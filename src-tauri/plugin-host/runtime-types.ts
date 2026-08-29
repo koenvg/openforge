@@ -158,8 +158,8 @@ export type RuntimePluginState = {
   activationGeneration: number
   activationCount: number
   reloadCount: number
-  importGeneration: number
   module: Record<string, unknown> | null
+  releaseModule: (() => void) | null
   methods: Map<string, RuntimeBackendMethod>
   commands: Map<string, RuntimeBackendCommand>
   eventHandlers: Map<string, Set<RuntimeEventHandler>>

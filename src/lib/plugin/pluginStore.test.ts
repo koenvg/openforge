@@ -77,14 +77,14 @@ describe('pluginStore', () => {
       description: 'Legacy description',
       contributes: JSON.stringify({ views: [{ id: 'legacy', title: 'Legacy', icon: 'sparkles' }] }),
       frontendEntry: 'legacy.js',
-      backendEntry: 'legacy-backend.js',
+      backendEntry: 'legacy-backend.cjs',
       packageMetadata: JSON.stringify({
         id: 'package-id',
         apiVersion: 1,
         displayName: 'Package Plugin',
         description: 'Package metadata description',
         frontend: './dist/frontend.js',
-        backend: './dist/backend.js',
+        backend: './dist/backend.cjs',
       }),
     }])
 
@@ -97,7 +97,7 @@ describe('pluginStore', () => {
       name: 'Package Plugin',
       description: 'Package metadata description',
       frontend: './dist/frontend.js',
-      backend: './dist/backend.js',
+      backend: './dist/backend.cjs',
     })
   })
 

@@ -1,7 +1,9 @@
-import { writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { createPluginHostRuntime } from './index'
-import { expectOnlyPluginHostStderr, writeBackendModule } from './backend-module.test-fixtures'
+import { expectOnlyPluginHostStderr, updateBackendModule, writeBackendModule, writeCommonJsModule } from './backend-module.test-fixtures'
 
 describe('plugin-host backend lifecycle', () => {
   it('activates backend entries and invokes registered plugin-local RPC methods when ready', async () => {
@@ -113,7 +115,7 @@ describe('plugin-host backend lifecycle', () => {
 
     await expect(runtime.invokeBackend({ pluginId: 'reloadable', backendPath, command: 'beforeReload' })).resolves.toBe('before')
 
-    await writeFile(backendPath, `
+    await updateBackendModule(backendPath, `
       export default {
         async activate(openforge, context) {
           context.subscriptions.add(openforge.backend.registerMethod('afterReload', {
@@ -126,6 +128,91 @@ describe('plugin-host backend lifecycle', () => {
 
     await expect(runtime.invokeBackend({ pluginId: 'reloadable', backendPath, command: 'afterReload' })).resolves.toBe('after')
     await expect(runtime.invokeBackend({ pluginId: 'reloadable', command: 'beforeReload' })).rejects.toThrow(/not found/i)
+  })
+
+  it('evicts dependencies loaded before a failed backend evaluation so repaired files can activate', async () => {
+    const backendPath = await writeBackendModule(`
+      export default { activate() {} }
+    `)
+    const dependencyPath = join(dirname(backendPath), 'activation-dependency.cjs')
+    await writeCommonJsModule(dependencyPath, "module.exports = { value: 'before-repair' }")
+    await writeCommonJsModule(backendPath, `
+      require('./activation-dependency.cjs')
+      throw new Error('broken backend artifact')
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await expectOnlyPluginHostStderr([
+      '[plugin:repairable-loader] activation error: broken backend artifact',
+    ], async () => {
+      await expect(runtime.activateBackend({ pluginId: 'repairable-loader', backendPath }))
+        .rejects.toThrow('broken backend artifact')
+    })
+
+    await writeCommonJsModule(dependencyPath, "module.exports = { value: 'after-repair' }")
+    await updateBackendModule(backendPath, `
+      export default {
+        async activate(openforge, context) {
+          const dependency = require('./activation-dependency.cjs')
+          context.subscriptions.add(openforge.backend.registerMethod('value', {
+            handler() { return dependency.value }
+          }))
+        }
+      }
+    `)
+
+    await expect(runtime.invokeBackend({ pluginId: 'repairable-loader', backendPath, command: 'value' }))
+      .resolves.toBe('after-repair')
+    await runtime.deactivateBackend('repairable-loader')
+  })
+
+  it('releases prior backend modules across repeated activate, deactivate, and reload cycles', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          let lazyModule
+          context.subscriptions.add(openforge.backend.registerMethod('generation', {
+            handler() {
+              lazyModule ??= require('./lazy.cjs')
+              return lazyModule.generation
+            }
+          }))
+        }
+      }
+    `)
+    const lazyModulePath = join(dirname(backendPath), 'lazy.cjs')
+    const runtime = createPluginHostRuntime()
+    const globals = globalThis as typeof globalThis & {
+      __backendReloadMarkers?: Array<WeakRef<object>>
+    }
+    globals.__backendReloadMarkers = []
+
+    for (let generation = 1; generation <= 20; generation += 1) {
+      await writeCommonJsModule(lazyModulePath, `
+        const marker = { generation: ${generation}, retained: new Uint8Array(512 * 1024) }
+        globalThis.__backendReloadMarkers.push(new WeakRef(marker))
+        module.exports = { generation: marker.generation, marker }
+      `)
+
+      await runtime.activateBackend({ pluginId: 'bounded-reload', backendPath })
+      await expect(runtime.invokeBackend({ pluginId: 'bounded-reload', command: 'generation' })).resolves.toBe(generation)
+      await runtime.deactivateBackend('bounded-reload')
+    }
+
+    setFlagsFromString('--expose-gc')
+    try {
+      const collectGarbage = runInNewContext('gc') as () => void
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await new Promise<void>(resolve => setImmediate(resolve))
+        collectGarbage()
+      }
+
+      const retainedModules = globals.__backendReloadMarkers.filter(marker => marker.deref() !== undefined)
+      expect(retainedModules).toHaveLength(0)
+    } finally {
+      setFlagsFromString('--no-expose-gc')
+      delete globals.__backendReloadMarkers
+    }
   })
 
   it('clears the crash-loop guard during explicit reload so repaired commands are discoverable', async () => {
@@ -159,7 +246,7 @@ describe('plugin-host backend lifecycle', () => {
       crashLoopGuardTripped: true,
     })
 
-    await writeFile(backendPath, `
+    await updateBackendModule(backendPath, `
       export default {
         async activate(openforge, context) {
           context.subscriptions.add(openforge.commands.register({

@@ -33,7 +33,7 @@ describe('pluginRegistry activation lifecycle', () => {
   it('deactivates backend-only plugins back to installed state', async () => {
     const manifest = makeManifest({
       frontend: null,
-      backend: 'backend.js',
+      backend: 'backend.cjs',
     })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
     enabledPluginIds.set(new Set(['backend-plugin']))

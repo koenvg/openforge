@@ -24,7 +24,7 @@ function validMetadata(overrides: Record<string, unknown> = {}): Record<string, 
     icon: 'github',
     frontend: './dist/frontend.js',
     frontendStyles: ['./dist/plugin.css'],
-    backend: './dist/backend.js',
+    backend: './dist/backend.cjs',
     requires: ['projects', 'tasks', 'commands', 'storage'],
     ...overrides,
   }
@@ -40,6 +40,13 @@ describe('package.json#openforge metadata contract', () => {
 
     expect(validateOpenForgePackageMetadata(metadata)).toEqual([])
     expect(metadata).not.toHaveProperty('enablement')
+  })
+
+  it('rejects backend entries that are not CommonJS .cjs artifacts', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({ backend: './dist/backend.js' }))).toContainEqual({
+      path: 'backend',
+      message: 'Must point to a CommonJS .cjs artifact',
+    })
   })
 
   it('accepts explicit app enablement with its required host capability', () => {

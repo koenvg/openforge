@@ -49,9 +49,9 @@ describe('pluginRegistry project enablement', () => {
         }))
       },
     })
-    const manifest = makeManifest({ id: 'scheduler-plugin', frontend: 'index.js', backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'scheduler-plugin', frontend: 'index.js', backend: 'backend.cjs' })
     installedPlugins.set(new Map([['scheduler-plugin', { manifest, state: 'installed', error: null }]]))
-    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('scheduler-plugin'), backendEntry: 'backend.js' }])
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('scheduler-plugin'), backendEntry: 'backend.cjs' }])
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'scheduler-plugin', module: frontendPlugin })
 
     await registryLoadEnabledForProject('P-1')
@@ -78,9 +78,9 @@ describe('pluginRegistry project enablement', () => {
         context.subscriptions.add({ dispose })
       },
     })
-    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.cjs' })
     installedPlugins.set(new Map([['project-runtime-plugin', { manifest, state: 'installed', error: null }]]))
-    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.js' }])
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.cjs' }])
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'project-runtime-plugin', module: frontendPlugin })
 
     activeProjectId.set('P-1')
@@ -133,12 +133,12 @@ describe('pluginRegistry project enablement', () => {
   })
 
   it('does not rebind or reactivate Plugins when the same Project is selected repeatedly', async () => {
-    const manifest = makeManifest({ id: 'stable-plugin', frontend: null, backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'stable-plugin', frontend: null, backend: 'backend.cjs' })
     installedPlugins.set(new Map([['stable-plugin', { manifest, state: 'installed', error: null }]]))
     getEnabledPluginsMock.mockResolvedValue([{
       ...makeNormalized('stable-plugin'),
       frontendEntry: null,
-      backendEntry: 'backend.js',
+      backendEntry: 'backend.cjs',
     }])
 
     await registryLoadEnabledForProject('P-1')
@@ -152,7 +152,7 @@ describe('pluginRegistry project enablement', () => {
 
   it('reconciles retained, departing, and entering project Plugins from enablement differences', async () => {
     const backendOnlyEntry = (pluginId: string) => ({
-      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.js' }),
+      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.cjs' }),
       state: 'installed' as const,
       error: null,
     })
@@ -168,7 +168,7 @@ describe('pluginRegistry project enablement', () => {
       return pluginIds.map(pluginId => ({
         ...makeNormalized(pluginId),
         frontendEntry: null,
-        backendEntry: 'backend.js',
+        backendEntry: 'backend.cjs',
       }))
     })
 
@@ -188,7 +188,7 @@ describe('pluginRegistry project enablement', () => {
       releaseFirstLookup = resolve
     })
     const backendOnlyEntry = (pluginId: string) => ({
-      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.js' }),
+      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.cjs' }),
       state: 'installed' as const,
       error: null,
     })
@@ -205,7 +205,7 @@ describe('pluginRegistry project enablement', () => {
       return [{
         ...makeNormalized(pluginId),
         frontendEntry: null,
-        backendEntry: 'backend.js',
+        backendEntry: 'backend.cjs',
       }]
     })
 
@@ -257,12 +257,12 @@ describe('pluginRegistry project enablement', () => {
   })
 
   it('continues reconciling later Projects after a retained backend context update fails', async () => {
-    const manifest = makeManifest({ id: 'recovering-plugin', frontend: null, backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'recovering-plugin', frontend: null, backend: 'backend.cjs' })
     installedPlugins.set(new Map([['recovering-plugin', { manifest, state: 'installed', error: null }]]))
     getEnabledPluginsMock.mockResolvedValue([{
       ...makeNormalized('recovering-plugin'),
       frontendEntry: null,
-      backendEntry: 'backend.js',
+      backendEntry: 'backend.cjs',
     }])
     pluginBackendWhenReadyMock.mockImplementation(async (_pluginId, projectId, preserveActivation) => {
       if (projectId === 'P-2' && preserveActivation) {
@@ -285,9 +285,9 @@ describe('pluginRegistry project enablement', () => {
         context.subscriptions.add({ dispose })
       },
     })
-    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.cjs' })
     installedPlugins.set(new Map([['project-runtime-plugin', { manifest, state: 'installed', error: null }]]))
-    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.js' }])
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.cjs' }])
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'project-runtime-plugin', module: frontendPlugin })
 
     activeProjectId.set('P-1')
@@ -339,7 +339,7 @@ describe('pluginRegistry project enablement', () => {
         }))
       },
     })
-    const manifest = makeManifest({ id: 'enabled-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'enabled-backend-plugin', frontend: 'index.js', backend: 'backend.cjs' })
     installedPlugins.set(new Map([['enabled-backend-plugin', { manifest, state: 'installed', error: null }]]))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enabled-backend-plugin', module: frontendPlugin })
 
@@ -362,9 +362,9 @@ describe('pluginRegistry project enablement', () => {
         }))
       },
     })
-    const manifest = makeManifest({ id: 'failing-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    const manifest = makeManifest({ id: 'failing-backend-plugin', frontend: 'index.js', backend: 'backend.cjs' })
     installedPlugins.set(new Map([['failing-backend-plugin', { manifest, state: 'installed', error: null }]]))
-    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('failing-backend-plugin'), backendEntry: 'backend.js' }])
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('failing-backend-plugin'), backendEntry: 'backend.cjs' }])
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'failing-backend-plugin', module: frontendPlugin })
     pluginBackendWhenReadyMock.mockRejectedValueOnce(new Error('backend failed'))
 

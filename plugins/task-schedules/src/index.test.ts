@@ -12,7 +12,7 @@ describe('Task Schedules frontend plugin', () => {
       id: 'com.openforge.task-schedules',
       displayName: 'Task Schedules',
       frontend: './dist/frontend.js',
-      backend: './dist/backend.js',
+      backend: './dist/backend.cjs',
     })
     expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'background', 'commands', 'storage', 'navigation', 'tasks']))
   })

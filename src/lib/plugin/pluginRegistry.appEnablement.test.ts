@@ -29,7 +29,7 @@ const metadata: OpenForgePackageMetadata = {
   description: 'Account usage across OpenForge',
   enablement: 'app' as const,
   frontend: './frontend.js',
-  backend: './backend.js',
+  backend: './backend.cjs',
   requires: ['views', 'backend', 'background', 'context', 'appEnablement'],
 }
 
@@ -37,7 +37,7 @@ function appPluginRow() {
   return {
     ...makeNormalized('account-usage'),
     frontendEntry: './frontend.js',
-    backendEntry: './backend.js',
+    backendEntry: './backend.cjs',
     packageMetadata: JSON.stringify(metadata),
   }
 }
@@ -69,7 +69,7 @@ describe('pluginRegistry app enablement', () => {
       manifest: makeManifest({
         id: 'account-usage',
         frontend: './frontend.js',
-        backend: './backend.js',
+        backend: './backend.cjs',
       }),
       packageMetadata: metadata,
       state: 'installed',

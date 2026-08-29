@@ -16,7 +16,7 @@ Use this page as the available/unavailable capability reference for API version 
     "displayName": "Notes",
     "description": "Project notes and scheduled follow-ups",
     "frontend": "./dist/frontend.js",
-    "backend": "./dist/backend.js",
+    "backend": "./dist/backend.cjs",
     "requires": ["commands", "views", "backend", "storage", "tasks"]
   }
 }

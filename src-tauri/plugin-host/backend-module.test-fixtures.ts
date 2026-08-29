@@ -8,10 +8,20 @@ export const unicodeLineSeparatorFixturePath = fileURLToPath(
   new URL('./fixtures/external-text-unicode-line-separator.jsonl', import.meta.url),
 )
 
+export async function writeCommonJsModule(path: string, source: string): Promise<void> {
+  await writeFile(path, source)
+}
+
+export async function updateBackendModule(path: string, source: string): Promise<void> {
+  const commonJsSource = source.replace(/\bexport default\b/, 'module.exports =')
+  if (commonJsSource === source) throw new Error('Backend module fixture requires an export default declaration')
+  await writeCommonJsModule(path, commonJsSource)
+}
+
 export async function writeBackendModule(source: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'openforge-plugin-host-'))
-  const file = join(dir, `backend-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`)
-  await writeFile(file, source)
+  const file = join(dir, `backend-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`)
+  await updateBackendModule(file, source)
   return file
 }
 

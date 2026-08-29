@@ -106,7 +106,8 @@ var openforgePackageMetadataSchema_default = {
 		"backend": {
 			"type": "string",
 			"minLength": 1,
-			"description": "Path to the built backend JavaScript entry artifact."
+			"pattern": "\\.cjs$",
+			"description": "Path to the built CommonJS backend entry artifact. Use a .cjs filename so the plugin host can reload it without retaining stale module instances."
 		},
 		"requires": {
 			"type": "array",
@@ -256,6 +257,15 @@ function validateOptionalString(value, path) {
 	}];
 	return [];
 }
+function validateBackendEntry(value) {
+	const errors = validateOptionalString(value, "backend");
+	if (!isNonEmptyString(value)) return errors;
+	if (!value.endsWith(".cjs")) errors.push({
+		path: "backend",
+		message: "Must point to a CommonJS .cjs artifact"
+	});
+	return errors;
+}
 function validateEnablement(value) {
 	if (value === void 0 || value === "app" || value === "project") return [];
 	return [{
@@ -354,7 +364,7 @@ function validateOpenForgePackageMetadata(data) {
 		path: "frontendStyles",
 		message: "Requires a frontend entry"
 	});
-	errors.push(...validateOptionalString(data.backend, "backend"));
+	errors.push(...validateBackendEntry(data.backend));
 	errors.push(...validateRequires(data.requires));
 	if (data.enablement === "app" && (!Array.isArray(data.requires) || !data.requires.includes("appEnablement"))) errors.push({
 		path: "requires",
