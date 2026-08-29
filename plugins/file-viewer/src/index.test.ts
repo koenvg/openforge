@@ -39,6 +39,7 @@ function makeRuntimeHarness() {
     apiVersion: 1,
     packageMetadata: packageJson.openforge,
     subscriptions,
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
   } as FrontendPluginContext
 
   return { api, context, subscriptions, invokeGlobal, registerCommand, registeredCommands }
@@ -98,7 +99,11 @@ describe('file-viewer plugin', () => {
     }))
 
     const [registration] = registeredCommands
-    await registration.handler({ path: 'src/lib/fileViewerPlugin.ts' })
+    await registration.handler({ path: 'src/lib/fileViewerPlugin.ts' }, {
+      taskId: null,
+      projectId: null,
+      source: 'plugin',
+    })
 
     expect(get(pendingFileReveal)).toBe('src/lib/fileViewerPlugin.ts')
     expect(subscriptions.add).toHaveBeenCalledTimes(2)
