@@ -1665,6 +1665,26 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    M::up_with_hook("", |tx| {
+        let can_index: bool = tx
+            .query_row(
+                "SELECT COUNT(*) = 4
+                   FROM pragma_table_info('agent_sessions')
+                  WHERE name IN ('id', 'ticket_id', 'created_at', 'provider')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if can_index {
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_sessions_usage_candidates
+                 ON agent_sessions(provider, ticket_id, created_at, id)",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -3935,5 +3955,24 @@ mod tests {
             !table_exists,
             "upgrade must delete stored general self-review comments"
         );
+    }
+
+    #[test]
+    fn fresh_database_indexes_provider_sessions_for_usage_candidate_queries() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let index_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_agent_sessions_usage_candidates'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check usage candidate index");
+
+        assert!(index_exists);
     }
 }

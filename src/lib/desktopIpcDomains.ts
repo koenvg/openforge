@@ -26,6 +26,7 @@ export const desktopIpcFunctionDomains = {
   setTaskConfig: 'config',
   resetProjectSettingsToGlobal: 'config',
   getAllTasks: 'tasks-projects',
+  listTaskUsageCandidates: 'tasks-projects',
   getTaskRelationshipReferences: 'tasks-projects',
   getTasksForProject: 'tasks-projects',
   getProjectTaskLabels: 'tasks-projects',

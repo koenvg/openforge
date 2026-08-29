@@ -45,6 +45,7 @@ fn command_domain(command: &str) -> Option<CommandDomain> {
         | "update_task_title"
         | "update_task_source_ticket_url"
         | "get_tasks"
+        | "list_task_usage_candidates"
         | "get_task_relationship_references"
         | "get_project_attention"
         | "get_task_attention"
@@ -132,6 +133,7 @@ mod tests {
             ("update_task_title", CommandDomain::Task),
             ("update_task_source_ticket_url", CommandDomain::Task),
             ("get_tasks", CommandDomain::Task),
+            ("list_task_usage_candidates", CommandDomain::Task),
             ("get_task_relationship_references", CommandDomain::Task),
             ("get_project_attention", CommandDomain::Task),
             ("get_task_attention", CommandDomain::Task),

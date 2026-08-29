@@ -492,6 +492,28 @@ for (const session of piSessions) {
 ```
 
 `listSessions` returns the existing public `AgentSession` structure, newest first. `ticket_id` contains the OpenForge Task ID; provider-specific identifiers include `pi_session_id`, `claude_session_id`, `opencode_session_id`, and `grok_session_id`. `createdAtOrAfter` is an inclusive Unix timestamp in seconds. Omit either optional filter to include every creation time or provider for that Task.
+
+For global usage attribution, use the bounded candidate query instead of `tasks.list({ includeDone: true })` and per-Task lookups:
+
+```ts
+let cursor: string | undefined
+do {
+  const page = await openforge.tasks.listUsageCandidates({
+    provider: 'pi',
+    periodStart: thirtyDaysAgo,
+    pageSize: 100,
+    cursor,
+  })
+
+  for (const candidate of page.items) {
+    await collectTaskUsage(candidate)
+  }
+  cursor = page.nextCursor ?? undefined
+} while (cursor)
+```
+
+`listUsageCandidates` returns only `{ taskId, title, status, createdAt, updatedAt, sessions, workspace }`. Each session has `{ id, createdAt, updatedAt }`; the workspace is `{ path, kind: 'project' | 'worktree' }` or `null`. Prompt fields and unrelated Task detail are never returned. Global queries include all active Tasks plus completed Tasks whose Task interval or matching-provider Agent Session interval overlaps `periodStart`. Results use stable Task-ID ordering. Pass each opaque `nextCursor` unchanged and request 1 through 250 rows. Pass `taskId` to query one Task without scanning unrelated Tasks.
+
 Behavior and limits:
 
 - `projectId` is required for plugin-created Tasks.
@@ -640,7 +662,8 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. Seed user-data files with `userDataTextFiles`; the backend fake applies replacements and appends in memory and records them in `fsUserDataWrites` and `fsUserDataAppends`. Seed external files, identities, and mtimes with `externalTextFiles`. The fake records `fsExternalStats` and ranged chunk requests, applies the same UTF-8 byte limits, rejects stale identities or misaligned ranges, and honors `AbortSignal` cancellation.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. Seed compact usage rows with `taskUsageCandidates`; `tasks.listUsageCandidates(...)` applies active/completed overlap, targeting, stable cursor pagination, and records requests in `taskUsageCandidateListRequests`.
+Seed user-data files with `userDataTextFiles`; the backend fake applies replacements and appends in memory and records them in `fsUserDataWrites` and `fsUserDataAppends`. Seed external files, identities, and mtimes with `externalTextFiles`. The fake records `fsExternalStats` and ranged chunk requests, applies the same UTF-8 byte limits, rejects stale identities or misaligned ranges, and honors `AbortSignal` cancellation.
 
 ## Authoring checklist
 

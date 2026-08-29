@@ -1,4 +1,6 @@
-use super::callbacks::{optional_param_string, optional_param_u64, required_param_string};
+use super::callbacks::{
+    optional_param_string, optional_param_u64, optional_param_usize, required_param_string,
+};
 use super::PluginHost;
 use crate::app_events::publish_app_event;
 use serde_json::{json, Value};
@@ -54,6 +56,42 @@ impl PluginHost {
             .ok_or_else(|| format!("plugin host app task command returned no value: {command}"))
     }
 
+    pub(super) fn list_task_usage_candidates_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let max_page_size = crate::db::MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE;
+
+        let provider = required_param_string(params, "provider")?;
+        let period_start = optional_param_u64(params, "periodStart")?
+            .ok_or_else(|| "plugin host callback missing integer param: periodStart".to_string())?;
+        let period_start = i64::try_from(period_start).map_err(|_| {
+            "plugin host callback integer param out of range: periodStart".to_string()
+        })?;
+        let task_id = optional_param_string(params, "taskId")?;
+        let cursor = optional_param_string(params, "cursor")?;
+        let page_size = optional_param_usize(params, "pageSize")?
+            .ok_or_else(|| "plugin host callback missing integer param: pageSize".to_string())?;
+        if !(1..=max_page_size).contains(&page_size) {
+            return Err(format!(
+                "plugin host callback pageSize must be between 1 and {max_page_size}"
+            ));
+        }
+
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let page = db
+            .list_task_usage_candidates(
+                &provider,
+                period_start,
+                task_id.as_deref(),
+                cursor.as_deref(),
+                page_size,
+            )
+            .map_err(|error| format!("failed to list Task usage candidates: {error}"))?;
+        serde_json::to_value(page)
+            .map_err(|error| format!("failed to serialize Task usage candidates: {error}"))
+    }
     pub(super) fn list_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
         let project_id = optional_param_string(params, "projectId")?;
         let include_done = optional_param_bool(params, "includeDone")?.unwrap_or(false);

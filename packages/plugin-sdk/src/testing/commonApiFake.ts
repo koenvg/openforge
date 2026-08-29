@@ -1,4 +1,4 @@
-import { resolveExternalTextFileChunkSize } from '../types.js'
+import { MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE, resolveExternalTextFileChunkSize } from '../types.js'
 import type {
   BackendOpenForgeAPI,
   CommandRegistration,
@@ -112,6 +112,43 @@ export class TestingCommonApiFake {
             if (!includeDone && task.status === 'done') return false
             return true
           })
+        },
+        listUsageCandidates: async (request) => {
+          if (typeof request.provider !== 'string' || request.provider.length === 0) {
+            throw new TypeError('provider must be a non-empty string')
+          }
+          if (request.taskId !== undefined && request.taskId.length === 0) {
+            throw new TypeError('taskId must be a non-empty string')
+          }
+          if (request.cursor !== undefined && request.cursor.length === 0) {
+            throw new TypeError('cursor must be a non-empty string')
+          }
+          if (!Number.isSafeInteger(request.periodStart) || request.periodStart < 0) {
+            throw new RangeError('periodStart must be a non-negative safe integer')
+          }
+          if (!Number.isSafeInteger(request.pageSize)
+            || request.pageSize < 1
+            || request.pageSize > MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE) {
+            throw new RangeError(`pageSize must be between 1 and ${MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE}`)
+          }
+          this.services.calls.taskUsageCandidateListRequests.push({ ...request })
+          const candidates = this.services.seededTaskUsageCandidates
+            .filter((candidate) => request.taskId === undefined || candidate.taskId === request.taskId)
+            .filter((candidate) => candidate.status === 'doing'
+              || candidate.createdAt >= request.periodStart
+              || candidate.updatedAt >= request.periodStart
+              || candidate.sessions.some((session) =>
+                session.createdAt >= request.periodStart || session.updatedAt >= request.periodStart))
+            .filter((candidate) => request.cursor === undefined || candidate.taskId > request.cursor)
+            .slice()
+            .sort((left, right) => left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0)
+          const items = candidates.slice(0, request.pageSize)
+          return {
+            items,
+            nextCursor: candidates.length > request.pageSize
+              ? items.at(-1)?.taskId ?? null
+              : null,
+          }
         },
         get: async () => null,
         create: async (request) => {

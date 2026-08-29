@@ -43,6 +43,20 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(listTaskSessions).toHaveBeenCalledWith(request)
   })
 
+  it('forwards Task usage candidate requests through the runtime host', async () => {
+    const page = { items: [], nextCursor: null }
+    const listTaskUsageCandidates = vi.fn().mockResolvedValue(page)
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'usage',
+      projectId: null,
+      host: { listTaskUsageCandidates },
+    }))
+    const request = { provider: 'pi', periodStart: 300, taskId: 'T-1', pageSize: 100 }
+
+    await expect(registry.createApi().tasks.listUsageCandidates(request)).resolves.toEqual(page)
+    expect(listTaskUsageCandidates).toHaveBeenCalledWith(request)
+  })
+
 
   it('creates isolated capability facades over shared registry state', () => {
     const registry = new RuntimeCommonApiRegistry(

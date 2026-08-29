@@ -10,6 +10,8 @@ import type {
   FileEntry,
   ImplementationRun,
   ListTaskSessionsRequest,
+  ListTaskUsageCandidatesRequest,
+  TaskUsageCandidatePage,
   JsonValue,
   Project,
   ProjectAttention,
@@ -237,6 +239,7 @@ export function createBackendApi(
     },
     tasks: {
       list: async request => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),
+      listUsageCandidates: async (request: ListTaskUsageCandidatesRequest) => await hostCallback<TaskUsageCandidatePage>('openforge.tasks.listUsageCandidates', objectCallbackParams(request)),
       get: async taskId => await hostCallback<Task | null>('openforge.tasks.get', { taskId }),
       create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
       compose: async request => await hostCallback<ComposeTaskResult | null>('openforge.tasks.compose', objectCallbackParams(request)),

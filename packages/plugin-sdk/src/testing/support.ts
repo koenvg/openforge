@@ -11,6 +11,7 @@ import type {
   PluginStorageScope,
   StartPromptContribution,
   SubscriptionSink,
+  TaskUsageCandidate,
 } from '../types'
 import type { AgentSession, Task } from '../domain'
 import type {
@@ -71,6 +72,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskImplementationStarts: [],
     taskFollowUps: [],
     taskListRequests: [],
+    taskUsageCandidateListRequests: [],
     taskSessionListRequests: [],
     taskStatusUpdates: [],
     configWrites: [],
@@ -240,6 +242,7 @@ export class TestingRegistryServices {
   readonly storage: PluginStorage
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
+  readonly seededTaskUsageCandidates: TaskUsageCandidate[]
   readonly seededAgentSessions: AgentSession[]
   readonly externalTextFiles: TestingExternalTextFile[]
   readonly userDataTextFiles = new Map<string, string>()
@@ -259,6 +262,7 @@ export class TestingRegistryServices {
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
+    this.seededTaskUsageCandidates = options.taskUsageCandidates ?? []
     this.seededAgentSessions = options.agentSessions ?? []
     this.externalTextFiles = options.externalTextFiles ?? []
     for (const file of options.userDataTextFiles ?? []) {

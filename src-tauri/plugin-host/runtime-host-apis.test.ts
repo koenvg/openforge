@@ -12,6 +12,7 @@ describe('plugin-host backend host APIs', () => {
             async handler() {
               const projectTasks = await openforge.tasks.list({ projectId: 'P-1', includeDone: true })
               const allTasks = await openforge.tasks.list()
+              const usageCandidates = await openforge.tasks.listUsageCandidates({ provider: 'pi', periodStart: 2, pageSize: 100 })
               const existing = await openforge.tasks.get('T-existing')
               const created = await openforge.tasks.create({
                 initialPrompt: 'Scheduled prompt',
@@ -34,7 +35,7 @@ describe('plugin-host backend host APIs', () => {
               const workspace = await openforge.tasks.getWorkspace(created.id)
               const latestSession = await openforge.tasks.getLatestSession(created.id)
               const sessions = await openforge.tasks.listSessions({ taskId: created.id, provider: 'pi', createdAtOrAfter: 2 })
-              return { projectTasks, allTasks, existing, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession, sessions }
+              return { projectTasks, allTasks, usageCandidates, existing, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession, sessions }
             }
           }))
         }
@@ -64,6 +65,7 @@ describe('plugin-host backend host APIs', () => {
       calls.push(request)
       switch (request.method) {
         case 'openforge.tasks.list': return request.params.projectId === 'P-1' ? [task] : [task, { ...task, id: 'T-other', project_id: 'P-2' }]
+        case 'openforge.tasks.listUsageCandidates': return { items: [], nextCursor: null }
         case 'openforge.tasks.get': return { ...task, id: request.params.taskId }
         case 'openforge.tasks.create': return createdTask
         case 'openforge.tasks.compose': return { task: createdTask, started: false }
@@ -82,6 +84,7 @@ describe('plugin-host backend host APIs', () => {
     await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'scheduler', backendPath, command: 'taskApis' })).resolves.toEqual({
       projectTasks: [task],
       allTasks: [task, { ...task, id: 'T-other', project_id: 'P-2' }],
+      usageCandidates: { items: [], nextCursor: null },
       existing: { ...task, id: 'T-existing' },
       created: createdTask,
       composed: { task: createdTask, started: false },
@@ -96,6 +99,7 @@ describe('plugin-host backend host APIs', () => {
     expect(calls).toEqual([
       { method: 'openforge.tasks.list', params: { projectId: 'P-1', includeDone: true } },
       { method: 'openforge.tasks.list', params: {} },
+      { method: 'openforge.tasks.listUsageCandidates', params: { provider: 'pi', periodStart: 2, pageSize: 100 } },
       { method: 'openforge.tasks.get', params: { taskId: 'T-existing' } },
       { method: 'openforge.tasks.create', params: { initialPrompt: 'Scheduled prompt', projectId: 'P-1', dependsOn: ['T-parent'], labelNames: ['scheduled'] } },
       { method: 'openforge.tasks.compose', params: { projectId: 'P-1', initialPrompt: 'Composed prompt' } },

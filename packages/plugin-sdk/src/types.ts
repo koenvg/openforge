@@ -732,6 +732,49 @@ export interface ListTaskSessionsRequest {
 }
 
 
+export const MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE = 250
+
+export interface ListTaskUsageCandidatesRequest {
+  /** Open-ended provider identifier such as `pi`. */
+  provider: string
+  /** Inclusive collection-period start as a Unix timestamp in seconds. */
+  periodStart: number
+  /** Restrict the query to one Task without enumerating unrelated Tasks. */
+  taskId?: string
+  /** Opaque cursor returned by the preceding page. */
+  cursor?: string
+  /** Number of candidates to return, from 1 through 250. */
+  pageSize: number
+}
+
+export interface TaskUsageCandidateSession {
+  /** Provider Agent Session identifier used to locate provider usage records. */
+  id: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface TaskUsageCandidateWorkspace {
+  path: string
+  kind: 'project' | 'worktree'
+}
+
+export interface TaskUsageCandidate {
+  taskId: string
+  title: string
+  status: 'doing' | 'done'
+  createdAt: number
+  updatedAt: number
+  sessions: TaskUsageCandidateSession[]
+  workspace: TaskUsageCandidateWorkspace | null
+}
+
+export interface TaskUsageCandidatePage {
+  items: TaskUsageCandidate[]
+  /** Cursor for the next stable Task-ID-ordered page, or null on the last page. */
+  nextCursor: string | null
+}
+
 export interface TasksAPI {
   /**
    * Lists tasks, optionally scoped to a project. By default done tasks are
@@ -741,6 +784,13 @@ export interface TasksAPI {
    * `includeDone` only affects the project-scoped path.
    */
   list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
+  /**
+   * Lists compact Task metadata for provider usage attribution. Global queries
+   * include every active Task and completed Tasks whose Task or matching Agent
+   * Session interval overlaps `periodStart`. Results use stable Task-ID cursor
+   * pagination and never include prompt fields.
+   */
+  listUsageCandidates(request: ListTaskUsageCandidatesRequest): Promise<TaskUsageCandidatePage>
   get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
   /**

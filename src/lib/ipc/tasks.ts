@@ -1,4 +1,5 @@
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
+import type { ListTaskUsageCandidatesRequest, TaskUsageCandidatePage } from '@openforge-app/plugin-sdk'
 import { normalizeTask, parseBoardStatus } from '../boardStatus'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { BoardStatus, DivergenceResolution, ExistingBranchPlan, GitBranchInfo, ImplementationStatus, Project, ProjectAttention, Task, TaskAttentionRow, TaskLabel, TaskLaneRows, TaskRelationshipReference, TaskWorkspaceInfo, WorktreeInfo, WorktreeSource, WritableBoardStatus } from '../types'
@@ -107,6 +108,18 @@ export async function getTaskLanes(): Promise<TaskLaneRows> {
 export async function getAllTasks(): Promise<Task[]> {
   const tasks = await invoke<RawTask[]>("get_tasks");
   return tasks.map(normalizeTask)
+}
+
+export async function listTaskUsageCandidates(
+  request: ListTaskUsageCandidatesRequest,
+): Promise<TaskUsageCandidatePage> {
+  return invoke<TaskUsageCandidatePage>('list_task_usage_candidates', {
+    provider: request.provider,
+    periodStart: request.periodStart,
+    taskId: request.taskId,
+    cursor: request.cursor,
+    pageSize: request.pageSize,
+  })
 }
 
 export async function getTaskRelationshipReferences(projectId: string): Promise<TaskRelationshipReference[]> {

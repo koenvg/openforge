@@ -6,6 +6,7 @@ import type {
   CreateTaskRequest,
   ImplementationRun,
   ListTaskSessionsRequest,
+  ListTaskUsageCandidatesRequest,
   SendTaskFollowUpRequest,
   StartPromptContribution,
   StartTaskImplementationRequest,
@@ -16,6 +17,7 @@ import {
   getAllTasks,
   getLatestSession,
   listAgentSessions,
+  listTaskUsageCandidates,
   getProjectConfig,
   getProjects,
   getTaskDetail,
@@ -36,6 +38,7 @@ const START_PROMPT_CONTRIBUTIONS_KEY = 'start_prompt_contributions'
 
 type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listTasks'
+  | 'listTaskUsageCandidates'
   | 'getTask'
   | 'createTask'
   | 'composeTask'
@@ -213,6 +216,7 @@ async function startTaskImplementationFromPluginRequest(request: StartTaskImplem
 export function createPluginTaskHostCapabilities(pluginId: string): TaskHostCapabilities {
   return {
     listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
+    listTaskUsageCandidates: (request: ListTaskUsageCandidatesRequest) => listTaskUsageCandidates(request),
     getTask: (taskId) => getTaskDetail(taskId),
     createTask: createTaskFromPluginRequest,
     composeTask: composeTaskFromPluginRequest,

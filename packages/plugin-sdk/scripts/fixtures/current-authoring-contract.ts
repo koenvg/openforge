@@ -6,6 +6,7 @@ import {
   type PluginSidebarNavigationProps,
   type PluginCommandInvocationContext,
   type Task,
+  type TaskUsageCandidatePage,
   type TasksAPI,
 } from '@openforge-app/plugin-sdk'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
@@ -49,6 +50,13 @@ const tasks = null as unknown as TasksAPI
 // @ts-expect-error The host no longer exposes the legacy handoff-summary mutation.
 void tasks.updateSummary('KVG-3423', 'obsolete handoff')
 
+const usageCandidates: Promise<TaskUsageCandidatePage> = tasks.listUsageCandidates({
+  provider: 'pi',
+  periodStart: 1_775_174_400,
+  taskId: 'KVG-3423',
+  pageSize: 100,
+})
+void usageCandidates
 const appPackageMetadata = {
   id: 'contract-fixture',
   apiVersion: 1,

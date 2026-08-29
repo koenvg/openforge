@@ -157,6 +157,69 @@ async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
 }
 
 #[tokio::test]
+async fn plugin_host_lists_compact_paginated_task_usage_candidates() {
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_task_usage_candidates");
+    let project = database
+        .create_project("Usage", "/repo")
+        .expect("create Project fixture");
+    let task = database
+        .create_task(
+            "Private usage prompt",
+            "doing",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("create Task fixture");
+    database
+        .update_task_title(&task.id, "Usage attribution")
+        .expect("set Task title fixture");
+    database
+        .create_task_workspace_record(
+            &task.id,
+            &project.id,
+            "/repo",
+            "/repo",
+            "project_dir",
+            None,
+            "pi",
+        )
+        .expect("workspace fixture");
+    database
+        .create_agent_session("session-1", &task.id, None, "implement", "running", "pi")
+        .expect("create Agent Session fixture");
+    database
+        .set_agent_session_pi_id("session-1", "pi-session-1")
+        .expect("provider Agent Session id fixture");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+
+    let page = host
+        .handle_host_callback(
+            "openforge.tasks.listUsageCandidates",
+            &json!({
+                "provider": "pi",
+                "periodStart": 0,
+                "pageSize": 100,
+            }),
+        )
+        .await
+        .expect("list Task usage candidates callback");
+
+    assert_eq!(page["nextCursor"], Value::Null);
+    assert_eq!(page["items"][0]["taskId"], task.id);
+    assert_eq!(page["items"][0]["title"], "Usage attribution");
+    assert_eq!(page["items"][0]["sessions"][0]["id"], "pi-session-1");
+    assert_eq!(page["items"][0]["workspace"]["path"], "/repo");
+    assert_eq!(page["items"][0]["workspace"]["kind"], "project");
+    assert!(page["items"][0].get("prompt").is_none());
+    assert!(page["items"][0].get("initial_prompt").is_none());
+    assert!(!page.to_string().contains("Private usage prompt"));
+}
+
+#[tokio::test]
 async fn plugin_host_lists_filtered_task_agent_sessions() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_agent_sessions");
