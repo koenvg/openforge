@@ -15,7 +15,7 @@ describe('pluginRegistry command execution', () => {
   beforeEach(resetPluginRegistryTestState)
 
   it('does not synthesize backend command handlers from legacy manifest contributions', async () => {
-    const manifest = makeManifest({ frontend: null, backend: 'backend.js' })
+    const manifest = makeManifest({ frontend: null, backend: 'backend.cjs' })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
     enabledPluginIds.set(new Set(['backend-plugin']))
     pluginInvokeMock.mockResolvedValue({ echoed: true })

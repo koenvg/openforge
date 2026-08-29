@@ -172,7 +172,7 @@ describe('pluginRegistry reload lifecycle', () => {
   })
 
   it('reloadPluginForProject deactivates the backend before refreshing installed artifacts', async () => {
-    const manifest = makeManifest({ id: 'reload-plugin', frontend: null, backend: './dist/backend.js' })
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: null, backend: './dist/backend.cjs' })
     enabledPluginIds.set(new Set(['reload-plugin']))
     installedPlugins.set(new Map([['reload-plugin', {
       manifest,
@@ -184,14 +184,14 @@ describe('pluginRegistry reload lifecycle', () => {
     getPluginIpcMock.mockResolvedValue({
       ...makeNormalized('reload-plugin'),
       frontendEntry: null,
-      backendEntry: './dist/backend.js',
+      backendEntry: './dist/backend.cjs',
       sourceKind: 'local',
       sourceSpec: '/plugins/reload-plugin',
     })
     getEnabledPluginsMock.mockResolvedValue([{
       ...makeNormalized('reload-plugin'),
       frontendEntry: null,
-      backendEntry: './dist/backend.js',
+      backendEntry: './dist/backend.cjs',
     }])
 
     await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
@@ -202,7 +202,7 @@ describe('pluginRegistry reload lifecycle', () => {
   })
 
   it('reloadPluginForProject releases live browser resources even when backend deactivation fails', async () => {
-    const manifest = makeManifest({ id: 'reload-plugin', backend: './dist/backend.js' })
+    const manifest = makeManifest({ id: 'reload-plugin', backend: './dist/backend.cjs' })
     installedPlugins.set(new Map([['reload-plugin', {
       manifest,
       state: 'active',

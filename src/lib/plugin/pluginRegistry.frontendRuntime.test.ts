@@ -35,7 +35,7 @@ function installRuntimePlugin(activate: Parameters<typeof defineFrontendPlugin>[
   const manifest = makeManifest({
     id: RUNTIME_PLUGIN_ID,
     frontend: './dist/frontend.js',
-    backend: './dist/backend.js',
+    backend: './dist/backend.cjs',
   })
   const frontendPlugin = defineFrontendPlugin({ activate })
 

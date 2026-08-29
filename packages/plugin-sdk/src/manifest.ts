@@ -38,6 +38,15 @@ function validateOptionalString(value: unknown, path: string): ValidationError[]
   return []
 }
 
+function validateBackendEntry(value: unknown): ValidationError[] {
+  const errors = validateOptionalString(value, 'backend')
+  if (!isNonEmptyString(value)) return errors
+  if (!value.endsWith('.cjs')) {
+    errors.push({ path: 'backend', message: 'Must point to a CommonJS .cjs artifact' })
+  }
+  return errors
+}
+
 function validateEnablement(value: unknown): ValidationError[] {
   if (value === undefined || value === 'app' || value === 'project') {
     return []
@@ -139,7 +148,7 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   if (data.frontendStyles !== undefined && !isNonEmptyString(data.frontend)) {
     errors.push({ path: 'frontendStyles', message: 'Requires a frontend entry' })
   }
-  errors.push(...validateOptionalString(data.backend, 'backend'))
+  errors.push(...validateBackendEntry(data.backend))
   errors.push(...validateRequires(data.requires))
   if (data.enablement === 'app' && (!Array.isArray(data.requires) || !data.requires.includes('appEnablement'))) {
     errors.push({ path: 'requires', message: 'App enablement requires the appEnablement capability' })

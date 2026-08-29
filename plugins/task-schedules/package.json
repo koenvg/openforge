@@ -30,7 +30,7 @@
     "description": "Create one-off or recurring project Task Schedules that create and optionally start Tasks.",
     "icon": "clock",
     "frontend": "./dist/frontend.js",
-    "backend": "./dist/backend.js",
+    "backend": "./dist/backend.cjs",
     "requires": [
       "views",
       "backend",

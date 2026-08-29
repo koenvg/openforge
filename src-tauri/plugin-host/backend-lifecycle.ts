@@ -1,4 +1,4 @@
-import { pathToFileURL } from 'node:url'
+import { loadBackendModule } from './backend-module-loader'
 import type { PluginStorage } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, BackendPlugin, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
@@ -27,11 +27,6 @@ function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | 
   return null
 }
 
-async function loadBackendModule(backendPath: string, importGeneration: number): Promise<Record<string, unknown>> {
-  const moduleUrl = pathToFileURL(backendPath)
-  moduleUrl.searchParams.set('openforgeReload', String(importGeneration))
-  return await import(moduleUrl.href) as Record<string, unknown>
-}
 
 export type BackendLifecycleOptions = {
   crashLoopLimit?: number
@@ -140,7 +135,6 @@ export class BackendLifecycle {
     state.error = null
     state.backendPath = null
     state.projectId = null
-    state.module = null
     await this.cleanup(state)
   }
 
@@ -272,8 +266,9 @@ export class BackendLifecycle {
   private async activateState(state: RuntimePluginState, activationGeneration: number): Promise<void> {
     const activationSubscriptions = state.subscriptions
     try {
-      state.importGeneration += 1
-      state.module = await loadBackendModule(state.backendPath ?? '', state.importGeneration)
+      const loadedModule = await loadBackendModule(state.backendPath ?? '')
+      state.module = loadedModule.exports
+      state.releaseModule = loadedModule.release
       const plugin = extractBackendPlugin(state.module)
 
       if (!plugin) {
@@ -366,6 +361,10 @@ export class BackendLifecycle {
     if (state.subscriptions === subscriptions) {
       state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
     }
+    state.module = null
+    const releaseModule = state.releaseModule
+    state.releaseModule = null
+    releaseModule?.()
   }
 
   private async startBackgroundServices(state: RuntimePluginState, activationGeneration: number): Promise<void> {

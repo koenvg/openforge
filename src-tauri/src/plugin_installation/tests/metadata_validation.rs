@@ -84,6 +84,23 @@ fn install_package_preserves_artifact_path_validation_error() {
 }
 
 #[test]
+fn install_package_rejects_non_commonjs_backend_artifacts() {
+    let fixture = PluginPackageFixture::new(
+        r#"{"id":"acme.esm-backend","apiVersion":1,"displayName":"ESM Backend","description":"Unsupported backend format","backend":"dist/backend.js"}"#,
+    );
+    fixture.write_artifact("dist/backend.js", "export default {};");
+
+    let error =
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
+            .expect_err("non-CommonJS backend should fail installation");
+
+    assert_eq!(
+        error,
+        "package.json openforge.backend must point to a CommonJS backend artifact (.cjs)"
+    );
+}
+
+#[test]
 fn inspect_plugin_package_preserves_discovery_details_and_installer_error() {
     let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.discovery","apiVersion":1,"displayName":"Discovery","description":"Needs build","frontend":"dist/frontend.js","frontendStyles":["dist/frontend.css"]}"#,

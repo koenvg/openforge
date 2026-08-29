@@ -41,7 +41,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
     "frontendStyles": ["./dist/openforge-notes.css"],
-    "backend": "./dist/backend.js",
+    "backend": "./dist/backend.cjs",
     "requires": ["views", "tasks", "storage", "notifications", "backend"]
   }
 }
