@@ -1,4 +1,10 @@
+import { spawn } from 'node:child_process'
+import { mkdtemp, realpath } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import { describe, expect, it, vi } from 'vitest'
+import { buildBackendPluginHostRuntime } from '../../scripts/electron-build.mjs'
 import { createPluginHostRuntime } from './index'
 import { writeBackendModule } from './backend-module.test-fixtures'
 
@@ -29,6 +35,78 @@ describe('plugin-host backend logging', () => {
     stderr.mockRestore()
   })
 
+  it('keeps detached activation logs off stdout and attributed to their plugin', async () => {
+    const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-logging-'))
+    const hostPath = await realpath(await buildBackendPluginHostRuntime(process.cwd(), hostOutDir))
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate() {
+          setTimeout(() => {
+            console.info({ detachedRefreshMarker: true })
+            console.dir({ detachedDirMarker: true })
+          }, 25)
+        }
+      }
+    `)
+    const child = spawn(process.execPath, [hostPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const lines = createInterface({ input: child.stdout })
+    const stdoutLines: string[] = []
+    let stderrWritten = ''
+
+    const activationResponse = new Promise<Record<string, unknown>>((resolve, reject) => {
+      const responseTimeout = setTimeout(() => {
+        reject(new Error(`Timed out waiting for plugin activation: ${stderrWritten}`))
+      }, 2_000)
+      lines.on('line', (line) => {
+        stdoutLines.push(line)
+        try {
+          const message = JSON.parse(line) as Record<string, unknown>
+          if (message.id === 1) {
+            clearTimeout(responseTimeout)
+            resolve(message)
+          }
+        } catch {
+          // Assert the complete stdout stream after the detached log has fired.
+        }
+      })
+    })
+    const detachedLog = new Promise<void>((resolve, reject) => {
+      const logTimeout = setTimeout(() => {
+        reject(new Error(`Timed out waiting for detached plugin log: ${stderrWritten}`))
+      }, 2_000)
+      child.stderr.on('data', (chunk) => {
+        stderrWritten += String(chunk)
+        if (stderrWritten.includes('detachedRefreshMarker') && stderrWritten.includes('detachedDirMarker')) {
+          clearTimeout(logTimeout)
+          resolve()
+        }
+      })
+    })
+
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'plugin.backend.activate',
+      params: { pluginId: 'timer-logger', backendPath },
+    })}\n`)
+
+    try {
+      await expect(activationResponse).resolves.toMatchObject({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { pluginId: 'timer-logger', ready: true },
+      })
+      await expect(detachedLog).resolves.toBeUndefined()
+      expect(stdoutLines.map(line => JSON.parse(line))).toHaveLength(1)
+      expect(stderrWritten).toContain('[plugin:timer-logger] {"detachedRefreshMarker":true}')
+      expect(stderrWritten.split('\n').some(line =>
+        line.startsWith('[plugin:timer-logger] ') && line.includes('detachedDirMarker'),
+      )).toBe(true)
+    } finally {
+      lines.close()
+      child.kill()
+    }
+  })
   it('keeps plugin log attribution isolated for overlapping JSON-RPC backend calls', async () => {
     const backendPath = await writeBackendModule(`
       export default {
