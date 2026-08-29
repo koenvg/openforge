@@ -41,7 +41,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
     "frontendStyles": ["./dist/openforge-notes.css"],
-    "backend": "./dist/backend.cjs",
+    "backend": "./dist/backend.mjs",
     "requires": ["views", "tasks", "storage", "notifications", "backend"]
   }
 }
@@ -54,6 +54,7 @@ Metadata rules:
 - `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
 - `icon` uses the same `PluginIcon` contract as view navigation: a supported Lucide name such as `chart-column-big`, or `{ "type": "svg", "svg": "<svg ...>...</svg>" }`.
 - `frontend` and `backend` are optional, independent built JavaScript artifacts.
+- Use `.mjs` for new backend bundles. OpenForge also accepts legacy `.js` and CommonJS `.cjs` entries. Each active backend runs in its own worker, which OpenForge terminates during deactivation or reload.
 - `frontendStyles` optionally lists one or more built CSS artifacts for a frontend plugin. Paths are package-relative, must end in `.css`, and are validated during installation.
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.

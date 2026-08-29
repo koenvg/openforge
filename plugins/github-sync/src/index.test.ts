@@ -75,7 +75,7 @@ describe('github-sync plugin', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
-    expect(packageJson.openforge.backend).toBe('./dist/backend.cjs')
+    expect(packageJson.openforge.backend).toBe('./dist/backend.mjs')
     expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend']))
   })
 

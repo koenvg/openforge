@@ -21,8 +21,8 @@ pub(super) fn validate_artifact_paths(
             dir,
             backend,
             "backend",
-            &["cjs"],
-            "CommonJS backend artifact",
+            &["mjs", "js", "cjs"],
+            "built backend JavaScript artifact",
         )?;
     }
     for (index, stylesheet) in package

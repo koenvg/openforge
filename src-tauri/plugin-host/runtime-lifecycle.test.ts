@@ -3,7 +3,7 @@ import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { createPluginHostRuntime } from './index'
-import { expectOnlyPluginHostStderr, updateBackendModule, writeBackendModule, writeCommonJsModule } from './backend-module.test-fixtures'
+import { expectOnlyPluginHostStderr, updateBackendModule, writeBackendModule, writeCommonJsModule, writeEsmBackendModule } from './backend-module.test-fixtures'
 
 describe('plugin-host backend lifecycle', () => {
   it('activates backend entries and invokes registered plugin-local RPC methods when ready', async () => {
@@ -30,6 +30,23 @@ describe('plugin-host backend lifecycle', () => {
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
   })
 
+
+  it('activates legacy ESM backend.js entries installed before worker isolation', async () => {
+    const backendPath = await writeEsmBackendModule(`
+      export default {
+        activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('legacy', {
+            handler() { return 'loaded' }
+          }))
+        }
+      }
+    `, 'js')
+    const runtime = createPluginHostRuntime()
+
+    await expect(runtime.invokeBackend({ pluginId: 'legacy-esm', backendPath, command: 'legacy' }))
+      .resolves.toBe('loaded')
+    await runtime.deactivateBackend('legacy-esm')
+  })
   it('starts backend background services after activation and stops them during deactivation', async () => {
     const backendPath = await writeBackendModule(`
       export default {

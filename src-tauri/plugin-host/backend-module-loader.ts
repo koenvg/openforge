@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { extname } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 
@@ -36,9 +37,24 @@ function normalizeCommonJsExports(exports: unknown): Record<string, unknown> {
   return { default: exports }
 }
 
+let esmImportGeneration = 0
+
+// ESM caches cannot be cleared in-process. The production host releases this graph by
+// terminating the plugin's worker; the generation only supports direct runtime tests and retries.
+async function loadEsmBackendModule(backendPath: string): Promise<LoadedBackendModule> {
+  const moduleUrl = pathToFileURL(backendPath)
+  moduleUrl.searchParams.set('openforgeReload', String(++esmImportGeneration))
+  const exports = await import(moduleUrl.href) as Record<string, unknown>
+  return { exports, release() {} }
+}
+
 export async function loadBackendModule(backendPath: string): Promise<LoadedBackendModule> {
-  if (extname(backendPath) !== '.cjs') {
-    throw new Error(`Backend entry must be a CommonJS .cjs bundle to support bounded reloads: ${backendPath}`)
+  const extension = extname(backendPath)
+  if (extension === '.js' || extension === '.mjs') {
+    return await loadEsmBackendModule(backendPath)
+  }
+  if (extension !== '.cjs') {
+    throw new Error(`Backend entry must be a JavaScript .js, .mjs, or .cjs bundle: ${backendPath}`)
   }
 
   const resolvedPath = require.resolve(backendPath)

@@ -41,8 +41,8 @@ function validateOptionalString(value: unknown, path: string): ValidationError[]
 function validateBackendEntry(value: unknown): ValidationError[] {
   const errors = validateOptionalString(value, 'backend')
   if (!isNonEmptyString(value)) return errors
-  if (!value.endsWith('.cjs')) {
-    errors.push({ path: 'backend', message: 'Must point to a CommonJS .cjs artifact' })
+  if (!['.mjs', '.js', '.cjs'].some(extension => value.endsWith(extension))) {
+    errors.push({ path: 'backend', message: 'Must point to a built .mjs, .js, or .cjs artifact' })
   }
   return errors
 }

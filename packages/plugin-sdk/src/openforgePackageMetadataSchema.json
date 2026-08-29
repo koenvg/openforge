@@ -97,8 +97,8 @@
     "backend": {
       "type": "string",
       "minLength": 1,
-      "pattern": "\\.cjs$",
-      "description": "Path to the built CommonJS backend entry artifact. Use a .cjs filename so the plugin host can reload it without retaining stale module instances."
+      "pattern": "\\.(?:mjs|js|cjs)$",
+      "description": "Path to the built backend JavaScript artifact. Use .mjs for new plugins; .js and .cjs remain supported for compatibility. The host runs each backend in a replaceable worker."
     },
     "requires": {
       "type": "array",

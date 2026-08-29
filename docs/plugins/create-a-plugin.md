@@ -17,7 +17,7 @@ acme-notes-plugin/
     NotesView.svelte
   dist/
     frontend.js
-    backend.cjs
+    backend.mjs
 ```
 
 OpenForge loads the built files referenced by `package.json#openforge`. It does not compile plugin source during Plugin Installation, so installed packages must include the `dist/` artifacts.
@@ -51,7 +51,7 @@ Declare your plugin metadata under `openforge`. The `frontend` and `backend` fie
     "description": "Project notes and scheduled follow-ups",
     "icon": "notebook-text",
     "frontend": "./dist/frontend.js",
-    "backend": "./dist/backend.cjs",
+    "backend": "./dist/backend.mjs",
     "requires": ["commands", "views", "backend", "storage", "tasks", "notifications"]
   }
 }
@@ -181,16 +181,16 @@ Configure your build so the installed package contains the artifacts named by `p
 
 ```text
 dist/frontend.js
-dist/backend.cjs
+dist/backend.mjs
 ```
 
 The exact bundler setup is up to the plugin package, but the output contract is fixed: OpenForge reads the metadata, then loads the built frontend and backend JavaScript files. Keep source files, tests, and build-only files out of the installed package unless you intentionally want to publish them.
 
-Build the backend entry as CommonJS with a `.cjs` filename. The plugin host removes that CommonJS module graph from its cache after loading, so deactivation and reload can pick up updated files without retaining every prior module instance. For a Vite backend build, configure Rollup with `format: 'cjs'`, `entryFileNames: 'backend.cjs'`, and `.cjs` chunk filenames.
+Build new backend entries as ESM with a `.mjs` filename. OpenForge runs each active backend in a dedicated worker and terminates that worker during deactivation or reload, so the complete ESM module graph can be reclaimed. `.js` and CommonJS `.cjs` bundles remain supported for existing plugins. For a Vite backend build, configure Rollup with `format: 'es'`, `entryFileNames: 'backend.mjs'`, and `.mjs` chunk filenames.
 
 ## 6. First working plugin flow
 
-1. Build the package so `dist/frontend.js` and `dist/backend.cjs` exist.
+1. Build the package so `dist/frontend.js` and `dist/backend.mjs` exist.
 2. Perform Plugin Installation for the package as a Trusted Plugin.
 3. Use Project Plugin Enablement to enable the Trusted Plugin for a Project.
 4. Open the plugin's Notes view.

@@ -3,6 +3,7 @@ import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValida
 import type { AgentCommandDescriptor, CommandDescriptor, PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
 import { createBackendApi, DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS } from './backend-api'
 import { BackendLifecycle } from './backend-lifecycle'
+import { IsolatedPluginHostRuntime, isPluginBackendWorker, startPluginBackendWorker } from './isolated-runtime'
 import { installPluginConsoleRouting, logPluginHostError, toError, withPluginConsole } from './console-attribution'
 import { globalContributionRegistry } from './contribution-registry'
 import type {
@@ -25,11 +26,13 @@ installPluginConsoleRouting()
 export class PluginHostRuntime {
   private readonly lifecycle: BackendLifecycle
   private readonly hostCallbacks: HostCallbackHandler | null
+  private readonly coordinatorCallbacks: HostCallbackHandler | null
   private readonly activationTails = new Map<string, Promise<void>>()
   private readonly invocationTails = new Map<string, Promise<void>>()
 
   constructor(options: RuntimeOptions = {}) {
     this.hostCallbacks = options.hostCallbacks ?? null
+    this.coordinatorCallbacks = options.coordinatorCallbacks ?? null
     this.lifecycle = new BackendLifecycle({
       crashLoopLimit: options.crashLoopLimit,
       crashLoopWindowMs: options.crashLoopWindowMs,
@@ -40,7 +43,8 @@ export class PluginHostRuntime {
         externalTextFileReadTimeoutMs: options.externalTextFileReadTimeoutMs ?? DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS,
         invokeCommand: input => this.invokeCommand(input),
         invokeGlobalCommand: (qualifiedId, payload, callerPluginId) => this.invokeGlobalCommand(qualifiedId, payload, callerPluginId),
-        listCommands: () => this.listCommands(),
+        listCommands: sourcePluginId => this.listCommands(sourcePluginId),
+        emitGlobalEvent: (event, payload, sourcePluginId) => this.emitGlobalEvent(event, payload, sourcePluginId),
       }, globalContributionRegistry),
     })
   }
@@ -121,11 +125,12 @@ export class PluginHostRuntime {
   async invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown> {
     const command = globalContributionRegistry.getCommand(qualifiedId)
     if (!command) {
+      const params = { qualifiedId, payload: payload ?? null, callerPluginId: callerPluginId ?? null }
+      if (!qualifiedId.startsWith('openforge.') && this.coordinatorCallbacks) {
+        return await this.coordinatorCallbacks({ method: 'openforge.plugins.invokeGlobalCommand', params })
+      }
       if (qualifiedId.startsWith('openforge.') && this.hostCallbacks) {
-        return await this.hostCallbacks({
-          method: 'openforge.commands.invokeGlobal',
-          params: { qualifiedId, payload: payload ?? null, callerPluginId: callerPluginId ?? null },
-        })
+        return await this.hostCallbacks({ method: 'openforge.commands.invokeGlobal', params })
       }
       throw new Error(`Command not found: ${qualifiedId}`)
     }
@@ -146,8 +151,24 @@ export class PluginHostRuntime {
     }
   }
 
-  async listCommands(): Promise<CommandDescriptor[]> {
-    return globalContributionRegistry.listCommands()
+  async listCommands(sourcePluginId?: string): Promise<CommandDescriptor[]> {
+    const localCommands = globalContributionRegistry.listCommands()
+    if (!this.coordinatorCallbacks || !sourcePluginId) return localCommands
+    const remoteCommands = await this.coordinatorCallbacks({
+      method: 'openforge.plugins.listCommands',
+      params: { sourcePluginId },
+    })
+    return [...localCommands, ...(remoteCommands as CommandDescriptor[])]
+  }
+
+  async emitGlobalEvent(event: string, payload: unknown, sourcePluginId: string): Promise<void> {
+    await globalContributionRegistry.emitEvent(event, payload)
+    if (this.coordinatorCallbacks) {
+      await this.coordinatorCallbacks({
+        method: 'openforge.plugins.emitGlobalEvent',
+        params: { event, payload: payload ?? null, sourcePluginId },
+      })
+    }
   }
 
   async listAgentCommands(input: ActivateBackendInput): Promise<AgentCommandDescriptor[]> {
@@ -240,6 +261,24 @@ export class PluginHostRuntime {
         case 'plugin.commands.invoke': {
           const input = this.requireAgentCommandParams(params)
           const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeAgentCommand(input))
+          return { jsonrpc: '2.0', id: request.id, result }
+        }
+        case 'plugin.internal.listCommands':
+          return { jsonrpc: '2.0', id: request.id, result: globalContributionRegistry.listCommands() }
+        case 'plugin.internal.emitGlobalEvent': {
+          const event = params.event
+          if (!isNonEmptyString(event)) throw new Error('Missing event')
+          await globalContributionRegistry.emitEvent(event, params.payload)
+          return { jsonrpc: '2.0', id: request.id, result: null }
+        }
+        case 'plugin.internal.invokeGlobalCommand': {
+          const qualifiedId = params.qualifiedId
+          if (!isNonEmptyString(qualifiedId)) throw new Error('Missing qualifiedId')
+          const result = await this.invokeGlobalCommand(
+            qualifiedId,
+            params.payload,
+            isNonEmptyString(params.callerPluginId) ? params.callerPluginId : undefined,
+          )
           return { jsonrpc: '2.0', id: request.id, result }
         }
         case 'plugin.backend.invoke': {
@@ -338,16 +377,27 @@ export function createPluginHostRuntime(options?: RuntimeOptions): PluginHostRun
   return new PluginHostRuntime(options)
 }
 
-const defaultStdioHostCallbackBridge = new StdioHostCallbackBridge()
-const defaultRuntime = createPluginHostRuntime({ hostCallbacks: defaultStdioHostCallbackBridge.request })
+const pluginBackendWorker = isPluginBackendWorker()
+const defaultStdioHostCallbackBridge = pluginBackendWorker ? null : new StdioHostCallbackBridge()
+const defaultRuntime = pluginBackendWorker
+  ? null
+  : new IsolatedPluginHostRuntime(import.meta.url, defaultStdioHostCallbackBridge!.request)
+
+if (pluginBackendWorker) {
+  startPluginBackendWorker(hostCallbacks => createPluginHostRuntime({
+    hostCallbacks,
+    coordinatorCallbacks: hostCallbacks,
+  }))
+}
 
 export async function handleRequest(request: JsonRpcRequest): Promise<void> {
+  if (!defaultRuntime) throw new Error('The parent plugin host runtime is unavailable inside a backend worker')
   writeJsonRpcResponse(await defaultRuntime.handleJsonRpcRequest(request))
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (!pluginBackendWorker && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startStdioServer({
-    callbackBridge: defaultStdioHostCallbackBridge,
+    callbackBridge: defaultStdioHostCallbackBridge!,
     handleRequest,
   })
 }

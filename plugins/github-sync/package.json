@@ -31,7 +31,7 @@
     "description": "Review pull requests assigned to you",
     "icon": "git-pull-request",
     "frontend": "./dist/frontend.js",
-    "backend": "./dist/backend.cjs",
+    "backend": "./dist/backend.mjs",
     "frontendStyles": [
       "./dist/plugin-github-sync.css"
     ],

@@ -193,7 +193,8 @@ export type BackendApiRuntime = {
   externalTextFileReadTimeoutMs: number
   invokeCommand(input: InvokeBackendInput): Promise<unknown>
   invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown>
-  listCommands(): Promise<ReturnType<ContributionRegistry['listCommands']>>
+  listCommands(sourcePluginId: string): Promise<ReturnType<ContributionRegistry['listCommands']>>
+  emitGlobalEvent(event: string, payload: unknown, sourcePluginId: string): Promise<void>
 }
 
 export function createBackendApi(
@@ -221,14 +222,14 @@ export function createBackendApi(
       async invokeGlobal<TOutput = unknown>(qualifiedId: string, payload?: unknown): Promise<TOutput> {
         return await runtime.invokeGlobalCommand(qualifiedId, payload, state.pluginId) as TOutput
       },
-      list: async () => runtime.listCommands(),
+      list: async () => runtime.listCommands(state.pluginId),
       listCatalog: async request => await hostCallback<CommandInfo[]>('openforge.commands.listCatalog', objectCallbackParams(request)),
     },
     events: {
       on: (event, handler) => contributions.registerEventListener(state, event, handler as RuntimeEventHandler, false),
       onGlobal: (event, handler) => contributions.registerEventListener(state, event, handler as RuntimeEventHandler, true),
       emit: async (event, payload) => contributions.emitEvent(`${state.pluginId}.${event}`, payload),
-      emitGlobal: async (event, payload) => contributions.emitEvent(event, payload),
+      emitGlobal: async (event, payload) => runtime.emitGlobalEvent(event, payload, state.pluginId),
     },
     storage: state.storage,
     context: {

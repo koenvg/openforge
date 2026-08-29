@@ -25,6 +25,14 @@ export async function writeBackendModule(source: string): Promise<string> {
   return file
 }
 
+export async function writeEsmBackendModule(source: string, extension: 'js' | 'mjs' = 'mjs'): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'openforge-plugin-host-esm-'))
+  if (extension === 'js') await writeFile(join(dir, 'package.json'), '{"type":"module"}\n')
+  const file = join(dir, `backend-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`)
+  await writeFile(file, source)
+  return file
+}
+
 export async function expectOnlyPluginHostStderr(expectedLines: string[], operation: () => Promise<void>): Promise<void> {
   const chunks: string[] = []
   const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
