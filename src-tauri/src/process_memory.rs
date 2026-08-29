@@ -27,6 +27,14 @@ pub struct ProcessMemoryNode {
     pub children: Vec<ProcessMemoryNode>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginHostRuntimeMetricsStatus {
+    Available,
+    Unavailable,
+    Error,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginHostMemoryDiagnostics {
@@ -36,6 +44,11 @@ pub struct PluginHostMemoryDiagnostics {
     pub root_rss_bytes: u64,
     pub total_tree_rss_bytes: u64,
     pub helper_processes: Vec<ProcessMemoryNode>,
+    pub runtime_metrics_status: PluginHostRuntimeMetricsStatus,
+    pub v8_memory_usage: Option<crate::plugin_host::PluginHostV8MemoryUsage>,
+    pub plugins: Vec<crate::plugin_host::PluginLifecycleDiagnostics>,
+    pub plugin_count: u64,
+    pub plugins_truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -80,6 +93,19 @@ pub struct ProcessMemoryDiagnostics {
     pub totals: ProcessMemoryTotals,
 }
 
+fn classify_plugin_host_runtime_diagnostics(
+    result: Result<Option<crate::plugin_host::PluginHostRuntimeDiagnostics>, String>,
+) -> (
+    Option<crate::plugin_host::PluginHostRuntimeDiagnostics>,
+    PluginHostRuntimeMetricsStatus,
+) {
+    match result {
+        Ok(Some(diagnostics)) => (Some(diagnostics), PluginHostRuntimeMetricsStatus::Available),
+        Ok(None) => (None, PluginHostRuntimeMetricsStatus::Unavailable),
+        Err(_) => (None, PluginHostRuntimeMetricsStatus::Error),
+    }
+}
+
 pub async fn collect_process_memory_diagnostics(
     db: Arc<Mutex<crate::db::Database>>,
     pty_manager: Option<PtyManager>,
@@ -92,9 +118,20 @@ pub async fn collect_process_memory_diagnostics(
         format!("current sidecar process {sidecar_pid} was not found in process table")
     })?;
 
-    let plugin_host = plugin_host
-        .map(|host| plugin_host_memory_diagnostics(&host, &processes))
-        .transpose()?;
+    let plugin_host = match plugin_host {
+        Some(host) => {
+            let runtime = host.runtime_process_diagnostics()?;
+            let (host_runtime, runtime_metrics_status) =
+                classify_plugin_host_runtime_diagnostics(host.process_diagnostics().await);
+            Some(plugin_host_memory_diagnostics(
+                runtime,
+                host_runtime,
+                runtime_metrics_status,
+                &processes,
+            ))
+        }
+        None => None,
+    };
 
     let pty_sessions = match pty_manager {
         Some(manager) => manager.process_diagnostic_sessions().await,
@@ -127,10 +164,11 @@ pub async fn collect_process_memory_diagnostics(
 }
 
 fn plugin_host_memory_diagnostics(
-    plugin_host: &PluginHost,
+    runtime: crate::plugin_host::PluginHostProcessDiagnostics,
+    host_runtime: Option<crate::plugin_host::PluginHostRuntimeDiagnostics>,
+    runtime_metrics_status: PluginHostRuntimeMetricsStatus,
     processes: &HashMap<u32, ProcessInfo>,
-) -> Result<PluginHostMemoryDiagnostics, String> {
-    let runtime = plugin_host.runtime_process_diagnostics()?;
+) -> PluginHostMemoryDiagnostics {
     let root_process = runtime
         .pid
         .and_then(|pid| build_process_tree(pid, processes));
@@ -138,8 +176,17 @@ fn plugin_host_memory_diagnostics(
         .as_ref()
         .map(flatten_descendants)
         .unwrap_or_default();
+    let (v8_memory_usage, plugins, plugin_count, plugins_truncated) = match host_runtime {
+        Some(diagnostics) => (
+            Some(diagnostics.memory_usage),
+            diagnostics.plugins,
+            diagnostics.plugin_count,
+            diagnostics.plugins_truncated,
+        ),
+        None => (None, Vec::new(), 0, false),
+    };
 
-    Ok(PluginHostMemoryDiagnostics {
+    PluginHostMemoryDiagnostics {
         state: runtime.state,
         root_pid: runtime.pid,
         root_rss_bytes: root_process
@@ -152,7 +199,12 @@ fn plugin_host_memory_diagnostics(
             .unwrap_or(0),
         root_process,
         helper_processes,
-    })
+        runtime_metrics_status,
+        v8_memory_usage,
+        plugins,
+        plugin_count,
+        plugins_truncated,
+    }
 }
 
 fn pty_memory_diagnostics(
@@ -550,5 +602,76 @@ mod tests {
         assert_eq!(diagnostics[0].provider, None);
         assert_eq!(diagnostics[0].agent_session_id, None);
         assert_eq!(diagnostics[0].agent_session_status, None);
+    }
+
+    #[test]
+    fn plugin_host_memory_diagnostics_exposes_v8_and_lifecycle_attribution() {
+        let processes = parse_ps_output("30 10 120 plugin-host\n31 30 5 helper\n");
+        let runtime = crate::plugin_host::PluginHostProcessDiagnostics {
+            state: "Running".to_string(),
+            pid: Some(30),
+        };
+        let host_runtime = crate::plugin_host::PluginHostRuntimeDiagnostics {
+            memory_usage: crate::plugin_host::PluginHostV8MemoryUsage {
+                rss_bytes: 100_000,
+                heap_total_bytes: 80_000,
+                heap_used_bytes: 60_000,
+                external_bytes: 20_000,
+                array_buffers_bytes: 10_000,
+            },
+            plugins: vec![crate::plugin_host::PluginLifecycleDiagnostics {
+                plugin_id: "com.example.memory".to_string(),
+                state: crate::plugin_host::PluginBackendReadyState::Missing,
+                active: false,
+                activation_count: 2,
+                reload_count: 1,
+            }],
+            plugin_count: 1,
+            plugins_truncated: false,
+        };
+
+        let diagnostics = plugin_host_memory_diagnostics(
+            runtime,
+            Some(host_runtime),
+            PluginHostRuntimeMetricsStatus::Available,
+            &processes,
+        );
+
+        assert_eq!(diagnostics.root_rss_bytes, 120 * 1024);
+        assert_eq!(
+            diagnostics.runtime_metrics_status,
+            PluginHostRuntimeMetricsStatus::Available
+        );
+        assert_eq!(
+            diagnostics
+                .v8_memory_usage
+                .as_ref()
+                .expect("V8 memory should be present")
+                .heap_used_bytes,
+            60_000
+        );
+        assert_eq!(diagnostics.plugins[0].plugin_id, "com.example.memory");
+        assert!(!diagnostics.plugins[0].active);
+        assert_eq!(diagnostics.plugins[0].reload_count, 1);
+        assert_eq!(diagnostics.plugin_count, 1);
+        assert!(!diagnostics.plugins_truncated);
+        let json = serde_json::to_value(&diagnostics).expect("diagnostics should serialize");
+        assert_eq!(json["v8MemoryUsage"]["heapUsedBytes"], 60_000);
+        assert_eq!(json["plugins"][0]["activationCount"], 2);
+        assert!(json["plugins"][0].get("backendPath").is_none());
+    }
+
+    #[test]
+    fn plugin_host_diagnostics_failure_is_explicit_without_error_content() {
+        let (runtime, status) = classify_plugin_host_runtime_diagnostics(Err(
+            "contract failure with plugin payload".to_string(),
+        ));
+
+        assert!(runtime.is_none());
+        assert_eq!(status, PluginHostRuntimeMetricsStatus::Error);
+        assert_eq!(
+            serde_json::to_value(status).expect("status should serialize"),
+            "error"
+        );
     }
 }

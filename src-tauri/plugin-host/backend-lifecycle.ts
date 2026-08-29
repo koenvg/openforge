@@ -9,6 +9,7 @@ import type {
   ActivateBackendInput,
   BackendStateSnapshot,
   HostCallbackHandler,
+  PluginLifecycleDiagnostics,
   ReadyBackendInput,
   RuntimePluginState,
 } from './runtime-types'
@@ -16,6 +17,7 @@ import { assertLocalId, isNonEmptyString } from './validation'
 
 const DEFAULT_CRASH_LOOP_LIMIT = 3
 const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
+export const MAX_PLUGIN_LIFECYCLE_DIAGNOSTICS = 100
 
 function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | null {
   const candidate = module.default ?? module
@@ -213,6 +215,29 @@ export class BackendLifecycle {
     if (firstError) throw firstError
   }
 
+  lifecycleDiagnostics(): {
+    plugins: PluginLifecycleDiagnostics[]
+    pluginCount: number
+    pluginsTruncated: boolean
+  } {
+    const states = Array.from(this.plugins.values()).sort((left, right) =>
+      left.pluginId.localeCompare(right.pluginId),
+    )
+    const plugins = states.slice(0, MAX_PLUGIN_LIFECYCLE_DIAGNOSTICS).map(state => ({
+      pluginId: state.pluginId,
+      state: state.state,
+      active: state.state === 'ready',
+      activationCount: state.activationCount,
+      reloadCount: state.reloadCount,
+    }))
+
+    return {
+      plugins,
+      pluginCount: states.length,
+      pluginsTruncated: states.length > plugins.length,
+    }
+  }
+
   snapshot(pluginId: string): BackendStateSnapshot {
     assertLocalId('backend', pluginId)
     const state = this.getState(pluginId)
@@ -271,6 +296,8 @@ export class BackendLifecycle {
         return
       }
 
+      if (state.activationCount > 0) state.reloadCount += 1
+      state.activationCount += 1
       state.state = 'ready'
       state.error = null
     } catch (error) {

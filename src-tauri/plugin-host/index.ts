@@ -11,6 +11,7 @@ import type {
   HostCallbackHandler,
   InvokeAgentCommandInput,
   InvokeBackendInput,
+  PluginHostProcessDiagnostics,
   JsonRpcRequest,
   JsonRpcResponse,
   ReadyBackendInput,
@@ -158,6 +159,20 @@ export class PluginHostRuntime {
     return this.lifecycle.snapshot(pluginId)
   }
 
+  getProcessDiagnostics(): PluginHostProcessDiagnostics {
+    const memoryUsage = process.memoryUsage()
+    return {
+      memoryUsage: {
+        rssBytes: memoryUsage.rss,
+        heapTotalBytes: memoryUsage.heapTotal,
+        heapUsedBytes: memoryUsage.heapUsed,
+        externalBytes: memoryUsage.external,
+        arrayBuffersBytes: memoryUsage.arrayBuffers,
+      },
+      ...this.lifecycle.lifecycleDiagnostics(),
+    }
+  }
+
   private serializePluginActivation<T>(
     pluginId: string,
     operation: () => Promise<T>,
@@ -208,6 +223,8 @@ export class PluginHostRuntime {
       const params = request.params ?? {}
       const method = request.method
       switch (method) {
+        case 'plugin.host.diagnostics':
+          return { jsonrpc: '2.0', id: request.id, result: this.getProcessDiagnostics() }
         case 'plugin.backend.activate':
           return { jsonrpc: '2.0', id: request.id, result: await this.activateBackend(this.requireActivationParams(params)) }
         case 'plugin.backend.deactivate':

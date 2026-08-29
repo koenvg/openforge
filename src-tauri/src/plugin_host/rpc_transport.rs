@@ -142,6 +142,36 @@ impl PluginHost {
         .await
     }
 
+    /// Requests bounded V8 and per-plugin lifecycle metrics from a running plugin host.
+    ///
+    /// Returns `Ok(None)` without starting the plugin host when it is stopped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when transport I/O, timeout handling, or response deserialization fails.
+    pub async fn process_diagnostics(
+        &self,
+    ) -> Result<Option<super::PluginHostRuntimeDiagnostics>, String> {
+        if !self.is_sidecar_running() {
+            return Ok(None);
+        }
+
+        let (request_id, request) =
+            crate::plugin_rpc::format_request("plugin", "host.diagnostics", json!({}));
+        let value = self
+            .send_request_and_wait(
+                request_id,
+                &request,
+                "plugin host process diagnostics",
+                "collecting plugin host process diagnostics",
+                crate::plugin_rpc::DEFAULT_TIMEOUT,
+            )
+            .await?;
+        serde_json::from_value(value)
+            .map(Some)
+            .map_err(|error| format!("invalid plugin host process diagnostics: {error}"))
+    }
+
     async fn send_request_and_wait(
         &self,
         request_id: u64,
