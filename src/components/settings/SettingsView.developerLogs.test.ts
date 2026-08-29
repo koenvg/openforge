@@ -51,6 +51,7 @@ describe('SettingsView developer logs integration', () => {
     try {
       await vi.waitFor(() => {
         expect(screen.getByText('Developer')).toBeTruthy()
+        expect(screen.getByText('Process memory history')).toBeTruthy()
         expect(screen.getByText(/\[electron\] app ready/)).toBeTruthy()
       })
       expect(getDeveloperLogSnapshot).toHaveBeenCalledWith(1000)

@@ -139,6 +139,7 @@ describe('OpenForge CLI', () => {
       'openforge project list',
       'openforge project labels list --project-id <id>',
       'openforge debug process-memory',
+      'openforge debug process-memory-history',
       'openforge plugin install --path <local-plugin-source>',
       'openforge plugin enable --plugin-id <id> --project-id <id>',
       'openforge plugin disable --plugin-id <id> --project-id <id>',

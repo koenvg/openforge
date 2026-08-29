@@ -47,6 +47,23 @@ export interface DeveloperLogSnapshot {
   totalEntries: number
 }
 
+export interface ProcessMemoryHistorySample {
+  collectedAt: string
+  electronTotalTreeRssBytes: number
+  sidecarTotalTreeRssBytes: number
+  managedPtyTotalTreeRssBytes: number
+  pluginHostTotalTreeRssBytes: number
+  trackedUniqueRssBytes: number
+}
+
+export interface ProcessMemoryHistorySnapshot {
+  enabled: boolean
+  sampleIntervalSeconds: number
+  maxSamples: number
+  rssSemantics: string
+  samples: ProcessMemoryHistorySample[]
+}
+
 export interface TaskLabel {
   id: number
   project_id: string

@@ -98,6 +98,7 @@ describe('Electron Rust sidecar supervision', () => {
       OPENFORGE_BACKEND_PORT: '17642',
       OPENFORGE_BACKEND_TOKEN: 'token-123',
       OPENFORGE_ELECTRON_SIDECAR: '1',
+      OPENFORGE_ELECTRON_PID: String(process.pid),
       OPENFORGE_APP_DATA_DIR: '/tmp/openforge-sidecar-data',
     })
   })

@@ -169,6 +169,7 @@ impl PluginHost {
             companion_gateway: None,
             task_claims: self.task_claims.clone(),
             task_start_worktree_root: crate::task_start::default_worktree_root(),
+            process_memory_history: crate::process_memory_history::ProcessMemoryHistory::default(),
             poll_context: crate::github_poller::PollContext::new(),
         })
     }

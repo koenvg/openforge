@@ -4,6 +4,7 @@ mod agent_sessions;
 mod app;
 mod browser_sessions;
 mod config;
+mod process_memory_history;
 mod projects;
 mod task_labels;
 mod tasks;
@@ -16,12 +17,16 @@ enum CommandDomain {
     Task,
     AgentSession,
     TaskLabel,
+    ProcessMemoryHistory,
     App,
 }
 
 fn command_domain(command: &str) -> Option<CommandDomain> {
     match command {
         "get_config" | "set_config" => Some(CommandDomain::Config),
+        "get_process_memory_history" | "set_process_memory_history_enabled" => {
+            Some(CommandDomain::ProcessMemoryHistory)
+        }
         "list_browser_session_purge_intents" | "acknowledge_browser_session_purge_intent" => {
             Some(CommandDomain::BrowserSession)
         }
@@ -68,6 +73,9 @@ pub(super) async fn handle_app_unmatched_command(
 ) -> AppResult<serde_json::Value> {
     match command_domain(&request.command) {
         Some(CommandDomain::Config) => config::handle(state, request).await,
+        Some(CommandDomain::ProcessMemoryHistory) => {
+            process_memory_history::handle(state, request).await
+        }
         Some(CommandDomain::BrowserSession) => browser_sessions::handle(state, request),
         Some(CommandDomain::Project) => projects::handle(state, request),
         Some(CommandDomain::Task) => tasks::handle(state, request),
@@ -93,6 +101,14 @@ mod tests {
         let cases = [
             ("get_config", CommandDomain::Config),
             ("set_config", CommandDomain::Config),
+            (
+                "get_process_memory_history",
+                CommandDomain::ProcessMemoryHistory,
+            ),
+            (
+                "set_process_memory_history_enabled",
+                CommandDomain::ProcessMemoryHistory,
+            ),
             (
                 "list_browser_session_purge_intents",
                 CommandDomain::BrowserSession,

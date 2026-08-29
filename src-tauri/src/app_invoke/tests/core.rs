@@ -692,6 +692,77 @@ async fn update_task_status_rejects_done_and_leaves_status_unchanged() {
     );
 }
 
+#[tokio::test]
+async fn process_memory_history_commands_persist_and_apply_the_opt_in_lifecycle() {
+    let (state, _temp_dir) = test_state("app_invoke_process_memory_history");
+
+    let initial = invoke_ok(&state, "get_process_memory_history", json!({})).await;
+    assert_eq!(initial["enabled"], false);
+    assert_eq!(initial["sampleIntervalSeconds"], 60);
+    assert_eq!(initial["maxSamples"], 60);
+
+    let enabled = invoke_ok(
+        &state,
+        "set_process_memory_history_enabled",
+        json!({ "enabled": true }),
+    )
+    .await;
+    assert_eq!(enabled["enabled"], true);
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_config(crate::process_memory_history::PROCESS_MEMORY_HISTORY_ENABLED_CONFIG)
+            .expect("read history preference")
+            .as_deref(),
+        Some("true")
+    );
+
+    let disabled = invoke_ok(
+        &state,
+        "set_process_memory_history_enabled",
+        json!({ "enabled": false }),
+    )
+    .await;
+    assert_eq!(disabled["enabled"], false);
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_config(crate::process_memory_history::PROCESS_MEMORY_HISTORY_ENABLED_CONFIG)
+            .expect("read history preference")
+            .as_deref(),
+        Some("false")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_process_memory_history_updates_keep_runtime_and_preference_consistent() {
+    let (state, _temp_dir) = test_state("app_invoke_concurrent_process_memory_history");
+    let mut updates = Vec::new();
+    for enabled in [true, false, true, false, true, false] {
+        let state = state.clone();
+        updates.push(tokio::spawn(async move {
+            invoke_ok(
+                &state,
+                "set_process_memory_history_enabled",
+                json!({ "enabled": enabled }),
+            )
+            .await;
+        }));
+    }
+    for update in updates {
+        update.await.expect("history update task");
+    }
+
+    let persisted_enabled = crate::db::acquire_db(&state.db)
+        .get_config(crate::process_memory_history::PROCESS_MEMORY_HISTORY_ENABLED_CONFIG)
+        .expect("read history preference")
+        .as_deref()
+        == Some("true");
+    assert_eq!(
+        state.process_memory_history.snapshot().enabled,
+        persisted_enabled
+    );
+    state.process_memory_history.disable();
+}
+
 async fn task_workspace_value(
     task_id: &str,
     state: &crate::http_server::AppState,

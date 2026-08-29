@@ -115,6 +115,8 @@ export const desktopCommandContracts = [
   {"functionName":"pluginBackendWhenReady","moduleName":"pluginManagement","ipcCommand":"plugin_backend_when_ready","payloadKeys":["pluginId","projectId","preserveActivation"],"owner":"rust-sidecar","domain":"plugins"},
   {"functionName":"pluginBackendDeactivate","moduleName":"pluginManagement","ipcCommand":"plugin_backend_deactivate","payloadKeys":["pluginId"],"owner":"rust-sidecar","domain":"plugins"},
   {"functionName":"stopPluginSidecar","moduleName":"pluginManagement","ipcCommand":"stop_plugin_sidecar","payloadKeys":[],"owner":"rust-sidecar","domain":"plugins"},
+  {"functionName":"getProcessMemoryHistory","moduleName":"processMemory","ipcCommand":"get_process_memory_history","payloadKeys":[],"owner":"rust-sidecar","domain":"app-shell"},
+  {"functionName":"setProcessMemoryHistoryEnabled","moduleName":"processMemory","ipcCommand":"set_process_memory_history_enabled","payloadKeys":["enabled"],"owner":"rust-sidecar","domain":"app-shell"},
   {"functionName":"createTask","moduleName":"tasks","ipcCommand":"create_task","payloadKeys":["initialPrompt","status","projectId","permissionMode","dependsOn","labelNames","worktreeSource","worktreeBranch","title","sourceTicketUrl","taskDisplayTitleUpdatesEnabled","aiProvider"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"updateTaskInitialPrompt","moduleName":"tasks","ipcCommand":"update_task","payloadKeys":["id","initialPrompt"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"updateTaskTitle","moduleName":"tasks","ipcCommand":"update_task_title","payloadKeys":["id","title"],"owner":"rust-sidecar","domain":"tasks-projects"},

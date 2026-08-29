@@ -28,6 +28,7 @@ import {
   getTaskLanes,
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
+  getProcessMemoryHistory,
   getDeveloperLogs,
   getCompanionPairingStatus,
   getTaskBatchFileContents,
@@ -51,6 +52,7 @@ import {
   spawnShellPty,
   startCompanionPairing,
   setCompanionTailscaleHostname,
+  setProcessMemoryHistoryEnabled,
   startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
@@ -185,6 +187,23 @@ describe("ipc developer logs", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_developer_logs", { limit: 150 });
   });
 });
+
+describe('ipc process memory history', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    invokeMock.mockResolvedValue({ enabled: false, samples: [] })
+  })
+
+  it('uses typed history commands with a camelCase opt-in payload', async () => {
+    await getProcessMemoryHistory()
+    await setProcessMemoryHistoryEnabled(true)
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['get_process_memory_history'],
+      ['set_process_memory_history_enabled', { enabled: true }],
+    ])
+  })
+})
 
 describe("ipc spawnShellPty", () => {
 	beforeEach(() => {
