@@ -232,13 +232,34 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         .expect("task");
     let dependency = database
         .create_task(
-            "Prepare companion contract",
+            "\n[image#2]: data:image/png;base64,cmVsYXRpb25zaGlwLXNlY3JldA==\nPrepare companion contract",
             "done",
             Some(&relationship_project.id),
             None,
             None,
         )
         .expect("dependency");
+    {
+        let connection = database.connection();
+        connection
+            .lock()
+            .expect("lock database")
+            .execute(
+                "UPDATE tasks SET title = '   ' WHERE id = ?1",
+                [&dependency.id],
+            )
+            .expect("store whitespace title");
+    }
+    let noncanonical_image_line = "[image#1]: data:image/png;base64,   ";
+    let literal_dependency = database
+        .create_task(
+            &format!("{noncanonical_image_line}\nReview the generated changes"),
+            "backlog",
+            Some(&relationship_project.id),
+            None,
+            None,
+        )
+        .expect("literal dependency");
     let other_dependency = database
         .create_task(
             "Finish release notes",
@@ -263,6 +284,9 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
     database
         .add_task_dependency(&task.id, &dependency.id)
         .expect("dependency link");
+    database
+        .add_task_dependency(&task.id, &literal_dependency.id)
+        .expect("literal dependency link");
     database
         .add_task_dependency(&dependent.id, &task.id)
         .expect("dependent link");
@@ -333,6 +357,11 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         relationship_project.id
     );
     assert_eq!(json["dependencies"][0]["projectName"], "Release Tools");
+    assert_eq!(json["dependencies"][1]["taskId"], literal_dependency.id);
+    assert_eq!(
+        json["dependencies"][1]["title"],
+        "[image#1]: data:image/png;base64,"
+    );
     assert_eq!(json["dependentTasks"][0]["taskId"], dependent.id);
     assert_eq!(json["dependentTasks"][0]["title"], "Ship companion release");
     assert_eq!(json["dependentTasks"][0]["boardStatus"], "backlog");

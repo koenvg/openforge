@@ -1,7 +1,10 @@
 use super::{
     task_dependencies::{load_task_dependency_ids, load_task_dependency_ids_for_tasks},
     task_labels::{load_task_labels, load_task_labels_for_tasks},
-    tasks::{CompactTaskRow, TaskRelationshipReferenceRow, TaskRow},
+    tasks::{
+        CompactTaskRow, TaskDetailRelationshipRow, TaskDetailRelationships,
+        TaskRelationshipReferenceRow, TaskRow,
+    },
     Database,
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
@@ -61,6 +64,41 @@ fn task_relationship_reference_from_row(
         title: row.get(3)?,
         depends_on: Vec::new(),
     })
+}
+
+fn task_detail_relationship_from_row(
+    row: &rusqlite::Row<'_>,
+) -> Result<(bool, TaskDetailRelationshipRow)> {
+    let id = row.get::<_, String>(1)?;
+    let explicit_title = row.get::<_, Option<String>>(5)?;
+    // Borrow the prompt only while deriving its display title; relationship rows never own it.
+    let initial_prompt = row.get_ref(6)?;
+    let initial_prompt = initial_prompt.as_str().map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(6, initial_prompt.data_type(), Box::new(error))
+    })?;
+    Ok((
+        row.get::<_, i64>(0)? == 1,
+        TaskDetailRelationshipRow {
+            title: crate::task_prompt::task_display_title(
+                &id,
+                explicit_title.as_deref(),
+                initial_prompt,
+            ),
+            id,
+            status: row.get(2)?,
+            project_id: row.get(3)?,
+            project_name: row.get(4)?,
+            remaining_dependency_count: usize::try_from(row.get::<_, i64>(7)?).map_err(
+                |error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        7,
+                        rusqlite::types::Type::Integer,
+                        Box::new(error),
+                    )
+                },
+            )?,
+        },
+    ))
 }
 
 fn hydrate_task_row(conn: &rusqlite::Connection, mut task: TaskRow) -> Result<TaskRow> {
@@ -226,6 +264,89 @@ ORDER BY updated_at DESC
         let rows = statement.query_map([project_id], task_relationship_reference_from_row)?;
         let tasks = rows.collect::<Result<Vec<_>>>()?;
         hydrate_task_relationship_references(&conn, tasks)
+    }
+
+    pub(crate) fn get_task_detail_relationships(
+        &self,
+        task_id: &str,
+    ) -> Result<TaskDetailRelationships> {
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(
+            r#"
+WITH relationships AS (
+    SELECT
+        0 AS relationship_kind,
+        related.id,
+        related.status,
+        related.project_id,
+        projects.name AS project_name,
+        related.title AS explicit_title,
+        related.initial_prompt,
+        0 AS remaining_dependency_count,
+        links.created_at AS relationship_created_at,
+        related.updated_at
+    FROM task_dependencies links
+    INNER JOIN tasks related ON related.id = links.depends_on_task_id
+    LEFT JOIN projects ON projects.id = related.project_id
+    WHERE links.task_id = ?1
+
+    UNION ALL
+
+    SELECT
+        1 AS relationship_kind,
+        related.id,
+        related.status,
+        related.project_id,
+        projects.name AS project_name,
+        related.title AS explicit_title,
+        related.initial_prompt,
+        (
+            SELECT COUNT(*)
+            FROM task_dependencies remaining
+            INNER JOIN tasks prerequisite ON prerequisite.id = remaining.depends_on_task_id
+            WHERE remaining.task_id = related.id
+              AND remaining.depends_on_task_id != ?1
+              AND prerequisite.status != 'done'
+        ) AS remaining_dependency_count,
+        links.created_at AS relationship_created_at,
+        related.updated_at
+    FROM task_dependencies links
+    INNER JOIN tasks related ON related.id = links.task_id
+    LEFT JOIN projects ON projects.id = related.project_id
+    WHERE links.depends_on_task_id = ?1
+)
+SELECT
+    relationship_kind,
+    id,
+    status,
+    project_id,
+    project_name,
+    explicit_title,
+    initial_prompt,
+    remaining_dependency_count
+FROM relationships
+ORDER BY
+    relationship_kind ASC,
+    CASE WHEN relationship_kind = 0 THEN relationship_created_at END ASC,
+    CASE WHEN relationship_kind = 0 THEN id END ASC,
+    CASE WHEN relationship_kind = 1 THEN updated_at END DESC,
+    id ASC
+            "#,
+        )?;
+        let rows = statement.query_map([task_id], task_detail_relationship_from_row)?;
+        let mut relationships = TaskDetailRelationships {
+            dependencies: Vec::new(),
+            dependents: Vec::new(),
+        };
+        for row in rows {
+            let (is_dependent, relationship) = row?;
+            if is_dependent {
+                relationships.dependents.push(relationship);
+            } else {
+                relationships.dependencies.push(relationship);
+            }
+        }
+        Ok(relationships)
     }
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
@@ -552,6 +673,113 @@ mod tests {
             "relationship response must not retain full task prompts"
         );
     }
+    #[test]
+    fn task_detail_relationships_stay_compact_and_scoped_with_large_task_history() {
+        let (db, _temp_dir) = make_test_db("task_detail_relationships_compact");
+        let task_project = db
+            .create_project("Task project", "/tmp/task-detail-relationships-task")
+            .expect("create task project");
+        let relationship_project = db
+            .create_project(
+                "Relationship project",
+                "/tmp/task-detail-relationships-related",
+            )
+            .expect("create relationship project");
+        let task = db
+            .create_task(
+                "Requested task",
+                "doing",
+                Some(&task_project.id),
+                None,
+                None,
+            )
+            .expect("create requested task");
+        let large_prompt = format!(
+            "[image#1]: data:image/png;base64,{}\nRelated title",
+            "eA".repeat(16 * 1024)
+        );
+        let dependency = db
+            .create_task(
+                &large_prompt,
+                "done",
+                Some(&relationship_project.id),
+                None,
+                None,
+            )
+            .expect("create dependency");
+        let open_dependency = db
+            .create_task(
+                "Open prerequisite",
+                "doing",
+                Some(&relationship_project.id),
+                None,
+                None,
+            )
+            .expect("create open dependency");
+        let completed_dependency = db
+            .create_task(
+                "Completed prerequisite",
+                "done",
+                Some(&relationship_project.id),
+                None,
+                None,
+            )
+            .expect("create completed dependency");
+        let dependent = db
+            .create_task(
+                &large_prompt,
+                "backlog",
+                Some(&relationship_project.id),
+                None,
+                None,
+            )
+            .expect("create dependent");
+        db.add_task_dependency(&task.id, &dependency.id)
+            .expect("link dependency");
+        for dependency_id in [&task.id, &open_dependency.id, &completed_dependency.id] {
+            db.add_task_dependency(&dependent.id, dependency_id)
+                .expect("link dependent prerequisite");
+        }
+        for index in 0..128 {
+            db.create_task(
+                &format!("Unrelated {index} {}", "y".repeat(32 * 1024)),
+                "done",
+                Some(&relationship_project.id),
+                None,
+                None,
+            )
+            .expect("create unrelated historical task");
+        }
+
+        let (relationships, statement_count) = trace_statement_count(&db, || {
+            db.get_task_detail_relationships(&task.id)
+                .expect("get task detail relationships")
+        });
+
+        assert_eq!(
+            statement_count, 1,
+            "Task detail relationships must use one scoped database statement"
+        );
+        assert_eq!(relationships.dependencies.len(), 1);
+        assert_eq!(relationships.dependencies[0].id, dependency.id);
+        assert_eq!(
+            relationships.dependencies[0].project_id,
+            Some(relationship_project.id.clone())
+        );
+        assert_eq!(
+            relationships.dependencies[0].project_name.as_deref(),
+            Some("Relationship project")
+        );
+        assert_eq!(relationships.dependents.len(), 1);
+        assert_eq!(relationships.dependents[0].id, dependent.id);
+        assert_eq!(relationships.dependents[0].remaining_dependency_count, 1);
+        assert!(relationships
+            .dependencies
+            .iter()
+            .chain(&relationships.dependents)
+            .all(|relationship| relationship.title.chars().count() <= 120));
+    }
+
     #[test]
     fn every_task_row_query_hydrates_dependencies_and_labels() {
         let (db, _temp_dir) = make_test_db("task_persistence_hydration");
