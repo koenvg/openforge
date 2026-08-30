@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util'
+import { assertRegistryMatchesCanonicalManifest } from './registryValidation.mjs'
 import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from './publicUiExports.mjs'
 
 const PLUGIN_SDK_PACKAGE_NAME = '@openforge-app/plugin-sdk'
@@ -78,26 +78,14 @@ export function createOpenForgePluginSdkTypeScriptPaths() {
 }
 
 export function assertOpenForgePluginSdkEntrypointRegistries({ packageExports, typeScriptPaths }) {
-  assertRegistryMatches('package exports', packageExports, createOpenForgePluginSdkPackageExports())
-  assertRegistryMatches('root TypeScript paths', typeScriptPaths, createOpenForgePluginSdkTypeScriptPaths())
-}
-
-function assertRegistryMatches(registryName, actual, expected) {
-  if (!actual || typeof actual !== 'object' || Array.isArray(actual)) {
-    throw new Error(`Plugin SDK ${registryName} must be an object`)
-  }
-
-  const missingOrMismatched = Object.entries(expected)
-    .filter(([key, value]) => !isDeepStrictEqual(actual[key], value))
-    .map(([key]) => key)
-  const unexpected = Object.keys(actual).filter((key) => !(key in expected))
-
-  if (missingOrMismatched.length === 0 && unexpected.length === 0) return
-
-  const details = [
-    missingOrMismatched.length > 0 ? `missing or mismatched: ${missingOrMismatched.join(', ')}` : null,
-    unexpected.length > 0 ? `not in the canonical manifest: ${unexpected.join(', ')}` : null,
-  ].filter(Boolean)
-
-  throw new Error(`Plugin SDK ${registryName} drifted from the canonical manifest (${details.join('; ')})`)
+  assertRegistryMatchesCanonicalManifest({
+    registryName: 'Plugin SDK package exports',
+    actual: packageExports,
+    expected: createOpenForgePluginSdkPackageExports(),
+  })
+  assertRegistryMatchesCanonicalManifest({
+    registryName: 'Plugin SDK root TypeScript paths',
+    actual: typeScriptPaths,
+    expected: createOpenForgePluginSdkTypeScriptPaths(),
+  })
 }

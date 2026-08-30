@@ -181,8 +181,12 @@ try {
   }
 
   writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')
+const vite = await import('@openforge-app/plugin-sdk/vite')
 if (typeof testing.createMockOpenForgeApi !== 'function') {
   throw new Error('Installed Plugin SDK testing entry point did not expose createMockOpenForgeApi.')
+}
+if (typeof vite.createOpenForgePluginSdkSourceAliases !== 'function') {
+  throw new Error('Installed Plugin SDK Vite entry point did not expose createOpenForgePluginSdkSourceAliases.')
 }
 `)
   run(process.execPath, ['./esm-resolution.mjs'], { cwd: consumerRoot })
