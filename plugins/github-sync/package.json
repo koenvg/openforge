@@ -46,7 +46,8 @@
       "storage",
       "system.openUrl",
       "projectConfig",
-      "context"
+      "context",
+      "tasks"
     ]
   }
 }

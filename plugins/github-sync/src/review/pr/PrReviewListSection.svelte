@@ -46,6 +46,7 @@
     onSelectPr: (pr: ReviewPullRequest) => void
     onMarkUnread: (pr: ReviewPullRequest) => void
     onOpenAuthoredPr: (url: string) => void
+    onStartTaskFromAuthoredPr?: (pr: AuthoredPullRequest) => void
     pluralize: (count: number, singular: string, plural?: string) => string
     // Per-PR walkthrough status (owned by PrReviewView) and the trigger to start
     // a background walkthrough+AI-review generation from the card. Optional so the
@@ -91,6 +92,7 @@
     onSelectPr,
     onMarkUnread,
     onOpenAuthoredPr,
+    onStartTaskFromAuthoredPr,
     pluralize,
     walkthroughByPr = new Map(),
     onGenerateWalkthrough = () => {},
@@ -273,7 +275,23 @@
                       {pr}
                       selected={false}
                       onClick={() => onOpenAuthoredPr(pr.html_url)}
-                    />
+                    >
+                      {#snippet footer()}
+                        {#if onStartTaskFromAuthoredPr}
+                          <div class="pt-1">
+                            <button
+                              type="button"
+                              class="btn btn-xs btn-outline"
+                              aria-label={`Start a task from this branch for pull request #${pr.number}`}
+                              onclick={(event) => {
+                                event.stopPropagation()
+                                onStartTaskFromAuthoredPr(pr)
+                              }}
+                            >Start a task from this branch</button>
+                          </div>
+                        {/if}
+                      {/snippet}
+                    </AuthoredPrCard>
                   {/each}
                 </div>
               </div>

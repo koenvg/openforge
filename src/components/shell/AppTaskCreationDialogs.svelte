@@ -32,6 +32,8 @@
     promptSeed={$pendingComposeRequest.request.initialPrompt}
     sourceTicketUrlSeed={$pendingComposeRequest.request.sourceTicketUrl ?? null}
     titleSeed={$pendingComposeRequest.request.title ?? null}
+    worktreeSourceSeed={$pendingComposeRequest.request.worktreeSource ?? null}
+    worktreeBranchSeed={$pendingComposeRequest.request.worktreeBranch ?? null}
     onClose={controller.cancelCompose}
     onTaskSaved={controller.saveComposedTask}
     onRunAction={controller.runComposedTask}

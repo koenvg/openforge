@@ -96,3 +96,28 @@ export function dedupeBranchesForSelector(branches: GitBranchInfo[]): BranchSele
 
   return options
 }
+
+/**
+ * Maps a compose/PR branch seed onto a selector option's stored `value`.
+ *
+ * Pull request `head_ref` values are short names (`fix/auth`). The selector
+ * stores `origin/<name>` whenever origin has the branch, so a short seed must
+ * resolve to that stored value rather than the local name.
+ */
+export function matchExistingBranchSeed(
+  seed: string,
+  options: BranchSelectorOption[],
+): string | null {
+  const trimmed = seed.trim()
+  if (!trimmed) return null
+
+  const exact = options.find((option) => option.value === trimmed)
+  if (exact) return exact.value
+
+  const shortName = trimmed.startsWith('origin/') ? trimmed.slice('origin/'.length) : trimmed
+  const origin = options.find((option) => option.value === `origin/${shortName}`)
+  if (origin) return origin.value
+
+  const labeled = options.find((option) => option.label === shortName || option.value === shortName)
+  return labeled?.value ?? null
+}

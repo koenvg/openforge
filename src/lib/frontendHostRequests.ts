@@ -3,6 +3,7 @@ import type {
   ComposeTaskRequest,
   ComposeTaskResult,
   PluginCommandInvocationContext,
+  WorktreeSource,
 } from '@openforge-app/plugin-sdk'
 import {
   frontendHostRequestCorrelationId,
@@ -68,17 +69,27 @@ function invocationContext(value: unknown, projectId: string): value is PluginCo
     && context.source === 'agent-cli'
 }
 
+const WORKTREE_SOURCES = new Set<WorktreeSource>(['newBranchFromMain', 'existingBranch', 'disabled'])
+
+function isWorktreeSource(value: unknown): value is WorktreeSource {
+  return typeof value === 'string' && WORKTREE_SOURCES.has(value as WorktreeSource)
+}
+
 function parseComposeTaskRequest(value: unknown): ComposeTaskRequest | null {
   if (typeof value !== 'object' || value === null) return null
   const request = value as Record<string, unknown>
   if (!nonEmptyString(request.projectId) || typeof request.initialPrompt !== 'string') return null
   if (request.sourceTicketUrl !== undefined && request.sourceTicketUrl !== null && typeof request.sourceTicketUrl !== 'string') return null
   if (request.title !== undefined && request.title !== null && typeof request.title !== 'string') return null
+  if (request.worktreeSource !== undefined && request.worktreeSource !== null && !isWorktreeSource(request.worktreeSource)) return null
+  if (request.worktreeBranch !== undefined && request.worktreeBranch !== null && typeof request.worktreeBranch !== 'string') return null
   return {
     projectId: request.projectId,
     initialPrompt: request.initialPrompt,
     ...(request.sourceTicketUrl !== undefined ? { sourceTicketUrl: request.sourceTicketUrl as string | null } : {}),
     ...(request.title !== undefined ? { title: request.title as string | null } : {}),
+    ...(request.worktreeSource !== undefined ? { worktreeSource: request.worktreeSource as WorktreeSource | null } : {}),
+    ...(request.worktreeBranch !== undefined ? { worktreeBranch: request.worktreeBranch as string | null } : {}),
   }
 }
 

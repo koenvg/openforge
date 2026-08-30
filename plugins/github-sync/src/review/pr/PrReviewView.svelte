@@ -8,6 +8,7 @@
   import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
   import PrReviewDetailSection from './PrReviewDetailSection.svelte'
   import PrReviewListSection from './PrReviewListSection.svelte'
+  import { composeRequestForAuthoredPr } from './authoredPrTaskCompose'
   import type { AiThread, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
@@ -313,6 +314,13 @@
 
   function openRepositoryFilters() {
     showFilterDropdown = true
+  }
+
+  function startTaskFromAuthoredPr(pr: AuthoredPullRequest) {
+    if (!projectId) return
+    void api.tasks.compose(composeRequestForAuthoredPr(projectId, pr)).catch((cause) => {
+      console.error('Failed to compose a task from the pull request:', cause)
+    })
   }
 
   async function loadGithubConfiguration() {
@@ -1178,6 +1186,7 @@
       onSelectPr={(pr) => { void selectPr(pr) }}
       onMarkUnread={(pr) => markPrUnread(pr)}
       onOpenAuthoredPr={(url) => api.system.openUrl(url)}
+      onStartTaskFromAuthoredPr={projectId ? startTaskFromAuthoredPr : undefined}
       {pluralize}
       {walkthroughByPr}
       onGenerateWalkthrough={(pr) => { void generateWalkthrough(pr) }}

@@ -42,6 +42,31 @@ describe('App compose dialog', () => {
       expect(props.promptSeed).toBe('Implement GitHub issue #412')
       expect(props.sourceTicketUrlSeed).toBe('https://github.com/me/app/issues/412')
       expect(props.titleSeed).toBe('Login redirect')
+      expect(props.worktreeSourceSeed).toBeNull()
+      expect(props.worktreeBranchSeed).toBeNull()
+    })
+  })
+
+  it('opens the create dialog seeded onto an existing branch', async () => {
+    const App = (await import('./App.svelte')).default
+    const AddTaskDialog = (await import('./components/AddTaskDialog.svelte')).default
+    const { requestTaskCompose } = await import('./lib/taskCompose')
+    render(App)
+
+    void requestTaskCompose({
+      projectId: 'P-1',
+      initialPrompt: 'Continue the pull request',
+      worktreeSource: 'existingBranch',
+      worktreeBranch: 'fix/auth',
+    })
+
+    await waitFor(() => {
+      const props = getLatestComponentProps<ComposeDialogProps>(
+        vi.mocked(AddTaskDialog),
+        'promptSeed',
+      )
+      expect(props.worktreeSourceSeed).toBe('existingBranch')
+      expect(props.worktreeBranchSeed).toBe('fix/auth')
     })
   })
 
