@@ -21,12 +21,19 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/numberParsing` | Strict finite-number parsing helper. |
 | `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers. |
 | `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
-| `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | Full-page plugin View shell with composed fixed-header and constrained-body regions. |
+| `@openforge-app/plugin-sdk/collapsibleSectionState` | Shared collapse-state helpers, including plugin key namespacing. |
+| `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button. |
+| `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox. |
+| `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Disclosure section with shared, persisted collapse state. |
+| `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Decorative file and folder icon. |
+| `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Sanitized Markdown rendering component. |
+| `@openforge-app/plugin-sdk/ui/Modal.svelte` | Accessible modal shell with focus and dismissal behavior. |
 | `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Standard plugin page heading, description, and actions. |
+| `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | Full-page plugin View shell with fixed-header and constrained-body regions. |
+| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard control for plugin-owned sidebar navigation. |
 | `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Loading, error, empty, and content state composition for plugin Views. |
-| `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Svelte Markdown rendering component. |
-| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Svelte resizable panel component. |
-| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation content. |
+| `@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte` | Accessible project file tree with caller-owned expansion and selection. |
+| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Resizable panel with persisted width. |
 
 ## Frontend plugins
 
@@ -399,52 +406,490 @@ It also exports related host-runtime and alias record types.
 
 ## UI component exports
 
-The package exposes plugin-safe Svelte component subpaths, including:
+The SDK publishes the following plugin-safe Svelte components. Import the `.svelte` subpath shown here. Do not import renderer-private components or files under the SDK's `src` or `dist` directories.
 
-```ts
-import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
+| Component | Import path | Use |
+| --- | --- | --- |
+| `Button` | `@openforge-app/plugin-sdk/ui/Button.svelte` | A native button with OpenForge variants and sizes. |
+| `Checkbox` | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | A native checkbox with bindable checked and indeterminate states. |
+| `CollapsibleSection` | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | A disclosure section with shared, persisted collapse state. |
+| `FileTypeIcon` | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | A decorative file or folder icon selected from a filename. |
+| `MarkdownContent` | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Sanitized Markdown with host-routed links and optional media handling. |
+| `Modal` | `@openforge-app/plugin-sdk/ui/Modal.svelte` | An accessible modal shell with focus management and dismissal behavior. |
+| `PluginPageHeader` | `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | A standard page or section heading with optional actions. |
+| `PluginPageShell` | `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | A full-height plugin View shell with fixed header and constrained body regions. |
+| `PluginSidebarLink` | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | A standard control for plugin-owned sidebar navigation. |
+| `PluginViewState` | `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Loading, error, empty, and content state composition. |
+| `ProjectFileTree` | `@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte` | An accessible, keyboard-navigable project file tree. |
+| `ResizablePanel` | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | A mouse and keyboard resizable panel with persisted width. |
+
+Test behavior through accessible roles, names, state, and callbacks. Do not assert Tailwind utilities, daisyUI classes, SVG paths, or other visual details. Use the fakes from `@openforge-app/plugin-sdk/testing` when a component test calls a host API.
+
+### `Button`
+
+Use `Button` for plugin actions that need the standard OpenForge button treatment. Set `type="button"` unless the button should submit a form.
+
+```svelte
+<script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+
+  let saving = $state(false)
+
+  async function saveSettings() {
+    saving = true
+    try {
+      // Save through a plugin API.
+    } finally {
+      saving = false
+    }
+  }
+</script>
+
+<Button type="button" variant="primary" size="sm" disabled={saving} onclick={saveSettings}>
+  {saving ? 'Saving…' : 'Save settings'}
+</Button>
 ```
 
-Use only component paths declared in the package exports. Do not import renderer-private components or SDK source/dist internals.
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `children` | `Snippet`, required | Button content. |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'error'`, default `'primary'` | Use `error` for destructive actions. |
+| `size` | `'xs' \| 'sm' \| 'md' \| 'lg'`, default `'md'` | Changes the control size. |
+| Native button attributes | `HTMLButtonAttributes` | Attributes such as `type`, `disabled`, `aria-label`, `title`, `class`, and `onclick` pass through. |
 
-### Full-page plugin Views
+`Button` renders a native `<button>`. Native focus, keyboard activation, and disabled semantics apply. Supply visible text or an `aria-label` for icon-only buttons. A disabled button does not call `onclick`.
 
-Use `PluginPageShell` for a registered plugin View that needs the same fixed-header, constrained-body structure as OpenForge's Task and Dashboard views. Compose the header explicitly so the shell does not duplicate `PluginPageHeader` props or prevent a purpose-built toolbar when a View needs one.
+In tests, query by role and accessible name, click the button, and assert the callback or disabled state. Do not assert variant or size class names.
+
+### `Checkbox`
+
+Wrap the checkbox in a visible label, or pass `aria-label` when no visible label is available. `checked` supports Svelte binding.
+
+```svelte
+<script lang="ts">
+  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+
+  let includeDrafts = $state(false)
+</script>
+
+<label class="flex items-center gap-2">
+  <Checkbox bind:checked={includeDrafts} />
+  <span>Include draft pull requests</span>
+</label>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `checked` | `boolean`, bindable, default `false` | The native checked state. |
+| `indeterminate` | `boolean`, default `false` | Sets the DOM indeterminate state and exposes `aria-checked="mixed"`. |
+| `size` | `'xs' \| 'sm' \| 'md'`, default `'sm'` | Changes the control size. |
+| Native input attributes | `HTMLInputAttributes` except `checked`, `size`, and `type` | Attributes such as `disabled`, `required`, `name`, `aria-label`, `class`, and `onchange` pass through. The component always uses `type="checkbox"`. |
+
+`Checkbox` renders a native `<input type="checkbox">`. The caller owns its accessible name through a `<label>` or ARIA attribute. The component preserves native disabled and change behavior and exposes a mixed state for partially selected groups.
+
+In tests, query `getByRole('checkbox', { name: ... })`, change it as a user would, and assert the bound value or callback. Use a partial-check assertion for `indeterminate`. Avoid class-based size assertions.
+
+### `CollapsibleSection`
+
+`CollapsibleSection` owns the disclosure button and stores collapsed state across mounts and reloads. Collapse keys are global across the host. A plugin must namespace every key with `pluginSectionKey(context.pluginId, localKey)`. Never pass a bare local key such as `details`. A bare key can collide with a host section or another plugin.
+
+```svelte
+<script lang="ts">
+  import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk'
+  import {
+    pluginSectionKey,
+    setSectionCollapsed,
+  } from '@openforge-app/plugin-sdk/collapsibleSectionState'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+
+  let { context }: PluginTaskUISectionProps = $props()
+  let sectionKey = $derived(pluginSectionKey(context.pluginId, 'review-notes'))
+  let note = $state('')
+
+  function startEditing() {
+    setSectionCollapsed(sectionKey, false)
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#review-note')?.focus())
+  }
+</script>
+
+<CollapsibleSection {sectionKey} title="Review notes" label="Pull request review notes">
+  {#snippet actions()}
+    <button type="button" class="btn btn-ghost btn-xs" onclick={startEditing}>Add note</button>
+  {/snippet}
+
+  <textarea id="review-note" bind:value={note} aria-label="Review note"></textarea>
+</CollapsibleSection>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `sectionKey` | `string`, required | Stable global state key. Plugins must create it with `pluginSectionKey(context.pluginId, localKey)`. |
+| `title` | `string`, required | Visible disclosure-button text. |
+| `label` | `string`, default `title` | Accessible name for the section landmark. |
+| `cardId` | `string`, default `sectionKey` | Value for the host-compatible `data-task-info-card` attribute. |
+| `ariaLive` | `'polite' \| 'off'` | Optional live-region behavior for the section. |
+| `icon` | `Snippet` | Decorative icon beside the title. The component hides it from assistive technology. |
+| `actions` | `Snippet` | Controls beside the disclosure button. The component renders them as siblings, so action buttons are never nested inside the disclosure button. |
+| `children` | `Snippet`, required | Section content. It is not mounted while collapsed. |
+
+A key with no stored value starts expanded. Every mounted section with the same key shares live state. The SDK persists only collapsed keys to local storage. Keep the local part of the key stable. Include a task, project, or other entity id only when each entity should remember a different state.
+
+The section landmark uses `label` or `title` as its accessible name. The disclosure button reports `aria-expanded` and points to the mounted content with `aria-controls`. If an action needs to reveal or focus content, call `setSectionCollapsed(sectionKey, false)` first.
+
+In tests, create the key with `pluginSectionKey`, query the disclosure button by its title, and assert `aria-expanded` plus content visibility after activation. Test persistence only when your plugin depends on it, and clear shared collapse state between such tests. Include a same-local-key test if your plugin builds keys dynamically.
+
+### `FileTypeIcon`
+
+`FileTypeIcon` selects a bundled icon from a filename or folder state. Always pair it with text because the icon is decorative.
+
+```svelte
+<script lang="ts">
+  import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
+
+  let file = { name: 'plugin.ts', path: 'src/plugin.ts' }
+</script>
+
+<span class="flex items-center gap-2">
+  <FileTypeIcon filename={file.path} class="size-4" />
+  <span>{file.name}</span>
+</span>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `filename` | `string` | Filename or path used to select a file icon. Unknown types use the generic file icon. |
+| `folder` | `boolean`, default `false` | Selects a folder icon instead of a file icon. |
+| `open` | `boolean`, default `false` | Selects the open-folder icon when `folder` is true. |
+| `class` | `string`, default `''` | Sets sizing or layout classes on the wrapper. |
+
+The wrapper has `aria-hidden="true"`, so the embedded SVG cannot change the surrounding control's accessible name. Do not use the icon alone to communicate a filename, file type, or folder state.
+
+In tests, assert the adjacent filename or folder label. If accessibility is relevant, assert that the icon wrapper is hidden. Do not assert bundled SVG markup or color classes.
+
+### `MarkdownContent`
+
+Use `MarkdownContent` instead of rendering plugin Markdown as raw HTML. Route external links through `api.system.openUrl`.
+
+```svelte
+<script lang="ts">
+  import type { PluginViewProps } from '@openforge-app/plugin-sdk'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+
+  let { api }: PluginViewProps = $props()
+  let releaseNotes = $state('# Release notes\n\nSee the [migration guide](https://example.com/migrate).')
+</script>
+
+<MarkdownContent
+  content={releaseNotes}
+  onOpenUrl={(url) => api.system.openUrl(url)}
+/>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `content` | `string`, required | Markdown source. |
+| `imageBaseUrl` | `string \| null`, default `null` | Base URL used for relative images when no repository-image resolver is supplied. |
+| `markdownFilePath` | `string \| null`, default `null` | Repository-relative path of the Markdown file. It provides context for relative links and images. |
+| `resolveRepositoryImage` | `(repositoryPath: string) => Promise<string \| null>` | Resolves a repository image to a displayable URL. Missing or failed resolutions leave the image inert. |
+| `resolveRemoteMedia` | `(url: string) => Promise<{ url: string; kind: 'image' \| 'video' } \| null>` | Rewrites deferred remote media. A resolved video link becomes a video player. |
+| `onOpenRepositoryPath` | `(repositoryPath: string, suffix: string) => void \| Promise<void>` | Opens a relative repository link. `suffix` preserves a query string or fragment. |
+| `onOpenUrl` | `(url: string) => void \| Promise<void>` | Opens a non-fragment URL. Plugins should delegate to `api.system.openUrl`. |
+| `onOpenImage` | `(request: { src: string; alt: string; openLink?: () => void }) => void` | Opens an image preview. `openLink` is present when the image is wrapped in a link. |
+
+The SDK sanitizes generated HTML. Fragment links retain their normal in-document behavior. When `onOpenImage` is present, resolvable images become keyboard-focusable controls with an accessible label derived from alt text. Enter and Space open the preview. Repository and remote media resolution is asynchronous. Stale resolution results do not replace newer content.
+
+In tests, query rendered headings and links rather than the wrapper. Assert that link clicks call the repository or URL callback, unsafe markup is removed, failed media resolution stays inert, and image previews work with pointer and keyboard input when your plugin enables them.
+
+### `Modal`
+
+Every modal needs exactly one non-empty accessible-name prop. Use `ariaLabelledby` when a visible heading names the dialog. Use `ariaLabel` only when there is no visible naming element.
+
+```svelte
+<script lang="ts">
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+
+  let open = $state(false)
+</script>
+
+<button type="button" onclick={() => (open = true)}>Configure repository</button>
+
+{#if open}
+  <Modal
+    ariaLabelledby="repository-dialog-title"
+    initialFocus="#repository-name"
+    onClose={() => (open = false)}
+  >
+    {#snippet header()}
+      <h2 id="repository-dialog-title" class="text-lg font-semibold">Repository settings</h2>
+    {/snippet}
+
+    <form class="space-y-4 p-5">
+      <label for="repository-name">Repository name</label>
+      <input id="repository-name" class="input" />
+    </form>
+  </Modal>
+{/if}
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `ariaLabel` or `ariaLabelledby` | Exactly one non-empty `string`, required | Directly names the dialog, or references visible naming content. A referenced element must contain text or have an `aria-label`. |
+| `onClose` | `() => void`, required | Called by enabled Escape, backdrop, and header close-button dismissal. The caller unmounts the modal. |
+| `children` | `Snippet`, required | Dialog body. |
+| `header` | `Snippet` | Header content rendered before the built-in close button. |
+| `maxWidth` | `string`, default `'500px'` | CSS maximum width for the modal box. |
+| `overflowVisible` | `boolean`, default `false` | Allows content to extend outside the modal box. |
+| `initialFocus` | `HTMLElement \| string \| (() => HTMLElement \| null \| undefined) \| null` | Initial focus target. A selector is scoped to the dialog. The dialog itself receives focus by default. |
+| `showHeader` | `boolean`, default `true` | Controls the entire header row, including the built-in close button. |
+| `closeLabel` | `string`, default `'Close dialog'` | Accessible name of the built-in close button. |
+| `closeDisabled` | `boolean`, default `false` | Disables Escape, backdrop, and close-button dismissal. |
+| `onKeydown` | `(event: KeyboardEvent) => boolean \| void` | Runs before default key handling. Return `true` to consume the key. |
+| `testId` | `string` | Optional test id on the dialog. Prefer role and name queries. |
+| `modalClass` | `string`, default `''` | Additional class on the overlay/dialog element. |
+| `boxClass` | `string`, default `''` | Additional class on the modal box. |
+
+`Modal` renders `role="dialog"` with `aria-modal="true"`. It traps Tab focus, supports caller-selected initial focus, and restores focus to the previously focused element when the caller closes it. Escape, backdrop clicks, and the close button call `onClose` unless `closeDisabled` is true.
+
+In tests, query `getByRole('dialog', { name: 'Repository settings' })`. Assert initial focus, Tab wrapping, each enabled dismissal path, `closeDisabled`, and focus restoration when those behaviors matter. Do not make `testId` or modal classes the primary contract.
+
+### `PluginPageHeader`
+
+Use `PluginPageHeader` at the top of a registered View or for a nested section that needs the same heading treatment.
+
+```svelte
+<script lang="ts">
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+</script>
+
+<PluginPageHeader
+  title="Scheduled tasks"
+  subtitle="Create and manage recurring task prompts"
+  surface="subtle"
+/>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `title` | `string`, required | Visible heading text. |
+| `subtitle` | `string \| null`, default `null` | Optional description below the heading. |
+| `surface` | `'default' \| 'subtle'`, default `'default'` | Selects the standard or subdued background. |
+| `headingLevel` | `'h1' \| 'h2'`, default `'h1'` | Use `h2` only when the header belongs to a nested section. |
+| `actions` | `Snippet` | Controls aligned opposite the title. |
+
+The component renders a semantic heading. A full-page View should normally have one `h1`; the host supplies the surrounding `main` landmark. Action snippets must provide their own accessible names.
+
+In tests, query the heading by level and name, then assert the subtitle and named action controls. Do not assert surface classes.
+
+### `PluginPageShell`
+
+`PluginPageShell` gives a registered View a fixed header region and a body that can shrink inside the available height. The plugin still owns loading state, body layout, scrolling, responsive behavior, and panel persistence.
 
 ```svelte
 <script lang="ts">
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
-  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
 </script>
 
-<PluginPageShell class="files-page">
+<PluginPageShell class="scheduled-tasks-page">
   {#snippet header()}
-    <PluginPageHeader title="Files" subtitle="Browse and preview project files">
-      {#snippet actions()}
-        <button type="button" onclick={refresh}>Refresh</button>
-      {/snippet}
-    </PluginPageHeader>
+    <PluginPageHeader title="Scheduled tasks" subtitle="Recurring prompts for this project" />
   {/snippet}
 
-  <PluginViewState {loading} {error} empty={files.length === 0}>
-    <div class="flex h-full min-h-0 overflow-hidden">
-      <ResizablePanel storageKey="com.example.files:tree" label="Project files">
-        <!-- Plugin-owned tree with its own scroll container. -->
-      </ResizablePanel>
-      <main class="min-w-0 flex-1 overflow-auto" aria-label="File preview">
-        <!-- Plugin-owned content. -->
-      </main>
-    </div>
-  </PluginViewState>
+  <section class="min-h-0 flex-1 overflow-auto p-4" aria-label="Scheduled tasks">
+    <!-- Plugin-owned page content. -->
+  </section>
 </PluginPageShell>
 ```
 
-`PluginPageShell` requires `header` and `children` snippets. Its optional `class` prop applies to the root for plugin CSS scoping. The shell owns full-height sizing, clipping, the fixed header region, and the flexing body boundary. It does not own loading state, body layout, scrolling, responsive pane behavior, or persisted panel state. Put `overflow-auto` on the plugin-owned region that should scroll. Qualify `ResizablePanel.storageKey` with the plugin id to avoid collisions with other plugins.
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `header` | `Snippet`, required | Fixed-size region rendered before the body. |
+| `children` | `Snippet`, required | Flexing, height-constrained body region. |
+| `class` | `string`, default `''` | Class on the root, commonly used to scope plugin CSS. |
 
-`PluginPageHeader` renders an `h1` by default, accepts an optional `subtitle` and `actions` snippet, and supports `headingLevel="h2"` when used for a nested section. A registered full-page View should normally expose one `h1`; the host already supplies the surrounding `main` landmark.
+The shell does not add landmarks because the host already owns the View's `main` landmark. Add headings, sections, navigation labels, and scroll containers according to the plugin content. Put `overflow-auto` on the plugin-owned region that should scroll.
 
-In component tests, assert the visible heading, actions, state, and plugin content through accessible queries. Do not assert the shell's Tailwind classes.
+In tests, assert the visible header and plugin content with accessible queries. Do not assert the shell's layout classes.
+
+### `PluginSidebarLink`
+
+Use this component inside a registered View's `navigationComponent`. Call the host-provided `onActivate` callback instead of creating a private route.
+
+```svelte
+<script lang="ts">
+  import type { PluginSidebarNavigationProps } from '@openforge-app/plugin-sdk'
+  import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
+
+  let { active, collapsed, onActivate }: PluginSidebarNavigationProps = $props()
+</script>
+
+<PluginSidebarLink accessibleName="Account usage" {active} {collapsed} {onActivate}>
+  {#snippet leading()}<span aria-hidden="true">%</span>{/snippet}
+  {#snippet label()}Account usage{/snippet}
+  {#snippet trailing()}<span aria-hidden="true">3</span>{/snippet}
+</PluginSidebarLink>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `accessibleName` | `string`, required | Button name in every state and tooltip text while collapsed. |
+| `active` | `boolean`, required | Adds `aria-current="page"` when true. |
+| `collapsed` | `boolean`, required | Hides label and trailing snippets while preserving the leading snippet. |
+| `onActivate` | `() => void`, required | Activates the registered View. |
+| `leading` | `Snippet` | Icon or marker shown in expanded and collapsed states. |
+| `label` | `Snippet` | Visible label shown while expanded. |
+| `trailing` | `Snippet` | Badge or metadata shown while expanded. |
+| `class` | `string` | Additional class on the button. |
+
+The component renders a native button, remains focusable in either sidebar state, and supports pointer, Enter, and Space activation. `accessibleName` remains available when visible text is hidden. Mark decorative snippet content with `aria-hidden="true"`.
+
+In tests, query the button by `accessibleName`, activate it with pointer and keyboard, and assert `aria-current` for the active state. Test that essential information remains in the accessible name while collapsed, not the visual classes used to hide content.
+
+### `PluginViewState`
+
+Use `PluginViewState` to choose one whole-View state. State precedence is loading, error, empty, then content.
+
+```svelte
+<script lang="ts">
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
+
+  let loading = $state(true)
+  let error = $state<string | null>(null)
+  let schedules = $state<string[]>([])
+
+  async function loadSchedules() {
+    loading = true
+    error = null
+    try {
+      // Load through a plugin API.
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      loading = false
+    }
+  }
+</script>
+
+<PluginViewState
+  {loading}
+  {error}
+  empty={schedules.length === 0}
+  emptyTitle="No schedules yet"
+  emptyDescription="Create a schedule to run a prompt on a timer."
+  onRetry={loadSchedules}
+  retryDisabled={loading}
+  loadingLabel="Loading schedules"
+  errorTitle="Could not load schedules"
+>
+  <ul>{#each schedules as schedule}<li>{schedule}</li>{/each}</ul>
+</PluginViewState>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `loading` | `boolean`, default `false` | Shows the loading state and hides all lower-priority states. |
+| `loadingLabel` | `string`, default `'Loading…'` | Visible and accessible loading text. |
+| `error` | `string \| null`, default `null` | Any non-null value activates the error state. An empty string shows the title without detail text. |
+| `errorTitle` | `string`, default `'Unable to load'` | Error heading. |
+| `empty` | `boolean`, default `false` | Shows the empty state when loading and error are inactive. |
+| `emptyTitle` | `string`, default `'Nothing to show'` | Empty-state heading. |
+| `emptyDescription` | `string \| null`, default `null` | Optional empty-state detail. |
+| `retryLabel` | `string`, default `'Retry'` | Default retry-button label. |
+| `retryDisabled` | `boolean`, default `false` | Disables the default retry button and guards its callback. |
+| `onRetry` | `() => void` | Shows the default retry button when no `errorActions` snippet is supplied. |
+| `errorActions` | `Snippet` | Replaces the default retry button with plugin-owned error actions. |
+| `emptyActions` | `Snippet` | Plugin-owned empty-state actions. |
+| `children` | `Snippet` | Content rendered when no state is active. |
+
+Loading and empty states use a polite status live region. Errors use an assertive alert. The component does not move focus when state changes. Plugin-owned action snippets must use named, keyboard-operable controls.
+
+In tests, exercise each state separately. Query loading and empty output by `status`, errors by `alert`, and actions by their names. Assert retry calls and disabled behavior. Do not assert badges, spinners, or layout classes.
+
+### `ProjectFileTree`
+
+`ProjectFileTree` renders flat `FileEntry` data as a hierarchy. The caller owns expanded and selected state.
+
+```svelte
+<script lang="ts">
+  import type { FileEntry } from '@openforge-app/plugin-sdk'
+  import ProjectFileTree from '@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte'
+
+  let entries = $state<FileEntry[]>([
+    { name: 'src', path: 'src', isDir: true, size: null, modifiedAt: null },
+    { name: 'plugin.ts', path: 'src/plugin.ts', isDir: false, size: 2048, modifiedAt: null },
+  ])
+  let expandedDirs = $state(new Set<string>(['src']))
+  let selectedPath = $state<string | null>(null)
+
+  function toggleDirectory(path: string) {
+    const next = new Set(expandedDirs)
+    if (next.has(path)) next.delete(path)
+    else next.add(path)
+    expandedDirs = next
+  }
+</script>
+
+<ProjectFileTree
+  {entries}
+  {expandedDirs}
+  {selectedPath}
+  onToggleDir={toggleDirectory}
+  onSelectFile={(path) => (selectedPath = path)}
+/>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `entries` | `FileEntry[]`, required | Repository-relative entries. Each entry has `name`, `path`, `isDir`, `size`, and `modifiedAt`. |
+| `expandedDirs` | `Set<string>`, required | Paths of expanded directories. Reassign a new set after updates so the component receives the change. |
+| `selectedPath` | `string \| null`, required | Selected file path. Directories are focused and expanded but not selected as files. |
+| `onToggleDir` | `(path: string) => void`, required | Called when a directory is activated or receives an expand/collapse keyboard action. |
+| `onSelectFile` | `(path: string) => void`, required | Called when a file is activated. |
+| `initialScrollTop` | `number`, default `0` | Scroll position restored when the supplied value changes. |
+| `onScrollTopChange` | `(scrollTop: number) => void` | Reports scroll position for caller-owned restoration. |
+| `focusSelectedRequest` | `number \| null`, default `null` | Change this token to focus the selected visible file once. |
+
+The component exposes a tree named "Project files". It uses tree-item levels, positions, expanded state, selection state, and roving `tabindex`. Arrow Up and Arrow Down move through visible entries. Home and End move to the first and last entry. Arrow Right expands a closed directory or moves to its first child. Arrow Left collapses an open directory or moves to its parent. Enter and Space activate the focused entry.
+
+In tests, query the tree and its tree items by role and name. Assert directory and file callbacks, keyboard focus movement, expansion, selection, scroll restoration, and focus requests that your plugin uses. Do not assert indentation or icon SVGs.
+
+### `ResizablePanel`
+
+Use a plugin-qualified `storageKey` because persisted width keys are global in local storage.
+
+```svelte
+<script lang="ts">
+  import type { PluginViewProps } from '@openforge-app/plugin-sdk'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+
+  let { context }: PluginViewProps = $props()
+  let storageKey = $derived(`${context.pluginId}:file-list`)
+</script>
+
+<ResizablePanel
+  {storageKey}
+  defaultWidth={280}
+  minWidth={200}
+  maxWidth={520}
+  side="left"
+  label="file list"
+>
+  <nav class="h-full overflow-auto" aria-label="Files">
+    <!-- Plugin-owned navigation. -->
+  </nav>
+</ResizablePanel>
+```
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `storageKey` | `string`, required | Stable persistence key. Qualify it with `context.pluginId`. |
+| `defaultWidth` | `number`, required | Initial width in pixels and reset target. |
+| `minWidth` | `number`, default `120` | Minimum drag and keyboard width in pixels. |
+| `maxWidth` | `number`, default `600` | Maximum drag and keyboard width in pixels. |
+| `side` | `'left' \| 'right'`, default `'left'` | Side occupied by the panel. It also determines which edge holds the handle and how arrow keys change width. |
+| `label` | `string`, default `'left'` or `'right'` | Panel phrase used in the separator's accessible name, `Resize {label} panel`. |
+| `children` | `Snippet` | Panel content. The caller owns its landmarks and scrolling. |
+
+The resize handle is a focusable vertical separator with its current, minimum, and maximum width exposed through ARIA value attributes. Dragging resizes the panel. Arrow Left and Arrow Right resize it in 10-pixel steps according to its side. Double-click, Enter, or Space resets the default width and removes the stored override. Width persistence is best effort when local storage is unavailable.
+
+In tests, query `getByRole('separator', { name: 'Resize file list panel' })`. Assert arrow-key resizing, reset behavior, clamping, and persistence when your plugin relies on them. Width style is a valid behavioral assertion here; handle color and utility classes are not.
