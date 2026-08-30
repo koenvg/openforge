@@ -4,14 +4,42 @@ import { describe, expect, it, vi } from 'vitest'
 import ModalTestWrapper from './ModalTestWrapper.svelte'
 
 describe('plugin-sdk Modal', () => {
-  it('renders a named modal dialog and focuses the dialog by default', async () => {
+  it('keeps ariaLabel compatible and focuses the dialog by default', async () => {
     render(ModalTestWrapper, { props: { onClose: vi.fn() } })
 
     const dialog = screen.getByRole('dialog', { name: 'Plugin dialog' })
 
     expect(dialog.getAttribute('aria-modal')).toBe('true')
+    expect(dialog.getAttribute('aria-label')).toBe('Plugin dialog')
+    expect(dialog.hasAttribute('aria-labelledby')).toBe(false)
     await tick()
     expect(document.activeElement).toBe(dialog)
+  })
+
+  it('can take its accessible name from labelled content', () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), accessibleName: 'aria-labelledby' } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Plugin dialog' })
+
+    expect(dialog.getAttribute('aria-labelledby')).toBe('plugin-dialog-title')
+    expect(dialog.hasAttribute('aria-label')).toBe(false)
+  })
+
+  it.each([
+    ['no naming prop', 'missing'],
+    ['a blank ariaLabel', 'blank'],
+    ['both naming props', 'both'],
+  ] as const)('rejects %s', (_description, accessibleName) => {
+    expect(() => render(ModalTestWrapper, { props: { onClose: vi.fn(), accessibleName } }))
+      .toThrow('Modal requires exactly one non-empty accessible name prop: ariaLabel or ariaLabelledby')
+  })
+
+  it.each([
+    ['references a missing element', 'dangling'],
+    ['references content without text', 'empty-reference'],
+  ] as const)('rejects ariaLabelledby that %s', (_description, accessibleName) => {
+    expect(() => render(ModalTestWrapper, { props: { onClose: vi.fn(), accessibleName } }))
+      .toThrow('Modal ariaLabelledby must reference at least one element with naming text')
   })
 
   it('supports caller-selected initial focus', async () => {

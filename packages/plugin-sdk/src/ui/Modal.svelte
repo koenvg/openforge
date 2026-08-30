@@ -4,12 +4,15 @@
 
   export type ModalInitialFocus = HTMLElement | string | (() => HTMLElement | null | undefined) | null | undefined
 
+  type ModalAccessibleName =
+    | { ariaLabel: string; ariaLabelledby?: never }
+    | { ariaLabel?: never; ariaLabelledby: string }
+
   interface Props {
     onClose: () => void
     maxWidth?: string
     overflowVisible?: boolean
     initialFocus?: ModalInitialFocus
-    ariaLabel?: string
     showHeader?: boolean
     closeLabel?: string
     closeDisabled?: boolean
@@ -21,7 +24,34 @@
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props & ModalAccessibleName = $props()
+  let accessibleNameAttributes = $derived.by(() => {
+    const hasAriaLabel = Boolean(ariaLabel?.trim())
+    const hasAriaLabelledby = Boolean(ariaLabelledby?.trim())
+
+    if (hasAriaLabel === hasAriaLabelledby) {
+      throw new Error('Modal requires exactly one non-empty accessible name prop: ariaLabel or ariaLabelledby')
+    }
+
+    return {
+      ariaLabel: hasAriaLabel ? ariaLabel : undefined,
+      ariaLabelledby: hasAriaLabelledby ? ariaLabelledby : undefined,
+    }
+  })
+
+  $effect(() => {
+    const idReferences = accessibleNameAttributes.ariaLabelledby?.split(/\s+/)
+    if (!idReferences) return
+
+    const hasNamingText = idReferences.some((id) => {
+      const labelledElement = document.getElementById(id)
+      return Boolean(labelledElement?.textContent?.trim() || labelledElement?.getAttribute('aria-label')?.trim())
+    })
+
+    if (!hasNamingText) {
+      throw new Error('Modal ariaLabelledby must reference at least one element with naming text')
+    }
+  })
 
   let modalElement: HTMLDivElement | null = $state(null)
   let hasAppliedInitialFocus = false
@@ -142,7 +172,7 @@
   }
 </script>
 
-<div bind:this={modalElement} class="modal modal-open {modalClass}" data-testid={testId} onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" aria-label={ariaLabel} tabindex="-1">
+<div bind:this={modalElement} class="modal modal-open {modalClass}" data-testid={testId} onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" aria-label={accessibleNameAttributes.ariaLabel} aria-labelledby={accessibleNameAttributes.ariaLabelledby} tabindex="-1">
   <div class="modal-box bg-base-100 shadow-xl p-0 flex flex-col max-h-[90vh] {overflowVisible ? 'overflow-visible' : ''} {boxClass}" style="max-width: {maxWidth}">
     {#if showHeader}
       <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">

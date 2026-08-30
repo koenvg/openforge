@@ -101,6 +101,45 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
+
+### Modal accessible names
+
+Import `Modal` from `@openforge-app/plugin-sdk/ui/Modal.svelte`. Every modal requires exactly one non-empty accessible-name prop:
+
+- Use `ariaLabelledby` when visible content, usually the header heading, names the dialog. When the modal mounts, the value must resolve to at least one element with text content or an `aria-label`.
+- Use `ariaLabel` when the dialog has no visible title, such as a search palette with `showHeader={false}`. Existing `ariaLabel` callers remain supported.
+
+Prefer visible labelled content:
+
+```svelte
+<script lang="ts">
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+
+  interface Props {
+    onClose: () => void
+  }
+
+  let { onClose }: Props = $props()
+</script>
+
+<Modal ariaLabelledby="settings-dialog-title" {onClose}>
+  {#snippet header()}
+    <h2 id="settings-dialog-title">Plugin settings</h2>
+  {/snippet}
+
+  <p>Settings content</p>
+</Modal>
+```
+
+Use a direct label when there is no visible title:
+
+```svelte
+<Modal ariaLabel="Search project files" showHeader={false} {onClose}>
+  <FileSearch />
+</Modal>
+```
+
+`onClose` handles Escape, backdrop, and close-button dismissal unless `closeDisabled` is true. `initialFocus` accepts an element, a selector scoped to the dialog, a function returning an element, or `null`. In component tests, query the dialog by its role and accessible name, for example `getByRole('dialog', { name: 'Plugin settings' })`. This checks the same name exposed to assistive technology.
 Use `CollapsibleSection` for plugin sections that should remember whether the user collapsed them:
 
 ```svelte
