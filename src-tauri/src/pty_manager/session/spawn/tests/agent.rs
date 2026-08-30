@@ -332,7 +332,8 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
         command_release_rx: None,
-        script: "stty -echo; IFS= read -r _; printf before; IFS= read -r _; printf after",
+        script:
+            "stty -echo; printf ready; IFS= read -r _; printf before; IFS= read -r _; printf after",
         check_lock: true,
     };
     manager
@@ -355,7 +356,17 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
         .attach_agent_terminal(task_id)
         .await
         .expect("running Agent attachment");
-    assert!(before_replay.replay().is_empty());
+    if before_replay.replay().is_empty() {
+        assert_eq!(
+            tokio::time::timeout(event_timeout, before_replay.recv())
+                .await
+                .expect("readiness output deadline")
+                .expect("readiness output"),
+            crate::pty_manager::AgentTerminalEvent::Output(b"ready".to_vec()),
+        );
+    } else {
+        assert_eq!(before_replay.replay(), b"ready");
+    }
     before_replay
         .write_input(b"\n")
         .await
@@ -372,7 +383,7 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
         .attach_agent_terminal(task_id)
         .await
         .expect("running Agent attachment");
-    assert_eq!(attachment.replay(), b"before");
+    assert_eq!(attachment.replay(), b"readybefore");
     drop(before_replay);
     assert!(manager.agent_terminal_available(task_id).await);
     attachment
