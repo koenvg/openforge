@@ -219,11 +219,6 @@ impl StartingPtyOutputReader {
             start: self.start,
         })
     }
-
-    pub(super) fn into_receiver(self) -> PtyOutputReceiver {
-        let _ = self.start.send(());
-        self.receiver
-    }
 }
 
 impl ReadyPtyOutputReader {
@@ -239,7 +234,7 @@ pub(super) fn spawn_pty_output_reader(
     last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
     terminal_model_feeder: Option<TerminalModelFeeder>,
-    #[cfg(test)] ready_gate: Option<super::AgentOutputReaderReadyGate>,
+    #[cfg(test)] ready_gate: Option<super::PtyOutputReaderReadyGate>,
 ) -> StartingPtyOutputReader {
     let (tx, receiver) = pty_output_channel();
     let (ready_tx, ready) = tokio::sync::oneshot::channel();

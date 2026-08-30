@@ -165,10 +165,10 @@ async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream
     let (reader_ready_tx, reader_ready_rx) = mpsc::channel();
     let (release_reader_tx, release_reader_rx) = mpsc::channel();
     *manager
-        .agent_output_reader_ready_gate
+        .output_reader_ready_gate
         .lock()
         .expect("output reader ready gate lock should not be poisoned") =
-        Some(crate::pty_manager::AgentOutputReaderReadyGate {
+        Some(crate::pty_manager::PtyOutputReaderReadyGate {
             reached_tx: reader_ready_tx,
             release_rx: release_reader_rx,
         });

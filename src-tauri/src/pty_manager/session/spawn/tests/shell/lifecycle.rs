@@ -4,6 +4,87 @@ use crate::pty_manager::pids::shell_session_key;
 use crate::pty_manager::session::lifecycle::PtySessionKind;
 use std::time::Duration;
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shell_spawn_waits_for_output_reader_readiness_before_returning() {
+    let harness = ShellTestHarness::new();
+    let task_id = "shell-reader-readiness";
+    let session_key = shell_session_key(task_id, Some(0));
+    let (reader_ready_tx, reader_ready_rx) = std::sync::mpsc::channel();
+    let (release_reader_tx, release_reader_rx) = std::sync::mpsc::channel();
+    *harness
+        .manager
+        .output_reader_ready_gate
+        .lock()
+        .expect("shell output reader ready gate lock should not be poisoned") =
+        Some(crate::pty_manager::PtyOutputReaderReadyGate {
+            reached_tx: reader_ready_tx,
+            release_rx: release_reader_rx,
+        });
+
+    let spawn_manager = harness.manager.clone();
+    let spawn_cwd = harness.temp_dir.path().to_path_buf();
+    let spawn = tokio::spawn(async move {
+        spawn_manager
+            .spawn_shell_pty_with_command(
+                crate::pty_manager::PtySpawnContext {
+                    task_id,
+                    cwd: &spawn_cwd,
+                    cols: 80,
+                    rows: 24,
+                    event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+                },
+                Some(0),
+                None,
+                super::support::long_running_shell_command(),
+            )
+            .await
+    });
+
+    tokio::task::spawn_blocking(move || {
+        reader_ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("shell output reader should report readiness");
+    })
+    .await
+    .expect("readiness waiter should join");
+
+    assert!(
+        !spawn.is_finished(),
+        "shell spawn must remain pending until its output reader is ready"
+    );
+    assert!(harness
+        .manager
+        .sessions
+        .lock()
+        .await
+        .contains_key(&session_key));
+    assert!(harness
+        .manager
+        .output_buffers
+        .lock()
+        .await
+        .contains_key(&session_key));
+    assert!(harness
+        .manager
+        .last_output
+        .lock()
+        .await
+        .contains_key(&session_key));
+
+    release_reader_tx
+        .send(())
+        .expect("shell output reader should be released");
+    spawn
+        .await
+        .expect("shell spawn task should join")
+        .expect("shell PTY should spawn after reader readiness");
+
+    harness
+        .manager
+        .kill_pty(&session_key)
+        .await
+        .expect("shell cleanup should succeed");
+}
 #[tokio::test]
 async fn shell_spawn_persists_identity_and_owns_lifecycle_state_until_cleanup() {
     let harness = ShellTestHarness::new();
