@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
 use super::super::super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
-    PtyOutputReceiver, RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
+    ReadyPtyOutputReader, RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 use super::super::super::{PtyError, PtyManager};
 use super::super::lifecycle::LifecycleLockLease;
@@ -41,7 +41,7 @@ pub(super) struct AgentEventStreamRequest<'a> {
     pub(super) task_id: &'a str,
     pub(super) token: AgentSpawnToken,
     pub(super) instance_id: u64,
-    pub(super) output: PtyOutputReceiver,
+    pub(super) output: ReadyPtyOutputReader,
     pub(super) stream_state: AgentStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
@@ -117,7 +117,7 @@ impl PtyManager {
         reader: Box<dyn Read + Send>,
         terminal_model_feeder: Option<TerminalModelFeeder>,
         stream_state: &AgentStreamState,
-    ) -> Result<PtyOutputReceiver, PtyError> {
+    ) -> Result<ReadyPtyOutputReader, PtyError> {
         #[cfg(test)]
         let ready_gate = self
             .agent_output_reader_ready_gate
@@ -253,7 +253,7 @@ impl PtyManager {
         }
 
         spawn_batched_pty_event_emitter(
-            output,
+            output.into_receiver(),
             PtyEventEmitterConfig {
                 session_key: task_id.to_string(),
                 instance_id,

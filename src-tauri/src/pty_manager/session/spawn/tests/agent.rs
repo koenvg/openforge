@@ -737,7 +737,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
                 sessions: Arc::clone(&stale_manager.sessions),
                 prepared_tx: None,
                 command_release_rx: None,
-                script: "printf stale-agent",
+                script: "printf stale-agent; exec sleep 60",
                 check_lock: false,
             },
             PtySpawnContext {
