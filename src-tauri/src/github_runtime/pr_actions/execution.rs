@@ -12,19 +12,37 @@ use super::{
 };
 use crate::github_runtime::auth::github_token;
 
-fn persist_successful_task_pull_request_action(
+fn persist_and_reload_task_pull_request(
     db: &db::Database,
+    task_id: &str,
     pr_id: i64,
     action: TaskPullRequestAction,
-) -> Result<(), String> {
+) -> Result<db::PrRow, String> {
+    let (read_error_context, missing_row_error) = match action {
+        TaskPullRequestAction::Merge => (
+            "Failed to read merged pull request",
+            "Merged pull request disappeared from local state",
+        ),
+        TaskPullRequestAction::Enqueue => (
+            "Failed to read queued pull request",
+            "Queued pull request disappeared from local state",
+        ),
+    };
+
     match action {
         TaskPullRequestAction::Merge => db
             .update_pr_merged(pr_id, current_unix_timestamp()?)
-            .map_err(|e| format!("Failed to persist merged pull request: {e}")),
+            .map_err(|e| format!("Failed to persist merged pull request: {e}"))?,
         TaskPullRequestAction::Enqueue => db
             .update_pr_queued(pr_id)
-            .map_err(|e| format!("Failed to persist queued pull request: {e}")),
+            .map_err(|e| format!("Failed to persist queued pull request: {e}"))?,
     }
+
+    db.get_pull_requests_for_task(task_id)
+        .map_err(|e| format!("{read_error_context}: {e}"))?
+        .into_iter()
+        .find(|row| row.id == pr_id)
+        .ok_or_else(|| missing_row_error.to_string())
 }
 
 pub async fn merge_task_pull_request(
@@ -63,13 +81,7 @@ pub async fn merge_task_pull_request(
     }
 
     let db_lock = crate::db::acquire_db(db);
-    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Merge)?;
-    db_lock
-        .get_pull_requests_for_task(task_id)
-        .map_err(|e| format!("Failed to read merged pull request: {e}"))?
-        .into_iter()
-        .find(|row| row.id == pr_id)
-        .ok_or_else(|| "Merged pull request disappeared from local state".to_string())
+    persist_and_reload_task_pull_request(&db_lock, task_id, pr_id, TaskPullRequestAction::Merge)
 }
 
 pub async fn enqueue_task_pull_request(
@@ -114,13 +126,7 @@ pub async fn enqueue_task_pull_request(
         .map_err(|e| format!("Failed to enqueue pull request: {e}"))?;
 
     let db_lock = crate::db::acquire_db(db);
-    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Enqueue)?;
-    db_lock
-        .get_pull_requests_for_task(task_id)
-        .map_err(|e| format!("Failed to read queued pull request: {e}"))?
-        .into_iter()
-        .find(|row| row.id == pr_id)
-        .ok_or_else(|| "Queued pull request disappeared from local state".to_string())
+    persist_and_reload_task_pull_request(&db_lock, task_id, pr_id, TaskPullRequestAction::Enqueue)
 }
 
 #[cfg(test)]
@@ -128,7 +134,7 @@ mod tests {
     use crate::db::test_helpers::make_test_db;
 
     #[test]
-    fn successful_task_actions_persist_terminal_local_state() {
+    fn successful_task_actions_persist_and_reload_terminal_local_state() {
         let (db, _temp_dir) = make_test_db("task_pr_action_local_state");
         let merged_task = db
             .create_task("Merge PR", "doing", None, None, None)
@@ -163,22 +169,21 @@ mod tests {
         )
         .expect("insert queue PR");
 
-        super::persist_successful_task_pull_request_action(
+        let merged = super::persist_and_reload_task_pull_request(
             &db,
+            &merged_task.id,
             1,
             super::TaskPullRequestAction::Merge,
         )
-        .expect("persist merge");
-        super::persist_successful_task_pull_request_action(
+        .expect("persist and reload merge");
+        let queued = super::persist_and_reload_task_pull_request(
             &db,
+            &queued_task.id,
             2,
             super::TaskPullRequestAction::Enqueue,
         )
-        .expect("persist enqueue");
+        .expect("persist and reload enqueue");
 
-        let prs = db.get_all_pull_requests().expect("read PRs");
-        let merged = prs.iter().find(|pr| pr.id == 1).expect("merged PR");
-        let queued = prs.iter().find(|pr| pr.id == 2).expect("queued PR");
         assert_eq!(merged.state, "merged");
         assert!(merged.merged_at.is_some());
         assert!(queued.is_queued);
@@ -189,6 +194,44 @@ mod tests {
         assert_eq!(
             queued.merge_readiness_action.as_deref(),
             Some("wait_for_queue")
+        );
+    }
+
+    #[test]
+    fn post_action_reload_preserves_action_specific_missing_row_errors() {
+        let (db, _temp_dir) = make_test_db("task_pr_action_missing_after_update");
+        let task = db
+            .create_task("Act on PR", "doing", None, None, None)
+            .expect("create task");
+        for pr_id in [1, 2] {
+            db.insert_pull_request(
+                pr_id, &task.id, "owner", "repo", "PR", "url", "open", 1, 1, false,
+            )
+            .expect("insert PR");
+        }
+
+        let merge_error = super::persist_and_reload_task_pull_request(
+            &db,
+            "another-task",
+            1,
+            super::TaskPullRequestAction::Merge,
+        )
+        .expect_err("merge row should be absent from another task");
+        let enqueue_error = super::persist_and_reload_task_pull_request(
+            &db,
+            "another-task",
+            2,
+            super::TaskPullRequestAction::Enqueue,
+        )
+        .expect_err("queued row should be absent from another task");
+
+        assert_eq!(
+            merge_error,
+            "Merged pull request disappeared from local state"
+        );
+        assert_eq!(
+            enqueue_error,
+            "Queued pull request disappeared from local state"
         );
     }
 }
