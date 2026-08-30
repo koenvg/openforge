@@ -58,7 +58,7 @@ describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () =>
         await Bun.sleep(0)
         Bun.gc(true)
       }
-      console.log(JSON.stringify({
+      process.stdout.write(JSON.stringify({
         generations: 20,
         retainedModules: markers.filter(marker => marker.deref() !== undefined).length,
       }))
