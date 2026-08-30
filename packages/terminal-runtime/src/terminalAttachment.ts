@@ -13,6 +13,7 @@ function isModalOpen(): boolean {
 
 const MIN_PTY_DIMENSION = 1
 const MAX_PTY_DIMENSION = 0xFFFF
+const MAX_INITIAL_FIT_ANIMATION_FRAMES = 120
 
 function isValidPtyDimension(value: unknown): value is number {
   return typeof value === 'number'
@@ -42,6 +43,8 @@ export function createTerminalAttachmentController(
   transport: TerminalTransport,
   environment: TerminalRuntimeEnvironment,
 ) {
+  const pendingInitialFits = new WeakMap<PoolEntry, Set<() => void>>()
+
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
     const dimensions = entry.view.geometry
@@ -50,30 +53,80 @@ export function createTerminalAttachmentController(
       .catch(error => console.error(terminalLogMessage(environment.loggerName, 'resize failed:'), error))
   }
 
+  function shouldStopInitialFit(
+    entry: PoolEntry,
+    attachmentGeneration: number,
+    signal?: AbortSignal,
+  ): boolean {
+    return Boolean(signal?.aborted)
+      || !entry.attached
+      || entry.attachmentGeneration !== attachmentGeneration
+  }
+
   function waitForInitialFit(
     entry: PoolEntry,
     attachmentGeneration: number,
     signal?: AbortSignal,
   ): Promise<void> {
     return new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        if (
-          signal?.aborted
-          || !entry.attached
-          || entry.attachmentGeneration !== attachmentGeneration
-        ) {
-          resolve()
+      let frameId: number | null = null
+      let frameCount = 0
+      let settled = false
+      const pendingForEntry = pendingInitialFits.get(entry) ?? new Set<() => void>()
+      pendingInitialFits.set(entry, pendingForEntry)
+
+      const finish = () => {
+        if (settled) return
+        settled = true
+        if (frameId !== null) cancelAnimationFrame(frameId)
+        signal?.removeEventListener('abort', finish)
+        pendingForEntry.delete(finish)
+        if (pendingForEntry.size === 0) pendingInitialFits.delete(entry)
+        resolve()
+      }
+
+      const scheduleNextFit = () => {
+        if (shouldStopInitialFit(entry, attachmentGeneration, signal)) {
+          finish()
           return
         }
-        if (safeFit(entry)) {
-          refreshAndFocus(entry)
-          syncPtySize(entry)
-          resolve()
+        if (frameCount >= MAX_INITIAL_FIT_ANIMATION_FRAMES) {
+          console.warn(terminalLogMessage(
+            environment.loggerName,
+            `Initial fit stopped after ${MAX_INITIAL_FIT_ANIMATION_FRAMES} animation frames for "${entry.shellSessionKey}"; terminal dimensions remained invalid.`,
+          ))
+          finish()
           return
         }
-        void waitForInitialFit(entry, attachmentGeneration, signal).then(resolve)
-      })
+
+        frameId = requestAnimationFrame(() => {
+          frameId = null
+          if (shouldStopInitialFit(entry, attachmentGeneration, signal)) {
+            finish()
+            return
+          }
+
+          frameCount += 1
+          if (safeFit(entry)) {
+            refreshAndFocus(entry)
+            syncPtySize(entry)
+            finish()
+            return
+          }
+          scheduleNextFit()
+        })
+      }
+
+      pendingForEntry.add(finish)
+      signal?.addEventListener('abort', finish, { once: true })
+      scheduleNextFit()
     })
+  }
+
+  function cancelPendingInitialFits(entry: PoolEntry): void {
+    const pendingForEntry = pendingInitialFits.get(entry)
+    if (!pendingForEntry) return
+    for (const cancel of [...pendingForEntry]) cancel()
   }
 
   function createAttachment(entry: PoolEntry, generation: number): TerminalViewAttachment {
@@ -139,6 +192,7 @@ export function createTerminalAttachmentController(
     attachmentGeneration = entry.attachmentGeneration,
   ): void {
     if (!entry.attached || attachmentGeneration !== entry.attachmentGeneration) return
+    cancelPendingInitialFits(entry)
 
     if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
     entry.resizeTimeout = null
