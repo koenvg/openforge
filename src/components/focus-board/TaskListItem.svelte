@@ -80,9 +80,9 @@
   aria-current={isFocused ? 'true' : undefined}
   class:vim-focus={isFocused}
   class:just-viewed-pop={justViewed}
-  class="relative flex w-full cursor-pointer flex-col gap-4 overflow-hidden rounded-xl border bg-base-100 p-5 text-left transition-[background-color,border-color,box-shadow] duration-200 {isSelected
-    ? 'border-accent ring-1 ring-accent/20'
-    : 'border-base-300 hover:border-base-content/25 hover:bg-base-200/30'}"
+  class="task-list-item relative flex w-full cursor-pointer flex-col gap-4 overflow-hidden rounded-xl border border-base-300 bg-base-100 p-5 text-left {isSelected
+    ? 'task-list-item--selected'
+    : 'composited-hover-layer task-list-item--interactive'}"
   onclick={onSelect}
   oncontextmenu={onContextMenu}
   onkeydown={(e: KeyboardEvent) => {
@@ -92,6 +92,7 @@
     }
   }}
 >
+  <span class="task-list-item-selection-layer" aria-hidden="true"></span>
 
   <div class="flex items-start gap-3 pt-0.5">
 
@@ -150,16 +151,16 @@
       </div>
       <button
         type="button"
-        class="btn btn-ghost btn-sm btn-square shrink-0 text-base-content/40 hover:text-base-content"
+        class="task-item-action-control btn btn-ghost btn-sm btn-square shrink-0 text-base-content"
         aria-label="Rename task"
         onclick={(e) => { e.stopPropagation(); titleRename.start() }}
-      ><Pencil size={15} aria-hidden="true" /></button>
+      ><Pencil class="task-item-action task-item-action--quiet" size={15} aria-hidden="true" /></button>
       <button
         type="button"
-        class="btn btn-ghost btn-sm btn-square shrink-0 text-base-content/45 hover:text-base-content"
+        class="task-item-action-control btn btn-ghost btn-sm btn-square shrink-0 text-base-content"
         aria-label="More actions for {task.id}"
         onclick={(e) => { e.stopPropagation(); onContextMenu(e) }}
-      ><MoreHorizontal size={16} aria-hidden="true" /></button>
+      ><MoreHorizontal class="task-item-action task-item-action--muted" size={16} aria-hidden="true" /></button>
     {/if}
   </div>
   {#if showLabels && labels.length > 0}
@@ -194,6 +195,50 @@
 </div>
 
 <style>
+  .task-list-item {
+    isolation: isolate;
+  }
+
+  .task-list-item--interactive {
+    --composited-hover-background: color-mix(in oklch, var(--color-base-200) 30%, transparent);
+    --composited-hover-border: 1px solid color-mix(in oklch, var(--color-base-content) 25%, transparent);
+  }
+
+  .task-list-item-selection-layer {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid var(--color-accent);
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-accent) 20%, transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+    will-change: opacity;
+  }
+
+  .task-list-item--selected .task-list-item-selection-layer {
+    opacity: 1;
+  }
+
+  .task-item-action {
+    transition-property: opacity, transform;
+    transition-duration: 200ms;
+    will-change: opacity;
+  }
+
+  .task-item-action--quiet {
+    opacity: 0.4;
+  }
+
+  .task-item-action--muted {
+    opacity: 0.45;
+  }
+
+  .task-item-action-control:is(:hover, :focus-visible) :global(.task-item-action) {
+    opacity: 1;
+  }
+
   /* One-shot fade on the card the user just returned from, so it's easy to spot without changing size. */
   @keyframes just-viewed-pop {
     from {

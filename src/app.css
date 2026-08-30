@@ -135,6 +135,30 @@
   border-color: color-mix(in srgb, var(--of-text) 24%, var(--of-divider));
 }
 
+/* Shared compositor-backed hover layer; components provide only visual tokens. */
+.composited-hover-layer {
+  position: relative;
+  isolation: isolate;
+}
+
+.composited-hover-layer::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: var(--composited-hover-border, 0 solid transparent);
+  border-radius: inherit;
+  background: var(--composited-hover-background, transparent);
+  pointer-events: none;
+  content: '';
+  opacity: 0;
+  transition: opacity var(--of-motion-fast) ease;
+  will-change: opacity;
+}
+
+.composited-hover-layer:hover::before {
+  opacity: 1;
+}
+
 .of-field:focus-visible,
 :where(button, input, textarea, select, summary):focus-visible {
   outline: 2px solid var(--of-focus);
