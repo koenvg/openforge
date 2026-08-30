@@ -5,6 +5,7 @@ import type {
   TerminalTransport,
 } from './terminalTransport'
 import type { PoolEntry } from './terminalRuntimeTypes'
+import { recordTerminalOutput, synchronizeTerminalOutputObservation } from './terminalOutputObservation'
 
 interface TerminalStateViewOptions {
   transport: TerminalTransport
@@ -86,6 +87,7 @@ export function createTerminalStateView({
       entry.needsClear = false
       entry.outputSequence = 0
       entry.currentPtyInstance = null
+      synchronizeTerminalOutputObservation(entry.terminalOutputObservation, null)
       entry.terminalModelSequence = null
       entry.pendingTerminalModelOutput.length = 0
       entry.hasOutput = Boolean(replay.historicalData)
@@ -113,6 +115,11 @@ export function createTerminalStateView({
     entry.outputSequence = 0
     entry.currentPtyInstance = replay.ptyInstanceId
     entry.terminalModelSequence = snapshot.watermark
+    synchronizeTerminalOutputObservation(
+      entry.terminalOutputObservation,
+      replay.ptyInstanceId,
+      snapshot.watermark,
+    )
     entry.hasOutput = snapshot.data.length > 0 || Boolean(snapshot.compatibilityData?.length)
     if (!isCurrentRenderRevision(entry, renderRevision)) {
       entry.terminalStateSource = 'ghostty-snapshot'
@@ -167,6 +174,7 @@ export function createTerminalStateView({
 
 
   function handleTerminalModelOutput(entry: PoolEntry, event: TerminalModelOutputEvent): void {
+    recordTerminalOutput(entry.terminalOutputObservation, event)
     if (!entry.attached || !entry.viewVisible) {
       if (entry.currentPtyInstance === event.ptyInstanceId) {
         entry.terminalModelSequence = Math.max(entry.terminalModelSequence ?? 0, event.sequence)

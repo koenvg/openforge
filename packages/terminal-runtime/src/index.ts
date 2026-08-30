@@ -18,6 +18,7 @@ export {
   type TerminalGeometry,
   type TerminalModelDisabledEvent,
   type TerminalModelOutputEvent,
+  type TerminalOutputObservation,
   type TerminalImageProtocol,
   type TerminalReplay,
   type TerminalSnapshot,

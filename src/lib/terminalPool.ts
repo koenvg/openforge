@@ -44,4 +44,5 @@ export const hasTerminal = agentTerminalSessions.hasTerminal
 export const isPtyActive = agentTerminalSessions.isPtyActive
 export const recoverActiveTerminal = agentTerminalSessions.recoverActiveTerminal
 export const replayPtyBuffersForActiveTerminals = agentTerminalSessions.replayPtyBuffersForActiveTerminals
+export const getTerminalEntriesForObservation = getTerminalRuntimeForTests()._getPool
 export const _getPool = getTerminalRuntimeForTests()._getPool

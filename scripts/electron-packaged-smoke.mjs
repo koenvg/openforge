@@ -4,8 +4,15 @@ import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createServer } from 'node:net'
 import { chromium } from 'playwright'
+import {
+  allocateLoopbackPort,
+  captureChildOutput,
+  forceKillProcessTree,
+  stopProcess,
+  waitForDevTools as waitForDevToolsEndpoint,
+  waitForPlaywrightPage,
+} from './electron-process.mjs'
 import { APP_NAME, electronBundlePath } from './electron-package.mjs'
 
 export const DEFAULT_SMOKE_TIMEOUT_MS = 45_000
@@ -107,83 +114,24 @@ export function assertHealthyBridge(result) {
   throw new Error(formatHealthFailure(result ?? { ok: false, step: 'unknown', message: 'No health result returned' }))
 }
 
-async function allocatePort() {
-  const server = createServer()
-  await new Promise((resolvePromise, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolvePromise)
-  })
-  const address = server.address()
-  const port = typeof address === 'object' && address ? address.port : null
-  await new Promise((resolvePromise, reject) => server.close(error => error ? reject(error) : resolvePromise()))
-  if (!port) throw new Error('Unable to allocate a DevTools port for packaged Electron smoke')
-  return port
-}
-
-function captureChildOutput(child, maxBytes = 20_000) {
-  const chunks = []
-  let total = 0
-
-  function append(prefix, chunk) {
-    const text = `${prefix}${chunk.toString()}`
-    chunks.push(text)
-    total += Buffer.byteLength(text)
-    while (total > maxBytes && chunks.length > 1) {
-      total -= Buffer.byteLength(chunks.shift())
-    }
-  }
-
-  child.stdout?.on('data', chunk => append('[stdout] ', chunk))
-  child.stderr?.on('data', chunk => append('[stderr] ', chunk))
-
-  return () => chunks.join('')
-}
-
-async function waitForDevTools(port, childState, output, timeoutMs) {
+async function waitForPackagedDevTools(port, childState, output, timeoutMs) {
   const endpoint = `http://127.0.0.1:${port}`
-  const deadline = Date.now() + timeoutMs
-  let lastError = null
-
-  while (Date.now() < deadline) {
-    if (childState.error) {
-      throw new Error(`Packaged Electron app failed to launch: ${childState.error.message}.\n${output()}`)
-    }
-
-    if (childState.exited) {
-      throw new Error(`Packaged Electron app exited before DevTools became available (${childState.signal ?? `code ${childState.code}`}).\n${output()}`)
-    }
-
-    try {
-      const response = await fetch(`${endpoint}/json/version`)
-      if (response.ok) return endpoint
-      lastError = new Error(`DevTools returned HTTP ${response.status}`)
-    } catch (error) {
-      lastError = error
-    }
-
-    await sleep(250)
+  try {
+    await waitForDevToolsEndpoint(port, {
+      timeoutMs,
+      assertRunning() {
+        if (childState.error) {
+          throw new Error(`Packaged Electron app failed to launch: ${childState.error.message}.`)
+        }
+        if (childState.exited) {
+          throw new Error(`Packaged Electron app exited before DevTools became available (${childState.signal ?? `code ${childState.code}`}).`)
+        }
+      },
+    })
+    return endpoint
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${output()}`)
   }
-
-  throw new Error(`Timed out waiting for packaged Electron DevTools at ${endpoint}.${lastError ? ` Last error: ${lastError.message}` : ''}\n${output()}`)
-}
-
-async function waitForRendererPage(browser, timeoutMs) {
-  const deadline = Date.now() + timeoutMs
-  let blankPage = null
-
-  while (Date.now() < deadline) {
-    for (const context of browser.contexts()) {
-      for (const candidate of context.pages()) {
-        if (candidate.url().startsWith('devtools://')) continue
-        if (candidate.url() !== 'about:blank') return candidate
-        blankPage ??= candidate
-      }
-    }
-    await sleep(250)
-  }
-
-  if (blankPage) return blankPage
-  throw new Error('Timed out waiting for packaged Electron renderer page to appear in DevTools')
 }
 
 export async function checkRendererBridge(page, { invokeTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS } = {}) {
@@ -242,31 +190,19 @@ export function forceKillPackagedApp(
   child,
   { platform = process.platform, killProcess = process.kill } = {},
 ) {
-  if (platform === 'darwin' && Number.isInteger(child.pid) && child.pid > 0) {
-    try {
-      killProcess(-child.pid, 'SIGKILL')
-    } catch (error) {
-      if (error?.code !== 'ESRCH') throw error
-    }
-    return
-  }
-
-  child.kill('SIGKILL')
+  forceKillProcessTree(child, {
+    platform,
+    killProcess,
+    detached: platform === 'darwin',
+  })
 }
 
 async function stopChild(child, timeoutMs = 5_000) {
-  if (child.exitCode !== null || child.signalCode !== null) return
-
-  const exited = new Promise(resolvePromise => child.once('exit', resolvePromise))
-  child.kill('SIGTERM')
-  const stopped = await Promise.race([
-    exited.then(() => true),
-    sleep(timeoutMs).then(() => false),
-  ])
-  if (!stopped && child.exitCode === null && child.signalCode === null) {
-    forceKillPackagedApp(child)
-    await Promise.race([exited, sleep(2_000)])
-  }
+  await stopProcess(child, {
+    graceMs: timeoutMs,
+    forceKill: forceKillPackagedApp,
+    forceWaitMs: 2_000,
+  })
 }
 
 async function closeElectronGracefully(browser, child, timeoutMs = 7_000) {
@@ -309,15 +245,15 @@ export async function runPackagedElectronSmoke({
   }
 
   const runtimeRoot = await mkdtemp(join(tmpdir(), 'openforge-packaged-smoke-'))
-  const port = debugPort ?? await allocatePort()
-  const backendPort = await allocatePort()
+  const port = debugPort ?? await allocateLoopbackPort()
+  const backendPort = await allocateLoopbackPort()
   const env = createPackagedSmokeEnv({ runtimeRoot, backendPort })
   const childState = { exited: false, code: null, signal: null, error: null }
   const child = spawn(executablePath, [
     `--remote-debugging-port=${port}`,
     '--no-first-run',
   ], packagedAppSpawnOptions({ repoRoot, env }))
-  const output = captureChildOutput(child)
+  const output = captureChildOutput(child, { maxBytes: 20_000 })
   child.once('error', error => {
     childState.error = error
     childState.exited = true
@@ -330,9 +266,9 @@ export async function runPackagedElectronSmoke({
 
   let browser = null
   try {
-    const cdpEndpoint = await waitForDevTools(port, childState, output, timeoutMs)
+    const cdpEndpoint = await waitForPackagedDevTools(port, childState, output, timeoutMs)
     browser = await chromium.connectOverCDP(cdpEndpoint, { timeout: timeoutMs })
-    const page = await waitForRendererPage(browser, timeoutMs)
+    const page = await waitForPlaywrightPage(browser, { timeoutMs })
     const result = assertHealthyBridge(await checkRendererBridge(page, { invokeTimeoutMs }))
     console.log(`Packaged Electron smoke passed: window.openforge.invoke('get_projects') returned ${result.resultType}${typeof result.projectCount === 'number' ? ` (${result.projectCount} projects)` : ''}.`)
     return {

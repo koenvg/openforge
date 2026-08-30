@@ -101,6 +101,13 @@ vi.mock('../../lib/terminalPool', () => {
       terminalReplayRecovery: null,
       hasOutput: false,
       outputSequence: 0,
+      terminalOutputObservation: {
+        ptyInstanceId: null,
+        receivedBytes: 0,
+        firstSequence: null,
+        lastSequence: null,
+        sequenceContinuous: true,
+      },
     }
   }
 

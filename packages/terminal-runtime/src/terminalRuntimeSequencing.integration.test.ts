@@ -43,5 +43,12 @@ describe('terminal output sequencing', () => {
       sequence: 3,
     })
     expect(entry.terminalModelSequence).toBe(4)
+    expect(entry.terminalOutputObservation).toEqual({
+      ptyInstanceId: 7,
+      receivedBytes: 16,
+      firstSequence: 1,
+      lastSequence: 4,
+      sequenceContinuous: true,
+    })
   })
 })

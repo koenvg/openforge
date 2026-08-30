@@ -4,6 +4,7 @@ import { createTerminalAttachmentController, isValidTerminalDimensions } from '.
 import type { TerminalImageProtocol } from './terminalImages'
 import { terminalLogMessage } from './terminalLogging'
 import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
+import { createTerminalOutputObservation } from './terminalOutputObservation'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
 import type { TerminalTransport } from './terminalTransport'
 import { createXtermTerminalView } from './xtermTerminalView'
@@ -14,6 +15,7 @@ import { applyTerminalTheme } from './terminalThemePropagation'
 import { themeMode as defaultThemeMode } from './theme'
 
 export type { TerminalViewAttachment } from './terminalAttachment'
+export type { TerminalOutputObservation } from './terminalOutputObservation'
 export type { TerminalImageProtocol } from './terminalImages'
 export type {
   TerminalExitEvent,
@@ -110,6 +112,7 @@ export function createTerminalRuntime({
       terminalReplayRecovery: null,
       hasOutput: false,
       outputSequence: 0,
+      terminalOutputObservation: createTerminalOutputObservation(),
     }
   }
 

@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
 import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv, parsePort } from './cargo-target-env.mjs'
 import { OPENFORGE_APP_DATA_IDENTIFIER, databaseFilenameForBuildMode } from './data-identity.mjs'
+import { captureChildOutput, stopProcess } from './electron-process.mjs'
+export { stopProcess } from './electron-process.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 import { ensureDevPluginArtifacts as defaultEnsureDevPluginArtifacts } from './build-dev-plugin-artifacts.mjs'
 import { prepareGhosttyVt as defaultPrepareGhosttyVt } from './prepare-ghostty-vt.mjs'
@@ -24,7 +26,6 @@ const VITE_HOST = '127.0.0.1'
 const VITE_PORT = DEFAULT_VITE_PORT
 export const ELECTRON_RENDERER_URL = rendererUrlForPort(VITE_PORT)
 const BACKEND_PORT_PROBE_LIMIT = 50
-export const ELECTRON_DEV_STOP_GRACE_MS = 2_000
 
 function logStep(message) {
   console.log(`[electron-dev] ${message}`)
@@ -274,6 +275,21 @@ export function buildElectronDebugArgs(runtimeOptions) {
     : [`--inspect=127.0.0.1:${runtimeOptions.electronDebugPort}`]
 }
 
+export function buildElectronLaunchArgs(runtimeOptions, options = {}) {
+  const chromiumArgs = options.chromiumDebugPort == null
+    ? []
+    : [
+        '--remote-debugging-address=127.0.0.1',
+        `--remote-debugging-port=${options.chromiumDebugPort}`,
+      ]
+
+  return [
+    ...buildElectronDebugArgs(runtimeOptions),
+    ...chromiumArgs,
+    ...(options.extraArgs ?? []),
+  ]
+}
+
 export function isPortOpen(host = VITE_HOST, port = VITE_PORT, timeoutMs = 500) {
   return new Promise((resolvePromise) => {
     const socket = connect({ host, port })
@@ -349,6 +365,22 @@ export async function assertElectronDebugPortAvailable(port, deps = { isPortOpen
   }
 }
 
+export async function assertChromiumDebugPortAvailable(port, deps = { isPortOpen }) {
+  if (port == null) return
+  if (await deps.isPortOpen(VITE_HOST, port)) {
+    const message = `Electron Chromium debug port ${port} is already in use.`
+    await reportScriptFailure(deps.failureReporter, {
+      phase: 'dev:port-check',
+      severity: 'error',
+      cause: message,
+      userMessage: 'A required development port is already in use.',
+      remediation: 'Stop the existing Chromium debugger target or choose a free port.',
+      decision: 'quit',
+    })
+    throw new Error(message)
+  }
+}
+
 async function findAvailableBackendPort(startPort, deps = { isPortOpen }) {
   for (let offset = 0; offset < BACKEND_PORT_PROBE_LIMIT; offset += 1) {
     const port = startPort + offset
@@ -416,12 +448,16 @@ export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv
 }
 
 function spawnCommand(command, args, options = {}) {
-  return spawn(command, args, {
+  const detached = options.detached ?? process.platform !== 'win32'
+  const child = spawn(command, args, {
     cwd: repoRoot(),
     stdio: 'inherit',
     shell: process.platform === 'win32',
     ...options,
+    detached,
   })
+  child.openforgeDetached = detached
+  return child
 }
 
 function waitForExit(child, label) {
@@ -470,50 +506,6 @@ export async function waitForVite(url = ELECTRON_RENDERER_URL, viteProcess = nul
   throw new Error(`Vite dev server did not become ready at ${url}: ${message}`)
 }
 
-function hasExited(child) {
-  return child.exitCode !== null && child.exitCode !== undefined
-    || child.signalCode !== null && child.signalCode !== undefined
-}
-
-function waitForChildExit(child, graceMs, deps = {}) {
-  if (hasExited(child)) return Promise.resolve('exited')
-
-  const scheduleTimeout = deps.setTimeout ?? setTimeout
-  const cancelTimeout = deps.clearTimeout ?? clearTimeout
-
-  return new Promise((resolvePromise) => {
-    let settled = false
-    let timeout = null
-    const settle = (result) => {
-      if (settled) return
-      settled = true
-      child.off?.('exit', onExit)
-      if (timeout !== null) cancelTimeout(timeout)
-      resolvePromise(result)
-    }
-    const onExit = () => settle('exited')
-
-    child.once('exit', onExit)
-    timeout = scheduleTimeout(() => settle('timeout'), graceMs)
-    timeout?.unref?.()
-  })
-}
-
-export async function stopProcess(child, options = {}) {
-  const graceMs = options.graceMs ?? ELECTRON_DEV_STOP_GRACE_MS
-
-  if (!child) return 'absent'
-  if (hasExited(child)) return 'already-exited'
-
-  child.kill('SIGTERM')
-  const result = await waitForChildExit(child, graceMs, options)
-  if (result !== 'timeout') return 'terminated'
-
-  child.kill('SIGKILL')
-  child.unref?.()
-  return 'killed'
-}
-
 async function cleanupRuntimeDirs(runtimeOptions = {}, options = {}) {
   const tempRuntimeDirs = runtimeOptions.tempRuntimeDirs ?? []
   const removeDir = options.rm ?? rmPath
@@ -558,52 +550,190 @@ export class DevScriptCleanupAdapter {
   }
 }
 
-async function main() {
-  const runtimeOptions = resolveElectronDevRuntimeOptions()
-  if (runtimeOptions.seededAppData) {
-    logStep(`Seeded isolated sidecar app data from ${runtimeOptions.seededAppData.sourceDbPath} to ${runtimeOptions.seededAppData.targetDbPath}.`)
-  }
-  let vite = null
-  let electron = null
-  let cleanupPromise = null
-  const cleanup = () => {
-    cleanupPromise ??= cleanupDevProcesses({ vite, electron }, { runtimeOptions })
-    return cleanupPromise
-  }
-  const shutdown = (exitCode) => {
-    void cleanup().finally(() => process.exit(exitCode))
-  }
-  process.once('SIGINT', () => shutdown(130))
-  process.once('SIGTERM', () => shutdown(143))
 
+export function createElectronDevLauncher(options = {}, deps = {}) {
+  const configuredRuntimeOptions = options.runtimeOptions ?? (deps.resolveElectronDevRuntimeOptions ?? resolveElectronDevRuntimeOptions)(
+    options.env ?? process.env,
+    options.runtimeOptionDeps,
+  )
+  const runtimeOptions = options.desktopTest
+    ? {
+        ...configuredRuntimeOptions,
+        rendererUrl: (() => {
+          const rendererUrl = new URL(configuredRuntimeOptions.rendererUrl)
+          rendererUrl.searchParams.set('openforge-desktop-test', '1')
+          return rendererUrl.toString()
+        })(),
+      }
+    : configuredRuntimeOptions
+  const childrenState = { vite: null, electron: null }
+  const maxOutputBytes = options.maxOutputBytes ?? 1_000_000
+  const outputCaptures = []
+  let startPromise = null
+  let shutdownPromise = null
+  let shutdownRequested = false
+  let electronExit = null
+
+  const prepareArtifacts = deps.prepareElectronDevArtifacts ?? prepareElectronDevArtifacts
+  const checkVitePort = deps.assertVitePortAvailable ?? assertVitePortAvailable
+  const checkElectronDebugPort = deps.assertElectronDebugPortAvailable ?? assertElectronDebugPortAvailable
+  const checkChromiumDebugPort = deps.assertChromiumDebugPortAvailable ?? assertChromiumDebugPortAvailable
+  const resolveBackendEnv = deps.resolveElectronDevBackendEnv ?? resolveElectronDevBackendEnv
+  const prepareCargoEnv = deps.prepareElectronDevCargoEnv ?? prepareElectronDevCargoEnv
+  const resolveSidecarLayout = deps.resolveRustSidecarLayout ?? resolveRustSidecarLayout
+  const spawnChild = deps.spawnCommand ?? spawnCommand
+  const awaitVite = deps.waitForVite ?? waitForVite
+  const awaitExit = deps.waitForExit ?? waitForExit
+  const cleanup = deps.cleanupDevProcesses ?? cleanupDevProcesses
+  const resolveRepoRoot = deps.repoRoot ?? repoRoot
+  const log = deps.logger ?? logStep
+
+  const trackOutput = (child) => {
+    if (options.captureOutput) {
+      outputCaptures.push(captureChildOutput(child, { maxBytes: maxOutputBytes }))
+    }
+  }
+  const assertNotShuttingDown = () => {
+    if (shutdownRequested) throw new Error('Electron dev launcher was stopped during startup')
+  }
+
+  const shutdown = () => {
+    shutdownRequested = true
+    shutdownPromise ??= cleanup(childrenState, {
+      runtimeOptions,
+      ...(options.cleanupOptions ?? {}),
+    })
+    return shutdownPromise
+  }
+
+  const start = () => {
+    startPromise ??= (async () => {
+      try {
+        if (runtimeOptions.seededAppData) {
+          log(`Seeded isolated sidecar app data from ${runtimeOptions.seededAppData.sourceDbPath} to ${runtimeOptions.seededAppData.targetDbPath}.`)
+        }
+        log('Preparing plugin backend artifacts for Electron dev ...')
+        await prepareArtifacts()
+        assertNotShuttingDown()
+
+        log(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
+        await checkVitePort(runtimeOptions.rendererPort)
+        await checkElectronDebugPort(runtimeOptions.electronDebugPort)
+        await checkChromiumDebugPort(options.chromiumDebugPort)
+        assertNotShuttingDown()
+
+        const rustSidecarLayout = resolveSidecarLayout({ repoRoot: resolveRepoRoot() })
+        const { env: baseCargoEnv, cargoTargetDir, source } = await resolveBackendEnv({
+          cwd: resolveRepoRoot(),
+          env: options.env ?? process.env,
+          rustSidecarLayout,
+        })
+        log('Preparing pinned Ghostty dependencies for the Rust sidecar ...')
+        const cargoEnv = await prepareCargoEnv(baseCargoEnv)
+        assertNotShuttingDown()
+
+        const childStdio = options.captureOutput ? ['ignore', 'pipe', 'pipe'] : 'inherit'
+        childrenState.vite = spawnChild(
+          'pnpm',
+          ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'],
+          { env: baseCargoEnv, stdio: childStdio },
+        )
+        trackOutput(childrenState.vite, 'vite')
+        log('Waiting for Vite readiness ...')
+        await awaitVite(runtimeOptions.rendererUrl, childrenState.vite)
+        assertNotShuttingDown()
+
+        const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir, rustSidecarLayout)
+        log(`Vite is ready; building Rust sidecar (${source} target dir: ${cargoTargetDir}) ...`)
+        const cargoBuild = spawnChild('cargo', ['build'], {
+          cwd: rustSidecarLayout.backendCrateRootPath,
+          env: cargoEnv,
+          stdio: childStdio,
+        })
+        trackOutput(cargoBuild, 'cargo')
+        await awaitExit(cargoBuild, 'cargo build')
+        assertNotShuttingDown()
+
+        log('Building Electron main process ...')
+        const electronBuild = spawnChild('pnpm', ['electron:build'], { stdio: childStdio })
+        trackOutput(electronBuild, 'electron-build')
+        await awaitExit(electronBuild, 'electron:build')
+        assertNotShuttingDown()
+        await options.beforeElectronLaunch?.({
+          cargoEnv,
+          runtimeOptions,
+          rustSidecarLayout,
+          sidecarPath,
+        })
+        assertNotShuttingDown()
+
+        log('Launching Electron with Rust sidecar. Close the Electron window to stop this command.')
+        childrenState.electron = spawnChild(
+          'pnpm',
+          ['exec', 'electron', ...buildElectronLaunchArgs(runtimeOptions, {
+            chromiumDebugPort: options.chromiumDebugPort,
+            extraArgs: options.electronArgs,
+          }), '.'],
+          {
+            env: buildElectronDevEnv(cargoEnv, sidecarPath, runtimeOptions),
+            stdio: childStdio,
+          },
+        )
+        trackOutput(childrenState.electron, 'electron')
+        electronExit = () => awaitExit(childrenState.electron, 'electron')
+        return launcher
+      } catch (error) {
+        await shutdown()
+        throw error
+      }
+    })()
+    return startPromise
+  }
+
+  const launcher = {
+    runtimeOptions,
+    start,
+    shutdown,
+    children: () => ({ ...childrenState }),
+    output: () => outputCaptures.map(readOutput => readOutput()).join(''),
+    async waitForExit() {
+      await start()
+      if (!electronExit) throw new Error('Electron did not launch')
+      return electronExit()
+    },
+  }
+
+  return launcher
+}
+
+export async function launchElectronDev(options = {}, deps = {}) {
+  const launcher = createElectronDevLauncher(options, deps)
+  await launcher.start()
+  return launcher
+}
+
+export function installElectronDevSignalHandlers(launcher, target = process) {
+  const handlers = new Map([
+    ['SIGINT', () => void launcher.shutdown().finally(() => target.exit(130))],
+    ['SIGTERM', () => void launcher.shutdown().finally(() => target.exit(143))],
+  ])
+  for (const [signal, handler] of handlers) target.once(signal, handler)
+
+  return () => {
+    for (const [signal, handler] of handlers) target.off(signal, handler)
+  }
+}
+
+export async function main() {
+  const launcher = createElectronDevLauncher()
+  const removeSignalHandlers = installElectronDevSignalHandlers(launcher)
   try {
-    logStep('Preparing plugin backend artifacts for Electron dev ...')
-    await prepareElectronDevArtifacts()
-    logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
-    await assertVitePortAvailable(runtimeOptions.rendererPort)
-    await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
-    const { env: baseCargoEnv, cargoTargetDir, source } = await resolveElectronDevBackendEnv()
-    logStep('Preparing pinned Ghostty dependencies for the Rust sidecar ...')
-    const cargoEnv = await prepareElectronDevCargoEnv(baseCargoEnv)
-    vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'])
-    logStep('Waiting for Vite readiness ...')
-    await waitForVite(runtimeOptions.rendererUrl, vite)
-    const rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: repoRoot() })
-    const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir, rustSidecarLayout)
-    logStep(`Vite is ready; building Rust sidecar (${source} target dir: ${cargoTargetDir}) ...`)
-    await waitForExit(
-      spawnCommand('cargo', ['build'], { cwd: rustSidecarLayout.backendCrateRootPath, env: cargoEnv }),
-      'cargo build',
-    )
-    logStep('Building Electron main process ...')
-    await waitForExit(spawnCommand('pnpm', ['electron:build']), 'electron:build')
-    logStep('Launching Electron with Rust sidecar. Close the Electron window to stop this command.')
-    electron = spawnCommand('pnpm', ['exec', 'electron', ...buildElectronDebugArgs(runtimeOptions), '.'], { env: buildElectronDevEnv(cargoEnv, sidecarPath, runtimeOptions) })
-    await waitForExit(electron, 'electron')
-    electron = null
+    await launcher.start()
+    await launcher.waitForExit()
     logStep('Electron exited; stopping Vite ...')
   } finally {
-    await cleanup()
+    removeSignalHandlers()
+    await launcher.shutdown()
   }
 }
 
