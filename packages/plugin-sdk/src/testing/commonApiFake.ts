@@ -1,4 +1,5 @@
 import { MAX_AGENT_SESSION_PAGE_SIZE, resolveExternalTextFileChunkSize } from '../types.js'
+import type { FileEntry } from '../domain.js'
 import type {
   BackendOpenForgeAPI,
   CommandRegistration,
@@ -27,6 +28,42 @@ import type {
 const UTF8_ENCODER = new TextEncoder()
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
 
+function readTestingUserDataDir(
+  files: ReadonlyMap<string, string>,
+  directoryPath: string | null | undefined,
+): FileEntry[] {
+  const prefix = directoryPath ? `${directoryPath}/` : ''
+  const entries = new Map<string, FileEntry>()
+
+  for (const [filePath, content] of files) {
+    if (!filePath.startsWith(prefix)) continue
+    const childPath = filePath.slice(prefix.length)
+    const separatorIndex = childPath.indexOf('/')
+    const name = separatorIndex === -1 ? childPath : childPath.slice(0, separatorIndex)
+    if (!name) continue
+
+    entries.set(name, separatorIndex === -1
+      ? {
+          name,
+          path: `${prefix}${name}`,
+          isDir: false,
+          size: UTF8_ENCODER.encode(content).byteLength,
+          modifiedAt: null,
+        }
+      : {
+          name,
+          path: `${prefix}${name}`,
+          isDir: true,
+          size: null,
+          modifiedAt: null,
+        })
+  }
+
+  return [...entries.values()].sort((left, right) => {
+    if (left.isDir !== right.isDir) return left.isDir ? -1 : 1
+    return left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  })
+}
 
 const TERMINAL_AGENT_SESSION_STATUSES = new Set(['completed', 'failed', 'interrupted'])
 
@@ -434,7 +471,7 @@ export class TestingCommonApiFake {
         userData: {
           readDir: async (request = {}) => {
             this.services.calls.fsUserDataReadDirs.push(request)
-            return []
+            return readTestingUserDataDir(this.services.userDataTextFiles, request.path)
           },
           readTextFile: async (request) => {
             this.services.calls.fsUserDataReads.push(request)
