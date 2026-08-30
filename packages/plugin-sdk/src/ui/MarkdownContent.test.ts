@@ -2,9 +2,126 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MarkdownContent from './MarkdownContent.svelte'
 
-describe('MarkdownContent repository paths', () => {
+const mermaid = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(),
+}))
+
+vi.mock('mermaid', () => ({ default: mermaid }))
+
+describe('MarkdownContent', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.documentElement.dataset.theme = 'openforge'
+    mermaid.render.mockResolvedValue({
+      svg: '<svg role="img" aria-label="Rendered diagram" style="fill:rgb(1, 2, 3);background-image:url(https://attacker.invalid/pixel)" onload="alert(1)"><style>.node{fill:url(https://attacker.invalid/pixel);stroke:#123}.label{fill:#456}</style><script>alert(1)</script><text>Safe diagram</text></svg>',
+    })
+  })
+
+  it('renders fenced Mermaid diagrams with strict settings and sanitized SVG output', async () => {
+    const { container } = render(MarkdownContent, {
+      props: {
+        content: '```mermaid\ngraph TD\n  A[Start] --> B[Finish]\n```',
+      },
+    })
+
+    await waitFor(() => {
+      expect(container.querySelector('.mermaid-diagram svg')).toBeTruthy()
+    })
+
+    expect(mermaid.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      suppressErrorRendering: true,
+      maxTextSize: 50_000,
+      maxEdges: 500,
+      secure: expect.arrayContaining(['securityLevel', 'theme', 'themeVariables', 'maxTextSize', 'maxEdges']),
+      theme: 'default',
+    }))
+    expect(mermaid.render).toHaveBeenCalledWith(
+      expect.stringMatching(/^openforge-mermaid-/),
+      'graph TD\n  A[Start] --> B[Finish]',
+    )
+    expect(container.querySelector('.mermaid-diagram')?.textContent).toContain('Safe diagram')
+    expect(container.querySelector('.mermaid-diagram script')).toBeNull()
+    expect(container.querySelector('.mermaid-diagram [onload]')).toBeNull()
+    expect(container.querySelector('.mermaid-diagram svg')?.getAttribute('style')).toBe('fill: rgb(1, 2, 3)')
+    const stylesheet = container.querySelector('.mermaid-diagram style')?.textContent ?? ''
+    expect(stylesheet).not.toContain('url(')
+    expect(stylesheet).not.toContain('attacker.invalid')
+    expect(stylesheet).toContain('stroke: rgb(17, 34, 51)')
+    expect(stylesheet).toContain('fill: rgb(68, 85, 102)')
+    expect(container.querySelector('pre')?.hidden).toBe(true)
+  })
+
+  it('keeps the Mermaid source visible when rendering fails', async () => {
+    mermaid.render.mockRejectedValueOnce(new Error('Invalid diagram'))
+    const { container } = render(MarkdownContent, {
+      props: { content: '```mermaid\nnot a diagram\n```' },
+    })
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Unable to render Mermaid diagram. Showing source instead.',
+    )
+    expect(container.querySelector('.mermaid-diagram-fallback code')?.textContent).toContain('not a diagram')
+    expect(container.querySelector('pre')?.hidden).toBe(false)
+    expect(container.querySelector('.mermaid-diagram svg')).toBeNull()
+  })
+
+  it('rejects Mermaid source that could load an external resource before rendering', async () => {
+    render(MarkdownContent, {
+      props: {
+        content: [
+          '```mermaid',
+          'stateDiagram-v2',
+          '  [*] --> A',
+          '  classDef leak fill:url(https://attacker.invalid/pixel),stroke:#333',
+          '  class A leak',
+          '```',
+        ].join('\n'),
+      },
+    })
+
+    expect(await screen.findByRole('status')).toBeTruthy()
+    expect(mermaid.render).not.toHaveBeenCalled()
+  })
+
+  it('keeps an explicit light application theme when the system prefers dark', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn(() => ({
+      matches: true,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      render(MarkdownContent, {
+        props: { content: '```mermaid\ngraph TD\n  Light --> Theme\n```' },
+      })
+      await waitFor(() => expect(mermaid.initialize).toHaveBeenCalled())
+      expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'default' }))
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
+  })
+
+  it('rerenders Mermaid diagrams when the application theme changes', async () => {
+    render(MarkdownContent, {
+      props: { content: '```mermaid\nsequenceDiagram\n  A->>B: Hello\n```' },
+    })
+
+    await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(1))
+    document.documentElement.dataset.theme = 'openforge-dark'
+
+    await waitFor(() => {
+      expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }))
+      expect(mermaid.render).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('resolves nested relative images and keeps missing assets inert', async () => {

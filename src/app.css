@@ -513,6 +513,33 @@
   border-radius: 6px;
 }
 
+.markdown-body .mermaid-diagram {
+  margin: 0 0 0.75em;
+  overflow-x: auto;
+  border: 1px solid var(--color-base-300);
+  border-radius: 6px;
+  background-color: var(--color-base-100);
+  padding: 1rem;
+}
+
+.markdown-body .mermaid-diagram svg {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.markdown-body .mermaid-diagram pre {
+  margin-bottom: 0;
+}
+
+.markdown-body .mermaid-diagram-error {
+  margin-bottom: 0.75rem;
+  color: var(--color-error);
+  font-weight: 500;
+}
+
 /* Uploaded screen recordings, swapped in for their bare GitHub link. */
 .markdown-body video {
   display: block;

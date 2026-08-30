@@ -1,13 +1,15 @@
 <script lang="ts">
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import RichMarkdownDiff from '../RichMarkdownDiff.svelte'
 
   interface Props {
     content: string
     filename: string
+    surface?: 'preview' | 'rich-diff'
   }
 
-  let { content, filename }: Props = $props()
+  let { content, filename, surface = 'rich-diff' }: Props = $props()
 
   const patch = $derived([
     `@@ -0,0 +1,${content.split('\n').length} @@`,
@@ -32,24 +34,28 @@
   <section
     class="mx-auto w-[900px] rounded-lg border border-base-300 bg-base-100 p-6 leading-relaxed"
     data-testid="markdown-visual"
-    aria-label="Rich diff for {filename}"
+    aria-label={surface === 'preview' ? `Markdown preview for ${filename}` : `Rich diff for ${filename}`}
   >
-    <RichMarkdownDiff
-      {file}
-      {content}
-      imageBaseUrl={null}
-      onOpenRepositoryPath={() => {}}
-      existingComments={[]}
-      pendingComments={[]}
-      agentComments={[]}
-      aiThreads={[]}
-      pendingReplies={[]}
-      getInlineCommentText={() => ''}
-      onSetInlineCommentText={() => {}}
-      onClearInlineCommentText={() => {}}
-      onSubmitInlineComment={() => {}}
-      onPendingCommentsChange={() => {}}
-      onAgentCommentsChange={() => {}}
-    />
+    {#if surface === 'preview'}
+      <MarkdownContent {content} markdownFilePath={filename} />
+    {:else}
+      <RichMarkdownDiff
+        {file}
+        {content}
+        imageBaseUrl={null}
+        onOpenRepositoryPath={() => {}}
+        existingComments={[]}
+        pendingComments={[]}
+        agentComments={[]}
+        aiThreads={[]}
+        pendingReplies={[]}
+        getInlineCommentText={() => ''}
+        onSetInlineCommentText={() => {}}
+        onClearInlineCommentText={() => {}}
+        onSubmitInlineComment={() => {}}
+        onPendingCommentsChange={() => {}}
+        onAgentCommentsChange={() => {}}
+      />
+    {/if}
   </section>
 </main>
