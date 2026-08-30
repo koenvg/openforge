@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use super::attachment::PtyAttachmentHub;
 use super::session::{LifecycleLockLease, PassiveExitOutcome, TerminalSessions};
-
+use super::PtyError;
 #[cfg(test)]
 pub(super) struct PtyExitCleanupContext<'a> {
     pub(super) terminal_sessions: &'a TerminalSessions,
@@ -196,15 +196,68 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
     }
 }
 
+pub(super) struct StartingPtyOutputReader {
+    receiver: PtyOutputReceiver,
+    ready: tokio::sync::oneshot::Receiver<()>,
+    start: tokio::sync::oneshot::Sender<()>,
+}
+
+pub(super) struct ReadyPtyOutputReader {
+    receiver: PtyOutputReceiver,
+    start: tokio::sync::oneshot::Sender<()>,
+}
+
+impl StartingPtyOutputReader {
+    pub(super) async fn wait_until_ready(self) -> Result<ReadyPtyOutputReader, PtyError> {
+        self.ready.await.map_err(|_| {
+            PtyError::SpawnFailed(
+                "PTY output reader stopped before reporting readiness".to_string(),
+            )
+        })?;
+        Ok(ReadyPtyOutputReader {
+            receiver: self.receiver,
+            start: self.start,
+        })
+    }
+
+    pub(super) fn into_receiver(self) -> PtyOutputReceiver {
+        let _ = self.start.send(());
+        self.receiver
+    }
+}
+
+impl ReadyPtyOutputReader {
+    pub(super) fn into_receiver(self) -> PtyOutputReceiver {
+        let _ = self.start.send(());
+        self.receiver
+    }
+}
+
 pub(super) fn spawn_pty_output_reader(
     mut reader: Box<dyn Read + Send>,
     session_key: String,
     last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
     terminal_model_feeder: Option<TerminalModelFeeder>,
-) -> PtyOutputReceiver {
-    let (tx, rx) = pty_output_channel();
+    #[cfg(test)] ready_gate: Option<super::AgentOutputReaderReadyGate>,
+) -> StartingPtyOutputReader {
+    let (tx, receiver) = pty_output_channel();
+    let (ready_tx, ready) = tokio::sync::oneshot::channel();
+    let (start, start_rx) = tokio::sync::oneshot::channel();
     tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        if let Some(gate) = ready_gate {
+            gate.reached_tx
+                .send(())
+                .expect("test should observe output reader readiness");
+            gate.release_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("test should release output reader readiness");
+        }
+        let _ = ready_tx.send(());
+        if start_rx.blocking_recv().is_err() {
+            return;
+        }
         read_pty_output_loop(
             &mut reader,
             tx,
@@ -214,7 +267,11 @@ pub(super) fn spawn_pty_output_reader(
             terminal_model_feeder,
         );
     });
-    rx
+    StartingPtyOutputReader {
+        receiver,
+        ready,
+        start,
+    }
 }
 
 pub(super) struct PtyOutputBatcher {
