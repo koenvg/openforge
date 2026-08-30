@@ -162,41 +162,22 @@
 {/snippet}
 
 {#snippet listContent(list: RichMarkdownListBlock)}
-  {#if list.ordered}
-    <ol start={list.start || undefined}>
-      {#each list.items as item (`list-item:${item.startLine}:${item.endLine}`)}
-        <li class="group relative" data-markdown-source-start={item.startLine} data-markdown-source-end={item.endLine}>
-          {#if item.anchorLine !== null}{@render commentButton(item.anchorLine, 'before')}{/if}
-          {#if item.checked !== null}
-            <input type="checkbox" checked={item.checked} disabled aria-label={item.checked ? 'Completed task' : 'Incomplete task'} class="float-left mt-1" />
-          {/if}
-          {@render markdown(item.content)}
-          {@render commentThread(item.startLine, item.endLine)}
-          {#if item.anchorLine !== null}{@render commentForm(item.anchorLine)}{/if}
-          {#each item.childLists as childList (`nested-list:${childList.startLine}:${childList.endLine}`)}
-            {@render listContent(childList)}
-          {/each}
-        </li>
-      {/each}
-    </ol>
-  {:else}
-    <ul>
-      {#each list.items as item (`list-item:${item.startLine}:${item.endLine}`)}
-        <li class="group relative" data-markdown-source-start={item.startLine} data-markdown-source-end={item.endLine}>
-          {#if item.anchorLine !== null}{@render commentButton(item.anchorLine, 'before')}{/if}
-          {#if item.checked !== null}
-            <input type="checkbox" checked={item.checked} disabled aria-label={item.checked ? 'Completed task' : 'Incomplete task'} class="float-left mt-1" />
-          {/if}
-          {@render markdown(item.content)}
-          {@render commentThread(item.startLine, item.endLine)}
-          {#if item.anchorLine !== null}{@render commentForm(item.anchorLine)}{/if}
-          {#each item.childLists as childList (`nested-list:${childList.startLine}:${childList.endLine}`)}
-            {@render listContent(childList)}
-          {/each}
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <svelte:element this={list.ordered ? 'ol' : 'ul'} start={list.ordered ? list.start || undefined : undefined}>
+    {#each list.items as item (`list-item:${item.startLine}:${item.endLine}`)}
+      <li class="group relative" data-markdown-source-start={item.startLine} data-markdown-source-end={item.endLine}>
+        {#if item.anchorLine !== null}{@render commentButton(item.anchorLine, 'before')}{/if}
+        {#if item.checked !== null}
+          <input type="checkbox" checked={item.checked} disabled aria-label={item.checked ? 'Completed task' : 'Incomplete task'} class="float-left mt-1" />
+        {/if}
+        {@render markdown(item.content)}
+        {@render commentThread(item.startLine, item.endLine)}
+        {#if item.anchorLine !== null}{@render commentForm(item.anchorLine)}{/if}
+        {#each item.childLists as childList (`nested-list:${childList.startLine}:${childList.endLine}`)}
+          {@render listContent(childList)}
+        {/each}
+      </li>
+    {/each}
+  </svelte:element>
 {/snippet}
 
 <div class="markdown-body rich-markdown-document">
