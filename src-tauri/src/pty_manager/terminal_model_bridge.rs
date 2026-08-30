@@ -12,7 +12,7 @@ type TerminalModelDisabledSink = Arc<dyn Fn(u64) + Send + Sync>;
 
 const TERMINAL_MODEL_EVENT_QUEUE_CAPACITY: usize = 64;
 const TERMINAL_MODEL_EVENT_FLUSH_INTERVAL: std::time::Duration =
-    std::time::Duration::from_millis(50);
+    std::time::Duration::from_millis(16);
 const TERMINAL_MODEL_EVENT_MAX_BATCH_BYTES: usize = 64 * 1024;
 
 enum DeferredTerminalModelEvent {
@@ -90,15 +90,22 @@ fn run_deferred_event_worker(
     output_event_name: String,
     disabled_event_name: String,
     disabled_sink: Option<TerminalModelDisabledSink>,
+    flush_interval: std::time::Duration,
 ) {
     let mut pending: Option<PendingModelOutput> = None;
+    let mut flush_deadline: Option<std::time::Instant> = None;
     loop {
-        let received = if pending.is_some() {
-            match rx.recv_timeout(TERMINAL_MODEL_EVENT_FLUSH_INTERVAL) {
-                Ok(event) => DeferredEventReceive::Event(event),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => DeferredEventReceive::Flush,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    DeferredEventReceive::Closed
+        let received = if let Some(deadline) = flush_deadline {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                DeferredEventReceive::Flush
+            } else {
+                match rx.recv_timeout(deadline.duration_since(now)) {
+                    Ok(event) => DeferredEventReceive::Event(event),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => DeferredEventReceive::Flush,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        DeferredEventReceive::Closed
+                    }
                 }
             }
         } else {
@@ -124,11 +131,13 @@ fn run_deferred_event_worker(
                     publish_model_output(&publisher, &output_event_name, current);
                 }
                 pending = Some(PendingModelOutput::new(instance_id, sequence, bytes));
+                flush_deadline = Some(std::time::Instant::now() + flush_interval);
             }
             DeferredEventReceive::Event(DeferredTerminalModelEvent::Disabled { instance_id }) => {
                 if let Some(current) = pending.take() {
                     publish_model_output(&publisher, &output_event_name, current);
                 }
+                flush_deadline = None;
                 publisher.publish(
                     &disabled_event_name,
                     &serde_json::json!({ "instance_id": instance_id }),
@@ -141,6 +150,7 @@ fn run_deferred_event_worker(
                 if let Some(current) = pending.take() {
                     publish_model_output(&publisher, &output_event_name, current);
                 }
+                flush_deadline = None;
             }
             DeferredEventReceive::Closed => {
                 if let Some(current) = pending.take() {
@@ -186,6 +196,7 @@ impl TerminalModelEventBridge {
                     worker_output_event_name,
                     worker_disabled_event_name,
                     worker_disabled_sink,
+                    TERMINAL_MODEL_EVENT_FLUSH_INTERVAL,
                 );
             })
         {
@@ -329,9 +340,10 @@ mod tests {
 
         feeder.feed(b"model ");
         feeder.feed(b"output");
-        session
+        let snapshot = session
             .portable_snapshot()
             .expect("snapshot should synchronize model output");
+        assert_eq!(snapshot.watermark, 2);
 
         let event = receive_event(&mut events);
         assert_eq!(event.event_name, "pty-model-output-model-shell");
@@ -343,6 +355,110 @@ mod tests {
             events.try_recv().is_err(),
             "coalesced output should publish once"
         );
+    }
+
+    #[test]
+    fn backlogged_input_honors_elapsed_flush_deadline() {
+        let (deferred_tx, deferred_rx) = std::sync::mpsc::channel();
+        for sequence in 1..=4 {
+            deferred_tx
+                .send(DeferredTerminalModelEvent::Output {
+                    instance_id: 33,
+                    sequence,
+                    bytes: vec![b'0' + sequence as u8],
+                })
+                .expect("test event should queue");
+        }
+        drop(deferred_tx);
+        let (event_tx, mut events) = tokio::sync::broadcast::channel(8);
+
+        run_deferred_event_worker(
+            deferred_rx,
+            RuntimeEventPublisher::new(None, Some(event_tx)),
+            "pty-model-output-backlogged-shell".to_string(),
+            "pty-model-disabled-backlogged-shell".to_string(),
+            None,
+            std::time::Duration::ZERO,
+        );
+
+        let published = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+        assert_eq!(
+            published.len(),
+            4,
+            "an elapsed deadline must flush before another queued event is consumed"
+        );
+        let mut output = Vec::new();
+        for (index, event) in published.iter().enumerate() {
+            let sequence = (index + 1) as u64;
+            assert_eq!(event.payload["start_sequence"], sequence);
+            assert_eq!(event.payload["sequence"], sequence);
+            output.extend(
+                base64::engine::general_purpose::STANDARD
+                    .decode(
+                        event.payload["data"]
+                            .as_str()
+                            .expect("output data should be base64 text"),
+                    )
+                    .expect("output data should decode"),
+            );
+        }
+        assert_eq!(output, b"1234");
+    }
+
+    #[test]
+    fn queued_burst_bounds_event_count_without_losing_output() {
+        const CHUNK_COUNT: u64 = 512;
+        const CHUNK_BYTES: usize = 256;
+
+        let (deferred_tx, deferred_rx) = std::sync::mpsc::channel();
+        let mut expected_output = Vec::with_capacity(CHUNK_COUNT as usize * CHUNK_BYTES);
+        for sequence in 1..=CHUNK_COUNT {
+            let bytes = vec![b'a' + ((sequence - 1) % 26) as u8; CHUNK_BYTES];
+            expected_output.extend_from_slice(&bytes);
+            deferred_tx
+                .send(DeferredTerminalModelEvent::Output {
+                    instance_id: 34,
+                    sequence,
+                    bytes,
+                })
+                .expect("test event should queue");
+        }
+        drop(deferred_tx);
+        let (event_tx, mut events) = tokio::sync::broadcast::channel(4);
+
+        run_deferred_event_worker(
+            deferred_rx,
+            RuntimeEventPublisher::new(None, Some(event_tx)),
+            "pty-model-output-queued-burst-shell".to_string(),
+            "pty-model-disabled-queued-burst-shell".to_string(),
+            None,
+            std::time::Duration::from_secs(60),
+        );
+
+        let published = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+        assert_eq!(
+            published.len(),
+            2,
+            "512 model frames totaling 128 KiB should produce two transport events"
+        );
+        assert_eq!(published[0].payload["start_sequence"], 1);
+        assert_eq!(published[0].payload["sequence"], 256);
+        assert_eq!(published[1].payload["start_sequence"], 257);
+        assert_eq!(published[1].payload["sequence"], CHUNK_COUNT);
+
+        let actual_output = published
+            .iter()
+            .flat_map(|event| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(
+                        event.payload["data"]
+                            .as_str()
+                            .expect("output data should be base64 text"),
+                    )
+                    .expect("output data should decode")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(actual_output, expected_output);
     }
 
     #[test]
