@@ -214,14 +214,11 @@ pub(super) async fn sync_authored_task_prs(
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
 
-    let task_ids: Vec<String> = {
+    let task_ids = {
         let db_lock = acquire_db(db);
         db_lock
-            .get_all_tasks()
-            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get task data: {}", e)))?
-            .into_iter()
-            .map(|task| task.id)
-            .collect()
+            .get_all_task_ids()
+            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get task IDs: {}", e)))?
     };
 
     let now = crate::unix_timestamp::seconds(std::time::SystemTime::now())
