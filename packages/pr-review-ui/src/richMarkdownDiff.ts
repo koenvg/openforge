@@ -86,6 +86,14 @@ export function getChangedRightLines(patch: string): Set<number> {
   return changedLines
 }
 
+function isListToken(token: Token): token is Tokens.List {
+  return token.type === 'list'
+}
+
+function isTableToken(token: Token): token is Tokens.Table {
+  return token.type === 'table'
+}
+
 function parseList(
   token: Tokens.List,
   startLine: number,
@@ -103,7 +111,7 @@ function parseList(
     let itemContentEndLine = itemStartLine - 1
 
     for (const itemToken of item.tokens) {
-      if (itemToken.type === 'list') {
+      if (isListToken(itemToken)) {
         const childList = parseList(itemToken, itemTokenLine, changedLines)
         childLists.push(childList)
         itemTokenLine = childList.endLine + 1
@@ -203,9 +211,9 @@ export function parseRichMarkdownDiff(content: string, patch: string): RichMarkd
 
     if (token.type === 'def') {
       references += token.raw.endsWith('\n') ? token.raw : `${token.raw}\n`
-    } else if (token.type === 'list') {
+    } else if (isListToken(token)) {
       blocks.push(parseList(token, sourceLine, changedLines))
-    } else if (token.type === 'table') {
+    } else if (isTableToken(token)) {
       blocks.push(parseTable(token, sourceLine, changedLines))
     } else {
       blocks.push(parseContent(token, sourceLine, changedLines))
