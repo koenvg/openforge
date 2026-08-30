@@ -181,6 +181,10 @@ describe('DiffViewer accessibility', () => {
     render(DiffViewer, { props: { files, onCopyFilePath } })
 
     const copyPathButton = screen.getByRole('button', { name: 'Copy file path: src/main.ts' })
+    const pathText = screen.getByText('src/main.ts')
+    expect(pathText.tagName).toBe('SPAN')
+    expect(pathText.nextElementSibling).toBe(copyPathButton)
+    expect(copyPathButton.querySelector('svg')).not.toBeNull()
     const collapseButton = screen.getByRole('button', { name: 'Collapse diff for src/main.ts' })
     expect(collapseButton.getAttribute('aria-expanded')).toBe('true')
 

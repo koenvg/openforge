@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MessageSquare } from '@lucide/svelte'
+  import { Copy, MessageSquare } from '@lucide/svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { Snippet } from 'svelte'
@@ -62,17 +62,17 @@
       <span class="max-w-[40%] min-w-0 overflow-hidden text-ellipsis text-base-content/50 line-through" title={file.previous_filename}>{file.previous_filename}</span>
       <span class="text-primary mx-1 flex-shrink-0">→</span>
     {/if}
+    <span class="min-w-0 overflow-hidden text-ellipsis" title={file.filename}>{file.filename}</span>
     {#if onCopyFilePath}
       <button
-        class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left hover:text-primary transition-colors"
-        title={file.filename}
+        type="button"
+        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 flex-shrink-0 p-0 text-base-content/60 hover:text-primary"
+        title="Copy file path"
         aria-label="Copy file path: {file.filename}"
         onclick={() => onCopyFilePath(file.filename)}
       >
-        {file.filename}
+        <Copy size={16} strokeWidth={1.8} aria-hidden="true" />
       </button>
-    {:else}
-      <span class="min-w-0 overflow-hidden text-ellipsis" title={file.filename}>{file.filename}</span>
     {/if}
   </div>
   {#if pendingCommentCount > 0}
