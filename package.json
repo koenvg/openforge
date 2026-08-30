@@ -22,7 +22,7 @@
     "website:deploy": "pnpm --filter @openforge-app/website exec astro build --outDir ../../dist",
     "electron:contract:generate": "node scripts/generate-desktop-ipc-registry.mjs",
     "electron:contract:check": "node scripts/generate-desktop-ipc-registry.mjs --check",
-    "electron:build": "pnpm electron:contract:generate && node scripts/electron-build.mjs",
+    "electron:build": "pnpm --filter @openforge-app/plugin-sdk build && pnpm electron:contract:generate && node scripts/electron-build.mjs",
     "electron:package": "node scripts/electron-package.mjs",
     "electron:install": "bash scripts/install-electron-mac.sh",
     "electron:smoke:packaged": "node scripts/electron-packaged-smoke.mjs",

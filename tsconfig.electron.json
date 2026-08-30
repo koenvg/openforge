@@ -5,6 +5,8 @@
     "noEmit": false,
     "outDir": "dist-electron",
     "rootDir": "src/electron",
+    // Electron emits imports for packaged dependencies; do not compile workspace source aliases outside rootDir.
+    "paths": {},
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
