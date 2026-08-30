@@ -45,7 +45,7 @@
   }
 </script>
 
-<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
+<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
   <button
     class="flex min-h-10 flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
     aria-label={getToggleLabel()}
@@ -66,7 +66,7 @@
     {#if onCopyFilePath}
       <button
         type="button"
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 flex-shrink-0 p-0 text-base-content/60 hover:text-primary"
+        class="inline-flex h-8 min-h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-md text-base-content/50 transition-colors hover:bg-base-300 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         title="Copy file path"
         aria-label="Copy file path: {file.filename}"
         onclick={() => onCopyFilePath(file.filename)}
