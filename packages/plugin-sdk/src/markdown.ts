@@ -23,6 +23,72 @@ const markedOptions = {
   breaks: true,
 }
 
+const RENDERED_MARKDOWN_CACHE_CAPACITY = 100
+
+export interface RenderedMarkdownCacheStats {
+  capacity: number
+  size: number
+  hits: number
+  misses: number
+  evictions: number
+}
+
+const renderedMarkdownCache = new Map<string, string>()
+let renderedMarkdownCacheHits = 0
+let renderedMarkdownCacheMisses = 0
+let renderedMarkdownCacheEvictions = 0
+
+function renderedMarkdownCacheKey(content: string, options: RenderMarkdownOptions): string {
+  return JSON.stringify([
+    content,
+    options.imageBaseUrl ?? null,
+    options.markdownFilePath ?? null,
+    Boolean(options.deferRepositoryImages),
+    Boolean(options.deferRemoteMedia),
+  ])
+}
+
+function readRenderedMarkdownCache(key: string): string | undefined {
+  const cached = renderedMarkdownCache.get(key)
+  if (cached === undefined) {
+    renderedMarkdownCacheMisses++
+    return undefined
+  }
+
+  renderedMarkdownCacheHits++
+  renderedMarkdownCache.delete(key)
+  renderedMarkdownCache.set(key, cached)
+  return cached
+}
+
+function writeRenderedMarkdownCache(key: string, html: string): void {
+  if (renderedMarkdownCache.size >= RENDERED_MARKDOWN_CACHE_CAPACITY) {
+    const oldestKey = renderedMarkdownCache.keys().next().value
+    if (oldestKey !== undefined) {
+      renderedMarkdownCache.delete(oldestKey)
+      renderedMarkdownCacheEvictions++
+    }
+  }
+
+  renderedMarkdownCache.set(key, html)
+}
+
+export function getRenderedMarkdownCacheStats(): Readonly<RenderedMarkdownCacheStats> {
+  return {
+    capacity: RENDERED_MARKDOWN_CACHE_CAPACITY,
+    size: renderedMarkdownCache.size,
+    hits: renderedMarkdownCacheHits,
+    misses: renderedMarkdownCacheMisses,
+    evictions: renderedMarkdownCacheEvictions,
+  }
+}
+
+export function clearRenderedMarkdownCache(): void {
+  renderedMarkdownCache.clear()
+  renderedMarkdownCacheHits = 0
+  renderedMarkdownCacheMisses = 0
+  renderedMarkdownCacheEvictions = 0
+}
 function hasAbsoluteOrSpecialUrl(value: string): boolean {
   return /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//') || value.startsWith('#')
 }
@@ -190,6 +256,12 @@ function prepareMarkdownMediaSources(
 }
 
 export function renderMarkdownHtml(content: string, options: RenderMarkdownOptions = {}): string {
+  const cacheKey = renderedMarkdownCacheKey(content, options)
+  const cached = readRenderedMarkdownCache(cacheKey)
+  if (cached !== undefined) return cached
+
   const rawHtml = marked.parse(content, markedOptions) as string
-  return sanitizeHtml(prepareMarkdownMediaSources(rawHtml, options))
+  const html = sanitizeHtml(prepareMarkdownMediaSources(rawHtml, options))
+  writeRenderedMarkdownCache(cacheKey, html)
+  return html
 }

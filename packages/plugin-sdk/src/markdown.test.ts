@@ -1,7 +1,116 @@
-import { describe, expect, it } from 'vitest'
-import { renderMarkdownHtml, resolveMarkdownImageSrc, resolveMarkdownRepositoryPath } from './markdown'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  clearRenderedMarkdownCache,
+  getRenderedMarkdownCacheStats,
+  renderMarkdownHtml,
+  resolveMarkdownImageSrc,
+  resolveMarkdownRepositoryPath,
+} from './markdown'
+
+beforeEach(() => {
+  clearRenderedMarkdownCache()
+})
 
 describe('renderMarkdownHtml', () => {
+  it('reuses rendered HTML until the content changes', () => {
+    const content = '# Cached prompt'
+    const options = { imageBaseUrl: 'https://raw.githubusercontent.com/acme/repo/abc123/' }
+
+    const first = renderMarkdownHtml(content, options)
+    const second = renderMarkdownHtml(content, { ...options })
+    const changed = renderMarkdownHtml('# Changed prompt', options)
+
+    expect(second).toBe(first)
+    expect(changed).not.toBe(first)
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({
+      size: 2,
+      hits: 1,
+      misses: 2,
+      evictions: 0,
+    })
+  })
+
+  it('invalidates cached HTML when any media-resolution option changes', () => {
+    const content = [
+      '![Repository image](../assets/diagram.png)',
+      '![Remote image](https://uploads.example.com/diagram.png)',
+    ].join('\n')
+    const baselineOptions = {
+      imageBaseUrl: 'https://cdn.example.com/one/',
+      markdownFilePath: 'docs/README.md',
+    }
+
+    const baseline = renderMarkdownHtml(content, baselineOptions)
+    const changedBaseUrl = renderMarkdownHtml(content, {
+      ...baselineOptions,
+      imageBaseUrl: 'https://cdn.example.com/two/',
+    })
+    const changedFilePath = renderMarkdownHtml(content, {
+      ...baselineOptions,
+      markdownFilePath: 'guides/nested/README.md',
+    })
+    const deferredRepository = renderMarkdownHtml(content, {
+      ...baselineOptions,
+      deferRepositoryImages: true,
+    })
+    const deferredRemote = renderMarkdownHtml(content, {
+      ...baselineOptions,
+      deferRemoteMedia: true,
+    })
+
+    expect(changedBaseUrl).not.toBe(baseline)
+    expect(changedFilePath).not.toBe(baseline)
+    expect(deferredRepository).toContain('data-markdown-repository-path="assets/diagram.png"')
+    expect(deferredRemote).toContain('data-markdown-remote-src="https://uploads.example.com/diagram.png"')
+    expect(renderMarkdownHtml(content, baselineOptions)).toBe(baseline)
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({ hits: 1, misses: 5, size: 5 })
+  })
+
+  it('evicts the least-recently-used rendered HTML at its fixed capacity', () => {
+    const { capacity } = getRenderedMarkdownCacheStats()
+    for (let index = 0; index < capacity; index++) {
+      renderMarkdownHtml(`Entry ${index}`)
+    }
+
+    renderMarkdownHtml('Entry 0')
+    renderMarkdownHtml('Overflow entry')
+
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({
+      capacity,
+      size: capacity,
+      hits: 1,
+      misses: capacity + 1,
+      evictions: 1,
+    })
+
+    renderMarkdownHtml('Entry 0')
+    renderMarkdownHtml('Entry 1')
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({
+      size: capacity,
+      hits: 2,
+      misses: capacity + 2,
+      evictions: 2,
+    })
+  })
+
+  it('keeps cached HTML sanitized against scripts, event handlers, and unsafe URLs', () => {
+    const content = [
+      '<img src="safe.png" onerror="alert(1)">',
+      '<script>alert("xss")</script>',
+      '<a href="javascript:alert(1)">Unsafe link</a>',
+    ].join('\n')
+
+    const first = renderMarkdownHtml(content)
+    const cached = renderMarkdownHtml(content)
+
+    expect(cached).toBe(first)
+    expect(cached).toContain('<img src="safe.png">')
+    expect(cached).not.toContain('<script')
+    expect(cached).not.toContain('onerror')
+    expect(cached).not.toContain('javascript:')
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({ hits: 1, misses: 1 })
+  })
+
   it('resolves relative image sources against the supplied image base URL', () => {
     const html = renderMarkdownHtml('![Architecture](docs/architecture.png)', {
       imageBaseUrl: 'https://raw.githubusercontent.com/acme/repo/abc123/',
