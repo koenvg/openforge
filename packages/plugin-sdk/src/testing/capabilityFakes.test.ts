@@ -73,6 +73,41 @@ describe('testing capability fakes', () => {
     }])
   })
 
+  it('lists seeded user-data files and nested directories with file metadata', async () => {
+    const api = createMockBackendOpenForgeApi({
+      userDataTextFiles: [
+        { path: 'events/archive/old.json', content: '{}' },
+        { path: 'events/state.json', content: 'é' },
+        { path: 'root.txt', content: '🙂' },
+      ],
+    })
+
+    await expect(api.fs.userData.readDir()).resolves.toEqual([
+      { name: 'events', path: 'events', isDir: true, size: null, modifiedAt: null },
+      { name: 'root.txt', path: 'root.txt', isDir: false, size: 4, modifiedAt: null },
+    ])
+    await expect(api.fs.userData.readDir({ path: 'events' })).resolves.toEqual([
+      { name: 'archive', path: 'events/archive', isDir: true, size: null, modifiedAt: null },
+      { name: 'state.json', path: 'events/state.json', isDir: false, size: 2, modifiedAt: null },
+    ])
+  })
+
+  it('updates user-data directory entries after writes and appends', async () => {
+    const api = createMockBackendOpenForgeApi()
+
+    await api.fs.userData.writeTextFile({ path: 'events/current.json', content: 'a' })
+    await api.fs.userData.appendTextFile({ path: 'events/current.json', content: '🙂' })
+    await api.fs.userData.writeTextFile({ path: 'events/archive/old.json', content: '{}' })
+
+    await expect(api.fs.userData.readDir()).resolves.toEqual([
+      { name: 'events', path: 'events', isDir: true, size: null, modifiedAt: null },
+    ])
+    await expect(api.fs.userData.readDir({ path: 'events' })).resolves.toEqual([
+      { name: 'archive', path: 'events/archive', isDir: true, size: null, modifiedAt: null },
+      { name: 'current.json', path: 'events/current.json', isDir: false, size: 5, modifiedAt: null },
+    ])
+  })
+
   it('stats an external file and reads only the requested identity-bound byte range', async () => {
     const api = createMockBackendOpenForgeApi({
       externalTextFiles: [{
