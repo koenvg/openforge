@@ -130,7 +130,7 @@
   ]
 </script>
 
-<div class="{collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full bg-base-100 border-r border-base-300 flex flex-col transition-all duration-200">
+<div class="{collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full bg-base-100 border-r border-base-300 flex flex-col transition-[width] duration-200">
   {#if appMode === 'dev'}
     <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
        <span class="text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
@@ -143,15 +143,17 @@
   <div class="h-12 px-2 flex items-center justify-end border-b border-base-300/50">
     <button
       type="button"
-      class="btn btn-ghost btn-xs text-base-content/30 hover:text-base-content/60"
+      class="group btn btn-ghost btn-xs text-base-content"
       aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       onclick={onToggleCollapse}
     >
+      <span class="sidebar-toggle-glyph">
       {#if collapsed}
         <ChevronRight size={16} />
       {:else}
         <ChevronLeft size={16} />
       {/if}
+      </span>
     </button>
   </div>
 
@@ -162,14 +164,14 @@
          matches the target icon in the dialog's own header. -->
     <button
       type="button"
-      class="w-full flex min-h-11 items-center {collapsed ? 'justify-center px-0' : 'px-4'} gap-3 py-2.5 cursor-pointer transition-colors text-base-content/55 hover:bg-base-200 hover:text-base-content"
+      class="composited-hover-layer sidebar-hover-base-200 group w-full flex min-h-11 items-center {collapsed ? 'justify-center px-0' : 'px-4'} gap-3 py-2.5 cursor-pointer text-base-content"
       title={collapsed ? 'Attention' : undefined}
       aria-label="Attention"
       onclick={onOpenAttentionOverview}
     >
-      <LocateFixed size={18} class="shrink-0" />
+      <LocateFixed size={18} class="sidebar-fade-content shrink-0" />
       {#if !collapsed}
-        <span class="text-sm font-medium">Attention</span>
+        <span class="sidebar-fade-content text-sm font-medium">Attention</span>
       {/if}
     </button>
   </div>
@@ -192,7 +194,7 @@
       {#if collapsed}
         <button
           type="button"
-           class="w-full flex justify-center py-2 transition-colors {isActive ? 'bg-base-100' : 'hover:bg-base-content/10 active:bg-base-content/20'}"
+           class="composited-hover-layer w-full flex justify-center py-2 {isActive ? 'bg-base-100' : 'sidebar-hover-content-10 active:bg-base-content/20'}"
           aria-current={isActive ? 'true' : undefined}
           title={project.name}
           onclick={() => selectProject(project.id)}
@@ -220,7 +222,7 @@
           </div>
         </button>
       {:else}
-        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-base-200 active:bg-base-300'}">
+        <div class="composited-hover-layer group relative flex border-l-2 {isActive ? 'border-primary bg-primary/10' : 'sidebar-hover-base-200 border-transparent active:bg-base-300'}">
           <button
             type="button"
             class="flex-1 px-4 py-3 text-left"
@@ -290,7 +292,7 @@
       <div class="border-t border-base-300/40 mt-1">
         <button
           type="button"
-          class="w-full flex items-center gap-1 px-3 py-2 text-left text-base-content/50 hover:text-base-content/80 transition-colors"
+          class="w-full flex items-center gap-1 px-3 py-2 text-left text-base-content opacity-50 transition-opacity hover:opacity-80"
           aria-expanded={hiddenExpanded}
           onclick={() => (hiddenExpanded = !hiddenExpanded)}
         >
@@ -304,7 +306,7 @@
         {#if hiddenExpanded}
           {#each hiddenProjects as project (project.id)}
             {@const isActive = project.id === $activeProjectId && isProjectContextView}
-            <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}">
+            <div class="composited-hover-layer group relative flex border-l-2 {isActive ? 'border-primary bg-base-100' : 'sidebar-hover-base-300-30 border-transparent'}">
               <button
                 type="button"
                 class="flex-1 px-3 py-2 text-left"
@@ -345,18 +347,55 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {isActive ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
+        class="composited-hover-layer group mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer {isActive ? 'bg-primary/10 text-primary' : 'sidebar-hover-base-200 text-base-content'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
         onclick={() => onNavigate(view)}
       >
-         <Icon size={18} class="shrink-0" />
+         <Icon size={18} class="shrink-0 {isActive ? '' : 'sidebar-fade-content'}" />
          {#if !collapsed}
-           <span class="text-sm font-medium">{label}</span>
+           <span class="text-sm font-medium {isActive ? '' : 'sidebar-fade-content'}">{label}</span>
          {/if}
       </button>
     {/each}
   </div>
 
 </div>
+
+<style>
+
+  .sidebar-hover-base-200 {
+    --composited-hover-background: var(--color-base-200);
+  }
+
+  .sidebar-hover-content-10 {
+    --composited-hover-background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  }
+
+  .sidebar-hover-base-300-30 {
+    --composited-hover-background: color-mix(in oklch, var(--color-base-300) 30%, transparent);
+  }
+
+  .sidebar-fade-content {
+    opacity: 0.55;
+    transition: opacity 200ms ease;
+    will-change: opacity;
+  }
+
+  .group:hover .sidebar-fade-content,
+  .group:focus-visible .sidebar-fade-content {
+    opacity: 1;
+  }
+
+  .sidebar-toggle-glyph {
+    opacity: 0.3;
+    transition: opacity 200ms ease;
+    will-change: opacity;
+  }
+
+  .group:hover .sidebar-toggle-glyph,
+  .group:focus-visible .sidebar-toggle-glyph {
+    opacity: 0.6;
+  }
+</style>

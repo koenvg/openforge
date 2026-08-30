@@ -133,7 +133,7 @@
 
       <button
         type="button"
-        class="of-field flex h-9 min-w-64 max-w-[30rem] flex-1 items-center gap-2.5 px-3 text-left text-xs text-base-content/55"
+        class="composited-hover-layer board-search of-field flex h-9 min-w-64 max-w-[30rem] flex-1 items-center gap-2.5 px-3 text-left text-xs text-base-content/55"
         aria-label="Search tasks or use a command"
         onclick={() => onOpenCommandSearch?.()}
       >
@@ -155,15 +155,15 @@
           {#each FILTER_OPTIONS as opt}
             <button
               type="button"
-              class="join-item relative min-h-8 border border-base-300 bg-base-100 px-3 text-xs font-medium transition-colors {activeFilter === opt.value
+              class="board-filter join-item relative min-h-8 border border-base-300 bg-base-100 px-3 text-xs font-medium {activeFilter === opt.value
                 ? 'z-10 border-primary bg-primary/[0.03] text-primary ring-1 ring-primary/20'
-                : 'text-base-content/65 hover:bg-base-200/60 hover:text-base-content'}"
+                : 'composited-hover-layer board-filter--interactive text-base-content'}"
               aria-pressed={activeFilter === opt.value}
               onclick={() => interactionController.activateFilter(opt.value)}
             >
-              <span>{opt.label} <span class="ml-1 text-[10px] opacity-60">{filterCounts[opt.value]}</span></span>
+              <span class="board-filter-content">{opt.label} <span class="ml-1 text-[10px] opacity-60">{filterCounts[opt.value]}</span></span>
               {#if $commandHeld}
-                <kbd class="kbd kbd-xs ml-1 opacity-60">{opt.shortcut}</kbd>
+                <kbd class="kbd kbd-xs ml-1 opacity-60 {activeFilter === opt.value ? '' : 'text-base-content/65'}">{opt.shortcut}</kbd>
               {/if}
             </button>
           {/each}
@@ -282,3 +282,31 @@
     onReturnToBoard={outOfFocusController.returnToBoard}
   />
 </div>
+
+<style>
+  .board-search {
+    --composited-hover-border: 1px solid color-mix(in srgb, var(--of-text) 24%, var(--of-divider));
+    transition-property: opacity, transform;
+  }
+
+  .board-search:hover {
+    border-color: var(--of-divider);
+  }
+
+  .board-filter--interactive {
+    --composited-hover-background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+  }
+
+  .board-filter-content {
+    transition: opacity 200ms ease;
+    will-change: opacity;
+  }
+
+  .board-filter--interactive .board-filter-content {
+    opacity: 0.65;
+  }
+
+  .board-filter--interactive:hover .board-filter-content {
+    opacity: 1;
+  }
+</style>
