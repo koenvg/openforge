@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, readFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -10,13 +10,13 @@ const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
 assertOpenForgePluginSdkPublicUiPackageExports(packageJson.exports)
 
+const rootModuleAssetPaths = (await readdir(join(packageRoot, 'src'), { withFileTypes: true }))
+  .filter((entry) => entry.isFile() && (entry.name.endsWith('.mjs') || entry.name.endsWith('.d.mts')))
+  .map(({ name }) => `src/${name}`)
+  .sort()
+
 const assetPaths = [
-  'src/svelteHostRuntimeContract.mjs',
-  'src/svelteHostRuntimeContract.d.mts',
-  'src/publicEntrypoints.mjs',
-  'src/publicEntrypoints.d.mts',
-  'src/publicUiExports.mjs',
-  'src/publicUiExports.d.mts',
+  ...rootModuleAssetPaths,
   ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ sourcePath }) => sourcePath),
 ]
 await Promise.all(assetPaths.map(async (assetPath) => {
