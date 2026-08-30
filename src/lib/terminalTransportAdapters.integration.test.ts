@@ -223,18 +223,13 @@ describe.each([
     await runtime.attach(entry, document.createElement('div'))
     harness.emitModelOutput('T-1-shell-2', 'model output', 9, 4)
 
-    expect(view.bootstrap).toHaveBeenNthCalledWith(
-      1,
-      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
-      9,
-      0,
-    )
-    expect(view.bootstrap).toHaveBeenNthCalledWith(
-      2,
-      Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
-      9,
-      0,
-    )
+    expect(view.replaceSnapshot).toHaveBeenCalledOnce()
+    expect(view.replaceSnapshot).toHaveBeenCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
+      compatibilityData: Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      ptyInstanceId: 9,
+      sequence: 0,
+    })
     expect(view.writeLive).toHaveBeenCalledWith({
       data: Uint8Array.from(new TextEncoder().encode('model output')),
       ptyInstanceId: 9,
@@ -289,11 +284,12 @@ describe.each([
     harness.setGhosttyReplay('reconnected replay', 7, 0)
     harness.emitConnectionRestored()
     await vi.waitFor(() => {
-      expect(view.bootstrap).toHaveBeenLastCalledWith(
-        Uint8Array.from(new TextEncoder().encode('reconnected replay')),
-        7,
-        0,
-      )
+      expect(view.replaceSnapshot).toHaveBeenLastCalledWith({
+        data: Uint8Array.from(new TextEncoder().encode('reconnected replay')),
+        compatibilityData: undefined,
+        ptyInstanceId: 7,
+        sequence: 0,
+      })
     })
 
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)

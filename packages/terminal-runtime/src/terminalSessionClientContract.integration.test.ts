@@ -40,25 +40,27 @@ describe('Terminal Session client contract', () => {
     const entry = await client.acquire(shellSessionKey)
     await attachTestTerminal(runtime, entry)
 
-    expect(view.bootstrap).toHaveBeenCalledWith(
-      Uint8Array.from(new TextEncoder().encode('bootstrap')),
-      1,
-      0,
-    )
+    expect(view.replaceSnapshot).toHaveBeenCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('bootstrap')),
+      compatibilityData: undefined,
+      ptyInstanceId: 1,
+      sequence: 0,
+    })
 
     inputListeners[0]?.('typed')
     expect(writePty).toHaveBeenCalledWith(shellSessionKey, 'typed')
 
     buffer = 'reconnected'
     host.emit('openforge-app-events-reconnected', { attempt: 1, reconnectedAt: 'now' })
-    await vi.waitFor(() => expect(view.bootstrap).toHaveBeenCalledWith(
-      Uint8Array.from(new TextEncoder().encode('reconnected')),
-      1,
-      0,
-    ))
+    await vi.waitFor(() => expect(view.replaceSnapshot).toHaveBeenCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('reconnected')),
+      compatibilityData: undefined,
+      ptyInstanceId: 1,
+      sequence: 0,
+    }))
 
-    await client.markShellPtyStarted(entry, 2)
     instanceId = 2
+    await client.markShellPtyStarted(entry, 2)
     host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('stale'), instance_id: 1, sequence: 1 })
     host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('current'), instance_id: 2, sequence: 1 })
 

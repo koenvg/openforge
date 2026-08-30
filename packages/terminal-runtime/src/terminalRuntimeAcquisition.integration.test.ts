@@ -82,13 +82,20 @@ describe('terminal runtime acquisition', () => {
 
     expect(entry.terminalStateSource).toBe('ghostty-snapshot')
     expect(entry.currentPtyInstance).toBe(7)
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledTimes(3)
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       1,
-      expect.any(Uint8Array),
+      '',
+      expect.any(Function),
     )
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       2,
-      expect.any(Uint8Array),
+      Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
+      expect.any(Function),
+    )
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      3,
+      Uint8Array.from(new TextEncoder().encode(' later output')),
     )
   })
 

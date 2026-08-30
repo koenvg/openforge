@@ -147,7 +147,7 @@ vi.mock("@xterm/xterm", () => {
 			terminalInstances.push(this);
 		}
 		open = vi.fn();
-		write = vi.fn();
+		write = vi.fn((_data: string | Uint8Array, callback?: () => void) => callback?.());
 		dispose = vi.fn();
 		onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
 		onWriteParsed = vi.fn().mockReturnValue({ dispose: vi.fn() });

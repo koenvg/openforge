@@ -146,6 +146,12 @@ export function createTerminalAttachmentController(
     return true
   }
 
+  async function recoverAttachmentState(entry: PoolEntry, generation: number): Promise<boolean> {
+    if (!entry.viewNeedsRecovery) return false
+    await recoverEntry(entry)
+    return retireStaleAttachment(entry, generation)
+  }
+
   async function attach(
     entry: PoolEntry,
     wrapperEl: HTMLDivElement,
@@ -164,8 +170,11 @@ export function createTerminalAttachmentController(
       if (await retireStaleAttachment(entry, generation)) {
         return createAttachment(entry, generation)
       }
-      if (entry.viewNeedsRecovery) await recoverEntry(entry)
-      if (await retireStaleAttachment(entry, generation)) {
+      const joinedPendingRecovery = entry.terminalReplayRecovery !== null
+      if (await recoverAttachmentState(entry, generation)) {
+        return createAttachment(entry, generation)
+      }
+      if (joinedPendingRecovery && await recoverAttachmentState(entry, generation)) {
         return createAttachment(entry, generation)
       }
     } catch (error) {

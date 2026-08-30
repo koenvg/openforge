@@ -37,7 +37,6 @@ interface TerminalAcquisitionOptions {
   createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry
   preloadEntry(): Promise<TerminalFontReadiness>
   disposeEntry(entry: PoolEntry): void
-  resetEntry(entry: PoolEntry): void
   lifecycle: TerminalAcquisitionLifecycle
   reconnectReplay: TerminalAcquisitionReconnectReplay
 }
@@ -49,14 +48,12 @@ export function createTerminalAcquisition({
   createEntry,
   preloadEntry,
   disposeEntry,
-  resetEntry,
   lifecycle,
   reconnectReplay,
 }: TerminalAcquisitionOptions) {
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
   const terminalStateView = createTerminalStateView({
     transport,
-    resetEntry,
     markOutput: lifecycle.markPtyOutput,
   })
 
@@ -126,7 +123,7 @@ export function createTerminalAcquisition({
     )
     if (!subscriptionRetained || disposeReleasedAcquisition(operation)) return entry
 
-    await terminalStateView.recover(entry, false)
+    await terminalStateView.recover(entry)
     entry.viewNeedsRecovery = true
     if (disposeReleasedAcquisition(operation)) return entry
 

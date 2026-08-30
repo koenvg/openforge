@@ -1,4 +1,4 @@
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import {
   createListenerRegistrationFailureSupport,
   imageAddonMocks,
@@ -65,6 +65,36 @@ describe('terminal runtime reconnect replay', () => {
     expect(host.getListenerCount(exitEvent)).toBe(1)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
   })
+
+  it('keeps detached views dirty across reconnect and restores the latest authority on attachment', async () => {
+    const terminalKey = 'T-detached-reconnect-shell-0'
+    const host = createHost()
+    host.setBuffer(terminalKey, 'initial authority')
+    const reads = vi.spyOn(host, 'getPtyBuffer')
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+    const terminal = terminalMocks.instances[0]
+    terminal.write.mockClear()
+
+    host.setBuffer(terminalKey, 'authority at reconnect')
+    host.emit(APP_EVENTS_RECONNECTED_EVENT, {})
+    await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
+
+    expect(entry.attached).toBe(false)
+    expect(entry.viewNeedsRecovery).toBe(true)
+    expect(terminal.write).not.toHaveBeenCalled()
+
+    host.setBuffer(terminalKey, 'latest authority before attachment')
+    await attachTestTerminal(runtime, entry)
+
+    expect(reads).toHaveBeenCalledTimes(3)
+    expect(terminal.write).toHaveBeenCalledWith(
+      Uint8Array.from(new TextEncoder().encode('latest authority before attachment')),
+      expect.any(Function),
+    )
+    runtime.release(terminalKey)
+  })
+
 
   it('rejects a reconnect replay that resolves after PTY replacement', async () => {
     const terminalKey = 'T-replaced-shell-0'

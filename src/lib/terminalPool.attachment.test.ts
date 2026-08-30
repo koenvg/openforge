@@ -324,7 +324,10 @@ describe("terminalPool attachment", () => {
 
 		// Re-attach to different wrapper
 		await attach(reacquired, wrapper2);
-		expect(writeSpy).toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("background output")));
+		expect(writeSpy).toHaveBeenCalledWith(
+			Uint8Array.from(new TextEncoder().encode("background output")),
+			expect.any(Function),
+		);
 		expect(wrapper2.childElementCount).toBe(1);
 		expect(entry.attached).toBe(true);
 	});

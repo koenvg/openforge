@@ -111,8 +111,12 @@ export function createTerminalRuntime({
     }
   }
 
-  function resetTerminal(entry: PoolEntry): void {
-    entry.view.reset()
+  async function resetTerminal(entry: PoolEntry): Promise<void> {
+    await entry.view.replaceSnapshot({
+      data: '',
+      ptyInstanceId: null,
+      sequence: 0,
+    })
   }
 
   function disposeTerminalEntry(entry: PoolEntry): void {
@@ -159,7 +163,6 @@ export function createTerminalRuntime({
     createEntry,
     preloadEntry: preloadTerminalFonts,
     disposeEntry: disposeTerminalEntry,
-    resetEntry: resetTerminal,
     lifecycle: sessionLifecycle,
     reconnectReplay,
   })
