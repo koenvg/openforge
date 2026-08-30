@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
-import { sideToSplitSide, buildExtendData, prCommentsToReviewComments, approvedInlineAgentComments, agentCommentToSubmission } from './diffComments'
+import { sideToSplitSide, buildExtendData, prCommentsToReviewComments, approvedInlineAgentComments, agentCommentToSubmission, type InlineCommentDisplayData } from './diffComments'
 
 // ============================================================================
 // Test Fixtures
@@ -42,6 +42,51 @@ const baseAgentComment: AgentReviewComment = {
   updated_at: 1000,
 }
 
+
+describe('CommentDisplayData', () => {
+  it('narrows each comment variant to its valid fields', () => {
+    function checkComment(comment: import('./diffComments').CommentDisplayData['comments'][number]) {
+      switch (comment.type) {
+        case 'existing':
+          expectTypeOf(comment.author).toEqualTypeOf<string>()
+          // @ts-expect-error Existing comments do not expose pending-comment indexes.
+          expectTypeOf(comment.index)
+          break
+        case 'pending':
+          expectTypeOf(comment.index).toEqualTypeOf<number>()
+          // @ts-expect-error Pending comments do not expose GitHub comment ids.
+          expectTypeOf(comment.commentId)
+          break
+        case 'agent':
+          expectTypeOf(comment.commentId).toEqualTypeOf<number>()
+          expectTypeOf(comment.filePath).toEqualTypeOf<string>()
+          expectTypeOf(comment.lineNumber).toEqualTypeOf<number>()
+          expectTypeOf(comment.commentSide).toEqualTypeOf<'LEFT' | 'RIGHT'>()
+          break
+        case 'ai-thread':
+          expectTypeOf(comment.thread).toEqualTypeOf<AiThread>()
+          // @ts-expect-error AI threads do not expose a placeholder body.
+          expectTypeOf(comment.body)
+          break
+        case 'pending-reply':
+          expectTypeOf(comment.commentId).toEqualTypeOf<number>()
+          // @ts-expect-error Pending replies do not expose pending-comment indexes.
+          expectTypeOf(comment.index)
+          break
+      }
+    }
+
+    expectTypeOf(checkComment).toBeFunction()
+  })
+})
+
+function commentOfType<Type extends InlineCommentDisplayData['type']>(
+  comment: InlineCommentDisplayData,
+  type: Type
+): Extract<InlineCommentDisplayData, { type: Type }> {
+  expect(comment.type).toBe(type)
+  return comment as Extract<InlineCommentDisplayData, { type: Type }>
+}
 // ============================================================================
 // sideToSplitSide Tests
 // ============================================================================
@@ -92,6 +137,7 @@ describe('buildExtendData', () => {
       author: 'reviewer',
       type: 'existing',
       createdAt: '2024-01-01T00:00:00Z',
+      isReply: false,
       commentId: 1,
     })
   })
@@ -147,9 +193,9 @@ describe('buildExtendData', () => {
 
     const result = buildExtendData('src/main.ts', [], pending)
 
-    expect(result.newFile['10'].data.comments[0].index).toBe(0)
-    expect(result.newFile['20'].data.comments[0].index).toBe(1)
-    expect(result.newFile['30'].data.comments[0].index).toBe(2)
+    expect(commentOfType(result.newFile['10'].data.comments[0], 'pending').index).toBe(0)
+    expect(commentOfType(result.newFile['20'].data.comments[0], 'pending').index).toBe(1)
+    expect(commentOfType(result.newFile['30'].data.comments[0], 'pending').index).toBe(2)
   })
 
   it('filters comments by filename - exact match', () => {
@@ -204,8 +250,8 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', comments, [])
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
-    expect(result.newFile['10'].data.comments[0].body).toBe('This looks good')
-    expect(result.newFile['10'].data.comments[1].body).toBe('Also good')
+    expect(commentOfType(result.newFile['10'].data.comments[0], 'existing').body).toBe('This looks good')
+    expect(commentOfType(result.newFile['10'].data.comments[1], 'existing').body).toBe('Also good')
   })
 
   it('aggregates existing and pending comments on same line', () => {
@@ -275,7 +321,7 @@ describe('buildExtendData', () => {
 
     const result = buildExtendData('src/main.ts', comments, [])
 
-    const comment = result.newFile['10'].data.comments[0]
+    const comment = commentOfType(result.newFile['10'].data.comments[0], 'existing')
     expect(comment.author).toBe('alice')
     expect(comment.createdAt).toBe('2024-02-15T10:30:00Z')
   })
@@ -285,9 +331,9 @@ describe('buildExtendData', () => {
 
     const result = buildExtendData('src/main.ts', [], pending)
 
-    const comment = result.newFile['15'].data.comments[0]
-    expect(comment.author).toBeUndefined()
-    expect(comment.createdAt).toBeUndefined()
+    const comment = commentOfType(result.newFile['15'].data.comments[0], 'pending')
+    expect(comment).not.toHaveProperty('author')
+    expect(comment).not.toHaveProperty('createdAt')
   })
 
   it('handles deeply nested file paths with endsWith matching', () => {
@@ -351,8 +397,7 @@ describe('buildExtendData', () => {
     
     expect(result.newFile['20']).toBeDefined()
     expect(result.newFile['20'].data.comments).toHaveLength(1)
-    expect(result.newFile['20'].data.comments[0].type).toBe('agent')
-    expect(result.newFile['20'].data.comments[0].body).toBe('Consider error handling here')
+    expect(commentOfType(result.newFile['20'].data.comments[0], 'agent').body).toBe('Consider error handling here')
   })
   
   it('dismissed agent comments are excluded', () => {
@@ -376,7 +421,7 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', [], [], [approved])
     
     expect(result.newFile['20']).toBeDefined()
-    expect(result.newFile['20'].data.comments[0].status).toBe('approved')
+    expect(commentOfType(result.newFile['20'].data.comments[0], 'agent').status).toBe('approved')
   })
   
   it('summary agent comments are excluded', () => {
@@ -396,7 +441,7 @@ describe('buildExtendData', () => {
     
     const result = buildExtendData('src/main.ts', [], [], agentComments)
     
-    const comment = result.newFile['20'].data.comments[0]
+    const comment = commentOfType(result.newFile['20'].data.comments[0], 'agent')
     expect(comment.commentId).toBe(100)
     expect(comment.status).toBe('pending')
     expect(comment.filePath).toBe('src/main.ts')
@@ -426,11 +471,15 @@ describe('buildExtendData', () => {
 
     const result = buildExtendData('src/main.ts', [reply, parent], [])
 
-    expect(result.newFile['10'].data.comments).toHaveLength(2)
-    expect(result.newFile['10'].data.comments[0].body).toBe('Parent comment')
-    expect(result.newFile['10'].data.comments[0].isReply).toBeFalsy()
-    expect(result.newFile['10'].data.comments[1].body).toBe('Reply comment')
-    expect(result.newFile['10'].data.comments[1].isReply).toBe(true)
+    const comments = result.newFile['10'].data.comments
+    expect(comments).toHaveLength(2)
+    const parentComment = commentOfType(comments[0], 'existing')
+    expect(parentComment.body).toBe('Parent comment')
+    expect(parentComment.isReply).toBe(false)
+    expect(commentOfType(comments[1], 'existing')).toMatchObject({
+      body: 'Reply comment',
+      isReply: true,
+    })
   })
 
   it('reply with null line inherits position from parent', () => {
@@ -452,8 +501,9 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', [parent, reply], [])
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
-    expect(result.newFile['10'].data.comments[1].body).toBe('Reply with no line')
-    expect(result.newFile['10'].data.comments[1].isReply).toBe(true)
+    const replyComment = commentOfType(result.newFile['10'].data.comments[1], 'existing')
+    expect(replyComment.body).toBe('Reply with no line')
+    expect(replyComment.isReply).toBe(true)
   })
 
   it('reply with null line and null side inherits both from parent', () => {
@@ -477,8 +527,9 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', [parent, reply], [])
 
     expect(result.oldFile['5'].data.comments).toHaveLength(2)
-    expect(result.oldFile['5'].data.comments[1].body).toBe('Reply inherits old file position')
-    expect(result.oldFile['5'].data.comments[1].isReply).toBe(true)
+    const replyComment = commentOfType(result.oldFile['5'].data.comments[1], 'existing')
+    expect(replyComment.body).toBe('Reply inherits old file position')
+    expect(replyComment.isReply).toBe(true)
     expect(result.newFile).toEqual({})
   })
 
@@ -515,12 +566,16 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', [parent1, reply1, parent2, reply2], [])
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
-    expect(result.newFile['10'].data.comments[0].body).toBe('Thread 1 parent')
-    expect(result.newFile['10'].data.comments[1].body).toBe('Thread 1 reply')
+    expect(result.newFile['10'].data.comments.map(comment => commentOfType(comment, 'existing').body)).toEqual([
+      'Thread 1 parent',
+      'Thread 1 reply',
+    ])
 
     expect(result.newFile['20'].data.comments).toHaveLength(2)
-    expect(result.newFile['20'].data.comments[0].body).toBe('Thread 2 parent')
-    expect(result.newFile['20'].data.comments[1].body).toBe('Thread 2 reply')
+    expect(result.newFile['20'].data.comments.map(comment => commentOfType(comment, 'existing').body)).toEqual([
+      'Thread 2 parent',
+      'Thread 2 reply',
+    ])
   })
 
   it('replies are sorted chronologically within a thread', () => {
@@ -553,9 +608,11 @@ describe('buildExtendData', () => {
     const result = buildExtendData('src/main.ts', [lateReply, parent, earlyReply], [])
 
     expect(result.newFile['10'].data.comments).toHaveLength(3)
-    expect(result.newFile['10'].data.comments[0].body).toBe('Parent')
-    expect(result.newFile['10'].data.comments[1].body).toBe('Early reply')
-    expect(result.newFile['10'].data.comments[2].body).toBe('Late reply')
+    expect(result.newFile['10'].data.comments.map(comment => commentOfType(comment, 'existing').body)).toEqual([
+      'Parent',
+      'Early reply',
+      'Late reply',
+    ])
   })
 
   it('orphan reply with null line is dropped when parent not found', () => {
@@ -593,7 +650,7 @@ describe('buildExtendData', () => {
 
     // Reply should be grouped with parent at line 10, not at its own line 15
     expect(result.newFile['10'].data.comments).toHaveLength(2)
-    expect(result.newFile['10'].data.comments[1].body).toBe('Reply (outdated line)')
+    expect(commentOfType(result.newFile['10'].data.comments[1], 'existing').body).toBe('Reply (outdated line)')
     expect(result.newFile['15']).toBeUndefined()
   })
 
@@ -620,10 +677,8 @@ describe('buildExtendData', () => {
 
     expect(result.newFile['10'].data.comments).toHaveLength(3)
     // Thread first (parent, reply), then pending
-    expect(result.newFile['10'].data.comments[0].type).toBe('existing')
-    expect(result.newFile['10'].data.comments[0].body).toBe('Thread parent')
-    expect(result.newFile['10'].data.comments[1].type).toBe('existing')
-    expect(result.newFile['10'].data.comments[1].body).toBe('Thread reply')
+    expect(commentOfType(result.newFile['10'].data.comments[0], 'existing').body).toBe('Thread parent')
+    expect(commentOfType(result.newFile['10'].data.comments[1], 'existing').body).toBe('Thread reply')
     expect(result.newFile['10'].data.comments[2].type).toBe('pending')
   })
 })
@@ -768,9 +823,9 @@ describe('prCommentsToReviewComments', () => {
 
     expect(extendData.newFile['10']).toBeDefined()
     expect(extendData.newFile['10'].data.comments).toHaveLength(1)
-    expect(extendData.newFile['10'].data.comments[0].type).toBe('existing')
-    expect(extendData.newFile['10'].data.comments[0].author).toBe('reviewer')
-    expect(extendData.newFile['10'].data.comments[0].body).toBe('Looks good')
+    const displayComment = commentOfType(extendData.newFile['10'].data.comments[0], 'existing')
+    expect(displayComment.author).toBe('reviewer')
+    expect(displayComment.body).toBe('Looks good')
   })
 })
 

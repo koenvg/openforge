@@ -2,13 +2,11 @@
   import { X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import type { CommentDisplayData } from './diffComments'
+  import type { AgentCommentDisplayData, CommentDisplayData, ExistingCommentDisplayData } from './diffComments'
   import InlineAiQuestionThread from './InlineAiQuestionThread.svelte'
   import InlineAiReviewComment from './InlineAiReviewComment.svelte'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineExistingComment from './InlineExistingComment.svelte'
-
-  type DisplayComment = CommentDisplayData['comments'][number]
 
   interface Props {
     data: CommentDisplayData
@@ -47,8 +45,7 @@
   let existingReplyDrafts = $state<Record<number, string>>({})
   let replyOpenCommentId = $state<number | null>(null)
 
-  function toggleAskComment(comment: DisplayComment) {
-    if (comment.commentId === undefined) return
+  function toggleAskComment(comment: AgentCommentDisplayData) {
     askOpenCommentId = askOpenCommentId === comment.commentId ? null : comment.commentId
   }
 
@@ -59,8 +56,8 @@
     askOpenCommentId = null
   }
 
-  function toggleExistingReply(comment: DisplayComment) {
-    if (comment.commentId === undefined) return
+  function toggleExistingReply(comment: ExistingCommentDisplayData) {
+    if (comment.isReply) return
     replyOpenCommentId = replyOpenCommentId === comment.commentId ? null : comment.commentId
   }
 
@@ -80,19 +77,21 @@
 
 <div class="w-full">
   {#each data.comments as comment}
-    <div class="{comment.isReply || comment.type === 'pending-reply' ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
+    {@const isNested = comment.type === 'pending-reply' || ((comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply)}
+    {@const isConnectedReply = (comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply}
+    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
       {#if comment.type === 'existing'}
         <InlineExistingComment
           {comment}
-          replyOpen={comment.commentId !== undefined && replyOpenCommentId === comment.commentId}
-          replyDraft={comment.commentId === undefined ? '' : existingReplyDrafts[comment.commentId] ?? ''}
+          replyOpen={!comment.isReply && replyOpenCommentId === comment.commentId}
+          replyDraft={comment.isReply ? '' : existingReplyDrafts[comment.commentId] ?? ''}
           onReplyDraftChange={(value) => {
-            if (comment.commentId === undefined) return
+            if (comment.isReply) return
             existingReplyDrafts = { ...existingReplyDrafts, [comment.commentId]: value }
           }}
           onToggleReply={() => toggleExistingReply(comment)}
           onClearReply={() => {
-            if (comment.commentId !== undefined) clearExistingReply(comment.commentId)
+            if (!comment.isReply) clearExistingReply(comment.commentId)
           }}
           {onReplyToExistingComment}
           {onAddReplyToReview}
@@ -102,40 +101,34 @@
         <InlineAiReviewComment
           {comment}
           {agentComments}
-          askOpen={comment.commentId !== undefined && askOpenCommentId === comment.commentId}
-          askDraft={comment.commentId === undefined ? '' : commentAskDrafts[comment.commentId] ?? ''}
+          askOpen={askOpenCommentId === comment.commentId}
+          askDraft={commentAskDrafts[comment.commentId] ?? ''}
           onAskDraftChange={(value) => {
-            if (comment.commentId === undefined) return
             commentAskDrafts = { ...commentAskDrafts, [comment.commentId]: value }
           }}
           onToggleAsk={() => toggleAskComment(comment)}
-          onAskSubmitted={() => {
-            if (comment.commentId !== undefined) clearCommentAsk(comment.commentId)
-          }}
+          onAskSubmitted={() => clearCommentAsk(comment.commentId)}
           {onAgentCommentsChange}
           onUpdateStatus={onUpdateAgentCommentStatus}
           {onAskAboutComment}
           {onOpenUrl}
         />
       {:else if comment.type === 'ai-thread'}
-        {@const threadId = comment.thread?.id}
+        {@const threadId = comment.thread.id}
         <InlineAiQuestionThread
           {comment}
-          replyDraft={threadId === undefined ? '' : threadReplyDrafts[threadId] ?? ''}
+          replyDraft={threadReplyDrafts[threadId] ?? ''}
           onReplyDraftChange={(value) => {
-            if (threadId === undefined) return
             threadReplyDrafts = { ...threadReplyDrafts, [threadId]: value }
           }}
-          onReplySubmitted={() => {
-            if (threadId !== undefined) clearThreadReply(threadId)
-          }}
+          onReplySubmitted={() => clearThreadReply(threadId)}
           {onReplyToThread}
           {onOpenUrl}
         />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">
           <span class="badge badge-warning badge-sm">Pending reply</span>
-          {#if onRemovePendingReply && comment.commentId !== undefined}
+          {#if onRemovePendingReply}
             {@const commentId = comment.commentId}
             <button
               class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"

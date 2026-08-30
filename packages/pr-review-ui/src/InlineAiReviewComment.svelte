@@ -2,14 +2,12 @@
   import { Check, MessageCircleQuestion, Undo2, X } from '@lucide/svelte'
   import type { AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import type { CommentDisplayData } from './diffComments'
+  import type { AgentCommentDisplayData } from './diffComments'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineReplyEditor from './InlineReplyEditor.svelte'
 
-  type DisplayComment = CommentDisplayData['comments'][number]
-
   interface Props {
-    comment: DisplayComment
+    comment: AgentCommentDisplayData
     agentComments: AgentReviewComment[]
     askOpen: boolean
     askDraft: string
@@ -37,7 +35,6 @@
   }: Props = $props()
 
   async function updateStatus(status: 'approved' | 'dismissed' | 'pending') {
-    if (comment.commentId === undefined) return
     try {
       await onUpdateStatus?.(comment.commentId, status)
       onAgentCommentsChange(agentComments.map(agentComment =>
@@ -50,11 +47,15 @@
   }
 
   function submitAsk() {
-    if (comment.commentId === undefined || comment.filePath === undefined || comment.lineNumber === undefined) return
     const body = askDraft.trim()
     if (!body) return
-    const side = comment.commentSide === 'LEFT' ? 'LEFT' : 'RIGHT'
-    onAskAboutComment?.({ commentId: comment.commentId, filename: comment.filePath, line: comment.lineNumber, side, body })
+    onAskAboutComment?.({
+      commentId: comment.commentId,
+      filename: comment.filePath,
+      line: comment.lineNumber,
+      side: comment.commentSide,
+      body,
+    })
     onAskSubmitted()
   }
 </script>
@@ -106,7 +107,7 @@
 </div>
 <InlineCommentBody>
   <MarkdownContent content={comment.body} {onOpenUrl} />
-  {#if comment.commentId !== undefined && askOpen}
+  {#if askOpen}
     <InlineReplyEditor
       value={askDraft}
       ariaLabel="Ask the agent about this AI review comment"
