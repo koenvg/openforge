@@ -97,10 +97,13 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
 | `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, and close-disabled behavior |
 | `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Shared plugin page heading and description component |
+| `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | Full-page plugin View shell with fixed header and constrained body regions |
+| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible control for plugin-owned sidebar navigation |
 | `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Shared loading, empty, and error state component |
-| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation |
+| `@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte` | Accessible project file tree with caller-owned state |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
+The complete UI component reference, including props, accessibility behavior, examples, and testing guidance, is in the [`@openforge-app/plugin-sdk` reference](./plugins/sdk-reference.md#ui-component-exports).
 
 ### Modal accessible names
 
