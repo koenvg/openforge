@@ -95,7 +95,8 @@
   },
   "scripts": {
     "clean": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
-    "build": "pnpm run clean && tsc && pnpm run build:assets",
+    "check:entrypoints": "node ./scripts/check-entrypoint-registries.mjs",
+    "build": "pnpm run check:entrypoints && pnpm run clean && tsc && pnpm run build:assets",
     "build:assets": "node ./scripts/copy-package-assets.mjs",
     "check:contract": "node ./scripts/check-published-contract.mjs",
     "icons:generate": "node ./scripts/generate-file-type-icons.mjs",
