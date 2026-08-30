@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildPreloadBundle, copyElectronMainRuntimeAssets } from './electron-build.mjs'
@@ -18,6 +18,37 @@ describe('Electron build preload assets', () => {
     expect(productionSources).toContain(join(repoRoot, 'src', 'electron', 'main.ts'))
     expect(productionSources.some(file => file.endsWith('.testUtils.ts'))).toBe(false)
     expect(productionSources.some(file => file.includes('/node_modules/vitest/'))).toBe(false)
+  })
+
+  it('does not emit cross-root package sources when production compilation fails', async () => {
+    const fixtureRoot = temporaryTestPath('electron-cross-root-no-emit')
+    const electronSourceDir = join(fixtureRoot, 'electron')
+    const packageSourceDir = join(fixtureRoot, 'packages', 'plugin-sdk', 'src')
+    const configPath = join(repoRoot, 'tsconfig.electron.json')
+    const tscPath = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc')
+    await mkdir(electronSourceDir, { recursive: true })
+    await mkdir(packageSourceDir, { recursive: true })
+    await writeFile(
+      join(electronSourceDir, 'main.ts'),
+      "import { invalidValue } from '../packages/plugin-sdk/src/invalid.js'\nconsole.log(invalidValue)\n",
+    )
+    await writeFile(join(packageSourceDir, 'invalid.ts'), 'export const invalidValue = 42\n')
+    await writeFile(join(fixtureRoot, 'tsconfig.json'), JSON.stringify({
+      extends: configPath,
+      compilerOptions: {
+        outDir: 'dist-electron',
+        rootDir: 'electron',
+      },
+      include: ['electron/**/*.ts'],
+    }))
+
+    expect(() => execFileSync(
+      process.execPath,
+      [tscPath, '--project', join(fixtureRoot, 'tsconfig.json')],
+      { cwd: fixtureRoot, stdio: 'pipe' },
+    )).toThrow()
+    await expect(stat(join(packageSourceDir, 'invalid.js'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(stat(join(packageSourceDir, 'invalid.js.map'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('copies shared runtime assets next to compiled Electron main assets', async () => {

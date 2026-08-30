@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": false,
     "noEmit": false,
+    "noEmitOnError": true,
     "outDir": "dist-electron",
     "rootDir": "src/electron",
     // Electron emits imports for packaged dependencies; do not compile workspace source aliases outside rootDir.
