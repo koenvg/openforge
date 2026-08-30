@@ -1,6 +1,16 @@
 use rusqlite::{Connection, Result};
 use rusqlite_migration::{Migrations, M};
 
+pub(super) const TASK_QUERY_INDEXES_SQL: &str =
+    "CREATE INDEX IF NOT EXISTS idx_tasks_project_updated_at
+         ON tasks(project_id, updated_at DESC);
+     CREATE INDEX IF NOT EXISTS idx_tasks_project_active_updated_at
+         ON tasks(project_id, updated_at DESC, id)
+         WHERE status != 'done';
+     CREATE INDEX IF NOT EXISTS idx_tasks_project_completed_updated_at
+         ON tasks(project_id, updated_at DESC)
+         WHERE status = 'done';";
+
 macro_rules! define_migrations {
     ($($migration:expr),+ $(,)?) => {
         const MIGRATION_COUNT: usize = [$(define_migrations!(@count $migration)),+].len();
@@ -1690,6 +1700,25 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    // Project refreshes read active and completed Tasks separately. The partial
+    // indexes keep active and relationship-reference lookups out of completed history,
+    // while the general index covers callers that request every Task in a Project.
+    M::up_with_hook("", |tx| {
+        let can_index: bool = tx
+            .query_row(
+                "SELECT COUNT(*) = 4
+                   FROM pragma_table_info('tasks')
+                  WHERE name IN ('id', 'project_id', 'status', 'updated_at')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if can_index {
+            tx.execute_batch(TASK_QUERY_INDEXES_SQL)
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2299,7 +2328,6 @@ mod tests {
     use super::*;
     use crate::db::Database;
     use std::path::PathBuf;
-
     #[derive(Clone, Copy)]
     enum MigrationBoundary {
         GithubPollIntervalDefaultUpdate,
@@ -2308,6 +2336,7 @@ mod tests {
         AgentSessionPtyInstanceBackfill,
         SelfReviewCommentsRemoval,
         AgentSessionListIndex,
+        TaskQueryIndexes,
     }
 
     impl MigrationBoundary {
@@ -2323,6 +2352,7 @@ mod tests {
                 Self::AgentSessionPtyInstanceBackfill => 26,
                 Self::SelfReviewCommentsRemoval => 52,
                 Self::AgentSessionListIndex => 54,
+                Self::TaskQueryIndexes => 55,
             }
         }
     }
@@ -2352,6 +2382,68 @@ mod tests {
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
         );
+    }
+
+    #[test]
+    fn task_query_index_migration_upgrades_existing_completed_history() {
+        let (_temp_dir, path) = temporary_database_path();
+        let project_id;
+        {
+            let db = Database::new(path.clone()).expect("create pre-migration database");
+            let project = db
+                .create_project("Indexed project", "/tmp/indexed-project-migration")
+                .expect("create project");
+            project_id = project.id.clone();
+            let connection = db.connection();
+            let conn = connection.lock().expect("lock pre-migration database");
+            conn.execute_batch(
+                "DROP INDEX idx_tasks_project_updated_at;
+                 DROP INDEX idx_tasks_project_active_updated_at;
+                 DROP INDEX idx_tasks_project_completed_updated_at;",
+            )
+            .expect("remove indexes absent from previous schema");
+            conn.execute(
+                "WITH RECURSIVE sequence(value) AS (
+                     SELECT 0
+                     UNION ALL
+                     SELECT value + 1 FROM sequence WHERE value + 1 < 20000
+                 )
+                 INSERT INTO tasks
+                    (id, initial_prompt, status, created_at, updated_at, project_id, prompt)
+                 SELECT printf('legacy-done-%05d', value), 'Completed task', 'done',
+                        value, value, ?1, 'Completed task'
+                 FROM sequence",
+                [&project_id],
+            )
+            .expect("insert existing completed task history");
+            set_user_version_before(&conn, MigrationBoundary::TaskQueryIndexes);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock upgraded database");
+        let index_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM sqlite_master
+                 WHERE type = 'index' AND name IN (
+                     'idx_tasks_project_updated_at',
+                     'idx_tasks_project_active_updated_at',
+                     'idx_tasks_project_completed_updated_at'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count task query indexes");
+        assert_eq!(index_count, 3);
+        let completed_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = ?1 AND status = 'done'",
+                [&project_id],
+                |row| row.get(0),
+            )
+            .expect("count migrated completed task history");
+        assert_eq!(completed_count, 20_000);
     }
 
     #[test]
