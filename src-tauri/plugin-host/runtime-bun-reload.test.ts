@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -14,6 +14,7 @@ describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () =>
   it('reloads lazy CommonJS dependencies without retaining prior generations', async () => {
     const testDirectory = await mkdtemp(join(tmpdir(), 'openforge-bun-backend-reload-'))
     const probePath = join(testDirectory, 'probe.ts')
+    const resultPath = join(testDirectory, 'result.json')
     const runtimeUrl = pathToFileURL(resolve('src-tauri/plugin-host/index.ts')).href
 
     await writeFile(probePath, `
@@ -58,18 +59,18 @@ describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () =>
         await Bun.sleep(0)
         Bun.gc(true)
       }
-      process.stdout.write(JSON.stringify({
+      await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({
         generations: 20,
         retainedModules: markers.filter(marker => marker.deref() !== undefined).length,
       }))
     `)
 
-    const { stdout } = await execFileAsync(bunExecutable, [probePath], {
+    await execFileAsync(bunExecutable, [probePath], {
       cwd: process.cwd(),
       timeout: 30_000,
     })
 
-    expect(JSON.parse(stdout.trim())).toEqual({ generations: 20, retainedModules: 0 })
+    expect(JSON.parse(await readFile(resultPath, 'utf8'))).toEqual({ generations: 20, retainedModules: 0 })
   })
 
   it('runs ESM backends in terminable workers under Bun', async () => {
