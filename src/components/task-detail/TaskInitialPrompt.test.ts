@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskInitialPrompt from './TaskInitialPrompt.svelte'
+import { clearRenderedMarkdownCache, getRenderedMarkdownCacheStats } from '@openforge-app/plugin-sdk/markdown'
 import type { Task } from '../../lib/types'
 
 const baseTask: Task = {
@@ -54,6 +55,26 @@ describe('TaskInitialPrompt', () => {
     expect(screen.getByRole('heading', { name: 'Release plan' })).toBeTruthy()
     expect(promptContent.querySelector('strong')?.textContent).toBe('renderer')
     expect(promptContent.textContent).toContain('Fourth line')
+  })
+  it('reuses sanitized Markdown when the initial prompt is collapsed and reopened', async () => {
+    clearRenderedMarkdownCache()
+    render(TaskInitialPrompt, {
+      props: {
+        task: {
+          ...baseTask,
+          initial_prompt: '# Cached prompt',
+        },
+      },
+    })
+
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({ hits: 0, misses: 1 })
+
+    const toggle = screen.getByRole('button', { name: 'Initial Prompt' })
+    await fireEvent.click(toggle)
+    await fireEvent.click(toggle)
+
+    expect(screen.getByRole('heading', { name: 'Cached prompt' })).toBeTruthy()
+    expect(getRenderedMarkdownCacheStats()).toMatchObject({ hits: 1, misses: 1 })
   })
 
   it('hides persisted image reference definitions from the initial prompt', () => {
