@@ -3,7 +3,7 @@ use crate::backend_runtime::AppHandle;
 use crate::pty_manager::session::provider_adapter::AgentPtyProviderAdapter;
 use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
@@ -445,87 +445,83 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
 
     let lifecycle_lock = manager.lifecycle_lock_for(task_id).await;
     let lifecycle_guard = lifecycle_lock.lock().await;
-    let spawn_in_thread = |spawn_manager: PtyManager,
-                           spawn_task_id: String,
-                           spawn_cwd: PathBuf,
-                           script: &'static str| {
-        std::thread::spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("spawn runtime should build");
-            runtime.block_on(spawn_manager.spawn_agent_pty(
-                LockCheckingAgentAdapter {
-                    sessions: Arc::clone(&spawn_manager.sessions),
-                    prepared_tx: None,
-                    command_delay: Duration::ZERO,
-                    script,
-                    check_lock: false,
-                },
-                PtySpawnContext {
-                    task_id: &spawn_task_id,
-                    cwd: &spawn_cwd,
-                    cols: 80,
-                    rows: 24,
-                    event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
-                },
-                None,
-            ))
-        })
-    };
-
-    let old_spawn = spawn_in_thread(
-        manager.clone(),
-        task_id.to_string(),
-        temp_dir.path().to_path_buf(),
-        "printf old-should-not-win; while true; do sleep 1; done",
+    let mut old_spawn = Box::pin(manager.spawn_agent_pty(
+        LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: None,
+            command_delay: Duration::ZERO,
+            script: "printf old-should-not-win; while true; do sleep 1; done",
+            check_lock: false,
+        },
+        PtySpawnContext {
+            task_id,
+            cwd: temp_dir.path(),
+            cols: 80,
+            rows: 24,
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+        },
+        None,
+    ));
+    assert!(
+        futures::poll!(old_spawn.as_mut()).is_pending(),
+        "older spawn should wait for the lifecycle lock"
     );
-    let old_generation = tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if let Some(generation) = manager
-                .agent_spawn_generations
-                .lock()
-                .await
-                .get(task_id)
-                .copied()
-            {
-                break generation;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("older spawn should publish its claim");
+    let old_generation = manager
+        .agent_spawn_generations
+        .lock()
+        .await
+        .get(task_id)
+        .copied()
+        .expect("older spawn should publish its claim before waiting");
 
-    let new_spawn = spawn_in_thread(
-        manager.clone(),
-        task_id.to_string(),
-        temp_dir.path().to_path_buf(),
-        "printf new-winner; while true; do sleep 1; done",
+    let mut new_spawn = Box::pin(manager.spawn_agent_pty(
+        LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: None,
+            command_delay: Duration::ZERO,
+            script: "printf new-winner; while true; do sleep 1; done",
+            check_lock: false,
+        },
+        PtySpawnContext {
+            task_id,
+            cwd: temp_dir.path(),
+            cols: 80,
+            rows: 24,
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+        },
+        None,
+    ));
+    assert!(
+        futures::poll!(new_spawn.as_mut()).is_pending(),
+        "newer spawn should queue behind the older spawn"
     );
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if manager
-                .agent_spawn_generations
-                .lock()
-                .await
-                .get(task_id)
-                .is_some_and(|generation| *generation != old_generation)
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("newer spawn should supersede the older claim");
+    let new_generation = manager
+        .agent_spawn_generations
+        .lock()
+        .await
+        .get(task_id)
+        .copied()
+        .expect("newer spawn should publish its claim before waiting");
+    assert_ne!(
+        new_generation, old_generation,
+        "newer spawn should supersede the older claim"
+    );
     drop(lifecycle_guard);
 
-    let old_result = old_spawn.join().expect("older spawn thread should join");
-    let new_instance_id = new_spawn
-        .join()
-        .expect("newer spawn thread should join")
-        .expect("newer spawn should win");
+    let spawn_results = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(old_spawn.as_mut(), new_spawn.as_mut())
+    })
+    .await;
+    let (old_result, new_result) = match spawn_results {
+        Ok(results) => results,
+        Err(_) => {
+            drop(old_spawn);
+            drop(new_spawn);
+            let _ = tokio::time::timeout(Duration::from_secs(2), manager.kill_pty(task_id)).await;
+            panic!("competing agent spawns should finish within 10 seconds");
+        }
+    };
+    let new_instance_id = new_result.expect("newer spawn should win");
     assert!(
         matches!(
             old_result,
