@@ -120,7 +120,7 @@ impl PtyManager {
     ) -> Result<ReadyPtyOutputReader, PtyError> {
         #[cfg(test)]
         let ready_gate = self
-            .agent_output_reader_ready_gate
+            .output_reader_ready_gate
             .lock()
             .expect("output reader ready gate lock should not be poisoned")
             .take();
@@ -292,7 +292,10 @@ impl PtyManager {
         }
     }
 
-    pub(super) fn start_shell_event_stream(&self, request: ShellEventStreamRequest) {
+    pub(super) async fn start_shell_event_stream(
+        &self,
+        request: ShellEventStreamRequest,
+    ) -> Result<(), PtyError> {
         let ShellEventStreamRequest {
             session_key,
             instance_id,
@@ -303,6 +306,12 @@ impl PtyManager {
             pid_file,
             event_publisher,
         } = request;
+        #[cfg(test)]
+        let ready_gate = self
+            .output_reader_ready_gate
+            .lock()
+            .expect("shell output reader ready gate lock should not be poisoned")
+            .take();
         let rx = spawn_pty_output_reader(
             reader,
             session_key.clone(),
@@ -310,8 +319,10 @@ impl PtyManager {
             None,
             terminal_model_feeder,
             #[cfg(test)]
-            None,
+            ready_gate,
         )
+        .wait_until_ready()
+        .await?
         .into_receiver();
         spawn_batched_pty_event_emitter(
             rx,
@@ -329,6 +340,7 @@ impl PtyManager {
                 },
             },
         );
+        Ok(())
     }
 }
 

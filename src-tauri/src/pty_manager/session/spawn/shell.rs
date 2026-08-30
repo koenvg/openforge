@@ -94,11 +94,6 @@ impl PtyManager {
         self.persist_session_identity(&session_key, &pid_file, &managed_process)
             .await?;
 
-        #[cfg(target_os = "macos")]
-        {
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        }
-
         let stream_state = self.register_shell_stream_state(&session_key).await;
         self.start_shell_event_stream(ShellEventStreamRequest {
             session_key,
@@ -109,7 +104,8 @@ impl PtyManager {
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,
             event_publisher,
-        });
+        })
+        .await?;
         self.finish_shell_spawn(&token).await;
         Ok(instance_id)
     }
