@@ -64,6 +64,7 @@ pub use task_workspaces::TaskWorkspaceRow;
 // This is part of the Database API even though production callers currently only format it.
 #[allow(unused_imports)]
 pub use task_dependencies::TaskDependencyPersistenceError;
+pub(crate) use tasks::TaskDetailRelationshipRow;
 pub use tasks::{
     CompactTaskRow, TaskInitialPromptUpdateError, TaskRelationshipReferenceRow, TaskRow,
 };

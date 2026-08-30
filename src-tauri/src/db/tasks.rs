@@ -70,6 +70,22 @@ pub struct TaskRelationshipReferenceRow {
     pub depends_on: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskDetailRelationshipRow {
+    pub(crate) id: String,
+    pub(crate) status: String,
+    pub(crate) project_id: Option<String>,
+    pub(crate) project_name: Option<String>,
+    pub(crate) title: String,
+    pub(crate) remaining_dependency_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskDetailRelationships {
+    pub(crate) dependencies: Vec<TaskDetailRelationshipRow>,
+    pub(crate) dependents: Vec<TaskDetailRelationshipRow>,
+}
+
 impl super::Database {
     /// Replace both prompt columns for a task that has never entered execution.
     ///

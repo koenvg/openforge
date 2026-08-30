@@ -1,7 +1,8 @@
 use crate::task_attention::{
-    driving_pr, project_task_attention, task_display_title, task_reason, task_state,
-    TaskAttentionInput, TaskAttentionPullRequest, TaskAttentionSession, TaskAttentionTask,
+    driving_pr, project_task_attention, task_reason, task_state, TaskAttentionInput,
+    TaskAttentionPullRequest, TaskAttentionSession, TaskAttentionTask,
 };
+use crate::task_prompt::task_display_title;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
