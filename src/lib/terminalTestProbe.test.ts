@@ -43,6 +43,8 @@ function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
     visibilityObserver: null,
     resizeTimeout: null,
     attached: true,
+    viewVisible: true,
+    viewVisibilityGeneration: 1,
     viewNeedsRecovery: false,
     attachmentGeneration: 1,
     spawnPending: false,
