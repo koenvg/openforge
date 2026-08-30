@@ -446,6 +446,82 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_continuation_overflow_defers_checkpoints_until_parsers_recover() {
+        const SESSION_COUNT: usize = 4;
+        const CONTINUATION_LIMIT: usize = 1024;
+
+        let workers = (0..SESSION_COUNT)
+            .map(|index| {
+                let mut options = TerminalModelOptions::new(20, 4);
+                options.max_continuation_bytes = CONTINUATION_LIMIT;
+                let sink: TerminalModelEventSink = Arc::new(|_| {});
+                TerminalModelSession::start_with_event_sink(
+                    format!("continuation-shell-{index}"),
+                    100 + index as u64,
+                    options,
+                    sink,
+                )
+                .expect("terminal model worker should start")
+            })
+            .collect::<Vec<_>>();
+        let start = Arc::new(std::sync::Barrier::new(SESSION_COUNT + 1));
+        let feed_threads = workers
+            .iter()
+            .map(|(_, feeder)| {
+                let feeder = feeder.clone();
+                let start = Arc::clone(&start);
+                std::thread::spawn(move || {
+                    start.wait();
+                    feeder.feed(b"\x1b[");
+                    feeder.feed(&vec![b'1'; CONTINUATION_LIMIT + 1]);
+                })
+            })
+            .collect::<Vec<_>>();
+
+        start.wait();
+        for feed_thread in feed_threads {
+            feed_thread
+                .join()
+                .expect("concurrent terminal feed should not panic");
+        }
+        for (session, _) in &workers {
+            let portable_error = session
+                .portable_snapshot()
+                .expect_err("overflowed continuation should defer portable snapshots");
+            assert!(
+                portable_error.contains("continuation is temporarily unavailable"),
+                "unexpected portable snapshot error: {portable_error}"
+            );
+            let error = session
+                .snapshot()
+                .expect_err("overflowed continuation should defer snapshots");
+            assert!(
+                error.contains("continuation is temporarily unavailable"),
+                "unexpected snapshot error: {error}"
+            );
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+        for (session, _) in &workers {
+            assert!(
+                session.diagnostics().is_empty(),
+                "transient continuation overflow must not disable the model"
+            );
+        }
+
+        for (session, feeder) in &workers {
+            feeder.feed(b"\x1bcmodel-recovered");
+            let snapshot = session
+                .portable_snapshot()
+                .expect("snapshot should recover after the parser reaches ground");
+            assert!(snapshot
+                .portable_vt
+                .windows(b"model-recovered".len())
+                .any(|window| window == b"model-recovered"));
+        }
+    }
+
+    #[test]
     fn stale_instance_feeder_cannot_mutate_successor_model() {
         let (old_session, old_feeder) = TerminalModelSession::start(
             "shared-key".to_string(),
