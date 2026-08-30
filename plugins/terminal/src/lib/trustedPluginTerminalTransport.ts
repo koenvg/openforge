@@ -1,4 +1,5 @@
 import {
+  createLiveModelOutputSubscriptionLifecycle,
   parsePtySessionKey,
   type TerminalSessionTransportHandlers,
   type TerminalSessionTransportSubscription,
@@ -108,7 +109,21 @@ export function createTrustedPluginTerminalTransport(
     parseIndexedShellSessionKey(shellSessionKey)
     const events = getPort().events
     const lifecycleSubscriptions: TrustedPluginDisposable[] = []
-    let modelOutputSubscription: TrustedPluginDisposable | null = null
+    const modelOutputLifecycle = createLiveModelOutputSubscriptionLifecycle({
+      register: () => events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
+        `openforge.pty-model-output-${shellSessionKey}`,
+        payload => handlers.onModelOutput({
+          data: decodeBase64(payload.data),
+          ptyInstanceId: payload.instance_id,
+          startSequence: payload.start_sequence ?? payload.sequence,
+          sequence: payload.sequence,
+        }),
+      ),
+      dispose: subscription => {
+        void subscription.dispose()
+      },
+      disposedErrorMessage: 'Trusted Plugin terminal session subscription is disposed',
+    })
     let active = true
     try {
       lifecycleSubscriptions.push(events.onGlobal<TrustedPluginTerminalModelDisabledPayload>(
@@ -123,29 +138,13 @@ export function createTrustedPluginTerminalTransport(
       const subscription: TerminalSessionTransportSubscription = {
         async setModelOutputEnabled(enabled) {
           ensureActive()
-          if (!active) throw new Error('Trusted Plugin terminal session subscription is disposed')
-          if (!enabled) {
-            void modelOutputSubscription?.dispose()
-            modelOutputSubscription = null
-            return
-          }
-          if (modelOutputSubscription) return
-          modelOutputSubscription = events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
-            `openforge.pty-model-output-${shellSessionKey}`,
-            payload => handlers.onModelOutput({
-              data: decodeBase64(payload.data),
-              ptyInstanceId: payload.instance_id,
-              startSequence: payload.start_sequence ?? payload.sequence,
-              sequence: payload.sequence,
-            }),
-          )
+          await modelOutputLifecycle.setEnabled(enabled)
         },
         dispose() {
           if (!active) return
           active = false
           activeSubscriptions.delete(subscription)
-          void modelOutputSubscription?.dispose()
-          modelOutputSubscription = null
+          modelOutputLifecycle.dispose()
           for (const lifecycleSubscription of lifecycleSubscriptions) {
             void lifecycleSubscription.dispose()
           }

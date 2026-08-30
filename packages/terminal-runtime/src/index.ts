@@ -5,6 +5,11 @@ export {
   type PtySessionKey,
 } from './ptySessionKey'
 export {
+  createLiveModelOutputSubscriptionLifecycle,
+  type LiveModelOutputSubscriptionLifecycle,
+  type LiveModelOutputSubscriptionLifecycleOptions,
+} from './liveModelOutputSubscription'
+export {
   createTerminalRuntime,
   type PoolEntry,
   type ShellLifecycleState,
