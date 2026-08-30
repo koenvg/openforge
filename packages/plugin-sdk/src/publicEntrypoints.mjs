@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { assertRegistryMatchesCanonicalManifest } from './registryValidation.mjs'
 import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from './publicUiExports.mjs'
 
@@ -74,6 +76,17 @@ export function createOpenForgePluginSdkTypeScriptPaths() {
       importSpecifier,
       [`./${workspaceSourcePath}`],
     ]),
+  )
+}
+
+export async function loadOpenForgePluginSdkTypeScriptPaths(workspaceRoot) {
+  const typeScriptConfig = JSON.parse(
+    (await readFile(resolve(workspaceRoot, 'tsconfig.json'), 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ''),
+  )
+
+  return Object.fromEntries(
+    Object.entries(typeScriptConfig.compilerOptions.paths)
+      .filter(([specifier]) => specifier === PLUGIN_SDK_PACKAGE_NAME || specifier.startsWith(`${PLUGIN_SDK_PACKAGE_NAME}/`)),
   )
 }
 

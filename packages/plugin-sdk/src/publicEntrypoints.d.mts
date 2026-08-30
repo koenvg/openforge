@@ -20,6 +20,7 @@ export function createOpenForgePluginSdkPackageExports(): Record<
 
 export function createOpenForgePluginSdkTypeScriptPaths(): Record<string, [string]>
 
+export function loadOpenForgePluginSdkTypeScriptPaths(workspaceRoot: string): Promise<Record<string, unknown>>
 export function assertOpenForgePluginSdkEntrypointRegistries(registries: {
   packageExports: unknown
   typeScriptPaths: unknown

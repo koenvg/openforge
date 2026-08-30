@@ -2,19 +2,16 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertOpenForgePluginSdkEntrypointRegistries } from '../src/publicEntrypoints.mjs'
+import {
+  assertOpenForgePluginSdkEntrypointRegistries,
+  loadOpenForgePluginSdkTypeScriptPaths,
+} from '../src/publicEntrypoints.mjs'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const workspaceRoot = resolve(packageRoot, '../..')
 
 const packageJson = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8'))
-const typeScriptConfig = JSON.parse(
-  (await readFile(resolve(workspaceRoot, 'tsconfig.json'), 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ''),
-)
-const pluginSdkTypeScriptPaths = Object.fromEntries(
-  Object.entries(typeScriptConfig.compilerOptions.paths)
-    .filter(([specifier]) => specifier === '@openforge-app/plugin-sdk' || specifier.startsWith('@openforge-app/plugin-sdk/')),
-)
+const pluginSdkTypeScriptPaths = await loadOpenForgePluginSdkTypeScriptPaths(workspaceRoot)
 
 assertOpenForgePluginSdkEntrypointRegistries({
   packageExports: packageJson.exports,

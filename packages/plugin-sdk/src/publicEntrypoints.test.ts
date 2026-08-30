@@ -6,6 +6,7 @@ import {
   assertOpenForgePluginSdkEntrypointRegistries,
   createOpenForgePluginSdkPackageExports,
   createOpenForgePluginSdkTypeScriptPaths,
+  loadOpenForgePluginSdkTypeScriptPaths,
 } from './publicEntrypoints.mjs'
 import { createOpenForgePluginSdkSourceAliasRecord } from './vite'
 
@@ -13,18 +14,11 @@ describe('plugin-sdk public entrypoints', () => {
   const packageRoot = resolve(import.meta.dirname, '..')
   const workspaceRoot = resolve(packageRoot, '../..')
 
-  it('registers every public entrypoint in package exports, TypeScript paths, and Vite aliases', () => {
+  it('registers every public entrypoint in package exports, TypeScript paths, and Vite aliases', async () => {
     const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
       exports: Record<string, unknown>
     }
-    const typeScriptConfig = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'tsconfig.json'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''),
-    ) as { compilerOptions: { paths: Record<string, string[]> } }
-
-    const pluginSdkTypeScriptPaths = Object.fromEntries(
-      Object.entries(typeScriptConfig.compilerOptions.paths)
-        .filter(([specifier]) => specifier === '@openforge-app/plugin-sdk' || specifier.startsWith('@openforge-app/plugin-sdk/')),
-    )
+    const pluginSdkTypeScriptPaths = await loadOpenForgePluginSdkTypeScriptPaths(workspaceRoot)
 
     expect(packageJson.exports).toEqual(createOpenForgePluginSdkPackageExports())
     expect(pluginSdkTypeScriptPaths).toEqual(createOpenForgePluginSdkTypeScriptPaths())
