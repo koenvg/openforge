@@ -340,9 +340,10 @@ mod tests {
 
         feeder.feed(b"model ");
         feeder.feed(b"output");
-        session
+        let snapshot = session
             .portable_snapshot()
             .expect("snapshot should synchronize model output");
+        assert_eq!(snapshot.watermark, 2);
 
         let event = receive_event(&mut events);
         assert_eq!(event.event_name, "pty-model-output-model-shell");
@@ -405,71 +406,58 @@ mod tests {
     }
 
     #[test]
-    fn sustained_burst_flushes_before_input_goes_idle_without_losing_output() {
-        const CHUNK_COUNT: usize = 64;
-        const CHUNK_BYTES: usize = 128;
-        const CHUNK_DELAY: std::time::Duration = std::time::Duration::from_millis(2);
+    fn queued_burst_bounds_event_count_without_losing_output() {
+        const CHUNK_COUNT: u64 = 512;
+        const CHUNK_BYTES: usize = 256;
 
-        let (event_tx, mut events) = tokio::sync::broadcast::channel(64);
-        let (bridge, _bytes) = bridge("burst-shell", 32, Some(event_tx));
-        let (session, feeder) = TerminalModelSession::start_with_event_sink(
-            "burst-shell".to_string(),
-            32,
-            TerminalModelOptions::new(80, 24),
-            bridge.into_event_sink(),
-        )
-        .expect("terminal model should start");
-        let mut expected_output = Vec::with_capacity(CHUNK_COUNT * CHUNK_BYTES);
-        let mut published = Vec::new();
-
-        for index in 0..CHUNK_COUNT {
-            let chunk = vec![b'a' + (index % 26) as u8; CHUNK_BYTES];
-            expected_output.extend_from_slice(&chunk);
-            feeder.feed(&chunk);
-            std::thread::sleep(CHUNK_DELAY);
-            while let Ok(event) = events.try_recv() {
-                published.push(event);
-            }
+        let (deferred_tx, deferred_rx) = std::sync::mpsc::channel();
+        let mut expected_output = Vec::with_capacity(CHUNK_COUNT as usize * CHUNK_BYTES);
+        for sequence in 1..=CHUNK_COUNT {
+            let bytes = vec![b'a' + ((sequence - 1) % 26) as u8; CHUNK_BYTES];
+            expected_output.extend_from_slice(&bytes);
+            deferred_tx
+                .send(DeferredTerminalModelEvent::Output {
+                    instance_id: 34,
+                    sequence,
+                    bytes,
+                })
+                .expect("test event should queue");
         }
+        drop(deferred_tx);
+        let (event_tx, mut events) = tokio::sync::broadcast::channel(4);
 
-        assert!(
-            !published.is_empty(),
-            "a sustained burst must flush output without waiting for the producer to go idle"
+        run_deferred_event_worker(
+            deferred_rx,
+            RuntimeEventPublisher::new(None, Some(event_tx)),
+            "pty-model-output-queued-burst-shell".to_string(),
+            "pty-model-disabled-queued-burst-shell".to_string(),
+            None,
+            std::time::Duration::from_secs(60),
         );
-        let snapshot = session
-            .portable_snapshot()
-            .expect("snapshot should synchronize model output");
-        assert_eq!(snapshot.watermark, CHUNK_COUNT as u64);
-        std::thread::sleep(TERMINAL_MODEL_EVENT_FLUSH_INTERVAL * 2);
-        while let Ok(event) = events.try_recv() {
-            published.push(event);
-        }
 
-        assert!(
-            published.len() <= 16,
-            "64 model frames should produce at most 16 transport events, got {}",
-            published.len()
+        let published = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+        assert_eq!(
+            published.len(),
+            2,
+            "512 model frames totaling 128 KiB should produce two transport events"
         );
-        let mut actual_output = Vec::new();
-        let mut previous_sequence = 0;
-        for event in &published {
-            assert_eq!(event.event_name, "pty-model-output-burst-shell");
-            assert_eq!(event.payload["instance_id"], 32);
-            assert_eq!(event.payload["start_sequence"], previous_sequence + 1);
-            previous_sequence = event.payload["sequence"]
-                .as_u64()
-                .expect("sequence should be an integer");
-            let encoded = event.payload["data"]
-                .as_str()
-                .expect("output data should be base64 text");
-            actual_output.extend(
+        assert_eq!(published[0].payload["start_sequence"], 1);
+        assert_eq!(published[0].payload["sequence"], 256);
+        assert_eq!(published[1].payload["start_sequence"], 257);
+        assert_eq!(published[1].payload["sequence"], CHUNK_COUNT);
+
+        let actual_output = published
+            .iter()
+            .flat_map(|event| {
                 base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .expect("output data should decode"),
-            );
-        }
-
-        assert_eq!(previous_sequence, CHUNK_COUNT as u64);
+                    .decode(
+                        event.payload["data"]
+                            .as_str()
+                            .expect("output data should be base64 text"),
+                    )
+                    .expect("output data should decode")
+            })
+            .collect::<Vec<_>>();
         assert_eq!(actual_output, expected_output);
     }
 
