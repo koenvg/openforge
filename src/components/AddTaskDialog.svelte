@@ -4,7 +4,8 @@
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
-  import { dedupeBranchesForSelector, type BranchListState } from '../lib/branchSelector'
+  import { dedupeBranchesForSelector, matchExistingBranchSeed, type BranchListState, type BranchSelectorOption } from '../lib/branchSelector'
+  import type { WorktreeSource } from '../lib/types'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
@@ -26,6 +27,8 @@
     promptSeed?: string
     sourceTicketUrlSeed?: string | null
     titleSeed?: string | null
+    worktreeSourceSeed?: WorktreeSource | null
+    worktreeBranchSeed?: string | null
     onClose?: () => void
     onTaskSaved?: (task?: Task, options?: { started: boolean }) => void | Promise<void>
     onRunAction?: (taskId: string, actionPrompt: string) => Promise<void>
@@ -35,7 +38,7 @@
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
-  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, onClose, onTaskSaved, onRunAction }: Props = $props()
+  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, worktreeSourceSeed = null, worktreeBranchSeed = null, onClose, onTaskSaved, onRunAction }: Props = $props()
   const dialogTitle = $derived(mode === 'create' ? 'Create task' : 'Edit task')
 
   let draft = $state(createTaskDraft())
@@ -58,6 +61,8 @@
   let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
   let lastTitleSeed = $state<string | null>(null)
   let lastSourceTicketSeed = $state<string | null>(null)
+  let lastWorktreeSourceSeed = $state<WorktreeSource | null>(null)
+  let lastWorktreeBranchSeed = $state<string | null>(null)
   let taskDefaultsLoading = $state(true)
   // Tracked apart from the task defaults so submission never waits on origin.
   let branchList = $state<BranchListState>({ status: 'loading' })
@@ -84,11 +89,28 @@
     draft.sourceTicketUrl = sourceTicketUrlSeed ?? ''
     lastTitleSeed = titleSeed
     lastSourceTicketSeed = sourceTicketUrlSeed
+    lastWorktreeSourceSeed = worktreeSourceSeed
+    lastWorktreeBranchSeed = worktreeBranchSeed
+  }
+
+  function applyWorktreeSeed(options: BranchSelectorOption[]) {
+    if (mode !== 'create' || worktreeSourceSeed !== 'existingBranch' || !worktreeAllowed) return
+    draft.useWorktree = true
+    draft.worktreeSource = 'existingBranch'
+    const seed = worktreeBranchSeed?.trim() ?? ''
+    if (!seed) return
+    draft.existingBranch = matchExistingBranchSeed(seed, options) ?? seed
   }
 
   $effect(() => {
-    if (titleSeed === lastTitleSeed && sourceTicketUrlSeed === lastSourceTicketSeed) return
+    if (
+      titleSeed === lastTitleSeed
+      && sourceTicketUrlSeed === lastSourceTicketSeed
+      && worktreeSourceSeed === lastWorktreeSourceSeed
+      && worktreeBranchSeed === lastWorktreeBranchSeed
+    ) return
     applySeedsToDraft()
+    applyWorktreeSeed(branchList.status === 'ready' ? dedupeBranchesForSelector(branchList.branches) : [])
   })
 
   onMount(() => {
@@ -158,6 +180,7 @@
       const availability = resolveWorktreeAvailability(hasCommits, defaults.useWorktrees)
       worktreeAllowed = availability.worktreeAllowed
       draft.useWorktree = availability.useWorktree
+      applyWorktreeSeed([])
 
       return projectPath
     } catch (defaultsError) {
@@ -179,16 +202,24 @@
       if (run !== branchLoadRun) return
       branchList = { status: 'ready', branches }
       const options = dedupeBranchesForSelector(branches)
-      const currentNames = new Set(
-        branches.filter((branch) => branch.is_current).map((branch) => branch.name),
-      )
-      const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
-      draft.existingBranch = preferred?.value ?? ''
+      if (worktreeSourceSeed === 'existingBranch' && worktreeBranchSeed?.trim()) {
+        applyWorktreeSeed(options)
+      } else {
+        const currentNames = new Set(
+          branches.filter((branch) => branch.is_current).map((branch) => branch.name),
+        )
+        const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
+        draft.existingBranch = preferred?.value ?? ''
+      }
     } catch (branchError) {
       if (run !== branchLoadRun) return
       console.error('Failed to list git branches:', branchError)
       branchList = { status: 'error', message: String(branchError) }
-      draft.existingBranch = ''
+      if (worktreeSourceSeed === 'existingBranch' && worktreeBranchSeed?.trim()) {
+        applyWorktreeSeed([])
+      } else {
+        draft.existingBranch = ''
+      }
     }
   }
 

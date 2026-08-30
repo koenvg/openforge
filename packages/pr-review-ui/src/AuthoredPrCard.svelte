@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { AuthoredPullRequest } from '@openforge-app/plugin-sdk/domain'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
@@ -10,9 +11,11 @@
     pr: AuthoredPullRequest
     selected?: boolean
     onClick: () => void
+    /** Optional content rendered inside the card, below the labels (e.g. start-task control). */
+    footer?: Snippet
   }
 
-  let { pr, selected = false, onClick }: Props = $props()
+  let { pr, selected = false, onClick, footer }: Props = $props()
 
   const MAX_VISIBLE_LABELS = 4
   let visibleLabels = $derived((pr.labels ?? []).slice(0, MAX_VISIBLE_LABELS))
@@ -73,6 +76,12 @@
       {#if overflowCount > 0}
         <span class="badge badge-sm badge-ghost">+{overflowCount}</span>
       {/if}
+    </div>
+  {/if}
+
+  {#if footer}
+    <div class="mt-0.5">
+      {@render footer()}
     </div>
   {/if}
 </Card>

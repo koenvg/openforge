@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dedupeBranchesForSelector } from './branchSelector'
+import { dedupeBranchesForSelector, matchExistingBranchSeed } from './branchSelector'
 import type { GitBranchInfo } from './types'
 
 function branch(name: string, is_remote: boolean, is_current = false): GitBranchInfo {
@@ -71,5 +71,35 @@ describe('dedupeBranchesForSelector', () => {
     expect(result[0].value).toBe('origin/feature/foo')
     expect(result[0].location).toBe('both')
     expect(result[0].label).toBe('feature/foo')
+  })
+})
+
+describe('matchExistingBranchSeed', () => {
+  const options = dedupeBranchesForSelector([
+    branch('main', false, true),
+    branch('origin/main', true),
+    branch('fix/auth', false),
+    branch('origin/fix/auth', true),
+    branch('local-only', false),
+  ])
+
+  it('returns null for a blank seed', () => {
+    expect(matchExistingBranchSeed('  ', options)).toBeNull()
+  })
+
+  it('keeps an exact stored value, including origin/<name>', () => {
+    expect(matchExistingBranchSeed('origin/fix/auth', options)).toBe('origin/fix/auth')
+  })
+
+  it('prefers origin/<name> when the seed is a pull-request head ref that exists on origin', () => {
+    expect(matchExistingBranchSeed('fix/auth', options)).toBe('origin/fix/auth')
+  })
+
+  it('uses the local name when the seed has no origin counterpart', () => {
+    expect(matchExistingBranchSeed('local-only', options)).toBe('local-only')
+  })
+
+  it('returns null when no selector option matches the seed', () => {
+    expect(matchExistingBranchSeed('missing-branch', options)).toBeNull()
   })
 })

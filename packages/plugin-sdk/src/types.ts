@@ -13,6 +13,7 @@ import type {
   ReviewPullRequest,
   Task,
   TaskWorkspaceInfo,
+  WorktreeSource,
   WritableBoardStatus,
 } from './domain'
 
@@ -664,6 +665,14 @@ export interface ComposeTaskRequest {
   initialPrompt: string
   sourceTicketUrl?: string | null
   title?: string | null
+  /** Seeds the dialog's worktree source instead of the project default. */
+  worktreeSource?: WorktreeSource | null
+  /**
+   * When `worktreeSource` is `existingBranch`, seeds the branch selector.
+   * Pull-request head refs may be short names; the host maps them onto the
+   * stored selector value (`origin/<name>` when origin has the branch).
+   */
+  worktreeBranch?: string | null
 }
 
 export interface ComposeTaskResult {
@@ -805,7 +814,9 @@ export interface TasksAPI {
   /**
    * Opens the host's create-task dialog pre-filled, letting the user edit the
    * prompt — including anything contributed at that injection point —
-   * before the task exists.
+   * before the task exists. Optional `worktreeSource` / `worktreeBranch` seed
+   * the environment controls the same way `title` and `sourceTicketUrl` seed
+   * their fields.
    * Resolves null if they dismiss it.
    */
   compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>

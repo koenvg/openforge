@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
-import { createTask } from '../lib/ipc'
+import { createTask, listGitBranches } from '../lib/ipc'
 
 vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
   default: vi.fn(() => ({ update() {}, destroy() {} })),
@@ -51,6 +51,10 @@ async function clickAddToBacklog(): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks()
   Element.prototype.scrollIntoView = vi.fn()
+  vi.mocked(listGitBranches).mockResolvedValue([
+    { name: 'main', is_current: true, is_remote: false },
+    { name: 'feature/open-pr', is_current: false, is_remote: false },
+  ])
 })
 
 describe('AddTaskDialog seeding', () => {
@@ -122,5 +126,66 @@ describe('AddTaskDialog seeding', () => {
 
     await waitFor(() => expect(onRunAction).toHaveBeenCalled())
     expect(onTaskSaved.mock.calls[0][1]).toEqual({ started: true })
+  })
+
+  it('selects an existing local branch when worktree seeds name it', async () => {
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, {
+      props: {
+        mode: 'create',
+        projectPath: '/repo',
+        promptSeed: SEED,
+        worktreeSourceSeed: 'existingBranch',
+        worktreeBranchSeed: 'feature/open-pr',
+        onTaskSaved,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('group', {
+        name: 'Environment summary: Worktree, feature/open-pr, default permissions',
+      })).toBeTruthy()
+    })
+
+    await clickAddToBacklog()
+
+    await waitFor(() => expect(createTask).toHaveBeenCalled())
+    expect(vi.mocked(createTask).mock.calls[0][4]).toMatchObject({
+      worktreeSource: 'existingBranch',
+      worktreeBranch: 'feature/open-pr',
+    })
+  })
+
+  it('maps a pull-request head ref onto origin/<name> when both exist', async () => {
+    vi.mocked(listGitBranches).mockResolvedValue([
+      { name: 'main', is_current: true, is_remote: false },
+      { name: 'fix/auth', is_current: false, is_remote: false },
+      { name: 'origin/fix/auth', is_current: false, is_remote: true },
+    ])
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, {
+      props: {
+        mode: 'create',
+        projectPath: '/repo',
+        promptSeed: SEED,
+        worktreeSourceSeed: 'existingBranch',
+        worktreeBranchSeed: 'fix/auth',
+        onTaskSaved,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('group', {
+        name: 'Environment summary: Worktree, origin/fix/auth, default permissions',
+      })).toBeTruthy()
+    })
+
+    await clickAddToBacklog()
+
+    await waitFor(() => expect(createTask).toHaveBeenCalled())
+    expect(vi.mocked(createTask).mock.calls[0][4]).toMatchObject({
+      worktreeSource: 'existingBranch',
+      worktreeBranch: 'origin/fix/auth',
+    })
   })
 })

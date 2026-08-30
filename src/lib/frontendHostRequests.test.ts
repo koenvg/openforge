@@ -148,4 +148,64 @@ describe('frontend host renderer requests', () => {
       outcome: { status: 'success', output: result },
     })
   })
+
+  it('forwards worktree seeds on a compose request', async () => {
+    const compose = vi.fn(async () => null)
+    const acknowledge = vi.fn(async () => true)
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async () => null),
+      },
+      composeTask: compose,
+      acknowledge,
+    })
+
+    await handler.handle({
+      operation: 'composeTask',
+      correlationId: 'compose-branch',
+      request: {
+        projectId: 'P-1',
+        initialPrompt: 'Continue the pull request',
+        worktreeSource: 'existingBranch',
+        worktreeBranch: 'fix/auth',
+      },
+    })
+
+    expect(compose).toHaveBeenCalledWith({
+      projectId: 'P-1',
+      initialPrompt: 'Continue the pull request',
+      worktreeSource: 'existingBranch',
+      worktreeBranch: 'fix/auth',
+    })
+  })
+
+  it('rejects a compose request with an unknown worktree source', async () => {
+    const compose = vi.fn(async () => null)
+    const acknowledge = vi.fn(async () => true)
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async () => null),
+      },
+      composeTask: compose,
+      acknowledge,
+    })
+
+    await handler.handle({
+      operation: 'composeTask',
+      correlationId: 'compose-bad-source',
+      request: {
+        projectId: 'P-1',
+        initialPrompt: 'Continue the pull request',
+        worktreeSource: 'not-a-source',
+      },
+    })
+
+    expect(compose).not.toHaveBeenCalled()
+    expect(acknowledge).toHaveBeenCalledWith({
+      correlationId: 'compose-bad-source',
+      outcome: { status: 'error', error: 'invalid frontend host request' },
+    })
+  })
 })

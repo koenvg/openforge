@@ -850,6 +850,76 @@ describe('PrReviewView authored PR ordering', () => {
   })
 })
 
+describe('PrReviewView start task from authored PR', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  async function renderAuthoredList(
+    registry: TestingOpenForgeRegistryFake,
+    authored: AuthoredPullRequest[],
+    projectId: string | null = 'project-1',
+  ) {
+    await registry.frontendApi.config.set('github_token', 'ghp_test')
+    await registry.frontendApi.projectConfig.set('resolved_repo', 'acme/repo')
+    const backend = registry.backendApi.backend
+    backend.registerMethod('getReviewPrs', { handler: async () => [] })
+    backend.registerMethod('fetchReviewPrs', { handler: async () => [] })
+    backend.registerMethod('getAuthoredPrs', { handler: async () => authored })
+    backend.registerMethod('fetchAuthoredPrs', { handler: async () => authored })
+
+    render(PrReviewView, {
+      props: {
+        api: registry.frontendApi,
+        context: registry.frontendApi.context.getSnapshot(),
+        projectName: 'Demo Project',
+        projectId,
+      },
+    })
+
+    await screen.findByText(authored[0].title)
+  }
+
+  it('opens the create-task dialog on the pull request branch', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await renderAuthoredList(registry, [baseAuthoredPr])
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Start a task from this branch for pull request #900' }))
+
+    expect(registry.frontendApi.__testing.calls.taskComposes).toEqual([{
+      projectId: 'project-1',
+      initialPrompt: 'Continue work on PR #900: Authored PR',
+      title: 'Authored PR',
+      sourceTicketUrl: 'https://github.com/acme/repo/pull/900',
+      worktreeSource: 'existingBranch',
+      worktreeBranch: 'feature',
+    }])
+    expect(registry.frontendApi.__testing.calls.openUrl).toEqual([])
+  })
+
+  it('still opens the pull request in the browser when the card is clicked', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    await renderAuthoredList(registry, [baseAuthoredPr])
+
+    await fireEvent.click(screen.getByText('Authored PR'))
+
+    expect(registry.frontendApi.__testing.calls.openUrl).toEqual([baseAuthoredPr.html_url])
+    expect(registry.frontendApi.__testing.calls.taskComposes).toEqual([])
+  })
+
+  it('hides the start-task control when no project is selected', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync',
+      projectId: null,
+      viewId: GLOBAL_VIEW_ID,
+    })
+    await renderAuthoredList(registry, [baseAuthoredPr], null)
+
+    expect(screen.queryByRole('button', { name: 'Start a task from this branch for pull request #900' })).toBeNull()
+  })
+})
+
 describe('PrReviewView submit review', () => {
   beforeEach(() => {
     resetStores()
