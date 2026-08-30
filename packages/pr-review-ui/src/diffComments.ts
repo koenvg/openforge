@@ -5,21 +5,58 @@ import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComme
  * Used by @git-diff-view/svelte ExtendData for inline annotations.
  */
 export interface CommentDisplayData {
-  comments: Array<{
-    body: string
-    author?: string
-    type: 'existing' | 'pending' | 'agent' | 'ai-thread' | 'pending-reply'
-    createdAt?: string
-    isReply?: boolean
-    index?: number
-    commentId?: number
-    status?: string
-    filePath?: string
-    lineNumber?: number
-    commentSide?: string
-    /** Present when type === 'ai-thread': the local Q&A conversation to render. */
-    thread?: AiThread
-  }>
+  comments: InlineCommentDisplayData[]
+}
+
+export type InlineCommentDisplayData =
+  | ExistingCommentDisplayData
+  | PendingCommentDisplayData
+  | AgentCommentDisplayData
+  | AiThreadCommentDisplayData
+  | PendingReplyCommentDisplayData
+
+interface ExistingCommentFields {
+  body: string
+  author: string
+  type: 'existing'
+  createdAt: string
+}
+
+export type ExistingCommentDisplayData =
+  | (ExistingCommentFields & {
+      isReply: false
+      commentId: number
+    })
+  | (ExistingCommentFields & {
+      isReply: true
+    })
+
+export interface PendingCommentDisplayData {
+  body: string
+  type: 'pending'
+  index: number
+}
+
+export interface AgentCommentDisplayData {
+  body: string
+  type: 'agent'
+  commentId: number
+  status: string
+  filePath: string
+  lineNumber: number
+  commentSide: 'LEFT' | 'RIGHT'
+}
+
+export interface AiThreadCommentDisplayData {
+  type: 'ai-thread'
+  thread: AiThread
+  isReply: boolean
+}
+
+export interface PendingReplyCommentDisplayData {
+  body: string
+  type: 'pending-reply'
+  commentId: number
 }
 
 /** A reply queued for the pending review, keyed to the existing comment it answers. */
@@ -121,6 +158,7 @@ export function buildExtendData(
       author: comment.author,
       type: 'existing',
       createdAt: comment.created_at,
+      isReply: false,
       commentId: comment.id,
     })
   }
@@ -193,7 +231,7 @@ export function buildExtendData(
       status: comment.status,
       filePath: comment.file_path,
       lineNumber: comment.line_number,
-      commentSide: comment.side ?? 'RIGHT',
+      commentSide: comment.side === 'LEFT' ? 'LEFT' : 'RIGHT',
     })
   }
 
@@ -210,7 +248,6 @@ export function buildExtendData(
     // so nest it (reply styling) to make that relationship clear. A line-anchored
     // thread stands on its own.
     ensureLine(target, lineKey).comments.push({
-      body: '',
       type: 'ai-thread',
       thread,
       isReply: thread.anchor.type === 'comment',

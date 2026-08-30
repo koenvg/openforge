@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ComponentProps } from 'svelte'
-import type { CommentDisplayData } from './diffComments'
+import type { AgentCommentDisplayData, CommentDisplayData } from './diffComments'
 import InlineCommentThread from './InlineCommentThread.svelte'
 
 type InlineCommentThreadProps = ComponentProps<typeof InlineCommentThread>
@@ -25,6 +25,22 @@ function makeAgentComment(overrides: Partial<AgentReviewComment> = {}): AgentRev
   }
 }
 
+
+function makeAgentDisplayComment(comment: AgentReviewComment): AgentCommentDisplayData {
+  if (!comment.file_path || comment.line_number === null) {
+    throw new Error('Agent display comments require an inline location')
+  }
+
+  return {
+    body: comment.body,
+    type: 'agent',
+    commentId: comment.id,
+    status: comment.status,
+    filePath: comment.file_path,
+    lineNumber: comment.line_number,
+    commentSide: comment.side === 'LEFT' ? 'LEFT' : 'RIGHT',
+  }
+}
 function makeDeferred() {
   let resolve!: () => void
   const promise = new Promise<void>((resolvePromise) => {
@@ -56,7 +72,7 @@ describe('InlineCommentThread', () => {
     const agentComment = makeAgentComment()
     const data: CommentDisplayData = {
       comments: [
-        { body: agentComment.body, type: 'agent', commentId: agentComment.id, status: 'pending' },
+        makeAgentDisplayComment(agentComment),
         { body: 'Pending suggestion', type: 'pending', index: 0 },
       ],
     }
@@ -84,6 +100,7 @@ describe('InlineCommentThread', () => {
         body: 'Existing reply',
         type: 'existing',
         author: 'reviewer',
+        createdAt: '2024-01-01T00:00:00Z',
         isReply: true,
       }],
     }
@@ -120,15 +137,7 @@ describe('InlineCommentThread', () => {
     const statusUpdate = makeDeferred()
     const initialAgent = makeAgentComment()
     const data: CommentDisplayData = {
-      comments: [{
-        body: 'AI suggestion',
-        type: 'agent',
-        commentId: initialAgent.id,
-        status: initialAgent.status,
-        filePath: initialAgent.file_path ?? undefined,
-        lineNumber: initialAgent.line_number ?? undefined,
-        commentSide: initialAgent.side ?? undefined,
-      }],
+      comments: [makeAgentDisplayComment(initialAgent)],
     }
     const setup = makeProps({
       data,
@@ -167,12 +176,7 @@ describe('InlineCommentThread', () => {
     const statusUpdate = makeDeferred()
     const initialAgent = makeAgentComment({ status: 'approved' })
     const data: CommentDisplayData = {
-      comments: [{
-        body: initialAgent.body,
-        type: 'agent',
-        commentId: initialAgent.id,
-        status: 'approved',
-      }],
+      comments: [makeAgentDisplayComment(initialAgent)],
     }
     const setup = makeProps({
       data,
@@ -208,12 +212,7 @@ describe('InlineCommentThread', () => {
     const statusUpdate = makeDeferred()
     const initialAgent = makeAgentComment()
     const data: CommentDisplayData = {
-      comments: [{
-        body: initialAgent.body,
-        type: 'agent',
-        commentId: initialAgent.id,
-        status: initialAgent.status,
-      }],
+      comments: [makeAgentDisplayComment(initialAgent)],
     }
     const setup = makeProps({
       data,
@@ -251,6 +250,8 @@ describe('InlineCommentThread', () => {
         body: 'Existing review comment',
         type: 'existing',
         author: 'reviewer',
+        createdAt: '2024-01-01T00:00:00Z',
+        isReply: false,
         commentId: 23,
       }],
     }
@@ -270,15 +271,7 @@ describe('InlineCommentThread', () => {
     const onAskAboutComment = vi.fn()
     const agentComment = makeAgentComment()
     const data: CommentDisplayData = {
-      comments: [{
-        body: agentComment.body,
-        type: 'agent',
-        commentId: agentComment.id,
-        status: agentComment.status,
-        filePath: agentComment.file_path ?? undefined,
-        lineNumber: agentComment.line_number ?? undefined,
-        commentSide: agentComment.side ?? undefined,
-      }],
+      comments: [makeAgentDisplayComment(agentComment)],
     }
     const setup = makeProps({ data, agentComments: [agentComment], onAskAboutComment })
     render(InlineCommentThread, { props: setup.props })
@@ -302,8 +295,8 @@ describe('InlineCommentThread', () => {
     const onReplyToThread = vi.fn()
     const data: CommentDisplayData = {
       comments: [{
-        body: '',
         type: 'ai-thread',
+        isReply: false,
         thread: {
           id: 'thread-1',
           anchor: { type: 'line', filename: 'src/example.ts', line: 12, side: 'RIGHT' },
