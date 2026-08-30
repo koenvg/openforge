@@ -2,6 +2,7 @@ interface PreloadBridgeIpcRenderer {
   invoke(channel: string, payload: unknown): Promise<unknown>
   on(channel: string, listener: (event: unknown, payload: unknown) => void): void
   off(channel: string, listener: (event: unknown, payload: unknown) => void): void
+  send?(channel: string, payload: unknown): void
 }
 
 interface OpenForgePreloadApi {

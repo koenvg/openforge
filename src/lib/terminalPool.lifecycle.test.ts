@@ -4,6 +4,7 @@ import { getPtyBuffer } from './ipc'
 import {
 	_getPool,
 	acquire,
+	attach,
 	clearPtySpawnPending,
 	clearTaskTerminalTabsSession,
 	getShellLifecycleState,
@@ -66,9 +67,9 @@ describe("terminalPool lifecycle", () => {
 		expect(entry1).toBe(entry2);
 	});
 
-	it("acquire sets up model-output, model-disabled, and PTY-exit listeners", async () => {
+	it("acquire sets up lifecycle listeners but defers model output until attachment", async () => {
 		await acquire("task-3");
-		expect(listenCallbacks.has("pty-model-output-task-3")).toBe(true);
+		expect(listenCallbacks.has("pty-model-output-task-3")).toBe(false);
 		expect(listenCallbacks.has("pty-model-disabled-task-3")).toBe(true);
 		expect(listenCallbacks.has("pty-exit-task-3")).toBe(true);
 	});
@@ -299,6 +300,8 @@ describe("terminalPool lifecycle", () => {
 			});
 			await markShellPtyStarted(agentEntry, 44);
 			await markShellPtyStarted(shellEntry, 45);
+			await attach(agentEntry, document.createElement("div"));
+			await attach(shellEntry, document.createElement("div"));
 			shellEntry.ptyActive = false;
 
 			const agentOutputCb = getListenCallback("pty-model-output-T-44");

@@ -1,4 +1,4 @@
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import {
   resetTerminalRuntimeMocks,
   terminalMocks,
@@ -180,6 +180,7 @@ describe('terminal runtime shell output lifecycle', () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
+    await attachTestTerminal(runtime, entry)
     const lifecycleUpdates: unknown[] = []
     runtime.subscribeShellLifecycle('T-1-shell-0', (state) => lifecycleUpdates.push(state))
 
@@ -241,6 +242,7 @@ describe('terminal runtime shell output lifecycle', () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire(terminalKey)
+    await attachTestTerminal(runtime, entry)
     host.getPtyBuffer = async () => liveReplay(9, 'snapshot')
 
     runtime.markPtySpawnPending(entry)
@@ -279,6 +281,7 @@ describe('terminal runtime shell output lifecycle', () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
+    await attachTestTerminal(runtime, entry)
 
     host.getPtyBuffer = async () => liveReplay(1)
     await runtime.markShellPtyStarted(entry, 1)

@@ -32,7 +32,7 @@ describe('terminal runtime reconnect replay', () => {
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
     expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
-    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
 
@@ -61,7 +61,7 @@ describe('terminal runtime reconnect replay', () => {
 
     expect(terminalMocks.instances).toHaveLength(2)
     expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
-    expect(host.getListenerCount(modelOutputEvent)).toBe(1)
+    expect(host.getListenerCount(modelOutputEvent)).toBe(0)
     expect(host.getListenerCount(exitEvent)).toBe(1)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
   })

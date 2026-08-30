@@ -58,6 +58,7 @@ pub struct GitHubClient {
     client: Client,
     etag_cache: Arc<Mutex<EtagResponseCache>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
+    refresh_lock: Arc<tokio::sync::Mutex<()>>,
     token_source: GitHubTokenSource,
 }
 
@@ -96,6 +97,7 @@ impl GitHubClient {
             client: Client::new(),
             etag_cache: Arc::new(Mutex::new(EtagResponseCache::new())),
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
+            refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             token_source: GitHubTokenSource::SecureStore,
         }
     }
@@ -106,6 +108,10 @@ impl GitHubClient {
             token_source: GitHubTokenSource::Fixed(result),
             ..Self::new()
         }
+    }
+
+    pub(crate) async fn acquire_refresh_permit(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        Arc::clone(&self.refresh_lock).lock_owned().await
     }
 
     pub(crate) async fn github_token(&self) -> Result<Option<String>, String> {
@@ -184,6 +190,25 @@ mod tests {
 
         assert!(client.shares_cache_with(&clone));
         assert!(clone.shares_cache_with(&client));
+    }
+
+    #[tokio::test]
+    async fn cloned_clients_serialize_refresh_work() {
+        let client = GitHubClient::new();
+        let clone = client.clone();
+        let permit = client.acquire_refresh_permit().await;
+
+        let waiting = tokio::spawn(async move {
+            let _permit = clone.acquire_refresh_permit().await;
+        });
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(20), waiting)
+                .await
+                .is_err(),
+            "a cloned client must not start overlapping refresh work"
+        );
+
+        drop(permit);
     }
 
     #[test]

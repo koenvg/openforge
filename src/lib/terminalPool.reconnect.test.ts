@@ -34,6 +34,7 @@ describe("terminalPool reconnect", () => {
 		const entry = await acquire("task-10");
 		vi.mocked(getPtyBuffer).mockResolvedValueOnce(ghosttyReplay("", 42));
 		await markShellPtyStarted(entry, 42);
+		await attach(entry, document.createElement("div"));
 		const { write: writeSpy } = getTerminalMocks(entry);
 
 		emitModelOutput("task-10", "hello world", 42);
@@ -47,6 +48,7 @@ describe("terminalPool reconnect", () => {
 		const { write: writeSpy } = getTerminalMocks(entry);
 		vi.mocked(getPtyBuffer).mockResolvedValueOnce(ghosttyReplay("", 2));
 		await markShellPtyStarted(entry, 2);
+		await attach(entry, document.createElement("div"));
 
 		emitModelOutput("task-10-stale-output", "old output", 1);
 

@@ -90,7 +90,7 @@ pub(super) type SharedRingBuffer = Arc<std::sync::Mutex<RingBuffer>>;
 // ============================================================================
 
 pub(super) const PTY_READ_BUFFER_SIZE: usize = 8192;
-const PTY_FLUSH_INTERVAL_MS: u64 = 16;
+const PTY_FLUSH_INTERVAL_MS: u64 = 50;
 const PTY_MAX_BATCH_SIZE: usize = 65_536;
 // Each message comes from one 8 KiB read plus at most three carried UTF-8 bytes.
 // Even with worst-case lossy UTF-8 expansion, queued string payload stays below 769 KiB.

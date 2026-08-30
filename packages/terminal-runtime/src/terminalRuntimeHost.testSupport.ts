@@ -2,6 +2,8 @@ import { writable } from 'svelte/store'
 import { vi, type Mock } from 'vitest'
 import type {
   TerminalRuntimeEnvironment,
+  PoolEntry,
+  TerminalRuntime,
   TerminalRuntimeOptions,
   TerminalSessionTransportHandlers,
   TerminalTransport,
@@ -30,6 +32,7 @@ interface RawPtyInstancePayload {
 
 interface RawPtyModelOutputPayload extends RawPtyInstancePayload {
   data: string
+  start_sequence?: number
   sequence: number
 }
 
@@ -61,6 +64,11 @@ interface CreateHostOptions {
   listenerRegistrationFailures?: ListenerRegistrationFailureSupport
 }
 
+
+interface TestSessionRegistration {
+  handlers: TerminalSessionTransportHandlers
+  modelOutputEnabled: boolean
+}
 export interface TestHost extends TerminalRuntimeOptions {
   transport: TestTransport
   environment: TerminalRuntimeEnvironment & { openLink: ReturnType<typeof vi.fn> }
@@ -91,8 +99,32 @@ function decodeBase64(value: string): Uint8Array {
   return Uint8Array.from(binary, character => character.charCodeAt(0))
 }
 
+
+export async function attachTestTerminal(runtime: TerminalRuntime, entry: PoolEntry): Promise<void> {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0)
+    return 1
+  })
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  })
+  vi.stubGlobal('IntersectionObserver', class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+    takeRecords() { return [] }
+    readonly root = null
+    readonly rootMargin = ''
+    readonly thresholds = [0]
+  })
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
+  await runtime.attach(entry, document.createElement('div'))
+}
 export function createHost({ listenerRegistrationFailures }: CreateHostOptions = {}): TestHost {
-  const sessionHandlers = new Map<string, Set<TerminalSessionTransportHandlers>>()
+  const sessionHandlers = new Map<string, Set<TestSessionRegistration>>()
   const connectionRestoredHandlers = new Set<() => void>()
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
@@ -122,21 +154,32 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
     if (ptyInstanceId === undefined) return true
     const event = decodeEvent(rawPayload, ptyInstanceId)
     const shellSessionKey = eventName.slice(eventPrefix.length)
-    for (const handlers of sessionHandlers.get(shellSessionKey) ?? []) {
-      handleEvent(handlers, event)
+    for (const registration of sessionHandlers.get(shellSessionKey) ?? []) {
+      if (eventPrefix === SESSION_EVENT_PREFIXES.modelOutput && !registration.modelOutputEnabled) {
+        continue
+      }
+      handleEvent(registration.handlers, event)
     }
     return true
   }
 
   const transport: TestTransport = {
     subscribeSession: vi.fn(async (shellSessionKey: string, handlers: TerminalSessionTransportHandlers) => {
-      for (const prefix of Object.values(SESSION_EVENT_PREFIXES)) {
-        await registerEvent(`${prefix}${shellSessionKey}`)
-      }
-      const current = sessionHandlers.get(shellSessionKey) ?? new Set()
-      current.add(handlers)
+      await registerEvent(`${SESSION_EVENT_PREFIXES.modelDisabled}${shellSessionKey}`)
+      await registerEvent(`${SESSION_EVENT_PREFIXES.exit}${shellSessionKey}`)
+      const current = sessionHandlers.get(shellSessionKey) ?? new Set<TestSessionRegistration>()
+      const registration: TestSessionRegistration = { handlers, modelOutputEnabled: false }
+      current.add(registration)
       sessionHandlers.set(shellSessionKey, current)
-      return { dispose: vi.fn(() => current.delete(handlers)) }
+      return {
+        setModelOutputEnabled: vi.fn(async (enabled: boolean) => {
+          if (enabled && !registration.modelOutputEnabled) {
+            await registerEvent(`${SESSION_EVENT_PREFIXES.modelOutput}${shellSessionKey}`)
+          }
+          registration.modelOutputEnabled = enabled
+        }),
+        dispose: vi.fn(() => current.delete(registration)),
+      }
     }),
     subscribeConnectionRestored: vi.fn(async (handler: () => void) => {
       await registerEvent('openforge-app-events-reconnected')
@@ -203,6 +246,7 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
         (raw: RawPtyModelOutputPayload, ptyInstanceId) => ({
           data: decodeBase64(raw.data),
           ptyInstanceId,
+          startSequence: raw.start_sequence ?? raw.sequence,
           sequence: raw.sequence,
         }),
         (handlers, event) => handlers.onModelOutput(event),
@@ -245,7 +289,11 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
       if (eventName === 'openforge-app-events-reconnected') return connectionRestoredHandlers.size
       const shellSessionKey = parseSessionEventName(eventName)
       if (shellSessionKey !== undefined) {
-        return sessionHandlers.get(shellSessionKey)?.size ?? 0
+        const registrations = sessionHandlers.get(shellSessionKey) ?? new Set<TestSessionRegistration>()
+        if (eventName.startsWith(SESSION_EVENT_PREFIXES.modelOutput)) {
+          return Array.from(registrations).filter(registration => registration.modelOutputEnabled).length
+        }
+        return registrations.size
       }
       return 0
     },

@@ -21,6 +21,7 @@ export {
   type TerminalRuntimeEnvironment,
   type TerminalRuntimeUnlistenFn,
   type TerminalSessionTransportHandlers,
+  type TerminalSessionTransportSubscription,
   type TerminalStateSource,
   type TerminalTab,
   type TerminalTransport,

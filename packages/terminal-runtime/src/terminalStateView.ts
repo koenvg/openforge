@@ -32,7 +32,7 @@ export function createTerminalStateView({
     if (entry.currentPtyInstance !== event.ptyInstanceId) return true
     const currentSequence = entry.terminalModelSequence
     if (currentSequence === null || event.sequence <= currentSequence) return true
-    if (event.sequence !== currentSequence + 1) return false
+    if (event.startSequence !== currentSequence + 1) return false
     entry.outputSequence += 1
     entry.view.writeLive({
       data: event.data,
@@ -74,6 +74,7 @@ export function createTerminalStateView({
       if (replay.historicalData) {
         entry.view.bootstrap(replay.historicalData, null, entry.outputSequence)
       }
+      entry.viewNeedsRecovery = false
       return
     }
     const snapshot = replay.snapshot
@@ -101,6 +102,7 @@ export function createTerminalStateView({
       entry.view.bootstrap(snapshot.data, replay.ptyInstanceId, entry.outputSequence)
       entry.hasOutput = true
     }
+    entry.viewNeedsRecovery = false
     flushPendingOutput(entry)
   }
 
@@ -129,6 +131,14 @@ export function createTerminalStateView({
 
 
   function handleTerminalModelOutput(entry: PoolEntry, event: TerminalModelOutputEvent): void {
+    if (!entry.attached) {
+      if (entry.currentPtyInstance === event.ptyInstanceId) {
+        entry.terminalModelSequence = Math.max(entry.terminalModelSequence ?? 0, event.sequence)
+        entry.viewNeedsRecovery = true
+        markOutput(entry)
+      }
+      return
+    }
     if (entry.spawnPending || entry.terminalStateSource === 'bootstrapping') {
       pushBounded(entry.pendingTerminalModelOutput, event)
       return

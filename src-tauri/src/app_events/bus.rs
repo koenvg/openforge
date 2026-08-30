@@ -51,6 +51,7 @@ impl AppEventBus {
         E: Into<AppEvent>,
     {
         let event = event.into();
+        let replayable = event.delivery != DeliveryClass::RealtimeLossy;
         let emitted_at_ms = now_ms()?;
         let seq = self.inner.sequence.fetch_add(1, Ordering::SeqCst) + 1;
         let id = AppEventId {
@@ -70,7 +71,7 @@ impl AppEventBus {
             }),
         };
 
-        if self.inner.replay_capacity > 0 {
+        if replayable && self.inner.replay_capacity > 0 {
             if let Ok(mut replay) = self.inner.replay.lock() {
                 replay.push_back(envelope.clone());
                 while replay.len() > self.inner.replay_capacity {
@@ -84,7 +85,7 @@ impl AppEventBus {
             .send(envelope)
             .map(|_| EmitReceipt { id: id.clone() })
             .or_else(|error| {
-                // No active subscribers is not a publish failure; the replay ring still records the event.
+                // No active subscribers is not a publish failure. Durable events remain replayable.
                 if error.0.id.as_ref() == Some(&id) {
                     Ok(EmitReceipt { id })
                 } else {
@@ -365,6 +366,35 @@ mod tests {
         assert_eq!(meta.sequence, 1);
         assert_eq!(meta.ordering_key.as_deref(), Some("task:T-1009"));
         assert_eq!(meta.delivery, DeliveryClass::StateInvalidation);
+    }
+
+    #[tokio::test]
+    async fn realtime_events_are_live_only_and_do_not_enter_cursor_replay() {
+        let bus = AppEventBus::new(16, 8);
+        let first = bus
+            .tasks()
+            .updated("T-1", None)
+            .expect("first event should publish");
+        bus.try_emit(AppEvent::new(
+            "pty-model-output-T-1",
+            serde_json::json!({ "data": "dGlueQ==", "instance_id": 7, "sequence": 1 }),
+            DeliveryClass::RealtimeLossy,
+            Some("pty:T-1".to_string()),
+        ))
+        .expect("realtime event should publish");
+        bus.tasks()
+            .updated("T-2", None)
+            .expect("second durable event should publish");
+
+        let mut subscription = bus
+            .subscribe(Some(AppEventCursor::after(first.id)))
+            .expect("cursor subscription should work");
+        let AppEventFrame::Event(received) = subscription.recv().await.expect("event") else {
+            panic!("expected durable event frame");
+        };
+
+        assert_eq!(received.event_name, "task-changed");
+        assert_eq!(received.payload["task_id"], "T-2");
     }
 
     #[tokio::test]

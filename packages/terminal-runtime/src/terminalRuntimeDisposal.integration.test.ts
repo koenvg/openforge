@@ -59,7 +59,7 @@ describe('terminal runtime disposal', () => {
 
     expect(host.getListenerCount('pty-model-output-T-1-shell-0')).toBe(0)
     expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(0)
-    expect(host.getListenerCount('pty-model-output-T-1-shell-1')).toBe(1)
+    expect(host.getListenerCount('pty-model-output-T-1-shell-1')).toBe(0)
     expect(host.getListenerCount('pty-exit-T-1-shell-1')).toBe(1)
     expect(host.getListenerCount('openforge-app-events-reconnected')).toBe(1)
     expect(host.transport.dispose).not.toHaveBeenCalled()

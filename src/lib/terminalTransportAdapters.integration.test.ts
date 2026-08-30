@@ -208,6 +208,7 @@ describe.each([
 
 
   it('normalizes Ghostty snapshots and sequenced model output at the Terminal Runtime seam', async () => {
+    stubAttachmentObservers()
     const harness = createHarness()
     const compatibilityReplay = INLINE_IMAGE_COMPATIBILITY_REPLAY
     harness.setGhosttyReplay('ghostty snapshot', 9, 3, compatibilityReplay)
@@ -219,6 +220,7 @@ describe.each([
     })
 
     const entry = await runtime.acquire('T-1-shell-2')
+    await runtime.attach(entry, document.createElement('div'))
     harness.emitModelOutput('T-1-shell-2', 'model output', 9, 4)
 
     expect(view.bootstrap).toHaveBeenNthCalledWith(
@@ -259,7 +261,7 @@ describe.each([
     expect(failedView.dispose).toHaveBeenCalledOnce()
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(0)
     await expect(runtime.acquire('T-1-shell-2')).resolves.toBeDefined()
-    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
     runtime.dispose()
   })
 

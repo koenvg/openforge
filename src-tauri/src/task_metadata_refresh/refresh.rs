@@ -10,7 +10,7 @@ use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 use std::time::Duration;
 
 const TITLE_REFRESH_DELAY_SECONDS: u64 = 8;
@@ -33,11 +33,27 @@ static PENDING_TASK_DISPLAY_TITLE_REFRESHES: LazyLock<
     Mutex<HashMap<String, PendingTaskDisplayTitleRefresh>>,
 > = LazyLock::new(|| Mutex::new(HashMap::new()));
 
+static TASK_DISPLAY_TITLE_REFRESH_LOCKS: LazyLock<
+    Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
 fn lock_pending_task_display_title_refreshes(
 ) -> std::sync::MutexGuard<'static, HashMap<String, PendingTaskDisplayTitleRefresh>> {
     PENDING_TASK_DISPLAY_TITLE_REFRESHES
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn task_display_title_refresh_lock(task_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let mut locks = TASK_DISPLAY_TITLE_REFRESH_LOCKS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(task_id).and_then(Weak::upgrade) {
+        return lock;
+    }
+    let lock = Arc::new(tokio::sync::Mutex::new(()));
+    locks.insert(task_id.to_string(), Arc::downgrade(&lock));
+    lock
 }
 
 #[cfg(test)]
@@ -173,6 +189,8 @@ where
     Fut: Future<Output = Result<Option<String>, String>>,
 {
     tokio::time::sleep(delay).await;
+    let refresh_lock = task_display_title_refresh_lock(&queued.task_id);
+    let _refresh_permit = refresh_lock.lock().await;
 
     let Some(refresh) = latest_task_display_title_refresh(&queued.task_id, queued.generation)
     else {

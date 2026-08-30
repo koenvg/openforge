@@ -55,6 +55,34 @@ describe('Electron preload API skeleton', () => {
     expect(ipc.off).toHaveBeenCalledWith('openforge:event', expect.any(Function))
   })
 
+  it('reports first and last logical event subscriptions to Electron main', () => {
+    const ipc = {
+      invoke: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      send: vi.fn(),
+    }
+    const api = createOpenForgePreloadApi(ipc)
+
+    const unsubscribeFirst = api.onEvent('pty-model-output-T-1', vi.fn())
+    const unsubscribeSecond = api.onEvent('pty-model-output-T-1', vi.fn())
+
+    expect(ipc.send).toHaveBeenCalledTimes(1)
+    expect(ipc.send).toHaveBeenCalledWith('openforge:event-subscription', {
+      action: 'subscribe',
+      eventName: 'pty-model-output-T-1',
+    })
+
+    unsubscribeFirst()
+    expect(ipc.send).toHaveBeenCalledTimes(1)
+
+    unsubscribeSecond()
+    expect(ipc.send).toHaveBeenLastCalledWith('openforge:event-subscription', {
+      action: 'unsubscribe',
+      eventName: 'pty-model-output-T-1',
+    })
+  })
+
   it('multiplexes logical app event subscriptions through one Electron listener', () => {
     const listeners = new Map<string, (...args: unknown[]) => void>()
     const ipc = {

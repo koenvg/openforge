@@ -1,4 +1,4 @@
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import {
   createListenerRegistrationFailureSupport,
   imageAddonMocks,
@@ -51,7 +51,7 @@ describe('terminal runtime acquisition', () => {
     const entry = await runtime.acquire(terminalKey)
 
     expect(entry.currentPtyInstance).toBe(7)
-    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-model-disabled-${terminalKey}`)).toBe(1)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
@@ -73,6 +73,7 @@ describe('terminal runtime acquisition', () => {
     const runtime = createTerminalRuntime(host)
 
     const entry = await runtime.acquire(terminalKey)
+    await attachTestTerminal(runtime, entry)
     host.emit(`pty-model-output-${terminalKey}`, {
       instance_id: 7,
       sequence: 2,
@@ -105,11 +106,11 @@ describe('terminal runtime acquisition', () => {
     expect(second).toBe(first)
     expect(terminalMocks.instances).toHaveLength(1)
     expect(imageAddonMocks.instances).toHaveLength(1)
-    expect(host.getListenerCount('pty-model-output-T-1-shell-0')).toBe(1)
+    expect(host.getListenerCount('pty-model-output-T-1-shell-0')).toBe(0)
     expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(1)
   })
 
-  it.each(['pty-model-output', 'pty-exit'] as const)(
+  it.each(['pty-exit'] as const)(
     'rolls back allocated resources and retained listeners when %s setup fails, then retries cleanly',
     async (failedEventPrefix) => {
       const terminalKey = 'T-1-shell-0'
@@ -135,7 +136,7 @@ describe('terminal runtime acquisition', () => {
 
       expect(terminalMocks.instances).toHaveLength(2)
       expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
-      expect(host.getListenerCount(modelOutputEvent)).toBe(1)
+      expect(host.getListenerCount(modelOutputEvent)).toBe(0)
       expect(host.getListenerCount(exitEvent)).toBe(1)
       expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
     },
@@ -160,7 +161,7 @@ describe('terminal runtime acquisition', () => {
     expect(releasedEntry).not.toBe(currentEntry)
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
     expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
-    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
 

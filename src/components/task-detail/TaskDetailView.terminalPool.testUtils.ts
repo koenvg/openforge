@@ -54,7 +54,10 @@ vi.mock('../../lib/terminalPool', () => {
   }
 
   const transport: TerminalTransport = {
-    subscribeSession: vi.fn(async () => ({ dispose: vi.fn() })),
+    subscribeSession: vi.fn(async () => ({
+      setModelOutputEnabled: vi.fn(async () => undefined),
+      dispose: vi.fn(),
+    })),
     subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
     readReplay: vi.fn(async () => ({
       historicalData: null,
@@ -86,6 +89,7 @@ vi.mock('../../lib/terminalPool', () => {
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      viewNeedsRecovery: false,
       attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,

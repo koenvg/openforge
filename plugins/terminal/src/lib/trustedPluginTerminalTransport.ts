@@ -1,6 +1,7 @@
 import {
   parsePtySessionKey,
   type TerminalSessionTransportHandlers,
+  type TerminalSessionTransportSubscription,
   type TerminalTransport,
   type TerminalTransportDisposable,
 } from '@openforge-app/terminal-runtime'
@@ -17,6 +18,7 @@ interface TrustedPluginPtyExitPayload {
 interface TrustedPluginTerminalModelOutputPayload {
   data: string
   instance_id: number
+  start_sequence?: number
   sequence: number
 }
 
@@ -101,32 +103,60 @@ export function createTrustedPluginTerminalTransport(
   async function subscribeSession(
     shellSessionKey: string,
     handlers: TerminalSessionTransportHandlers,
-  ): Promise<TerminalTransportDisposable> {
+  ): Promise<TerminalSessionTransportSubscription> {
     ensureActive()
     parseIndexedShellSessionKey(shellSessionKey)
     const events = getPort().events
-    const subscriptions: TrustedPluginDisposable[] = []
+    const lifecycleSubscriptions: TrustedPluginDisposable[] = []
+    let modelOutputSubscription: TrustedPluginDisposable | null = null
+    let active = true
     try {
-      subscriptions.push(events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
-        `openforge.pty-model-output-${shellSessionKey}`,
-        payload => handlers.onModelOutput({
-          data: decodeBase64(payload.data),
-          ptyInstanceId: payload.instance_id,
-          sequence: payload.sequence,
-        }),
-      ))
-      subscriptions.push(events.onGlobal<TrustedPluginTerminalModelDisabledPayload>(
+      lifecycleSubscriptions.push(events.onGlobal<TrustedPluginTerminalModelDisabledPayload>(
         `openforge.pty-model-disabled-${shellSessionKey}`,
         payload => handlers.onModelDisabled({ ptyInstanceId: payload.instance_id }),
       ))
-      subscriptions.push(events.onGlobal<TrustedPluginPtyExitPayload>(
+      lifecycleSubscriptions.push(events.onGlobal<TrustedPluginPtyExitPayload>(
         `openforge.pty-exit-${shellSessionKey}`,
         payload => handlers.onExit({ ptyInstanceId: payload.instance_id }),
       ))
       ensureActive()
-      return track(subscriptions)
+      const subscription: TerminalSessionTransportSubscription = {
+        async setModelOutputEnabled(enabled) {
+          ensureActive()
+          if (!active) throw new Error('Trusted Plugin terminal session subscription is disposed')
+          if (!enabled) {
+            void modelOutputSubscription?.dispose()
+            modelOutputSubscription = null
+            return
+          }
+          if (modelOutputSubscription) return
+          modelOutputSubscription = events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
+            `openforge.pty-model-output-${shellSessionKey}`,
+            payload => handlers.onModelOutput({
+              data: decodeBase64(payload.data),
+              ptyInstanceId: payload.instance_id,
+              startSequence: payload.start_sequence ?? payload.sequence,
+              sequence: payload.sequence,
+            }),
+          )
+        },
+        dispose() {
+          if (!active) return
+          active = false
+          activeSubscriptions.delete(subscription)
+          void modelOutputSubscription?.dispose()
+          modelOutputSubscription = null
+          for (const lifecycleSubscription of lifecycleSubscriptions) {
+            void lifecycleSubscription.dispose()
+          }
+        },
+      }
+      activeSubscriptions.add(subscription)
+      return subscription
     } catch (error) {
-      for (const subscription of subscriptions) void subscription.dispose()
+      for (const lifecycleSubscription of lifecycleSubscriptions) {
+        void lifecycleSubscription.dispose()
+      }
       throw error
     }
   }

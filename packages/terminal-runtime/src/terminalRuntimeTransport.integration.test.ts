@@ -16,7 +16,7 @@ describe('terminal runtime transport seam', () => {
     const transport = {
       subscribeSession: vi.fn(async (shellSessionKey, handlers) => {
         sessionSubscriptions.push({ shellSessionKey, handlers })
-        return { dispose: vi.fn() }
+        return { setModelOutputEnabled: vi.fn(async () => undefined), dispose: vi.fn() }
       }),
       subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
       readReplay: vi.fn(() => new Promise<TerminalReplay>(resolve => { resolveReplay = resolve })),
@@ -54,13 +54,7 @@ describe('terminal runtime transport seam', () => {
     expect(transport.subscribeSession).toHaveBeenCalledOnce()
     expect(transport.subscribeSession).toHaveBeenCalledWith('T-1-shell-0', expect.any(Object))
     expect(view.bootstrap).toHaveBeenCalledWith(expect.any(Uint8Array), 7, 0)
-    expect(view.writeLive).toHaveBeenCalledWith({
-      data: Uint8Array.from(new TextEncoder().encode(' then live')),
-      ptyInstanceId: 7,
-      sequence: 1,
-    })
-    expect(vi.mocked(view.bootstrap).mock.invocationCallOrder[0])
-      .toBeLessThan(vi.mocked(view.writeLive).mock.invocationCallOrder[0])
+    expect(view.writeLive).not.toHaveBeenCalled()
     expect(entry.currentPtyInstance).toBe(7)
   })
 })

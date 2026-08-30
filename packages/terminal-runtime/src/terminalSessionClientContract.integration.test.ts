@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalSessionService } from './terminalSessionService'
 
@@ -38,6 +38,7 @@ describe('Terminal Session client contract', () => {
     const client = service.createClient(ownerId)
 
     const entry = await client.acquire(shellSessionKey)
+    await attachTestTerminal(runtime, entry)
 
     expect(view.bootstrap).toHaveBeenCalledWith(
       Uint8Array.from(new TextEncoder().encode('bootstrap')),

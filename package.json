@@ -39,6 +39,7 @@
     "packages:pack:dry-run": "pnpm packages:metadata:check && node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",
     "terminal:presentation": "node packages/terminal-runtime/conformance/run.mjs",
+    "performance:idle": "node scripts/check-idle-resources.mjs",
     "terminal:presentation:update": "node packages/terminal-runtime/conformance/run.mjs --update-baselines",
     "test": "vitest run"
   },

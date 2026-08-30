@@ -201,6 +201,7 @@ pub async fn refresh_task_github_status_for_sidecar(
     if open_prs.is_empty() {
         return Ok(PollResult::empty());
     }
+    let _refresh_permit = github_client.acquire_refresh_permit().await;
 
     github_client.clear_rate_limit_reset();
     let github_token = match github_token_for_poll(github_client).await {
@@ -244,6 +245,7 @@ pub(super) async fn poll_github_once_with_state(
     events: &GitHubEventTarget,
     scope: &PollScope,
 ) -> PollResult {
+    let _refresh_permit = github_client.acquire_refresh_permit().await;
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
 

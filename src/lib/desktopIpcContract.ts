@@ -191,7 +191,7 @@ export type TerminalDesktopEventName =
 
 export interface TerminalDesktopEventPayloads {
   output: { shell_session_key: string; data: string; instance_id: number }
-  modelOutput: { data: string; instance_id: number; sequence: number }
+  modelOutput: { data: string; instance_id: number; start_sequence: number; sequence: number }
   modelDisabled: { instance_id: number }
   exit: { instance_id: number }
   connectionRestored: { attempt: number; reconnectedAt: string }

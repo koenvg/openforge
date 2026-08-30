@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 
@@ -14,11 +14,18 @@ describe('terminal output sequencing', () => {
     }))
     const view = createFakeTerminalView()
     const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
-    await runtime.acquire('T-1-shell-0')
+    const entry = await runtime.acquire('T-1-shell-0')
+    await attachTestTerminal(runtime, entry)
 
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('one'), instance_id: 7, sequence: 1 })
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('stale'), instance_id: 8, sequence: 2 })
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('two'), instance_id: 7, sequence: 2 })
+    host.emit('pty-model-output-T-1-shell-0', {
+      data: btoa('three four'),
+      instance_id: 7,
+      start_sequence: 3,
+      sequence: 4,
+    })
 
     expect(view.writeLive).toHaveBeenNthCalledWith(1, {
       data: Uint8Array.from(new TextEncoder().encode('one')),
@@ -30,5 +37,11 @@ describe('terminal output sequencing', () => {
       ptyInstanceId: 7,
       sequence: 2,
     })
+    expect(view.writeLive).toHaveBeenNthCalledWith(3, {
+      data: Uint8Array.from(new TextEncoder().encode('three four')),
+      ptyInstanceId: 7,
+      sequence: 3,
+    })
+    expect(entry.terminalModelSequence).toBe(4)
   })
 })

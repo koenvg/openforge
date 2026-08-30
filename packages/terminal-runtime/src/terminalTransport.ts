@@ -22,6 +22,7 @@ export interface TerminalReplay {
 export interface TerminalModelOutputEvent {
   data: Uint8Array
   ptyInstanceId: number
+  startSequence: number
   sequence: number
 }
 
@@ -36,6 +37,10 @@ export interface TerminalTransportDisposable {
   dispose(): void
 }
 
+export interface TerminalSessionTransportSubscription extends TerminalTransportDisposable {
+  setModelOutputEnabled(enabled: boolean): Promise<void>
+}
+
 export interface TerminalSessionTransportHandlers {
   onModelOutput(event: TerminalModelOutputEvent): void
   onModelDisabled(event: TerminalModelDisabledEvent): void
@@ -46,7 +51,7 @@ export interface TerminalTransport {
   subscribeSession(
     shellSessionKey: string,
     handlers: TerminalSessionTransportHandlers,
-  ): Promise<TerminalTransportDisposable>
+  ): Promise<TerminalSessionTransportSubscription>
   subscribeConnectionRestored(
     handler: () => void,
   ): Promise<TerminalTransportDisposable>

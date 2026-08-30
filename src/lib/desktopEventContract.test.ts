@@ -36,6 +36,7 @@ describe('Desktop event contract', () => {
     expectTypeOf<TerminalDesktopEventPayload<`pty-model-output-${string}`>>().toEqualTypeOf<{
       data: string
       instance_id: number
+      start_sequence: number
       sequence: number
     }>()
     expectTypeOf<TerminalDesktopEventPayload<`pty-exit-${string}`>>()
@@ -52,8 +53,9 @@ describe('Desktop event contract', () => {
 
     const producerSource = source('src-tauri/src/pty_manager/terminal_model_bridge.rs')
     expect(producerSource).toContain('format!("pty-model-output-{}", self.session_key)')
-    expect(producerSource).toContain('"instance_id": frame.instance_id')
-    expect(producerSource).toContain('"sequence": frame.sequence')
+    expect(producerSource).toContain('"instance_id": output.instance_id')
+    expect(producerSource).toContain('"start_sequence": output.start_sequence')
+    expect(producerSource).toContain('"sequence": output.sequence')
   })
 
 })

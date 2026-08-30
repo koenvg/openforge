@@ -150,6 +150,7 @@ describe("terminalPool attachment", () => {
 			entry.ptyActive = true;
 			entry.currentPtyInstance = 42;
 			loadAddonSpy.mockClear();
+			resetSpy.mockClear();
 
 			webglContextLossListeners[0]?.();
 
@@ -245,6 +246,7 @@ describe("terminalPool attachment", () => {
 
 		try {
 			const attachPromise = attach(entry, wrapper);
+			await vi.waitFor(() => expect(globalThis.requestAnimationFrame).toHaveBeenCalled());
 
 			for (let index = 0; index < 5; index += 1) {
 				flushFrame();
@@ -307,16 +309,22 @@ describe("terminalPool attachment", () => {
 		detach(entry);
 		expect(entry.attached).toBe(false);
 
-		// Output while detached still writes to terminal
+		// Detached output does not parse through xterm; reattachment restores authority.
 		outputCb({ payload: { data: btoa("background output"), instance_id: 42, sequence: 2 } });
-		expect(writeSpy).toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("background output")));
-
+		expect(writeSpy).not.toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("background output")));
+		vi.mocked(getPtyBuffer).mockResolvedValueOnce({
+			buffer: null,
+			isLive: true,
+			instanceId: 42,
+			snapshot: { instanceId: 42, watermark: 2, data: btoa("background output") },
+		});
 		// Re-acquire returns same entry
 		const reacquired = await acquire("task-13");
 		expect(reacquired).toBe(entry);
 
 		// Re-attach to different wrapper
 		await attach(reacquired, wrapper2);
+		expect(writeSpy).toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("background output")));
 		expect(wrapper2.childElementCount).toBe(1);
 		expect(entry.attached).toBe(true);
 	});
