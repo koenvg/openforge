@@ -719,6 +719,34 @@ var TestingBackendServicesFake = class {
 //#region packages/plugin-sdk/src/testing/commonApiFake.ts
 var UTF8_ENCODER = new TextEncoder();
 var UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+function readTestingUserDataDir(files, directoryPath) {
+	const prefix = directoryPath ? `${directoryPath}/` : "";
+	const entries = /* @__PURE__ */ new Map();
+	for (const [filePath, content] of files) {
+		if (!filePath.startsWith(prefix)) continue;
+		const childPath = filePath.slice(prefix.length);
+		const separatorIndex = childPath.indexOf("/");
+		const name = separatorIndex === -1 ? childPath : childPath.slice(0, separatorIndex);
+		if (!name) continue;
+		entries.set(name, separatorIndex === -1 ? {
+			name,
+			path: `${prefix}${name}`,
+			isDir: false,
+			size: UTF8_ENCODER.encode(content).byteLength,
+			modifiedAt: null
+		} : {
+			name,
+			path: `${prefix}${name}`,
+			isDir: true,
+			size: null,
+			modifiedAt: null
+		});
+	}
+	return [...entries.values()].sort((left, right) => {
+		if (left.isDir !== right.isDir) return left.isDir ? -1 : 1;
+		return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
+	});
+}
 var TERMINAL_AGENT_SESSION_STATUSES = /* @__PURE__ */ new Set([
 	"completed",
 	"failed",
@@ -1049,7 +1077,7 @@ var TestingCommonApiFake = class {
 				userData: {
 					readDir: async (request = {}) => {
 						this.services.calls.fsUserDataReadDirs.push(request);
-						return [];
+						return readTestingUserDataDir(this.services.userDataTextFiles, request.path);
 					},
 					readTextFile: async (request) => {
 						this.services.calls.fsUserDataReads.push(request);
