@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
+import { createTerminalOutputObservation } from './terminalOutputObservation'
 import type { PoolEntry } from './terminalRuntimeTypes'
 
 function createEntry(terminalKey: string): PoolEntry {
@@ -11,6 +12,7 @@ function createEntry(terminalKey: string): PoolEntry {
     spawnPending: false,
     currentPtyInstance: null,
     hasOutput: false,
+    terminalOutputObservation: createTerminalOutputObservation(),
   } as PoolEntry
 }
 

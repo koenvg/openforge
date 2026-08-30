@@ -3,6 +3,7 @@ import type {
   TerminalSessionTransportSubscription,
 } from './terminalTransport'
 import type { TerminalView, TerminalViewDisposable } from './terminalView'
+import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { Readable } from 'svelte/store'
 import type { ThemeMode } from './theme'
 
@@ -47,6 +48,7 @@ export interface PoolEntry {
   terminalReplayRecovery: Promise<void> | null
   hasOutput: boolean
   outputSequence: number
+  terminalOutputObservation: TerminalOutputObservation
 }
 
 export interface TerminalTab {

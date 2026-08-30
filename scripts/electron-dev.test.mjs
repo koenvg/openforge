@@ -1,6 +1,27 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { DevScriptCleanupAdapter, ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, prepareElectronDevArtifacts, prepareElectronDevCargoEnv, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
+import {
+  DevScriptCleanupAdapter,
+  ELECTRON_DEV_DISABLE_AUTO_SEED_ENV,
+  ELECTRON_DEV_SEED_APP_DATA_DIR_ENV,
+  ELECTRON_DEV_SEED_DB_PATH_ENV,
+  ELECTRON_RENDERER_URL,
+  assertBackendPortAvailable,
+  assertElectronDebugPortAvailable,
+  assertVitePortAvailable,
+  buildElectronDebugArgs,
+  buildElectronDevEnv,
+  cleanupDevProcesses,
+  installElectronDevSignalHandlers,
+  electronSidecarPath,
+  prepareElectronDevArtifacts,
+  prepareElectronDevCargoEnv,
+  rendererUrlForPort,
+  resolveElectronDevBackendEnv,
+  resolveElectronDevRuntimeOptions,
+  stopProcess,
+  waitForVite,
+} from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const defaultTestLayout = resolveRustSidecarLayout({
@@ -188,6 +209,24 @@ describe('electron dev script environment', () => {
     expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
     expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1'])
     expect(buildElectronDebugArgs(options)).toEqual(['--inspect=127.0.0.1:9333'])
+  })
+
+
+  it('routes termination signals through launcher cleanup before exiting', async () => {
+    const target = new EventEmitter()
+    target.exit = vi.fn()
+    const launcher = { shutdown: vi.fn(async () => undefined) }
+    const removeHandlers = installElectronDevSignalHandlers(launcher, target)
+
+    target.emit('SIGTERM')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(launcher.shutdown).toHaveBeenCalledOnce()
+    expect(target.exit).toHaveBeenCalledWith(143)
+    removeHandlers()
+    expect(target.listenerCount('SIGINT')).toBe(0)
+    expect(target.listenerCount('SIGTERM')).toBe(0)
   })
 
   it('preserves explicit isolation directories and allows disabling Electron debug', () => {
@@ -749,6 +788,22 @@ describe('electron dev script environment', () => {
 
     expect(child.killSignals).toEqual(['SIGTERM', 'SIGKILL'])
     expect(child.unrefCalls).toBe(1)
+  })
+
+  it('terminates detached dev command process groups so grandchildren cannot leak', async () => {
+    const child = createChildProcessMock()
+    child.pid = 42
+    child.openforgeDetached = true
+    const killProcess = vi.fn()
+    const timerDeps = createCleanupTimerDeps()
+    const stop = stopProcess(child, { graceMs: 100, killProcess, platform: 'darwin', ...timerDeps })
+
+    expect(killProcess).toHaveBeenCalledWith(-42, 'SIGTERM')
+    expect(child.killSignals).toEqual([])
+
+    timerDeps.fireTimeout()
+    await expect(stop).resolves.toBe('killed')
+    expect(killProcess).toHaveBeenCalledWith(-42, 'SIGKILL')
   })
 
   it('cleans up Vite, Electron, and auto-created runtime directories before resolving', async () => {

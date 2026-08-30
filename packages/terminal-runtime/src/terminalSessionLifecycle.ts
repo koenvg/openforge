@@ -1,5 +1,6 @@
 import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
 import { createTerminalShellLifecycleStore } from './terminalShellLifecycle'
+import { synchronizeTerminalOutputObservation } from './terminalOutputObservation'
 import type { PoolEntry, ShellLifecycleState, TaskTerminalTabsSession } from './terminalRuntimeTypes'
 
 export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) => PoolEntry | undefined) {
@@ -61,7 +62,10 @@ export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) =
   }
 
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
-    if (entry.currentPtyInstance !== instanceId) entry.outputSequence = 0
+    if (entry.currentPtyInstance !== instanceId) {
+      entry.outputSequence = 0
+      synchronizeTerminalOutputObservation(entry.terminalOutputObservation, instanceId)
+    }
     entry.currentPtyInstance = instanceId
   }
 

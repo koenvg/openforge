@@ -17,6 +17,7 @@ mod companion_gateway;
 mod completed_session_replay;
 mod data_identity;
 mod db;
+mod desktop_test_fixture;
 mod diff_parser;
 mod frontend_host_request_transport;
 mod git_clone;
@@ -176,6 +177,23 @@ fn sidecar_app_data_dir_from_override(
     Ok(app_data_dir)
 }
 
+fn default_sidecar_app_data_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|directory| directory.join(data_identity::app_data_identifier()))
+}
+
+fn run_desktop_test_fixture_if_requested() -> Result<bool, String> {
+    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let Some(options) = desktop_test_fixture::parse_fixture_command(&arguments)? else {
+        return Ok(false);
+    };
+    let default_app_data_dir = default_sidecar_app_data_dir();
+    let manifest = desktop_test_fixture::run_fixture(&options, default_app_data_dir.as_deref())?;
+    let json = serde_json::to_string(&manifest)
+        .map_err(|error| format!("failed to serialize fixture result: {error}"))?;
+    println!("{json}");
+    Ok(true)
+}
+
 fn sidecar_resource_dir() -> Result<PathBuf, String> {
     std::env::current_exe()
         .ok()
@@ -252,6 +270,14 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 fn main() {
     if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
+    }
+    match run_desktop_test_fixture_if_requested() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("[desktop-test-fixture] failed: {error}");
+            std::process::exit(1);
+        }
     }
     if let Err(error) = sidecar_logger::initialize_electron_sidecar_logger() {
         eprintln!("[electron-sidecar] logger initialization failed: {error}");
