@@ -8,7 +8,7 @@
     showHeader?: boolean
   }
 
-  let { onClose, initialFocusTarget = 'dialog', ariaLabel, showHeader = true }: Props = $props()
+  let { onClose, initialFocusTarget = 'dialog', ariaLabel = 'Test dialog', showHeader = true }: Props = $props()
   let primaryButton: HTMLButtonElement | null = $state(null)
 
   let initialFocus = $derived.by(() => {
