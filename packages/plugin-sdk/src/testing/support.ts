@@ -1,4 +1,5 @@
 import type {
+  AgentSessionWorkspace,
   AgentCommandMetadata,
   CommandDescriptor,
   Disposable,
@@ -71,6 +72,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskImplementationStarts: [],
     taskFollowUps: [],
     taskListRequests: [],
+    agentSessionListRequests: [],
     taskSessionListRequests: [],
     taskStatusUpdates: [],
     configWrites: [],
@@ -241,6 +243,7 @@ export class TestingRegistryServices {
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
   readonly seededAgentSessions: AgentSession[]
+  readonly agentSessionWorkspaces: Readonly<Record<string, AgentSessionWorkspace>>
   readonly externalTextFiles: TestingExternalTextFile[]
   readonly userDataTextFiles = new Map<string, string>()
   readonly claims = new TestingContributionClaims()
@@ -260,6 +263,7 @@ export class TestingRegistryServices {
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
     this.seededAgentSessions = options.agentSessions ?? []
+    this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {}
     this.externalTextFiles = options.externalTextFiles ?? []
     for (const file of options.userDataTextFiles ?? []) {
       this.userDataTextFiles.set(file.path, file.content)

@@ -83,6 +83,7 @@ export const desktopIpcFunctionDomains = {
   getTaskDetail: 'tasks-projects',
   getLatestSession: 'agent-session-pty',
   listAgentSessions: 'agent-session-pty',
+  listAgentSessionSummaries: 'agent-session-pty',
   sendAgentFollowUp: 'agent-session-pty',
   getLatestSessions: 'agent-session-pty',
   getGithubUsername: 'github-review',

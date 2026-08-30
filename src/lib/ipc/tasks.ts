@@ -109,6 +109,7 @@ export async function getAllTasks(): Promise<Task[]> {
   return tasks.map(normalizeTask)
 }
 
+
 export async function getTaskRelationshipReferences(projectId: string): Promise<TaskRelationshipReference[]> {
   const references = await invoke<RawTaskRelationshipReference[]>("get_task_relationship_references", { projectId })
   return references.map((reference) => ({ ...reference, status: parseBoardStatus(reference.status) }))

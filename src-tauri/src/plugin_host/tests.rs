@@ -1,5 +1,6 @@
 use super::*;
 
+mod agent_session_callbacks;
 mod command_callbacks;
 mod filesystem_callbacks;
 mod host_app_event_callbacks;

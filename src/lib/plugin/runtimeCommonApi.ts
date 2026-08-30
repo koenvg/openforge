@@ -130,6 +130,11 @@ export class RuntimeCommonApiRegistry {
           }
         },
       },
+      agentSessions: {
+        list: async (request) => this.services.host.listAgentSessions
+          ? this.services.host.listAgentSessions(request)
+          : unavailableCapability('agentSessions.list'),
+      },
       tasks: {
         list: async (request) => this.services.host.listTasks ? this.services.host.listTasks(request) : unavailableCapability('tasks.list'),
         get: async (taskId) => this.services.host.getTask ? this.services.host.getTask(taskId) : unavailableCapability('tasks.get'),

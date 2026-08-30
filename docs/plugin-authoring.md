@@ -492,6 +492,52 @@ for (const session of piSessions) {
 ```
 
 `listSessions` returns the existing public `AgentSession` structure, newest first. `ticket_id` contains the OpenForge Task ID; provider-specific identifiers include `pi_session_id`, `claude_session_id`, `opencode_session_id`, and `grok_session_id`. `createdAtOrAfter` is an inclusive Unix timestamp in seconds. Omit either optional filter to include every creation time or provider for that Task.
+
+For bounded history across Tasks, query Agent Sessions directly. Choose one immutable closed-open interval for the whole pagination run:
+
+```ts
+const endExclusive = Math.floor(Date.now() / 1000)
+const startInclusive = endExclusive - 30 * 24 * 60 * 60
+let cursor: string | undefined
+
+do {
+  const page = await openforge.agentSessions.list({
+    provider: 'pi',
+    overlaps: { startInclusive, endExclusive },
+    pageSize: 100,
+    cursor,
+  })
+
+  for (const session of page.items) {
+    if (session.providerSessionId === null) {
+      reportMissingProviderIdentity(session.id, session.task.id)
+      continue
+    }
+    await collectProviderHistory({
+      taskId: session.task.id,
+      providerSessionId: session.providerSessionId,
+      workspaceRoot: session.workspace?.rootPath ?? null,
+    })
+  }
+  cursor = page.nextCursor ?? undefined
+} while (cursor)
+```
+
+To restrict the same query to one known Task, pass `taskId`:
+
+```ts
+const targeted = await openforge.agentSessions.list({
+  provider: 'pi',
+  overlaps: { startInclusive, endExclusive },
+  taskId: task.id,
+  pageSize: 100,
+})
+```
+
+Each item is `{ id, provider, providerSessionId, createdAt, updatedAt, task, workspace }`. `task` contains only `{ id, title, status, createdAt, updatedAt }`; `workspace` is `{ rootPath, kind: 'project' | 'worktree' }` or `null`. A missing provider-owned identity remains `providerSessionId: null`; OpenForge does not scan the workspace to infer one. Prompt text, checkpoints, error bodies, transcripts, and tool data are excluded.
+
+The host orders results by `createdAt`, then OpenForge Agent Session ID. Request 1 through 250 rows. Pass each opaque `nextCursor` unchanged with the same provider, interval, and optional Task ID. Changing any bound or filter invalidates the cursor. `tasks.listSessions()` remains the task-scoped, full Agent Session API with its existing newest-first response.
+
 Behavior and limits:
 
 - `projectId` is required for plugin-created Tasks.
@@ -640,7 +686,8 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. Seed user-data files with `userDataTextFiles`; the backend fake applies replacements and appends in memory and records them in `fsUserDataWrites` and `fsUserDataAppends`. Seed external files, identities, and mtimes with `externalTextFiles`. The fake records `fsExternalStats` and ranged chunk requests, applies the same UTF-8 byte limits, rejects stale identities or misaligned ranges, and honors `AbortSignal` cancellation.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Tasks with `tasks`, Agent Sessions with `agentSessions`, and compact workspace context by Task ID with `agentSessionWorkspaces`. `agentSessions.list(...)` applies provider, interval, optional Task, cursor, ordering, and page-size rules and records requests in `agentSessionListRequests`. The existing `tasks.listSessions(...)` fake remains task-scoped and newest first, with requests in `taskSessionListRequests`.
+Seed user-data files with `userDataTextFiles`; the backend fake applies replacements and appends in memory and records them in `fsUserDataWrites` and `fsUserDataAppends`. Seed external files, identities, and mtimes with `externalTextFiles`. The fake records `fsExternalStats` and ranged chunk requests, applies the same UTF-8 byte limits, rejects stale identities or misaligned ranges, and honors `AbortSignal` cancellation.
 
 ## Authoring checklist
 

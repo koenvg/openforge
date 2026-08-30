@@ -26,6 +26,8 @@ import type {
   FileEntry,
   ImplementationRun,
   ListTaskSessionsRequest,
+  AgentSessionSummaryPage,
+  ListAgentSessionsRequest,
   InjectionPointLocation,
   JsonSchema,
   OpenForgeNavigationRequest,
@@ -61,6 +63,7 @@ export type RuntimeHostBridge = {
   listProjects?(): Promise<Project[]>
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
+  listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
   getTask?(taskId: string): Promise<Task>
   createTask?(request: CreateTaskRequest): Promise<Task>
   composeTask?(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>

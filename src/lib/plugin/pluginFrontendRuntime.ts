@@ -101,6 +101,9 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     context: {
       getSnapshot: () => ({ pluginId, projectId: get(activeProjectId) }),
     },
+    agentSessions: {
+      list: unavailable('agentSessions.list'),
+    },
     tasks: {
       list: unavailable('tasks.list'),
       get: unavailable('tasks.get'),

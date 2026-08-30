@@ -10,6 +10,8 @@ import type {
   FileEntry,
   ImplementationRun,
   ListTaskSessionsRequest,
+  AgentSessionSummaryPage,
+  ListAgentSessionsRequest,
   JsonValue,
   Project,
   ProjectAttention,
@@ -234,6 +236,12 @@ export function createBackendApi(
     storage: state.storage,
     context: {
       getSnapshot: () => ({ pluginId: state.pluginId, projectId: state.projectId }),
+    },
+    agentSessions: {
+      list: async (request: ListAgentSessionsRequest) => await hostCallback<AgentSessionSummaryPage>(
+        'openforge.agentSessions.list',
+        { ...objectCallbackParams(request), pluginId: state.pluginId },
+      ),
     },
     tasks: {
       list: async request => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),

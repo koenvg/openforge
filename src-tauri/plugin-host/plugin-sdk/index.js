@@ -215,6 +215,7 @@ var TaskFollowUpError = class extends Error {
 		this.code = code;
 	}
 };
+var MAX_AGENT_SESSION_PAGE_SIZE = 250;
 function makePluginViewKey(pluginId, viewId) {
 	return `plugin:${pluginId}:${viewId}`;
 }
@@ -437,6 +438,7 @@ function createTestingCalls() {
 		taskImplementationStarts: [],
 		taskFollowUps: [],
 		taskListRequests: [],
+		agentSessionListRequests: [],
 		taskSessionListRequests: [],
 		taskStatusUpdates: [],
 		configWrites: [],
@@ -584,6 +586,7 @@ var TestingRegistryServices = class {
 	config = /* @__PURE__ */ new Map();
 	seededTasks;
 	seededAgentSessions;
+	agentSessionWorkspaces;
 	externalTextFiles;
 	userDataTextFiles = /* @__PURE__ */ new Map();
 	claims = new TestingContributionClaims();
@@ -602,6 +605,7 @@ var TestingRegistryServices = class {
 		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
 		this.seededTasks = options.tasks ?? [];
 		this.seededAgentSessions = options.agentSessions ?? [];
+		this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {};
 		this.externalTextFiles = options.externalTextFiles ?? [];
 		for (const file of options.userDataTextFiles ?? []) this.userDataTextFiles.set(file.path, file.content);
 	}
@@ -715,6 +719,40 @@ var TestingBackendServicesFake = class {
 //#region packages/plugin-sdk/src/testing/commonApiFake.ts
 var UTF8_ENCODER = new TextEncoder();
 var UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+var TERMINAL_AGENT_SESSION_STATUSES = /* @__PURE__ */ new Set([
+	"completed",
+	"failed",
+	"interrupted"
+]);
+function encodeAgentSessionCursor(payload) {
+	const bytes = UTF8_ENCODER.encode(JSON.stringify(payload));
+	let binary = "";
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+function parseAgentSessionCursor(cursor) {
+	try {
+		const base64 = cursor.replaceAll("-", "+").replaceAll("_", "/");
+		const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+		const binary = atob(padded);
+		const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+		const payload = JSON.parse(UTF8_DECODER.decode(bytes));
+		const filters = payload.filters;
+		if (payload.version !== 1 || !Number.isSafeInteger(payload.createdAt) || typeof payload.id !== "string" || payload.id.length === 0 || !filters || typeof filters.provider !== "string" || !Number.isSafeInteger(filters.startInclusive) || !Number.isSafeInteger(filters.endExclusive) || filters.taskId !== null && typeof filters.taskId !== "string") throw new Error("invalid payload");
+		return payload;
+	} catch {
+		throw new TypeError("cursor is malformed");
+	}
+}
+function providerSessionId(session) {
+	switch (session.provider) {
+		case "opencode": return session.opencode_session_id;
+		case "claude-code": return session.claude_session_id;
+		case "pi": return session.pi_session_id;
+		case "grok": return session.grok_session_id;
+		default: return null;
+	}
+}
 function assertNonNegativeSafeInteger(value, name) {
 	if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`${name} must be a non-negative safe integer`);
 }
@@ -771,6 +809,64 @@ var TestingCommonApiFake = class {
 			},
 			storage: this.services.storage,
 			context: { getSnapshot: () => this.services.getContextSnapshot() },
+			agentSessions: { list: async (request) => {
+				if (typeof request.provider !== "string" || request.provider.trim().length === 0) throw new TypeError("provider must be a non-empty string");
+				if (request.taskId !== void 0 && (typeof request.taskId !== "string" || request.taskId.trim().length === 0)) throw new TypeError("taskId must be a non-empty string");
+				if (request.cursor !== void 0 && (typeof request.cursor !== "string" || request.cursor.length === 0)) throw new TypeError("cursor must be a non-empty string");
+				if (!request.overlaps || typeof request.overlaps !== "object") throw new TypeError("overlaps must contain startInclusive and endExclusive");
+				assertNonNegativeSafeInteger(request.overlaps.startInclusive, "overlaps.startInclusive");
+				assertNonNegativeSafeInteger(request.overlaps.endExclusive, "overlaps.endExclusive");
+				if (request.overlaps.startInclusive >= request.overlaps.endExclusive) throw new RangeError("overlaps must satisfy startInclusive < endExclusive");
+				if (!Number.isSafeInteger(request.pageSize) || request.pageSize < 1 || request.pageSize > 250) throw new RangeError(`pageSize must be between 1 and 250`);
+				const filters = {
+					provider: request.provider,
+					startInclusive: request.overlaps.startInclusive,
+					endExclusive: request.overlaps.endExclusive,
+					taskId: request.taskId ?? null
+				};
+				const cursor = request.cursor === void 0 ? null : parseAgentSessionCursor(request.cursor);
+				if (cursor !== null && (cursor.filters.provider !== filters.provider || cursor.filters.startInclusive !== filters.startInclusive || cursor.filters.endExclusive !== filters.endExclusive || cursor.filters.taskId !== filters.taskId)) throw new TypeError("cursor does not match request filters");
+				this.services.calls.agentSessionListRequests.push({
+					...request,
+					overlaps: { ...request.overlaps }
+				});
+				const taskById = new Map(this.services.seededTasks.map((task) => [task.id, task]));
+				const rows = this.services.seededAgentSessions.filter((session) => taskById.has(session.ticket_id)).filter((session) => session.provider === request.provider).filter((session) => request.taskId === void 0 || session.ticket_id === request.taskId).filter((session) => session.created_at < request.overlaps.endExclusive && (!TERMINAL_AGENT_SESSION_STATUSES.has(session.status) || session.updated_at > request.overlaps.startInclusive)).filter((session) => cursor === null || session.created_at > cursor.createdAt || session.created_at === cursor.createdAt && session.id > cursor.id).slice().sort((left, right) => left.created_at - right.created_at || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+				const pageRows = rows.slice(0, request.pageSize);
+				const items = pageRows.map((session) => {
+					const task = taskById.get(session.ticket_id);
+					if (!task) throw new Error(`Missing seeded Task for Agent Session ${session.id}`);
+					const workspace = this.services.agentSessionWorkspaces[task.id];
+					return {
+						id: session.id,
+						provider: session.provider,
+						providerSessionId: providerSessionId(session),
+						createdAt: session.created_at,
+						updatedAt: session.updated_at,
+						task: {
+							id: task.id,
+							title: task.title?.trim() || task.id,
+							status: task.status,
+							createdAt: task.created_at,
+							updatedAt: task.updated_at
+						},
+						workspace: workspace ? {
+							rootPath: workspace.rootPath,
+							kind: workspace.kind
+						} : null
+					};
+				});
+				const last = pageRows.at(-1);
+				return {
+					items,
+					nextCursor: rows.length > request.pageSize && last ? encodeAgentSessionCursor({
+						version: 1,
+						createdAt: last.created_at,
+						id: last.id,
+						filters
+					}) : null
+				};
+			} },
 			tasks: {
 				list: async (request) => {
 					const projectId = request?.projectId ?? null;
@@ -2129,4 +2225,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { BrowserSurfaceError, DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_SUPPORTED_API_VERSION, MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, resolveExternalTextFileChunkSize, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { BrowserSurfaceError, DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_AGENT_SESSION_PAGE_SIZE, MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_SUPPORTED_API_VERSION, MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, resolveExternalTextFileChunkSize, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

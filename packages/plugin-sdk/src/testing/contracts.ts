@@ -11,6 +11,8 @@ import type {
   CreateTaskRequest,
   FrontendOpenForgeAPI,
   InjectionPointLocation,
+  AgentSessionWorkspace,
+  ListAgentSessionsRequest,
   ListTaskSessionsRequest,
   JsonValue,
   NotificationRequest,
@@ -70,6 +72,8 @@ export interface TestingOpenForgeApiOptions {
   tasks?: Task[]
   /** Agent Sessions returned by `tasks.listSessions`. Defaults to an empty list. */
   agentSessions?: AgentSession[]
+  /** Compact workspace context keyed by Task ID for `agentSessions.list`. Defaults to none. */
+  agentSessionWorkspaces?: Readonly<Record<string, AgentSessionWorkspace>>
   /** UTF-8 files returned by `fs.external.readTextFileChunks`. Defaults to none. */
   externalTextFiles?: TestingExternalTextFile[]
 }
@@ -90,6 +94,7 @@ export interface TestingOpenForgeApiCalls {
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]
   taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
+  agentSessionListRequests: ListAgentSessionsRequest[]
   taskSessionListRequests: ListTaskSessionsRequest[]
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>

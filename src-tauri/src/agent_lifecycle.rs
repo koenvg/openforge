@@ -136,6 +136,15 @@ pub enum AgentLifecycleEventKind {
     Ended,
 }
 
+const AGENT_SESSION_STATUS_COMPLETED: &str = "completed";
+const AGENT_SESSION_STATUS_FAILED: &str = "failed";
+const AGENT_SESSION_STATUS_INTERRUPTED: &str = "interrupted";
+pub(crate) const TERMINAL_AGENT_SESSION_STATUSES: [&str; 3] = [
+    AGENT_SESSION_STATUS_COMPLETED,
+    AGENT_SESSION_STATUS_FAILED,
+    AGENT_SESSION_STATUS_INTERRUPTED,
+];
+
 /// Provider-agnostic lifecycle notification sent by installed agent adapters.
 ///
 /// This is the seam between provider plugins/extensions/hooks and OpenForge's
@@ -186,18 +195,22 @@ pub(crate) fn lifecycle_status_transition(
             "running",
             &[
                 "started",
-                "completed",
+                AGENT_SESSION_STATUS_COMPLETED,
                 "paused",
-                "failed",
-                "interrupted",
+                AGENT_SESSION_STATUS_FAILED,
+                AGENT_SESSION_STATUS_INTERRUPTED,
                 "running",
             ],
         ),
-        AgentLifecycleEventKind::BecameIdle | AgentLifecycleEventKind::Ended => {
-            ("completed", &["running", "paused", "completed"])
-        }
+        AgentLifecycleEventKind::BecameIdle | AgentLifecycleEventKind::Ended => (
+            AGENT_SESSION_STATUS_COMPLETED,
+            &["running", "paused", AGENT_SESSION_STATUS_COMPLETED],
+        ),
         AgentLifecycleEventKind::RequestedPermission => ("paused", &["running", "paused"]),
-        AgentLifecycleEventKind::Failed => ("failed", &["running", "paused", "failed"]),
+        AgentLifecycleEventKind::Failed => (
+            AGENT_SESSION_STATUS_FAILED,
+            &["running", "paused", AGENT_SESSION_STATUS_FAILED],
+        ),
     }
 }
 

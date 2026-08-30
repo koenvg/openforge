@@ -1,3 +1,4 @@
+mod agent_session_callbacks;
 mod callbacks;
 mod command_callbacks;
 mod filesystem_callbacks;

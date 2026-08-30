@@ -35,6 +35,7 @@ export {
 } from './testing'
 
 export {
+  MAX_AGENT_SESSION_PAGE_SIZE,
   DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
@@ -50,6 +51,13 @@ export {
 } from './types'
 
 export type {
+  AgentSessionCursor,
+  AgentSessionOverlap,
+  AgentSessionsAPI,
+  AgentSessionSummary,
+  AgentSessionSummaryPage,
+  AgentSessionTaskSummary,
+  AgentSessionWorkspace,
   AgentCommandDescriptor,
   AgentCommandMetadata,
   AgentCommandRuntime,
@@ -77,6 +85,7 @@ export type {
   UserDataFileSystemAPI,
   UserDataFileWriteRequest,
   ImplementationRun,
+  ListAgentSessionsRequest,
   ListTaskSessionsRequest,
   InjectionPointLocation,
   JsonObject,

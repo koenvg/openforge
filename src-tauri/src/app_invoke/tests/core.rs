@@ -48,6 +48,56 @@ async fn lists_filtered_agent_sessions_for_a_task() {
         vec!["new-pi"]
     );
 }
+
+#[tokio::test]
+async fn lists_paginated_agent_session_summaries() {
+    let (state, _temp_dir) = test_state("app_invoke_agent_session_list");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Private prompt", "doing", None, None, None)
+            .expect("create Task");
+        db.update_task_title(&task.id, "Historical import")
+            .expect("set Task title");
+        db.create_agent_session(
+            "session-1",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "pi",
+        )
+        .expect("create Agent Session");
+        db.set_agent_session_pi_id("session-1", "pi-session-1")
+            .expect("set provider Agent Session ID");
+        db.connection()
+            .lock()
+            .expect("lock connection")
+            .execute(
+                "UPDATE agent_sessions SET created_at = 110, updated_at = 120 WHERE id = 'session-1'",
+                [],
+            )
+            .expect("set Agent Session timestamps");
+        task.id
+    };
+
+    let page = invoke_ok(
+        &state,
+        "list_agent_sessions",
+        json!({
+            "provider": "pi",
+            "overlaps": { "startInclusive": 100, "endExclusive": 200 },
+            "taskId": task_id,
+            "pageSize": 100,
+        }),
+    )
+    .await;
+
+    assert_eq!(page["items"][0]["id"], "session-1");
+    assert_eq!(page["items"][0]["providerSessionId"], "pi-session-1");
+    assert_eq!(page["items"][0]["task"]["title"], "Historical import");
+    assert_eq!(page["nextCursor"], serde_json::Value::Null);
+}
 #[tokio::test]
 async fn handles_config_projects_tasks_and_unmatched_commands() {
     let (state, _temp_dir) = test_state("app_invoke_config_projects_tasks");

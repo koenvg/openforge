@@ -1,4 +1,8 @@
 import {
+  type AgentSessionSummary,
+  type AgentSessionSummaryPage,
+  type AgentSessionsAPI,
+  type ListAgentSessionsRequest,
   OPENFORGE_PLUGIN_API_VERSION,
   type AgentCommandMetadata,
   type CommandRegistration,
@@ -49,6 +53,33 @@ const tasks = null as unknown as TasksAPI
 // @ts-expect-error The host no longer exposes the legacy handoff-summary mutation.
 void tasks.updateSummary('KVG-3423', 'obsolete handoff')
 
+const listAgentSessionsRequest = {
+  provider: 'pi',
+  overlaps: { startInclusive: 1_775_174_400, endExclusive: 1_777_852_800 },
+  taskId: 'KVG-3423',
+  pageSize: 100,
+} satisfies ListAgentSessionsRequest
+const agentSessionSummary = {
+  id: 'session-1',
+  provider: 'pi',
+  providerSessionId: 'pi-session-1',
+  createdAt: 1_775_174_400,
+  updatedAt: 1_775_174_500,
+  task: {
+    id: 'KVG-3423',
+    title: 'Contract fixture',
+    status: 'doing',
+    createdAt: 1_775_174_300,
+    updatedAt: 1_775_174_600,
+  },
+  workspace: { rootPath: '/repo', kind: 'project' },
+} satisfies AgentSessionSummary
+const agentSessions = null as unknown as AgentSessionsAPI
+const agentSessionPage: Promise<AgentSessionSummaryPage> = agentSessions.list(listAgentSessionsRequest)
+void agentSessionPage
+// @ts-expect-error Compact Agent Session summaries never expose Task prompts.
+void agentSessionSummary.prompt
+
 const appPackageMetadata = {
   id: 'contract-fixture',
   apiVersion: 1,
@@ -65,6 +96,8 @@ const registry = createOpenForgeRegistryFake({
   taskId: invocation.taskId,
   packageMetadata: appPackageMetadata,
 })
+void registry.frontendApi.agentSessions.list(listAgentSessionsRequest)
+void registry.backendApi.agentSessions.list(listAgentSessionsRequest)
 void registry.backendApi.commands.register(registration)
 void registry.backendApi.fs.external.stat({ root: '/collector', path: 'events.jsonl' })
 void registry.backendApi.fs.external.readTextFileChunks({

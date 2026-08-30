@@ -1665,6 +1665,31 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    M::up_with_hook("", |tx| {
+        let can_index: bool = tx
+            .query_row(
+                "SELECT COUNT(*) = 6
+                   FROM pragma_table_info('agent_sessions')
+                  WHERE name IN ('id', 'ticket_id', 'status', 'created_at', 'updated_at', 'provider')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if can_index {
+            tx.execute(
+                "DROP INDEX IF EXISTS idx_agent_sessions_usage_candidates",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_sessions_list
+                 ON agent_sessions(provider, created_at, id, ticket_id, status, updated_at)",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2282,6 +2307,7 @@ mod tests {
         PluginStorageScopedKeyMigration,
         AgentSessionPtyInstanceBackfill,
         SelfReviewCommentsRemoval,
+        AgentSessionListIndex,
     }
 
     impl MigrationBoundary {
@@ -2296,6 +2322,7 @@ mod tests {
                 Self::PluginStorageScopedKeyMigration => 25,
                 Self::AgentSessionPtyInstanceBackfill => 26,
                 Self::SelfReviewCommentsRemoval => 52,
+                Self::AgentSessionListIndex => 54,
             }
         }
     }
@@ -3935,5 +3962,75 @@ mod tests {
             !table_exists,
             "upgrade must delete stored general self-review comments"
         );
+    }
+
+    #[test]
+    fn fresh_database_indexes_provider_sessions_for_agent_session_list_queries() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let index_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_agent_sessions_list'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check Agent Session list index");
+        let candidate_index_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_agent_sessions_usage_candidates'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check obsolete usage candidate index");
+
+        assert!(index_exists);
+        assert!(!candidate_index_exists);
+    }
+
+    #[test]
+    fn upgrade_replaces_usage_candidate_index_with_agent_session_list_index() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            drop(db);
+            let conn = Connection::open(&path).expect("open pre-upgrade database");
+            conn.execute("DROP INDEX IF EXISTS idx_agent_sessions_list", [])
+                .expect("drop current Agent Session list index");
+            conn.execute(
+                "CREATE INDEX idx_agent_sessions_usage_candidates
+                 ON agent_sessions(provider, ticket_id, created_at, id)",
+                [],
+            )
+            .expect("create obsolete usage candidate index");
+            set_user_version_before(&conn, MigrationBoundary::AgentSessionListIndex);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+        let new_index_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_agent_sessions_list'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check upgraded Agent Session list index");
+        let old_index_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_agent_sessions_usage_candidates'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check removed usage candidate index");
+
+        assert!(new_index_exists);
+        assert!(!old_index_exists);
     }
 }
