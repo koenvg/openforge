@@ -567,6 +567,75 @@ async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_s
 }
 
 #[tokio::test]
+async fn refresh_task_display_title_serializes_in_flight_work_for_one_task() {
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_serialized");
+    let task = db
+        .create_task("Vague title", "doing", None, None, None)
+        .expect("create task");
+    let db = Arc::new(Mutex::new(db));
+    let first_started = Arc::new(tokio::sync::Notify::new());
+    let release_first = Arc::new(tokio::sync::Notify::new());
+    let second_started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let first_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some("first snapshot".to_string()),
+    );
+    let first_refresh = tokio::spawn(refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        first_queued,
+        Duration::ZERO,
+        {
+            let first_started = Arc::clone(&first_started);
+            let release_first = Arc::clone(&release_first);
+            move |_job, _prompt| async move {
+                first_started.notify_one();
+                release_first.notified().await;
+                Ok(Some("Superseded Title".to_string()))
+            }
+        },
+    ));
+    first_started.notified().await;
+
+    let second_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some("second snapshot".to_string()),
+    );
+    let second_refresh = tokio::spawn(refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        second_queued,
+        Duration::ZERO,
+        {
+            let second_started = Arc::clone(&second_started);
+            move |_job, _prompt| async move {
+                second_started.store(true, std::sync::atomic::Ordering::Release);
+                Ok(Some("Serialized Title".to_string()))
+            }
+        },
+    ));
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(
+        !second_started.load(std::sync::atomic::Ordering::Acquire),
+        "newer metadata work must wait for the in-flight provider"
+    );
+    release_first.notify_one();
+
+    assert!(!first_refresh
+        .await
+        .expect("first task")
+        .expect("first refresh"));
+    assert!(second_refresh
+        .await
+        .expect("second task")
+        .expect("second refresh"));
+}
+
+#[tokio::test]
 async fn refresh_task_display_title_with_ai_once_skips_in_flight_title_when_newer_snapshot_arrives()
 {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_in_flight_superseded");

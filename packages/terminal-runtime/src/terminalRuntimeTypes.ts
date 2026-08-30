@@ -1,6 +1,6 @@
 import type {
   TerminalModelOutputEvent,
-  TerminalTransportDisposable,
+  TerminalSessionTransportSubscription,
 } from './terminalTransport'
 import type { TerminalView, TerminalViewDisposable } from './terminalView'
 import type { Readable } from 'svelte/store'
@@ -29,12 +29,13 @@ export interface PoolEntry {
   ptyActive: boolean
   needsClear: boolean
   shellExited: boolean
-  transportSubscription: TerminalTransportDisposable | null
+  transportSubscription: TerminalSessionTransportSubscription | null
   viewSubscriptions: TerminalViewDisposable[]
   resizeObserver: ResizeObserver | null
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
   attached: boolean
+  viewNeedsRecovery: boolean
   attachmentGeneration: number
   spawnPending: boolean
   currentPtyInstance: number | null

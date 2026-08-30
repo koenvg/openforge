@@ -1,5 +1,9 @@
-import { createHost } from './terminalRuntimeHost.testSupport'
 import {
+  attachTestTerminal,
+  createHost,
+} from './terminalRuntimeHost.testSupport'
+import {
+  createListenerRegistrationFailureSupport,
   resetTerminalRuntimeMocks,
   terminalMocks,
 } from './terminalRuntimeFeatures.testSupport'
@@ -107,6 +111,7 @@ describe('terminal runtime attachment', () => {
     try {
       const entry = await runtime.acquire('T-1-shell-0')
       const attachment = runtime.attach(entry, document.createElement('div'))
+      await vi.waitFor(() => expect(animationFrames.frames.size).toBe(1))
 
       for (let attempt = 0; attempt < 500 && animationFrames.frames.size > 0; attempt += 1) {
         animationFrames.runNextFrame()
@@ -136,6 +141,7 @@ describe('terminal runtime attachment', () => {
     try {
       const entry = await runtime.acquire('T-1-shell-0')
       const attachment = runtime.attach(entry, document.createElement('div'))
+      await vi.waitFor(() => expect(animationFrames.frames.size).toBe(1))
       expect(animationFrames.frames.size).toBe(1)
 
       runtime.detach(entry)
@@ -151,6 +157,53 @@ describe('terminal runtime attachment', () => {
     }
   })
 
+  it('parses model output only while a view is attached and restores detached output from authority', async () => {
+    const terminalKey = 'T-offscreen-shell-0'
+    const host = createHost()
+    host.setBuffer(terminalKey, 'initial snapshot')
+    const runtime = createTerminalRuntime(host)
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
+    vi.stubGlobal('ResizeObserver', class { observe() {}; disconnect() {}; unobserve() {} })
+    vi.stubGlobal('IntersectionObserver', class {
+      observe() {}; disconnect() {}; unobserve() {}; takeRecords() { return [] }
+      readonly root = null
+      readonly rootMargin = ''
+      readonly thresholds = [0]
+    })
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
+
+    try {
+      const entry = await runtime.acquire(terminalKey)
+      const terminal = terminalMocks.instances[0]
+      expect(terminal.write).toHaveBeenCalledOnce()
+      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+
+      const wrapper = document.createElement('div')
+      await runtime.attach(entry, wrapper)
+      expect(terminal.write).toHaveBeenCalledTimes(2)
+      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+
+      runtime.detach(entry)
+      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+      host.emit(`pty-model-output-${terminalKey}`, {
+        instance_id: 1,
+        sequence: 1,
+        data: btoa('detached output'),
+      })
+      expect(terminal.write).toHaveBeenCalledTimes(2)
+
+      host.setBuffer(terminalKey, 'authoritative detached output')
+      await runtime.attach(entry, wrapper)
+      expect(terminal.write).toHaveBeenCalledTimes(3)
+      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    } finally {
+      runtime.release(terminalKey)
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('cancels a pending initial-fit frame when disposed', async () => {
     const host = createHost()
     const view = createFakeTerminalView({ fit: vi.fn(() => null) })
@@ -161,6 +214,7 @@ describe('terminal runtime attachment', () => {
     try {
       const entry = await runtime.acquire('T-1-shell-0')
       const attachment = runtime.attach(entry, document.createElement('div'))
+      await vi.waitFor(() => expect(animationFrames.frames.size).toBe(1))
       expect(animationFrames.frames.size).toBe(1)
 
       runtime.dispose()
@@ -174,5 +228,71 @@ describe('terminal runtime attachment', () => {
       vi.restoreAllMocks()
       vi.unstubAllGlobals()
     }
+  })
+
+  it('rereads terminal authority when the first attachment follows unseen output', async () => {
+    const terminalKey = 'T-first-attach-shell-0'
+    const host = createHost()
+    host.setBuffer(terminalKey, 'acquisition snapshot')
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+
+    host.setBuffer(terminalKey, 'output before first attachment')
+    await attachTestTerminal(runtime, entry)
+
+    expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
+      Uint8Array.from(new TextEncoder().encode('output before first attachment')),
+    )
+    runtime.release(terminalKey)
+  })
+
+  it('keeps recovery pending when detachment races an authority read', async () => {
+    const terminalKey = 'T-detach-during-recovery-shell-0'
+    const host = createHost()
+    host.setBuffer(terminalKey, 'initial')
+    const reads = vi.spyOn(host, 'getPtyBuffer')
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+    const resumeRead = host.deferBufferRead(terminalKey)
+
+    const pendingAttachment = attachTestTerminal(runtime, entry)
+    await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
+    runtime.detach(entry)
+    resumeRead()
+    await pendingAttachment
+
+    expect(entry.attached).toBe(false)
+    expect(entry.viewNeedsRecovery).toBe(true)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+
+    host.setBuffer(terminalKey, 'output after raced detach')
+    await attachTestTerminal(runtime, entry)
+    expect(entry.viewNeedsRecovery).toBe(false)
+    expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
+      Uint8Array.from(new TextEncoder().encode('output after raced detach')),
+    )
+    runtime.release(terminalKey)
+  })
+
+
+  it('rolls back a failed live-output subscription and retries attachment cleanly', async () => {
+    const terminalKey = 'T-subscription-shell-0'
+    const listenerRegistrationFailures = createListenerRegistrationFailureSupport()
+    const host = createHost({ listenerRegistrationFailures })
+    host.setBuffer(terminalKey, 'snapshot')
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+    listenerRegistrationFailures.failNext(`pty-model-output-${terminalKey}`)
+
+    await expect(attachTestTerminal(runtime, entry)).rejects.toThrow(
+      `listener registration failed: pty-model-output-${terminalKey}`,
+    )
+    expect(entry.attached).toBe(false)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+
+    await attachTestTerminal(runtime, entry)
+    expect(entry.attached).toBe(true)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    runtime.release(terminalKey)
   })
 })

@@ -1,5 +1,6 @@
 import type {
   TerminalSessionTransportHandlers,
+  TerminalSessionTransportSubscription,
   TerminalTransport,
   TerminalTransportDisposable,
 } from '@openforge-app/terminal-runtime'
@@ -16,6 +17,7 @@ interface DesktopPtyExitPayload {
 interface DesktopTerminalModelOutputPayload {
   data: string
   instance_id: number
+  start_sequence?: number
   sequence: number
 }
 
@@ -78,32 +80,73 @@ export function createDesktopTerminalTransport(
   async function subscribeSession(
     shellSessionKey: string,
     handlers: TerminalSessionTransportHandlers,
-  ): Promise<TerminalTransportDisposable> {
+  ): Promise<TerminalSessionTransportSubscription> {
     ensureActive()
-    const unlisteners: Array<() => void> = []
+    const lifecycleUnlisteners: Array<() => void> = []
+    let modelOutputUnlisten: (() => void) | null = null
+    let modelOutputRegistration: Promise<void> | null = null
+    let modelOutputDesired = false
+    let active = true
     try {
-      unlisteners.push(await port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
-        const payload = event.payload as DesktopTerminalModelOutputPayload
-        handlers.onModelOutput({
-          data: decodeBase64(payload.data),
-          ptyInstanceId: payload.instance_id,
-          sequence: payload.sequence,
-        })
-      }))
-      unlisteners.push(await port.listenEvent(`pty-model-disabled-${shellSessionKey}`, (event) => {
+      lifecycleUnlisteners.push(await port.listenEvent(`pty-model-disabled-${shellSessionKey}`, (event) => {
         const payload = event.payload as DesktopTerminalModelDisabledPayload
         handlers.onModelDisabled({ ptyInstanceId: payload.instance_id })
       }))
-      unlisteners.push(await port.listenEvent(`pty-exit-${shellSessionKey}`, (event) => {
+      lifecycleUnlisteners.push(await port.listenEvent(`pty-exit-${shellSessionKey}`, (event) => {
         const payload = event.payload as DesktopPtyExitPayload
         handlers.onExit({ ptyInstanceId: payload.instance_id })
       }))
       ensureActive()
-      return track(() => {
-        for (const unlisten of unlisteners.reverse()) unlisten()
-      })
+      const subscription: TerminalSessionTransportSubscription = {
+        async setModelOutputEnabled(enabled) {
+          ensureActive()
+          if (!active) throw new Error('Desktop terminal session subscription is disposed')
+          modelOutputDesired = enabled
+          if (!enabled) {
+            modelOutputUnlisten?.()
+            modelOutputUnlisten = null
+            await modelOutputRegistration
+            return
+          }
+          if (modelOutputUnlisten) return
+          if (modelOutputRegistration) return modelOutputRegistration
+
+          const registration = port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
+            const payload = event.payload as DesktopTerminalModelOutputPayload
+            handlers.onModelOutput({
+              data: decodeBase64(payload.data),
+              ptyInstanceId: payload.instance_id,
+              startSequence: payload.start_sequence ?? payload.sequence,
+              sequence: payload.sequence,
+            })
+          }).then((unlisten) => {
+            if (!active || disposed || !modelOutputDesired) {
+              unlisten()
+              return
+            }
+            modelOutputUnlisten = unlisten
+          })
+          modelOutputRegistration = registration
+          try {
+            await registration
+          } finally {
+            if (modelOutputRegistration === registration) modelOutputRegistration = null
+          }
+        },
+        dispose() {
+          if (!active) return
+          active = false
+          activeSubscriptions.delete(subscription)
+          modelOutputDesired = false
+          modelOutputUnlisten?.()
+          modelOutputUnlisten = null
+          for (const unlisten of lifecycleUnlisteners.reverse()) unlisten()
+        },
+      }
+      activeSubscriptions.add(subscription)
+      return subscription
     } catch (error) {
-      for (const unlisten of unlisteners.reverse()) unlisten()
+      for (const unlisten of lifecycleUnlisteners.reverse()) unlisten()
       throw error
     }
   }

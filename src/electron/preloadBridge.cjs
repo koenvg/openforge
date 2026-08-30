@@ -1,5 +1,6 @@
 const OPENFORGE_INVOKE_CHANNEL = 'openforge:invoke'
 const OPENFORGE_EVENT_CHANNEL = 'openforge:event'
+const OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL = 'openforge:event-subscription'
 const OPENFORGE_APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 function isEventEnvelope(value) {
@@ -50,6 +51,7 @@ function createOpenForgePreloadApi(ipcRenderer) {
     },
     onEvent(eventName, handler) {
       let handlers = eventHandlers.get(eventName)
+      const isFirstHandler = !handlers
       if (!handlers) {
         handlers = []
         eventHandlers.set(eventName, handlers)
@@ -57,6 +59,9 @@ function createOpenForgePreloadApi(ipcRenderer) {
 
       handlers.push(handler)
       registerOpenForgeEventListener()
+      if (isFirstHandler) {
+        ipcRenderer.send?.(OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, { action: 'subscribe', eventName })
+      }
 
       return () => {
         const currentHandlers = eventHandlers.get(eventName)
@@ -68,6 +73,7 @@ function createOpenForgePreloadApi(ipcRenderer) {
         currentHandlers.splice(handlerIndex, 1)
         if (currentHandlers.length === 0) {
           eventHandlers.delete(eventName)
+          ipcRenderer.send?.(OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, { action: 'unsubscribe', eventName })
         }
         unregisterOpenForgeEventListenerIfIdle()
       }

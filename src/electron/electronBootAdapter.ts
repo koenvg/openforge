@@ -32,6 +32,7 @@ import { FrontendHostRequestRelay } from './frontendHostRequestRelay.js'
 import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
 import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createAppEventForwarder } from './eventForwarder.js'
+import { OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, RendererEventSubscriptions } from './rendererEventSubscriptions.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
 import { configureElectronUserDataPath } from './runtimePaths.js'
 import {
@@ -82,6 +83,7 @@ function shouldDrainTaskBrowserSessionPurges(envelope: SidecarEventEnvelopeLike)
 export function createElectronBootAdapter(options: ElectronBootAdapterOptions): BootLifecycleAdapter {
   let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
   const rendererTrustAdapter = new ElectronRendererTrustAdapter()
+  const rendererEventSubscriptions = new RendererEventSubscriptions()
   let backendInvokeContext: BootBackendInvokeContext | null = null
   let mainRendererWindow: BrowserWindow | null = null
 
@@ -215,6 +217,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     window.on('resize', updateTaskBrowserWindowBounds)
     window.on('closed', () => {
       taskBrowserSurfaceManager.unregisterWindow(window.id)
+      rendererEventSubscriptions.clear(mainWebContentsId)
       if (mainRendererWindow === window) mainRendererWindow = null
       void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
@@ -223,6 +226,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)
     const mainWebContentsId = window.webContents.id
     window.webContents.on('render-process-gone', () => {
+      rendererEventSubscriptions.clear(mainWebContentsId)
       void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
     window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -251,6 +255,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     registerBackendInvokeHandler(context: BootBackendInvokeContext): void {
       backendInvokeContext = context
+      ipcMain.on(OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, (event, request: unknown) => {
+        if (event.sender.id !== mainRendererWindow?.webContents.id) return
+        rendererEventSubscriptions.update(event.sender.id, request)
+      })
       ipcMain.handle('openforge:invoke', async (event, request: unknown) => {
         const typedRequest = request as { command?: unknown; payload?: unknown }
         if (typedRequest.command === FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND) {
@@ -339,7 +347,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
                 void taskBrowserSessionPurgeCoordinator.drain()
               }
             },
-            windows: () => BrowserWindow.getAllWindows(),
+            windows: envelope => BrowserWindow.getAllWindows().filter(window => (
+              rendererEventSubscriptions.has(window.webContents.id, envelope.eventName)
+            )),
             failureReporter: options.failureReporter,
           })
           return {

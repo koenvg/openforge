@@ -2,7 +2,10 @@ import { parsePtySessionKey } from './ptySessionKey'
 import { terminalLogMessage } from './terminalLogging'
 import type { TerminalFontReadiness } from './terminalOptions'
 import { createTerminalStateView } from './terminalStateView'
-import type { TerminalTransport, TerminalTransportDisposable } from './terminalTransport'
+import type {
+  TerminalSessionTransportSubscription,
+  TerminalTransport,
+} from './terminalTransport'
 import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
 interface TerminalAcquisitionOperation {
@@ -88,7 +91,7 @@ export function createTerminalAcquisition({
   async function retainSessionSubscription(
     operation: TerminalAcquisitionOperation,
     entry: PoolEntry,
-    registration: Promise<TerminalTransportDisposable>,
+    registration: Promise<TerminalSessionTransportSubscription>,
   ): Promise<boolean> {
     const subscription = await registration
     if (operation.released) {
@@ -124,6 +127,7 @@ export function createTerminalAcquisition({
     if (!subscriptionRetained || disposeReleasedAcquisition(operation)) return entry
 
     await terminalStateView.recover(entry, false)
+    entry.viewNeedsRecovery = true
     if (disposeReleasedAcquisition(operation)) return entry
 
     attachAgentTerminalKeyHandler(entry)

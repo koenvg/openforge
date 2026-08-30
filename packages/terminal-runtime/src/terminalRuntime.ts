@@ -23,6 +23,7 @@ export type {
   TerminalReplay,
   TerminalSnapshot,
   TerminalSessionTransportHandlers,
+  TerminalSessionTransportSubscription,
   TerminalTransport,
   TerminalTransportDisposable,
 } from './terminalTransport'
@@ -65,7 +66,12 @@ export function createTerminalRuntime({
 }: TerminalRuntimeOptions) {
   const activeThemeMode = environment.themeMode ?? defaultThemeMode
   const pool = new Map<string, PoolEntry>()
-  const attachments = createTerminalAttachmentController(transport, environment)
+  let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
+  const attachments = createTerminalAttachmentController(
+    transport,
+    environment,
+    entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
+  )
   const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key))
 
   function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
@@ -92,6 +98,7 @@ export function createTerminalRuntime({
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      viewNeedsRecovery: false,
       attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,
@@ -137,7 +144,6 @@ export function createTerminalRuntime({
     entry.view.dispose()
   }
 
-  let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
   const reconnectReplay = createTerminalReconnectReplay({
     transport,
     environment,

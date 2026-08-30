@@ -28,7 +28,7 @@ export type AppEventFetch = (url: string, init: { headers: Record<string, string
 export interface AppEventForwarderDeps {
   sidecarConfig: SidecarLaunchConfig
   fetch: AppEventFetch
-  windows: () => readonly BrowserWindowLike[]
+  windows: (envelope: OpenForgeEventEnvelope) => readonly BrowserWindowLike[]
   sleep?: (ms: number) => Promise<void>
   reconnectDelayMs?: number
   onEvent?: (envelope: OpenForgeEventEnvelope) => boolean | void
@@ -117,7 +117,7 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
       lastEventId = envelope.id
     }
     if (deps.onEvent?.(envelope) === false) return
-    for (const window of deps.windows()) {
+    for (const window of deps.windows(envelope)) {
       window.webContents.send(OPENFORGE_EVENT_CHANNEL, envelope)
     }
   }

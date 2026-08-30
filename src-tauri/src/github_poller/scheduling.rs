@@ -334,16 +334,18 @@ pub(super) fn poll_scheduler_snapshot(
     rate_limit_reset_at: Option<i64>,
     global_review_due: bool,
 ) -> PollSchedulerSnapshot {
-    let projects = {
+    let scheduler_source = {
         let db_lock = acquire_db(db);
-        db_lock.get_all_projects()
+        db_lock
+            .get_all_projects()
+            .and_then(|projects| db_lock.get_open_prs().map(|open_prs| (projects, open_prs)))
     };
 
-    let linked_prs = match projects {
-        Ok(projects) => projects
+    let linked_prs = match scheduler_source {
+        Ok((projects, open_prs)) => projects
             .into_iter()
-            .flat_map(
-                |project| match get_scheduled_prs_for_project(db, &project.id) {
+            .flat_map(|project| {
+                match scheduled_prs_for_project_from_open_prs(db, &project.id, &open_prs) {
                     Ok(prs) => prs,
                     Err(e) => {
                         warn!(
@@ -352,8 +354,8 @@ pub(super) fn poll_scheduler_snapshot(
                         );
                         Vec::new()
                     }
-                },
-            )
+                }
+            })
             .collect(),
         Err(e) => {
             warn!(
@@ -376,9 +378,19 @@ pub(super) fn get_scheduled_prs_for_project(
     db: &Mutex<Database>,
     project_id: &str,
 ) -> Result<Vec<ScheduledPr>, String> {
-    let db_lock = acquire_db(db);
-    let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
+    let open_prs = {
+        let db_lock = acquire_db(db);
+        db_lock.get_open_prs().map_err(|e| e.to_string())?
+    };
+    scheduled_prs_for_project_from_open_prs(db, project_id, &open_prs)
+}
 
+fn scheduled_prs_for_project_from_open_prs(
+    db: &Mutex<Database>,
+    project_id: &str,
+    open_prs: &[PrRow],
+) -> Result<Vec<ScheduledPr>, String> {
+    let db_lock = acquire_db(db);
     let tasks = db_lock
         .get_tasks_for_project(project_id)
         .map_err(|e| e.to_string())?;
@@ -403,13 +415,13 @@ pub(super) fn get_scheduled_prs_for_project(
         })
         .collect();
 
-    Ok(all_open_prs
-        .into_iter()
+    Ok(open_prs
+        .iter()
         .filter_map(|pr| {
             task_statuses
                 .get(&pr.ticket_id)
                 .map(|(status, out_of_focus)| ScheduledPr {
-                    pr,
+                    pr: pr.clone(),
                     project_id: project_id.to_string(),
                     task_status: status.clone(),
                     out_of_focus: *out_of_focus,

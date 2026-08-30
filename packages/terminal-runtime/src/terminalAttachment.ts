@@ -42,6 +42,7 @@ function refreshAndFocus(entry: PoolEntry): void {
 export function createTerminalAttachmentController(
   transport: TerminalTransport,
   environment: TerminalRuntimeEnvironment,
+  recoverEntry: (entry: PoolEntry) => Promise<void>,
 ) {
   const pendingInitialFits = new WeakMap<PoolEntry, Set<() => void>>()
 
@@ -136,6 +137,15 @@ export function createTerminalAttachmentController(
     }
   }
 
+  async function retireStaleAttachment(entry: PoolEntry, generation: number): Promise<boolean> {
+    if (entry.attached && entry.attachmentGeneration === generation) return false
+    if (entry.attachmentGeneration === generation) {
+      await entry.transportSubscription?.setModelOutputEnabled(false)
+    }
+    if (!entry.attached) entry.viewNeedsRecovery = true
+    return true
+  }
+
   async function attach(
     entry: PoolEntry,
     wrapperEl: HTMLDivElement,
@@ -149,6 +159,19 @@ export function createTerminalAttachmentController(
     const generation = entry.attachmentGeneration
     entry.view.mount(wrapperEl)
     entry.attached = true
+    try {
+      await entry.transportSubscription?.setModelOutputEnabled(true)
+      if (await retireStaleAttachment(entry, generation)) {
+        return createAttachment(entry, generation)
+      }
+      if (entry.viewNeedsRecovery) await recoverEntry(entry)
+      if (await retireStaleAttachment(entry, generation)) {
+        return createAttachment(entry, generation)
+      }
+    } catch (error) {
+      detach(entry, generation)
+      throw error
+    }
     if (!entry.resizeObserver) {
       entry.resizeObserver = new ResizeObserver((entries) => {
         const { width, height } = entries[0].contentRect
@@ -200,6 +223,10 @@ export function createTerminalAttachmentController(
     entry.resizeObserver = null
     entry.visibilityObserver?.disconnect()
     entry.visibilityObserver = null
+    void entry.transportSubscription?.setModelOutputEnabled(false).catch(error => {
+      console.warn(terminalLogMessage(environment.loggerName, 'Failed to pause detached terminal output:'), error)
+    })
+    entry.viewNeedsRecovery = true
     entry.view.unmount()
     entry.attached = false
   }
