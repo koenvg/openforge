@@ -559,7 +559,8 @@ describe('TaskTerminal', () => {
       resolveAttach = () => {
         mockPoolEntry.view.geometry.cols = 132
         mockPoolEntry.view.geometry.rows = 40
-        const detach = vi.fn()
+        mockPoolEntry.attached = true
+        const detach = vi.fn(() => { mockPoolEntry.attached = false })
         attachmentDetaches.push(detach)
         resolve({ generation: attachmentDetaches.length, detach })
       }
@@ -586,7 +587,8 @@ describe('TaskTerminal', () => {
     let resolveAttach!: () => void
     const attachPromise = new Promise<TerminalViewAttachment>((resolve) => {
       resolveAttach = () => {
-        const detach = vi.fn()
+        mockPoolEntry.attached = true
+        const detach = vi.fn(() => { mockPoolEntry.attached = false })
         attachmentDetaches.push(detach)
         resolve({ generation: attachmentDetaches.length, detach })
       }
