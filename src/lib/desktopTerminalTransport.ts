@@ -1,8 +1,9 @@
-import type {
-  TerminalSessionTransportHandlers,
-  TerminalSessionTransportSubscription,
-  TerminalTransport,
-  TerminalTransportDisposable,
+import {
+  createLiveModelOutputSubscriptionLifecycle,
+  type TerminalSessionTransportHandlers,
+  type TerminalSessionTransportSubscription,
+  type TerminalTransport,
+  type TerminalTransportDisposable,
 } from '@openforge-app/terminal-runtime'
 
 interface DesktopTerminalEvent<TPayload> {
@@ -83,9 +84,19 @@ export function createDesktopTerminalTransport(
   ): Promise<TerminalSessionTransportSubscription> {
     ensureActive()
     const lifecycleUnlisteners: Array<() => void> = []
-    let modelOutputUnlisten: (() => void) | null = null
-    let modelOutputRegistration: Promise<void> | null = null
-    let modelOutputDesired = false
+    const modelOutputLifecycle = createLiveModelOutputSubscriptionLifecycle({
+      register: () => port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
+        const payload = event.payload as DesktopTerminalModelOutputPayload
+        handlers.onModelOutput({
+          data: decodeBase64(payload.data),
+          ptyInstanceId: payload.instance_id,
+          startSequence: payload.start_sequence ?? payload.sequence,
+          sequence: payload.sequence,
+        })
+      }),
+      dispose: unlisten => unlisten(),
+      disposedErrorMessage: 'Desktop terminal session subscription is disposed',
+    })
     let active = true
     try {
       lifecycleUnlisteners.push(await port.listenEvent(`pty-model-disabled-${shellSessionKey}`, (event) => {
@@ -100,46 +111,13 @@ export function createDesktopTerminalTransport(
       const subscription: TerminalSessionTransportSubscription = {
         async setModelOutputEnabled(enabled) {
           ensureActive()
-          if (!active) throw new Error('Desktop terminal session subscription is disposed')
-          modelOutputDesired = enabled
-          if (!enabled) {
-            modelOutputUnlisten?.()
-            modelOutputUnlisten = null
-            await modelOutputRegistration
-            return
-          }
-          if (modelOutputUnlisten) return
-          if (modelOutputRegistration) return modelOutputRegistration
-
-          const registration = port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
-            const payload = event.payload as DesktopTerminalModelOutputPayload
-            handlers.onModelOutput({
-              data: decodeBase64(payload.data),
-              ptyInstanceId: payload.instance_id,
-              startSequence: payload.start_sequence ?? payload.sequence,
-              sequence: payload.sequence,
-            })
-          }).then((unlisten) => {
-            if (!active || disposed || !modelOutputDesired) {
-              unlisten()
-              return
-            }
-            modelOutputUnlisten = unlisten
-          })
-          modelOutputRegistration = registration
-          try {
-            await registration
-          } finally {
-            if (modelOutputRegistration === registration) modelOutputRegistration = null
-          }
+          await modelOutputLifecycle.setEnabled(enabled)
         },
         dispose() {
           if (!active) return
           active = false
           activeSubscriptions.delete(subscription)
-          modelOutputDesired = false
-          modelOutputUnlisten?.()
-          modelOutputUnlisten = null
+          modelOutputLifecycle.dispose()
           for (const unlisten of lifecycleUnlisteners.reverse()) unlisten()
         },
       }

@@ -198,6 +198,40 @@ function stubAttachmentObservers(): void {
   })
 }
 
+describe('desktop TerminalTransport async registration', () => {
+  it('releases a model-output listener that finishes registering after transport disposal', async () => {
+    let resolveModelOutputRegistration!: (unlisten: () => void) => void
+    const modelOutputUnlisten = vi.fn()
+    const port = {
+      listenEvent: vi.fn((
+        eventName: string,
+        _handler: (event: { payload: unknown }) => void,
+      ): Promise<() => void> => {
+        if (eventName.startsWith('pty-model-output-')) {
+          return new Promise(resolve => { resolveModelOutputRegistration = resolve })
+        }
+        return Promise.resolve(vi.fn())
+      }),
+      getPtyBuffer: vi.fn(async () => ({ buffer: null, isLive: true, instanceId: 7 })),
+      writePty: vi.fn(async () => undefined),
+      resizePty: vi.fn(async () => undefined),
+    }
+    const transport = createDesktopTerminalTransport(port)
+    const subscription = await transport.subscribeSession('T-1-shell-2', {
+      onModelOutput: vi.fn(),
+      onModelDisabled: vi.fn(),
+      onExit: vi.fn(),
+    })
+
+    const enabling = subscription.setModelOutputEnabled(true)
+    transport.dispose()
+    resolveModelOutputRegistration(modelOutputUnlisten)
+
+    await enabling
+    expect(modelOutputUnlisten).toHaveBeenCalledOnce()
+  })
+})
+
 describe.each([
   ['desktop', createDesktopHarness],
   ['Trusted Plugin', createTrustedPluginHarness],
@@ -237,6 +271,41 @@ describe.each([
     })
     expect(entry.currentPtyInstance).toBe(9)
     expect(entry.terminalModelSequence).toBe(4)
+  })
+
+  it('pauses live model output while detached and restores it after reattachment', async () => {
+    stubAttachmentObservers()
+    const harness = createHarness()
+    const view = createFakeTerminalView()
+    const writeLive = vi.spyOn(view, 'writeLive')
+    const runtime = createTerminalRuntime({
+      transport: harness.transport,
+      environment: { openLink: vi.fn(async () => undefined) },
+      createTerminalView: () => view,
+    })
+    const entry = await runtime.acquire('T-1-shell-2')
+    const firstContainer = document.createElement('div')
+    const secondContainer = document.createElement('div')
+
+    await runtime.attach(entry, firstContainer)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
+
+    runtime.detach(entry)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
+    const writesBeforeDetachedOutput = writeLive.mock.calls.length
+    harness.emitModelOutput('T-1-shell-2', 'detached output', 7, 1)
+    expect(writeLive).toHaveBeenCalledTimes(writesBeforeDetachedOutput)
+
+    await runtime.attach(entry, secondContainer)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
+    harness.emitModelOutput('T-1-shell-2', 'reattached output', 7, 1)
+    expect(writeLive).toHaveBeenLastCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('reattached output')),
+      ptyInstanceId: 7,
+      sequence: 1,
+    })
+
+    runtime.dispose()
   })
 
   it('rolls back a partially registered session subscription and retries cleanly', async () => {
