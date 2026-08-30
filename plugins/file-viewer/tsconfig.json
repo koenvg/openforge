@@ -13,6 +13,7 @@
       "@openforge-app/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
       "@openforge-app/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
       "@openforge-app/plugin-sdk/domain": ["../../packages/plugin-sdk/src/domain.ts"],
+      "@openforge-app/plugin-sdk/markdown": ["../../packages/plugin-sdk/src/markdown.ts"],
       "@openforge-app/plugin-sdk/projectFileTree": ["../../packages/plugin-sdk/src/projectFileTree.ts"]
     }
   },
