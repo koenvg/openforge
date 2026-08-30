@@ -15,6 +15,7 @@
     reviewed: boolean
     pendingCommentCount: number
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    onCopyFilePath?: (filename: string) => void
     onToggleCollapse: () => void
     onSetRichDiffActive: (active: boolean) => void
     onReviewedChange?: (reviewed: boolean) => void
@@ -42,6 +43,7 @@
     pendingComments,
     agentComments,
     fileHeaderExtra,
+    onCopyFilePath,
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
@@ -81,6 +83,7 @@
     {reviewed}
     {pendingCommentCount}
     {fileHeaderExtra}
+    {onCopyFilePath}
     {onToggleCollapse}
     {onSetRichDiffActive}
     {onReviewedChange}

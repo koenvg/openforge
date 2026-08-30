@@ -2,7 +2,7 @@
   import SharedDiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
-  import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl } from '../../../../lib/ipc'
+  import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { getDiffTheme, themeMode } from '../../../../lib/theme'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
@@ -124,6 +124,14 @@
     imageRequest = null
     imageContextKey = null
   }
+
+  async function copyFilePath(filename: string): Promise<void> {
+    try {
+      await writeClipboardText(filename)
+    } catch (error) {
+      console.error('Failed to copy file path:', error)
+    }
+  }
   function setVisiblePendingComments(comments: ReviewSubmissionComment[]) {
     if (onPendingCommentsChange) {
       onPendingCommentsChange(comments)
@@ -169,6 +177,7 @@
   {onOpenRepositoryPath}
   {toolbarExtra}
   {fileHeaderExtra}
+  onCopyFilePath={copyFilePath}
   {includeCommitted}
   {includeUncommitted}
   {agentComments}
