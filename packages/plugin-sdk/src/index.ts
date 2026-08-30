@@ -35,11 +35,11 @@ export {
 } from './testing'
 
 export {
+  MAX_AGENT_SESSION_PAGE_SIZE,
   DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   TaskFollowUpError,
-  MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE,
   MAX_SUPPORTED_API_VERSION,
   MIN_SUPPORTED_API_VERSION,
   OPENFORGE_PLUGIN_API_VERSION,
@@ -51,6 +51,13 @@ export {
 } from './types'
 
 export type {
+  AgentSessionCursor,
+  AgentSessionOverlap,
+  AgentSessionsAPI,
+  AgentSessionSummary,
+  AgentSessionSummaryPage,
+  AgentSessionTaskSummary,
+  AgentSessionWorkspace,
   AgentCommandDescriptor,
   AgentCommandMetadata,
   AgentCommandRuntime,
@@ -78,12 +85,8 @@ export type {
   UserDataFileSystemAPI,
   UserDataFileWriteRequest,
   ImplementationRun,
+  ListAgentSessionsRequest,
   ListTaskSessionsRequest,
-  ListTaskUsageCandidatesRequest,
-  TaskUsageCandidate,
-  TaskUsageCandidatePage,
-  TaskUsageCandidateSession,
-  TaskUsageCandidateWorkspace,
   InjectionPointLocation,
   JsonObject,
   JsonPrimitive,

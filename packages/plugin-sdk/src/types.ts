@@ -3,6 +3,7 @@ import packageMetadataSchemaData from './openforgePackageMetadataSchema.json' wi
 import type { Component } from 'svelte'
 import type { BrowserSurfacesAPI } from './browserSurfaces'
 import type {
+  BoardStatus,
   AgentSession,
   CommandInfo,
   FileContent,
@@ -732,48 +733,63 @@ export interface ListTaskSessionsRequest {
 }
 
 
-export const MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE = 250
+export const MAX_AGENT_SESSION_PAGE_SIZE = 250
 
-export interface ListTaskUsageCandidatesRequest {
+export type AgentSessionCursor = string
+
+export interface AgentSessionOverlap {
+  /** Inclusive lower bound as a Unix timestamp in seconds. */
+  startInclusive: number
+  /** Exclusive upper bound as a Unix timestamp in seconds. */
+  endExclusive: number
+}
+
+export interface ListAgentSessionsRequest {
   /** Open-ended provider identifier such as `pi`. */
   provider: string
-  /** Inclusive collection-period start as a Unix timestamp in seconds. */
-  periodStart: number
+  overlaps: AgentSessionOverlap
   /** Restrict the query to one Task without enumerating unrelated Tasks. */
   taskId?: string
   /** Opaque cursor returned by the preceding page. */
-  cursor?: string
-  /** Number of candidates to return, from 1 through 250. */
+  cursor?: AgentSessionCursor
+  /** Number of Agent Sessions to return, from 1 through 250. */
   pageSize: number
 }
 
-export interface TaskUsageCandidateSession {
-  /** Provider Agent Session identifier used to locate provider usage records. */
+export interface AgentSessionTaskSummary {
   id: string
+  title: string
+  status: BoardStatus
   createdAt: number
   updatedAt: number
 }
 
-export interface TaskUsageCandidateWorkspace {
-  path: string
+export interface AgentSessionWorkspace {
+  rootPath: string
   kind: 'project' | 'worktree'
 }
 
-export interface TaskUsageCandidate {
-  taskId: string
-  title: string
-  status: 'doing' | 'done'
+export interface AgentSessionSummary {
+  /** OpenForge Agent Session ID. */
+  id: string
+  provider: string
+  /** Provider-owned Agent Session ID, or null when the host has none. */
+  providerSessionId: string | null
   createdAt: number
   updatedAt: number
-  sessions: TaskUsageCandidateSession[]
-  workspace: TaskUsageCandidateWorkspace | null
+  task: AgentSessionTaskSummary
+  workspace: AgentSessionWorkspace | null
 }
 
-export interface TaskUsageCandidatePage {
-  items: TaskUsageCandidate[]
-  /** Cursor for the next stable Task-ID-ordered page, or null on the last page. */
-  nextCursor: string | null
+export interface AgentSessionSummaryPage {
+  items: AgentSessionSummary[]
+  nextCursor: AgentSessionCursor | null
 }
+
+export interface AgentSessionsAPI {
+  list(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
+}
+
 
 export interface TasksAPI {
   /**
@@ -784,13 +800,6 @@ export interface TasksAPI {
    * `includeDone` only affects the project-scoped path.
    */
   list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
-  /**
-   * Lists compact Task metadata for provider usage attribution. Global queries
-   * include every active Task and completed Tasks whose Task or matching Agent
-   * Session interval overlaps `periodStart`. Results use stable Task-ID cursor
-   * pagination and never include prompt fields.
-   */
-  listUsageCandidates(request: ListTaskUsageCandidatesRequest): Promise<TaskUsageCandidatePage>
   get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
   /**
@@ -847,6 +856,7 @@ export interface OpenForgeCommonAPI {
   context: {
     getSnapshot(): OpenForgeContextSnapshot
   }
+  agentSessions: AgentSessionsAPI
   tasks: TasksAPI
   projects: ProjectsAPI
   fs: FileSystemAPI

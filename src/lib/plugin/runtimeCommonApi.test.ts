@@ -43,18 +43,30 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(listTaskSessions).toHaveBeenCalledWith(request)
   })
 
-  it('forwards Task usage candidate requests through the runtime host', async () => {
-    const page = { items: [], nextCursor: null }
-    const listTaskUsageCandidates = vi.fn().mockResolvedValue(page)
+  it('forwards Agent Session page requests through the frontend runtime host', async () => {
+    const page = {
+      items: [{
+        id: 'S-1', provider: 'pi', providerSessionId: 'pi-S-1', createdAt: 100, updatedAt: 200,
+        task: { id: 'T-1', title: 'Import history', status: 'doing', createdAt: 50, updatedAt: 250 },
+        workspace: { rootPath: '/repo', kind: 'project' },
+      }],
+      nextCursor: null,
+    }
+    const listAgentSessions = vi.fn().mockResolvedValue(page)
     const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
       pluginId: 'usage',
       projectId: null,
-      host: { listTaskUsageCandidates },
+      host: { listAgentSessions },
     }))
-    const request = { provider: 'pi', periodStart: 300, taskId: 'T-1', pageSize: 100 }
+    const request = {
+      provider: 'pi',
+      overlaps: { startInclusive: 100, endExclusive: 300 },
+      taskId: 'T-1',
+      pageSize: 100,
+    }
 
-    await expect(registry.createApi().tasks.listUsageCandidates(request)).resolves.toEqual(page)
-    expect(listTaskUsageCandidates).toHaveBeenCalledWith(request)
+    await expect(registry.createApi().agentSessions.list(request)).resolves.toEqual(page)
+    expect(listAgentSessions).toHaveBeenCalledWith(request)
   })
 
 

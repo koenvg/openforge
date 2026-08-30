@@ -127,50 +127,6 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(tasks)
         }
-        "list_task_usage_candidates" => {
-            let max_page_size = crate::db::MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE;
-
-            let provider = payload_string(&request.payload, "provider")?;
-            let period_start = payload_i64(&request.payload, "periodStart")?;
-            if period_start < 0 {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    "payload.periodStart must be a non-negative integer".to_string(),
-                ));
-            }
-            let task_id = payload_optional_string(&request.payload, "taskId")?;
-            let cursor = payload_optional_string(&request.payload, "cursor")?;
-            let page_size =
-                payload_optional_usize(&request.payload, "pageSize")?.ok_or_else(|| {
-                    (
-                        StatusCode::BAD_REQUEST,
-                        "payload.pageSize is required".to_string(),
-                    )
-                })?;
-            if !(1..=max_page_size).contains(&page_size) {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    format!("payload.pageSize must be between 1 and {max_page_size}"),
-                ));
-            }
-            let page = {
-                let db = crate::db::acquire_db(&state.db);
-                db.list_task_usage_candidates(
-                    &provider,
-                    period_start,
-                    task_id.as_deref(),
-                    cursor.as_deref(),
-                    page_size,
-                )
-                .map_err(|error| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("failed to list Task usage candidates: {error}"),
-                    )
-                })?
-            };
-            json_value(page)
-        }
         "get_task_relationship_references" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let references = load_task_relationship_references(state, &project_id)

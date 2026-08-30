@@ -62,6 +62,66 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(sessions)
         }
+        "list_agent_sessions" => {
+            let provider = payload_string(&request.payload, "provider")?;
+            let overlaps = request
+                .payload
+                .get("overlaps")
+                .filter(|value| value.is_object())
+                .ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "payload.overlaps must be an object".to_string(),
+                    )
+                })?;
+            let start_inclusive = payload_i64(overlaps, "startInclusive")?;
+            let end_exclusive = payload_i64(overlaps, "endExclusive")?;
+            if start_inclusive < 0 || end_exclusive <= start_inclusive {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "payload.overlaps must satisfy 0 <= startInclusive < endExclusive".to_string(),
+                ));
+            }
+            let task_id = payload_optional_string(&request.payload, "taskId")?;
+            let cursor = payload_optional_string(&request.payload, "cursor")?;
+            let page_size =
+                payload_optional_usize(&request.payload, "pageSize")?.ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "payload.pageSize is required".to_string(),
+                    )
+                })?;
+            if !(1..=crate::db::MAX_AGENT_SESSION_PAGE_SIZE).contains(&page_size) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "payload.pageSize must be between 1 and {}",
+                        crate::db::MAX_AGENT_SESSION_PAGE_SIZE
+                    ),
+                ));
+            }
+
+            let page = {
+                let db = crate::db::acquire_db(&state.db);
+                db.list_agent_sessions(
+                    &provider,
+                    start_inclusive,
+                    end_exclusive,
+                    task_id.as_deref(),
+                    cursor.as_deref(),
+                    page_size,
+                )
+                .map_err(|error| {
+                    let status = if matches!(error, rusqlite::Error::InvalidParameterName(_)) {
+                        StatusCode::BAD_REQUEST
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    };
+                    (status, format!("Failed to list Agent Sessions: {error}"))
+                })?
+            };
+            json_value(page)
+        }
         "get_latest_sessions" => {
             let task_ids = payload_string_vec(&request.payload, "taskIds")?;
             let sessions = {

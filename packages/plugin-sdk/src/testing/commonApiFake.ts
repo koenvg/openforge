@@ -1,4 +1,4 @@
-import { MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE, resolveExternalTextFileChunkSize } from '../types.js'
+import { MAX_AGENT_SESSION_PAGE_SIZE, resolveExternalTextFileChunkSize } from '../types.js'
 import type {
   BackendOpenForgeAPI,
   CommandRegistration,
@@ -27,6 +27,68 @@ import type {
 const UTF8_ENCODER = new TextEncoder()
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
 
+
+const TERMINAL_AGENT_SESSION_STATUSES = new Set(['completed', 'failed', 'interrupted'])
+
+interface AgentSessionCursorPayload {
+  version: 1
+  createdAt: number
+  id: string
+  filters: {
+    provider: string
+    startInclusive: number
+    endExclusive: number
+    taskId: string | null
+  }
+}
+
+function encodeAgentSessionCursor(payload: AgentSessionCursorPayload): string {
+  const bytes = UTF8_ENCODER.encode(JSON.stringify(payload))
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
+function parseAgentSessionCursor(cursor: string): AgentSessionCursorPayload {
+  try {
+    const base64 = cursor.replaceAll('-', '+').replaceAll('_', '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const payload = JSON.parse(UTF8_DECODER.decode(bytes)) as Partial<AgentSessionCursorPayload>
+    const filters = payload.filters
+    if (payload.version !== 1
+      || !Number.isSafeInteger(payload.createdAt)
+      || typeof payload.id !== 'string'
+      || payload.id.length === 0
+      || !filters
+      || typeof filters.provider !== 'string'
+      || !Number.isSafeInteger(filters.startInclusive)
+      || !Number.isSafeInteger(filters.endExclusive)
+      || (filters.taskId !== null && typeof filters.taskId !== 'string')) {
+      throw new Error('invalid payload')
+    }
+    return payload as AgentSessionCursorPayload
+  } catch {
+    throw new TypeError('cursor is malformed')
+  }
+}
+
+function providerSessionId(session: {
+  provider: string
+  opencode_session_id: string | null
+  claude_session_id: string | null
+  pi_session_id: string | null
+  grok_session_id: string | null
+}): string | null {
+  switch (session.provider) {
+    case 'opencode': return session.opencode_session_id
+    case 'claude-code': return session.claude_session_id
+    case 'pi': return session.pi_session_id
+    case 'grok': return session.grok_session_id
+    default: return null
+  }
+}
 function assertNonNegativeSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`)
@@ -102,6 +164,101 @@ export class TestingCommonApiFake {
       context: {
         getSnapshot: () => this.services.getContextSnapshot(),
       },
+      agentSessions: {
+        list: async (request) => {
+          if (typeof request.provider !== 'string' || request.provider.trim().length === 0) {
+            throw new TypeError('provider must be a non-empty string')
+          }
+          if (request.taskId !== undefined && (typeof request.taskId !== 'string' || request.taskId.trim().length === 0)) {
+            throw new TypeError('taskId must be a non-empty string')
+          }
+          if (request.cursor !== undefined && (typeof request.cursor !== 'string' || request.cursor.length === 0)) {
+            throw new TypeError('cursor must be a non-empty string')
+          }
+          if (!request.overlaps || typeof request.overlaps !== 'object') {
+            throw new TypeError('overlaps must contain startInclusive and endExclusive')
+          }
+          assertNonNegativeSafeInteger(request.overlaps.startInclusive, 'overlaps.startInclusive')
+          assertNonNegativeSafeInteger(request.overlaps.endExclusive, 'overlaps.endExclusive')
+          if (request.overlaps.startInclusive >= request.overlaps.endExclusive) {
+            throw new RangeError('overlaps must satisfy startInclusive < endExclusive')
+          }
+          if (!Number.isSafeInteger(request.pageSize)
+            || request.pageSize < 1
+            || request.pageSize > MAX_AGENT_SESSION_PAGE_SIZE) {
+            throw new RangeError(`pageSize must be between 1 and ${MAX_AGENT_SESSION_PAGE_SIZE}`)
+          }
+
+          const filters = {
+            provider: request.provider,
+            startInclusive: request.overlaps.startInclusive,
+            endExclusive: request.overlaps.endExclusive,
+            taskId: request.taskId ?? null,
+          }
+          const cursor = request.cursor === undefined ? null : parseAgentSessionCursor(request.cursor)
+          if (cursor !== null
+            && (cursor.filters.provider !== filters.provider
+              || cursor.filters.startInclusive !== filters.startInclusive
+              || cursor.filters.endExclusive !== filters.endExclusive
+              || cursor.filters.taskId !== filters.taskId)) {
+            throw new TypeError('cursor does not match request filters')
+          }
+
+          this.services.calls.agentSessionListRequests.push({
+            ...request,
+            overlaps: { ...request.overlaps },
+          })
+          const taskById = new Map(this.services.seededTasks.map((task) => [task.id, task]))
+          const rows = this.services.seededAgentSessions
+            .filter((session) => taskById.has(session.ticket_id))
+            .filter((session) => session.provider === request.provider)
+            .filter((session) => request.taskId === undefined || session.ticket_id === request.taskId)
+            .filter((session) => session.created_at < request.overlaps.endExclusive
+              && (!TERMINAL_AGENT_SESSION_STATUSES.has(session.status)
+                || session.updated_at > request.overlaps.startInclusive))
+            .filter((session) => cursor === null
+              || session.created_at > cursor.createdAt
+              || (session.created_at === cursor.createdAt && session.id > cursor.id))
+            .slice()
+            .sort((left, right) => left.created_at - right.created_at
+              || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+          const pageRows = rows.slice(0, request.pageSize)
+          const items = pageRows.map((session) => {
+            const task = taskById.get(session.ticket_id)
+            if (!task) throw new Error(`Missing seeded Task for Agent Session ${session.id}`)
+            const workspace = this.services.agentSessionWorkspaces[task.id]
+            return {
+              id: session.id,
+              provider: session.provider,
+              providerSessionId: providerSessionId(session),
+              createdAt: session.created_at,
+              updatedAt: session.updated_at,
+              task: {
+                id: task.id,
+                title: task.title?.trim() || task.id,
+                status: task.status,
+                createdAt: task.created_at,
+                updatedAt: task.updated_at,
+              },
+              workspace: workspace
+                ? { rootPath: workspace.rootPath, kind: workspace.kind }
+                : null,
+            }
+          })
+          const last = pageRows.at(-1)
+          return {
+            items,
+            nextCursor: rows.length > request.pageSize && last
+              ? encodeAgentSessionCursor({
+                  version: 1,
+                  createdAt: last.created_at,
+                  id: last.id,
+                  filters,
+                })
+              : null,
+          }
+        },
+      },
       tasks: {
         list: async (request) => {
           const projectId = request?.projectId ?? null
@@ -112,43 +269,6 @@ export class TestingCommonApiFake {
             if (!includeDone && task.status === 'done') return false
             return true
           })
-        },
-        listUsageCandidates: async (request) => {
-          if (typeof request.provider !== 'string' || request.provider.length === 0) {
-            throw new TypeError('provider must be a non-empty string')
-          }
-          if (request.taskId !== undefined && request.taskId.length === 0) {
-            throw new TypeError('taskId must be a non-empty string')
-          }
-          if (request.cursor !== undefined && request.cursor.length === 0) {
-            throw new TypeError('cursor must be a non-empty string')
-          }
-          if (!Number.isSafeInteger(request.periodStart) || request.periodStart < 0) {
-            throw new RangeError('periodStart must be a non-negative safe integer')
-          }
-          if (!Number.isSafeInteger(request.pageSize)
-            || request.pageSize < 1
-            || request.pageSize > MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE) {
-            throw new RangeError(`pageSize must be between 1 and ${MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE}`)
-          }
-          this.services.calls.taskUsageCandidateListRequests.push({ ...request })
-          const candidates = this.services.seededTaskUsageCandidates
-            .filter((candidate) => request.taskId === undefined || candidate.taskId === request.taskId)
-            .filter((candidate) => candidate.status === 'doing'
-              || candidate.createdAt >= request.periodStart
-              || candidate.updatedAt >= request.periodStart
-              || candidate.sessions.some((session) =>
-                session.createdAt >= request.periodStart || session.updatedAt >= request.periodStart))
-            .filter((candidate) => request.cursor === undefined || candidate.taskId > request.cursor)
-            .slice()
-            .sort((left, right) => left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0)
-          const items = candidates.slice(0, request.pageSize)
-          return {
-            items,
-            nextCursor: candidates.length > request.pageSize
-              ? items.at(-1)?.taskId ?? null
-              : null,
-          }
         },
         get: async () => null,
         create: async (request) => {

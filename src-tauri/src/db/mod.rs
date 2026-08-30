@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod agent_review;
+mod agent_session_list;
 mod agent_terminal_replay;
 mod agents;
 mod authored_prs;
@@ -29,7 +30,6 @@ mod task_labels;
 mod task_lifecycle;
 mod task_persistence;
 mod task_start;
-mod task_usage_candidates;
 mod task_workspaces;
 mod tasks;
 mod worktrees;
@@ -65,7 +65,7 @@ pub use tasks::{
 };
 pub use worktrees::WorktreeRow;
 
-pub const MAX_TASK_USAGE_CANDIDATE_PAGE_SIZE: usize = 250;
+pub const MAX_AGENT_SESSION_PAGE_SIZE: usize = 250;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =
     ["running", "paused", "interrupted"];

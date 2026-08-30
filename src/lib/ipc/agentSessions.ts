@@ -1,4 +1,4 @@
-import type { ListTaskSessionsRequest, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
+import type { AgentSessionSummaryPage, ListAgentSessionsRequest, ListTaskSessionsRequest, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { AgentSession, AutocompleteAgentInfo, CommandInfo, ProviderModelInfo } from '../types'
 
@@ -19,6 +19,18 @@ export async function listAgentSessions(request: ListTaskSessionsRequest): Promi
     taskId: request.taskId,
     provider: request.provider,
     createdAtOrAfter: request.createdAtOrAfter,
+  })
+}
+
+export async function listAgentSessionSummaries(
+  request: ListAgentSessionsRequest,
+): Promise<AgentSessionSummaryPage> {
+  return invoke<AgentSessionSummaryPage>('list_agent_sessions', {
+    provider: request.provider,
+    overlaps: request.overlaps,
+    taskId: request.taskId,
+    cursor: request.cursor,
+    pageSize: request.pageSize,
   })
 }
 

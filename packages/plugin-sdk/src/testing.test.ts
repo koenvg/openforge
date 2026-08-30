@@ -234,79 +234,7 @@ describe('plugin SDK testing utilities', () => {
     ])
   })
 
-  it('pages seeded Task usage candidates with host overlap and targeting rules', async () => {
-    const periodStart = 300
-    const sharedWorkspace = { path: '/repo', kind: 'project' as const }
-    const api = createMockFrontendOpenForgeApi({
-      pluginId: 'usage',
-      taskUsageCandidates: [
-        {
-          taskId: 'T-1', title: 'Active', status: 'doing', createdAt: 100, updatedAt: 200,
-          sessions: [], workspace: sharedWorkspace,
-        },
-        {
-          taskId: 'T-2', title: 'Recent Task', status: 'done', createdAt: 100, updatedAt: 350,
-          sessions: [], workspace: sharedWorkspace,
-        },
-        {
-          taskId: 'T-3', title: 'Recent Session', status: 'done', createdAt: 100, updatedAt: 200,
-          sessions: [{ id: 'pi-session', createdAt: 250, updatedAt: 350 }], workspace: null,
-        },
-        {
-          taskId: 'T-4', title: 'Old', status: 'done', createdAt: 100, updatedAt: 200,
-          sessions: [{ id: 'old-session', createdAt: 100, updatedAt: 200 }], workspace: null,
-        },
-      ],
-    })
 
-    const first = await api.tasks.listUsageCandidates({ provider: 'pi', periodStart, pageSize: 2 })
-    expect(first).toEqual({
-      items: expect.arrayContaining([
-        expect.objectContaining({ taskId: 'T-1', workspace: sharedWorkspace }),
-        expect.objectContaining({ taskId: 'T-2', workspace: sharedWorkspace }),
-      ]),
-      nextCursor: 'T-2',
-    })
-    const second = await api.tasks.listUsageCandidates({
-      provider: 'pi', periodStart, pageSize: 2, cursor: first.nextCursor ?? undefined,
-    })
-    expect(second.items.map((candidate) => candidate.taskId)).toEqual(['T-3'])
-    expect(second.nextCursor).toBeNull()
-
-    const targeted = await api.tasks.listUsageCandidates({
-      provider: 'pi', periodStart, taskId: 'T-2', pageSize: 100,
-    })
-    expect(targeted.items.map((candidate) => candidate.taskId)).toEqual(['T-2'])
-    expect(api.__testing.calls.taskUsageCandidateListRequests).toEqual([
-      { provider: 'pi', periodStart, pageSize: 2 },
-      { provider: 'pi', periodStart, pageSize: 2, cursor: 'T-2' },
-      { provider: 'pi', periodStart, taskId: 'T-2', pageSize: 100 },
-    ])
-  })
-
-  it('uses binary Task ID ordering consistently across usage candidate cursors', async () => {
-    const candidate = (taskId: string) => ({
-      taskId,
-      title: taskId,
-      status: 'doing' as const,
-      createdAt: 0,
-      updatedAt: 0,
-      sessions: [],
-      workspace: null,
-    })
-    const api = createMockFrontendOpenForgeApi({
-      taskUsageCandidates: [candidate('a'), candidate('B'), candidate('A')],
-    })
-
-    const first = await api.tasks.listUsageCandidates({ provider: 'pi', periodStart: 0, pageSize: 2 })
-    const second = await api.tasks.listUsageCandidates({
-      provider: 'pi', periodStart: 0, pageSize: 2, cursor: first.nextCursor ?? undefined,
-    })
-
-    expect(first.items.map((item) => item.taskId)).toEqual(['A', 'B'])
-    expect(first.nextCursor).toBe('B')
-    expect(second.items.map((item) => item.taskId)).toEqual(['a'])
-  })
 
   it('lists every seeded Agent Session for a Task with optional provider and creation-time filters', async () => {
     const session = (id: string, taskId: string, provider: string, createdAt: number) => ({

@@ -13,10 +13,8 @@ impl PluginHost {
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
+            "openforge.agentSessions.list" => self.list_agent_sessions_for_host(params),
             "openforge.tasks.list" => self.list_tasks_for_host(params),
-            "openforge.tasks.listUsageCandidates" => {
-                self.list_task_usage_candidates_for_host(params)
-            }
             "openforge.tasks.get" => self.get_task_for_host(params),
             "openforge.tasks.create" => self.create_task_for_host(params),
             "openforge.tasks.compose" => self.compose_task_for_host(params).await,
