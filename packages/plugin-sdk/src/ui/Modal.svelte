@@ -179,7 +179,12 @@
         {#if header}
           {@render header()}
         {/if}
-        <button class="btn btn-ghost btn-xs shrink-0" aria-label={closeLabel} onclick={handleCloseButtonClick} type="button" disabled={closeDisabled}>✕</button>
+        <button class="btn btn-ghost h-11 min-h-11 w-11 min-w-11 shrink-0 p-0" aria-label={closeLabel} onclick={handleCloseButtonClick} type="button" disabled={closeDisabled}>
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
       </div>
     {/if}
     {@render children()}

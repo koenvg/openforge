@@ -25,6 +25,21 @@ describe('plugin-sdk Modal', () => {
     expect(dialog.hasAttribute('aria-label')).toBe(false)
   })
 
+  it('renders an accessibility-hidden vector icon and preserves close-button dismissal', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose } })
+
+    const closeButton = screen.getByRole('button', { name: 'Close plugin dialog' })
+    const icon = closeButton.querySelector('svg')
+
+    expect(icon?.getAttribute('aria-hidden')).toBe('true')
+    expect(closeButton.textContent?.trim()).toBe('')
+
+    await fireEvent.click(closeButton)
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
   it.each([
     ['no naming prop', 'missing'],
     ['a blank ariaLabel', 'blank'],
