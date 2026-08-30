@@ -25,7 +25,9 @@ use std::sync::{Arc, Barrier};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 const DEFAULT_SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
-const DEFAULT_CONTINUATION_BYTES: usize = 65 * 1024 * 1024;
+// Ghostty grows continuation storage lazily but retains its peak allocation.
+// Keep that peak within the replay carried by portable snapshots.
+const MAX_SNAPSHOT_CONTINUATION_BYTES: usize = 256 * 1024;
 
 #[cfg(test)]
 #[derive(Clone, Debug)]
@@ -91,7 +93,7 @@ impl TerminalModelOptions {
             cols,
             rows,
             max_scrollback_bytes: DEFAULT_SCROLLBACK_BYTES,
-            max_continuation_bytes: DEFAULT_CONTINUATION_BYTES,
+            max_continuation_bytes: MAX_SNAPSHOT_CONTINUATION_BYTES,
             #[cfg(test)]
             test_fault: TerminalModelTestFault::None,
         }
@@ -108,6 +110,8 @@ impl TerminalModelOptions {
 pub(crate) enum TerminalModelError {
     #[error("ghostty terminal model error: {0}")]
     Ghostty(#[from] libghostty_vt::Error),
+    #[error("terminal snapshot continuation is temporarily unavailable")]
+    ContinuationUnavailable,
     #[error("ghostty produced an empty canonical snapshot")]
     EmptySnapshot,
 }
@@ -139,8 +143,19 @@ impl GhosttyTerminalModel {
     pub(crate) fn decode_snapshot(snapshot: &[u8]) -> Result<Self, TerminalModelError> {
         let decoder = Decoder::new_buf(snapshot)?;
         let mut terminal = decoder.decode()?;
-        terminal.set_continuation_max_bytes(DEFAULT_CONTINUATION_BYTES)?;
+        terminal.set_continuation_max_bytes(MAX_SNAPSHOT_CONTINUATION_BYTES)?;
         Self::from_terminal(terminal)
+    }
+
+    fn ensure_snapshot_continuation_available(&self) -> Result<(), TerminalModelError> {
+        match self.terminal.continuation_buf(&mut []) {
+            Err(libghostty_vt::Error::OutOfSpace { .. }) => Ok(()),
+            Err(libghostty_vt::Error::InvalidValue) | Ok(None) => {
+                Err(TerminalModelError::ContinuationUnavailable)
+            }
+            Err(error) => Err(error.into()),
+            Ok(Some(_)) => Ok(()),
+        }
     }
 
     fn from_terminal(mut terminal: Terminal<'static, 'static>) -> Result<Self, TerminalModelError> {
@@ -186,6 +201,7 @@ impl TerminalModel for GhosttyTerminalModel {
     }
 
     fn encode_snapshot(&self) -> Result<Vec<u8>, TerminalModelError> {
+        self.ensure_snapshot_continuation_available()?;
         self.terminal
             .encode_snapshot_alloc(None)?
             .map(|bytes| bytes.as_ref().to_vec())
@@ -220,6 +236,12 @@ impl TerminalModel for GhosttyTerminalModel {
 mod tests {
     use super::{GhosttyTerminalModel, TerminalModel, TerminalModelOptions};
 
+    #[test]
+    fn default_continuation_memory_is_bounded_per_terminal() {
+        let options = TerminalModelOptions::new(80, 24);
+
+        assert_eq!(options.max_continuation_bytes, 256 * 1024);
+    }
     #[test]
     fn snapshot_round_trip_preserves_split_parser_state() {
         let mut model = GhosttyTerminalModel::new(TerminalModelOptions::new(20, 4))

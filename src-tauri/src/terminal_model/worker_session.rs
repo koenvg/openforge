@@ -50,7 +50,8 @@ fn send_command_with_timeout(
     }
 }
 
-const TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY: usize = 256 * 1024;
+const TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY: usize =
+    super::super::MAX_SNAPSHOT_CONTINUATION_BYTES;
 
 struct BoundedCompatibilityReplay {
     bytes: VecDeque<u8>,
@@ -466,12 +467,24 @@ fn run_worker(
             Ok(command) => command,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if checkpoint_due {
-                    if let Err(error) = validate_checkpoint(&model) {
-                        state.disable(&session_key, instance_id, "snapshot", model_error(error));
-                        return;
+                    match validate_checkpoint(&model) {
+                        Ok(()) => {
+                            checkpoint_due = false;
+                            bytes_since_checkpoint = 0;
+                        }
+                        Err(TerminalModelError::ContinuationUnavailable) => {
+                            // Retry after later input returns the parser to a snapshotable state.
+                        }
+                        Err(error) => {
+                            state.disable(
+                                &session_key,
+                                instance_id,
+                                "snapshot",
+                                model_error(error),
+                            );
+                            return;
+                        }
                     }
-                    checkpoint_due = false;
-                    bytes_since_checkpoint = 0;
                 }
                 continue;
             }
@@ -508,7 +521,8 @@ fn run_worker(
             TerminalModelCommand::Resize { cols, rows } => model.resize(cols, rows),
             TerminalModelCommand::PortableSnapshot(response) => {
                 let result = model
-                    .format_portable_vt()
+                    .ensure_snapshot_continuation_available()
+                    .and_then(|()| model.format_portable_vt())
                     .map(|portable_vt| PortableTerminalSnapshot {
                         instance_id,
                         watermark: output_sequence,
