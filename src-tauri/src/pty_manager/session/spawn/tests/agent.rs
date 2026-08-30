@@ -156,6 +156,115 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream_state() {
+    let mut manager = PtyManager::new();
+    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let task_id = "reader-ready-agent-spawn";
+    let (reader_ready_tx, reader_ready_rx) = mpsc::channel();
+    let (release_reader_tx, release_reader_rx) = mpsc::channel();
+    *manager
+        .agent_output_reader_ready_gate
+        .lock()
+        .expect("output reader ready gate lock should not be poisoned") =
+        Some(crate::pty_manager::AgentOutputReaderReadyGate {
+            reached_tx: reader_ready_tx,
+            release_rx: release_reader_rx,
+        });
+    let (stream_start_tx, stream_start_rx) = mpsc::channel();
+    let (release_stream_tx, release_stream_rx) = mpsc::channel();
+    *manager
+        .agent_event_stream_start_gate
+        .lock()
+        .expect("event stream start gate lock should not be poisoned") =
+        Some(crate::pty_manager::AgentEventStreamStartGate {
+            reached_tx: stream_start_tx,
+            release_rx: release_stream_rx,
+        });
+
+    let spawn_manager = manager.clone();
+    let spawn_cwd = tmp_dir.path().to_path_buf();
+    let spawn_task_id = task_id.to_string();
+    let spawn = std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime should build");
+        runtime.block_on(spawn_manager.spawn_agent_pty(
+            LockCheckingAgentAdapter {
+                sessions: Arc::clone(&spawn_manager.sessions),
+                prepared_tx: None,
+                command_release_rx: None,
+                script: "printf reader-ready; exec sleep 5",
+                check_lock: false,
+            },
+            PtySpawnContext {
+                task_id: &spawn_task_id,
+                cwd: &spawn_cwd,
+                cols: 80,
+                rows: 24,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+            },
+            None,
+        ))
+    });
+
+    reader_ready_rx
+        .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
+        .expect("agent output reader should reach its readiness signal");
+    assert!(
+        manager.sessions.lock().await.contains_key(task_id),
+        "the spawned process should be registered before output-reader readiness"
+    );
+    assert!(
+        !manager.last_output.lock().await.contains_key(task_id),
+        "last-output tracking must wait for output-reader readiness"
+    );
+    assert!(
+        !manager.output_buffers.lock().await.contains_key(task_id),
+        "replay buffer registration must wait for output-reader readiness"
+    );
+    assert!(
+        !manager.attachment_hubs.lock().await.contains_key(task_id),
+        "attachment registration must wait for output-reader readiness"
+    );
+    assert!(
+        matches!(stream_start_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
+        "event-stream registration must wait for output-reader readiness"
+    );
+
+    release_reader_tx
+        .send(())
+        .expect("agent output reader should be released");
+    stream_start_rx
+        .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
+        .expect("event stream should register after output-reader readiness");
+    assert!(manager.last_output.lock().await.contains_key(task_id));
+    assert!(manager.output_buffers.lock().await.contains_key(task_id));
+    assert!(manager.attachment_hubs.lock().await.contains_key(task_id));
+    release_stream_tx
+        .send(())
+        .expect("agent event stream should be released");
+
+    let instance_id = join_thread_with_timeout(spawn, "reader-ready agent spawn")
+        .expect("agent spawn should complete after readiness");
+    assert_eq!(
+        manager
+            .sessions
+            .lock()
+            .await
+            .get(task_id)
+            .expect("agent session should remain registered")
+            .instance_id,
+        instance_id
+    );
+    manager
+        .kill_pty(task_id)
+        .await
+        .expect("test PTY should be cleaned up");
+}
+
 #[tokio::test]
 async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
     let mut manager = PtyManager::new();

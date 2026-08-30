@@ -11,7 +11,7 @@ use super::super::provider_adapter::{
 };
 use super::process::{resolve_pty_cwd, AgentProcessRequest, SpawnedPty};
 use super::registration::SessionRegistrationRequest;
-use super::streams::AgentEventStreamRequest;
+use super::streams::{AgentEventStreamRequest, AgentStreamState};
 
 impl PtyManager {
     #[allow(clippy::too_many_arguments)]
@@ -276,10 +276,10 @@ impl PtyManager {
         self.persist_session_identity(task_id, &pid_file, &managed_process)
             .await?;
 
-        #[cfg(target_os = "macos")]
-        {
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        }
+        let stream_state = AgentStreamState::new(instance_id, adapter.track_last_output());
+        let output = self
+            .start_agent_output_reader(task_id, reader, terminal_model_feeder, &stream_state)
+            .await?;
 
         self.require_current_agent_spawn_and_session(
             task_id,
@@ -288,16 +288,7 @@ impl PtyManager {
             "before setup completed",
         )
         .await?;
-        let last_output_time = self
-            .register_agent_last_output_tracking(
-                task_id,
-                token,
-                instance_id,
-                adapter.track_last_output(),
-            )
-            .await?;
-        let stream_state = self
-            .register_agent_stream_state(task_id, token, instance_id, last_output_time)
+        self.register_agent_stream_state(task_id, token, instance_id, &stream_state)
             .await?;
         #[cfg(test)]
         self.pause_before_agent_event_stream_start();
@@ -305,8 +296,7 @@ impl PtyManager {
             task_id,
             token,
             instance_id,
-            reader,
-            terminal_model_feeder,
+            output,
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,

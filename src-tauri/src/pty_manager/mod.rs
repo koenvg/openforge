@@ -32,6 +32,13 @@ struct AgentEventStreamStartGate {
 
 #[cfg(test)]
 #[derive(Debug)]
+struct AgentOutputReaderReadyGate {
+    reached_tx: std::sync::mpsc::Sender<()>,
+    release_rx: std::sync::mpsc::Receiver<()>,
+}
+
+#[cfg(test)]
+#[derive(Debug)]
 struct ShellSpawnPendingGate {
     reached_tx: tokio::sync::oneshot::Sender<()>,
     release_rx: tokio::sync::oneshot::Receiver<()>,
@@ -133,6 +140,8 @@ pub struct PtyManager {
     #[cfg(test)]
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
+    agent_output_reader_ready_gate: Arc<std::sync::Mutex<Option<AgentOutputReaderReadyGate>>>,
+    #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
     #[cfg(test)]
     shell_spawn_pending_gate: Arc<std::sync::Mutex<Option<ShellSpawnPendingGate>>>,
@@ -233,6 +242,8 @@ impl PtyManager {
             terminal_model_test_fault: Arc::new(std::sync::Mutex::new(
                 TerminalModelTestFault::None,
             )),
+            #[cfg(test)]
+            agent_output_reader_ready_gate: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]

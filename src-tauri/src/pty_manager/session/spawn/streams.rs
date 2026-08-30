@@ -10,7 +10,7 @@ use std::sync::Arc;
 use super::super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
 use super::super::super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
-    RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
+    PtyOutputReceiver, RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 use super::super::super::{PtyError, PtyManager};
 use super::super::lifecycle::LifecycleLockLease;
@@ -22,12 +22,26 @@ pub(super) struct AgentStreamState {
     pub(super) attachment_hub: Arc<PtyAttachmentHub>,
 }
 
+impl AgentStreamState {
+    pub(super) fn new(instance_id: u64, track_last_output: bool) -> Self {
+        Self {
+            last_output_time: track_last_output.then(|| Arc::new(AtomicU64::new(0))),
+            ring_buffer: Arc::new(std::sync::Mutex::new(RingBuffer::new(
+                CLAUDE_BUFFER_CAPACITY,
+            ))),
+            attachment_hub: Arc::new(PtyAttachmentHub::new(
+                instance_id,
+                CLAUDE_BUFFER_CAPACITY,
+                COMPANION_ATTACHMENT_EVENT_CAPACITY,
+            )),
+        }
+    }
+}
 pub(super) struct AgentEventStreamRequest<'a> {
     pub(super) task_id: &'a str,
     pub(super) token: AgentSpawnToken,
     pub(super) instance_id: u64,
-    pub(super) reader: Box<dyn Read + Send>,
-    pub(super) terminal_model_feeder: Option<TerminalModelFeeder>,
+    pub(super) output: PtyOutputReceiver,
     pub(super) stream_state: AgentStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
@@ -97,37 +111,30 @@ impl PtyManager {
         }
     }
 
-    pub(super) async fn register_agent_last_output_tracking(
+    pub(super) async fn start_agent_output_reader(
         &self,
         task_id: &str,
-        token: AgentSpawnToken,
-        instance_id: u64,
-        enabled: bool,
-    ) -> Result<Option<Arc<AtomicU64>>, PtyError> {
-        let last_output_time = enabled.then(|| Arc::new(AtomicU64::new(0)));
-        if let Some(last_output_time) = &last_output_time {
-            self.terminal_sessions
-                .last_output
-                .lock()
-                .await
-                .insert(task_id.to_string(), Arc::clone(last_output_time));
-        }
-
-        if let Err(error) = self
-            .require_current_agent_spawn_and_session(
-                task_id,
-                token,
-                instance_id,
-                "before output tracking completed",
-            )
-            .await
-        {
-            self.remove_agent_last_output_if_registered(task_id, last_output_time.as_ref())
-                .await;
-            return Err(error);
-        }
-
-        Ok(last_output_time)
+        reader: Box<dyn Read + Send>,
+        terminal_model_feeder: Option<TerminalModelFeeder>,
+        stream_state: &AgentStreamState,
+    ) -> Result<PtyOutputReceiver, PtyError> {
+        #[cfg(test)]
+        let ready_gate = self
+            .agent_output_reader_ready_gate
+            .lock()
+            .expect("output reader ready gate lock should not be poisoned")
+            .take();
+        spawn_pty_output_reader(
+            reader,
+            task_id.to_string(),
+            stream_state.last_output_time.as_ref().map(Arc::clone),
+            Some(Arc::clone(&stream_state.attachment_hub)),
+            terminal_model_feeder,
+            #[cfg(test)]
+            ready_gate,
+        )
+        .wait_until_ready()
+        .await
     }
 
     pub(super) async fn register_agent_stream_state(
@@ -135,51 +142,53 @@ impl PtyManager {
         task_id: &str,
         token: AgentSpawnToken,
         instance_id: u64,
-        last_output_time: Option<Arc<AtomicU64>>,
-    ) -> Result<AgentStreamState, PtyError> {
-        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
-            CLAUDE_BUFFER_CAPACITY,
-        )));
+        stream_state: &AgentStreamState,
+    ) -> Result<(), PtyError> {
+        if let Err(error) = self
+            .require_current_agent_spawn_and_session(
+                task_id,
+                token,
+                instance_id,
+                "before stream state registration started",
+            )
+            .await
+        {
+            self.remove_agent_stream_state_if_registered(task_id, stream_state)
+                .await;
+            return Err(error);
+        }
+        if let Some(last_output_time) = &stream_state.last_output_time {
+            self.terminal_sessions
+                .last_output
+                .lock()
+                .await
+                .insert(task_id.to_string(), Arc::clone(last_output_time));
+        }
         self.terminal_sessions
             .output_buffers
             .lock()
             .await
-            .insert(task_id.to_string(), Arc::clone(&ring_buffer));
-
-        let attachment_hub = Arc::new(PtyAttachmentHub::new(
-            instance_id,
-            CLAUDE_BUFFER_CAPACITY,
-            COMPANION_ATTACHMENT_EVENT_CAPACITY,
-        ));
-        self.terminal_sessions
-            .attachment_hubs
-            .lock()
-            .await
-            .insert(task_id.to_string(), Arc::clone(&attachment_hub));
+            .insert(task_id.to_string(), Arc::clone(&stream_state.ring_buffer));
+        self.terminal_sessions.attachment_hubs.lock().await.insert(
+            task_id.to_string(),
+            Arc::clone(&stream_state.attachment_hub),
+        );
 
         if let Err(error) = self
             .require_current_agent_spawn_and_session(
                 task_id,
                 token,
                 instance_id,
-                "before output buffer registration completed",
+                "before stream state registration completed",
             )
             .await
         {
-            self.remove_agent_last_output_if_registered(task_id, last_output_time.as_ref())
-                .await;
-            self.remove_output_buffer_if_registered(task_id, &ring_buffer)
-                .await;
-            self.remove_attachment_hub_if_registered(task_id, &attachment_hub)
+            self.remove_agent_stream_state_if_registered(task_id, stream_state)
                 .await;
             return Err(error);
         }
 
-        Ok(AgentStreamState {
-            last_output_time,
-            ring_buffer,
-            attachment_hub,
-        })
+        Ok(())
     }
 
     #[cfg(test)]
@@ -223,8 +232,7 @@ impl PtyManager {
             task_id,
             token,
             instance_id,
-            reader,
-            terminal_model_feeder,
+            output,
             stream_state,
             lifecycle_lock,
             pid_file,
@@ -244,15 +252,8 @@ impl PtyManager {
             return Err(error);
         }
 
-        let rx = spawn_pty_output_reader(
-            reader,
-            task_id.to_string(),
-            stream_state.last_output_time.as_ref().map(Arc::clone),
-            Some(Arc::clone(&stream_state.attachment_hub)),
-            terminal_model_feeder,
-        );
         spawn_batched_pty_event_emitter(
-            rx,
+            output,
             PtyEventEmitterConfig {
                 session_key: task_id.to_string(),
                 instance_id,
@@ -308,7 +309,10 @@ impl PtyManager {
             Some(Arc::clone(&stream_state.last_output_time)),
             None,
             terminal_model_feeder,
-        );
+            #[cfg(test)]
+            None,
+        )
+        .into_receiver();
         spawn_batched_pty_event_emitter(
             rx,
             PtyEventEmitterConfig {
