@@ -486,6 +486,38 @@ describe('plugin FilesView', () => {
     expect(screen.getByText('b.ts')).toBeTruthy()
   })
 
+  it('ignores an earlier root load after returning to the same project', async () => {
+    let resolveEarlierProjectA!: (entries: FileEntry[]) => void
+    const earlierProjectARoot = new Promise<FileEntry[]>((resolve) => {
+      resolveEarlierProjectA = resolve
+    })
+    vi.mocked(fsReadDir)
+      .mockReturnValueOnce(earlierProjectARoot)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([makeFileEntry({ name: 'fresh.ts', path: 'fresh.ts' })])
+
+    const { rerender } = renderFilesView({ projectName: 'Project A', projectId: 'project-a' })
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'project-a', path: null })
+    })
+
+    await rerender({ projectName: 'Project B', projectId: 'project-b' })
+    await waitFor(() => {
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'project-b', path: null })
+    })
+
+    await rerender({ projectName: 'Project A', projectId: 'project-a' })
+    await waitFor(() => {
+      expect(screen.getByText('fresh.ts')).toBeTruthy()
+    })
+
+    resolveEarlierProjectA([makeFileEntry({ name: 'stale.ts', path: 'stale.ts' })])
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByText('stale.ts')).toBeNull()
+    expect(screen.getByText('fresh.ts')).toBeTruthy()
+  })
+
   it('refetches the open file when returning to a project after a stale response was ignored', async () => {
     const readmeEntry = makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false })
     let resolveStaleRead!: (content: FileContent) => void
@@ -644,6 +676,48 @@ describe('plugin FilesView', () => {
     })
   })
 
+  it('continues a pending reveal in the new project when the previous file read becomes stale', async () => {
+    const readmeEntry = makeFileEntry({ name: 'README.md', path: 'README.md' })
+    const projectBContent: FileContent = {
+      type: 'text',
+      content: 'Project B readme',
+      mimeType: null,
+      size: 16,
+    }
+    let resolveProjectARead!: (content: FileContent) => void
+    const projectARead = new Promise<FileContent>((resolve) => {
+      resolveProjectARead = resolve
+    })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([readmeEntry])
+      .mockResolvedValueOnce([readmeEntry])
+    vi.mocked(fsReadFile)
+      .mockReturnValueOnce(projectARead)
+      .mockResolvedValueOnce(projectBContent)
+
+    const { rerender } = renderFilesView({ projectName: 'Project A', projectId: 'project-a' })
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+
+    pendingFileReveal.set('README.md')
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'project-a', path: 'README.md' })
+    })
+
+    await rerender({ projectName: 'Project B', projectId: 'project-b' })
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'project-b', path: 'README.md' })
+      expect(screen.getByText('Project B readme')).toBeTruthy()
+      expect(get(pendingFileReveal)).toBeNull()
+    })
+
+    resolveProjectARead(sampleFileContent)
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.getByText('Project B readme')).toBeTruthy()
+  })
+
   it('does not select a revealed file or clear pending reveal when parent expansion fails', async () => {
     vi.mocked(fsReadDir)
       .mockResolvedValueOnce([makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })])
@@ -724,6 +798,46 @@ describe('plugin FilesView', () => {
       await waitFor(() => {
         expect(fsSearchFiles).toHaveBeenCalledWith({ projectId: 'test-project-id', query: 'stores', limit: 50 })
       })
+    })
+
+    it('ignores stale search results from the previous project', async () => {
+      let resolveProjectASearch!: (paths: string[]) => void
+      const projectASearch = new Promise<string[]>((resolve) => {
+        resolveProjectASearch = resolve
+      })
+      vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
+      vi.mocked(fsSearchFiles)
+        .mockReturnValueOnce(projectASearch)
+        .mockResolvedValueOnce(['src/project-b.ts'])
+
+      const { rerender } = renderFilesView({ projectName: 'Project A', projectId: 'project-a' })
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'project' },
+      })
+      await waitFor(() => {
+        expect(fsSearchFiles).toHaveBeenCalledWith({ projectId: 'project-a', query: 'project', limit: 50 })
+      })
+
+      await rerender({ projectName: 'Project B', projectId: 'project-b' })
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search files' }), {
+        target: { value: 'project' },
+      })
+      await waitFor(() => {
+        expect(screen.getByText('project-b.ts')).toBeTruthy()
+      })
+
+      resolveProjectASearch(['src/project-a.ts'])
+
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.queryByText('project-a.ts')).toBeNull()
+      expect(screen.getByText('project-b.ts')).toBeTruthy()
     })
 
     it('renders matching files as a nested tree with ancestor directories', async () => {
