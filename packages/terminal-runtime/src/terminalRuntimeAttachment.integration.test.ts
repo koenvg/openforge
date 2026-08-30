@@ -176,7 +176,7 @@ describe('terminal runtime attachment', () => {
     try {
       const entry = await runtime.acquire(terminalKey)
       const terminal = terminalMocks.instances[0]
-      expect(terminal.write).toHaveBeenCalledOnce()
+      expect(terminal.write).not.toHaveBeenCalled()
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
 
       const wrapper = document.createElement('div')
@@ -195,7 +195,7 @@ describe('terminal runtime attachment', () => {
 
       host.setBuffer(terminalKey, 'authoritative detached output')
       await runtime.attach(entry, wrapper)
-      expect(terminal.write).toHaveBeenCalledTimes(3)
+      expect(terminal.write).toHaveBeenCalledTimes(4)
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
     } finally {
       runtime.release(terminalKey)
@@ -236,15 +236,60 @@ describe('terminal runtime attachment', () => {
     host.setBuffer(terminalKey, 'acquisition snapshot')
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire(terminalKey)
+    const terminal = terminalMocks.instances[0]
+    expect(terminal.write).not.toHaveBeenCalled()
 
     host.setBuffer(terminalKey, 'output before first attachment')
     await attachTestTerminal(runtime, entry)
 
-    expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
+    expect(terminal.write).toHaveBeenCalledTimes(2)
+    expect(terminal.write).toHaveBeenNthCalledWith(1, '', expect.any(Function))
+    expect(terminal.write).toHaveBeenNthCalledWith(
+      2,
       Uint8Array.from(new TextEncoder().encode('output before first attachment')),
+      expect.any(Function),
     )
     runtime.release(terminalKey)
   })
+
+  it('rereads authority when a replacement attachment joins stale recovery', async () => {
+    const terminalKey = 'T-overlapping-reattach-shell-0'
+    const replay = (data: string) => ({
+      buffer: null,
+      isLive: true,
+      instanceId: 1,
+      snapshot: { instanceId: 1, watermark: 0, data: btoa(data) },
+    })
+    let resolveStaleRecovery!: () => void
+    const host = createHost()
+    host.getPtyBuffer = vi.fn()
+      .mockResolvedValueOnce(replay('initial'))
+      .mockImplementationOnce(() => new Promise(resolve => {
+        resolveStaleRecovery = () => resolve(replay('stale recovery'))
+      }))
+      .mockResolvedValue(replay('latest authority'))
+    const reads = vi.spyOn(host, 'getPtyBuffer')
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+
+    const staleAttachment = attachTestTerminal(runtime, entry)
+    await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
+    runtime.detach(entry)
+    const currentAttachment = attachTestTerminal(runtime, entry)
+    resolveStaleRecovery()
+
+    await Promise.all([staleAttachment, currentAttachment])
+
+    expect(reads).toHaveBeenCalledTimes(3)
+    expect(entry.attached).toBe(true)
+    expect(entry.viewNeedsRecovery).toBe(false)
+    expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
+      Uint8Array.from(new TextEncoder().encode('latest authority')),
+      expect.any(Function),
+    )
+    runtime.release(terminalKey)
+  })
+
 
   it('keeps recovery pending when detachment races an authority read', async () => {
     const terminalKey = 'T-detach-during-recovery-shell-0'
@@ -270,6 +315,7 @@ describe('terminal runtime attachment', () => {
     expect(entry.viewNeedsRecovery).toBe(false)
     expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
       Uint8Array.from(new TextEncoder().encode('output after raced detach')),
+      expect.any(Function),
     )
     runtime.release(terminalKey)
   })

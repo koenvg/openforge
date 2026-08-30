@@ -145,12 +145,16 @@ describe('terminal runtime shell output lifecycle', () => {
     const runtime = createTerminalRuntime(host)
 
     const entry = await runtime.acquire('T-1')
+    await attachTestTerminal(runtime, entry)
     const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
       | ((data: string) => void)
       | undefined
     onData?.('unsafe input')
 
-    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('completed replay')
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith(
+      'completed replay',
+      expect.any(Function),
+    )
     expect(entry.ptyActive).toBe(false)
     expect(writePty).not.toHaveBeenCalled()
   })

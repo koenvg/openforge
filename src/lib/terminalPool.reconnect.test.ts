@@ -107,7 +107,7 @@ describe("terminalPool reconnect", () => {
 	});
 
 
-	it("restores backend snapshots for active terminals after the app event stream reconnects", async () => {
+	it("marks detached terminals for authoritative recovery after the app event stream reconnects", async () => {
 		vi.mocked(getPtyBuffer).mockImplementation(async (taskId: string) => {
 			if (taskId === "task-reconnect-a") return ghosttyReplay("latest buffer a", 42);
 			if (taskId === "task-reconnect-b") return ghosttyReplay("latest buffer b", 42);
@@ -124,15 +124,14 @@ describe("terminalPool reconnect", () => {
 
 		const reconnectCb = getListenCallback("openforge-app-events-reconnected");
 		reconnectCb({ payload: { attempt: 1 } });
-		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith(
-			Uint8Array.from(new TextEncoder().encode("latest buffer a")),
-		));
+		await vi.waitFor(() => expect(getPtyBuffer).toHaveBeenCalledTimes(4));
 
-		expect(resetA).toHaveBeenCalled();
-		expect(resetB).toHaveBeenCalled();
-		expect(writeB).toHaveBeenCalledWith(
-			Uint8Array.from(new TextEncoder().encode("latest buffer b")),
-		);
+		expect(resetA).not.toHaveBeenCalled();
+		expect(resetB).not.toHaveBeenCalled();
+		expect(writeA).not.toHaveBeenCalled();
+		expect(writeB).not.toHaveBeenCalled();
+		expect(entryA.viewNeedsRecovery).toBe(true);
+		expect(entryB.viewNeedsRecovery).toBe(true);
 		expect(entryA.ptyActive).toBe(true);
 		expect(entryA.needsClear).toBe(false);
 		expect(entryB.ptyActive).toBe(true);

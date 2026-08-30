@@ -11,6 +11,7 @@ import type {
   TerminalViewFactoryOptions,
   TerminalViewGeometry,
   TerminalViewRendererFailure,
+  TerminalViewSnapshot,
 } from './terminalView'
 import { createXtermWebglRendererLifecycle } from './xtermWebglRenderer'
 
@@ -132,6 +133,24 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     terminal.write(data)
   }
 
+
+  function writeAndWait(data: string | Uint8Array): Promise<void> {
+    presentation.recordWrite()
+    return new Promise(resolve => terminal.write(data, resolve))
+  }
+
+  function hasData(data: string | Uint8Array | undefined): data is string | Uint8Array {
+    return typeof data === 'string' ? data.length > 0 : Boolean(data?.byteLength)
+  }
+
+  async function replaceSnapshot(snapshot: TerminalViewSnapshot): Promise<void> {
+    await new Promise<void>(resolve => terminal.write('', resolve))
+    if (disposed) return
+    imageSupport.reset()
+    terminal.reset()
+    if (hasData(snapshot.compatibilityData)) await writeAndWait(snapshot.compatibilityData)
+    if (hasData(snapshot.data)) await writeAndWait(snapshot.data)
+  }
   return {
     get geometry() {
       return { cols: terminal.cols, rows: terminal.rows }
@@ -162,6 +181,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     bootstrap(data) {
       write(data)
     },
+    replaceSnapshot,
     writeLive(output) {
       write(output.data)
     },

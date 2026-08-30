@@ -53,7 +53,8 @@ describe('terminal runtime transport seam', () => {
 
     expect(transport.subscribeSession).toHaveBeenCalledOnce()
     expect(transport.subscribeSession).toHaveBeenCalledWith('T-1-shell-0', expect.any(Object))
-    expect(view.bootstrap).toHaveBeenCalledWith(expect.any(Uint8Array), 7, 0)
+    expect(view.replaceSnapshot).not.toHaveBeenCalled()
+    expect(entry.viewNeedsRecovery).toBe(true)
     expect(view.writeLive).not.toHaveBeenCalled()
     expect(entry.currentPtyInstance).toBe(7)
   })

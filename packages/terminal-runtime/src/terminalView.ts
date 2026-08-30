@@ -11,6 +11,13 @@ export interface TerminalViewLiveOutput {
 }
 
 
+export interface TerminalViewSnapshot {
+  data: TerminalViewData
+  compatibilityData?: TerminalViewData
+  ptyInstanceId: number | null
+  sequence: number
+}
+
 export interface TerminalViewGeometry {
   cols: number
   rows: number
@@ -107,6 +114,7 @@ export interface TerminalView {
   unmount(): void
   isMountedIn(container: HTMLElement): boolean
   bootstrap(data: TerminalViewData, ptyInstanceId: number | null, sequence: number): void
+  replaceSnapshot(snapshot: TerminalViewSnapshot): Promise<void>
   writeLive(output: TerminalViewLiveOutput): void
   drainPresentation(): Promise<TerminalViewPresentationEvidence>
   capturePresentation(): TerminalViewPresentationSnapshot

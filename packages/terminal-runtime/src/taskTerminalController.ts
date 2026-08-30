@@ -195,7 +195,7 @@ export function createTaskTerminalController({
       await adapter.killPty(binding.terminalKey).catch((error: unknown) => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', error)
       })
-      adapter.runtime.resetTerminal(entry)
+      await adapter.runtime.resetTerminal(entry)
       await spawnShellPty(entry, binding)
     } catch (error) {
       console.error('[TaskTerminal] Failed to restart shell:', error)

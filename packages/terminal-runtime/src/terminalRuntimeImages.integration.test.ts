@@ -1,4 +1,4 @@
-import { createHost } from './terminalRuntimeHost.testSupport'
+import { attachTestTerminal, createHost } from './terminalRuntimeHost.testSupport'
 import {
   imageAddonMocks,
   resetTerminalRuntimeMocks,
@@ -88,19 +88,27 @@ describe('terminal runtime inline image lifecycle', () => {
       instanceId: 7,
     })
     const runtime = createTerminalRuntime(host)
-    await runtime.acquire('T-1')
+    const entry = await runtime.acquire('T-1')
+    await attachTestTerminal(runtime, entry)
     terminalMocks.instances[0].write.mockClear()
 
     host.emit('openforge-app-events-reconnected', {})
 
-    await vi.waitFor(() => expect(terminalMocks.instances[0].write).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(terminalMocks.instances[0].write).toHaveBeenCalledTimes(3))
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       1,
-      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      '',
+      expect.any(Function),
     )
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       2,
+      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      expect.any(Function),
+    )
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      3,
       Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
+      expect.any(Function),
     )
   })
 
@@ -108,7 +116,9 @@ describe('terminal runtime inline image lifecycle', () => {
     const host = createHost()
     host.setBuffer('T-1', 'before')
     const runtime = createTerminalRuntime(host)
-    await runtime.acquire('T-1')
+    const entry = await runtime.acquire('T-1')
+    await attachTestTerminal(runtime, entry)
+    imageAddonMocks.instances[0].reset.mockClear()
     host.setBuffer('T-1', 'after')
 
     host.emit('openforge-app-events-reconnected', {})

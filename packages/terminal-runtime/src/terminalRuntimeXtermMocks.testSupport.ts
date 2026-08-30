@@ -51,7 +51,7 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: vi.fn(function Terminal() {
     const loadedAddons: Array<{ dispose?: () => void }> = []
     const terminal = {
-      write: vi.fn(),
+      write: vi.fn((_data: string | Uint8Array, callback?: () => void) => callback?.()),
       reset: vi.fn(),
       open: vi.fn(),
       dispose: vi.fn(() => {

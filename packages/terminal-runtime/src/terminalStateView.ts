@@ -8,7 +8,6 @@ import type { PoolEntry } from './terminalRuntimeTypes'
 
 interface TerminalStateViewOptions {
   transport: TerminalTransport
-  resetEntry(entry: PoolEntry): void
   markOutput(entry: PoolEntry): void
 }
 
@@ -21,7 +20,6 @@ function pushBounded<T>(queue: T[], value: T): void {
 
 export function createTerminalStateView({
   transport,
-  resetEntry,
   markOutput,
 }: TerminalStateViewOptions) {
 
@@ -56,58 +54,65 @@ export function createTerminalStateView({
   }
 
 
-  function activateGhosttySnapshot(entry: PoolEntry, replay: TerminalReplay, reset: boolean): void {
+  async function activateGhosttySnapshot(
+    entry: PoolEntry,
+    replay: TerminalReplay,
+    renderRequested: boolean,
+  ): Promise<void> {
     if (replay.ptyInstanceId === null) {
-      if (reset) {
-        resetEntry(entry)
-        entry.hasOutput = false
-      }
       entry.ptyActive = false
       entry.shellExited = false
       entry.needsClear = false
       entry.outputSequence = 0
       entry.currentPtyInstance = null
-      entry.terminalStateSource = 'ghostty-snapshot'
       entry.terminalModelSequence = null
       entry.pendingTerminalModelOutput.length = 0
       entry.hasOutput = Boolean(replay.historicalData)
-      if (replay.historicalData) {
-        entry.view.bootstrap(replay.historicalData, null, entry.outputSequence)
+      if (!renderRequested || !entry.attached) {
+        entry.terminalStateSource = 'ghostty-snapshot'
+        entry.viewNeedsRecovery = true
+        return
       }
-      entry.viewNeedsRecovery = false
+      await entry.view.replaceSnapshot({
+        data: replay.historicalData ?? '',
+        ptyInstanceId: null,
+        sequence: entry.outputSequence,
+      })
+      entry.terminalStateSource = 'ghostty-snapshot'
+      entry.viewNeedsRecovery = !entry.attached
       return
     }
     const snapshot = replay.snapshot
     if (!snapshot || snapshot.ptyInstanceId !== replay.ptyInstanceId) {
       throw new Error('Ghostty-authoritative terminal state requires a current snapshot')
     }
-    if (reset) {
-      resetEntry(entry)
-      entry.hasOutput = false
-    }
     entry.ptyActive = replay.isLive
     entry.shellExited = !replay.isLive
     entry.needsClear = false
     entry.outputSequence = 0
     entry.currentPtyInstance = replay.ptyInstanceId
-    entry.terminalStateSource = 'ghostty-snapshot'
     entry.terminalModelSequence = snapshot.watermark
-    // Seed renderer-only state, such as inline images, before the Ghostty snapshot
-    // establishes the canonical parsed terminal state.
-    if (snapshot.compatibilityData?.length) {
-      entry.view.bootstrap(snapshot.compatibilityData, replay.ptyInstanceId, entry.outputSequence)
-      entry.hasOutput = true
+    entry.hasOutput = snapshot.data.length > 0 || Boolean(snapshot.compatibilityData?.length)
+    if (!renderRequested || !entry.attached) {
+      entry.terminalStateSource = 'ghostty-snapshot'
+      entry.viewNeedsRecovery = true
+      return
     }
-    if (snapshot.data.length > 0) {
-      entry.view.bootstrap(snapshot.data, replay.ptyInstanceId, entry.outputSequence)
-      entry.hasOutput = true
-    }
-    entry.viewNeedsRecovery = false
-    flushPendingOutput(entry)
+    await entry.view.replaceSnapshot({
+      data: snapshot.data,
+      compatibilityData: snapshot.compatibilityData,
+      ptyInstanceId: replay.ptyInstanceId,
+      sequence: entry.outputSequence,
+    })
+    entry.terminalStateSource = 'ghostty-snapshot'
+    entry.viewNeedsRecovery = !entry.attached
+    if (entry.attached) flushPendingOutput(entry)
   }
 
-  async function recover(entry: PoolEntry, reset = true): Promise<void> {
+  async function recover(entry: PoolEntry): Promise<void> {
     if (entry.terminalReplayRecovery) return entry.terminalReplayRecovery
+    const renderRequested = entry.attached
+    const requestedAttachmentGeneration = entry.attachmentGeneration
     const requestedInstance = entry.currentPtyInstance
     const previousStateSource = entry.terminalStateSource
     entry.terminalStateSource = 'bootstrapping'
@@ -119,7 +124,8 @@ export function createTerminalStateView({
         flushPendingOutput(entry)
         return
       }
-      activateGhosttySnapshot(entry, replay, reset)
+      const sameAttachment = entry.attachmentGeneration === requestedAttachmentGeneration
+      return activateGhosttySnapshot(entry, replay, renderRequested && sameAttachment)
     })
     entry.terminalReplayRecovery = recovery
     try {

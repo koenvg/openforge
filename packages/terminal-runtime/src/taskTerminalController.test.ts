@@ -201,7 +201,9 @@ describe('createTaskTerminalController', () => {
       hasOutput: true,
     }
     const entry = createEntry('T-1-shell-0')
+    const reset = deferred<void>()
     const adapter = createAdapter({
+      resetTerminal: vi.fn(() => reset.promise),
       acquire: vi.fn(async () => entry),
       getShellLifecycleState: vi.fn(() => exitedLifecycle),
       getTerminalImageProtocol: vi.fn((): 'iterm2' => 'iterm2'),
@@ -215,7 +217,11 @@ describe('createTaskTerminalController', () => {
     controller.mount(binding('T-1-shell-0'))
     await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
 
-    await controller.restart()
+    const restarting = controller.restart()
+    await vi.waitFor(() => expect(adapter.runtime.resetTerminal).toHaveBeenCalledWith(entry))
+    expect(adapter.spawnShellPty).not.toHaveBeenCalled()
+    reset.resolve()
+    await restarting
 
     expect(adapter.killPty).toHaveBeenCalledWith('T-1-shell-0')
     expect(adapter.runtime.resetTerminal).toHaveBeenCalledWith(entry)
