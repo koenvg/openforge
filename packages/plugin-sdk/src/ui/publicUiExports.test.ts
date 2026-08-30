@@ -45,8 +45,11 @@ describe('plugin-sdk public UI exports', () => {
 
     const exportsWithoutFileTypeIcon = { ...packageJson.exports }
     delete exportsWithoutFileTypeIcon['./ui/FileTypeIcon.svelte']
+    exportsWithoutFileTypeIcon['./ui/Legacy.svelte'] = './dist/ui/Legacy.svelte'
     expect(() => assertOpenForgePluginSdkPublicUiPackageExports(exportsWithoutFileTypeIcon)).toThrow(
-      'missing or mismatched: ./ui/FileTypeIcon.svelte -> ./dist/ui/FileTypeIcon.svelte',
+      'Plugin SDK public UI exports drifted from the canonical manifest '
+        + '(missing or mismatched: ./ui/FileTypeIcon.svelte -> ./dist/ui/FileTypeIcon.svelte; '
+        + 'not in the canonical manifest: ./ui/Legacy.svelte)',
     )
   })
 

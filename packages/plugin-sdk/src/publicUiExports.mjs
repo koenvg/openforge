@@ -1,3 +1,5 @@
+import { assertRegistryMatchesCanonicalManifest } from './registryValidation.mjs'
+
 const PLUGIN_SDK_PACKAGE_NAME = '@openforge-app/plugin-sdk'
 
 const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
@@ -38,26 +40,12 @@ export function createOpenForgePluginSdkPublicUiPackageExports() {
 }
 
 export function assertOpenForgePluginSdkPublicUiPackageExports(packageExports) {
-  if (!packageExports || typeof packageExports !== 'object' || Array.isArray(packageExports)) {
-    throw new Error('Plugin SDK package.json must define an exports object')
-  }
-
-  const expected = createOpenForgePluginSdkPublicUiPackageExports()
-  const actual = Object.fromEntries(
-    Object.entries(packageExports).filter(([subpath]) => subpath.startsWith('./ui/')),
-  )
-  const expectedEntries = Object.entries(expected)
-  const missingOrMismatched = expectedEntries
-    .filter(([subpath, distPath]) => actual[subpath] !== distPath)
-    .map(([subpath, distPath]) => `${subpath} -> ${distPath}`)
-  const unexpected = Object.keys(actual).filter((subpath) => !(subpath in expected))
-
-  if (missingOrMismatched.length === 0 && unexpected.length === 0) return
-
-  const details = [
-    missingOrMismatched.length > 0 ? `missing or mismatched: ${missingOrMismatched.join(', ')}` : null,
-    unexpected.length > 0 ? `not in the canonical manifest: ${unexpected.join(', ')}` : null,
-  ].filter(Boolean)
-
-  throw new Error(`Plugin SDK public UI exports drifted from the canonical manifest (${details.join('; ')})`)
+  assertRegistryMatchesCanonicalManifest({
+    registryName: 'Plugin SDK public UI exports',
+    actual: packageExports,
+    expected: createOpenForgePluginSdkPublicUiPackageExports(),
+    invalidRegistryMessage: 'Plugin SDK package.json must define an exports object',
+    includeActualEntry: ([subpath]) => subpath.startsWith('./ui/'),
+    formatMissingOrMismatched: ([subpath, distPath]) => `${subpath} -> ${distPath}`,
+  })
 }

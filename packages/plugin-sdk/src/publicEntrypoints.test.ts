@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   OPENFORGE_PLUGIN_SDK_PUBLIC_ENTRYPOINTS,
+  assertOpenForgePluginSdkEntrypointRegistries,
   createOpenForgePluginSdkPackageExports,
   createOpenForgePluginSdkTypeScriptPaths,
 } from './publicEntrypoints.mjs'
@@ -34,6 +35,22 @@ describe('plugin-sdk public entrypoints', () => {
           resolve(workspaceRoot, workspaceSourcePath),
         ]),
       ),
+    )
+  })
+
+  it('preserves package registry drift diagnostics', () => {
+    const packageExports = {
+      ...createOpenForgePluginSdkPackageExports(),
+      './frontend': './dist/wrong.js',
+      './legacy': './dist/legacy.js',
+    }
+
+    expect(() => assertOpenForgePluginSdkEntrypointRegistries({
+      packageExports,
+      typeScriptPaths: createOpenForgePluginSdkTypeScriptPaths(),
+    })).toThrow(
+      'Plugin SDK package exports drifted from the canonical manifest '
+        + '(missing or mismatched: ./frontend; not in the canonical manifest: ./legacy)',
     )
   })
 
