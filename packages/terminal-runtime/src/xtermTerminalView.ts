@@ -52,8 +52,10 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     for (const listener of userInputListeners) listener(data)
   })
   let opened = false
+  let visible = false
+  let visibilityManaged = false
+  let refreshPending = false
   let disposed = false
-
   function notifyRendererFailure(failure: TerminalViewRendererFailure): void {
     for (const listener of rendererFailureListeners) listener(failure)
   }
@@ -75,13 +77,20 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     refresh()
   }
 
+  function fitAndRefreshWhenVisible(): void {
+    if (!visible || !hostDiv.parentNode) {
+      refreshPending = true
+      return
+    }
+    refreshPending = false
+    fitAndRefresh()
+  }
+
   const webglRenderer = createXtermWebglRendererLifecycle({
     terminal,
     loggerName: options.loggerName,
     onFailure: notifyRendererFailure,
-    refreshAfterFallback: () => {
-      if (hostDiv.parentNode) fitAndRefresh()
-    },
+    refreshAfterFallback: fitAndRefreshWhenVisible,
   })
   let completedFontLoad: TerminalFontLoadOutcome | null = null
   function handleFontLoadCompletion(outcome: TerminalFontLoadOutcome): void {
@@ -100,7 +109,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     }
     if (!opened || disposed) return
     webglRenderer.clearTextureAtlas()
-    if (hostDiv.parentNode) fitAndRefresh()
+    fitAndRefreshWhenVisible()
   }
   if (options.fontReadiness.status === 'timed-out') {
     void options.fontReadiness.completion.then(handleFontLoadCompletion)
@@ -124,7 +133,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   const presentation = createXtermPresentationController({
     terminal,
     rendererName: () => webglRenderer.rendererName,
-    canPresent: () => opened && Boolean(hostDiv.parentNode),
+    canPresent: () => opened && visible && Boolean(hostDiv.parentNode),
     refresh,
   })
 
@@ -163,14 +172,29 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     },
     mount(container) {
       if (disposed) return
+      if (!visibilityManaged) visible = true
       container.appendChild(hostDiv)
-      if (opened) return
+      if (opened) {
+        if (refreshPending) fitAndRefreshWhenVisible()
+        return
+      }
       reportFontReadinessBeforeOpen()
       terminal.open(hostDiv)
       opened = true
       webglRenderer.load()
     },
+    setVisible(nextVisible) {
+      visibilityManaged = true
+      if (visible === nextVisible) return
+      visible = nextVisible
+      if (!visible) {
+        presentation.detach()
+        return
+      }
+      if (refreshPending) fitAndRefreshWhenVisible()
+    },
     unmount() {
+      visible = false
       terminal.blur()
       presentation.detach()
       hostDiv.parentNode?.removeChild(hostDiv)

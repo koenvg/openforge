@@ -245,8 +245,15 @@ const MockIntersectionObserver: typeof IntersectionObserver = class MockIntersec
 	readonly scrollMargin = "";
 	readonly thresholds: number[] = [];
 
+	private readonly callback: IntersectionObserverCallback;
+
+	constructor(callback: IntersectionObserverCallback) {
+		this.callback = callback;
+	}
 	disconnect = vi.fn<() => void>();
-	observe = vi.fn<(target: Element) => void>();
+	observe = vi.fn<(target: Element) => void>((target) => {
+		this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this);
+	});
 	takeRecords = vi.fn<() => IntersectionObserverEntry[]>().mockReturnValue([]);
 	unobserve = vi.fn<(target: Element) => void>();
 };

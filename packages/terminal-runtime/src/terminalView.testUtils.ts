@@ -9,6 +9,7 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     imageProtocol: null,
     resizeTarget: document.createElement('div'),
     mount: vi.fn(),
+    setVisible: vi.fn(),
     unmount: vi.fn(),
     isMountedIn: vi.fn(() => false),
     bootstrap: vi.fn(),

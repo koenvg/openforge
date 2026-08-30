@@ -98,6 +98,8 @@ export function createTerminalRuntime({
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      viewVisible: false,
+      viewVisibilityGeneration: 0,
       viewNeedsRecovery: false,
       attachmentGeneration: 0,
       spawnPending: false,

@@ -111,6 +111,7 @@ export interface TerminalView {
   readonly resizeTarget: Element
 
   mount(container: HTMLElement): void
+  setVisible(visible: boolean): void
   unmount(): void
   isMountedIn(container: HTMLElement): boolean
   bootstrap(data: TerminalViewData, ptyInstanceId: number | null, sequence: number): void

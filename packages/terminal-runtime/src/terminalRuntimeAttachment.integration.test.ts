@@ -18,7 +18,10 @@ function stubAttachmentObservers(): void {
     unobserve() {}
   })
   vi.stubGlobal('IntersectionObserver', class {
-    observe() {}
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+    }
     disconnect() {}
     unobserve() {}
     takeRecords() { return [] }
@@ -165,7 +168,13 @@ describe('terminal runtime attachment', () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
     vi.stubGlobal('ResizeObserver', class { observe() {}; disconnect() {}; unobserve() {} })
     vi.stubGlobal('IntersectionObserver', class {
-      observe() {}; disconnect() {}; unobserve() {}; takeRecords() { return [] }
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return [] }
       readonly root = null
       readonly rootMargin = ''
       readonly thresholds = [0]

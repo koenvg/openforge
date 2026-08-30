@@ -118,7 +118,7 @@ export function createTaskTerminalController({
     try {
       const wasAttached = entry.attached
       const attachment = await adapter.runtime.attach(entry, terminalHost)
-      if (poolEntry !== entry || !isCurrentBinding(binding)) {
+      if (!entry.attached || poolEntry !== entry || !isCurrentBinding(binding)) {
         attachment.detach()
         return
       }
