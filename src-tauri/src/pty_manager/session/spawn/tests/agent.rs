@@ -12,10 +12,12 @@ use super::super::streams::AgentStreamState;
 use crate::pty_manager::managed_process::ManagedProcessIdentity;
 use crate::pty_manager::pids::write_managed_process_identity;
 
+const CONCURRENT_SPAWN_TIMEOUT: Duration = Duration::from_secs(5);
+
 struct LockCheckingAgentAdapter {
     sessions: PtySessions,
     prepared_tx: Option<mpsc::Sender<()>>,
-    command_delay: Duration,
+    command_release_rx: Option<mpsc::Receiver<()>>,
     script: &'static str,
     check_lock: bool,
 }
@@ -42,8 +44,10 @@ impl AgentPtyProviderAdapter for LockCheckingAgentAdapter {
 
     fn command_args(&self) -> Vec<String> {
         self.assert_sessions_unlocked("command argument construction");
-        if !self.command_delay.is_zero() {
-            std::thread::sleep(self.command_delay);
+        if let Some(release_rx) = &self.command_release_rx {
+            release_rx
+                .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
+                .expect("test should release provider command construction");
         }
         // Keep test PTYs single-process so cleanup never waits on an orphan reaper.
         vec!["-lc".to_string(), format!("{}; exec sleep 5", self.script)]
@@ -71,6 +75,27 @@ impl AgentPtyProviderAdapter for LockCheckingAgentAdapter {
     }
 }
 
+fn join_thread_with_timeout<T: Send + 'static>(
+    thread: std::thread::JoinHandle<T>,
+    description: &str,
+) -> T {
+    let (result_tx, result_rx) = mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let _ = result_tx.send(thread.join());
+    });
+
+    match result_rx.recv_timeout(CONCURRENT_SPAWN_TIMEOUT) {
+        Ok(Ok(result)) => result,
+        Ok(Err(payload)) => std::panic::resume_unwind(payload),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            panic!("{description} should join within {CONCURRENT_SPAWN_TIMEOUT:?}")
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("{description} join monitor disconnected")
+        }
+    }
+}
+
 #[tokio::test]
 async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
     let mut manager = PtyManager::new();
@@ -80,7 +105,7 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
-        command_delay: Duration::ZERO,
+        command_release_rx: None,
         script: "printf lock-free-agent",
         check_lock: true,
     };
@@ -144,7 +169,7 @@ async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
-        command_delay: Duration::ZERO,
+        command_release_rx: None,
         script: "printf ghostty-agent-output",
         check_lock: true,
     };
@@ -197,7 +222,7 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
-        command_delay: Duration::ZERO,
+        command_release_rx: None,
         script: "stty -echo; IFS= read -r _; printf before; IFS= read -r _; printf after",
         check_lock: true,
     };
@@ -283,7 +308,7 @@ async fn unresolved_recovery_metadata_blocks_spawn_without_clobbering_record() {
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
-        command_delay: Duration::ZERO,
+        command_release_rx: None,
         script: "printf blocked-agent",
         check_lock: false,
     };
@@ -319,6 +344,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
     manager.set_pid_dir(tmp_dir.path().to_path_buf());
     let task_id = "concurrent-agent-spawn";
     let (old_prepared_tx, old_prepared_rx) = mpsc::channel();
+    let (release_old_command_tx, release_old_command_rx) = mpsc::channel();
 
     let old_manager = manager.clone();
     let old_cwd = tmp_dir.path().to_path_buf();
@@ -326,7 +352,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
     let old_adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: Some(old_prepared_tx),
-        command_delay: Duration::from_millis(150),
+        command_release_rx: Some(release_old_command_rx),
         script: "printf old-agent",
         check_lock: false,
     };
@@ -349,32 +375,58 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
     });
 
     old_prepared_rx
-        .recv_timeout(Duration::from_secs(1))
+        .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
         .expect("older spawn should reach provider preparation");
+    let old_generation = manager
+        .agent_spawn_generations
+        .lock()
+        .await
+        .get(task_id)
+        .copied()
+        .expect("older spawn should publish its claim before command construction");
 
     let new_adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: None,
-        command_delay: Duration::ZERO,
+        command_release_rx: None,
         script: "printf new-agent",
         check_lock: false,
     };
-    let new_instance_id = manager
-        .spawn_agent_pty(
-            new_adapter,
-            PtySpawnContext {
-                task_id,
-                cwd: tmp_dir.path(),
-                cols: 80,
-                rows: 24,
-                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
-            },
-            None,
-        )
+    let mut new_spawn = Box::pin(manager.spawn_agent_pty(
+        new_adapter,
+        PtySpawnContext {
+            task_id,
+            cwd: tmp_dir.path(),
+            cols: 80,
+            rows: 24,
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+        },
+        None,
+    ));
+    assert!(
+        futures::poll!(new_spawn.as_mut()).is_pending(),
+        "newer spawn should wait for the older spawn's lifecycle lock"
+    );
+    let new_generation = manager
+        .agent_spawn_generations
+        .lock()
         .await
-        .expect("newer spawn should become current");
+        .get(task_id)
+        .copied()
+        .expect("newer spawn should publish its claim before waiting");
+    assert_ne!(
+        new_generation, old_generation,
+        "newer spawn should supersede the older claim"
+    );
 
-    let old_result = old_spawn.join().expect("older spawn task should join");
+    release_old_command_tx
+        .send(())
+        .expect("older spawn command construction should be released");
+    let old_result = join_thread_with_timeout(old_spawn, "older spawn task");
+    let new_instance_id = tokio::time::timeout(CONCURRENT_SPAWN_TIMEOUT, new_spawn.as_mut())
+        .await
+        .expect("newer spawn should finish before the deadline")
+        .expect("newer spawn should become current");
     assert!(
         matches!(old_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before session registration")),
         "older spawn should abort instead of replacing the newer session: {old_result:?}"
@@ -427,7 +479,7 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
             LockCheckingAgentAdapter {
                 sessions: Arc::clone(&manager.sessions),
                 prepared_tx: None,
-                command_delay: Duration::ZERO,
+                command_release_rx: None,
                 script: "while true; do sleep 1; done",
                 check_lock: false,
             },
@@ -449,7 +501,7 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
         LockCheckingAgentAdapter {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
-            command_delay: Duration::ZERO,
+            command_release_rx: None,
             script: "printf old-should-not-win; while true; do sleep 1; done",
             check_lock: false,
         },
@@ -478,7 +530,7 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
         LockCheckingAgentAdapter {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
-            command_delay: Duration::ZERO,
+            command_release_rx: None,
             script: "printf new-winner; while true; do sleep 1; done",
             check_lock: false,
         },
@@ -575,7 +627,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
             LockCheckingAgentAdapter {
                 sessions: Arc::clone(&stale_manager.sessions),
                 prepared_tx: None,
-                command_delay: Duration::ZERO,
+                command_release_rx: None,
                 script: "printf stale-agent",
                 check_lock: false,
             },
@@ -619,7 +671,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
     release_stream_tx
         .send(())
         .expect("stale spawn should be released");
-    let stale_result = stale_spawn.join().expect("stale spawn thread should join");
+    let stale_result = join_thread_with_timeout(stale_spawn, "stale spawn thread");
     assert!(
         matches!(stale_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before event streaming started")),
         "superseded setup should stop before event streaming: {stale_result:?}"
@@ -642,7 +694,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
             LockCheckingAgentAdapter {
                 sessions: Arc::clone(&manager.sessions),
                 prepared_tx: None,
-                command_delay: Duration::ZERO,
+                command_release_rx: None,
                 script: "printf newer-agent",
                 check_lock: false,
             },
@@ -734,6 +786,7 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
     manager.set_pid_dir(tmp_dir.path().to_path_buf());
     let task_id = "kill-pending-agent-spawn";
     let (prepared_tx, prepared_rx) = mpsc::channel();
+    let (release_command_tx, release_command_rx) = mpsc::channel();
 
     let spawn_manager = manager.clone();
     let spawn_cwd = tmp_dir.path().to_path_buf();
@@ -741,7 +794,7 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
         prepared_tx: Some(prepared_tx),
-        command_delay: Duration::from_millis(150),
+        command_release_rx: Some(release_command_rx),
         script: "printf killed-agent",
         check_lock: false,
     };
@@ -764,16 +817,30 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
     });
 
     prepared_rx
-        .recv_timeout(Duration::from_secs(1))
+        .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
         .expect("spawn should reach provider preparation");
-    manager
-        .kill_pty(task_id)
-        .await
-        .expect("kill during pending spawn should be accepted");
+    let mut kill = Box::pin(manager.kill_pty(task_id));
+    assert!(
+        futures::poll!(kill.as_mut()).is_pending(),
+        "kill should wait for the pending spawn's lifecycle lock"
+    );
+    assert!(
+        !manager
+            .agent_spawn_generations
+            .lock()
+            .await
+            .contains_key(task_id),
+        "kill should invalidate the pending spawn before waiting"
+    );
 
-    let spawn_result = pending_spawn
-        .join()
-        .expect("pending spawn thread should join");
+    release_command_tx
+        .send(())
+        .expect("pending spawn command construction should be released");
+    let spawn_result = join_thread_with_timeout(pending_spawn, "pending spawn thread");
+    tokio::time::timeout(CONCURRENT_SPAWN_TIMEOUT, kill.as_mut())
+        .await
+        .expect("kill should finish before the deadline")
+        .expect("kill during pending spawn should be accepted");
     assert!(
         matches!(spawn_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before session registration")),
         "pending spawn should abort after kill_pty invalidates it: {spawn_result:?}"
