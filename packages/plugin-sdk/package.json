@@ -106,7 +106,8 @@
   },
   "dependencies": {
     "dompurify": "catalog:",
-    "marked": "catalog:"
+    "marked": "catalog:",
+    "mermaid": "catalog:"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

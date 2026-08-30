@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { observeMermaidTheme, renderMermaidDiagrams } from '../mermaid'
   import {
     getMarkdownRepositoryLinkSuffix,
     MARKDOWN_REMOTE_MEDIA_ATTRIBUTE,
@@ -38,6 +39,9 @@
 
   let root = $state<HTMLDivElement | null>(null)
   let imageResolutionId = 0
+  let mermaidRenderId = 0
+  let mermaidThemeRevision = $state(0)
+  let stopObservingMermaidTheme: (() => void) | undefined
   let html = $derived(renderMarkdownHtml(content, {
     imageBaseUrl: resolveRepositoryImage ? null : imageBaseUrl,
     markdownFilePath,
@@ -138,6 +142,22 @@
   }
 
   $effect(() => {
+    if (!root || stopObservingMermaidTheme) return
+    stopObservingMermaidTheme = observeMermaidTheme(root.ownerDocument, () => {
+      mermaidThemeRevision++
+    })
+  })
+
+  $effect(() => {
+    const runId = ++mermaidRenderId
+    void html
+    void mermaidThemeRevision
+    if (!root) return
+
+    void renderMermaidDiagrams(root, () => runId === mermaidRenderId)
+  })
+
+  $effect(() => {
     const runId = ++imageResolutionId
     void html
     if (!root) return
@@ -149,6 +169,8 @@
 
   onDestroy(() => {
     imageResolutionId++
+    mermaidRenderId++
+    stopObservingMermaidTheme?.()
   })
 
   function openMarkdownLink(href: string, absoluteHref: string) {

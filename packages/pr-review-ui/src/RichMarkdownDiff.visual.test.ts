@@ -62,24 +62,58 @@ describe.skipIf(!runsMarkdownVisuals)('Rich Markdown diff visuals', () => {
   it('preserves multiple Markdown table layouts', async () => {
     await expectVisualFixture('tables', 'light')
   }, 30_000)
+
+  it('renders Mermaid diagrams in a light Markdown preview', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'light', 'preview')
+  }, 30_000)
+
+  it('renders Mermaid diagrams in a dark Markdown preview', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'dark', 'preview')
+  }, 30_000)
+
+  it('renders Mermaid diagrams in a light rich diff', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'light', 'rich-diff')
+  }, 30_000)
+
+  it('renders Mermaid diagrams in a dark rich diff', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'dark', 'rich-diff')
+  }, 30_000)
 })
 
-async function expectVisualFixture(fixture: string, theme: 'light' | 'dark') {
+async function expectVisualFixture(
+  fixture: string,
+  theme: 'light' | 'dark',
+  surface?: 'preview' | 'rich-diff',
+) {
   const page = await browser.newPage({
     deviceScaleFactor: 1,
     viewport: { width: 1024, height: 900 },
     colorScheme: theme,
     reducedMotion: 'reduce',
   })
+  const externalRequests: string[] = []
+  page.on('request', (request) => {
+    const url = request.url()
+    if (/^https?:/i.test(url) && new URL(url).origin !== new URL(origin).origin) externalRequests.push(url)
+  })
 
   try {
-    await page.goto(`${origin}${harnessPath}?fixture=${fixture}&theme=${theme}`)
+    const surfaceQuery = surface ? `&surface=${surface}` : ''
+    await page.goto(`${origin}${harnessPath}?fixture=${fixture}&theme=${theme}${surfaceQuery}`)
     await page.evaluate(() => document.fonts.ready)
+    if (fixture === 'mermaid-diagrams') {
+      await page.waitForFunction(() => (
+        document.querySelectorAll('.mermaid-diagram svg').length === 3
+        && document.querySelectorAll('.mermaid-diagram-fallback').length === 2
+      ))
+    }
     const screenshot = await page.getByTestId('markdown-visual').screenshot({
       animations: 'disabled',
       caret: 'hide',
     })
-    compareScreenshot(`${fixture}-${theme}`, screenshot)
+    expect(externalRequests, 'Sanitized Markdown must not load external resources').toEqual([])
+    const baselineName = surface ? `${fixture}-${surface}-${theme}` : `${fixture}-${theme}`
+    compareScreenshot(baselineName, screenshot)
   } finally {
     await page.close()
   }
