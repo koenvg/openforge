@@ -20,8 +20,10 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers. |
 | `@openforge-app/plugin-sdk/numberParsing` | Strict finite-number parsing helper. |
 | `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers. |
+| `@openforge-app/plugin-sdk/fileIcons` | File and folder icon-name lookup helpers plus the bundled icon-name list. |
 | `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
 | `@openforge-app/plugin-sdk/collapsibleSectionState` | Shared collapse-state helpers, including plugin key namespacing. |
+| `@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts` | Keyboard shortcut classification for task browser DevTools actions. |
 | `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button. |
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox. |
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Disclosure section with shared, persisted collapse state. |
