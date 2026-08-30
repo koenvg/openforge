@@ -29,6 +29,10 @@ mod task_dependencies;
 mod task_labels;
 mod task_lifecycle;
 mod task_persistence;
+#[cfg(test)]
+mod task_persistence_benchmark;
+#[cfg(test)]
+mod task_persistence_test_support;
 mod task_start;
 mod task_workspaces;
 mod tasks;

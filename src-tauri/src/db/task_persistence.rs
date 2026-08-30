@@ -6,8 +6,76 @@ use super::{
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
 
-const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
-const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, source_ticket_url";
+macro_rules! task_row_query {
+    ($suffix:literal) => {
+        concat!(
+            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, ",
+            "prompt, agent, permission_mode, title, title_source, title_generated_at, ",
+            "worktree_source, worktree_branch, source_ticket_url FROM tasks ",
+            $suffix
+        )
+    };
+}
+
+macro_rules! compact_task_row_query {
+    ($suffix:literal) => {
+        concat!(
+            "SELECT id, status, project_id, created_at, updated_at, agent, permission_mode, ",
+            "worktree_source, worktree_branch, ",
+            "COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, ",
+            "title_source, title_generated_at, source_ticket_url FROM tasks ",
+            $suffix
+        )
+    };
+}
+
+const TASKS_FOR_PROJECT_SQL: &str =
+    task_row_query!("WHERE project_id = ?1 ORDER BY updated_at DESC");
+const TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL: &str =
+    task_row_query!("WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
+const TASKS_FOR_PROJECT_BY_STATE_SQL: &str =
+    task_row_query!("WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
+const COMPACT_TASKS_FOR_PROJECT_SQL: &str =
+    compact_task_row_query!("WHERE project_id = ?1 ORDER BY updated_at DESC");
+const COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL: &str =
+    compact_task_row_query!("WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
+const COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL: &str =
+    compact_task_row_query!("WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
+const ALL_TASKS_SQL: &str = task_row_query!("ORDER BY updated_at DESC");
+const TASK_BY_ID_SQL: &str = task_row_query!("WHERE id = ?1");
+
+const TASK_RELATIONSHIP_REFERENCES_FOR_PROJECT_SQL: &str = r#"
+WITH active_tasks AS (
+    SELECT id
+    FROM tasks
+    WHERE project_id = ?1 AND status != 'done'
+),
+relationship_ids AS (
+    SELECT dependencies.depends_on_task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.task_id
+    UNION
+    SELECT dependencies.task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.depends_on_task_id
+    INNER JOIN tasks dependent ON dependent.id = dependencies.task_id
+    WHERE dependent.status != 'done'
+),
+relationship_tasks AS (
+    SELECT
+        tasks.id,
+        tasks.status,
+        tasks.project_id,
+        COALESCE(NULLIF(tasks.title, ''), substr(tasks.initial_prompt, 1, 120)) AS title,
+        tasks.updated_at
+    FROM tasks
+    INNER JOIN relationship_ids ON relationship_ids.id = tasks.id
+    WHERE NOT EXISTS (SELECT 1 FROM active_tasks WHERE active_tasks.id = tasks.id)
+)
+SELECT id, status, project_id, title
+FROM relationship_tasks
+ORDER BY updated_at DESC
+"#;
 
 fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
     Ok(TaskRow {
@@ -132,10 +200,7 @@ impl Database {
     /// Get all tasks for a project.
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!(
-            "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC"
-        );
-        query_task_rows(&conn, &query, [project_id])
+        query_task_rows(&conn, TASKS_FOR_PROJECT_SQL, [project_id])
     }
 
     pub fn get_tasks_for_project_excluding_state(
@@ -144,14 +209,16 @@ impl Database {
         state: &str,
     ) -> Result<Vec<TaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-        query_task_rows(&conn, &query, [project_id, state])
+        query_task_rows(
+            &conn,
+            TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
+            [project_id, state],
+        )
     }
 
     pub fn get_compact_tasks_for_project(&self, project_id: &str) -> Result<Vec<CompactTaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC");
-        query_compact_task_rows(&conn, &query, [project_id])
+        query_compact_task_rows(&conn, COMPACT_TASKS_FOR_PROJECT_SQL, [project_id])
     }
 
     pub fn get_compact_tasks_for_project_excluding_state(
@@ -160,8 +227,11 @@ impl Database {
         state: &str,
     ) -> Result<Vec<CompactTaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-        query_compact_task_rows(&conn, &query, [project_id, state])
+        query_compact_task_rows(
+            &conn,
+            COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
+            [project_id, state],
+        )
     }
 
     pub fn get_compact_tasks_for_project_by_state(
@@ -170,8 +240,11 @@ impl Database {
         state: &str,
     ) -> Result<Vec<CompactTaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
-        query_compact_task_rows(&conn, &query, [project_id, state])
+        query_compact_task_rows(
+            &conn,
+            COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL,
+            [project_id, state],
+        )
     }
 
     pub fn get_tasks_for_project_by_state(
@@ -180,8 +253,7 @@ impl Database {
         state: &str,
     ) -> Result<Vec<TaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
-        query_task_rows(&conn, &query, [project_id, state])
+        query_task_rows(&conn, TASKS_FOR_PROJECT_BY_STATE_SQL, [project_id, state])
     }
 
     pub fn get_task_relationship_references_for_project(
@@ -189,40 +261,7 @@ impl Database {
         project_id: &str,
     ) -> Result<Vec<TaskRelationshipReferenceRow>> {
         let conn = self.lock_conn()?;
-        let mut statement = conn.prepare(
-            r#"
-WITH active_tasks AS (
-    SELECT id
-    FROM tasks
-    WHERE project_id = ?1 AND status != 'done'
-),
-relationship_ids AS (
-    SELECT dependencies.depends_on_task_id AS id
-    FROM task_dependencies dependencies
-    INNER JOIN active_tasks active ON active.id = dependencies.task_id
-    UNION
-    SELECT dependencies.task_id AS id
-    FROM task_dependencies dependencies
-    INNER JOIN active_tasks active ON active.id = dependencies.depends_on_task_id
-    INNER JOIN tasks dependent ON dependent.id = dependencies.task_id
-    WHERE dependent.status != 'done'
-),
-relationship_tasks AS (
-    SELECT
-        tasks.id,
-        tasks.status,
-        tasks.project_id,
-        COALESCE(NULLIF(tasks.title, ''), substr(tasks.initial_prompt, 1, 120)) AS title,
-        tasks.updated_at
-    FROM tasks
-    INNER JOIN relationship_ids ON relationship_ids.id = tasks.id
-    WHERE NOT EXISTS (SELECT 1 FROM active_tasks WHERE active_tasks.id = tasks.id)
-)
-SELECT id, status, project_id, title
-FROM relationship_tasks
-ORDER BY updated_at DESC
-            "#,
-        )?;
+        let mut statement = conn.prepare(TASK_RELATIONSHIP_REFERENCES_FOR_PROJECT_SQL)?;
         let rows = statement.query_map([project_id], task_relationship_reference_from_row)?;
         let tasks = rows.collect::<Result<Vec<_>>>()?;
         hydrate_task_relationship_references(&conn, tasks)
@@ -230,14 +269,14 @@ ORDER BY updated_at DESC
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks ORDER BY updated_at DESC");
-        query_task_rows(&conn, &query, [])
+        query_task_rows(&conn, ALL_TASKS_SQL, [])
     }
 
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE id = ?1");
-        let task = conn.query_row(&query, [id], task_from_row).optional()?;
+        let task = conn
+            .query_row(TASK_BY_ID_SQL, [id], task_from_row)
+            .optional()?;
         task.map(|task| hydrate_task_row(&conn, task)).transpose()
     }
 
@@ -256,7 +295,12 @@ ORDER BY updated_at DESC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::test_helpers::*;
+    use crate::db::{
+        task_persistence_test_support::{
+            seed_project_task_history, ACTIVE_TASK_COUNT, COMPLETED_TASK_HISTORY_SIZE,
+        },
+        test_helpers::*,
+    };
     use rusqlite::trace::{TraceEvent, TraceEventCodes};
     use std::cell::Cell;
 
@@ -306,6 +350,33 @@ mod tests {
             )
             .expect("set updated_at");
         }
+    }
+
+    fn query_plan<const N: usize>(
+        conn: &rusqlite::Connection,
+        query: &str,
+        params: [&str; N],
+    ) -> Vec<String> {
+        let mut statement = conn
+            .prepare(&format!("EXPLAIN QUERY PLAN {query}"))
+            .expect("prepare query plan");
+        statement
+            .query_map(params_from_iter(params), |row| row.get(3))
+            .expect("query plan")
+            .collect::<Result<Vec<_>>>()
+            .expect("collect query plan")
+    }
+
+    fn assert_plan_uses_index_without_temp_sort(plan: &[String], index: &str) {
+        let details = plan.join("\n");
+        assert!(
+            details.contains(index),
+            "query plan should use {index}:\n{details}"
+        );
+        assert!(
+            !details.contains("USE TEMP B-TREE FOR ORDER BY"),
+            "query plan should use index order instead of a temporary sort:\n{details}"
+        );
     }
 
     #[test]
@@ -399,6 +470,78 @@ mod tests {
         );
 
         drop(db);
+    }
+
+    #[test]
+    fn production_project_queries_use_task_indexes_with_completed_history() {
+        let (db, _temp_dir) = make_test_db("task_query_plans");
+        let project = db
+            .create_project("Indexed project", "/tmp/indexed-project")
+            .expect("create project");
+        seed_project_task_history(&db, &project.id);
+
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock connection");
+
+        for query in [TASKS_FOR_PROJECT_SQL, COMPACT_TASKS_FOR_PROJECT_SQL] {
+            assert_plan_uses_index_without_temp_sort(
+                &query_plan(&conn, query, [&project.id]),
+                "idx_tasks_project_updated_at",
+            );
+        }
+        for query in [
+            TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
+            COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
+        ] {
+            assert_plan_uses_index_without_temp_sort(
+                &query_plan(&conn, query, [&project.id, "done"]),
+                "idx_tasks_project_active_updated_at",
+            );
+        }
+        for query in [
+            TASKS_FOR_PROJECT_BY_STATE_SQL,
+            COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL,
+        ] {
+            assert_plan_uses_index_without_temp_sort(
+                &query_plan(&conn, query, [&project.id, "done"]),
+                "idx_tasks_project_completed_updated_at",
+            );
+        }
+
+        let relationship_plan = query_plan(
+            &conn,
+            TASK_RELATIONSHIP_REFERENCES_FOR_PROJECT_SQL,
+            [&project.id],
+        )
+        .join("\n");
+        assert!(
+            relationship_plan.contains("idx_tasks_project_active_updated_at"),
+            "relationship query should find active tasks through the partial index:\n{relationship_plan}"
+        );
+        assert!(
+            relationship_plan.contains("idx_task_dependencies_depends_on"),
+            "relationship query should use the reverse dependency index:\n{relationship_plan}"
+        );
+        drop(conn);
+
+        assert_eq!(
+            db.get_compact_tasks_for_project_excluding_state(&project.id, "done")
+                .expect("refresh active tasks")
+                .len() as i64,
+            ACTIVE_TASK_COUNT
+        );
+        assert_eq!(
+            db.get_compact_tasks_for_project_by_state(&project.id, "done")
+                .expect("refresh completed tasks")
+                .len() as i64,
+            COMPLETED_TASK_HISTORY_SIZE
+        );
+        assert_eq!(
+            db.get_task_relationship_references_for_project(&project.id)
+                .expect("refresh relationship references")
+                .len(),
+            10
+        );
     }
 
     #[test]
