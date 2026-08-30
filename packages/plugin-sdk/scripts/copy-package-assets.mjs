@@ -7,13 +7,14 @@ import {
 } from '../src/publicUiExports.mjs'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
-
 const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
 assertOpenForgePluginSdkPublicUiPackageExports(packageJson.exports)
 
 const assetPaths = [
   'src/svelteHostRuntimeContract.mjs',
   'src/svelteHostRuntimeContract.d.mts',
+  'src/publicEntrypoints.mjs',
+  'src/publicEntrypoints.d.mts',
   'src/publicUiExports.mjs',
   'src/publicUiExports.d.mts',
   ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ sourcePath }) => sourcePath),
