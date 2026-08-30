@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process'
+import { execFile, spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -9,6 +9,39 @@ import { describe, expect, it } from 'vitest'
 const execFileAsync = promisify(execFile)
 const bunExecutable = process.env.OPENFORGE_BUN_PATH ?? 'bun'
 const bunAvailable = spawnSync(bunExecutable, ['--version'], { stdio: 'ignore', timeout: 5_000 }).status === 0
+
+async function parseProbeResult<T>(
+  probeName: string,
+  result: SpawnSyncReturns<string>,
+  resultPath: string,
+): Promise<T> {
+  const diagnostics = [
+    `exit status: ${result.status ?? 'none'}`,
+    `signal: ${result.signal ?? 'none'}`,
+    `spawn error: ${result.error?.message ?? 'none'}`,
+    `stdout: ${JSON.stringify(result.stdout ?? '')}`,
+    `stderr: ${JSON.stringify(result.stderr ?? '')}`,
+  ].join('\n')
+
+  if (result.error || result.status !== 0 || result.signal !== null) {
+    throw new Error(`${probeName} failed\n${diagnostics}`)
+  }
+
+  let output: string
+  try {
+    output = await readFile(resultPath, 'utf8')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`${probeName} did not emit a JSON result: ${message}\n${diagnostics}`)
+  }
+
+  try {
+    return JSON.parse(output) as T
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`${probeName} emitted invalid JSON: ${message}\n${diagnostics}`)
+  }
+}
 
 describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () => {
   it('reloads lazy CommonJS dependencies without retaining prior generations', async () => {
@@ -65,12 +98,18 @@ describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () =>
       }))
     `)
 
-    await execFileAsync(bunExecutable, [probePath], {
+    const result = spawnSync(bunExecutable, [probePath], {
       cwd: process.cwd(),
       timeout: 30_000,
+      encoding: 'utf8',
     })
+    const output = await parseProbeResult<{ generations: number; retainedModules: number }>(
+      'Lazy CommonJS reload probe',
+      result,
+      resultPath,
+    )
 
-    expect(JSON.parse(await readFile(resultPath, 'utf8'))).toEqual({ generations: 20, retainedModules: 0 })
+    expect(output).toEqual({ generations: 20, retainedModules: 0 })
   })
 
   it('runs ESM backends in terminable workers under Bun', async () => {
