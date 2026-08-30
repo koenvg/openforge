@@ -35,6 +35,8 @@ export interface PoolEntry {
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
   attached: boolean
+  viewVisible: boolean
+  viewVisibilityGeneration: number
   viewNeedsRecovery: boolean
   attachmentGeneration: number
   spawnPending: boolean

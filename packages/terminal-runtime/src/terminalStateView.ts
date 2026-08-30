@@ -11,6 +11,11 @@ interface TerminalStateViewOptions {
   markOutput(entry: PoolEntry): void
 }
 
+interface TerminalRenderRevision {
+  attachmentGeneration: number
+  visibilityGeneration: number
+}
+
 const MAX_PENDING_OUTPUTS = 256
 
 function pushBounded<T>(queue: T[], value: T): void {
@@ -43,6 +48,11 @@ export function createTerminalStateView({
   }
 
   function flushPendingOutput(entry: PoolEntry): void {
+    if (!entry.attached || !entry.viewVisible) {
+      entry.pendingTerminalModelOutput.length = 0
+      entry.viewNeedsRecovery = true
+      return
+    }
     const pending = entry.pendingTerminalModelOutput.splice(0)
     for (const event of pending) {
       if (!writeTerminalModelOutput(entry, event)) {
@@ -54,10 +64,21 @@ export function createTerminalStateView({
   }
 
 
+  function isCurrentRenderRevision(
+    entry: PoolEntry,
+    revision: TerminalRenderRevision | null,
+  ): boolean {
+    return revision !== null
+      && entry.attached
+      && entry.viewVisible
+      && entry.attachmentGeneration === revision.attachmentGeneration
+      && entry.viewVisibilityGeneration === revision.visibilityGeneration
+  }
+
   async function activateGhosttySnapshot(
     entry: PoolEntry,
     replay: TerminalReplay,
-    renderRequested: boolean,
+    renderRevision: TerminalRenderRevision | null,
   ): Promise<void> {
     if (replay.ptyInstanceId === null) {
       entry.ptyActive = false
@@ -68,7 +89,7 @@ export function createTerminalStateView({
       entry.terminalModelSequence = null
       entry.pendingTerminalModelOutput.length = 0
       entry.hasOutput = Boolean(replay.historicalData)
-      if (!renderRequested || !entry.attached) {
+      if (!isCurrentRenderRevision(entry, renderRevision)) {
         entry.terminalStateSource = 'ghostty-snapshot'
         entry.viewNeedsRecovery = true
         return
@@ -79,7 +100,7 @@ export function createTerminalStateView({
         sequence: entry.outputSequence,
       })
       entry.terminalStateSource = 'ghostty-snapshot'
-      entry.viewNeedsRecovery = !entry.attached
+      entry.viewNeedsRecovery = !isCurrentRenderRevision(entry, renderRevision)
       return
     }
     const snapshot = replay.snapshot
@@ -93,7 +114,7 @@ export function createTerminalStateView({
     entry.currentPtyInstance = replay.ptyInstanceId
     entry.terminalModelSequence = snapshot.watermark
     entry.hasOutput = snapshot.data.length > 0 || Boolean(snapshot.compatibilityData?.length)
-    if (!renderRequested || !entry.attached) {
+    if (!isCurrentRenderRevision(entry, renderRevision)) {
       entry.terminalStateSource = 'ghostty-snapshot'
       entry.viewNeedsRecovery = true
       return
@@ -105,14 +126,16 @@ export function createTerminalStateView({
       sequence: entry.outputSequence,
     })
     entry.terminalStateSource = 'ghostty-snapshot'
-    entry.viewNeedsRecovery = !entry.attached
-    if (entry.attached) flushPendingOutput(entry)
+    const currentRenderRevision = isCurrentRenderRevision(entry, renderRevision)
+    entry.viewNeedsRecovery = !currentRenderRevision
+    if (currentRenderRevision) flushPendingOutput(entry)
   }
 
   async function recover(entry: PoolEntry): Promise<void> {
     if (entry.terminalReplayRecovery) return entry.terminalReplayRecovery
-    const renderRequested = entry.attached
+    const renderRequested = entry.attached && entry.viewVisible
     const requestedAttachmentGeneration = entry.attachmentGeneration
+    const requestedVisibilityGeneration = entry.viewVisibilityGeneration
     const requestedInstance = entry.currentPtyInstance
     const previousStateSource = entry.terminalStateSource
     entry.terminalStateSource = 'bootstrapping'
@@ -124,8 +147,15 @@ export function createTerminalStateView({
         flushPendingOutput(entry)
         return
       }
-      const sameAttachment = entry.attachmentGeneration === requestedAttachmentGeneration
-      return activateGhosttySnapshot(entry, replay, renderRequested && sameAttachment)
+      const sameViewState = entry.attachmentGeneration === requestedAttachmentGeneration
+        && entry.viewVisibilityGeneration === requestedVisibilityGeneration
+      const renderRevision = renderRequested && sameViewState
+        ? {
+            attachmentGeneration: requestedAttachmentGeneration,
+            visibilityGeneration: requestedVisibilityGeneration,
+          }
+        : null
+      return activateGhosttySnapshot(entry, replay, renderRevision)
     })
     entry.terminalReplayRecovery = recovery
     try {
@@ -137,7 +167,7 @@ export function createTerminalStateView({
 
 
   function handleTerminalModelOutput(entry: PoolEntry, event: TerminalModelOutputEvent): void {
-    if (!entry.attached) {
+    if (!entry.attached || !entry.viewVisible) {
       if (entry.currentPtyInstance === event.ptyInstanceId) {
         entry.terminalModelSequence = Math.max(entry.terminalModelSequence ?? 0, event.sequence)
         entry.viewNeedsRecovery = true

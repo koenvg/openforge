@@ -89,6 +89,8 @@ vi.mock('../../lib/terminalPool', () => {
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      viewVisible: false,
+      viewVisibilityGeneration: 0,
       viewNeedsRecovery: false,
       attachmentGeneration: 0,
       spawnPending: false,
@@ -114,6 +116,9 @@ vi.mock('../../lib/terminalPool', () => {
       if (entry.attached) entry.view.unmount()
       entry.attachmentGeneration += 1
       const generation = entry.attachmentGeneration
+      entry.viewVisibilityGeneration += 1
+      entry.viewVisible = true
+      entry.view.setVisible(true)
       entry.view.mount(host)
       entry.attached = true
       return {
@@ -121,6 +126,9 @@ vi.mock('../../lib/terminalPool', () => {
         detach: () => {
           if (!entry.attached || entry.attachmentGeneration !== generation) return
           terminalAttachmentDetach()
+          entry.viewVisible = false
+          entry.viewVisibilityGeneration += 1
+          entry.view.setVisible(false)
           entry.view.unmount()
           entry.attached = false
         },
@@ -128,6 +136,9 @@ vi.mock('../../lib/terminalPool', () => {
     }),
     detach: vi.fn((entry: PoolEntry) => {
       entry.view.unmount()
+      entry.viewVisible = false
+      entry.viewVisibilityGeneration += 1
+      entry.view.setVisible(false)
       entry.attached = false
     }),
     recoverActiveTerminal: vi.fn(async () => undefined),

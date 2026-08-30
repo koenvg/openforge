@@ -24,7 +24,10 @@ function createAdapter(): TerminalSurfaceAdapter {
 
   const runtime = {
     acquire: vi.fn(async () => entry),
-    attach: vi.fn(async () => undefined),
+    attach: vi.fn(async () => {
+      entry.attached = true
+      return { generation: 1, detach: vi.fn() }
+    }),
     detach: vi.fn(),
     recoverActiveTerminal: vi.fn(async () => undefined),
     resetTerminal: vi.fn(),
