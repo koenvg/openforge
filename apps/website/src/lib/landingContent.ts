@@ -21,12 +21,25 @@ export interface LandingActionLink extends BaseLandingActionLink {
   ariaLabel: string;
 }
 
+export type PluginDiagramSlot = 'northwest' | 'northeast' | 'southwest' | 'southeast';
+export type PluginTheme = 'blue' | 'violet' | 'mint' | 'amber';
+
 export interface PluginCapability {
   title: string;
   code: string;
   description: string;
   iconPaths: readonly string[];
+  slot: PluginDiagramSlot;
+  theme: PluginTheme;
+  pipePath: string;
 }
+
+type PluginDiagram = readonly [
+  PluginCapability & { slot: 'northwest'; theme: 'blue' },
+  PluginCapability & { slot: 'northeast'; theme: 'violet' },
+  PluginCapability & { slot: 'southwest'; theme: 'mint' },
+  PluginCapability & { slot: 'southeast'; theme: 'amber' },
+];
 
 export const TOP_REASONS = [
   {
@@ -86,18 +99,27 @@ export const FINAL_CTA_LINKS = [
 export const PLUGIN_CAPABILITIES = [
   {
     title: 'Project views',
+    slot: 'northwest',
+    theme: 'blue',
+    pipePath: 'M430 300 H370 V150 H300',
     code: 'views.register',
     description: 'Dashboards, review queues, and repository lenses.',
     iconPaths: ['M4 5.5h16v13H4z', 'M4 10h16', 'M9 10v8.5']
   },
   {
     title: 'Task context',
+    slot: 'northeast',
+    theme: 'violet',
+    pipePath: 'M570 300 H630 V150 H700',
     code: 'taskPane.registerTab',
     description: 'Notes, checklists, docs, and team review rituals.',
     iconPaths: ['M5 4.5h14v15H5z', 'M10 4.5v15', 'M13 9h3', 'M13 13h3']
   },
   {
     title: 'Background automations',
+    slot: 'southwest',
+    theme: 'mint',
+    pipePath: 'M430 380 H370 V530 H300',
     code: 'background.register',
     description: 'Blocked work, CI events, stale tasks, and recurring prompts.',
     iconPaths: [
@@ -108,8 +130,11 @@ export const PLUGIN_CAPABILITIES = [
   },
   {
     title: 'Host capabilities',
+    slot: 'southeast',
+    theme: 'amber',
+    pipePath: 'M570 380 H630 V530 H700',
     code: 'tasks · fs · shell · notifications',
     description: 'Explicit, reviewable access for trusted extensions.',
     iconPaths: ['M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z', 'm8.8 12.1 2 2 4.6-4.8']
   }
-] satisfies readonly PluginCapability[];
+] satisfies PluginDiagram;

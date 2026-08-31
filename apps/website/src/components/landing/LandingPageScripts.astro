@@ -13,7 +13,6 @@
     const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
     heroTimeline
       .from('.site-header', { autoAlpha: 0, y: -12, duration: 0.45 })
-      .from('.hero-kicker', { autoAlpha: 0, y: 16, duration: 0.45 }, 0.08)
       .from('#hero-title', { autoAlpha: 0, y: 30, duration: 0.78 }, 0.14)
       .from('.hero .lede', { autoAlpha: 0, y: 20, duration: 0.58 }, 0.3)
       .from('.hero-actions .button', { autoAlpha: 0, y: 14, duration: 0.46, stagger: 0.06 }, 0.42)
@@ -63,14 +62,20 @@
       scrollTrigger: { trigger: '.product-facts', start: 'top 88%', once: true },
     });
 
-    gsap.from('.plugin-system > *', {
-      autoAlpha: 0,
-      x: 24,
-      duration: 0.64,
-      ease: 'power3.out',
-      stagger: 0.1,
-      scrollTrigger: { trigger: '.plugin-system', start: 'top 78%', once: true },
+    const pluginTimeline = gsap.timeline({
+      scrollTrigger: { trigger: '.plugin-architecture', start: 'top 78%', once: true },
+      defaults: { ease: 'power3.out' },
     });
+    pluginTimeline
+      .from('[data-plugin-core]', { autoAlpha: 0, scale: 0.9, duration: 0.46 })
+      .from('[data-plugin-pipe]', { autoAlpha: 0, duration: 0.3, stagger: 0.05 }, 0.18)
+      .from('[data-plugin-node]', {
+        autoAlpha: 0,
+        x: (index) => (index % 2 === 0 ? -26 : 26),
+        scale: 0.96,
+        duration: 0.5,
+        stagger: 0.08,
+      }, 0.24);
 
     gsap.from('.final-cta-copy > *', {
       autoAlpha: 0,
