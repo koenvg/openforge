@@ -32,6 +32,7 @@ describe('Task Browser agent open command', () => {
       loading: true,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     }
     vi.spyOn(surface, 'navigate').mockResolvedValue(loadingState)
@@ -76,6 +77,7 @@ describe('Task Browser agent open command', () => {
       loading: true,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     }
     vi.spyOn(surface, 'navigate').mockResolvedValue(loadingState)
@@ -137,6 +139,7 @@ describe('Task Browser agent open command', () => {
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: {
         code: 'ERR_NAME_NOT_RESOLVED',
         message: 'Could not load https://user:secret@unreachable.invalid/',
@@ -178,6 +181,7 @@ describe('Task Browser agent open command', () => {
         loading: true,
         canGoBack: false,
         canGoForward: false,
+        devToolsOpen: false,
         error: null,
       })
       .mockImplementation(url => originalNavigate(url))
@@ -209,6 +213,7 @@ describe('Task Browser agent open command', () => {
     vi.spyOn(surface, 'navigate').mockResolvedValue({
       url: 'https://terminal.invalid/', title: '', loading: true,
       canGoBack: false, canGoForward: false, error: null,
+      devToolsOpen: false,
     })
     vi.spyOn(registry.frontendApi.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
 
@@ -234,6 +239,7 @@ describe('Task Browser agent open command', () => {
     vi.spyOn(surface, 'navigate').mockResolvedValue({
       url: 'https://loading.example/', title: '', loading: true,
       canGoBack: false, canGoForward: false, error: null,
+      devToolsOpen: false,
     })
     vi.spyOn(registry.frontendApi.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
 
@@ -257,6 +263,7 @@ describe('Task Browser agent open command', () => {
       vi.spyOn(surface, 'navigate').mockResolvedValue({
         url: 'https://loading.example/', title: '', loading: true,
         canGoBack: false, canGoForward: false, error: null,
+        devToolsOpen: false,
       })
       vi.spyOn(registry.frontendApi.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
 

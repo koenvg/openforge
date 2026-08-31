@@ -78,6 +78,7 @@ describe('Task browser tab session', () => {
       loading: false,
       canGoBack: true,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     })
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
@@ -278,6 +279,7 @@ describe('Task browser tab session', () => {
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     })
     await setStarted

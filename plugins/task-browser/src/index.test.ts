@@ -21,7 +21,7 @@ function makeRuntimeHarness() {
     apiVersion: 1,
     packageMetadata: packageJson.openforge,
     subscriptions,
-  } as FrontendPluginContext
+  } as unknown as FrontendPluginContext
   return { api, context, subscriptions }
 }
 
