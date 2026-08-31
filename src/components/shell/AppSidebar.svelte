@@ -347,7 +347,7 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="composited-hover-layer group mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer {isActive ? 'bg-primary/10 text-primary' : 'sidebar-hover-base-200 text-base-content'}"
+        class="composited-hover-layer group mx-2 flex min-h-11 w-[calc(100%_-_1rem)] items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer {isActive ? 'bg-primary/10 text-primary' : 'sidebar-hover-base-200 text-base-content'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}

@@ -33,7 +33,7 @@
 <button
   type="button"
   class={[
-    'relative mx-2 flex min-h-11 w-auto items-center rounded-lg gap-3 py-2.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+    'relative mx-2 flex min-h-11 w-[calc(100%_-_1rem)] items-center rounded-lg gap-3 py-2.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
     collapsed ? 'justify-center px-0' : 'px-3',
     active ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content',
     className,
