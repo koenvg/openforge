@@ -108,7 +108,6 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       return
     }
     if (!opened || disposed) return
-    webglRenderer.clearTextureAtlas()
     fitAndRefreshWhenVisible()
   }
   if (options.fontReadiness.status === 'timed-out') {
