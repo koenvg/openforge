@@ -1,4 +1,5 @@
 import type { Readable } from 'svelte/store'
+import type { LiveModelOutputSubscriptionSnapshot } from './liveModelOutputSubscription'
 import type { TerminalImageProtocol } from './terminalImages'
 import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
@@ -67,7 +68,9 @@ export interface TerminalSessionDiagnostics {
     visible: boolean
     needsRecovery: boolean
     attachmentGeneration: number
+    authorityReadPending: boolean
   }>
+  readonly modelOutputSubscription: LiveModelOutputSubscriptionSnapshot | null
   readonly geometry: TerminalGeometry
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildElectronLaunchArgs,
   createElectronDevLauncher,
+  createPlaywrightElectronLaunchAdapter,
 } from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
@@ -131,6 +132,39 @@ describe('importable Electron development launcher', () => {
     await expect(firstShutdown).resolves.toEqual({ processes: ['terminated', 'terminated'], runtimeDirs: [] })
     expect(cleanup).toHaveBeenCalledOnce()
   })
+  it('translates an E2E launch into a matching Vite flag, tokenized renderer URL, and Sidecar flag', async () => {
+    const spawned = []
+    const spawnCommand = vi.fn((command, args, options = {}) => {
+      const child = Object.assign(childProcessMock(), { command, args, options })
+      spawned.push(child)
+      return child
+    })
+    const launcher = createElectronDevLauncher(
+      {
+        runtimeOptions: runtimeOptions(),
+        desktopTest: true,
+        e2eToken: 'fixed-run-token',
+      },
+      launcherDependencies({ spawnCommand }),
+    )
+
+    await launcher.start()
+
+    expect(launcher.runtimeOptions.rendererUrl).toBe(
+      'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token',
+    )
+    expect(spawned[0].options.env).toMatchObject({
+      VITE_OPENFORGE_E2E: '1',
+      VITE_OPENFORGE_E2E_TOKEN: 'fixed-run-token',
+    })
+    expect(spawned[3].options.env).toMatchObject({
+      OPENFORGE_E2E: '1',
+      ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token',
+    })
+
+    await launcher.shutdown()
+  })
+
 
   it('cleans the runtime when readiness fails before Electron launch', async () => {
     const cleanup = vi.fn(async () => ({ processes: ['terminated'], runtimeDirs: ['removed'] }))
@@ -148,5 +182,133 @@ describe('importable Electron development launcher', () => {
     expect(spawnCommand).toHaveBeenCalledOnce()
     expect(cleanup).toHaveBeenCalledOnce()
     expect(launcher.children().electron).toBeNull()
+  })
+
+  it('launches Electron through an injected adapter and closes it before process cleanup', async () => {
+    const order = []
+    const electronProcess = childProcessMock()
+    electronProcess.pid = 404
+    electronProcess.stdout = new EventEmitter()
+    electronProcess.stderr = new EventEmitter()
+    const application = { name: 'playwright-electron' }
+    const page = { url: () => 'http://127.0.0.1:1431/' }
+    const electronLaunchAdapter = {
+      launch: vi.fn(async launchOptions => ({
+        application,
+        page,
+        process: electronProcess,
+        close: vi.fn(async () => { order.push('electron-close') }),
+        waitForExit: vi.fn(async () => { order.push('electron-exit') }),
+        launchOptions,
+      })),
+    }
+    const spawned = []
+    const spawnCommand = vi.fn((command, args, options = {}) => {
+      const child = childProcessMock()
+      Object.assign(child, { command, args, options })
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      spawned.push(child)
+      return child
+    })
+    const cleanup = vi.fn(async () => {
+      order.push('process-cleanup')
+      return { processes: ['terminated'], runtimeDirs: ['removed'] }
+    })
+    const launcher = createElectronDevLauncher(
+      {
+        runtimeOptions: runtimeOptions(),
+        captureOutput: true,
+        electronLaunchAdapter,
+        electronArgs: ['--no-first-run'],
+      },
+      launcherDependencies({ spawnCommand, cleanupDevProcesses: cleanup }),
+    )
+
+    await launcher.start()
+
+    expect(spawned.map(child => child.command)).toEqual(['pnpm', 'cargo', 'pnpm'])
+    expect(electronLaunchAdapter.launch).toHaveBeenCalledWith(expect.objectContaining({
+      args: ['--no-first-run', '.'],
+      env: expect.objectContaining({
+        OPENFORGE_APP_DATA_DIR: '/tmp/desktop-test/app-data',
+        OPENFORGE_ELECTRON_USER_DATA_DIR: '/tmp/desktop-test/user-data',
+      }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }))
+    expect(launcher.children().electron).toBe(electronProcess)
+    expect(launcher.electronApplication()).toBe(application)
+    expect(launcher.page()).toBe(page)
+    expect(electronProcess.pid).toBe(404)
+
+    await launcher.waitForExit()
+    await launcher.shutdown()
+
+    expect(order).toEqual(['electron-exit', 'electron-close', 'process-cleanup'])
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(launcher.output()).toBe('')
+  })
+
+  it('normalizes Playwright Electron application lifecycle and renderer access', async () => {
+    const process = childProcessMock()
+    process.pid = 505
+    const page = { url: () => 'http://127.0.0.1:1431/' }
+    const application = {
+      close: vi.fn(async () => undefined),
+      firstWindow: vi.fn(async () => page),
+      process: vi.fn(() => process),
+      waitForEvent: vi.fn(async event => event),
+    }
+    const electronApi = { launch: vi.fn(async () => application) }
+    const adapter = createPlaywrightElectronLaunchAdapter(electronApi)
+
+    const handle = await adapter.launch({
+      args: ['--inspect=127.0.0.1:9333', '.'],
+      env: { ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    expect(electronApi.launch).toHaveBeenCalledWith({
+      args: ['--inspect=127.0.0.1:9333', '.'],
+      env: { ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/' },
+    })
+    expect(handle.process).toBe(process)
+    expect(handle.application).toBe(application)
+    expect(handle.page).toBe(page)
+    await handle.waitForExit()
+    expect(application.waitForEvent).toHaveBeenCalledWith('close')
+    await handle.close()
+    expect(application.close).toHaveBeenCalledOnce()
+  })
+
+  it('uses the explicit Chromium debugging environment port on the normal development path', async () => {
+    const spawned = []
+    const spawnCommand = vi.fn((command, args, options = {}) => {
+      const child = childProcessMock()
+      Object.assign(child, { command, args, options })
+      spawned.push(child)
+      return child
+    })
+    const launcher = createElectronDevLauncher(
+      {
+        runtimeOptions: runtimeOptions(),
+        env: { OPENFORGE_CHROMIUM_DEBUG_PORT: '9555' },
+      },
+      launcherDependencies({
+        spawnCommand,
+        cleanupDevProcesses: vi.fn(async () => ({ processes: [], runtimeDirs: [] })),
+      }),
+    )
+
+    await launcher.start()
+
+    expect(spawned.at(-1).args).toEqual([
+      'exec',
+      'electron',
+      '--remote-debugging-address=127.0.0.1',
+      '--remote-debugging-port=9555',
+      '.',
+    ])
+    await launcher.shutdown()
   })
 })

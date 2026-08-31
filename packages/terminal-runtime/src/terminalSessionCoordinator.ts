@@ -745,7 +745,9 @@ export function createTerminalSessionCoordinator({
         visible: viewVisible,
         needsRecovery: viewNeedsRecovery,
         attachmentGeneration,
+        authorityReadPending: terminalReplayRecovery !== null,
       }),
+      modelOutputSubscription: transportSubscription?.snapshot?.() ?? null,
       geometry: Object.freeze({ ...view.geometry }),
     })
   }

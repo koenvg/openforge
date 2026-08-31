@@ -1,6 +1,14 @@
 export interface LiveModelOutputSubscriptionLifecycle {
   setEnabled(enabled: boolean): Promise<void>
+  snapshot(): LiveModelOutputSubscriptionSnapshot
   dispose(): void
+}
+
+export interface LiveModelOutputSubscriptionSnapshot {
+  desired: boolean
+  pending: boolean
+  registered: boolean
+  disposed: boolean
 }
 
 export interface LiveModelOutputSubscriptionLifecycleOptions<TRegistration extends object> {
@@ -30,6 +38,14 @@ export function createLiveModelOutputSubscriptionLifecycle<TRegistration extends
   }
 
   return {
+    snapshot() {
+      return {
+        desired,
+        pending: pendingRegistration !== null,
+        registered: currentRegistration !== null,
+        disposed: !active,
+      }
+    },
     async setEnabled(enabled) {
       if (!active) throw new Error(options.disposedErrorMessage)
       desired = enabled

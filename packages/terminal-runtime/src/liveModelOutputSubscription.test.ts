@@ -52,6 +52,41 @@ describe('live model-output subscription lifecycle', () => {
     expect(retryDispose).toHaveBeenCalledOnce()
   })
 
+  it('reports desired, pending, registered, and disposed state without exposing handles', async () => {
+    let finishRegistration!: (registration: () => void) => void
+    const registration = vi.fn()
+    const lifecycle = createLiveModelOutputSubscriptionLifecycle({
+      register: () => new Promise<() => void>(resolve => { finishRegistration = resolve }),
+      dispose: value => value(),
+      disposedErrorMessage: 'disposed',
+    })
+
+    expect(lifecycle.snapshot()).toEqual({
+      desired: false,
+      pending: false,
+      registered: false,
+      disposed: false,
+    })
+
+    const enabling = lifecycle.setEnabled(true)
+    expect(lifecycle.snapshot()).toMatchObject({ desired: true, pending: true, registered: false })
+    finishRegistration(registration)
+    await enabling
+    expect(lifecycle.snapshot()).toMatchObject({ desired: true, pending: false, registered: true })
+
+    await lifecycle.setEnabled(false)
+    expect(lifecycle.snapshot()).toMatchObject({ desired: false, pending: false, registered: false })
+    expect(registration).toHaveBeenCalledOnce()
+
+    lifecycle.dispose()
+    expect(lifecycle.snapshot()).toEqual({
+      desired: false,
+      pending: false,
+      registered: false,
+      disposed: true,
+    })
+  })
+
   it('excludes nullish registration handles from its type contract', () => {
     // @ts-expect-error Registration handles must be non-nullish.
     createLiveModelOutputSubscriptionLifecycle<null>({

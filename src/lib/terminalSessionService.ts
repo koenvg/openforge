@@ -8,6 +8,10 @@ import { listenDesktopEvent } from './desktopIpc'
 import type { TerminalDesktopEventName } from './desktopIpcContract'
 import { createDesktopTerminalTransport } from './desktopTerminalTransport'
 import {
+  checkpointTerminalAcquisition,
+  checkpointTerminalAuthorityRead,
+} from './terminalE2eRuntime'
+import {
   getPtyBuffer,
   openUrl,
   resizePty,
@@ -23,7 +27,7 @@ const transport = createDesktopTerminalTransport({
   getPtyBuffer,
   writePty,
   resizePty,
-})
+}, { afterReadReplay: checkpointTerminalAuthorityRead })
 
 const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
   sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
@@ -35,6 +39,7 @@ const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
 const terminalRuntime = createTerminalRuntime({
   transport,
   environment: terminalRuntimeEnvironment,
+  beforeSessionStart: checkpointTerminalAcquisition,
 })
 
 export function configureTerminalPerformanceTrace(trace: TerminalPerformanceTrace | undefined): void {

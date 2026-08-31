@@ -1,4 +1,5 @@
 
+import type { LiveModelOutputSubscriptionSnapshot } from './liveModelOutputSubscription'
 export interface TerminalGeometry {
   cols: number
   rows: number
@@ -39,6 +40,7 @@ export interface TerminalTransportDisposable {
 
 export interface TerminalSessionTransportSubscription extends TerminalTransportDisposable {
   setModelOutputEnabled(enabled: boolean): Promise<void>
+  snapshot?(): LiveModelOutputSubscriptionSnapshot
 }
 
 export interface TerminalSessionTransportHandlers {

@@ -1,5 +1,6 @@
 use super::pty_payload::{
-    PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload,
+    PtyE2eFixtureOutputPayload, PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload,
+    PtyTaskPayload, PtyWritePayload,
 };
 use super::*;
 use serde::Serialize;
@@ -12,6 +13,15 @@ struct AgentFollowUpReceipt {
     task_id: String,
     session_id: String,
     disposition: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct E2eFixtureOutputReceipt {
+    shell_session_key: String,
+    marker: String,
+    byte_count: u64,
+    pty_instance_id: u64,
 }
 
 fn agent_follow_up_error_response(
@@ -50,6 +60,53 @@ fn pty_command_error_response(
             format!("{action}: {error}"),
         )
     }
+}
+
+fn e2e_fixture_output_enabled() -> bool {
+    cfg!(debug_assertions) && std::env::var("OPENFORGE_E2E").as_deref() == Ok("1")
+}
+
+async fn emit_e2e_fixture_output(
+    pty_manager: &crate::pty_manager::PtyManager,
+    request: &AppInvokeRequest,
+    enabled: bool,
+) -> AppResult<serde_json::Value> {
+    if !enabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "E2E terminal fixture output requires OPENFORGE_E2E=1".to_string(),
+        ));
+    }
+    let payload = PtyE2eFixtureOutputPayload::decode(&request.command, &request.payload)?;
+    let terminal = pty_manager
+        .pty_buffer_state(&payload.shell_session_key)
+        .await;
+    let Some(pty_instance_id) = terminal.instance_id else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("unknown live terminal {}", payload.shell_session_key),
+        ));
+    };
+    let command = format!(
+        "node ./terminal-output.mjs --bytes={} --marker={}\n",
+        payload.byte_count, payload.marker
+    );
+    pty_manager
+        .write_pty(&payload.shell_session_key, command.as_bytes())
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to emit E2E terminal fixture output: {error}"),
+            )
+        })?;
+
+    json_value(E2eFixtureOutputReceipt {
+        shell_session_key: payload.shell_session_key,
+        marker: payload.marker,
+        byte_count: payload.byte_count,
+        pty_instance_id,
+    })
 }
 
 pub(super) async fn handle_app_pty_command(
@@ -111,6 +168,9 @@ pub(super) async fn handle_app_pty_command(
                 session_id: outcome.session_id,
                 disposition: outcome.disposition.as_str(),
             })?
+        }
+        "e2e_emit_terminal_fixture" => {
+            emit_e2e_fixture_output(pty_manager, request, e2e_fixture_output_enabled()).await?
         }
         "pty_write" => {
             let payload = PtyWritePayload::decode(&request.command, &request.payload)?;

@@ -42,6 +42,41 @@ impl PtyWritePayload {
     }
 }
 
+const MAX_E2E_FIXTURE_OUTPUT_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_E2E_FIXTURE_MARKER_BYTES: usize = 64;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PtyE2eFixtureOutputPayload {
+    pub(super) shell_session_key: String,
+    pub(super) marker: String,
+    pub(super) byte_count: u64,
+}
+
+impl PtyE2eFixtureOutputPayload {
+    pub(super) fn decode(command: &str, payload: &serde_json::Value) -> AppResult<Self> {
+        let decoded: Self = decode_payload(command, payload)?;
+        if decoded.marker.is_empty()
+            || decoded.marker.len() > MAX_E2E_FIXTURE_MARKER_BYTES
+            || !decoded.marker.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':')
+            })
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "marker must contain 1-64 ASCII letters, digits, hyphens, underscores, periods, or colons".to_string(),
+            ));
+        }
+        if decoded.byte_count > MAX_E2E_FIXTURE_OUTPUT_BYTES {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("byteCount must not exceed {MAX_E2E_FIXTURE_OUTPUT_BYTES}"),
+            ));
+        }
+        Ok(decoded)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct PtyResizePayload {

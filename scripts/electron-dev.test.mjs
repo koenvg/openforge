@@ -17,6 +17,7 @@ import {
   prepareElectronDevArtifacts,
   prepareElectronDevCargoEnv,
   rendererUrlForPort,
+  resolveChromiumDebugPort,
   resolveElectronDevBackendEnv,
   resolveElectronDevRuntimeOptions,
   stopProcess,
@@ -184,6 +185,15 @@ describe('electron dev script environment', () => {
       GHOSTTY_SOURCE_DIR: '/cache/ghostty-source',
       GHOSTTY_ZIG_SYSTEM_DIR: '/cache/ghostty-system',
     })
+  })
+
+  it('accepts only an explicit numeric loopback Chromium debugging port', () => {
+    expect(resolveChromiumDebugPort({ OPENFORGE_CHROMIUM_DEBUG_PORT: '9222' })).toBe(9222)
+    expect(resolveChromiumDebugPort({})).toBeNull()
+    expect(() => resolveChromiumDebugPort({ OPENFORGE_CHROMIUM_DEBUG_PORT: '0.0.0.0:9222' }))
+      .toThrow('OPENFORGE_CHROMIUM_DEBUG_PORT must be an integer port')
+    expect(() => resolveChromiumDebugPort({ OPENFORGE_CHROMIUM_DEBUG_PORT: '70000' }))
+      .toThrow('OPENFORGE_CHROMIUM_DEBUG_PORT must be an integer port')
   })
 
   it('preserves an explicit Ghostty optimization mode for specialized builds', async () => {

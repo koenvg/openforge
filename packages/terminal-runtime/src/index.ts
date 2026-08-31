@@ -8,6 +8,7 @@ export {
   createLiveModelOutputSubscriptionLifecycle,
   type LiveModelOutputSubscriptionLifecycle,
   type LiveModelOutputSubscriptionLifecycleOptions,
+  type LiveModelOutputSubscriptionSnapshot,
 } from './liveModelOutputSubscription'
 export {
   createTerminalRuntime,

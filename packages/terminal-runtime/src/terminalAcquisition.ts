@@ -3,7 +3,7 @@ import type { TerminalFontReadiness } from './terminalOptions'
 import type {
   TerminalSessionCoordinator,
 } from './terminalSessionCoordinator'
-import type { TerminalSession } from './terminalRuntimeTypes'
+import type { TerminalSession, TerminalSessionDiagnostics } from './terminalRuntimeTypes'
 
 interface TerminalAcquisitionOperation {
   released: boolean
@@ -31,6 +31,10 @@ interface TerminalAcquisitionOptions {
     shellSessionKey: string,
     fontReadiness: TerminalFontReadiness,
   ): TerminalSessionCoordinator
+  beforeSessionStart?(
+    session: TerminalSession,
+    getDiagnostics: () => TerminalSessionDiagnostics,
+  ): Promise<void> | undefined
   preloadEntry(): Promise<TerminalFontReadiness>
   lifecycle: TerminalAcquisitionLifecycle
   reconnectReplay: TerminalAcquisitionReconnectReplay
@@ -39,6 +43,7 @@ interface TerminalAcquisitionOptions {
 export function createTerminalAcquisition({
   coordinators,
   createCoordinator,
+  beforeSessionStart,
   preloadEntry,
   lifecycle,
   reconnectReplay,
@@ -59,9 +64,16 @@ export function createTerminalAcquisition({
     const fontReadiness = await preloadEntry()
     const coordinator = createCoordinator(shellSessionKey, fontReadiness)
     operation.coordinator = coordinator
-    if (disposeReleasedAcquisition(operation)) return coordinator.session
+    const checkpoint = beforeSessionStart?.(coordinator.session, () => coordinator.diagnostics())
+    if (checkpoint) void checkpoint.catch(() => undefined)
+    if (operation.released) {
+      if (checkpoint) await checkpoint
+      disposeReleasedAcquisition(operation)
+      return coordinator.session
+    }
 
     await coordinator.start()
+    if (checkpoint) await checkpoint
     if (disposeReleasedAcquisition(operation)) return coordinator.session
 
     coordinators.set(shellSessionKey, coordinator)

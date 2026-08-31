@@ -14,6 +14,7 @@ import type {
   TerminalRuntimeDiagnostics,
   TerminalRuntimeEnvironment,
   TerminalSession,
+  TerminalSessionDiagnostics,
 } from './terminalRuntimeTypes'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import type { TerminalViewFactory } from './terminalView'
@@ -68,12 +69,17 @@ export interface TerminalRuntimeOptions {
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
   createTerminalView?: TerminalViewFactory
+  beforeSessionStart?(
+    session: TerminalSession,
+    getDiagnostics: () => TerminalSessionDiagnostics,
+  ): Promise<void> | undefined
 }
 
 export function createTerminalRuntime({
   transport,
   environment,
   createTerminalView = createXtermTerminalView,
+  beforeSessionStart,
 }: TerminalRuntimeOptions) {
   const activeThemeMode = environment.themeMode ?? defaultThemeMode
   const coordinators = new Map<string, TerminalSessionCoordinator>()
@@ -130,6 +136,7 @@ export function createTerminalRuntime({
   const acquisition = createTerminalAcquisition({
     coordinators,
     createCoordinator,
+    beforeSessionStart,
     preloadEntry: preloadTerminalFonts,
     lifecycle: sessionLifecycle,
     reconnectReplay,
