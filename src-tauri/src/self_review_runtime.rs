@@ -204,7 +204,6 @@ pub enum FileRevisionAvailability {
     Available { size: usize },
     Missing,
     TooLarge { size: usize },
-    LoadFailed { message: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -275,10 +274,6 @@ fn bytes_to_frontend_revision(path: &str, bytes: &[u8]) -> FileRevisionContent {
         content,
         availability: FileRevisionAvailability::Available { size },
     }
-}
-
-fn bytes_to_frontend_content(path: &str, bytes: &[u8]) -> String {
-    bytes_to_frontend_revision(path, bytes).content
 }
 
 fn missing_frontend_revision() -> FileRevisionContent {
@@ -1535,13 +1530,14 @@ mod tests {
 
     #[test]
     fn test_image_content_is_encoded_for_frontend() {
-        let content = bytes_to_frontend_content("assets/logo.png", &[0x89, b'P', b'N', b'G']);
+        let content =
+            bytes_to_frontend_revision("assets/logo.png", &[0x89, b'P', b'N', b'G']).content;
         assert_eq!(content, "iVBORw==");
     }
 
     #[test]
     fn test_text_content_stays_text_for_frontend() {
-        let content = bytes_to_frontend_content("src/main.rs", b"fn main() {}\n");
+        let content = bytes_to_frontend_revision("src/main.rs", b"fn main() {}\n").content;
         assert_eq!(content, "fn main() {}\n");
     }
 
