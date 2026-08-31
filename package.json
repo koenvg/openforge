@@ -63,7 +63,7 @@
     "@xterm/addon-web-links": "catalog:",
     "@xterm/addon-webgl": "catalog:",
     "@xterm/xterm": "catalog:",
-    "daisyui": "^5.7.19",
+    "daisyui": "^5.7.22",
     "dompurify": "catalog:",
     "es-module-lexer": "2.3.2",
     "marked": "catalog:",
