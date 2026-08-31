@@ -5,7 +5,8 @@ describe('TaskDetailView Terminal Session mock', () => {
   beforeEach(resetTaskDetailViewTestState)
 
   it('completes a PTY spawn through a generation-bound lease', async () => {
-    const { acquire, beginPtySpawn, getShellLifecycleState } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, beginPtySpawn, getShellLifecycleState } = regularTerminalSessions
     const session = await acquire('T-42-shell-0')
 
     const lease = beginPtySpawn(session)
@@ -28,7 +29,8 @@ describe('TaskDetailView Terminal Session mock', () => {
   })
 
   it('restores PTY identity without exposing mutable session state', async () => {
-    const { acquire, getShellLifecycleState, restorePtyInstance } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, getShellLifecycleState, restorePtyInstance } = regularTerminalSessions
     const session = await acquire('T-42-shell-0')
 
     await restorePtyInstance(session.shellSessionKey, 23)
@@ -41,7 +43,8 @@ describe('TaskDetailView Terminal Session mock', () => {
   })
 
   it('returns the same opaque session for duplicate acquisition', async () => {
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
     const first = await acquire('T-42-shell-0')
     const duplicate = await acquire('T-42-shell-0')
 
@@ -49,7 +52,8 @@ describe('TaskDetailView Terminal Session mock', () => {
   })
 
   it('releases only indexed shell sessions owned by the task', async () => {
-    const { acquire, releaseAllForTask } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, releaseAllForTask } = regularTerminalSessions
     const agentSession = await acquire('T-42')
     const firstShell = await acquire('T-42-shell-0')
     const secondShell = await acquire('T-42-shell-1')
@@ -63,7 +67,8 @@ describe('TaskDetailView Terminal Session mock', () => {
   })
 
   it('returns generation-bound attachment capabilities', async () => {
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = regularTerminalSessions
     const session = await acquire('T-42-shell-0')
 
     const first = await attach(session, document.createElement('div'))

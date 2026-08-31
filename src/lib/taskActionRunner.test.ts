@@ -18,13 +18,15 @@ vi.mock('./ptySubmit', () => ({
   writePtyWithSubmit: vi.fn(),
 }))
 
-vi.mock('./terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-1' }),
-  beginPtySpawn: vi.fn(() => null),
-  focusTerminal: vi.fn(),
-  hasTerminal: vi.fn(() => false),
-  isPtyActive: vi.fn(() => false),
-  release: vi.fn(),
+vi.mock('./terminalSessionService', () => ({
+  agentTerminalSessions: {
+    acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-1' }),
+    beginPtySpawn: vi.fn(() => null),
+    focusTerminal: vi.fn(),
+    hasTerminal: vi.fn(() => false),
+    isPtyActive: vi.fn(() => false),
+    release: vi.fn(),
+  },
 }))
 
 import { createOutOfFocusController } from '../components/focus-board/outOfFocusController.svelte'

@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import {
-  acquire,
-  attach,
-  release,
-  terminalDiagnostics,
-} from './terminalPool'
+import { agentTerminalSessions, terminalDiagnostics } from './terminalSessionService'
 
-describe('desktop Terminal Session attachment facade', () => {
+const { acquire, attach, release } = agentTerminalSessions
+
+describe('desktop Terminal Session attachment', () => {
   it('mounts a session and returns a generation-bound attachment', async () => {
     const session = await acquire('task-4')
     const wrapper = document.createElement('div')

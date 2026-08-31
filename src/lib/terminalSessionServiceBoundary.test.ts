@@ -1,39 +1,35 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   agentTerminalSessions,
+  getTerminalRuntimeForTests,
   regularTerminalSessions,
 } from './terminalSessionService'
-import {
-  getShellLifecycleState as liveGetShellLifecycleState,
-  getTaskTerminalTabsSession as liveGetTaskTerminalTabsSession,
-} from './liveTerminalPool'
 import { getBuiltinPluginModule } from './plugin/builtinPluginModules'
+import { desktopTerminalSurfaceAdapter } from '../components/task-detail/terminalSurfaceAdapter'
 import {
   getShellLifecycleState as pluginGetShellLifecycleState,
   getTaskTerminalTabsSession as pluginGetTaskTerminalTabsSession,
 } from '../../plugins/terminal/src/lib/terminalPool'
 
 describe('host Terminal Session Service boundary', () => {
-  it('owns the only production Terminal Runtime used by agent and regular plugin terminals', () => {
-    const serviceSource = readFileSync(join(process.cwd(), 'src/lib/terminalSessionService.ts'), 'utf8')
-    const agentFacadeSource = readFileSync(join(process.cwd(), 'src/lib/terminalPool.ts'), 'utf8')
-    const pluginFacadeSource = readFileSync(join(process.cwd(), 'plugins/terminal/src/lib/terminalPool.ts'), 'utf8')
-    const builtinModulesSource = readFileSync(join(process.cwd(), 'src/lib/plugin/builtinPluginModules.ts'), 'utf8')
-
-    expect(serviceSource).toContain('createTerminalRuntime(')
-    expect(agentFacadeSource).not.toContain('createTerminalRuntime(')
-    expect(pluginFacadeSource).not.toContain('createTerminalRuntime(')
-    expect(pluginFacadeSource).not.toContain("from './ipc'")
-    expect(builtinModulesSource).toContain('configureTerminalSessionClient(regularTerminalSessions)')
+  it('uses the regular-terminal client for desktop Terminal Surfaces', () => {
+    expect(desktopTerminalSurfaceAdapter.runtime).toBe(regularTerminalSessions)
   })
 
-  it('routes core observers to the regular terminal client without a plugin-owned bridge registry', () => {
-    expect(liveGetShellLifecycleState).toBe(regularTerminalSessions.getShellLifecycleState)
-    expect(liveGetTaskTerminalTabsSession).toBe(regularTerminalSessions.getTaskTerminalTabsSession)
+  it('backs both owner-scoped clients with the host Terminal Runtime', () => {
+    const runtime = getTerminalRuntimeForTests()
+
+    expect(agentTerminalSessions).not.toBe(regularTerminalSessions)
+    expect(agentTerminalSessions.hasTerminal).toBe(runtime.hasTerminal)
+    expect(regularTerminalSessions.hasTerminal).toBe(runtime.hasTerminal)
+    expect(agentTerminalSessions.acquire).not.toBe(regularTerminalSessions.acquire)
+    expect(agentTerminalSessions.release).not.toBe(regularTerminalSessions.release)
+  })
+
+  it('shares runtime observations without sharing owner-scoped release operations', () => {
     expect(agentTerminalSessions.getShellLifecycleState).toBe(regularTerminalSessions.getShellLifecycleState)
     expect(agentTerminalSessions.getTaskTerminalTabsSession).toBe(regularTerminalSessions.getTaskTerminalTabsSession)
+    expect(agentTerminalSessions.releaseAllForTask).not.toBe(regularTerminalSessions.releaseAllForTask)
   })
 
   it('injects the regular terminal client into the built-in plugin facade', () => {

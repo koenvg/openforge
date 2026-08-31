@@ -17,7 +17,8 @@ describe('TaskDetailView — lifecycle', () => {
   beforeEach(resetTaskDetailViewTestState)
 
   it('recreates agent panel terminal when switching tasks', async () => {
-    const { acquire } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = agentTerminalSessions
     vi.mocked(acquire).mockClear()
     terminalAttachmentDetach.mockClear()
 
@@ -48,7 +49,8 @@ describe('TaskDetailView — lifecycle', () => {
   describe('terminal cleanup on navigate-away', () => {
       it('calls releaseAllForTask when component unmounts', async () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
-        const { releaseAllForTask } = await import('../../lib/liveTerminalPool')
+        const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+        const { releaseAllForTask } = regularTerminalSessions
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
@@ -66,7 +68,8 @@ describe('TaskDetailView — lifecycle', () => {
 
       it('calls releaseAllForTask when task prop changes', async () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
-        const { releaseAllForTask } = await import('../../lib/liveTerminalPool')
+        const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+        const { releaseAllForTask } = regularTerminalSessions
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
@@ -87,7 +90,8 @@ describe('TaskDetailView — lifecycle', () => {
 
       it('does NOT call releaseAllForTask when task prop changes with same ID', async () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
-        const { releaseAllForTask } = await import('../../lib/liveTerminalPool')
+        const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+        const { releaseAllForTask } = regularTerminalSessions
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()
@@ -108,7 +112,8 @@ describe('TaskDetailView — lifecycle', () => {
 
       it('cleanup only releases shell entries, not agent terminal', async () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
-        const { releaseAllForTask } = await import('../../lib/liveTerminalPool')
+        const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+        const { releaseAllForTask } = regularTerminalSessions
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
         vi.mocked(releaseAllForTask).mockClear()

@@ -1,14 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
+import { getPtyBuffer } from './ipc'
+import { agentTerminalSessions, terminalDiagnostics } from './terminalSessionService'
+
+const {
   acquire,
   getShellLifecycleState,
   restorePtyInstance,
   subscribeShellLifecycle,
-  terminalDiagnostics,
-} from './terminalPool'
-import { getPtyBuffer } from './ipc'
+} = agentTerminalSessions
 
-describe('desktop Terminal Session restore facade', () => {
+describe('desktop Terminal Session restore', () => {
   it('applies restored PTY identity before acquisition', async () => {
     await restorePtyInstance('task-restored', 42)
 

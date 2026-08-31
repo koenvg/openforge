@@ -13,26 +13,21 @@ vi.mock('./ptySubmit', () => ({
   writePtyWithSubmit: vi.fn(),
 }))
 
-vi.mock('./terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-42' }),
-  beginPtySpawn: vi.fn(),
-  focusTerminal: vi.fn(),
-  hasTerminal: vi.fn(() => false),
-  isPtyActive: vi.fn(() => false),
-  release: vi.fn(),
+vi.mock('./terminalSessionService', () => ({
+  agentTerminalSessions: {
+    acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-42' }),
+    beginPtySpawn: vi.fn(),
+    focusTerminal: vi.fn(),
+    hasTerminal: vi.fn(() => false),
+    isPtyActive: vi.fn(() => false),
+    release: vi.fn(),
+  },
 }))
 
 import { createTaskSessionActions } from './taskSessionActions'
 import { deleteTask, getSessionStatus, inspectExistingBranch, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
-import {
-  acquire,
-  beginPtySpawn,
-  focusTerminal,
-  hasTerminal,
-  isPtyActive,
-  release,
-} from './terminalPool'
+import { agentTerminalSessions } from './terminalSessionService'
 import { writePtyWithSubmit } from './ptySubmit'
 import {
   activeSessions,
@@ -42,6 +37,15 @@ import {
   taskRuntimeInfo,
 } from './stores'
 import { refreshActiveTasks } from './tasksState'
+
+const {
+  acquire,
+  beginPtySpawn,
+  focusTerminal,
+  hasTerminal,
+  isPtyActive,
+  release,
+} = agentTerminalSessions
 
 function createSpawnLease(imageProtocol: 'iterm2' | null = null) {
   return {

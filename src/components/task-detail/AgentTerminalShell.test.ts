@@ -44,7 +44,8 @@ describe('AgentTerminalShell', () => {
     setActiveSession(session)
     mockShellLifecycleState.ptyActive = true
 
-    const { acquire, attach, release } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach, release } = agentTerminalSessions
     const { killPty } = await import('../../lib/ipc')
 
     const firstRender = render(AgentTerminalShell, {
@@ -87,7 +88,8 @@ describe('AgentTerminalShell', () => {
     setActiveSession(createAgentSession({ provider: 'opencode', opencode_session_id: 'opencode-sess-abc123' }))
     mockShellLifecycleState.ptyActive = true
 
-    const { restorePtyInstance } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { restorePtyInstance } = agentTerminalSessions
 
     render(AgentTerminalShell, {
       props: {
@@ -110,7 +112,8 @@ describe('AgentTerminalShell', () => {
 
   it('hydrates the persisted PTY instance before attaching a resumed Agent Session', async () => {
     setActiveSession(createAgentSession({ provider: 'pi', pty_instance_id: 42 }))
-    const { attach, restorePtyInstance } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach, restorePtyInstance } = agentTerminalSessions
 
     render(AgentTerminalShell, {
       props: {
@@ -130,7 +133,8 @@ describe('AgentTerminalShell', () => {
     'does not restore stale persisted PTY metadata for a %s Agent Session',
     async (status) => {
       setActiveSession(createAgentSession({ provider: 'pi', status, pty_instance_id: 42 }))
-      const { attach, restorePtyInstance } = await import('../../lib/terminalPool')
+      const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+      const { attach, restorePtyInstance } = agentTerminalSessions
 
       render(AgentTerminalShell, {
         props: {
@@ -149,7 +153,8 @@ describe('AgentTerminalShell', () => {
   it('mounts the pooled terminal shell for an active session', async () => {
     setActiveSession(baseSession)
 
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = agentTerminalSessions
 
     render(AgentTerminalShell, {
       props: {
@@ -170,7 +175,8 @@ describe('AgentTerminalShell', () => {
 
   it('refits only while the Agent workbench remains active', async () => {
     setActiveSession(baseSession)
-    const { attach } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = agentTerminalSessions
 
     const view = render(AgentTerminalShell, {
       props: {
@@ -209,7 +215,8 @@ describe('AgentTerminalShell', () => {
   it('leaves the agent PTY palette under the shared app theme runtime', async () => {
     setActiveSession(baseSession)
 
-    const { attach } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = agentTerminalSessions
     render(AgentTerminalShell, {
       props: {
         taskId: 'T-1',

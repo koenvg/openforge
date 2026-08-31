@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { replayPtyBuffersForActiveTerminals } from '../terminalPool'
+import { agentTerminalSessions } from '../terminalSessionService'
 import { createAppLifecycleEventListeners } from './appLifecycleEventListeners'
 import { createAppDesktopEventHarness, registerEventListenerGroup } from './testUtils'
 
-vi.mock('../terminalPool', () => ({
-  replayPtyBuffersForActiveTerminals: vi.fn(async () => undefined),
-}))
+const { replayPtyBuffersForActiveTerminals } = agentTerminalSessions
+
+vi.mock('../terminalSessionService', () => {
+  const agentTerminalSessions = {
+    replayPtyBuffersForActiveTerminals: vi.fn(async () => undefined),
+  }
+  return {
+    agentTerminalSessions,
+    regularTerminalSessions: { ...agentTerminalSessions },
+  }
+})
 
 describe('createAppLifecycleEventListeners', () => {
   beforeEach(() => {

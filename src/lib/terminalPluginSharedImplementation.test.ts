@@ -5,13 +5,7 @@ import { get } from 'svelte/store'
 
 import { commandHeld as appCommandHeld } from './stores'
 import { setupCommandHeldListeners as appSetupCommandHeldListeners } from './useCommandHeld.svelte'
-import {
-  acquire as appAcquire,
-  focusTerminal as appFocusTerminal,
-  getTaskTerminalTabsSession as appGetTaskTerminalTabsSession,
-  release as appRelease,
-  updateTaskTerminalTabsSession as appUpdateTaskTerminalTabsSession,
-} from './terminalPool'
+import { regularTerminalSessions } from './terminalSessionService'
 import {
   clearTerminalTaskPaneControllers as clearAppControllers,
   getTerminalTaskPaneController as getAppController,
@@ -39,6 +33,14 @@ import { handleTerminalShortcutKeydown as runtimeShortcutHandler } from '@openfo
 import { handleTerminalShortcutKeydown as appShortcutHandler } from './terminalShortcuts'
 import { handleTerminalShortcutKeydown as pluginShortcutHandler } from '../../plugins/terminal/src/terminalShortcuts'
 
+
+const {
+  acquire: appAcquire,
+  focusTerminal: appFocusTerminal,
+  getTaskTerminalTabsSession: appGetTaskTerminalTabsSession,
+  release: appRelease,
+  updateTaskTerminalTabsSession: appUpdateTaskTerminalTabsSession,
+} = regularTerminalSessions
 describe('terminal plugin implementation boundary', () => {
   beforeEach(() => {
     appCommandHeld.set(false)

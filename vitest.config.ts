@@ -50,7 +50,7 @@ export default defineConfig({
           setupFiles: ['src/test-setup.ts'],
           include: ['src/**/*.test.ts', WORKSPACE_TEST_SUITE_GLOB],
           exclude: [
-            'src/lib/terminalPool.*.test.ts',
+            'src/lib/terminalSessionService.*.test.ts',
             pluginSdk.suiteGlob,
             pluginRuntime.suiteGlob,
             ...WORKSPACE_TEST_SUITE_EXCLUDES,
@@ -65,12 +65,12 @@ export default defineConfig({
       {
         plugins: [svelte(), svelteTesting()],
         test: {
-          name: 'terminal-pool',
+          name: 'terminal-session-service',
           environment: 'jsdom',
           pool: 'forks',
           globals: true,
-          setupFiles: ['src/test-setup.ts', 'src/lib/terminalPool.testSetup.ts'],
-          include: ['src/lib/terminalPool.*.test.ts'],
+          setupFiles: ['src/test-setup.ts', 'src/lib/terminalSessionService.testSetup.ts'],
+          include: ['src/lib/terminalSessionService.*.test.ts'],
           alias: {
             ...pluginRuntimeAliases,
             ...pluginSdkAliases,

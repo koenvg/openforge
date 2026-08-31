@@ -1,13 +1,13 @@
 import type { TerminalSurfaceAdapter } from '@openforge-app/terminal-runtime'
 import { getTaskWorkspace, killPty, spawnShellPty } from '../../lib/ipc'
-import * as desktopTerminalRuntime from '../../lib/terminalPool'
+import { regularTerminalSessions } from '../../lib/terminalSessionService'
 import {
   registerTerminalTaskPaneController,
   unregisterTerminalTaskPaneController,
 } from './terminalTaskPaneController'
 
 export const desktopTerminalSurfaceAdapter: TerminalSurfaceAdapter = {
-  runtime: desktopTerminalRuntime,
+  runtime: regularTerminalSessions,
   spawnShellPty,
   killPty,
   getTaskWorkspace,

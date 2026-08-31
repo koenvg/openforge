@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { releaseAll } from './terminalPool'
+import { agentTerminalSessions } from './terminalSessionService'
+
+const { releaseAll } = agentTerminalSessions
 
 type ListenCallback = (event: unknown) => void;
 type UnlistenMock = Mock<() => void>;

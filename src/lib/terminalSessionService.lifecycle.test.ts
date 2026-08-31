@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
+import { agentTerminalSessions } from './terminalSessionService'
+
+const {
   acquire,
   beginPtySpawn,
   clearTaskTerminalTabsSession,
@@ -11,9 +13,9 @@ import {
   releaseAllForTask,
   subscribeShellLifecycle,
   updateTaskTerminalTabsSession,
-} from './terminalPool'
+} = agentTerminalSessions
 
-describe('desktop Terminal Session lifecycle facade', () => {
+describe('desktop Terminal Session lifecycle', () => {
   it('returns the same opaque session for duplicate acquisition', async () => {
     const first = await acquire('task-1')
     const second = await acquire('task-1')

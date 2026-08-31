@@ -8,7 +8,7 @@ import {
 } from '../../lib/stores'
 import { clearTerminalTaskPaneControllers } from './terminalTaskPaneController'
 import { resetTaskDetailViewPluginSetup } from './TaskDetailView.pluginSetup.testUtils'
-import { resetTaskDetailViewTerminalPoolMocks } from './TaskDetailView.terminalPool.testUtils'
+import { resetTaskDetailViewTerminalPoolMocks } from './TaskDetailView.terminalSessionService.testUtils'
 
 function resetTaskDetailViewTestState() {
   localStorage.clear()

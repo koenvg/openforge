@@ -78,7 +78,8 @@ function emitShellLifecycle(terminalKey: string, state: { ptyActive: boolean, sh
   shellLifecycleCallbacks.get(terminalKey)?.(state)
 }
 
-vi.mock('../../lib/terminalPool', () => ({
+vi.mock('../../lib/terminalSessionService', () => {
+  const regularTerminalSessions = {
   acquire: vi.fn().mockResolvedValue({
     taskId: '',
     terminal: {
@@ -138,7 +139,12 @@ vi.mock('../../lib/terminalPool', () => ({
     clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
       taskTabSessions.delete(taskId)
     }),
-}))
+  }
+  return {
+    agentTerminalSessions: { ...regularTerminalSessions },
+    regularTerminalSessions,
+  }
+})
 
 // Mock TaskTerminal to avoid complex terminal setup in tab tests
 vi.mock('./TaskTerminal.svelte', () => ({
@@ -572,7 +578,8 @@ describe('TerminalTabs', () => {
   })
 
   it('focuses the newly selected terminal tab after switching by visible position', async () => {
-    const { focusTerminal } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { focusTerminal } = regularTerminalSessions
     const { component } = render(TerminalTabs, {
       props: {
         taskId: 'T-1',
@@ -604,7 +611,8 @@ describe('TerminalTabs', () => {
   })
 
   it('moves focus to the active terminal when closing an inactive tab', async () => {
-    const { focusTerminal } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { focusTerminal } = regularTerminalSessions
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',

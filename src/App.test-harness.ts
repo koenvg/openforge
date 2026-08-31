@@ -28,14 +28,20 @@ vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
 }))
 
-vi.mock('./lib/terminalPool', () => ({
-  acquire: vi.fn(async () => ({ ptyActive: false })),
-  attach: vi.fn(),
-  detach: vi.fn(),
-  focusTerminal: vi.fn(),
-  isPtyActive: vi.fn(() => false),
-  release: vi.fn(),
-}))
+vi.mock('./lib/terminalSessionService', () => {
+  const operations = {
+    acquire: vi.fn(async () => ({ ptyActive: false })),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    focusTerminal: vi.fn(),
+    isPtyActive: vi.fn(() => false),
+    release: vi.fn(),
+  }
+  return {
+    agentTerminalSessions: { ...operations },
+    regularTerminalSessions: { ...operations },
+  }
+})
 
 vi.mock('@lucide/svelte', () => {
   const stub = vi.fn()

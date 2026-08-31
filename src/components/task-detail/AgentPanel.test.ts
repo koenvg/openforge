@@ -101,7 +101,8 @@ describe('AgentPanel starting animation', () => {
 describe('OpenCode shared shell (via router)', () => {
 
   it('calls attach with the pooled terminal entry for OpenCode sessions', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = agentTerminalSessions
 
     const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 
@@ -115,7 +116,8 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('does not expose an Abort action for a running agent session', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = agentTerminalSessions
 
     const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 

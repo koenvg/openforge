@@ -69,7 +69,8 @@ describe('TaskDetailView mounted-pane behavior', () => {
 
   it('keeps the agent PTY component mounted while another tab is active', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
-    const { acquire } = await import('../../lib/terminalPool')
+    const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = agentTerminalSessions
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
     vi.mocked(acquire).mockClear()
     terminalAttachmentDetach.mockClear()

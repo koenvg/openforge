@@ -318,7 +318,8 @@ describe('TaskDetailView navigation', () => {
 
   it('activates shell terminal through the shared terminal pool', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
     const acquireMock = vi.mocked(acquire)
     acquireMock.mockClear()
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))

@@ -19,9 +19,15 @@ vi.mock('../../lib/ipc', () => ({
   getTaskWorkspace: getTaskWorkspaceMock,
 }))
 
-vi.mock('../../lib/terminalPool', () => ({
-  releaseAllForTask: vi.fn().mockReturnValue(0),
-}))
+vi.mock('../../lib/terminalSessionService', () => {
+  const regularTerminalSessions = {
+    releaseAllForTask: vi.fn().mockReturnValue(0),
+  }
+  return {
+    agentTerminalSessions: { ...regularTerminalSessions },
+    regularTerminalSessions,
+  }
+})
 
 vi.mock('../../lib/terminalShortcutController', () => ({
   createTerminalShortcutController: vi.fn(() => ({
