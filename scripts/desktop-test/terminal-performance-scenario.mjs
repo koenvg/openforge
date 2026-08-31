@@ -10,8 +10,8 @@ import {
 const DEFAULT_ECHO_SAMPLE_COUNT = 8
 const DEFAULT_ECHO_WARMUP_COUNT = 2
 const DEFAULT_BULK_INPUT_BYTES = 2_048
-const DEFAULT_PTY_OUTPUT_BYTES = 256 * 1_024
-const DEFAULT_DRAIN_TIMEOUT_MS = 30_000
+const DEFAULT_PTY_OUTPUT_BYTES = 1_024 * 1_024
+const DEFAULT_DRAIN_TIMEOUT_MS = 120_000
 
 function byteLength(text) {
   return new TextEncoder().encode(text).byteLength

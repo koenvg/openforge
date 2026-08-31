@@ -33,14 +33,14 @@ function createScenarioHarness({ markerFound = true, sequenceContinuous = true }
     typeTerminalCommand: vi.fn(async (_region, command) => {
       commands.push(command)
       commandModes.push('full-driver')
-      receivedBytes += 1_000_000
+      receivedBytes += 2_000_000
       modelSequence += 1
     }),
     focusTerminal: vi.fn(async () => undefined),
     typeFocusedTerminalCommand: vi.fn(async (_region, command) => {
       commands.push(command)
       commandModes.push('already-focused')
-      receivedBytes += 1_000_000
+      receivedBytes += 2_000_000
       modelSequence += 1
     }),
     startTerminalPerformanceTrace: vi.fn(async () => {
@@ -173,6 +173,28 @@ describe('full-app terminal performance scenario', () => {
     expect(harness.driver.selectTaskView).toHaveBeenNthCalledWith(2, 'Terminal')
     expect(harness.region.waitFor).toHaveBeenCalledWith({ state: 'visible' })
     expect(harness.commands.some(command => command.includes('terminal-output.mjs'))).toBe(true)
+  })
+
+  it('uses a 1 MiB PTY fixture by default for representative throughput measurements', async () => {
+    const harness = createScenarioHarness()
+
+    const result = await runTerminalPerformanceScenario(context, {
+      driver: harness.driver,
+      now: harness.now,
+      echoSampleCount: 2,
+      echoWarmupCount: 1,
+      bulkInputBytes: 8,
+    })
+
+    expect(harness.commands.some(command => command.includes('--bytes=1048576'))).toBe(true)
+    expect(result.metrics.ptyOutput.bytes).toBe(1_048_576)
+    expect(harness.driver.drainTerminal).toHaveBeenCalledWith(
+      'T-1-shell-0',
+      expect.objectContaining({
+        marker: 'OPENFORGE_PERF_PTY_OUTPUT_DONE',
+        timeoutMs: 120_000,
+      }),
+    )
   })
 
   it.each([

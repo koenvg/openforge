@@ -42,12 +42,16 @@ describe('terminal performance report', () => {
       totalMemoryBytes: 16_000,
       versions: { node: '24.0.0', electron: '43.0.0', chrome: '142.0.0' },
       appRevision: 'abc123',
+      sourceState: { revision: 'abc123', trackedWorkingTreeDirty: true },
+      terminalModelBuild: { optimizeMode: 'ReleaseFast', cpuTarget: 'baseline' },
     })).toEqual({
       operatingSystem: { platform: 'darwin', release: '24.1.0', arch: 'arm64' },
       cpu: { model: 'Test CPU', logicalCores: 2 },
       totalMemoryBytes: 16_000,
       runtime: { node: '24.0.0', electron: '43.0.0', chromium: '142.0.0' },
       appRevision: 'abc123',
+      sourceState: { revision: 'abc123', trackedWorkingTreeDirty: true },
+      terminalModelBuild: { optimizeMode: 'ReleaseFast', cpuTarget: 'baseline' },
     })
     expect(unavailableMemoryMeasurement('unsupported platform')).toEqual({
       available: false,

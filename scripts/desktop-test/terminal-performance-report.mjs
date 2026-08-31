@@ -159,6 +159,8 @@ export function createEnvironmentMetadata({
   totalMemoryBytes,
   versions = {},
   appRevision = null,
+  sourceState = { revision: appRevision, trackedWorkingTreeDirty: null },
+  terminalModelBuild = { optimizeMode: null, cpuTarget: null },
 }) {
   return {
     operatingSystem: { platform, release, arch },
@@ -173,6 +175,8 @@ export function createEnvironmentMetadata({
       chromium: versions.chrome ?? null,
     },
     appRevision,
+    sourceState,
+    terminalModelBuild,
   }
 }
 
