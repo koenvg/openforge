@@ -1,0 +1,82 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.62rem;
+  padding: 0.72rem 1.1rem;
+  border: 1px solid transparent;
+  font-size: 0.84rem;
+  font-weight: 620;
+  letter-spacing: -0.012em;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button-primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: 0 0.45rem 1.4rem rgba(17, 19, 24, 0.14);
+  color: white;
+}
+
+.button-primary:hover {
+  border-color: var(--blue);
+  background: var(--blue);
+  box-shadow: 0 0.65rem 1.8rem rgba(41, 71, 255, 0.2);
+}
+
+.button-secondary {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+}
+
+.button-secondary:hover {
+  border-color: var(--ink);
+  background: var(--surface);
+}
+
+.button-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.download-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+@media (max-width: 42rem) {
+  .actions {
+    align-items: stretch;
+  }
+
+  .actions .button {
+    flex: 1 1 100%;
+  }
+}

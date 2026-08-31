@@ -1,0 +1,244 @@
+.reason-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 5rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+}
+
+.reason-step {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.reason-step:last-child {
+  border-right: 0;
+}
+
+.reason-card {
+  min-height: 29rem;
+  padding: 1.35rem 1.35rem 1.8rem;
+  background: rgba(255, 255, 255, 0.44);
+  transition: background-color 200ms ease;
+}
+
+.reason-card:hover {
+  background: var(--surface);
+}
+
+.reason-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.step-badge {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.reason-signal {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.reason-signal i {
+  width: 0.26rem;
+  height: 0.26rem;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.reason-diagram {
+  position: relative;
+  height: 13rem;
+  margin: 2.2rem 0 2rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background-color: var(--surface-soft);
+  background-image:
+    linear-gradient(rgba(17, 19, 24, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 19, 24, 0.055) 1px, transparent 1px);
+  background-size: 1.3rem 1.3rem;
+}
+
+.reason-diagram span {
+  position: absolute;
+  display: block;
+  border: 1px solid var(--ink);
+  background: white;
+  box-shadow: 0.28rem 0.28rem 0 rgba(17, 19, 24, 0.09);
+}
+
+.reason-diagram-1 span:nth-child(1) {
+  top: 2rem;
+  left: 2rem;
+  width: 42%;
+  height: 2rem;
+}
+
+.reason-diagram-1 span:nth-child(2) {
+  top: 5rem;
+  left: 2rem;
+  width: 68%;
+  height: 0.7rem;
+  border-color: var(--blue);
+  background: var(--blue);
+  box-shadow: none;
+}
+
+.reason-diagram-1 span:nth-child(3) {
+  top: 7.25rem;
+  left: 2rem;
+  width: 54%;
+  height: 0.7rem;
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
+.reason-diagram-1 span:nth-child(4) {
+  right: 1.75rem;
+  bottom: 1.5rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border-color: var(--mint);
+  background: rgba(8, 168, 130, 0.12);
+}
+
+.reason-diagram-2 span {
+  width: 3.4rem;
+  height: 4.8rem;
+}
+
+.reason-diagram-2 span:nth-child(1) {
+  top: 4rem;
+  left: 1.8rem;
+  border-color: var(--blue);
+}
+
+.reason-diagram-2 span:nth-child(2) {
+  top: 2.2rem;
+  left: calc(50% - 1.7rem);
+  border-color: var(--violet);
+}
+
+.reason-diagram-2 span:nth-child(3) {
+  top: 4.9rem;
+  right: 1.8rem;
+  border-color: var(--mint);
+}
+
+.reason-diagram-2 span:nth-child(4) {
+  top: 6.3rem;
+  left: 18%;
+  width: 64%;
+  height: 1px;
+  border: 0;
+  border-top: 1px dashed var(--line-strong);
+  background: transparent;
+  box-shadow: none;
+}
+
+.reason-diagram-3 span:nth-child(1) {
+  inset: 1.8rem 2.2rem;
+}
+
+.reason-diagram-3 span:nth-child(2),
+.reason-diagram-3 span:nth-child(3) {
+  left: 3.4rem;
+  width: calc(100% - 6.8rem);
+  height: 0.62rem;
+  border: 0;
+  box-shadow: none;
+}
+
+.reason-diagram-3 span:nth-child(2) {
+  top: 4.7rem;
+  background: linear-gradient(90deg, var(--mint) 62%, var(--line) 62%);
+}
+
+.reason-diagram-3 span:nth-child(3) {
+  top: 6.5rem;
+  background: linear-gradient(90deg, var(--blue) 78%, var(--line) 78%);
+}
+
+.reason-diagram-3 span:nth-child(4) {
+  right: 3rem;
+  bottom: 2.6rem;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  border-color: var(--mint);
+  background: var(--mint);
+  box-shadow: 0 0 0 0.4rem rgba(8, 168, 130, 0.11);
+}
+
+.reason-card h3 {
+  margin: 0;
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+.reason-card > p {
+  max-width: 26rem;
+  margin: 0.85rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+@media (max-width: 58rem) {
+  .reason-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .reason-step {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .reason-step:last-child {
+    border-bottom: 0;
+  }
+
+  .reason-card {
+    display: grid;
+    grid-template-columns: 0.7fr 1fr;
+    column-gap: 2rem;
+    min-height: auto;
+    padding: 1.5rem;
+  }
+
+  .reason-card-topline {
+    grid-column: 1 / -1;
+  }
+
+  .reason-diagram {
+    grid-row: 2 / 4;
+    min-height: 13rem;
+  }
+
+  .reason-card h3 {
+    align-self: end;
+  }
+}
+
+@media (max-width: 42rem) {
+  .reason-rail {
+    margin-top: 3rem;
+  }
+
+  .reason-card {
+    display: block;
+  }
+
+  .reason-diagram {
+    margin-top: 1.8rem;
+  }
+}

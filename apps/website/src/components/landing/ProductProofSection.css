@@ -1,0 +1,234 @@
+.product-proof {
+  padding-bottom: 0;
+  background: var(--surface);
+}
+
+.product-stage {
+  position: relative;
+  min-height: 55rem;
+  margin: 5rem -4.5rem 0;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 40% 46%, rgba(41, 71, 255, 0.1), transparent 27rem),
+    linear-gradient(180deg, #f6f7f8, #eef0f3);
+}
+
+.product-stage-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(17, 19, 24, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 19, 24, 0.055) 1px, transparent 1px);
+  background-size: 2.7rem 2.7rem;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+
+.product-window {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(17, 19, 24, 0.2);
+  background: #12151b;
+  box-shadow: var(--shadow-window);
+}
+
+.product-window-board {
+  top: 6.5rem;
+  left: 5.5%;
+  width: 72%;
+  transform: rotate(-1.2deg);
+}
+
+.product-window-review {
+  right: 5%;
+  bottom: 5.5rem;
+  width: 48%;
+  transform: rotate(1.6deg);
+}
+
+.window-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 2.4rem;
+  padding: 0 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: #171a21;
+  color: rgba(255, 255, 255, 0.64);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+}
+
+.window-bar > div {
+  display: flex;
+  gap: 0.32rem;
+}
+
+.window-bar > div span {
+  width: 0.46rem;
+  height: 0.46rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.window-bar p {
+  margin: 0;
+}
+
+.window-status {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 0.35rem;
+}
+
+.window-status i {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: #59d59b;
+}
+
+.product-window img {
+  width: 100%;
+  height: auto;
+}
+
+.product-callout {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  gap: 0.26rem;
+  color: var(--muted-strong);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.product-callout span {
+  color: var(--blue);
+}
+
+.product-callout-left {
+  bottom: 8rem;
+  left: 4.5%;
+}
+
+.product-callout-right {
+  top: 4.2rem;
+  right: 4.5%;
+  text-align: right;
+}
+
+.product-facts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0 -4.5rem;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.product-facts li {
+  display: grid;
+  gap: 0.36rem;
+  padding: 1.65rem 2rem;
+  border-right: 1px solid var(--line);
+}
+
+.product-facts li:last-child {
+  border-right: 0;
+}
+
+.product-facts strong {
+  font-size: 0.9rem;
+  font-weight: 620;
+}
+
+.product-facts span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+@media (max-width: 74rem) {
+  .product-stage,
+  .product-facts {
+    margin-right: -3rem;
+    margin-left: -3rem;
+  }
+}
+
+@media (max-width: 58rem) {
+  .product-stage {
+    min-height: 46rem;
+  }
+
+  .product-window-board {
+    width: 82%;
+  }
+
+  .product-window-review {
+    width: 58%;
+  }
+
+  .product-facts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .product-facts li:nth-child(2) {
+    border-right: 0;
+  }
+
+  .product-facts li:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 42rem) {
+  .product-proof {
+    padding-bottom: 0;
+  }
+
+  .product-stage {
+    min-height: 34rem;
+    margin-right: -1.25rem;
+    margin-left: -1.25rem;
+  }
+
+  .product-window-board {
+    top: 4rem;
+    left: 3%;
+    width: 94%;
+  }
+
+  .product-window-review {
+    right: 3%;
+    bottom: 4rem;
+    width: 72%;
+  }
+
+  .product-callout {
+    display: none;
+  }
+
+  .window-bar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .window-bar > p {
+    display: none;
+  }
+
+  .product-facts {
+    margin-right: -1.25rem;
+    margin-left: -1.25rem;
+  }
+
+  .product-facts li {
+    padding: 1.35rem 1.1rem;
+  }
+}
