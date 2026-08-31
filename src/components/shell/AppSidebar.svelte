@@ -11,6 +11,7 @@
   import { isCrossProjectView } from '../../lib/views'
   import type { SidebarPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
+  import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
   import PluginSidebarNavigationSlot from './PluginSidebarNavigationSlot.svelte'
 
   interface Props {
@@ -343,21 +344,21 @@
         onActivate={() => onNavigate(item.viewKey)}
       />
     {/each}
-    {#each bottomNavItems as { view, Icon, label }}
+    {#each bottomNavItems as { view, Icon, label: itemLabel }}
       {@const isActive = currentView === view}
-      <button
-        type="button"
-        class="composited-hover-layer group mx-2 flex min-h-11 w-[calc(100%_-_1rem)] items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer {isActive ? 'bg-primary/10 text-primary' : 'sidebar-hover-base-200 text-base-content'}"
-        title={collapsed ? label : undefined}
-        aria-label={label}
-        aria-current={isActive ? 'page' : undefined}
-        onclick={() => onNavigate(view)}
+      <PluginSidebarLink
+        accessibleName={itemLabel}
+        active={isActive}
+        {collapsed}
+        onActivate={() => onNavigate(view)}
       >
-         <Icon size={18} class="shrink-0 {isActive ? '' : 'sidebar-fade-content'}" />
-         {#if !collapsed}
-           <span class="text-sm font-medium {isActive ? '' : 'sidebar-fade-content'}">{label}</span>
-         {/if}
-      </button>
+        {#snippet leading()}
+          <Icon size={18} />
+        {/snippet}
+        {#snippet label()}
+          {itemLabel}
+        {/snippet}
+      </PluginSidebarLink>
     {/each}
   </div>
 
