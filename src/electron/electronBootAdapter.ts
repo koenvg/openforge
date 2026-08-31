@@ -32,7 +32,7 @@ import { FrontendHostRequestRelay } from './frontendHostRequestRelay.js'
 import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
 import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createAppEventForwarder } from './eventForwarder.js'
-import { OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, RendererEventSubscriptions } from './rendererEventSubscriptions.js'
+import { RendererEventSubscriptions, registerRendererEventSubscriptionHandler } from './rendererEventSubscriptions.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
 import { configureElectronUserDataPath } from './runtimePaths.js'
 import {
@@ -255,10 +255,11 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     registerBackendInvokeHandler(context: BootBackendInvokeContext): void {
       backendInvokeContext = context
-      ipcMain.on(OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, (event, request: unknown) => {
-        if (event.sender.id !== mainRendererWindow?.webContents.id) return
-        rendererEventSubscriptions.update(event.sender.id, request)
-      })
+      registerRendererEventSubscriptionHandler(
+        ipcMain,
+        rendererEventSubscriptions,
+        () => mainRendererWindow?.webContents.id ?? null,
+      )
       ipcMain.handle('openforge:invoke', async (event, request: unknown) => {
         const typedRequest = request as { command?: unknown; payload?: unknown }
         if (typedRequest.command === FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND) {
