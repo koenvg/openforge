@@ -22,6 +22,7 @@
 
 <script>
   import { clock, effect, frame, init, surface } from 'vgpu';
+  import { getHeroCanvasPolicy } from '../../lib/heroCanvasPolicy';
 
   const SHADER_SOURCE = `
     struct Params {
@@ -29,6 +30,7 @@
       pointer: vec2f,
       time: f32,
       motion: f32,
+      detail: f32,
     }
 
     @group(0) @binding(0) var<uniform> params: Params;
@@ -139,42 +141,44 @@
       color = mix(color, edgeCol, max(max(xEdge, zEdge), tEdge) * 0.9);
 
       // Vent slits on the right face.
-      let ventRow = 1.0 - smoothstep(0.09, 0.17, abs(fract(xInfo.z * 5.0) - 0.5));
-      let ventGate = smoothstep(0.16, 0.24, xInfo.y) * (1.0 - smoothstep(0.68, 0.76, xInfo.y))
-        * smoothstep(0.14, 0.22, xInfo.z) * (1.0 - smoothstep(0.80, 0.88, xInfo.z));
-      color = mix(color, mix(INK, accent, 0.30), ventRow * ventGate * xMask * detail * 0.45);
+      if (detail > 0.5) {
+        let ventRow = 1.0 - smoothstep(0.09, 0.17, abs(fract(xInfo.z * 5.0) - 0.5));
+        let ventGate = smoothstep(0.16, 0.24, xInfo.y) * (1.0 - smoothstep(0.68, 0.76, xInfo.y))
+          * smoothstep(0.14, 0.22, xInfo.z) * (1.0 - smoothstep(0.80, 0.88, xInfo.z));
+        color = mix(color, mix(INK, accent, 0.30), ventRow * ventGate * xMask * detail * 0.45);
 
-      // Pin field on the left face.
-      let pinUv = fract(vec2f(zInfo.y * 6.0, zInfo.z * 3.0)) - vec2f(0.5);
-      let pinDist = length(pinUv * vec2f(length(axisX) / 6.0, length(axisY) / 3.0));
-      let pinGate = smoothstep(0.10, 0.17, zInfo.y) * (1.0 - smoothstep(0.85, 0.92, zInfo.y))
-        * smoothstep(0.20, 0.27, zInfo.z) * (1.0 - smoothstep(0.68, 0.75, zInfo.z));
-      let pins = (1.0 - smoothstep(0.0026, 0.0026 + aa, pinDist)) * pinGate * zMask * detail;
-      color = mix(color, mix(INK, accent, 0.25), pins * 0.55);
+        // Pin field on the left face.
+        let pinUv = fract(vec2f(zInfo.y * 6.0, zInfo.z * 3.0)) - vec2f(0.5);
+        let pinDist = length(pinUv * vec2f(length(axisX) / 6.0, length(axisY) / 3.0));
+        let pinGate = smoothstep(0.10, 0.17, zInfo.y) * (1.0 - smoothstep(0.85, 0.92, zInfo.y))
+          * smoothstep(0.20, 0.27, zInfo.z) * (1.0 - smoothstep(0.68, 0.75, zInfo.z));
+        let pins = (1.0 - smoothstep(0.0026, 0.0026 + aa, pinDist)) * pinGate * zMask * detail;
+        color = mix(color, mix(INK, accent, 0.25), pins * 0.55);
 
-      // Etched label bar on the left face.
-      let labelD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.27, 0.88), vec2f(0.15, 0.032));
-      let label = (1.0 - smoothstep(0.0, 0.03, labelD)) * zMask * detail;
-      color = mix(color, INK, label * 0.30);
+        // Etched label bar on the left face.
+        let labelD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.27, 0.88), vec2f(0.15, 0.032));
+        let label = (1.0 - smoothstep(0.0, 0.03, labelD)) * zMask * detail;
+        color = mix(color, INK, label * 0.30);
 
-      // Status LED with soft glow, top right of the left face.
-      let ledD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.85, 0.14), vec2f(0.042, 0.048));
-      let ledGlow = (1.0 - smoothstep(0.0, 0.20, ledD)) * zMask * detail;
-      let ledCore = (1.0 - smoothstep(0.0, 0.03, ledD)) * zMask * detail;
-      color = mix(color, accent, ledGlow * 0.30 * signal);
-      color = mix(color, mix(accent, vec3f(1.0), 0.35), ledCore * (0.30 + 0.70 * signal));
+        // Status LED with soft glow, top right of the left face.
+        let ledD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.85, 0.14), vec2f(0.042, 0.048));
+        let ledGlow = (1.0 - smoothstep(0.0, 0.20, ledD)) * zMask * detail;
+        let ledCore = (1.0 - smoothstep(0.0, 0.03, ledD)) * zMask * detail;
+        color = mix(color, accent, ledGlow * 0.30 * signal);
+        color = mix(color, mix(accent, vec3f(1.0), 0.35), ledCore * (0.30 + 0.70 * signal));
 
-      // Recessed roof panel and corner screws on the top face.
-      let roofD = abs(boxSdf(tInfo.yz - vec2f(0.5), vec2f(0.30)));
-      let roofLine = (1.0 - smoothstep(0.012, 0.028, roofD)) * tMask * detail;
-      color = mix(color, edgeCol, roofLine * 0.5);
-      let screwScale = vec2f(length(axisX), length(axisZ));
-      let screwDist = min(
-        min(length((tInfo.yz - vec2f(0.11, 0.11)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.11)) * screwScale)),
-        min(length((tInfo.yz - vec2f(0.11, 0.89)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.89)) * screwScale))
-      );
-      let screws = (1.0 - smoothstep(0.0030, 0.0030 + aa, screwDist)) * tMask * detail;
-      color = mix(color, mix(INK, accent, 0.40), screws * 0.6);
+        // Recessed roof panel and corner screws on the top face.
+        let roofD = abs(boxSdf(tInfo.yz - vec2f(0.5), vec2f(0.30)));
+        let roofLine = (1.0 - smoothstep(0.012, 0.028, roofD)) * tMask * detail;
+        color = mix(color, edgeCol, roofLine * 0.5);
+        let screwScale = vec2f(length(axisX), length(axisZ));
+        let screwDist = min(
+          min(length((tInfo.yz - vec2f(0.11, 0.11)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.11)) * screwScale)),
+          min(length((tInfo.yz - vec2f(0.11, 0.89)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.89)) * screwScale))
+        );
+        let screws = (1.0 - smoothstep(0.0030, 0.0030 + aa, screwDist)) * tMask * detail;
+        color = mix(color, mix(INK, accent, 0.40), screws * 0.6);
+      }
       return color;
     }
 
@@ -335,16 +339,16 @@
       color = dropShadow(color, point, eX + 0.475, 0.025, 0.95, 0.95, 0.18 * eDock * eVis);
 
       // Paint order is far to near: A, B, C, E, host core, D.
-      color = paintModule(color, point, vec3f(-1.6, 0.33 + (1.0 - easeA) * 4.5, -1.6), vec3f(1.1, 1.05, 1.1), BLUE, appear(sceneTime, 0.45), led(1.0, 0.0, animationTime, params.motion), 1.0, 0.0, aa);
-      color = paintModule(color, point, vec3f(0.2, 0.33 + (1.0 - easeB) * 4.5, -1.7), vec3f(1.4, 1.5, 1.1), VIOLET, appear(sceneTime, 0.62), led(1.0, 1.3, animationTime, params.motion), 1.0, 0.0, aa);
-      color = paintModule(color, point, vec3f(-1.75, 0.33 + (1.0 - easeC) * 4.5, 0.15), vec3f(1.25, 1.85, 1.25), MINT, appear(sceneTime, 0.79), led(1.0, 2.6, animationTime, params.motion), 1.0, 0.0, aa);
-      color = paintModule(color, point, vec3f(eX, eBaseY, -0.45), vec3f(0.95, 1.15, 0.95), SLATE, eVis, led(1.0, 3.9, animationTime, params.motion), 1.0, 0.0, aa);
+      color = paintModule(color, point, vec3f(-1.6, 0.33 + (1.0 - easeA) * 4.5, -1.6), vec3f(1.1, 1.05, 1.1), BLUE, appear(sceneTime, 0.45), led(1.0, 0.0, animationTime, params.motion), params.detail, 0.0, aa);
+      color = paintModule(color, point, vec3f(0.2, 0.33 + (1.0 - easeB) * 4.5, -1.7), vec3f(1.4, 1.5, 1.1), VIOLET, appear(sceneTime, 0.62), led(1.0, 1.3, animationTime, params.motion), params.detail, 0.0, aa);
+      color = paintModule(color, point, vec3f(-1.75, 0.33 + (1.0 - easeC) * 4.5, 0.15), vec3f(1.25, 1.85, 1.25), MINT, appear(sceneTime, 0.79), led(1.0, 2.6, animationTime, params.motion), params.detail, 0.0, aa);
+      color = paintModule(color, point, vec3f(eX, eBaseY, -0.45), vec3f(0.95, 1.15, 0.95), SLATE, eVis, led(1.0, 3.9, animationTime, params.motion), params.detail, 0.0, aa);
 
       // Host core chip on the deck, front center.
       let coreEase = dropEase(sceneTime, 0.55, 0.4);
-      color = paintModule(color, point, vec3f(-0.35, 0.33 + (1.0 - coreEase) * 2.0, 1.3), vec3f(0.7, 0.26, 0.45), BLUE, appear(sceneTime, 0.55), led(1.0, 0.7, animationTime, params.motion), 1.0, 1.0, aa);
+      color = paintModule(color, point, vec3f(-0.35, 0.33 + (1.0 - coreEase) * 2.0, 1.3), vec3f(0.7, 0.26, 0.45), BLUE, appear(sceneTime, 0.55), led(1.0, 0.7, animationTime, params.motion), params.detail, 1.0, aa);
 
-      color = paintModule(color, point, vec3f(0.65, 0.33 + (1.0 - easeD) * 4.5, 0.25), vec3f(1.05, 0.85, 1.15), AMBER, appear(sceneTime, 0.96), led(1.0, 5.2, animationTime, params.motion), 1.0, 0.0, aa);
+      color = paintModule(color, point, vec3f(0.65, 0.33 + (1.0 - easeD) * 4.5, 0.25), vec3f(1.05, 0.85, 1.15), AMBER, appear(sceneTime, 0.96), led(1.0, 5.2, animationTime, params.motion), params.detail, 0.0, aa);
 
       // Antenna with beacon on the tallest module.
       let mastTop = iso(vec3f(-1.125, 0.33 + (1.0 - easeC) * 4.5 + 1.85, 0.775));
@@ -381,12 +385,14 @@
   const visual = document.querySelector<HTMLElement>('[data-vgpu-visual]');
   const canvas = visual?.querySelector<HTMLCanvasElement>('canvas');
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const usesCompactRendering = window.matchMedia('(max-width: 42rem), (pointer: coarse)').matches;
+  const renderingPolicy = getHeroCanvasPolicy({ prefersReducedMotion, usesCompactRendering });
 
   if (visual && canvas && 'gpu' in navigator) {
     void (async () => {
       try {
         const gpu = await init();
-        const target = surface(gpu, canvas, { dpr: [1, 2] });
+        const target = surface(gpu, canvas, { dpr: renderingPolicy.devicePixelRatio });
         const pointer = [0.5, 0.5] as [number, number];
         const timer = clock(gpu);
         const shader = effect(gpu, SHADER_SOURCE, {
@@ -396,7 +402,8 @@
               resolution: target.size,
               pointer,
               time: 0,
-              motion: prefersReducedMotion ? 0 : 1,
+              motion: renderingPolicy.animate ? 1 : 0,
+              detail: renderingPolicy.shaderDetail,
             },
           },
         });
@@ -412,8 +419,9 @@
           shader.set({ params: { pointer } });
         };
 
-        canvas.addEventListener('pointermove', updatePointer, { passive: true });
-
+        if (renderingPolicy.trackPointer) {
+          canvas.addEventListener('pointermove', updatePointer, { passive: true });
+        }
         let animationFrameId: number | null = null;
         let resizeFrameId: number | null = null;
         let isInViewport = false;
@@ -423,7 +431,7 @@
         const drawFrame = (timestamp = performance.now()) => {
           if (isDisposed) return;
 
-          if (!prefersReducedMotion) {
+          if (renderingPolicy.animate) {
             const deltaSeconds = Math.min(Math.max((timestamp - lastTimestamp) / 1000, 0), 0.1);
             timer.advance(deltaSeconds);
           }
@@ -444,14 +452,15 @@
             return;
           }
 
-          if (timestamp - lastTimestamp >= 1000 / 30) drawFrame(timestamp);
+          const frameInterval = 1000 / renderingPolicy.targetFramesPerSecond;
+          if (timestamp - lastTimestamp >= frameInterval) drawFrame(timestamp);
           animationFrameId = requestAnimationFrame(renderLoop);
         };
 
         const startRendering = () => {
           if (document.hidden || !isInViewport || isDisposed) return;
 
-          if (prefersReducedMotion) {
+          if (!renderingPolicy.animate) {
             drawFrame();
             return;
           }
@@ -477,7 +486,7 @@
         };
 
         const handleResize = () => {
-          if (!prefersReducedMotion || !isInViewport || resizeFrameId !== null) return;
+          if (renderingPolicy.animate || !isInViewport || resizeFrameId !== null) return;
           resizeFrameId = requestAnimationFrame(() => {
             resizeFrameId = null;
             drawFrame();
