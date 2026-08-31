@@ -5,7 +5,8 @@ export type MermaidTheme = 'default' | 'dark'
 type MermaidApi = Pick<(typeof import('mermaid'))['default'], 'initialize' | 'render'>
 
 const MERMAID_CODE_SELECTOR = 'pre > code.language-mermaid'
-const MERMAID_DIAGRAM_CLASS = 'mermaid-diagram'
+export const MERMAID_DIAGRAM_CLASS = 'mermaid-diagram'
+export const MERMAID_EXPAND_ACTION_CLASS = 'mermaid-diagram-expand'
 const MERMAID_FAILURE_CLASS = 'mermaid-diagram-fallback'
 const MERMAID_EXTERNAL_RESOURCE_PATTERN = /(?:\b(?:https?|ftp|file|data|javascript|vbscript):|(?:^|[\s("'=])\/\/|@import|\burl\s*\()/im
 const MERMAID_ESCAPED_STYLE_PATTERN = /\b(?:classDef|style|linkStyle)\b[^\r\n]*\\/i
@@ -100,9 +101,11 @@ function prepareDiagram(code: HTMLElement): { wrapper: HTMLDivElement, source: s
 }
 
 function clearRenderedDiagram(wrapper: HTMLDivElement, fallback: HTMLPreElement): void {
+  const expandAction = wrapper.querySelector<HTMLButtonElement>(`:scope > button.${MERMAID_EXPAND_ACTION_CLASS}`)
   for (const child of Array.from(wrapper.children)) {
-    if (child !== fallback) child.remove()
+    if (child !== fallback && child !== expandAction) child.remove()
   }
+  if (expandAction) expandAction.hidden = true
   fallback.hidden = false
   wrapper.classList.remove('mermaid-diagram-rendered', MERMAID_FAILURE_CLASS)
 }
@@ -139,6 +142,38 @@ function fitSvgToRenderedContent(svg: SVGSVGElement): void {
   }
 }
 
+export interface RenderedMermaidDiagram {
+  trigger: HTMLButtonElement
+  wrapper: HTMLDivElement
+  svg: string
+}
+
+function createDiagramExpandAction(doc: Document): HTMLButtonElement {
+  const button = doc.createElement('button')
+  button.type = 'button'
+  button.className = MERMAID_EXPAND_ACTION_CLASS
+  button.setAttribute('aria-label', 'Expand Mermaid diagram')
+  button.title = 'Expand Mermaid diagram'
+  button.textContent = 'Expand'
+  return button
+}
+
+export function getRenderedMermaidSvg(wrapper: HTMLDivElement): string | null {
+  if (!wrapper.isConnected || !wrapper.classList.contains('mermaid-diagram-rendered')) return null
+  return wrapper.querySelector(':scope > svg')?.outerHTML ?? null
+}
+
+export function getRenderedMermaidDiagram(target: Element): RenderedMermaidDiagram | null {
+  const trigger = target.closest(`button.${MERMAID_EXPAND_ACTION_CLASS}`)
+  if (!(trigger instanceof HTMLButtonElement)) return null
+
+  const wrapper = trigger.closest(`.${MERMAID_DIAGRAM_CLASS}`)
+  if (!(wrapper instanceof HTMLDivElement)) return null
+
+  const svg = getRenderedMermaidSvg(wrapper)
+  return svg ? { trigger, wrapper, svg } : null
+}
+
 
 function showRenderedDiagram(wrapper: HTMLDivElement, fallback: HTMLPreElement, sanitizedSvg: string): boolean {
   const template = document.createElement('template')
@@ -154,6 +189,10 @@ function showRenderedDiagram(wrapper: HTMLDivElement, fallback: HTMLPreElement, 
   clearRenderedDiagram(wrapper, fallback)
   wrapper.insertBefore(template.content, fallback)
   fitSvgToRenderedContent(svg)
+  const expandAction = wrapper.querySelector<HTMLButtonElement>(`:scope > button.${MERMAID_EXPAND_ACTION_CLASS}`)
+    ?? createDiagramExpandAction(wrapper.ownerDocument)
+  expandAction.hidden = false
+  if (!expandAction.parentElement) wrapper.insertBefore(expandAction, fallback)
   fallback.hidden = true
   wrapper.classList.add('mermaid-diagram-rendered')
   return true

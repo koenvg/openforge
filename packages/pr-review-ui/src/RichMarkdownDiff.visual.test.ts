@@ -71,6 +71,14 @@ describe.skipIf(!runsMarkdownVisuals)('Rich Markdown diff visuals', () => {
     await expectVisualFixture('mermaid-diagrams', 'dark', 'preview')
   }, 30_000)
 
+  it('shows Mermaid zoom controls in an expanded light preview', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'light', 'preview', true)
+  }, 30_000)
+
+  it('shows Mermaid zoom controls in an expanded dark preview', async () => {
+    await expectVisualFixture('mermaid-diagrams', 'dark', 'preview', true)
+  }, 30_000)
+
   it('renders Mermaid diagrams in a light rich diff', async () => {
     await expectVisualFixture('mermaid-diagrams', 'light', 'rich-diff')
   }, 30_000)
@@ -84,6 +92,7 @@ async function expectVisualFixture(
   fixture: string,
   theme: 'light' | 'dark',
   surface?: 'preview' | 'rich-diff',
+  expanded = false,
 ) {
   const page = await browser.newPage({
     deviceScaleFactor: 1,
@@ -107,12 +116,25 @@ async function expectVisualFixture(
         && document.querySelectorAll('.mermaid-diagram-fallback').length === 2
       ))
     }
-    const screenshot = await page.getByTestId('markdown-visual').screenshot({
+    const screenshotTarget = expanded
+      ? page.getByRole('dialog', { name: 'Mermaid diagram preview' })
+      : page.getByTestId('markdown-visual')
+    if (expanded) {
+      await page.getByRole('button', { name: 'Expand Mermaid diagram' }).first().click()
+      await screenshotTarget.getByRole('button', { name: 'Zoom in' }).click()
+      await page.waitForFunction(() => {
+        const status = document.querySelector('output[aria-live="polite"]')
+        return Boolean(status?.textContent && !status.textContent.startsWith('Fit'))
+      })
+    }
+    const screenshot = await screenshotTarget.screenshot({
       animations: 'disabled',
       caret: 'hide',
     })
     expect(externalRequests, 'Sanitized Markdown must not load external resources').toEqual([])
-    const baselineName = surface ? `${fixture}-${surface}-${theme}` : `${fixture}-${theme}`
+    const baselineName = [fixture, surface, theme, expanded ? 'expanded' : null]
+      .filter(Boolean)
+      .join('-')
     compareScreenshot(baselineName, screenshot)
   } finally {
     await page.close()

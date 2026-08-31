@@ -54,6 +54,62 @@ describe('MarkdownContent', () => {
     expect(container.querySelector('pre')?.hidden).toBe(true)
   })
 
+  it('expands a rendered diagram without changing its inline SVG', async () => {
+    const { container } = render(MarkdownContent, {
+      props: { content: '```mermaid\ngraph TD\n  A --> B\n```' },
+    })
+
+    const expand = await screen.findByRole('button', { name: 'Expand Mermaid diagram' })
+    const inlineSvg = container.querySelector('.mermaid-diagram > svg') as SVGSVGElement
+    const inlineStyle = inlineSvg.getAttribute('style')
+
+    await fireEvent.click(expand)
+
+    expect(screen.getByRole('dialog', { name: 'Mermaid diagram preview' })).toBeTruthy()
+    expect(container.querySelector('.mermaid-diagram > svg')).toBe(inlineSvg)
+    expect(inlineSvg.getAttribute('style')).toBe(inlineStyle)
+  })
+
+  it('opens the diagram that owns the activated action when Markdown contains several diagrams', async () => {
+    mermaid.render.mockImplementation(async (_id, source: string) => {
+      const label = source.includes('First') ? 'First diagram' : 'Second diagram'
+      return { svg: `<svg role="img" aria-label="${label}" viewBox="0 0 200 100"><text>${label}</text></svg>` }
+    })
+
+    render(MarkdownContent, {
+      props: {
+        content: [
+          '```mermaid',
+          'graph TD',
+          '  First --> A',
+          '```',
+          '',
+          '```mermaid',
+          'graph TD',
+          '  Second --> B',
+          '```',
+        ].join('\n'),
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Expand Mermaid diagram' })).toHaveLength(2)
+    })
+    const expandActions = screen.getAllByRole('button', { name: 'Expand Mermaid diagram' })
+    await fireEvent.click(expandActions[1])
+
+    const dialog = screen.getByRole('dialog', { name: 'Mermaid diagram preview' })
+    expect(dialog.textContent).toContain('Second diagram')
+    expect(dialog.textContent).not.toContain('First diagram')
+  })
+
+  it('does not offer expansion for an empty Mermaid fence', async () => {
+    render(MarkdownContent, { props: { content: '```mermaid\n\n```' } })
+
+    expect(await screen.findByRole('status')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Expand Mermaid diagram' })).toBeNull()
+  })
+
   it('keeps the Mermaid source visible when rendering fails', async () => {
     mermaid.render.mockRejectedValueOnce(new Error('Invalid diagram'))
     const { container } = render(MarkdownContent, {
@@ -66,6 +122,7 @@ describe('MarkdownContent', () => {
     expect(container.querySelector('.mermaid-diagram-fallback code')?.textContent).toContain('not a diagram')
     expect(container.querySelector('pre')?.hidden).toBe(false)
     expect(container.querySelector('.mermaid-diagram svg')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Expand Mermaid diagram' })).toBeNull()
   })
 
   it('rejects Mermaid source that could load an external resource before rendering', async () => {
@@ -122,6 +179,91 @@ describe('MarkdownContent', () => {
       expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }))
       expect(mermaid.render).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('keeps the expanded SVG sanitized', async () => {
+    render(MarkdownContent, {
+      props: { content: '```mermaid\ngraph TD\n  Safe --> Preview\n```' },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
+    const dialog = screen.getByRole('dialog', { name: 'Mermaid diagram preview' })
+
+    expect(dialog.querySelector('script')).toBeNull()
+    expect(dialog.querySelector('[onload]')).toBeNull()
+    expect(dialog.innerHTML).not.toContain('attacker.invalid')
+    expect(dialog.textContent).toContain('Safe diagram')
+  })
+
+  it('refreshes an open preview after a theme rerender', async () => {
+    mermaid.render
+      .mockResolvedValueOnce({
+        svg: '<svg role="img" aria-label="Light diagram" viewBox="0 0 200 100"><text>Light preview</text></svg>',
+      })
+      .mockResolvedValueOnce({
+        svg: '<svg role="img" aria-label="Dark diagram" viewBox="0 0 200 100"><text>Dark preview</text></svg>',
+      })
+
+    render(MarkdownContent, {
+      props: { content: '```mermaid\ngraph TD\n  Theme --> Preview\n```' },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
+    expect(screen.getByRole('dialog', { name: 'Mermaid diagram preview' }).textContent).toContain('Light preview')
+
+    document.documentElement.dataset.theme = 'openforge-dark'
+
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog', { name: 'Mermaid diagram preview' })
+      expect(dialog.textContent).toContain('Dark preview')
+      expect(dialog.textContent).not.toContain('Light preview')
+    })
+  })
+
+  it('closes an open preview when Markdown removes its originating diagram', async () => {
+    const { rerender } = render(MarkdownContent, {
+      props: { content: '```mermaid\ngraph TD\n  Present --> Diagram\n```' },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
+    await rerender({ content: 'The diagram was removed.' })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Mermaid diagram preview' })).toBeNull()
+    })
+  })
+
+  it('does not restore a preview from a stale asynchronous theme render', async () => {
+    let resolveThemeRender!: (value: { svg: string }) => void
+    const pendingThemeRender = new Promise<{ svg: string }>((resolve) => {
+      resolveThemeRender = resolve
+    })
+    mermaid.render
+      .mockResolvedValueOnce({
+        svg: '<svg role="img" aria-label="Current diagram" viewBox="0 0 200 100"><text>Current preview</text></svg>',
+      })
+      .mockReturnValueOnce(pendingThemeRender)
+
+    const { rerender } = render(MarkdownContent, {
+      props: { content: '```mermaid\ngraph TD\n  Current --> Diagram\n```' },
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
+    document.documentElement.dataset.theme = 'openforge-dark'
+    await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(2))
+
+    try {
+      await rerender({ content: 'The diagram was removed while rerendering.' })
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Mermaid diagram preview' })).toBeNull()
+      })
+    } finally {
+      resolveThemeRender({
+        svg: '<svg role="img" aria-label="Stale diagram" viewBox="0 0 200 100"><text>Stale preview</text></svg>',
+      })
+    }
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Mermaid diagram preview' })).toBeNull())
   })
 
   it('resolves nested relative images and keeps missing assets inert', async () => {

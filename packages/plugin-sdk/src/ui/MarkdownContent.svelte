@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { observeMermaidTheme, renderMermaidDiagrams } from '../mermaid'
+  import { getRenderedMermaidDiagram, getRenderedMermaidSvg, observeMermaidTheme, renderMermaidDiagrams, type RenderedMermaidDiagram } from '../mermaid'
+  import MermaidDiagramPreview from './MermaidDiagramPreview.svelte'
   import {
     getMarkdownRepositoryLinkSuffix,
     MARKDOWN_REMOTE_MEDIA_ATTRIBUTE,
@@ -38,6 +39,7 @@
   }: Props = $props()
 
   let root = $state<HTMLDivElement | null>(null)
+  let activeMermaidDiagram = $state<RenderedMermaidDiagram | null>(null)
   let imageResolutionId = 0
   let mermaidRenderId = 0
   let mermaidThemeRevision = $state(0)
@@ -141,6 +143,13 @@
     }))
   }
 
+  function synchronizeActiveMermaidDiagram() {
+    if (!activeMermaidDiagram) return
+
+    const svg = getRenderedMermaidSvg(activeMermaidDiagram.wrapper)
+    activeMermaidDiagram = svg ? { ...activeMermaidDiagram, svg } : null
+  }
+
   $effect(() => {
     if (!root || stopObservingMermaidTheme) return
     stopObservingMermaidTheme = observeMermaidTheme(root.ownerDocument, () => {
@@ -154,7 +163,9 @@
     void mermaidThemeRevision
     if (!root) return
 
-    void renderMermaidDiagrams(root, () => runId === mermaidRenderId)
+    void renderMermaidDiagrams(root, () => runId === mermaidRenderId).then(() => {
+      if (runId === mermaidRenderId) synchronizeActiveMermaidDiagram()
+    })
   })
 
   $effect(() => {
@@ -170,6 +181,7 @@
   onDestroy(() => {
     imageResolutionId++
     mermaidRenderId++
+    activeMermaidDiagram = null
     stopObservingMermaidTheme?.()
   })
 
@@ -212,6 +224,14 @@
   function handleClick(event: MouseEvent) {
     if (!(event.target instanceof Element)) return
 
+    const diagram = getRenderedMermaidDiagram(event.target)
+    if (diagram) {
+      event.preventDefault()
+      diagram.trigger.focus()
+      activeMermaidDiagram = diagram
+      return
+    }
+
     const image = findEventImage(event.target)
     if (image && onOpenImage && image.getAttribute('src')) {
       event.preventDefault()
@@ -243,3 +263,7 @@
 <div bind:this={root} role="presentation" class="markdown-body" onclick={handleClick} onkeydown={handleKeydown}>
   {@html html}
 </div>
+
+{#if activeMermaidDiagram}
+  <MermaidDiagramPreview svg={activeMermaidDiagram.svg} onClose={() => { activeMermaidDiagram = null }} />
+{/if}
