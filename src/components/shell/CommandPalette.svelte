@@ -2,11 +2,11 @@
   import { onMount } from 'svelte'
   import { activeSessions, projects, activeProjectId } from '../../lib/stores'
   import { matchesSearch, sortTasks, filterActiveTasks, navigateToTask } from '../../lib/commandPalette'
-  import { getAllTasks, getLatestSessions } from '../../lib/ipc'
+  import { getLatestSessions, readActiveTasks } from '../../lib/ipc'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { executePluginCommand } from '../../lib/plugin/pluginRegistry'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
   import PaletteInput from '../shared/ui/PaletteInput.svelte'
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
@@ -20,7 +20,7 @@
 
   let searchQuery = $state('')
   let selectedTaskKey = $state<string | null>(null)
-  let allTasks = $state<Task[]>([])
+  let allTasks = $state<TaskDetail[]>([])
   let loading = $state(true)
 
   let projectMap = $derived(new Map($projects.map(p => [p.id, p])))
@@ -31,28 +31,27 @@
   )
   let pluginCommands = $derived(resolveContributions(enabledPluginContributionSources).commands.filter((command) => command.discoverable))
 
-  async function loadAllTasks() {
+  async function loadActiveTasks() {
     loading = true
     try {
-      const tasks = await getAllTasks()
-      allTasks = tasks
-      // Load sessions for all tasks
-      const taskIds = tasks.map(t => t.id)
+      const pages = await Promise.all($projects.map((project) => readActiveTasks(project.id)))
+      const activeTasks = filterActiveTasks(pages.flatMap((page) => page.tasks))
+      allTasks = activeTasks
+      const taskIds = activeTasks.map(task => task.id)
       if (taskIds.length > 0) {
         const sessions = await getLatestSessions(taskIds)
         const updated = new Map($activeSessions)
-        for (const s of sessions) {
-          updated.set(s.ticket_id, s)
+        for (const session of sessions) {
+          updated.set(session.ticket_id, session)
         }
         $activeSessions = updated
       }
     } catch (e) {
-      console.error('Failed to load all tasks:', e)
+      console.error('Failed to load active tasks:', e)
     } finally {
       loading = false
     }
   }
-
   let sortedAndFiltered = $derived.by(() => {
     const active = filterActiveTasks(allTasks)
     const sorted = sortTasks(active, $activeSessions)
@@ -75,7 +74,7 @@
 
   type PaletteItem =
     | { key: string; kind: 'command'; pluginId: string; commandId: string; title: string; pluginName: string; shortcut: string | null }
-    | { key: string; kind: 'task'; task: Task }
+    | { key: string; kind: 'task'; task: TaskDetail }
 
   let paletteItems = $derived<PaletteItem[]>([
     ...filteredCommands.map((command) => ({
@@ -154,7 +153,7 @@
     }
   }
 
-  function selectTask(task: Task) {
+  function selectTask(task: TaskDetail) {
     navigateToTask(task)
     onClose()
   }
@@ -189,7 +188,7 @@
   }
 
   onMount(() => {
-    void loadAllTasks()
+    void loadActiveTasks()
   })
 
 </script>
@@ -228,15 +227,15 @@
         {@const sessionStatus = getSessionStatus(item.task.id)}
         {@const label = statusLabel(sessionStatus)}
         {@const badgeClass = statusBadgeClass(sessionStatus)}
-        {@const projectName = getProjectName(item.task.project_id)}
-        {@const isOtherProject = item.task.project_id !== $activeProjectId}
+        {@const projectName = getProjectName(item.task.projectId)}
+        {@const isOtherProject = item.task.projectId !== $activeProjectId}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="font-mono text-xs font-semibold text-primary shrink-0">{item.task.id}</span>
             {#if label}<span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>{/if}
             {#if projectName && isOtherProject}<span class="badge badge-outline badge-xs shrink-0 opacity-60">{projectName}</span>{/if}
           </div>
-          <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.initial_prompt), 80)}</div>
+          <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.prompt), 80)}</div>
         </div>
         <span class="text-[10px] text-base-content/30 shrink-0">{item.task.status}</span>
       {:else}

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import { useAppRouter } from '../../lib/router.svelte'
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import SelfReviewWorkspace from './SelfReviewWorkspace.svelte'
   import { createSelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
   }

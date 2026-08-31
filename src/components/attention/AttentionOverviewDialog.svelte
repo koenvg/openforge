@@ -5,18 +5,18 @@
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
-  import { getAllTasks, getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
+  import { getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { buildAttentionOverview, laneRowsByFilter, TASK_LANES, TASK_LANE_LABELS } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
-  import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
+  import type { AttentionOverview, AttentionFocusTask, AttentionTaskReference } from '../../lib/attentionOverview'
   import type { BoardFilter } from '../../lib/boardFilters'
-  import type { ReviewPullRequest, Task } from '../../lib/types'
+  import type { ReviewPullRequest } from '../../lib/types'
   import { TASK_STATE_COMPACT_LABELS } from '../../lib/taskStatePresentation'
 
   interface Props {
     onClose: () => void
-    onOpenTask: (task: Task) => void
+    onOpenTask: (task: AttentionTaskReference) => void
     onOpenPr: (pr: ReviewPullRequest, projectId: string | null) => void
   }
 
@@ -308,15 +308,21 @@
     focusedIndex = index
   }
 
-  // Read the current stores + fresh IPC snapshots and assemble the overview. Pure gather
+  // Read the current stores + fresh backend lane projection and assemble the overview. Pure gather
   // step: it does not touch component state, so both the initial load and the live refresh
   // can share it and apply the result differently (initial resets focus, refresh preserves it).
   async function gatherOverview(): Promise<{ overview: AttentionOverview; activeId: string | null }> {
     const projectList = get(projects)
     const nextActiveId = get(activeProjectId)
 
-    const [allTasks, laneRows] = await Promise.all([getAllTasks(), getTaskLanes()])
-
+    const laneRows = await getTaskLanes()
+    const taskReferencesById = new Map<string, AttentionTaskReference>()
+    for (const rows of Object.values(laneRows)) {
+      for (const row of rows) {
+        taskReferencesById.set(row.task_id, { id: row.task_id, projectId: row.project_id })
+      }
+    }
+    const allTasks = Array.from(taskReferencesById.values())
     const resolvedRepoByProject = new Map<string, string | null>()
     await Promise.all(
       projectList.map(async (project) => {

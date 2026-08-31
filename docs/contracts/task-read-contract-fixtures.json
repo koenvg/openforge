@@ -1,0 +1,10 @@
+{
+  "projectId": "P-1",
+  "otherProjectId": "P-2",
+  "completedTaskCount": 51,
+  "completedPageSize": 50,
+  "maximumSearchCharacters": 200,
+  "maximumLabelFilters": 20,
+  "maximumLabelCharacters": 40,
+  "missingTaskId": "T-missing"
+}

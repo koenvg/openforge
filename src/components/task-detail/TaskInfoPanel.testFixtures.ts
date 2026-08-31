@@ -1,28 +1,29 @@
-import type { PollResult, PullRequestInfo, Task, TaskLabel } from '../../lib/types'
+import type { PollResult, PullRequestInfo, TaskDetail, TaskLabel } from '../../lib/types'
 
-const baseTask: Task = {
+const baseTask: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Implement auth middleware',
-  status: 'backlog',
   prompt: 'Build the auth middleware implementation with JWT support',
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  promptPreview: 'Build the auth middleware implementation with JWT support',
+  status: 'backlog',
+  title: 'Implement auth middleware',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  projectId: 'proj-1',
+  createdAt: 1000,
+  updatedAt: 2000,
+  labels: [],
 }
 
-const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
-const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
+const bugLabel: TaskLabel = { id: 1, projectId: 'proj-1', name: 'bug' }
+const uiLabel: TaskLabel = { id: 2, projectId: 'proj-1', name: 'ui' }
 
-function taskWithLabels(labels: TaskLabel[]): Task & { labels: TaskLabel[] } {
+function taskWithLabels(labels: TaskLabel[]): TaskDetail {
   return { ...baseTask, labels }
 }
 
@@ -77,4 +78,4 @@ function createEmptyGithubSyncResult(): PollResult {
 }
 
 export { baseTask, bugLabel, createEmptyGithubSyncResult, createPullRequest, taskWithLabels, uiLabel }
-export type { Task }
+export type { TaskDetail }

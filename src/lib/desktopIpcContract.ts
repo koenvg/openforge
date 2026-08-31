@@ -138,6 +138,7 @@ export interface PluginReloadRequestedPayload {
 export interface TaskChangedPayload {
   action: 'created' | 'updated' | 'deleted'
   task_id: string
+  project_id?: string | null
 }
 
 export interface AppDesktopEventPayloads {

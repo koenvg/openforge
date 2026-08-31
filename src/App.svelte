@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { tasks, taskDetailsById, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
@@ -57,9 +57,14 @@
 
   useCommandHeld()
 
-  let selectedTask = $derived(
-    $tasks.find(t => t.id === $selectedTaskId) ||
-      ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
+  let selectedTaskRecord = $derived(
+    ($selectedTaskId ? $taskDetailsById.get($selectedTaskId) : null)
+      ?? $tasks.find(t => t.id === $selectedTaskId)
+      ?? ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
+  )
+  let selectedTask = $derived(selectedTaskRecord)
+  let selectedTaskForView = $derived(
+    selectedTaskRecord
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
   let enabledPluginContributionSources = $derived(
@@ -184,6 +189,7 @@
       tasks: $tasks,
       pendingTask: $pendingTask,
       selectedTaskId: $selectedTaskId,
+      selectedTaskDetailExists: $selectedTaskId ? $taskDetailsById.has($selectedTaskId) : false,
     })
   })
 
@@ -273,9 +279,9 @@
           <renderedActiveView.component {...(renderedActiveView?.props ?? {})} />
         {:else if pluginViewActive}
           <PluginSlot slotType="views" slotId={$currentView} />
-        {:else if selectedTask}
+        {:else if selectedTaskForView}
           <TaskDetailView
-            task={selectedTask}
+            task={selectedTaskForView}
             onRunAction={handleRunAction}
             onEdit={taskCreation.openEditTask}
             onOpenTask={navigation.openTaskInProject}
@@ -295,6 +301,7 @@
                 projectId={$activeProjectId}
                 projectName={activeProject?.name ?? ''}
                 tasks={$tasks}
+                taskDetailsById={$taskDetailsById}
                 dependencyReferenceTasks={$dependencyReferenceTasks}
                 activeSessions={$activeSessions}
                 ticketPrs={$ticketPrs}

@@ -3,7 +3,8 @@ import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import { TASK_SCHEDULES_VIEW_KEY } from '../../lib/taskSchedulesPlugin'
-import type { AgentSession, Project, Task } from '../../lib/types'
+import type { ActiveTasks, AgentSession, Project, TaskDetail } from '../../lib/types'
+import { createTask } from '../../App.test-fixtures/tasks'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 const mockActiveSessions = writable<Map<string, AgentSession>>(new Map())
@@ -11,12 +12,13 @@ const mockProjects = writable<Project[]>([])
 const mockActiveProjectId = writable<string | null>(null)
 const mockCurrentView = writable<'board' | 'settings' | typeof GITHUB_SYNC_VIEW_KEY | typeof TASK_SCHEDULES_VIEW_KEY>('board')
 const mockSelectedTaskId = writable<string | null>(null)
-const mockTasks = writable<Task[]>([])
+const mockPendingTask = writable<TaskDetail | null>(null)
+const mockTasks = writable<TaskDetail[]>([])
 const mockInstalledPlugins = writable<Map<string, PluginEntry>>(new Map())
 const mockEnabledPluginIds = writable<Set<string>>(new Set())
 const mockRuntimeContributionSources = writable(new Map<string, { pluginId: string; commands?: unknown[] }>())
 
-const mockGetAllTasks = vi.fn<() => Promise<Task[]>>()
+const mockReadActiveTasks = vi.fn<(projectId: string) => Promise<ActiveTasks>>()
 const mockGetLatestSessions = vi.fn<(taskIds: string[]) => Promise<AgentSession[]>>()
 const mockExecutePluginCommand = vi.fn<(pluginId: string, commandId: string) => Promise<boolean>>()
 
@@ -26,6 +28,7 @@ vi.mock('../../lib/stores', () => ({
   activeProjectId: mockActiveProjectId,
   currentView: mockCurrentView,
   selectedTaskId: mockSelectedTaskId,
+  pendingTask: mockPendingTask,
   tasks: mockTasks,
 }))
 
@@ -40,7 +43,7 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
-  getAllTasks: mockGetAllTasks,
+  readActiveTasks: mockReadActiveTasks,
   getLatestSessions: mockGetLatestSessions,
 }))
 
@@ -50,27 +53,13 @@ vi.mock('../../lib/router.svelte', () => ({
 
 Element.prototype.scrollIntoView = vi.fn()
 
-function makeTask(overrides: Partial<Task> & { id: string }): Task {
-  return {
-    initial_prompt: 'Test task',
-    status: 'doing',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 1000,
-    updated_at: 1000,
-    ...overrides,
-  }
+function makeTask(overrides: Partial<TaskDetail> & { id: string }): TaskDetail {
+  return createTask(overrides)
 }
 
+function activePage(tasks: TaskDetail[]): ActiveTasks {
+  return { tasks, related: [] }
+}
 function makeSession(taskId: string, status: string): AgentSession {
   return {
     id: `session-${taskId}`,
@@ -94,10 +83,11 @@ describe('CommandPalette component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockActiveSessions.set(new Map())
-    mockProjects.set([])
+    mockProjects.set([{ id: 'P-1', name: 'Project', path: '/tmp/project', created_at: 1, updated_at: 1 }])
     mockActiveProjectId.set(null)
     mockCurrentView.set('board')
     mockSelectedTaskId.set(null)
+    mockPendingTask.set(null)
     mockTasks.set([])
     mockInstalledPlugins.set(new Map())
     mockEnabledPluginIds.set(new Set())
@@ -106,10 +96,12 @@ describe('CommandPalette component', () => {
   })
 
   it('keeps listbox option ids linked to the search input and has no active descendant while loading or empty', async () => {
-    let resolveTasks: (tasks: Task[]) => void = () => {}
-    mockGetAllTasks.mockReturnValue(new Promise<Task[]>((resolve) => {
-      resolveTasks = resolve
-    }))
+    let resolveTasks: (tasks: TaskDetail[]) => void = () => {}
+    mockReadActiveTasks.mockImplementationOnce((_projectId) =>
+      new Promise<ActiveTasks>((resolve) => {
+        resolveTasks = (tasks) => resolve(activePage(tasks))
+      }),
+    )
     mockGetLatestSessions.mockResolvedValue([])
 
     const { default: CommandPalette } = await import('./CommandPalette.svelte')
@@ -121,8 +113,8 @@ describe('CommandPalette component', () => {
     expect(input.getAttribute('aria-activedescendant')).toBeNull()
 
     resolveTasks([
-      makeTask({ id: 'T-100', updated_at: 200 }),
-      makeTask({ id: 'T-200', updated_at: 100 }),
+      makeTask({ id: 'T-100', updatedAt: 200 }),
+      makeTask({ id: 'T-200', updatedAt: 100 }),
     ])
 
     await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2))
@@ -141,14 +133,32 @@ describe('CommandPalette component', () => {
     expect(input.getAttribute('aria-activedescendant')).toBeNull()
   })
 
+  it('loads only active snapshot Tasks and batches sessions for active IDs', async () => {
+    const active = makeTask({ id: 'T-active', status: 'doing' })
+    const completed = makeTask({ id: 'T-completed', status: 'done' })
+    mockReadActiveTasks.mockImplementationOnce(async (_projectId) =>
+      activePage([active, completed]),
+    )
+    mockGetLatestSessions.mockResolvedValue([])
+
+    const { default: CommandPalette } = await import('./CommandPalette.svelte')
+    render(CommandPalette, { props: { onClose: vi.fn() } })
+
+    await waitFor(() => expect(screen.getByText('T-active')).toBeTruthy())
+    expect(screen.queryByText('T-completed')).toBeNull()
+    expect(mockReadActiveTasks).toHaveBeenCalledOnce()
+    expect(mockGetLatestSessions).toHaveBeenCalledWith(['T-active'])
+  })
+
+
   it('preserves keyboard selection when async session updates re-render the list', async () => {
     const paletteTasks = [
-      makeTask({ id: 'T-100', updated_at: 300 }),
-      makeTask({ id: 'T-200', updated_at: 200 }),
-      makeTask({ id: 'T-300', updated_at: 100 }),
+      makeTask({ id: 'T-100', updatedAt: 300 }),
+      makeTask({ id: 'T-200', updatedAt: 200 }),
+      makeTask({ id: 'T-300', updatedAt: 100 }),
     ]
 
-    mockGetAllTasks.mockResolvedValue(paletteTasks)
+    mockReadActiveTasks.mockImplementationOnce(async (_projectId) => activePage(paletteTasks))
     mockGetLatestSessions.mockResolvedValue([])
 
     const { default: CommandPalette } = await import('./CommandPalette.svelte')
@@ -157,7 +167,7 @@ describe('CommandPalette component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('T-100')).toBeTruthy()
-      expect(mockGetAllTasks).toHaveBeenCalledOnce()
+      expect(mockReadActiveTasks).toHaveBeenCalledOnce()
       expect(mockGetLatestSessions).toHaveBeenCalledWith(['T-100', 'T-200', 'T-300'])
     })
 
@@ -173,7 +183,7 @@ describe('CommandPalette component', () => {
   })
 
   it('renders plugin commands in the palette and executes them on selection', async () => {
-    mockGetAllTasks.mockResolvedValue([])
+    mockReadActiveTasks.mockImplementationOnce(async (_projectId) => activePage([]))
     mockGetLatestSessions.mockResolvedValue([])
     mockInstalledPlugins.set(new Map([[
       'plugin.commands',

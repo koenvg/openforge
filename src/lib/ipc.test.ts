@@ -24,7 +24,9 @@ import {
   fsSearchFiles,
   fsWriteFile,
   getAllTasks,
-  getTaskRelationshipReferences,
+  readActiveTasks,
+  readCompletedTasks,
+  readTaskDetail,
   getTaskAttention,
   getTaskLanes,
   getCommitBatchFileContents,
@@ -324,28 +326,6 @@ describe("ipc spawnShellPty", () => {
 		]);
 	});
 
-  it("loads compact relationship references without full prompt fields", async () => {
-    invokeMock.mockResolvedValueOnce([{
-      id: "T-related",
-      status: "in_progress",
-      project_id: "P-2",
-      title: "Compact relationship title",
-      depends_on: ["T-active"],
-    }])
-
-    const references = await getTaskRelationshipReferences("P-1")
-
-    expect(invokeMock).toHaveBeenLastCalledWith("get_task_relationship_references", { projectId: "P-1" })
-    expect(references).toEqual([{
-      id: "T-related",
-      status: "doing",
-      project_id: "P-2",
-      title: "Compact relationship title",
-      depends_on: ["T-active"],
-    }])
-    expect(references[0]).not.toHaveProperty("initial_prompt")
-    expect(references[0]).not.toHaveProperty("prompt")
-  })
 
 	it("rejects unknown task statuses from the backend boundary", async () => {
 		invokeMock.mockResolvedValueOnce([
@@ -385,12 +365,12 @@ describe("ipc spawnShellPty", () => {
 		});
 
 		await expect(
-			createTask("Created task", "doing", null, null),
+			createTask('Created task', 'doing', 'P-1', null),
 		).resolves.toEqual(expect.objectContaining({ id: "T-4", status: "doing" }));
 		expect(invokeMock).toHaveBeenCalledWith("create_task", {
 			initialPrompt: "Created task",
 			status: "doing",
-			projectId: null,
+			projectId: 'P-1',
 			permissionMode: null,
 			dependsOn: [],
 			labelNames: [],
@@ -750,3 +730,47 @@ describe("ipc fsSearchFiles", () => {
 		expect(result).toEqual(["src/lib/ipc.ts", "src/lib/types.ts"]);
 	});
 });
+
+describe('canonical IPC Task reads', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+  })
+
+  it('normalizes active, completed, and detail statuses through typed wrappers', async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        tasks: [{ id: 'T-active', status: 'in_progress' }],
+        related: [{ id: 'T-related', status: 'todo' }],
+      })
+      .mockResolvedValueOnce({
+        tasks: [{ id: 'T-done', status: 'done' }],
+        nextCursor: 'cursor-2',
+      })
+      .mockResolvedValueOnce({
+        task: { id: 'T-done', status: 'done', prompt: 'Full prompt' },
+        related: [{ id: 'T-related', status: 'in_progress' }],
+      })
+      .mockResolvedValueOnce(null)
+
+    const active = await readActiveTasks('P-1')
+    expect(active.tasks[0].status).toBe('doing')
+    expect(active.related[0].status).toBe('backlog')
+
+    const completed = await readCompletedTasks('P-1', { labels: ['feature'] })
+    expect(completed.tasks[0].status).toBe('done')
+    expect(completed.nextCursor).toBe('cursor-2')
+
+    await expect(readTaskDetail('P-1', 'T-done')).resolves.toMatchObject({
+      task: { id: 'T-done', status: 'done', prompt: 'Full prompt' },
+      related: [{ id: 'T-related', status: 'doing' }],
+    })
+    await expect(readTaskDetail('P-1', 'T-missing')).resolves.toBeNull()
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['tasks_active', { projectId: 'P-1' }],
+      ['tasks_completed', { projectId: 'P-1', query: { labels: ['feature'] } }],
+      ['tasks_detail', { projectId: 'P-1', taskId: 'T-done' }],
+      ['tasks_detail', { projectId: 'P-1', taskId: 'T-missing' }],
+    ])
+  })
+})

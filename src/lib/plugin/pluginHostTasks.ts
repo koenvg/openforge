@@ -11,18 +11,23 @@ import type {
   StartPromptContribution,
   StartTaskImplementationRequest,
   TaskFollowUpReceipt,
+  Task,
+  TaskDetail,
 } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   getAllTasks,
   getLatestSession,
-  listAgentSessions,
   listAgentSessionSummaries,
   getProjectConfig,
   getProjects,
   getTaskDetail,
   getTasksForProject,
   getTaskWorkspace,
+  listAgentSessions,
+  readActiveTasks,
+  readCompletedTasks,
+  readTaskDetail,
   sendAgentFollowUp,
   configureStartPromptContribution as configureStartPromptContributionIpc,
   startImplementation,
@@ -40,6 +45,9 @@ type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listTasks'
   | 'listAgentSessions'
   | 'getTask'
+  | 'activeTasks'
+  | 'completedTasks'
+  | 'taskDetail'
   | 'createTask'
   | 'composeTask'
   | 'updateTaskStatus'
@@ -52,8 +60,29 @@ type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listTaskSessions'
 >>
 
-function createTaskFromPluginRequest(request: CreateTaskRequest) {
-  return createTask(
+function legacyTask(detail: TaskDetail): Task {
+  return {
+    id: detail.id,
+    initial_prompt: detail.prompt,
+    status: detail.status,
+    prompt: detail.prompt,
+    title: detail.title,
+    title_source: detail.titleSource,
+    title_generated_at: detail.titleGeneratedAt,
+    agent: detail.agent,
+    permission_mode: detail.permissionMode,
+    worktree_source: detail.worktreeSource,
+    worktree_branch: detail.worktreeBranch,
+    source_ticket_url: detail.sourceTicketUrl,
+    depends_on: detail.dependsOn,
+    project_id: detail.projectId,
+    created_at: detail.createdAt,
+    updated_at: detail.updatedAt,
+  }
+}
+
+async function createTaskFromPluginRequest(request: CreateTaskRequest): Promise<Task> {
+  const detail = await createTask(
     request.initialPrompt,
     'backlog',
     request.projectId,
@@ -63,6 +92,7 @@ function createTaskFromPluginRequest(request: CreateTaskRequest) {
       labelNames: request.labelNames ?? [],
     },
   )
+  return legacyTask(detail)
 }
 
 export async function composeTaskFromPluginRequest(request: ComposeTaskRequest) {
@@ -73,7 +103,8 @@ export async function composeTaskFromPluginRequest(request: ComposeTaskRequest) 
   if (get(activeProjectId) !== projectId) {
     activeProjectId.set(projectId)
   }
-  return requestTaskCompose(request)
+  const result = await requestTaskCompose(request)
+  return result ? { ...result, task: legacyTask(result.task) } : null
 }
 
 function stringArray(value: unknown): string[] {
@@ -218,6 +249,9 @@ export function createPluginTaskHostCapabilities(pluginId: string): TaskHostCapa
     listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     listAgentSessions: (request: ListAgentSessionsRequest) => listAgentSessionSummaries(request),
     getTask: (taskId) => getTaskDetail(taskId),
+    activeTasks: (projectId) => readActiveTasks(projectId),
+    completedTasks: (projectId, query) => readCompletedTasks(projectId, query),
+    taskDetail: (projectId, taskId) => readTaskDetail(projectId, taskId),
     createTask: createTaskFromPluginRequest,
     composeTask: composeTaskFromPluginRequest,
     updateTaskStatus: (taskId, status) => updateTaskStatus(taskId, status),

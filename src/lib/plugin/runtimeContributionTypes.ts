@@ -13,6 +13,7 @@ import type {
   BackgroundServiceRegistration,
 } from '@openforge-app/plugin-sdk/backend'
 import type {
+  ActiveTasks,
   AgentCommandMetadata,
   AgentSession,
   BackendReadyState,
@@ -44,6 +45,9 @@ import type {
   StartTaskImplementationRequest,
   TaskFollowUpReceipt,
   Task,
+  CompletedTaskPage,
+  CompletedTaskQuery,
+  TaskRead,
   TaskStartPrefixContext,
   TaskWorkspaceInfo,
   WritableBoardStatus,
@@ -64,7 +68,10 @@ export type RuntimeHostBridge = {
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
-  getTask?(taskId: string): Promise<Task>
+  getTask?(taskId: string): Promise<Task | null>
+  activeTasks?(projectId: string): Promise<ActiveTasks>
+  completedTasks?(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>
+  taskDetail?(projectId: string, taskId: string): Promise<TaskRead | null>
   createTask?(request: CreateTaskRequest): Promise<Task>
   composeTask?(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
   updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>

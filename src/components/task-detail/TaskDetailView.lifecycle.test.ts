@@ -33,7 +33,7 @@ describe('TaskDetailView — lifecycle', () => {
     terminalAttachmentDetach.mockClear()
 
     // Switch to a different task
-    const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Another task' }
+    const taskB = { ...baseTask, id: 'T-99', title: 'Another task', prompt: 'Another task', promptPreview: 'Another task' }
     await rerender({ task: taskB, onRunAction: mockOnRunAction })
 
     // Agent panel should be recreated, acquiring terminal for the new task
@@ -75,7 +75,7 @@ describe('TaskDetailView — lifecycle', () => {
 
         await waitFor(() => expect(screen.getByRole('button', { name: /^agent\b/i })).toBeTruthy())
 
-        const newTask = { ...baseTask, id: 'T-99', initial_prompt: 'New task' }
+        const newTask = { ...baseTask, id: 'T-99', title: 'New task', prompt: 'New task', promptPreview: 'New task' }
         rerender({ task: newTask, onRunAction: mockOnRunAction })
 
         await waitFor(() => {
@@ -96,7 +96,7 @@ describe('TaskDetailView — lifecycle', () => {
 
         await waitFor(() => expect(screen.getByRole('button', { name: /^agent\b/i })).toBeTruthy())
 
-        const refreshedTask = { ...baseTask, title: 'Updated title', title_source: 'manual' as const }
+        const refreshedTask = { ...baseTask, title: 'Updated title', titleSource: 'manual' as const }
         rerender({ task: refreshedTask, onRunAction: mockOnRunAction })
 
         await new Promise(r => setTimeout(r, 50))

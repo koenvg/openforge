@@ -135,12 +135,10 @@ impl super::Database {
 
     fn get_task_projection_input(&self) -> Result<TaskAttentionInput> {
         let projects = self.get_all_projects()?;
-        let tasks = self.get_all_tasks()?;
-        let active_task_ids: Vec<String> = tasks
-            .iter()
-            .filter(|task| matches!(task.status.as_str(), "backlog" | "doing"))
-            .map(|task| task.id.clone())
-            .collect();
+        let active_tasks = self.get_active_task_details(None)?;
+        let active_task_ids: Vec<String> =
+            active_tasks.iter().map(|task| task.id.clone()).collect();
+        let relationship_references = self.get_active_task_relationship_references()?;
         let sessions = self.get_latest_sessions_for_tickets(&active_task_ids)?;
         let pull_requests = self.get_all_pull_requests()?;
         let mut out_of_focus_by_project = HashMap::new();
@@ -169,18 +167,31 @@ impl super::Database {
                     name: project.name,
                 })
                 .collect(),
-            tasks: tasks
+            tasks: active_tasks
                 .into_iter()
                 .map(|task| TaskAttentionTask {
                     id: task.id,
                     project_id: task.project_id,
                     status: task.status,
-                    title: task.title,
-                    initial_prompt: task.initial_prompt,
+                    title: Some(task.title),
+                    initial_prompt: task.prompt,
                     updated_at: task.updated_at,
                     depends_on: task.depends_on,
                     labels: task.labels.into_iter().map(|label| label.name).collect(),
                 })
+                .chain(relationship_references.into_iter().map(|task| {
+                    let title = task.title;
+                    TaskAttentionTask {
+                        id: task.id,
+                        project_id: task.project_id,
+                        status: task.status,
+                        title: Some(title.clone()),
+                        initial_prompt: title,
+                        updated_at: 0,
+                        depends_on: task.depends_on,
+                        labels: Vec::new(),
+                    }
+                }))
                 .collect(),
             sessions: sessions
                 .into_iter()
@@ -244,5 +255,60 @@ mod tests {
             )),
             None
         );
+    }
+
+    #[test]
+    fn board_projection_ignores_unrelated_completed_history_and_resolves_dependencies() {
+        let (db, _temp_dir) =
+            crate::db::test_helpers::make_test_db("task_attention_bounded_history");
+        let project = db
+            .create_project("Project", "/tmp/task-attention-bounded-history")
+            .expect("create project");
+        let dependency = db
+            .create_task(
+                "Completed dependency",
+                "done",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("create dependency");
+        let active = db
+            .create_task(
+                "Active backlog task",
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("create active task");
+        db.add_task_dependency(&active.id, &dependency.id)
+            .expect("link dependency");
+        db.add_task_label(&active.id, "feature")
+            .expect("label active task");
+        let large_prompt = "x".repeat(16 * 1024);
+        for index in 0..256 {
+            db.create_task(
+                &format!("unrelated completed {index} {large_prompt}"),
+                "done",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("create unrelated completed task");
+        }
+
+        let board = db
+            .get_project_board(&project.id)
+            .expect("project board")
+            .expect("project exists");
+        assert_eq!(board.backlog.len(), 1);
+        assert_eq!(board.backlog[0].task_id, active.id);
+        assert_eq!(board.backlog[0].dependency_count, 1);
+        assert_eq!(board.backlog[0].waiting_dependency_count, 0);
+        assert_eq!(board.backlog[0].labels, vec!["feature".to_string()]);
+        assert!(board.focus.is_empty());
+        assert!(board.in_flight.is_empty());
+        assert!(board.out_of_focus.is_empty());
     }
 }

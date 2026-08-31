@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Task, TaskRelationshipReference } from '../../lib/types'
+  import type { TaskDetail, TaskReference } from '../../lib/types'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { getTaskTitle } from '../../lib/taskTitle'
@@ -7,10 +7,10 @@
   import TaskInfoPanel from './TaskInfoPanel.svelte'
 
   interface Props {
-    task: Task | null
+    task: TaskDetail | null
     workspacePath?: string | null
-    allTasks?: Task[]
-    dependencyReferenceTasks?: TaskRelationshipReference[]
+    allTasks?: TaskDetail[]
+    dependencyReferenceTasks?: TaskReference[]
     onOpenFullView?: () => void
     onOpenLinkedTask?: (taskId: string, projectId: string | null) => void
     onEditTask?: (taskId: string) => void
@@ -27,7 +27,7 @@
 
   // Most tasks have no explicit title, so the header shows the first line of the prompt
   // and repeats what the Initial Prompt section says. Renaming here is the way out.
-  const titleRename = createTaskTitleRename(() => task as Task, () => onTaskUpdated?.())
+  const titleRename = createTaskTitleRename(() => task as TaskDetail, () => onTaskUpdated?.())
 
   function focusAndSelect(node: HTMLInputElement) {
     node.focus()

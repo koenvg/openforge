@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { PullRequestInfo } from './lib/types'
 import { requireDefined } from './test-utils/dom'
 import { installAppTestLifecycle } from './App.test-harness'
+import { setMockTasks } from './App.test-fixtures/stores'
 import { eventListeners } from './App.test-fixtures/ipc'
 import { createTask } from './App.test-fixtures/tasks'
 
@@ -16,12 +17,12 @@ describe('App desktop events', { timeout: 15_000 }, () => {
       const { get } = await import('svelte/store')
 
       stores.projects.set([])
-      stores.tasks.set([])
+      setMockTasks([])
       stores.ticketPrs.set(new Map())
       stores.activeProjectId.set('proj-1')
 
       vi.mocked(ipc.getProjects).mockResolvedValue([])
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [], related: [] })
       vi.mocked(ipc.getLatestSessions).mockResolvedValue([])
       vi.mocked(ipc.getProjectAttention).mockResolvedValue([{
         project_id: 'proj-1',
@@ -138,15 +139,18 @@ describe('App desktop events', { timeout: 15_000 }, () => {
     it('stores the created task prompt text for the spawned-task toast', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const { getTaskDetail } = await import('./lib/ipc')
+      const { readTaskDetail } = await import('./lib/ipc')
       const { get } = await import('svelte/store')
 
-      vi.mocked(getTaskDetail).mockResolvedValue(createTask({
-        id: 'T-99',
-        initial_prompt: '',
-        prompt: 'Prompt from task detail',
-        status: 'backlog',
-      }))
+      vi.mocked(readTaskDetail).mockResolvedValue({
+        task: createTask({
+          id: 'T-99',
+          prompt: 'Prompt from task detail',
+          projectId: 'proj-1',
+          status: 'backlog',
+        }),
+        related: [],
+      })
 
       render(App)
 
@@ -157,7 +161,7 @@ describe('App desktop events', { timeout: 15_000 }, () => {
       const callback = eventListeners.get('task-changed')
       expect(callback).toBeDefined()
 
-      await callback?.({ payload: { action: 'created', task_id: 'T-99' } })
+      await callback?.({ payload: { action: 'created', task_id: 'T-99', project_id: 'proj-1' } })
 
       await vi.waitFor(() => {
         expect(get(stores.taskSpawned)).toEqual({ taskId: 'T-99', promptText: 'Prompt from task detail' })
@@ -177,15 +181,14 @@ describe('App desktop events', { timeout: 15_000 }, () => {
       await vi.waitFor(() => {
         expect(eventListeners.has('task-changed')).toBe(true)
         expect(eventListeners.has('implementation-failed')).toBe(true)
-        expect(ipc.getTaskRelationshipReferences).toHaveBeenCalled()
+        expect(ipc.readActiveTasks).toHaveBeenCalled()
         expect(get(stores.isLoading)).toBe(false)
       })
       stores.activeProjectId.set('proj-1')
 
-      vi.mocked(ipc.getTasksForProject).mockClear()
-      vi.mocked(ipc.getTaskRelationshipReferences).mockClear()
-      vi.mocked(ipc.getTasksForProject).mockReturnValueOnce(new Promise((resolve) => {
-        resolveTasks = () => resolve([])
+      vi.mocked(ipc.readActiveTasks).mockClear()
+      vi.mocked(ipc.readActiveTasks).mockReturnValueOnce(new Promise((resolve) => {
+        resolveTasks = () => resolve({ tasks: [], related: [] })
       }))
 
       const taskChanged = requireDefined(eventListeners.get('task-changed'), 'Expected task-changed listener')
@@ -199,15 +202,13 @@ describe('App desktop events', { timeout: 15_000 }, () => {
       ]))
 
       await vi.waitFor(() => {
-        expect(ipc.getTasksForProject).toHaveBeenCalledOnce()
-        expect(ipc.getTaskRelationshipReferences).toHaveBeenCalledOnce()
+        expect(ipc.readActiveTasks).toHaveBeenCalledOnce()
       })
 
       resolveTasks()
       await Promise.all(refreshes)
 
-      expect(ipc.getTasksForProject).toHaveBeenCalledOnce()
-      expect(ipc.getTaskRelationshipReferences).toHaveBeenCalledOnce()
+      expect(ipc.readActiveTasks).toHaveBeenCalledOnce()
     })
   })
 })

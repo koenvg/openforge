@@ -1,24 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import type { Task, AgentSession } from './types'
+import type { TaskDetail, AgentSession } from './types'
 import { sortBySessionActivity, sortForSearch } from './taskSort'
 
-function makeTask(overrides: Partial<Task> & { id: string }): Task {
+function makeTask(overrides: Partial<TaskDetail> & { id: string }): TaskDetail {
   return {
-    initial_prompt: overrides.id,
+    prompt: overrides.id,
+    promptPreview: overrides.id,
     status: 'doing',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
+    title: overrides.id,
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 1000,
-    updated_at: 1000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    projectId: 'project-1',
+    createdAt: 1000,
+    updatedAt: 1000,
+    labels: [],
     ...overrides,
   }
 }
@@ -66,8 +67,8 @@ describe('sortBySessionActivity', () => {
     ])
 
     const tasks = [
-      makeTask({ id: 'T-1', updated_at: 1000 }),
-      makeTask({ id: 'T-2', updated_at: 3000 }),
+      makeTask({ id: 'T-1', updatedAt: 1000 }),
+      makeTask({ id: 'T-2', updatedAt: 3000 }),
     ]
 
     const sorted = sortBySessionActivity(tasks, sessions)

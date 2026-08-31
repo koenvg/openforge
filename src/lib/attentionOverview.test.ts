@@ -1,33 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { buildAttentionOverview, emptyLaneRows, laneRowsByFilter } from './attentionOverview'
-import type { BuildAttentionOverviewInput, LaneRows } from './attentionOverview'
-import type { Project, ReviewPullRequest, Task, TaskAttentionRow, PrLabel } from './types'
+import type { AttentionTaskReference, BuildAttentionOverviewInput, LaneRows } from './attentionOverview'
+import type { Project, ReviewPullRequest, TaskAttentionRow, PrLabel } from './types'
 import { DO_NOT_REVIEW_LABEL } from './types'
 
 function project(id: string, overrides: Partial<Project> = {}): Project {
   return { id, name: id, path: `/repos/${id}`, created_at: 0, updated_at: 0, ...overrides }
 }
 
-function task(id: string, projectId: string, overrides: Partial<Task> = {}): Task {
-  return {
-    id,
-    initial_prompt: id,
-    status: 'doing',
-    prompt: null,
-    title: id,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: projectId,
-    created_at: 0,
-    updated_at: 0,
-    ...overrides,
-  }
+function task(id: string, projectId: string): AttentionTaskReference {
+  return { id, projectId }
 }
 
 function attentionRow(taskId: string, projectId: string, overrides: Partial<TaskAttentionRow> = {}): TaskAttentionRow {

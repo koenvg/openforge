@@ -9,7 +9,7 @@
   import Pencil from '@lucide/svelte/icons/pencil'
   import Tags from '@lucide/svelte/icons/tags'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
-  import type { Task, AgentSession, PullRequestInfo } from '../../lib/types'
+  import type { TaskDetail, AgentSession, PullRequestInfo } from '../../lib/types'
   import { getTaskLabels } from '../../lib/taskLabels'
   import type { TaskState } from '../../lib/taskState'
   import { getStateDrivingPr } from '../../lib/taskState'
@@ -20,7 +20,7 @@
   import TaskLabelPills from '../shared/tasks/TaskLabelPills.svelte'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     state: TaskState
     session: AgentSession | null
     pullRequests: PullRequestInfo[]
@@ -67,7 +67,7 @@
   let firstPr = $derived(getStateDrivingPr(pullRequests))
   let labels = $derived(getTaskLabels(task))
   let labelNamesText = $derived(labels.map((label) => label.name).join(', '))
-  let dependencyCount = $derived(task.depends_on.length)
+  let dependencyCount = $derived(task.dependsOn.length)
 </script>
 
 <div
@@ -129,7 +129,7 @@
           <span>{pluralize(pullRequests.length, 'PR')}</span>
         </span>
       {/if}
-      <span class="font-mono text-sm text-base-content/50">{timeAgoFromSeconds(task.updated_at)}</span>
+      <span class="font-mono text-sm text-base-content/50">{timeAgoFromSeconds(task.updatedAt)}</span>
     </div>
   </div>
 

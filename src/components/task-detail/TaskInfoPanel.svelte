@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Task, TaskLabel, TaskRelationshipReference } from '../../lib/types'
+  import type { TaskDetail, TaskLabel, TaskReference } from '../../lib/types'
   import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks as allTasks } from '../../lib/stores'
+  import { updateTaskDetail } from '../../lib/tasksState'
   import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
@@ -16,10 +17,10 @@
   import Info from '@lucide/svelte/icons/info'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     workspacePath: string | null
-    allTasksOverride?: Task[]
-    dependencyReferenceTasksOverride?: TaskRelationshipReference[]
+    allTasksOverride?: TaskDetail[]
+    dependencyReferenceTasksOverride?: TaskReference[]
     surface?: 'default' | 'transparent'
     density?: 'default' | 'inspector'
     onEditPrompt?: () => void
@@ -39,7 +40,10 @@
   let previousTaskLabelSignature = ''
 
   let activeTaskList = $derived(allTasksOverride ?? $allTasks)
-  let relationshipTaskList = $derived([...activeTaskList, ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks)])
+  let relationshipTaskList = $derived<Array<TaskDetail | TaskReference>>([
+    ...activeTaskList,
+    ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks),
+  ])
   let projectNames = $derived(new Map($projects.map((project) => [project.id, project.name])))
   let dependencies = $derived(getTaskDependencySummaries(task, relationshipTaskList, projectNames))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, relationshipTaskList))
@@ -65,10 +69,7 @@
   })
 
   function replaceTaskLabelsInStore(nextLabels: TaskLabel[]) {
-    allTasks.update((current) => current.map((storedTask) => {
-      if (storedTask.id !== task.id) return storedTask
-      return { ...storedTask, labels: nextLabels } as Task & { labels: TaskLabel[] }
-    }))
+    updateTaskDetail(task.id, (detail) => ({ ...detail, labels: nextLabels }))
   }
 
   async function handleAddLabel(labelOrName: TaskLabel | string) {
@@ -88,10 +89,7 @@
 
   async function handleSaveSourceTicket(nextUrl: string | null) {
     await updateTaskSourceTicketUrl(task.id, nextUrl)
-    allTasks.update((current) => current.map((storedTask) => {
-      if (storedTask.id !== task.id) return storedTask
-      return { ...storedTask, source_ticket_url: nextUrl }
-    }))
+    updateTaskDetail(task.id, (detail) => ({ ...detail, sourceTicketUrl: nextUrl }))
   }
 
 </script>
@@ -103,12 +101,13 @@
 <div data-testid="task-info-panel" data-scroll-owner="false" data-density={density} class="flex min-h-max flex-col {panelClass}">
   <TaskInitialPrompt {task} {onEditPrompt} />
 
-  <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
+  <SourceTicketLink url={task.sourceTicketUrl} onSave={handleSaveSourceTicket} />
 
   <PluginSlot
     slotType="taskUISections"
     taskId={task.id}
-    projectId={task.project_id}
+    {task}
+    projectId={task.projectId}
     taskActionPending={$mergingTaskIds.has(task.id)}
     maxOrder={CHANGES_SECTION_ORDER}
   />
@@ -120,7 +119,8 @@
   <PluginSlot
     slotType="taskUISections"
     taskId={task.id}
-    projectId={task.project_id}
+    {task}
+    projectId={task.projectId}
     taskActionPending={$mergingTaskIds.has(task.id)}
     minOrder={CHANGES_SECTION_ORDER}
   />
@@ -144,7 +144,7 @@
     {#snippet icon()}<Info size={14} />{/snippet}
     <div class="py-2 border-b border-base-300/70">
       <TaskLabelEditor
-        projectId={task.project_id}
+        projectId={task.projectId}
         selectedLabels={labels}
         onAdd={handleAddLabel}
         onRemove={handleRemoveLabel}

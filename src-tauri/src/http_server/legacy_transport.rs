@@ -1,6 +1,7 @@
 mod events;
 mod hook_routes;
 mod models;
+mod task_read_routes;
 mod task_routes;
 
 use super::AppState;
@@ -67,6 +68,18 @@ pub(super) fn router() -> Router<AppState> {
         .route("/projects", get(get_projects_handler))
         .route("/project/:id/labels", get(get_project_task_labels_handler))
         .route("/tasks", get(get_tasks_handler))
+        .route(
+            "/v2/projects/:project_id/tasks/active",
+            get(task_read_routes::active_tasks_handler),
+        )
+        .route(
+            "/v2/projects/:project_id/tasks/completed",
+            get(task_read_routes::completed_tasks_handler),
+        )
+        .route(
+            "/v2/projects/:project_id/tasks/:task_id",
+            get(task_read_routes::task_detail_handler),
+        )
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/hooks/agent-lifecycle", post(agent_lifecycle_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))

@@ -11,7 +11,7 @@ import type {
   ActionPresentationMetadata,
   TaskPaletteActionId,
 } from './actionPalettePresentation'
-import type { PullRequestInfo, PullRequestMergeMethod, Task } from './types'
+import type { PullRequestInfo, PullRequestMergeMethod, TaskDetail } from './types'
 
 export interface PaletteAction extends ActionPresentationMetadata {
   id: string
@@ -56,7 +56,7 @@ function mergePaletteActions(pr: PullRequestInfo): PaletteAction[] {
 }
 
 export function getTaskActions(
-  task: Task,
+  task: TaskDetail,
   taskPrs: PullRequestInfo[] = [],
   outOfFocusTaskIds: Set<string> = new Set(),
   capabilities: TaskActionCapabilities = DEFAULT_TASK_ACTION_CAPABILITIES,
@@ -152,7 +152,7 @@ export function getGlobalActions(): PaletteAction[] {
 }
 
 export function getAvailableActions(
-  task: Task | null,
+  task: TaskDetail | null,
   taskPrs: PullRequestInfo[] = [],
   outOfFocusTaskIds: Set<string> = new Set(),
   capabilities: TaskActionCapabilities = DEFAULT_TASK_ACTION_CAPABILITIES,

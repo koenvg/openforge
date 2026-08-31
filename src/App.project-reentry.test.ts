@@ -2,6 +2,7 @@ import { render } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import { installAppTestLifecycle } from './App.test-harness'
+import { setMockTasks } from './App.test-fixtures/stores'
 import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { activateGithubGlobalView } from './App.test-fixtures/plugin-runtime'
 import { createTask } from './App.test-fixtures/tasks'
@@ -10,7 +11,7 @@ import App from './App.svelte'
 
 const openTask = createTask({
   id: 'task-open',
-  initial_prompt: 'Drilled-in task',
+  prompt: 'Drilled-in task',
 })
 
 describe('App project re-entry from cross-project views', () => {
@@ -90,7 +91,7 @@ describe('App project re-entry from cross-project views', () => {
 
     stores.activeProjectId.set('proj-1')
     stores.currentView.set('board')
-    stores.tasks.set([openTask])
+    setMockTasks([openTask])
     stores.selectedTaskId.set(openTask.id)
     await tick()
 

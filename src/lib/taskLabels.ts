@@ -1,4 +1,4 @@
-import type { Task, TaskLabel } from './types'
+import type { TaskDetail, TaskLabel } from './types'
 
 export const MAX_TASK_LABEL_NAME_LENGTH = 40
 
@@ -23,7 +23,7 @@ export function makeTemporaryTaskLabel(name: string, projectId: string): TaskLab
   const normalized = normalizeTaskLabelNameInput(name)
   return {
     id: -Math.max(1, Math.abs(hashLabelId(projectId, normalized))),
-    project_id: projectId,
+    projectId,
     name: normalized,
   }
 }
@@ -37,9 +37,8 @@ function hashLabelId(projectId: string, name: string): number {
   return hash
 }
 
-export function getTaskLabels(task: Task): TaskLabel[] {
-  const labels = (task as Task & { labels?: unknown }).labels
-  return Array.isArray(labels) ? (labels as TaskLabel[]) : []
+export function getTaskLabels(task: TaskDetail): TaskLabel[] {
+  return task.labels
 }
 
 export function hasLabelNamed(labels: TaskLabel[], name: string): boolean {
@@ -47,12 +46,12 @@ export function hasLabelNamed(labels: TaskLabel[], name: string): boolean {
   return labels.some((label) => normalizeTaskLabelKey(label.name) === key)
 }
 
-export function taskMatchesAnySelectedLabel(task: Task, selectedLabelIds: Set<number>): boolean {
+export function taskMatchesAnySelectedLabel(task: TaskDetail, selectedLabelIds: Set<number>): boolean {
   if (selectedLabelIds.size === 0) return true
   return getTaskLabels(task).some((label) => selectedLabelIds.has(label.id))
 }
 
-export function getBacklogLabelCounts(tasks: Task[], labels: TaskLabel[]): Map<number, number> {
+export function getBacklogLabelCounts(tasks: TaskDetail[], labels: TaskLabel[]): Map<number, number> {
   const counts = new Map(labels.map((label) => [label.id, 0]))
   for (const task of tasks) {
     if (task.status !== 'backlog') continue

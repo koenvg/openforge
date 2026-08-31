@@ -17,7 +17,7 @@ describe('FocusBoard task presentation', () => {
 
   it('shows dependency wait hint on backlog rows only in the Backlog filter', async () => {
     const dependency = makeTask('T-5', 'doing', 'Dependency task')
-    const waitingBacklog = { ...taskBacklog, depends_on: [dependency.id] }
+    const waitingBacklog = { ...taskBacklog, dependsOn: [dependency.id] }
     renderBoard({
       tasks: [taskFocus, waitingBacklog, dependency],
       sessions: new Map([[taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')]]),
@@ -33,7 +33,7 @@ describe('FocusBoard task presentation', () => {
 
   it('uses completed dependency references for backlog wait hints without rendering completed tasks', async () => {
     const completedDependency = makeTask('T-done', 'done', 'Completed dependency')
-    const waitingBacklog = { ...taskBacklog, depends_on: [completedDependency.id] }
+    const waitingBacklog = { ...taskBacklog, dependsOn: [completedDependency.id] }
     renderBoard({
       tasks: [waitingBacklog],
       dependencyReferenceTasks: [completedDependency],

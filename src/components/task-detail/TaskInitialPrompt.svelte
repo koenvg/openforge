@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import { parseTaskPrompt } from '../../lib/taskPrompt'
   import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import MessageSquareQuote from '@lucide/svelte/icons/message-square-quote'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     onEditPrompt?: () => void
   }
 
@@ -15,7 +15,7 @@
   // The prompt can only be edited before it has been injected into a session.
   let canEditPrompt = $derived(task.status === 'backlog' && !!onEditPrompt)
 
-  let initialPromptText = $derived(parseTaskPrompt(task.initial_prompt).text)
+  let initialPromptText = $derived(parseTaskPrompt(task.prompt).text)
   let promptContentId = $derived(`initial-prompt-${task.id}`)
 </script>
 

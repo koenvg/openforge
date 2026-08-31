@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ImagePlus } from '@lucide/svelte'
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import {
     formatTaskPromptWithImageReferences,
     getTaskPromptImageReferences,
@@ -12,7 +12,7 @@
 
   interface Props {
     mode: 'create' | 'edit'
-    task: Task | null
+    task: TaskDetail | null
     onMarkerInsert: (marker: string) => void
     onMarkerInsertReset: () => void
     onTranscription: (text: string) => void
@@ -43,7 +43,7 @@
 
   function taskPromptSourceKey(): string {
     if (mode !== 'edit' || !task) return 'create'
-    return `${task.id}\u0000${task.prompt ?? ''}\u0000${task.initial_prompt ?? ''}`
+    return `${task.id}\u0000${task.prompt}`
   }
 
   function imageFromReference(reference: TaskPromptImageReference): PastedTaskImage {

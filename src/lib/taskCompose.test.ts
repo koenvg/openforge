@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 import { pendingComposeRequest, requestTaskCompose, settleTaskCompose } from './taskCompose'
-import type { Task } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 
-const task = { id: 'T-1' } as Task
+const task = createTask({ id: 'T-1' })
 
 beforeEach(() => settleTaskCompose(null))
 

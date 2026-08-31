@@ -1,9 +1,12 @@
 import { get } from 'svelte/store'
 import { activeProjectId, currentView, pendingTask, projects, selectedTaskId, tasks } from './stores'
-import { getTaskDetail } from './ipc'
+import { activateCachedTaskDetail, loadTaskDetail } from './tasksState'
 import { isCrossProjectView } from './views'
 import { pushNavState, restoreProjectView, selectFocusBoardTab } from './router.svelte'
-import type { AppView, Task } from './types'
+import type { AppView, TaskDetail, TaskRead } from './types'
+
+type TaskNavigationReference = Pick<TaskDetail, 'id' | 'projectId'>
+
 
 interface AppRouter {
   navigate(view: AppView): void
@@ -21,8 +24,8 @@ interface AppNavigationHistory {
 interface AppNavigationControllerOptions {
   router: AppRouter
   loadTasks(): Promise<void>
-  loadTaskDetail?(taskId: string): Promise<Task>
-  getSelectedTask(): Task | null
+  loadTaskDetail?(projectId: string, taskId: string): Promise<TaskRead | null>
+  getSelectedTask(): TaskDetail | null
   getSidebarPluginViewKeys(): ReadonlySet<string>
   closeAttentionOverview(): void
   history?: AppNavigationHistory
@@ -33,28 +36,50 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     push: pushNavState,
     restoreProject: restoreProjectView,
   }
-  const loadTaskDetail = options.loadTaskDetail ?? getTaskDetail
-
+  const detailLoader = options.loadTaskDetail
+  let navigationGeneration = 0
   function navigate(view: AppView): void {
+    navigationGeneration += 1
     options.router.navigate(view)
   }
 
   function openTask(taskId: string): void {
+    navigationGeneration += 1
+    const projectId = get(activeProjectId)
+    if (projectId) activateCachedTaskDetail(projectId, taskId)
     options.router.navigateToTask(taskId)
   }
-
   async function openTaskInProject(taskId: string, projectId: string | null = null): Promise<void> {
+    const generation = ++navigationGeneration
+    const expectedProjectId = projectId ?? get(activeProjectId)
+    if (!expectedProjectId) return
     if (projectId && projectId !== get(activeProjectId)) {
       activeProjectId.set(projectId)
       await options.loadTasks()
+      if (generation !== navigationGeneration || get(activeProjectId) !== expectedProjectId) return
     }
-    if (!get(tasks).some((task) => task.id === taskId)) {
-      pendingTask.set(await loadTaskDetail(taskId))
+    if (activateCachedTaskDetail(expectedProjectId, taskId)) {
+      pendingTask.set(null)
+      options.router.navigateToTask(taskId)
+      return
     }
+
+    const result = await loadTaskDetail(
+      expectedProjectId,
+      taskId,
+      detailLoader,
+      () => generation === navigationGeneration && get(activeProjectId) === expectedProjectId,
+    )
+    if (generation !== navigationGeneration
+      || get(activeProjectId) !== expectedProjectId
+      || result?.task.id !== taskId
+      || result.task.projectId !== expectedProjectId) return
+    pendingTask.set(null)
     options.router.navigateToTask(taskId)
   }
 
   async function switchToProject(projectId: string): Promise<void> {
+    const generation = ++navigationGeneration
     const activeId = get(activeProjectId)
     const view = get(currentView)
     if (activeId === projectId && !isCrossProjectView(view, options.getSidebarPluginViewKeys())) {
@@ -80,18 +105,20 @@ export function createAppNavigationController(options: AppNavigationControllerOp
 
     if (rememberedTaskId) {
       await options.loadTasks()
+      if (generation !== navigationGeneration) return
       if (get(activeProjectId) === projectId && get(tasks).some((task) => task.id === rememberedTaskId)) {
         selectedTaskId.set(rememberedTaskId)
       }
     }
   }
 
-  async function openTaskFromOverview(task: Task): Promise<void> {
+  async function openTaskFromOverview(task: TaskNavigationReference): Promise<void> {
     options.closeAttentionOverview()
-    await openTaskInProject(task.id, task.project_id)
+    await openTaskInProject(task.id, task.projectId)
   }
 
   async function historyNavigate(move: () => boolean): Promise<void> {
+    const generation = ++navigationGeneration
     const previousProjectId = get(activeProjectId)
     if (!move()) return
 
@@ -102,6 +129,7 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     if (!restoredTaskId) return
 
     await options.loadTasks()
+    if (generation !== navigationGeneration) return
     if (get(activeProjectId) === nextProjectId && get(tasks).some((task) => task.id === restoredTaskId)) {
       selectedTaskId.set(restoredTaskId)
     }

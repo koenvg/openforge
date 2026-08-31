@@ -6,11 +6,11 @@ import {
   resetTaskDetailViewTestState,
 } from './TaskDetailView.testUtils'
 import { INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
-import type { Task } from '../../lib/types'
+import type { TaskDetail } from '../../lib/types'
 
 const OUT_OF_FOCUS_CONFIG_KEY = 'low_fire_task_ids'
 
-async function renderToolbar(task: Task, onProjectAttentionChanged = vi.fn()) {
+async function renderToolbar(task: TaskDetail, onProjectAttentionChanged = vi.fn()) {
   const TaskDetailToolbar = (await import('./TaskDetailToolbar.svelte')).default
   return render(TaskDetailToolbar, {
     props: {
@@ -36,7 +36,7 @@ async function openMoreActions() {
 }
 
 describe('TaskDetailToolbar — more actions menu', () => {
-  const doingTask: Task = { ...baseTask, status: 'doing' }
+  const doingTask: TaskDetail = { ...baseTask, status: 'doing' }
 
   beforeEach(async () => {
     resetTaskDetailViewTestState()

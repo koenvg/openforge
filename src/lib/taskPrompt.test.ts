@@ -5,56 +5,23 @@ import {
   getTaskPromptText,
   parseTaskPrompt,
 } from './taskPrompt'
-import type { Task } from './types'
 
-describe('getTaskPromptText', () => {
-  const baseTask = {
-    id: 'T-123',
-    status: 'backlog' as const,
-    agent: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 0,
-    updated_at: 0,
-  }
-
-  it('returns mutable prompt when present', () => {
-    const task: Task = { ...baseTask, initial_prompt: 'Initial prompt', prompt: 'Edited prompt' }
-    expect(getTaskPromptText(task)).toBe('Edited prompt')
-  })
-
-  it('falls back to immutable initial_prompt when prompt is empty', () => {
-    const task: Task = { ...baseTask, initial_prompt: 'Initial prompt', prompt: '' }
-    expect(getTaskPromptText(task)).toBe('Initial prompt')
-  })
-
-  it('falls back to empty string when both values are missing', () => {
-    const task: Task = { ...baseTask, initial_prompt: '', prompt: null }
-    expect(getTaskPromptText(task)).toBe('')
+describe('Task prompt projections', () => {
+  it('returns the canonical authoring prompt', () => {
+    expect(getTaskPromptText({ prompt: 'Edited prompt' })).toBe('Edited prompt')
   })
 
   it('hides persisted inline image reference definitions from editable prompt text', () => {
-    const task: Task = {
-      ...baseTask,
-      initial_prompt: 'Inspect [image#1] and then explain it\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
-      prompt: null,
+    const task = {
+      prompt: 'Inspect [image#1] and then explain it\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
     }
 
     expect(getTaskPromptText(task)).toBe('Inspect [image#1] and then explain it')
   })
 
-  it('extracts persisted inline image references from task prompt text', () => {
-    const task: Task = {
-      ...baseTask,
-      initial_prompt: 'Inspect [image#1]\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
-      prompt: null,
+  it('extracts persisted inline image references from the canonical prompt', () => {
+    const task = {
+      prompt: 'Inspect [image#1]\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
     }
 
     expect(getTaskPromptImageReferences(task)).toEqual([

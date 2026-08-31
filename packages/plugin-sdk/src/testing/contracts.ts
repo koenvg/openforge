@@ -1,4 +1,5 @@
 import type { BrowserSurfaceVisualFeedback } from '../browserSurfaces'
+import type { CompletedTaskQuery } from '../domain'
 import type { TestingOpenForgeRegistryFake } from './registryFake'
 import type {
   BackendMethodRegistration,
@@ -35,7 +36,7 @@ import type {
   UserDataFileRequest,
   UserDataFileWriteRequest,
 } from '../types'
-import type { AgentSession, FileContent, Task } from '../domain'
+import type { AgentSession, FileContent, Task, TaskLabel } from '../domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
@@ -52,6 +53,11 @@ export interface TestingExternalTextFile extends ExternalReadFileRequest {
 
 export type TestingExternalTextFileChunksCall = Omit<ExternalReadTextFileChunksRequest, 'signal' | 'chunkSizeBytes'> & {
   chunkSizeBytes: number
+}
+
+export interface TestingTaskLabelAssignment {
+  taskId: string
+  labels: TaskLabel[]
 }
 
 export interface TestingOpenForgeApiOptions {
@@ -72,6 +78,8 @@ export interface TestingOpenForgeApiOptions {
    * mirroring the host capability. Defaults to an empty list.
    */
   tasks?: Task[]
+  /** Task Label assignments used by canonical Task projections. */
+  taskLabelAssignments?: TestingTaskLabelAssignment[]
   /** Agent Sessions returned by `tasks.listSessions`. Defaults to an empty list. */
   agentSessions?: AgentSession[]
   /** Compact workspace context keyed by Task ID for `agentSessions.list`. Defaults to none. */
@@ -96,6 +104,9 @@ export interface TestingOpenForgeApiCalls {
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]
   taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
+  taskActiveRequests: Array<{ projectId: string }>
+  taskCompletedRequests: Array<{ projectId: string } & CompletedTaskQuery>
+  taskDetailRequests: Array<{ projectId: string; taskId: string }>
   agentSessionListRequests: ListAgentSessionsRequest[]
   taskSessionListRequests: ListTaskSessionsRequest[]
   taskStatusUpdates: Array<{ taskId: string; status: string }>

@@ -32,7 +32,7 @@ function resetTaskInfoPanelTestState(): void {
   ticketPrs.set(new Map())
   mergingTaskIds.set(new Set())
   projects.set([])
-  tasks.set([])
+  ;(tasks as unknown as { set(value: never[]): void }).set([])
   dependencyReferenceTasks.set([])
   installedPlugins.set(new Map())
   enabledPluginIds.set(new Set())

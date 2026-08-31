@@ -47,14 +47,12 @@ vi.mock('../lib/ipc', () => ({
     callOrder.push('getProjects')
     return [{ id: 'proj-1', name: 'Test Project', path: '/test' }]
   }),
-  getTasksForProject: vi.fn(async () => {
-    callOrder.push('getTasksForProject')
-    return []
+  readActiveTasks: vi.fn(async (_projectId: string) => {
+    callOrder.push('readActiveTasks')
+    return { tasks: [], related: [] }
   }),
-  getTaskRelationshipReferences: vi.fn(async () => {
-    callOrder.push('getTaskRelationshipReferences')
-    return []
-  }),
+  readCompletedTasks: vi.fn(async () => ({ items: [], nextCursor: null })),
+  readTaskDetail: vi.fn(async () => null),
   getTaskAttention: vi.fn(async () => []),
   getTaskLanes: vi.fn(async () => ({ focus: [], in_flight: [], out_of_focus: [], backlog: [] })),
   getOpenCodeStatus: vi.fn(async () => {

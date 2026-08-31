@@ -1,9 +1,10 @@
 import { updateTaskTitle } from './ipc'
-import { getTaskTitle } from './taskTitle'
+import { getTaskTitle, type TaskTitleSource } from './taskTitle'
 import { error } from './stores'
-import type { Task } from './types'
+import { updateTaskDetail } from './tasksState'
+import { buildTaskPromptPreview, resolveTaskProjectionTitle } from './taskDetail'
 
-type RenamableTask = Pick<Task, 'id' | 'initial_prompt' | 'prompt' | 'title'>
+type RenamableTask = TaskTitleSource
 
 /**
  * Inline title-rename state machine shared by the task detail header and the board
@@ -29,7 +30,18 @@ export function createTaskTitleRename(
     editing = false
     if (!commit) return
     try {
-      await updateTaskTitle(getTask().id, draft)
+      const task = getTask()
+      await updateTaskTitle(task.id, draft)
+      const explicitTitle = draft.trim()
+      updateTaskDetail(task.id, (detail) => {
+        const preview = buildTaskPromptPreview(detail.prompt)
+        const title = resolveTaskProjectionTitle(detail.id, explicitTitle, preview)
+        return {
+          ...detail,
+          title,
+          titleSource: explicitTitle ? 'manual' : null,
+        }
+      })
       await onSaved?.()
     } catch (e) {
       console.error('Failed to rename task:', e)

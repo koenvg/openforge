@@ -1,23 +1,29 @@
 import { writable } from 'svelte/store'
-import type { ComposeTaskRequest, ComposeTaskResult } from '@openforge-app/plugin-sdk'
+import type { ComposeTaskRequest } from '@openforge-app/plugin-sdk'
+import type { TaskDetail } from './types'
 
 export interface PendingComposeRequest {
   request: ComposeTaskRequest
 }
 
+export interface TaskComposeResult {
+  task: TaskDetail
+  started: boolean
+}
+
 const pending = writable<PendingComposeRequest | null>(null)
 export const pendingComposeRequest = { subscribe: pending.subscribe }
 
-let settle: ((result: ComposeTaskResult | null) => void) | null = null
+let settle: ((result: TaskComposeResult | null) => void) | null = null
 
 /**
  * Opens the host's create-task dialog seeded from `request` and resolves with
  * what the user did, or null if they dismissed it. Only one compose can be in
  * flight; a second request cancels the first rather than queueing behind it.
  */
-export function requestTaskCompose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null> {
+export function requestTaskCompose(request: ComposeTaskRequest): Promise<TaskComposeResult | null> {
   settle?.(null)
-  return new Promise<ComposeTaskResult | null>((resolve) => {
+  return new Promise<TaskComposeResult | null>((resolve) => {
     settle = resolve
     pending.set({ request })
   })
@@ -28,7 +34,7 @@ export function requestTaskCompose(request: ComposeTaskRequest): Promise<Compose
  * saved task and then closes, and the close must not overwrite that result with
  * a cancellation.
  */
-export function settleTaskCompose(result: ComposeTaskResult | null): void {
+export function settleTaskCompose(result: TaskComposeResult | null): void {
   const resolve = settle
   settle = null
   pending.set(null)

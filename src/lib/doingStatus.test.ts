@@ -1,24 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { computeDoingStatus } from './doingStatus'
-import type { Task, AgentSession, BoardStatus } from './types'
+import type { AgentSession, BoardStatus } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 
-const makeTask = (id: string, status: BoardStatus): Task => ({
+const makeTask = (id: string, status: BoardStatus) => createTask({
   id,
-  initial_prompt: `Task ${id}`,
+  title: `Task ${id}`,
+  prompt: `Task ${id}`,
+  promptPreview: `Task ${id}`,
   status,
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
-  agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
 })
 
 const makeSession = (ticketId: string, status: string, checkpointData: string | null = null): AgentSession => ({

@@ -449,6 +449,32 @@ Use:
 
 Plugins can create OpenForge Tasks and start native Implementation Runs through the versioned `tasks` capability. This is the supported path for scheduler-style plugins. Do not shell out to the OpenForge CLI or call Electron/preload APIs directly from plugin code.
 
+For reads, choose the projection that matches the work:
+
+```ts
+const active = await openforge.tasks.active(projectId)
+// active.tasks contains every selection-ready non-Completed TaskDetail for the project.
+
+let page = await openforge.tasks.completed(projectId, {
+  search: 'billing',
+  labels: ['scheduled']
+})
+for (const summary of page.tasks) {
+  console.log(summary.id, summary.promptPreview)
+}
+if (page.nextCursor) {
+  page = await openforge.tasks.completed(projectId, { cursor: page.nextCursor })
+}
+
+const read = await openforge.tasks.detail(projectId, 'T-123')
+console.log(read?.task.prompt) // The canonical authoring prompt.
+console.log(read?.related) // Immediate TaskReference records.
+```
+
+`TaskReference` is for links, `TaskSummary` is for fixed 50-item Completed pages, and `TaskDetail` is for an active or selected Task. Completed pages never include full prompts, and cursors are opaque and bound to the project and normalized filters. `tasks.list()` and `tasks.get()` remain available only to API version 1 plugins. They are deprecated, emit at most one warning per plugin activation, and will be removed in version 2. The host preserves their complete-array behavior; migrate rather than relying on that unbounded read.
+
+Task pane tabs and Task UI sections receive the selected `TaskDetail` as their `task` prop. Use that prop for ordinary rendering instead of calling `tasks.detail()` during mount.
+
 ```ts
 const task = await openforge.tasks.create({
   initialPrompt: 'Refresh the billing export job',

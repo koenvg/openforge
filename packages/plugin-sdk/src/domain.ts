@@ -17,8 +17,10 @@ export type WorktreeSource = 'newBranchFromMain' | 'existingBranch' | 'disabled'
 
 export interface Task {
   id: string;
+  /** @deprecated Use `TaskDetail.prompt` in the bounded Task read APIs. */
   initial_prompt: string;
   status: BoardStatus;
+  /** @deprecated Legacy execution override retained for API version 1 compatibility. */
   prompt: string | null;
   /** Explicit display title; null means fall back to the prompt-derived title. */
   title: string | null;
@@ -39,6 +41,61 @@ export interface Task {
   project_id: string | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface TaskLabel {
+  id: number
+  projectId: string
+  name: string
+}
+
+export interface TaskReference {
+  id: string
+  status: BoardStatus
+  projectId: string
+  title: string
+  dependsOn: string[]
+}
+
+export interface TaskSummary extends TaskReference {
+  createdAt: number
+  updatedAt: number
+  promptPreview: string
+  labels: TaskLabel[]
+  sourceTicketUrl: string | null
+}
+
+export interface TaskDetail extends TaskSummary {
+  prompt: string
+  agent: string | null
+  permissionMode: string | null
+  worktreeSource: WorktreeSource | null
+  worktreeBranch: string | null
+  titleSource: 'manual' | 'generated' | null
+  titleGeneratedAt: number | null
+}
+
+export interface ActiveTasks {
+  tasks: TaskDetail[]
+  related: TaskReference[]
+}
+
+export interface CompletedTaskQuery {
+  /** At most 200 Unicode characters. ASCII case-insensitive; non-ASCII casing is exact. */
+  search?: string
+  /** At most 20 Task Label names; each trimmed name is at most 40 Unicode characters. */
+  labels?: string[]
+  cursor?: string | null
+}
+
+export interface CompletedTaskPage {
+  tasks: TaskSummary[]
+  nextCursor: string | null
+}
+
+export interface TaskRead {
+  task: TaskDetail
+  related: TaskReference[]
 }
 
 export interface GitBranchInfo {

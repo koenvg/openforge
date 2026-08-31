@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import type { ExistingBranchPlan, Project, Task } from './types'
+import type { ExistingBranchPlan, Project, TaskDetail } from './types'
 
 vi.mock('./ipc', () => ({
   deleteTask: vi.fn(),
@@ -40,8 +40,8 @@ import {
   error,
   startingTasks,
   taskRuntimeInfo,
-  tasks,
 } from './stores'
+import { refreshActiveTasks } from './tasksState'
 
 function createSpawnLease(imageProtocol: 'iterm2' | null = null) {
   return {
@@ -61,23 +61,28 @@ const activeProject: Project = {
   updated_at: 1000,
 }
 
-const task: Task = {
+const task: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Prompt',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  prompt: 'Prompt',
+  promptPreview: 'Prompt',
+  title: 'Prompt',
+  titleSource: null,
+  titleGeneratedAt: null,
   status: 'doing',
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 1000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  projectId: 'proj-1',
+  createdAt: 1000,
+  updatedAt: 1000,
+  labels: [],
+}
+
+async function setTasks(items: TaskDetail[]): Promise<void> {
+  await refreshActiveTasks(activeProject.id, async () => ({ tasks: items, related: [] }))
 }
 
 function createActions(loadTasks = vi.fn(async () => undefined)) {
@@ -88,8 +93,8 @@ function createActions(loadTasks = vi.fn(async () => undefined)) {
   })
 }
 
-function existingBranchTask(): Task {
-  return { ...task, worktree_source: 'existingBranch', worktree_branch: 'origin/foo' }
+function existingBranchTask(): TaskDetail {
+  return { ...task, worktreeSource: 'existingBranch', worktreeBranch: 'origin/foo' }
 }
 
 function plan(
@@ -108,14 +113,14 @@ function plan(
 }
 
 describe('createTaskSessionActions', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     activeSessions.set(new Map())
     completingTasks.set(new Set())
     error.set(null)
     startingTasks.set(new Set())
     taskRuntimeInfo.set(new Map())
-    tasks.set([])
+    await setTasks([])
     branchDivergenceRequest.set(null)
     vi.mocked(isPtyActive).mockReturnValue(false)
     vi.mocked(acquire).mockResolvedValue({ shellSessionKey: 'T-42' } as never)
@@ -130,7 +135,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(beginPtySpawn).mockReturnValue(createSpawnLease('iterm2'))
     const actions = createActions(loadTasks)
 
-    tasks.set([task])
+    await setTasks([task])
     await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(inspectExistingBranch).not.toHaveBeenCalled()
@@ -147,7 +152,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as never)
     const actions = createActions()
 
-    tasks.set([task])
+    await setTasks([task])
     await actions.handleRunAction({
       taskId: task.id,
       actionPrompt: '',
@@ -161,7 +166,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as never)
     const actions = createActions()
 
-    tasks.set([task])
+    await setTasks([task])
     await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(vi.mocked(startImplementation).mock.calls[0][4]).toBeNull()
@@ -171,7 +176,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(isPtyActive).mockReturnValue(true)
     const actions = createActions()
 
-    tasks.set([task])
+    await setTasks([task])
     await actions.handleRunAction({
       taskId: task.id,
       actionPrompt: 'continue',
@@ -203,7 +208,7 @@ describe('createTaskSessionActions', () => {
 
   it('auto-starts an existing-branch task that fast-forwards without opening the modal', async () => {
     const branchTask = existingBranchTask()
-    tasks.set([branchTask])
+    await setTasks([branchTask])
     vi.mocked(inspectExistingBranch).mockResolvedValue(plan('autoFastForward'))
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 's', workspace_path: '/w', task_id: branchTask.id, port: 0 } as never)
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: branchTask.id, status: 'running' } as never)
@@ -218,7 +223,7 @@ describe('createTaskSessionActions', () => {
 
   it('opens the divergence modal for a diverged branch and threads the chosen resolution', async () => {
     const branchTask = existingBranchTask()
-    tasks.set([branchTask])
+    await setTasks([branchTask])
     vi.mocked(inspectExistingBranch).mockResolvedValue(
       plan('diverged', { ahead: [{ shortSha: 'a1b2c3d', subject: 'WIP', author: 'me', relativeDate: '1h ago' }] }),
     )
@@ -237,7 +242,7 @@ describe('createTaskSessionActions', () => {
 
   it('aborts the start when the divergence modal is cancelled', async () => {
     const branchTask = existingBranchTask()
-    tasks.set([branchTask])
+    await setTasks([branchTask])
     vi.mocked(inspectExistingBranch).mockResolvedValue(plan('diverged'))
     const actions = createActions()
 

@@ -17,7 +17,7 @@ function resetTaskDetailViewTestState() {
   completingTasks.set(new Set())
   commandHeld.set(false)
   outOfFocusTaskIdsByProject.set(new Map())
-  tasks.set([])
+  ;(tasks as unknown as { set(value: never[]): void }).set([])
   resetTaskDetailViewTerminalPoolMocks()
   clearTerminalTaskPaneControllers()
   resetTaskDetailViewPluginSetup()

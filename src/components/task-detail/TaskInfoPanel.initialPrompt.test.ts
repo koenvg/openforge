@@ -13,7 +13,7 @@ describe('TaskInfoPanel initial prompt', () => {
     renderTaskInfoPanel({
       task: {
         ...baseTask,
-        initial_prompt: 'Build a calm task attention pane\nShow active signals\nKeep long documents below\nReserve full text for expansion',
+        prompt: 'Build a calm task attention pane\nShow active signals\nKeep long documents below\nReserve full text for expansion',
       },
     })
 

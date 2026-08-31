@@ -7,8 +7,12 @@ use super::{
 use rusqlite::{types::Type, OptionalExtension, Result};
 use thiserror::Error;
 
+pub const MAX_ACTIVE_TASKS_PER_PROJECT: usize = 500;
+
 #[derive(Debug, Error)]
 pub enum TaskCreationError {
+    #[error("project {project_id} already contains the maximum of {max} active Tasks")]
+    ActiveTaskLimit { project_id: String, max: usize },
     #[error("{0}")]
     Storage(#[from] rusqlite::Error),
     #[error("{0}")]
@@ -37,6 +41,9 @@ impl TaskCreationError {
             Self::Storage(error) => error,
             Self::Dependencies(error) => error.into_database_error(),
             Self::Labels(error) => error.into_database_error(),
+            domain_error @ Self::ActiveTaskLimit { .. } => {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(domain_error))
+            }
         }
     }
 }
@@ -259,10 +266,11 @@ fn insert_task_row(
 ) -> Result<TaskRow> {
     let title_source = opts.title.as_ref().map(|_| "manual".to_string());
     let execution_started_at = (opts.status != "backlog").then_some(now);
+    let prompt_preview = super::tasks::prompt_preview(opts.initial_prompt);
 
     conn.execute(
-        "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url, prompt_preview)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         rusqlite::params![
             &task_id,
             opts.initial_prompt,
@@ -280,6 +288,7 @@ fn insert_task_row(
             None::<i64>,
             execution_started_at,
             opts.source_ticket_url.as_deref(),
+            prompt_preview,
         ],
     )?;
 
@@ -360,6 +369,28 @@ fn persist_task_label_metadata(
     Ok(())
 }
 
+fn enforce_active_task_limit(
+    conn: &rusqlite::Connection,
+    project_id: Option<&str>,
+    status: &str,
+) -> std::result::Result<(), TaskCreationError> {
+    let Some(project_id) = project_id.filter(|_| status != "done") else {
+        return Ok(());
+    };
+    let active_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE project_id = ?1 AND status != 'done'",
+        [project_id],
+        |row| row.get(0),
+    )?;
+    if active_count >= MAX_ACTIVE_TASKS_PER_PROJECT as i64 {
+        return Err(TaskCreationError::ActiveTaskLimit {
+            project_id: project_id.to_string(),
+            max: MAX_ACTIVE_TASKS_PER_PROJECT,
+        });
+    }
+    Ok(())
+}
+
 fn create_task_in_transaction(
     conn: &rusqlite::Connection,
     opts: NewTaskOptions<'_>,
@@ -367,6 +398,7 @@ fn create_task_in_transaction(
     label_names: &[String],
 ) -> std::result::Result<TaskRow, TaskCreationError> {
     let opts = normalize_task_options(conn, opts)?;
+    enforce_active_task_limit(conn, opts.project_id, opts.status)?;
     let task_id = allocate_task_id(conn, opts.project_id)?;
     let now = super::current_unix_timestamp()?;
     let mut task = insert_task_row(conn, task_id, &opts, now)?;

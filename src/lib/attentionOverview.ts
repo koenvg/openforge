@@ -1,4 +1,4 @@
-import type { Project, ReviewPullRequest, Task, TaskAttentionRow, TaskLaneRows } from './types'
+import type { Project, ReviewPullRequest, TaskAttentionRow, TaskLaneRows } from './types'
 import type { TaskState } from './taskState'
 import type { BoardFilter } from './boardFilters'
 import { isUnopened } from './prReviewBadgeCounts'
@@ -29,9 +29,14 @@ export function emptyLaneRows(): LaneRows {
   return { focus: [], 'in-flight': [], 'out-of-focus': [], backlog: [] }
 }
 
-/** A backend-projected task row joined to the full desktop Task record used for navigation. */
+export interface AttentionTaskReference {
+  id: string
+  projectId: string
+}
+
+/** A backend-projected Task row paired with compact navigation identity. */
 export interface AttentionFocusTask {
-  task: Task
+  task: AttentionTaskReference
   state: TaskState
   title: string
   reason: string
@@ -68,8 +73,8 @@ export interface AttentionOverview {
 export interface BuildAttentionOverviewInput {
   /** Projects in sidebar order. */
   projects: Project[]
-  /** Full desktop Task records used only to open selected backend-projected rows. */
-  allTasks: Task[]
+  /** Compact Task identities used to open projected rows. */
+  allTasks: AttentionTaskReference[]
   /**
    * Backend-authoritative Task-only lane projection. The lanes are disjoint: a Task appears
    * in exactly one of them.
@@ -95,7 +100,7 @@ function prRepoKey(pr: ReviewPullRequest): string {
 
 function buildLaneTasks(
   project: Project,
-  tasksById: ReadonlyMap<string, Task>,
+  tasksById: ReadonlyMap<string, AttentionTaskReference>,
   rows: TaskAttentionRow[],
 ): AttentionFocusTask[] {
   return rows

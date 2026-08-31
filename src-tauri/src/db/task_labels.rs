@@ -5,13 +5,14 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskLabelRow {
     pub id: i64,
     pub project_id: String,
     pub name: String,
 }
 
-const MAX_TASK_LABEL_NAME_CHARS: usize = 40;
+pub(super) const MAX_TASK_LABEL_NAME_CHARS: usize = 40;
 
 /// Errors returned by task label persistence operations.
 #[derive(Debug, Error)]

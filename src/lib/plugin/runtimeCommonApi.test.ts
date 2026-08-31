@@ -69,6 +69,28 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(listAgentSessions).toHaveBeenCalledWith(request)
   })
 
+  it('warns once per activation while preserving every legacy Task list result', async () => {
+    const legacyTasks = [{ id: 'T-1' }, { id: 'T-2' }] as never
+    const listTasks = vi.fn().mockResolvedValue(legacyTasks)
+    const getTask = vi.fn().mockResolvedValue(legacyTasks[0])
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'legacy-plugin',
+      projectId: null,
+      host: { listTasks, getTask },
+    }))
+    const api = registry.createApi()
+
+    await expect(api.tasks.list()).resolves.toBe(legacyTasks)
+    await expect(api.tasks.list({ projectId: 'P-1', includeDone: true })).resolves.toBe(legacyTasks)
+    await expect(api.tasks.get('T-1')).resolves.toBe(legacyTasks[0])
+
+    expect(listTasks).toHaveBeenCalledTimes(2)
+    expect(warning).toHaveBeenCalledOnce()
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('tasks.list() and tasks.get() are deprecated'))
+    warning.mockRestore()
+  })
+
 
   it('creates isolated capability facades over shared registry state', () => {
     const registry = new RuntimeCommonApiRegistry(

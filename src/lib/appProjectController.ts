@@ -1,9 +1,10 @@
-import type { Project, Task } from './types'
+import type { Project, TaskDetail } from './types'
 
 interface TaskSelectionState {
-  tasks: Task[]
-  pendingTask: Task | null
+  tasks: TaskDetail[]
+  pendingTask: TaskDetail | null
   selectedTaskId: string | null
+  selectedTaskDetailExists?: boolean
 }
 
 interface AppProjectControllerOptions<TFilter> {
@@ -31,6 +32,7 @@ export function createAppProjectController<TFilter>(options: AppProjectControlle
     if (!state.selectedTaskId) return
     const selectedTaskExists = state.tasks.some((task) => task.id === state.selectedTaskId)
       || state.pendingTask?.id === state.selectedTaskId
+      || state.selectedTaskDetailExists === true
     if (!selectedTaskExists) {
       options.clearSelectedTask()
     }

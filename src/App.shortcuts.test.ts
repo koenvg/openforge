@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installAppTestLifecycle } from './App.test-harness'
+import { setMockTasks } from './App.test-fixtures/stores'
 import { installedPluginRows } from './App.test-fixtures/ipc'
 import { mockExecutePluginCommand } from './App.test-fixtures/plugin-runtime'
 import { createTask } from './App.test-fixtures/tasks'
@@ -98,9 +99,9 @@ describe('App shortcut behavior', () => {
     const stores = await import('./lib/stores')
     const selectedTask = createTask({
       id: 'task-123',
-      initial_prompt: 'Selected task',
+      prompt: 'Selected task',
     })
-    stores.tasks.set([selectedTask])
+    setMockTasks([selectedTask])
     stores.selectedTaskId.set(selectedTask.id)
 
     render(App)

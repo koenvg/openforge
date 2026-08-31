@@ -11,12 +11,12 @@ import {
   pruneSelectedBacklogLabelIds,
   taskMatchesAnySelectedLabel,
 } from '../../lib/taskLabels'
-import type { AgentSession, Task, TaskLabel } from '../../lib/types'
+import type { AgentSession, TaskDetail, TaskLabel } from '../../lib/types'
 
 export interface FocusBoardFilterControllerOptions {
   getProjectId: () => string | null
-  getTasks: () => Task[]
-  getTasksWithReadyAttentionMetadata: () => Task[]
+  getTasks: () => TaskDetail[]
+  getTasksWithReadyAttentionMetadata: () => TaskDetail[]
   getActiveSessions: () => Map<string, AgentSession>
   getAttentionTaskIds: () => ReadonlySet<string>
   getAttentionOrder: () => ReadonlyMap<string, number>

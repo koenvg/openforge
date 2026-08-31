@@ -8,12 +8,14 @@
   import { getRegisteredComponent, getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
   import type { PluginComponentSource } from '../../lib/plugin/componentRegistry'
   import type { PluginSlotType } from '../../lib/plugin/renderableSlotTypes'
+  import type { TaskDetail } from '../../lib/types'
   import { activatePlugin, getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
     slotType: PluginSlotType
     slotId?: string
     taskId?: string
+    task?: TaskDetail | null
     projectId?: string | null
     projectName?: string
     projectPath?: string
@@ -39,7 +41,7 @@
     extraProps?: Record<string, unknown>
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null, minOrder = null, maxOrder = null, extraProps = undefined }: Props = $props()
+  let { slotType, slotId = '', taskId = '', task = null, projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null, minOrder = null, maxOrder = null, extraProps = undefined }: Props = $props()
 
   const UNWRAPPED_SLOT_TYPES = new Set<PluginSlotType>(['taskUISections', 'reviewRowActions'])
 
@@ -196,7 +198,7 @@
         />
       {/snippet}
       {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
-      <Component {...renderProps} {...extraProps ?? {}} {taskId} {projectId} {projectName} {projectPath} {taskActionPending} />
+      <Component {...renderProps} {...extraProps ?? {}} {taskId} {task} {projectId} {projectName} {projectPath} {taskActionPending} />
     </svelte:boundary>
   {:else if !UNWRAPPED_SLOT_TYPES.has(slotType)}
     <div data-contribution-id={contrib.contributionId}></div>

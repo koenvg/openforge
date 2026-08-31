@@ -1,30 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import type { Task, TaskLabel } from './types'
+import type { TaskDetail, TaskLabel } from './types'
 import { getBacklogLabelCounts, getLabelsWithBacklogItems, pruneSelectedBacklogLabelIds, taskMatchesAnySelectedLabel, validateTaskLabelName } from './taskLabels'
 
-const bug: TaskLabel = { id: 1, project_id: 'proj-1', name: 'Bug' }
-const ui: TaskLabel = { id: 2, project_id: 'proj-1', name: 'UI' }
+const bug: TaskLabel = { id: 1, projectId: 'proj-1', name: 'Bug' }
+const ui: TaskLabel = { id: 2, projectId: 'proj-1', name: 'UI' }
 
-function task(id: string, status: Task['status'], labels: TaskLabel[] = []): Task {
+function task(id: string, status: TaskDetail['status'], labels: TaskLabel[] = []): TaskDetail {
   return {
     id,
-    initial_prompt: id,
+    prompt: id,
+    promptPreview: id,
     status,
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
+    title: id,
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'proj-1',
-    created_at: 1000,
-    updated_at: 1000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    projectId: 'proj-1',
+    createdAt: 1000,
+    updatedAt: 1000,
     labels,
-  } as Task & { labels: TaskLabel[] }
+  }
 }
 
 describe('taskLabels', () => {

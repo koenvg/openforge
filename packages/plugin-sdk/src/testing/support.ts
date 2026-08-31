@@ -13,7 +13,7 @@ import type {
   StartPromptContribution,
   SubscriptionSink,
 } from '../types'
-import type { AgentSession, FileContent, Task } from '../domain'
+import type { AgentSession, FileContent, Task, TaskLabel } from '../domain'
 import type {
   TestingCommandContribution,
   TestingMaybePromise,
@@ -72,6 +72,9 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskImplementationStarts: [],
     taskFollowUps: [],
     taskListRequests: [],
+    taskActiveRequests: [],
+    taskCompletedRequests: [],
+    taskDetailRequests: [],
     agentSessionListRequests: [],
     taskSessionListRequests: [],
     taskStatusUpdates: [],
@@ -242,6 +245,7 @@ export class TestingRegistryServices {
   readonly storage: PluginStorage
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
+  readonly seededTaskLabelAssignments: Map<string, TaskLabel[]>
   readonly seededAgentSessions: AgentSession[]
   readonly agentSessionWorkspaces: Readonly<Record<string, AgentSessionWorkspace>>
   readonly externalTextFiles: TestingExternalTextFile[]
@@ -263,6 +267,9 @@ export class TestingRegistryServices {
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
+    this.seededTaskLabelAssignments = new Map(
+      (options.taskLabelAssignments ?? []).map(assignment => [assignment.taskId, assignment.labels]),
+    )
     this.seededAgentSessions = options.agentSessions ?? []
     this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {}
     this.externalTextFiles = options.externalTextFiles ?? []

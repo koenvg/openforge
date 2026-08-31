@@ -60,15 +60,15 @@ describe('TaskDetailView — inspector', () => {
     const onOpenTask = vi.fn()
     const dependentTask = {
       ...secondaryTask,
-      depends_on: [baseTask.id],
+      dependsOn: [baseTask.id],
     }
-    tasks.set([baseTask, dependentTask])
+    ;(tasks as unknown as { set(value: Array<typeof baseTask>): void }).set([baseTask, dependentTask])
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onOpenTask } })
 
     await fireEvent.click(screen.getByRole('button', { name: /T-99/ }))
 
-    expect(onOpenTask).toHaveBeenCalledWith('T-99', null)
+    expect(onOpenTask).toHaveBeenCalledWith('T-99', 'project-1')
     expect(onOpenTask).toHaveBeenCalledTimes(1)
   })
 

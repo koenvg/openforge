@@ -1,4 +1,4 @@
-import type { Task, AgentSession, PullRequestInfo } from './types'
+import type { TaskDetail, AgentSession, PullRequestInfo } from './types'
 import { getMergeReadiness, getMostAttentionWorthyPullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from './types'
 
 export type TaskState =
@@ -86,7 +86,7 @@ export function taskStateToBorderClass(state: TaskState): string {
   return BORDER_CLASS[state] ?? ''
 }
 
-export function computeTaskState(task: Task, session: AgentSession | null, prs: PullRequestInfo[]): TaskState {
+export function computeTaskState(task: TaskDetail, session: AgentSession | null, prs: PullRequestInfo[]): TaskState {
   // Done tasks are always done
   if (task.status === 'done') {
     return 'done'

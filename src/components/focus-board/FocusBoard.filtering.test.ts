@@ -162,7 +162,7 @@ describe('FocusBoard filtering and labels', () => {
     await view.rerender({
       projectId: 'proj-2',
       projectName: 'Second Project',
-      tasks: [{ ...taskFocus, project_id: 'proj-2' }],
+      tasks: [{ ...taskFocus, projectId: 'proj-2' }],
       activeSessions: new Map(),
       ticketPrs: new Map(),
       onOpenTask,
@@ -387,7 +387,7 @@ describe('FocusBoard filtering and labels', () => {
     await view.rerender({
       projectId: 'proj-2',
       projectName: 'Second Project',
-      tasks: [{ ...bugTask, id: 'T-6', project_id: 'proj-2' }],
+      tasks: [{ ...bugTask, id: 'T-6', projectId: 'proj-2' }],
       activeSessions: new Map(),
       ticketPrs: new Map(),
       onOpenTask,
@@ -403,8 +403,8 @@ describe('FocusBoard filtering and labels', () => {
     const extraLabels: TaskLabel[] = [
       bugLabel,
       uiLabel,
-      { id: 3, project_id: 'proj-1', name: 'backend' },
-      { id: 4, project_id: 'proj-1', name: 'blocked' },
+      { id: 3, projectId: 'proj-1', name: 'backend' },
+      { id: 4, projectId: 'proj-1', name: 'blocked' },
     ]
     renderBoard({ tasks: [makeTask('T-9', 'backlog', 'Many labels', extraLabels)], sessions: new Map() })
 

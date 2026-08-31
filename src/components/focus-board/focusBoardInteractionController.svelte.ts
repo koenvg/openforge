@@ -3,12 +3,12 @@ import { get } from 'svelte/store'
 import type { BoardFilter } from '../../lib/boardFilters'
 import { getHTMLElementAt } from '../../lib/domUtils'
 import { lastViewedTaskId } from '../../lib/stores'
-import type { Task } from '../../lib/types'
+import type { TaskDetail } from '../../lib/types'
 import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
 
 export interface FocusBoardInteractionControllerOptions {
   getProjectId: () => string | null
-  getVisibleTasks: () => Task[]
+  getVisibleTasks: () => TaskDetail[]
   setActiveFilter: (filter: BoardFilter) => void
   onOpenTask: (taskId: string) => void | Promise<void>
   onRunAction: (data: { taskId: string; actionPrompt: string; promptPrefix?: string | null }) => void
@@ -79,7 +79,7 @@ export function createFocusBoardInteractionController(options: FocusBoardInterac
     if (!paneHasFocus) vim.handleKeydown(event)
   }
 
-  function selectTask(task: Task, taskIndex: number): void {
+  function selectTask(task: TaskDetail, taskIndex: number): void {
     if (selectedTaskId === task.id) {
       void options.onOpenTask(task.id)
       return

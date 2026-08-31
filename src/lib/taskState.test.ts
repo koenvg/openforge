@@ -1,29 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import type { Task, AgentSession, PullRequestInfo } from './types'
+import type { TaskDetail, AgentSession, PullRequestInfo } from './types'
 import { computeTaskState, taskStateToBorderClass, getStateDrivingPr } from './taskState'
 
 // ============================================================================
 // Factory Helpers
 // ============================================================================
 
-function createTask(overrides: Partial<Task> = {}): Task {
+function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {
     id: 'task-1',
-    initial_prompt: 'Test task',
+    prompt: 'Test task',
+    promptPreview: 'Test task',
     status: 'doing',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
+    title: 'Test task',
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 1000,
-    updated_at: 2000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    projectId: 'project-1',
+    createdAt: 1000,
+    updatedAt: 2000,
+    labels: [],
     ...overrides,
   }
 }

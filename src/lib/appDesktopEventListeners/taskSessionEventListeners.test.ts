@@ -1,7 +1,8 @@
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finalizeAgentSession, getLatestSession } from '../ipc'
-import { activeSessions, checkpointNotification, taskRuntimeInfo } from '../stores'
+import { activeProjectId, activeSessions, checkpointNotification, selectedTaskId, taskRuntimeInfo } from '../stores'
+import { evictTask, getVisibleRelationshipOwner, loadTaskDetail } from '../tasksState'
 import { release, restorePtyInstance } from '../terminalPool'
 import { createTaskSessionEventListeners } from './taskSessionEventListeners'
 import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
@@ -10,6 +11,16 @@ vi.mock('../terminalPool', () => ({
   release: vi.fn(),
   restorePtyInstance: vi.fn(),
 }))
+vi.mock('../tasksState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../tasksState')>()
+  return {
+    ...actual,
+    evictTask: vi.fn(),
+    getVisibleRelationshipOwner: vi.fn(() => null),
+    loadTaskDetail: vi.fn(),
+  }
+})
+
 
 vi.mock('../ipc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ipc')>()
@@ -17,15 +28,17 @@ vi.mock('../ipc', async (importOriginal) => {
     ...actual,
     getLatestSession: vi.fn(),
     finalizeAgentSession: vi.fn(),
-    getTaskDetail: vi.fn(),
   }
 })
+
 
 describe('createTaskSessionEventListeners', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     checkpointNotification.set(null)
     taskRuntimeInfo.set(new Map())
+    activeProjectId.set(null)
+    selectedTaskId.set(null)
     vi.clearAllMocks()
   })
 
@@ -217,16 +230,40 @@ describe('createTaskSessionEventListeners', () => {
     vi.useRealTimers()
   })
 
-  it('reloads pull requests when a task change may contain polled PR policy updates', async () => {
+  it('reloads canonical active Tasks, pull requests, and attention after an update', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
     await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
 
-    await handlers.get('task-changed')?.({ payload: { action: 'updated', task_id: 'task-1' } })
+    await handlers.get('task-changed')?.({
+      payload: { action: 'updated', task_id: 'task-1', project_id: 'project-1' },
+    })
 
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
     expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 
-  it('clears active session and releases terminal when task is deleted', async () => {
+  it('refreshes the visible detail through the project-scoped state owner', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeProjectId.set('project-1')
+    selectedTaskId.set('task-owner')
+    vi.mocked(getVisibleRelationshipOwner).mockReturnValue('task-owner')
+    vi.mocked(loadTaskDetail).mockResolvedValue(null)
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('task-changed')?.({
+      payload: { action: 'updated', task_id: 'task-related', project_id: 'project-1' },
+    })
+
+    expect(loadTaskDetail).toHaveBeenCalledWith(
+      'project-1',
+      'task-owner',
+      undefined,
+      expect.any(Function),
+    )
+  })
+
+  it('evicts Task state, clears its session, and releases its terminal when deleted', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
     activeSessions.set(new Map([['task-1', createSession()]]))
     await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
@@ -234,6 +271,7 @@ describe('createTaskSessionEventListeners', () => {
     await handlers.get('task-changed')?.({ payload: { action: 'deleted', task_id: 'task-1' } })
 
     expect(get(activeSessions).has('task-1')).toBe(false)
+    expect(evictTask).toHaveBeenCalledWith('task-1')
     expect(release).toHaveBeenCalledWith('task-1')
     expect(deps.loadTasks).toHaveBeenCalledOnce()
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()

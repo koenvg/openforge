@@ -100,8 +100,17 @@ export class RuntimeCommonApiRegistry {
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
   private readonly contextChangeHandlers = new Set<OpenForgeContextChangeHandler>()
   private eventListenerSequence = 0
+  private didWarnLegacyTaskReads = false
 
   constructor(private readonly services: RuntimeRegistryServices) {}
+
+  private warnLegacyTaskReads(): void {
+    if (this.didWarnLegacyTaskReads) return
+    this.didWarnLegacyTaskReads = true
+    console.warn(
+      `[OpenForge plugin ${this.services.pluginId}] tasks.list() and tasks.get() are deprecated; use tasks.active(), tasks.completed(), or tasks.detail()`,
+    )
+  }
 
   createApi(): RuntimeCommonApi {
     const api: RuntimeCommonApi = {
@@ -136,8 +145,27 @@ export class RuntimeCommonApiRegistry {
           : unavailableCapability('agentSessions.list'),
       },
       tasks: {
-        list: async (request) => this.services.host.listTasks ? this.services.host.listTasks(request) : unavailableCapability('tasks.list'),
-        get: async (taskId) => this.services.host.getTask ? this.services.host.getTask(taskId) : unavailableCapability('tasks.get'),
+        list: async (request) => {
+          this.warnLegacyTaskReads()
+          return this.services.host.listTasks
+            ? this.services.host.listTasks(request)
+            : unavailableCapability('tasks.list')
+        },
+        get: async (taskId) => {
+          this.warnLegacyTaskReads()
+          return this.services.host.getTask
+            ? this.services.host.getTask(taskId)
+            : unavailableCapability('tasks.get')
+        },
+        active: async (projectId) => this.services.host.activeTasks
+          ? this.services.host.activeTasks(projectId)
+          : unavailableCapability('tasks.active'),
+        completed: async (projectId, query) => this.services.host.completedTasks
+          ? this.services.host.completedTasks(projectId, query)
+          : unavailableCapability('tasks.completed'),
+        detail: async (projectId, taskId) => this.services.host.taskDetail
+          ? this.services.host.taskDetail(projectId, taskId)
+          : unavailableCapability('tasks.detail'),
         create: async (request) => this.services.host.createTask ? this.services.host.createTask(request) : unavailableCapability('tasks.create'),
         updateStatus: async (taskId, status) => this.services.host.updateTaskStatus ? this.services.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
         compose: async (request) => this.services.host.composeTask

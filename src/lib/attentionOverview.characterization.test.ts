@@ -2,11 +2,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildAttentionOverview, emptyLaneRows } from './attentionOverview'
-import type { Project, Task, TaskAttentionRow } from './types'
+import type { Project, TaskAttentionRow } from './types'
+import type { AttentionTaskReference } from './attentionOverview'
 
 interface CharacterizationFixture {
   projects: Project[]
-  tasks: Array<Partial<Task> & Pick<Task, 'id' | 'project_id' | 'status' | 'initial_prompt' | 'created_at' | 'updated_at'>>
+  tasks: Array<{ id: string; project_id: string }>
   expected: TaskAttentionRow[]
 }
 
@@ -14,20 +15,8 @@ const fixture = JSON.parse(
   readFileSync(resolve(process.cwd(), 'fixtures/task_attention_characterization.json'), 'utf8'),
 ) as CharacterizationFixture
 
-function normalizeTask(task: CharacterizationFixture['tasks'][number]): Task {
-  return {
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    ...task,
-  }
+function normalizeTask(task: CharacterizationFixture['tasks'][number]): AttentionTaskReference {
+  return { id: task.id, projectId: task.project_id }
 }
 
 describe('desktop task attention characterization fixture', () => {

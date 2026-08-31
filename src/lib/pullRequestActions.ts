@@ -6,7 +6,7 @@ import {
 } from './ipc'
 import { error, setTaskMerging, ticketPrs } from './stores'
 import { getPullRequestMergeMethodSelections, selectPullRequestForAction } from './pullRequestActionPolicy'
-import type { PullRequestMergeMethod, Task } from './types'
+import type { PullRequestMergeMethod, TaskDetail } from './types'
 
 export interface PullRequestActionOptions {
   logError(message: string, error: unknown): void
@@ -18,7 +18,7 @@ function setError(errorValue: unknown): void {
 
 export function createPullRequestActions(options: PullRequestActionOptions) {
   async function mergeReadyPullRequest(
-    task: Task,
+    task: TaskDetail,
     mergeMethod: PullRequestMergeMethod,
   ): Promise<void> {
     const selection = selectPullRequestForAction(get(ticketPrs).get(task.id) || [], 'merge')
@@ -57,7 +57,7 @@ export function createPullRequestActions(options: PullRequestActionOptions) {
     }
   }
 
-  async function enqueueReadyPullRequest(task: Task): Promise<void> {
+  async function enqueueReadyPullRequest(task: TaskDetail): Promise<void> {
     const selection = selectPullRequestForAction(get(ticketPrs).get(task.id) || [], 'enqueue')
     if (selection.status === 'eligible') {
       const pr = selection.pullRequest

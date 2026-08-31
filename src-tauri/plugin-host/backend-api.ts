@@ -1,5 +1,6 @@
 import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'
 import type {
+  ActiveTasks,
   AgentSession,
   CommandInfo,
   ComposeTaskResult,
@@ -18,6 +19,9 @@ import type {
   StartPromptContribution,
   StartTaskImplementationRequest,
   Task,
+  CompletedTaskPage,
+  CompletedTaskQuery,
+  TaskRead,
   TaskFollowUpReceipt,
   TaskWorkspaceInfo,
   UserDataFileAppendResult,
@@ -215,6 +219,14 @@ export function createBackendApi(
     return await invokeHostCallback<T>(runtime.hostCallbacks, method, params, options)
   }
 
+  let didWarnLegacyTaskReads = false
+  const warnLegacyTaskReads = (): void => {
+    if (didWarnLegacyTaskReads) return
+    didWarnLegacyTaskReads = true
+    console.warn(
+      `[OpenForge plugin ${state.pluginId}] tasks.list() and tasks.get() are deprecated; use tasks.active(), tasks.completed(), or tasks.detail()`,
+    )
+  }
   const api: BackendOpenForgeAPI = {
     commands: {
       register: registration => contributions.registerCommand(state, registration),
@@ -244,8 +256,26 @@ export function createBackendApi(
       ),
     },
     tasks: {
-      list: async request => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),
-      get: async taskId => await hostCallback<Task | null>('openforge.tasks.get', { taskId }),
+      list: async request => {
+        warnLegacyTaskReads()
+        return await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request))
+      },
+      get: async taskId => {
+        warnLegacyTaskReads()
+        return await hostCallback<Task | null>('openforge.tasks.get', { taskId })
+      },
+      active: async (projectId: string) => await hostCallback<ActiveTasks>(
+        'openforge.tasks.active',
+        { projectId },
+      ),
+      completed: async (projectId: string, query: CompletedTaskQuery = {}) => await hostCallback<CompletedTaskPage>(
+        'openforge.tasks.completed',
+        { projectId, query },
+      ),
+      detail: async (projectId: string, taskId: string) => await hostCallback<TaskRead | null>(
+        'openforge.tasks.detail',
+        { projectId, taskId },
+      ),
       create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
       compose: async request => await hostCallback<ComposeTaskResult | null>('openforge.tasks.compose', objectCallbackParams(request)),
       updateStatus: async (taskId: string, status: WritableBoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },

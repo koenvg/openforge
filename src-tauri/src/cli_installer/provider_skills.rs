@@ -178,8 +178,9 @@ mod tests {
             assert!(content.contains("openforge task update"));
             assert!(content.contains("openforge task start --task-id"));
             assert!(content.contains("openforge task delete"));
-            assert!(content.contains("openforge task get"));
-            assert!(content.contains("openforge task list"));
+            assert!(content.contains("openforge task active"));
+            assert!(content.contains("openforge task completed"));
+            assert!(content.contains("openforge task detail"));
             assert!(content.contains("openforge project labels list"));
             assert!(content.contains("openforge task labels list"));
             assert!(content.contains("openforge task labels add"));
@@ -192,13 +193,13 @@ mod tests {
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
             assert!(content.contains("openforge task create --help"));
             assert!(content.contains("openforge task update --help"));
-            assert_eq!(content.matches("openforge task get").count(), 1);
-            assert_eq!(content.matches("openforge project labels list").count(), 2);
+            assert_eq!(content.matches("openforge task detail").count(), 2);
+            assert_eq!(content.matches("openforge project labels list").count(), 1);
             assert_eq!(content.matches("openforge task labels list").count(), 1);
             assert!(!content.contains("reverse dependents"));
             assert!(!content.contains("repoint each dependent"));
             assert!(!content.contains("openforge/cli/cli.js"));
-            assert_eq!(content.matches("openforge project labels list").count(), 2);
+            assert_eq!(content.matches("openforge project labels list").count(), 1);
             let obsolete_segment = ["mcp", "server"].join("-");
             assert!(!content.contains(&obsolete_segment));
         }

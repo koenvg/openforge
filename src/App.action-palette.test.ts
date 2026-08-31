@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'svelte'
 import { createGithubSyncResult, createPullRequest } from './App.test-fixtures/github'
+import { setMockTasks } from './App.test-fixtures/stores'
 import { installAppTestLifecycle } from './App.test-harness'
 import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { createTask } from './App.test-fixtures/tasks'
@@ -26,17 +27,17 @@ describe('App action palette shortcuts', () => {
 
       const selectedTask = createTask({
         id: 'task-merge',
-        initial_prompt: 'Merge ready PR',
+        prompt: 'Merge ready PR',
       })
 
       const readyPr = createPullRequest({ ticket_id: selectedTask.id })
 
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [selectedTask], related: [] })
       vi.mocked(ipc.getPullRequests).mockResolvedValue([readyPr])
       vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
       vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
       stores.ticketPrs.set(new Map([[selectedTask.id, [readyPr]]]))
@@ -44,7 +45,7 @@ describe('App action palette shortcuts', () => {
       render(App)
 
       await vi.waitFor(() => {
-        expect(ipc.getTasksForProject).toHaveBeenCalled()
+        expect(ipc.readActiveTasks).toHaveBeenCalled()
       })
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
@@ -83,20 +84,20 @@ describe('App action palette shortcuts', () => {
 
       const selectedTask = createTask({
         id: 'task-merge-pending',
-        initial_prompt: 'Merge pending PR',
+        prompt: 'Merge pending PR',
       })
 
       const readyPr = createPullRequest({ ticket_id: selectedTask.id })
 
       let resolveMerge!: () => void
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [selectedTask], related: [] })
       vi.mocked(ipc.getPullRequests).mockResolvedValue([readyPr])
       vi.mocked(ipc.mergePullRequest).mockImplementationOnce(() => new Promise<void>((resolve) => {
         resolveMerge = resolve
       }))
       vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
       stores.ticketPrs.set(new Map([[selectedTask.id, [readyPr]]]))
@@ -105,7 +106,7 @@ describe('App action palette shortcuts', () => {
       render(App)
 
       await vi.waitFor(() => {
-        expect(ipc.getTasksForProject).toHaveBeenCalled()
+        expect(ipc.readActiveTasks).toHaveBeenCalled()
       })
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
@@ -127,7 +128,7 @@ describe('App action palette shortcuts', () => {
       })
 
       const otherTaskId = 'task-selected-later'
-      stores.tasks.set([selectedTask, { ...selectedTask, id: otherTaskId, initial_prompt: 'Selected later' }])
+      setMockTasks([selectedTask, { ...selectedTask, id: otherTaskId, prompt: 'Selected later' }])
       stores.selectedTaskId.set(otherTaskId)
 
       resolveMerge()
@@ -147,7 +148,7 @@ describe('App action palette shortcuts', () => {
 
       const selectedTask = createTask({
         id: 'task-merge-many',
-        initial_prompt: 'Task with multiple ready PRs',
+        prompt: 'Task with multiple ready PRs',
       })
 
       const firstReadyPr = createPullRequest({
@@ -163,12 +164,12 @@ describe('App action palette shortcuts', () => {
         head_sha: 'def456',
       })
 
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [selectedTask], related: [] })
       vi.mocked(ipc.getPullRequests).mockResolvedValue([firstReadyPr, secondReadyPr])
       vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
       vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
       stores.ticketPrs.set(new Map([[selectedTask.id, [firstReadyPr, secondReadyPr]]]))
@@ -176,7 +177,7 @@ describe('App action palette shortcuts', () => {
       render(App)
 
       await vi.waitFor(() => {
-        expect(ipc.getTasksForProject).toHaveBeenCalled()
+        expect(ipc.readActiveTasks).toHaveBeenCalled()
       })
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })

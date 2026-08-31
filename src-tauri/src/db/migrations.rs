@@ -1719,6 +1719,28 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    M::up_with_hook("", |tx| {
+        ensure_task_prompt_preview_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        let can_index: bool = tx
+            .query_row(
+                "SELECT COUNT(*) = 4
+                   FROM pragma_table_info('tasks')
+                  WHERE name IN ('id', 'project_id', 'status', 'updated_at')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if can_index {
+            tx.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_completed_keyset
+                     ON tasks(project_id, updated_at DESC, id DESC)
+                     WHERE status = 'done';",
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1739,6 +1761,57 @@ pub(super) fn bootstrap_existing_db(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn ensure_task_prompt_preview_column(conn: &Connection) -> Result<()> {
+    let required_columns: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name IN ('id', 'initial_prompt')",
+        [],
+        |row| row.get(0),
+    )?;
+    if required_columns != 2 {
+        return Ok(());
+    }
+    let preview_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'prompt_preview'",
+        [],
+        |row| row.get(0),
+    )?;
+    if preview_exists {
+        return Ok(());
+    }
+    conn.execute(
+        "ALTER TABLE tasks ADD COLUMN prompt_preview TEXT NOT NULL DEFAULT ''",
+        [],
+    )?;
+
+    let mut last_rowid = 0_i64;
+    loop {
+        let previews = {
+            let mut statement = conn.prepare(
+                "SELECT rowid, id, initial_prompt FROM tasks WHERE rowid > ?1 ORDER BY rowid LIMIT 100",
+            )?;
+            let rows = statement.query_map([last_rowid], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        };
+        if previews.is_empty() {
+            break;
+        }
+        for (rowid, task_id, prompt) in previews {
+            conn.execute(
+                "UPDATE tasks SET prompt_preview = ?1 WHERE id = ?2",
+                rusqlite::params![super::tasks::prompt_preview(&prompt), task_id],
+            )?;
+            last_rowid = rowid;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
     let has_tasks: bool = conn.query_row(
         "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
@@ -1748,6 +1821,7 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
     if !has_tasks {
         return Ok(());
     }
+    ensure_task_prompt_preview_column(conn)?;
 
     for (col, backfill) in [
         ("prompt", true),

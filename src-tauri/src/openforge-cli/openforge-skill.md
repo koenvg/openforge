@@ -20,7 +20,7 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task start`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`, `openforge debug process-memory-history`). Flat task/project compatibility aliases are no longer supported.
+Use canonical nested command groups such as `openforge task create`, `openforge task update`, `openforge task start`, `openforge task active`, `openforge task completed`, `openforge task detail`, and `openforge task plan apply`. Project, plugin, and diagnostic commands use the same nested form. Flat task and project aliases are no longer supported.
 
 `openforge task start --task-id <id>` starts the native configured implementation flow using persisted task and project configuration. Dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain authoritative; the command does not accept runtime overrides.
 
@@ -51,7 +51,10 @@ If labels or dependency order are unclear, report that uncertainty instead of gu
 openforge task plan apply --file follow-up-plan.json
 openforge task create --initial-prompt "Describe the follow-up work" --worktree "$PWD" --depends-on T-122 --label cleanup
 openforge task update --task-id T-124 --initial-prompt "Corrected backlog prompt"
-openforge task get --task-id T-123
+openforge task active --project-id P-1
+openforge task completed --project-id P-1 --label cleanup
+openforge task completed --project-id P-1 --cursor '<nextCursor>'
+openforge task detail --project-id P-1 --task-id T-123
 openforge task start --task-id T-123
 openforge project labels list --project-id P-1
 openforge debug process-memory
@@ -62,7 +65,6 @@ openforge task labels remove --task-id T-123 --label-id 42
 openforge task dependencies set --task-id T-123 --depends-on T-121,T-122
 openforge task dependencies add --task-id T-123 --depends-on T-122
 openforge task dependencies link --chain "T-121 -> T-122 -> T-123"
-openforge task list --project-id P-1 --full
 openforge task delete --task-id T-123
 ```
 
@@ -80,7 +82,7 @@ Plan JSON shape:
 
 Use dependsOn for current or prerequisite task IDs or for local task keys from the same plan. `projectId` is optional when the OpenForge bridge can infer the project; include it when known. Do not include `worktree` in task plan JSON.
 
-`task list` prints compact rows by default (`id`, `prompt_preview`, `status`, `labels`, `depends_on`, `updated_at`) for broad scans and excludes done tasks by default. Pass `--full` when you need complete TaskRow objects. Pass `--state done` only when you explicitly need completed tasks. Use `--worktree "$PWD"` with `task create` when the project can be inferred from the current worktree and no project id is known.
+Use `task active --project-id <id>` for every non-Completed Task in a project. It returns bounded full details and immediate relationship references. Use `task completed --project-id <id>` for Completed work. It returns at most 50 summaries and a `nextCursor`; pass that opaque value back with `--cursor` to continue. Use `task detail --project-id <id> --task-id <id>` for one full authoring prompt and its relationship context. The old `task list` and `task get` commands are deprecated and will be removed in version 2. Use `--worktree "$PWD"` with `task create` when the project can be inferred from the current worktree and no project id is known.
 
 Labels are project-scoped. Use `project labels list --project-id <id>` before creating follow-up tasks when a project id is available, and reuse an existing label when it fits. Use `--label` on `task create` for AI-created follow-up work that already has an obvious category, and pair it with `--depends-on` when the follow-up is related to a known active task or prerequisite. `--label` can be repeated or comma-separated, e.g. `--label bug --label "needs review"` or `--label bug,cleanup`. Use `task labels add`, `task labels remove`, and `task labels list` to manage labels on existing tasks.
 

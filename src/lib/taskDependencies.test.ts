@@ -1,32 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import type { Task } from './types'
+import type { TaskDetail } from './types'
 import { getDependencyWaitLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from './taskDependencies'
 
-function makeTask(id: string, overrides: Partial<Task> = {}): Task {
+function makeTask(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {
     id,
-    initial_prompt: `Task ${id}`,
+    prompt: `Task ${id}`,
+    promptPreview: `Task ${id}`,
     status: 'backlog',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
+    title: `Task ${id}`,
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'project-1',
-    created_at: 1000,
-    updated_at: 2000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    projectId: 'project-1',
+    createdAt: 1000,
+    updatedAt: 2000,
+    labels: [],
     ...overrides,
   }
 }
 
 describe('task dependency summaries', () => {
   it('counts unfinished and unknown dependencies as waiting', () => {
-    const task = makeTask('T-1', { depends_on: ['T-done', 'T-doing', 'T-missing'] })
+    const task = makeTask('T-1', { dependsOn: ['T-done', 'T-doing', 'T-missing'] })
     const knownTasks = [
       task,
       makeTask('T-done', { status: 'done' }),
@@ -38,15 +39,15 @@ describe('task dependency summaries', () => {
   })
 
   it('omits compact wait label when all dependencies are done', () => {
-    const task = makeTask('T-1', { depends_on: ['T-done'] })
+    const task = makeTask('T-1', { dependsOn: ['T-done'] })
     const knownTasks = [task, makeTask('T-done', { status: 'done' })]
 
     expect(getDependencyWaitLabel(task, knownTasks)).toBeNull()
   })
 
   it('returns dependency titles and statuses for detail surfaces', () => {
-    const task = makeTask('T-1', { depends_on: ['T-2', 'T-missing'] })
-    const knownTasks = [task, makeTask('T-2', { status: 'doing', initial_prompt: 'Prepare the API' })]
+    const task = makeTask('T-1', { dependsOn: ['T-2', 'T-missing'] })
+    const knownTasks = [task, makeTask('T-2', { status: 'doing', prompt: 'Prepare the API', title: 'Prepare the API' })]
 
     expect(getTaskDependencySummaries(task, knownTasks)).toEqual([
       {
@@ -75,14 +76,16 @@ describe('task dependency summaries', () => {
     const alreadyDoneDependency = makeTask('T-done', { status: 'done' })
     const unfinishedDependency = makeTask('T-doing', { status: 'doing' })
     const readyDependent = makeTask('T-2', {
-      depends_on: ['T-1', 'T-done'],
-      initial_prompt: 'Start after current task',
+      dependsOn: ['T-1', 'T-done'],
+      prompt: 'Start after current task',
+      title: 'Start after current task',
     })
     const stillBlockedDependent = makeTask('T-3', {
-      depends_on: ['T-1', 'T-doing', 'T-missing'],
-      initial_prompt: 'Needs more prerequisites',
+      dependsOn: ['T-1', 'T-doing', 'T-missing'],
+      prompt: 'Needs more prerequisites',
+      title: 'Needs more prerequisites',
     })
-    const unrelatedTask = makeTask('T-4', { depends_on: ['T-done'] })
+    const unrelatedTask = makeTask('T-4', { dependsOn: ['T-done'] })
 
     expect(getTaskDependentSummaries(selectedTask, [
       selectedTask,

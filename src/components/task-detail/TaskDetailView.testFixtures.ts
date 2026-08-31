@@ -1,29 +1,32 @@
 import { vi } from 'vitest'
-import type { Task, TaskWorkspaceInfo } from '../../lib/types'
+import type { TaskDetail, TaskWorkspaceInfo } from '../../lib/types'
 
-const baseTask: Task = {
+const baseTask: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Implement auth middleware',
+  projectId: 'project-1',
   status: 'backlog',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Implement auth middleware',
+  prompt: 'Implement auth middleware',
+  promptPreview: 'Implement auth middleware',
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
+  titleSource: null,
+  titleGeneratedAt: null,
+  createdAt: 1000,
+  updatedAt: 2000,
 }
 
-const secondaryTask: Task = {
+const secondaryTask: TaskDetail = {
   ...baseTask,
   id: 'T-99',
-  initial_prompt: 'Implement audit logging',
+  title: 'Implement audit logging',
+  prompt: 'Implement audit logging',
+  promptPreview: 'Implement audit logging',
 }
 
 const mockOnRunAction = vi.fn()
@@ -46,4 +49,4 @@ function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): Ta
 }
 
 export { baseTask, createTaskWorkspaceInfo, mockOnRunAction, secondaryTask }
-export type { Task }
+export type { TaskDetail as Task }

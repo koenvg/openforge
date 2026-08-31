@@ -1,6 +1,6 @@
 use super::task_labels::TaskLabelRow;
 use rusqlite::{OptionalExtension, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -40,6 +40,200 @@ pub struct TaskRow {
     pub source_ticket_url: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskReference {
+    pub id: String,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub title: String,
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskSummary {
+    pub id: String,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub title: String,
+    pub depends_on: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub prompt_preview: String,
+    pub labels: Vec<TaskLabelRow>,
+    pub source_ticket_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetail {
+    pub id: String,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub title: String,
+    pub depends_on: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub prompt_preview: String,
+    pub labels: Vec<TaskLabelRow>,
+    pub source_ticket_url: Option<String>,
+    pub prompt: String,
+    pub agent: Option<String>,
+    pub permission_mode: Option<String>,
+    pub worktree_source: Option<String>,
+    pub worktree_branch: Option<String>,
+    pub title_source: Option<String>,
+    pub title_generated_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CompletedTaskQuery {
+    pub search: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedTaskPage {
+    pub tasks: Vec<TaskSummary>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ActiveTasks {
+    pub tasks: Vec<TaskDetail>,
+    pub related: Vec<TaskReference>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TaskRead {
+    pub task: TaskDetail,
+    pub related: Vec<TaskReference>,
+}
+
+#[derive(Debug, Error)]
+pub enum TaskReadError {
+    #[error("project {0} does not exist")]
+    ProjectNotFound(String),
+    #[error("Completed Task search contains {requested} characters; maximum is {max}")]
+    SearchTooLong { requested: usize, max: usize },
+    #[error("Completed Task query contains {requested} Task Label filters; maximum is {max}")]
+    TooManyLabels { requested: usize, max: usize },
+    #[error("Completed Task Label filter contains {requested} characters; maximum is {max}")]
+    LabelNameTooLong { requested: usize, max: usize },
+    #[error("invalid Completed Task cursor")]
+    InvalidCursor,
+    #[error("database error: {0}")]
+    Database(#[from] rusqlite::Error),
+}
+
+fn is_image_reference_definition(line: &str) -> bool {
+    let Some((marker, value)) = line.split_once(':') else {
+        return false;
+    };
+    let image_number = marker
+        .strip_prefix("[image#")
+        .and_then(|marker| marker.strip_suffix(']'));
+    image_number
+        .is_some_and(|number| !number.is_empty() && number.chars().all(|ch| ch.is_ascii_digit()))
+        && value.trim_start().starts_with("data:image/")
+        && value.contains(";base64,")
+}
+
+pub(super) fn prompt_preview(prompt: &str) -> String {
+    let mut lines = prompt
+        .lines()
+        .filter(|line| !is_image_reference_definition(line))
+        .collect::<Vec<_>>();
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    lines.join("\n").chars().take(120).collect()
+}
+
+pub(super) fn resolved_projection_title(
+    task_id: &str,
+    explicit_title: Option<&str>,
+    preview: &str,
+) -> String {
+    if let Some(title) = explicit_title
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+    {
+        return title.to_string();
+    }
+    preview
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or(task_id)
+        .chars()
+        .take(120)
+        .collect()
+}
+
+fn resolved_title(task: &TaskRow) -> String {
+    let preview = prompt_preview(&task.initial_prompt);
+    resolved_projection_title(&task.id, task.title.as_deref(), &preview)
+}
+
+impl From<&TaskRow> for TaskReference {
+    fn from(task: &TaskRow) -> Self {
+        Self {
+            id: task.id.clone(),
+            status: task.status.clone(),
+            project_id: task.project_id.clone(),
+            title: resolved_title(task),
+            depends_on: task.depends_on.clone(),
+        }
+    }
+}
+
+impl From<&TaskRow> for TaskSummary {
+    fn from(task: &TaskRow) -> Self {
+        Self {
+            id: task.id.clone(),
+            status: task.status.clone(),
+            project_id: task.project_id.clone(),
+            title: resolved_title(task),
+            depends_on: task.depends_on.clone(),
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+            prompt_preview: prompt_preview(&task.initial_prompt),
+            labels: task.labels.clone(),
+            source_ticket_url: task.source_ticket_url.clone(),
+        }
+    }
+}
+
+impl From<&TaskRow> for TaskDetail {
+    fn from(task: &TaskRow) -> Self {
+        Self {
+            id: task.id.clone(),
+            status: task.status.clone(),
+            project_id: task.project_id.clone(),
+            title: resolved_title(task),
+            depends_on: task.depends_on.clone(),
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+            prompt_preview: prompt_preview(&task.initial_prompt),
+            labels: task.labels.clone(),
+            source_ticket_url: task.source_ticket_url.clone(),
+            prompt: task.initial_prompt.clone(),
+            agent: task.agent.clone(),
+            permission_mode: task.permission_mode.clone(),
+            worktree_source: task.worktree_source.clone(),
+            worktree_branch: task.worktree_branch.clone(),
+            title_source: task.title_source.clone(),
+            title_generated_at: task.title_generated_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,6 +280,18 @@ pub(crate) struct TaskDetailRelationships {
     pub(crate) dependents: Vec<TaskDetailRelationshipRow>,
 }
 
+impl From<&TaskRelationshipReferenceRow> for TaskReference {
+    fn from(task: &TaskRelationshipReferenceRow) -> Self {
+        Self {
+            id: task.id.clone(),
+            status: task.status.clone(),
+            project_id: task.project_id.clone(),
+            title: task.title.clone(),
+            depends_on: task.depends_on.clone(),
+        }
+    }
+}
+
 impl super::Database {
     /// Replace both prompt columns for a task that has never entered execution.
     ///
@@ -100,16 +306,17 @@ impl super::Database {
     ) -> std::result::Result<(), TaskInitialPromptUpdateError> {
         let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
+        let prompt_preview = prompt_preview(initial_prompt);
         let changed = conn.execute(
             "UPDATE tasks
-             SET initial_prompt = ?1, prompt = ?1, updated_at = ?2
-             WHERE id = ?3
+             SET initial_prompt = ?1, prompt = ?1, updated_at = ?2, prompt_preview = ?3
+             WHERE id = ?4
                AND status = 'backlog'
                AND execution_started_at IS NULL
                AND NOT EXISTS (
                    SELECT 1 FROM agent_sessions WHERE ticket_id = tasks.id
                )",
-            rusqlite::params![initial_prompt, now, id],
+            rusqlite::params![initial_prompt, now, prompt_preview, id],
         )?;
 
         if changed > 0 {
@@ -192,6 +399,151 @@ mod tests {
         sync::{Arc, Barrier},
         thread,
     };
+
+    #[test]
+    fn task_projections_serialize_exact_bounded_contracts() {
+        let label = super::TaskLabelRow {
+            id: 7,
+            project_id: "P-1".to_string(),
+            name: "feature".to_string(),
+        };
+        let task = super::TaskRow {
+            id: "P-1-42".to_string(),
+            initial_prompt: format!(
+                "{}\n[image#1]: data:image/png;base64,aGVsbG8=",
+                "Canonical authoring prompt ".repeat(8)
+            ),
+            status: "done".to_string(),
+            project_id: Some("P-1".to_string()),
+            created_at: 10,
+            updated_at: 20,
+            prompt: Some("legacy execution override".to_string()),
+            agent: Some("pi".to_string()),
+            permission_mode: Some("workspace-write".to_string()),
+            worktree_source: Some("main".to_string()),
+            worktree_branch: Some("task/P-1-42".to_string()),
+            title: Some("Projection contract".to_string()),
+            title_source: Some("manual".to_string()),
+            title_generated_at: None,
+            source_ticket_url: Some("https://example.com/tickets/42".to_string()),
+            depends_on: vec!["P-1-41".to_string()],
+            labels: vec![label.clone()],
+        };
+
+        let reference = super::TaskReference::from(&task);
+        assert_eq!(
+            serde_json::to_value(reference).expect("serialize reference"),
+            serde_json::json!({
+                "id": "P-1-42",
+                "status": "done",
+                "projectId": "P-1",
+                "title": "Projection contract",
+                "dependsOn": ["P-1-41"],
+            })
+        );
+
+        let summary = super::TaskSummary::from(&task);
+        let summary_json = serde_json::to_value(&summary).expect("serialize summary");
+        assert_eq!(
+            summary_json,
+            serde_json::json!({
+                "id": "P-1-42",
+                "status": "done",
+                "projectId": "P-1",
+                "title": "Projection contract",
+                "dependsOn": ["P-1-41"],
+                "createdAt": 10,
+                "updatedAt": 20,
+                "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
+                "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
+                "sourceTicketUrl": "https://example.com/tickets/42",
+            })
+        );
+        assert_eq!(summary.prompt_preview.chars().count(), 120);
+        assert!(!summary_json.to_string().contains("base64"));
+        assert!(!summary_json
+            .to_string()
+            .contains("legacy execution override"));
+
+        let detail = super::TaskDetail::from(&task);
+        assert_eq!(
+            serde_json::to_value(detail).expect("serialize detail"),
+            serde_json::json!({
+                "id": "P-1-42",
+                "status": "done",
+                "projectId": "P-1",
+                "title": "Projection contract",
+                "dependsOn": ["P-1-41"],
+                "createdAt": 10,
+                "updatedAt": 20,
+                "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
+                "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
+                "sourceTicketUrl": "https://example.com/tickets/42",
+                "prompt": task.initial_prompt,
+                "agent": "pi",
+                "permissionMode": "workspace-write",
+                "worktreeSource": "main",
+                "worktreeBranch": "task/P-1-42",
+                "titleSource": "manual",
+                "titleGeneratedAt": null,
+            })
+        );
+    }
+
+    #[test]
+    fn task_projection_fallback_title_uses_the_authoring_prompt() {
+        let task = super::TaskRow {
+            id: "T-1".to_string(),
+            initial_prompt: "Authoring title".to_string(),
+            status: "backlog".to_string(),
+            project_id: None,
+            created_at: 1,
+            updated_at: 2,
+            prompt: Some("Execution override".to_string()),
+            agent: None,
+            permission_mode: None,
+            worktree_source: None,
+            worktree_branch: None,
+            title: None,
+            title_source: None,
+            title_generated_at: None,
+            source_ticket_url: None,
+            depends_on: Vec::new(),
+            labels: Vec::new(),
+        };
+
+        assert_eq!(super::TaskReference::from(&task).title, "Authoring title");
+        assert_eq!(super::TaskDetail::from(&task).prompt, "Authoring title");
+    }
+    #[test]
+    fn explicit_projection_titles_are_not_truncated() {
+        let title = "x".repeat(200);
+        assert_eq!(
+            super::resolved_projection_title("T-1", Some(&title), "fallback"),
+            title
+        );
+        assert_eq!(
+            super::resolved_projection_title("T-1", None, &"y".repeat(200))
+                .chars()
+                .count(),
+            120
+        );
+    }
+
+    #[test]
+    fn prompt_preview_matches_unicode_image_and_trailing_blank_contract() {
+        let unicode = format!("{}😀z", "a".repeat(119));
+        let unicode_preview = super::prompt_preview(&unicode);
+        assert_eq!(unicode_preview.chars().count(), 120);
+        assert!(unicode_preview.ends_with('😀'));
+
+        let prompt = "[image#1]: data:image/png,not-base64\n[image#2]: data:image/png;base64,aaaa\nVisible\n\n   ";
+        assert_eq!(
+            super::prompt_preview(prompt),
+            "[image#1]: data:image/png,not-base64\nVisible"
+        );
+    }
+
     #[test]
     fn task_initial_prompt_update_error_preserves_sources_and_from_conversion() {
         let error = super::TaskInitialPromptUpdateError::from(rusqlite::Error::InvalidQuery);

@@ -9,7 +9,7 @@ import {
   saveFocusFilterStates,
   saveOutOfFocusTaskIds,
 } from './boardFilters'
-import type { Task } from './types'
+import type { TaskDetail } from './types'
 
 const ipc = vi.hoisted(() => ({
   getProjectConfig: vi.fn(),
@@ -18,24 +18,25 @@ const ipc = vi.hoisted(() => ({
 
 vi.mock('./ipc', () => ipc)
 
-function task(id: string, status: Task['status'] = 'doing'): Task {
+function task(id: string, status: TaskDetail['status'] = 'doing'): TaskDetail {
   return {
     id,
-    initial_prompt: id,
+    prompt: id,
+    promptPreview: id,
     status,
-    prompt: null,
     title: id,
-    title_source: null,
-    title_generated_at: null,
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'P-1',
-    created_at: 0,
-    updated_at: 0,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    projectId: 'P-1',
+    createdAt: 0,
+    updatedAt: 0,
+    labels: [],
   }
 }
 
@@ -45,14 +46,13 @@ beforeEach(() => {
 })
 
 describe('plain-text Task filtering', () => {
-  it('matches case-insensitive substrings across the Task title, prompts, and labels', () => {
-    const candidate = {
+  it('matches case-insensitive substrings across the Task title, prompt, and labels', () => {
+    const candidate: TaskDetail = {
       ...task('T-1'),
       title: 'Authentication overhaul',
-      initial_prompt: 'Build the login flow',
-      prompt: 'Include recovery codes',
-      labels: [{ id: 1, project_id: 'P-1', name: 'Security' }],
-    } as Task & { labels: Array<{ id: number; project_id: string; name: string }> }
+      prompt: 'Build the login flow with recovery codes',
+      labels: [{ id: 1, projectId: 'P-1', name: 'Security' }],
+    }
 
     expect(taskMatchesTextFilter(candidate, 'AUTH')).toBe(true)
     expect(taskMatchesTextFilter(candidate, 'login')).toBe(true)

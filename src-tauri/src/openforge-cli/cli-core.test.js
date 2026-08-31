@@ -19,8 +19,9 @@ describe('OpenForge CLI', () => {
       'openforge task update',
       'openforge task start',
       'openforge task delete',
-      'openforge task get',
-      'openforge task list',
+      'openforge task active',
+      'openforge task completed',
+      'openforge task detail',
       'openforge project labels list',
       'openforge task labels list',
       'openforge task labels add',
@@ -61,9 +62,10 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('openforge task start --task-id <id>');
     expect(stdout).toContain('openforge project list');
     expect(stdout).toContain('openforge project labels list --project-id <id>');
-    expect(stdout).toContain('task list prints compact rows by default');
-    expect(stdout).toContain('Pass --full to print complete TaskRow objects');
-    expect(stdout).toContain('task list excludes done tasks unless --state done is passed');
+    expect(stdout).toContain('task completed requires --project-id and returns a fixed page of at most 50');
+    expect(stdout).toContain('Repeat task completed with --cursor <nextCursor>');
+    expect(stdout).toContain('task detail requires --project-id and --task-id');
+    expect(stdout).toContain('deprecated version 1 compatibility commands');
     expect(stdout).toContain('Task creation hygiene:');
     expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
     expect(stdout).toContain('link prerequisites immediately with --depends-on or task dependencies link');
@@ -129,8 +131,9 @@ describe('OpenForge CLI', () => {
       'openforge task create --initial-prompt <text>',
       'openforge task update --task-id <id> --initial-prompt <text>',
       'openforge task start --task-id <id>',
-      'openforge task list --project-id <id>',
-      'openforge task get --task-id <id>',
+      'openforge task active --project-id <id>',
+      'openforge task completed --project-id <id>',
+      'openforge task detail --project-id <id> --task-id <id>',
       'openforge task labels list --task-id <id>',
       'openforge task labels add --task-id <id> --label <name>',
       'openforge task labels remove --task-id <id> --label-id <id>',
