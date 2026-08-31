@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 2,
+  "task": "KVG-4434",
+  "fixtureBytes": 1048576,
+  "presentationMode": "model",
+  "transportMode": "electron-ipc",
+  "acceptanceGateMiBPerSecond": 1,
+  "historicalSpotChecks": {
+    "provenanceAttestedInReport": false,
+    "note": "Optimization modes were supplied by the benchmark commands and encoded in output directory names, but these reports predate self-recorded build metadata.",
+    "Debug": {
+      "throughputMiBPerSecond": [0.07093819909318101, 0.11393886701674275, 0.07812300954168075],
+      "medianThroughputMiBPerSecond": 0.07812300954168075,
+      "medianDurationMs": 12800.326124999996
+    },
+    "ReleaseSafe": {
+      "throughputMiBPerSecond": [1.5057366684898723, 1.5855104411895529, 2.516933196636331],
+      "medianThroughputMiBPerSecond": 1.5855104411895529,
+      "medianDurationMs": 630.7117089999956
+    },
+    "ReleaseFast": {
+      "throughputMiBPerSecond": [2.228122617705217, 2.149066217296909, 2.3146350984017414],
+      "medianThroughputMiBPerSecond": 2.228122617705217,
+      "medianDurationMs": 448.8083340000012
+    },
+    "RawBypassReference": {
+      "throughputMiBPerSecond": [2.3485408894742714, 3.0144864946752445, 2.4401467625293587],
+      "medianThroughputMiBPerSecond": 2.4401467625293587,
+      "medianDurationMs": 409.8114160000114
+    }
+  },
+  "attestedReleaseFast": {
+    "provenanceAttestedInReport": true,
+    "sourceState": {
+      "revision": "78ce96156760ccd4ecd70450863914c4e4e0c8a5",
+      "trackedWorkingTreeDirty": true
+    },
+    "terminalModelBuild": {
+      "optimizeMode": "ReleaseFast",
+      "cpuTarget": "baseline"
+    },
+    "throughputMiBPerSecond": [2.639448093726385, 3.5460206998958537, 3.1671603477858885],
+    "medianThroughputMiBPerSecond": 3.1671603477858885,
+    "medianDurationMs": 315.7402499999989,
+    "passedAttempts": 3,
+    "totalAttempts": 3,
+    "passedAcceptanceGate": true,
+    "reportPaths": [
+      "ghostty-releasefast-attested-attempt-01/report.json",
+      "ghostty-releasefast-attested-attempt-02/report.json",
+      "ghostty-releasefast-attested-attempt-03/report.json"
+    ]
+  },
+  "comparisons": {
+    "attestedReleaseFastVsDebug": 40.54068534182778,
+    "attestedReleaseFastVsHistoricalRawPercent": 29.79384668252234
+  },
+  "decision": {
+    "dominantFactor": "ghostty-zig-debug-build-mode",
+    "keepGhosttyAuthoritative": true,
+    "adoptRawPresentation": false,
+    "adoptDirectWebSocket": false,
+    "replaceElectron": false
+  },
+  "conclusion": "Attested ReleaseFast Ghostty exceeds the 1 MiB/s gate while preserving the authoritative model and recovery path. The synthetic result does not justify raw presentation or a second WebSocket transport."
+}

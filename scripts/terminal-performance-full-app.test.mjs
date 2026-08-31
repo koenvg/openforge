@@ -62,27 +62,54 @@ function dependencies(harness) {
       fixture: { renderer: 'xterm-webgl', rows: 24, cols: 80 },
     })),
     sampleMemory: vi.fn(async ({ label, rootPid }) => ({ label, rootPid })),
-    createEnvironment: vi.fn(async () => ({ appRevision: 'abc123' })),
+    createEnvironment: vi.fn(async (_context, provenance) => ({ appRevision: 'abc123', ...provenance })),
+    createSourceState: vi.fn(async () => ({
+      revision: 'abc123',
+      trackedWorkingTreeDirty: true,
+    })),
     writeFile: vi.fn(async () => undefined),
     log: vi.fn(),
   }
 }
 
 describe('full-app terminal performance runner', () => {
-  it('parses the shared repository, retention, and output options strictly', () => {
-    expect(parseFullAppTerminalPerformanceOptions(['--', '--retain', '--output=artifacts/run'])).toEqual({
+  it('parses the standard desktop performance options strictly', () => {
+    expect(parseFullAppTerminalPerformanceOptions([
+      '--',
+      '--retain',
+      '--output=artifacts/run',
+    ])).toEqual({
       retainRuntime: true,
       outputDir: 'artifacts/run',
     })
-    expect(() => parseFullAppTerminalPerformanceOptions(['--wat'])).toThrow('Unknown desktop test option')
+    expect(() => parseFullAppTerminalPerformanceOptions(['--presentation=raw'])).toThrow(
+      'Unknown desktop test option',
+    )
   })
 
   it('writes a successful report, screenshot, child-log references, and concise summary', async () => {
     const harness = createHarness()
     const deps = dependencies(harness)
 
-    const result = await runFullAppTerminalPerformance({ outputDir: '/artifacts/run' }, deps)
+    const result = await runFullAppTerminalPerformance({
+      outputDir: '/artifacts/run',
+    }, deps)
 
+    expect(deps.createLifecycle).toHaveBeenCalledWith(expect.objectContaining({
+      ghosttyOptimizeMode: 'ReleaseFast',
+    }))
+    expect(result.report).not.toHaveProperty('experiment')
+    expect(result.report.environment).toMatchObject({
+      sourceState: { revision: 'abc123', trackedWorkingTreeDirty: true },
+      terminalModelBuild: { optimizeMode: 'ReleaseFast', cpuTarget: 'baseline' },
+    })
+    expect(deps.runScenario).toHaveBeenCalledWith(
+      harness.context,
+      expect.not.objectContaining({
+        presentationMode: expect.anything(),
+        transportMode: expect.anything(),
+      }),
+    )
     expect(result.exitCode).toBe(0)
     expect(result.report.status).toBe('passed')
     expect(result.report.schemaVersion).toBe(2)

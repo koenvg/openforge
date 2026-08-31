@@ -13,7 +13,13 @@ const manifest = {
   databasePath: '/run/app-data/openforge_dev.db',
 }
 
-function createHarness({ connectPlaywright = true, retainRuntime = false, repoPath = null, launchError = null } = {}) {
+function createHarness({
+  connectPlaywright = true,
+  retainRuntime = false,
+  repoPath = null,
+  launchError = null,
+  ghosttyOptimizeMode,
+} = {}) {
   const page = { screenshot: vi.fn(async () => undefined) }
   const browser = { close: vi.fn(async () => undefined) }
   const launcher = {
@@ -54,6 +60,7 @@ function createHarness({ connectPlaywright = true, retainRuntime = false, repoPa
       repoPath,
       retainRuntime,
       timeoutMs: 12_000,
+      ghosttyOptimizeMode,
     },
     {
       allocateLoopbackPort,
@@ -100,6 +107,19 @@ describe('desktop test lifecycle', () => {
       failureScreenshotPath: '/repo/artifacts/run-1/failure.png',
       reportPath: '/repo/artifacts/run-1/report.json',
     })
+  })
+
+  it('passes an explicit Ghostty optimization mode to Electron and the Rust sidecar build', async () => {
+    const harness = createHarness({ ghosttyOptimizeMode: 'ReleaseFast' })
+
+    await harness.lifecycle.start()
+
+    expect(harness.createElectronDevLauncher).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        LIBGHOSTTY_VT_SYS_OPTIMIZE: 'ReleaseFast',
+      }),
+    }))
+    await harness.lifecycle.shutdown()
   })
 
   it.each([

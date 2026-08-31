@@ -180,9 +180,24 @@ describe('electron dev script environment', () => {
     expect(cargoEnv).toMatchObject({
       PATH: '/usr/bin',
       CARGO_TARGET_DIR: '/repo/.cargo-target',
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: 'ReleaseSafe',
       GHOSTTY_SOURCE_DIR: '/cache/ghostty-source',
       GHOSTTY_ZIG_SYSTEM_DIR: '/cache/ghostty-system',
     })
+  })
+
+  it('preserves an explicit Ghostty optimization mode for specialized builds', async () => {
+    const cargoEnv = await prepareElectronDevCargoEnv(
+      { LIBGHOSTTY_VT_SYS_OPTIMIZE: 'ReleaseFast' },
+      {
+        prepareGhosttyVt: vi.fn(async () => ({
+          GHOSTTY_SOURCE_DIR: '/cache/ghostty-source',
+          GHOSTTY_ZIG_SYSTEM_DIR: '/cache/ghostty-system',
+        })),
+      },
+    )
+
+    expect(cargoEnv.LIBGHOSTTY_VT_SYS_OPTIMIZE).toBe('ReleaseFast')
   })
 
   it('resolves configurable renderer/debug ports and creates per-run isolation dirs', () => {

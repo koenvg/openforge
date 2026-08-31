@@ -110,12 +110,16 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
         ])
         const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
         let fixtureManifest = null
+        const ghosttyOptimizeEnv = options.ghosttyOptimizeMode
+          ? { LIBGHOSTTY_VT_SYS_OPTIMIZE: options.ghosttyOptimizeMode }
+          : {}
         launcher = createLauncher({
           captureOutput: true,
           chromiumDebugPort,
           desktopTest: true,
           env: {
             ...process.env,
+            ...ghosttyOptimizeEnv,
             OPENFORGE_BACKEND_PORT: String(backendPort),
             OPENFORGE_HTTP_PORT: String(backendPort),
           },

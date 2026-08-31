@@ -1,0 +1,733 @@
+{
+  "schemaVersion": 1,
+  "scenario": "full-app-terminal-performance",
+  "generatedAt": "2026-08-31T09:46:19.217Z",
+  "status": "passed",
+  "experiment": {
+    "presentationMode": "model",
+    "transportMode": "electron-ipc"
+  },
+  "performanceValuesAreInformational": true,
+  "checks": [
+    {
+      "name": "shell-ready:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "shell-ready:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 7,
+        "modelSequence": 7
+      }
+    },
+    {
+      "name": "shell-ready:expected-bytes",
+      "passed": true,
+      "message": "expected at least 27 received bytes, observed 605",
+      "evidence": {
+        "expectedBytes": 27,
+        "receivedByteDelta": 605
+      }
+    },
+    {
+      "name": "shell-ready:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 5,
+        "parsedGeneration": 5,
+        "renderFrame": 10,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 8251.20000000298,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-0:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-0:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 94,
+        "modelSequence": 94
+      }
+    },
+    {
+      "name": "echo-0:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-0:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 7,
+        "parsedGeneration": 7,
+        "renderFrame": 15,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 8500.09999999404,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-1:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-1:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 138,
+        "modelSequence": 138
+      }
+    },
+    {
+      "name": "echo-1:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-1:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 9,
+        "parsedGeneration": 9,
+        "renderFrame": 20,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 8650.70000000298,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-2:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-2:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 166,
+        "modelSequence": 166
+      }
+    },
+    {
+      "name": "echo-2:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-2:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 11,
+        "parsedGeneration": 11,
+        "renderFrame": 25,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 8834,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-3:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_3\\n'\nOPENFORGE_PERF_ECHO_3\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-3:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 191,
+        "modelSequence": 191
+      }
+    },
+    {
+      "name": "echo-3:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-3:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 13,
+        "parsedGeneration": 13,
+        "renderFrame": 30,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 8984,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-4:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_3\\n'\nOPENFORGE_PERF_ECHO_3\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_4\\n'\nOPENFORGE_PERF_ECHO_4\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-4:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 236,
+        "modelSequence": 236
+      }
+    },
+    {
+      "name": "echo-4:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-4:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 14,
+        "parsedGeneration": 14,
+        "renderFrame": 33,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 9133.89999999106,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-5:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_3\\n'\nOPENFORGE_PERF_ECHO_3\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_4\\n'\nOPENFORGE_PERF_ECHO_4\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_5\\n'\nOPENFORGE_PERF_ECHO_5\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-5:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 256,
+        "modelSequence": 256
+      }
+    },
+    {
+      "name": "echo-5:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-5:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 16,
+        "parsedGeneration": 16,
+        "renderFrame": 37,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 9317.29999999702,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-6:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_3\\n'\nOPENFORGE_PERF_ECHO_3\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_4\\n'\nOPENFORGE_PERF_ECHO_4\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_5\\n'\nOPENFORGE_PERF_ECHO_5\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_6\\n'\nOPENFORGE_PERF_ECHO_6\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-6:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 299,
+        "modelSequence": 299
+      }
+    },
+    {
+      "name": "echo-6:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-6:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 18,
+        "parsedGeneration": 18,
+        "renderFrame": 42,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 9517.29999999702,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "echo-7:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "➜  repository git:(main) printf 'OPENFORGE_PERF_SHELL_READY\\n'\nOPENFORGE_PERF_SHELL_READY\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_0\\n'\nOPENFORGE_PERF_ECHO_0\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_1\\n'\nOPENFORGE_PERF_ECHO_1\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_2\\n'\nOPENFORGE_PERF_ECHO_2\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_3\\n'\nOPENFORGE_PERF_ECHO_3\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_4\\n'\nOPENFORGE_PERF_ECHO_4\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_5\\n'\nOPENFORGE_PERF_ECHO_5\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_6\\n'\nOPENFORGE_PERF_ECHO_6\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_7\\n'\nOPENFORGE_PERF_ECHO_7\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "echo-7:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 343,
+        "modelSequence": 343
+      }
+    },
+    {
+      "name": "echo-7:expected-bytes",
+      "passed": true,
+      "message": "expected at least 22 received bytes, observed 672",
+      "evidence": {
+        "expectedBytes": 22,
+        "receivedByteDelta": 672
+      }
+    },
+    {
+      "name": "echo-7:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 20,
+        "parsedGeneration": 20,
+        "renderFrame": 47,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 9667.29999999702,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "bulk-input:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "OPENFORGE_PERF_ECHO_5\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_6\\n'\nOPENFORGE_PERF_ECHO_6\n➜  repository git:(main) printf 'OPENFORGE_PERF_ECHO_7\\n'\nOPENFORGE_PERF_ECHO_7\n➜  repository git:(main) printf %s 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nbbbbbbbbbbbbb' >/dev/null; printf 'OPENFORGE_PERF_BULK_INPUT_DONE\\n'\nOPENFORGE_PERF_BULK_INPUT_DONE\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "bulk-input:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 2420,
+        "modelSequence": 2420
+      }
+    },
+    {
+      "name": "bulk-input:expected-bytes",
+      "passed": true,
+      "message": "expected at least 31 received bytes, observed 2929",
+      "evidence": {
+        "expectedBytes": 31,
+        "receivedByteDelta": 2929
+      }
+    },
+    {
+      "name": "bulk-input:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 39,
+        "parsedGeneration": 39,
+        "renderFrame": 68,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 10083.89999999106,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "pty-output:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nOPENFORGE_PERF_PTY_OUTPUT_DONE\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "pty-output:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 3472,
+        "modelSequence": 3472
+      }
+    },
+    {
+      "name": "pty-output:expected-bytes",
+      "passed": true,
+      "message": "expected at least 1048608 received bytes, observed 1049465",
+      "evidence": {
+        "expectedBytes": 1048608,
+        "receivedByteDelta": 1049465
+      }
+    },
+    {
+      "name": "pty-output:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 58,
+        "parsedGeneration": 58,
+        "renderFrame": 84,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 10550.59999999404,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    },
+    {
+      "name": "view-recovery:completion-marker",
+      "passed": true,
+      "message": "completion marker was not presented",
+      "evidence": {
+        "markerFound": true,
+        "visibleText": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nOPENFORGE_PERF_PTY_OUTPUT_DONE\n➜  repository git:(main) "
+      }
+    },
+    {
+      "name": "view-recovery:sequence-continuity",
+      "passed": true,
+      "message": "output sequence is incomplete",
+      "evidence": {
+        "firstSequence": 1,
+        "lastSequence": 3472,
+        "modelSequence": 3472
+      }
+    },
+    {
+      "name": "view-recovery:expected-bytes",
+      "passed": true,
+      "message": "expected at least 0 received bytes, observed 0",
+      "evidence": {
+        "expectedBytes": 0,
+        "receivedByteDelta": 0
+      }
+    },
+    {
+      "name": "view-recovery:presentation-drain",
+      "passed": true,
+      "message": "no presented renderer frame covered the completed write generation",
+      "evidence": {
+        "writeGeneration": 58,
+        "parsedGeneration": 58,
+        "renderFrame": 86,
+        "renderedRows": {
+          "start": 0,
+          "end": 26
+        },
+        "renderer": "xterm-webgl",
+        "presentedAt": 10667.09999999404,
+        "devicePixelRatio": 2,
+        "geometry": {
+          "cols": 109,
+          "rows": 27
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "shellReady": {
+      "durationMs": 8140.65258400001,
+      "unit": "ms"
+    },
+    "driverToPaintedEcho": {
+      "samples": [
+        182.43083399999887,
+        148.59058399999049,
+        177.98704199999338,
+        148.64258299999346,
+        148.51350000000093,
+        212.03983300000255,
+        154.33041699999012,
+        146.53304199999548
+      ],
+      "warmupSamples": [
+        182.43083399999887,
+        148.59058399999049
+      ],
+      "measuredSamples": [
+        177.98704199999338,
+        148.64258299999346,
+        148.51350000000093,
+        212.03983300000255,
+        154.33041699999012,
+        146.53304199999548
+      ],
+      "median": 151.4864999999918,
+      "p95": 212.03983300000255,
+      "unit": "ms"
+    },
+    "bulkInput": {
+      "bytes": 2114,
+      "durationMs": 415.1079580000078,
+      "bytesPerSecond": 5092.651102583681
+    },
+    "ptyOutput": {
+      "bytes": 1048576,
+      "durationMs": 465.31837500000256,
+      "bytesPerSecond": 2253459.2578683235
+    },
+    "viewRecovery": {
+      "durationMs": 116.64845799999603,
+      "unit": "ms"
+    }
+  },
+  "environment": {
+    "operatingSystem": {
+      "platform": "darwin",
+      "release": "25.6.0",
+      "arch": "arm64"
+    },
+    "cpu": {
+      "model": "Apple M5",
+      "logicalCores": 10
+    },
+    "totalMemoryBytes": 34359738368,
+    "runtime": {
+      "node": "24.14.0",
+      "electron": "43.4.1",
+      "chromium": "150.0.7871.224"
+    },
+    "appRevision": "78ce96156760ccd4ecd70450863914c4e4e0c8a5"
+  },
+  "memory": {
+    "afterShellReady": {
+      "capturedAt": "2026-08-31T09:46:16.515Z",
+      "native": {
+        "app": {
+          "available": true,
+          "bytes": 144900096
+        },
+        "processTree": {
+          "available": true,
+          "bytes": 1058160640
+        },
+        "renderer": {
+          "available": true,
+          "bytes": 331431936
+        },
+        "gpu": {
+          "available": true,
+          "bytes": 116228096
+        }
+      },
+      "javascriptHeap": {
+        "available": true,
+        "bytes": 80504367
+      },
+      "processCount": 12
+    },
+    "afterWorkload": {
+      "capturedAt": "2026-08-31T09:46:18.926Z",
+      "native": {
+        "app": {
+          "available": true,
+          "bytes": 144900096
+        },
+        "processTree": {
+          "available": true,
+          "bytes": 1090240512
+        },
+        "renderer": {
+          "available": true,
+          "bytes": 357744640
+        },
+        "gpu": {
+          "available": true,
+          "bytes": 116391936
+        }
+      },
+      "javascriptHeap": {
+        "available": true,
+        "bytes": 78498099
+      },
+      "processCount": 9
+    }
+  },
+  "fixture": {
+    "cols": 109,
+    "rows": 27,
+    "renderer": "xterm-webgl",
+    "devicePixelRatio": 2,
+    "terminalKey": "FZW-1-shell-0",
+    "workspacePath": "/private/var/folders/5f/jlmxmscj0gnb0h9z6j5by_rr0000gn/T/.ctx-mode-lDkg5Y/openforge-desktop-test-LUCoWR/repository"
+  },
+  "artifacts": {
+    "report": "/Users/koen/.openforge/worktrees/openforge/KVG-4434/artifacts/terminal-experiment/ghostty-releasefast-model-electron-ipc-attempt-02/report.json",
+    "childLog": "/Users/koen/.openforge/worktrees/openforge/KVG-4434/artifacts/terminal-experiment/ghostty-releasefast-model-electron-ipc-attempt-02/children.log",
+    "screenshot": "/Users/koen/.openforge/worktrees/openforge/KVG-4434/artifacts/terminal-experiment/ghostty-releasefast-model-electron-ipc-attempt-02/terminal-performance.png"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 2,
+  "task": "KVG-4434",
+  "fixtureBytes": 1048576,
+  "acceptanceGateMiBPerSecond": 1,
+  "originalModelCellsGhosttyOptimizeMode": "Debug",
+  "supersededBy": "ghostty-optimized-aggregate.json",
+  "transportIsolation": {
+    "websocketCellsSuppressTerminalDataOnSse": true,
+    "websocketEndpointExperimentGated": true,
+    "rawSnapshotExperimentGated": true,
+    "modelProducerStillSerializesBase64BeforeWebsocketDecoding": true
+  },
+  "cells": {
+    "A": {
+      "presentationMode": "model",
+      "transportMode": "electron-ipc",
+      "successfulThroughputMiBPerSecond": [0.07093819909318101, 0.11393886701674275, 0.07812300954168075],
+      "medianThroughputMiBPerSecond": 0.07812300954168075,
+      "medianEchoMs": 132.75139550000313,
+      "medianRecoveryMs": 114.99633300000278,
+      "passedAcceptanceGate": false,
+      "successfulRuns": 3,
+      "attempts": 4
+    },
+    "B": {
+      "presentationMode": "model",
+      "transportMode": "websocket",
+      "successfulThroughputMiBPerSecond": [0.05012387070313433, 0.023337964674629796, 0.023139600958044272],
+      "medianThroughputMiBPerSecond": 0.023337964674629796,
+      "medianEchoMs": 151.34016599999813,
+      "medianRecoveryMs": 146.32966700000543,
+      "passedAcceptanceGate": false,
+      "successfulRuns": 3,
+      "attempts": 3
+    },
+    "C": {
+      "presentationMode": "raw",
+      "transportMode": "electron-ipc",
+      "successfulThroughputMiBPerSecond": [2.3485408894742714, 3.0144864946752445, 2.4401467625293587],
+      "medianThroughputMiBPerSecond": 2.4401467625293587,
+      "medianEchoMs": 179.8732289999607,
+      "medianRecoveryMs": 149.26124999998137,
+      "passedAcceptanceGate": true,
+      "successfulRuns": 3,
+      "attempts": 3
+    },
+    "D": {
+      "presentationMode": "raw",
+      "transportMode": "websocket",
+      "successfulThroughputMiBPerSecond": [2.743267533171776, 2.4181399184119527, 3.212103638215538],
+      "medianThroughputMiBPerSecond": 2.743267533171776,
+      "medianEchoMs": 170.91108349999922,
+      "medianRecoveryMs": 149.58683299999757,
+      "passedAcceptanceGate": true,
+      "successfulRuns": 3,
+      "attempts": 3
+    }
+  },
+  "decision": {
+    "dominantFactor": "ghostty-zig-debug-build-mode",
+    "keepGhosttyAuthoritative": true,
+    "adoptRawPresentation": false,
+    "adoptDirectWebSocket": false,
+    "replaceElectron": false
+  }
+}
