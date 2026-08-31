@@ -18,6 +18,76 @@ const sourceDir = join(cacheRoot, GHOSTTY_REVISION)
 const systemDir = join(cacheRoot, `zig-system-${GHOSTTY_REVISION}`)
 const fetchCacheDir = join(cacheRoot, `zig-fetch-${GHOSTTY_REVISION}`)
 const repositoryRoot = join(import.meta.dirname, '..')
+const DEFAULT_DOWNLOAD_ATTEMPTS = 4
+const DOWNLOAD_RETRY_BASE_MS = 1_000
+
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+
+function errorMessage(error) {
+  const messages = []
+  const pending = [error]
+  const seen = new Set()
+
+  while (pending.length > 0) {
+    const current = pending.shift()
+    if (current instanceof Error) {
+      if (seen.has(current)) continue
+      seen.add(current)
+      if (current.message && !messages.includes(current.message)) messages.push(current.message)
+      if (current instanceof AggregateError) pending.push(...current.errors)
+      if (current.cause !== undefined) pending.push(current.cause)
+    } else if (current !== undefined && current !== null) {
+      const message = String(current)
+      if (message && !messages.includes(message)) messages.push(message)
+    }
+  }
+
+  return messages.join(': ')
+}
+
+function isRetryableStatus(status) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+export async function fetchWithRetry(
+  url,
+  { fetchImpl = fetch, maxAttempts = DEFAULT_DOWNLOAD_ATTEMPTS, sleep: wait = sleep } = {},
+) {
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error(`Download attempts must be a positive integer, found ${maxAttempts}`)
+  }
+
+  let lastError
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let response
+    try {
+      response = await fetchImpl(url, { redirect: 'follow' })
+    } catch (error) {
+      lastError = error
+    }
+
+    if (response?.ok && response.body) return response
+
+    if (response) {
+      const missingBody = response.ok && !response.body
+      const failure = new Error(missingBody ? 'HTTP response had no body' : `HTTP ${response.status}`)
+      if (!missingBody && !isRetryableStatus(response.status)) {
+        throw new Error(`Failed to download ${url}: ${failure.message}`, { cause: failure })
+      }
+      lastError = failure
+      await response.body?.cancel?.()
+    }
+
+    if (attempt < maxAttempts) {
+      await wait(DOWNLOAD_RETRY_BASE_MS * (2 ** (attempt - 1)))
+    }
+  }
+
+  throw new Error(
+    `Failed to download ${url} after ${maxAttempts} attempts: ${errorMessage(lastError)}`,
+    { cause: lastError },
+  )
+}
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...options }).trim()
@@ -90,10 +160,7 @@ function downloadableUrl(url) {
 }
 
 async function download(url, destination) {
-  const response = await fetch(url, { redirect: 'follow' })
-  if (!response.ok || !response.body) {
-    throw new Error(`Failed to download ${url}: HTTP ${response.status}`)
-  }
+  const response = await fetchWithRetry(url)
   await pipeline(Readable.fromWeb(response.body), createWriteStream(destination))
 }
 
