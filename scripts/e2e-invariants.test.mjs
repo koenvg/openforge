@@ -45,13 +45,17 @@ describe('invariant package commands', () => {
   it('runs terminal races on pull requests and keeps the macOS idle gate scheduled or manual', async () => {
     const pullRequestWorkflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
     const idleWorkflow = await readFile(new URL('../.github/workflows/live-electron-idle.yml', import.meta.url), 'utf8')
+    const pullRequestJob = pullRequestWorkflow.slice(
+      pullRequestWorkflow.indexOf('  live-electron-terminal-invariants:'),
+    )
 
-    expect(pullRequestWorkflow).toContain('live-electron-terminal-invariants:')
-    expect(pullRequestWorkflow).toContain('name: Live Electron Terminal Invariants')
-    expect(pullRequestWorkflow).toContain('--scenario first-attachment')
-    expect(pullRequestWorkflow).toContain('--scenario detach-during-recovery')
-    expect(pullRequestWorkflow).toContain('artifacts/desktop-test/ci-terminal-invariants')
-    expect(pullRequestWorkflow).toContain('name: live-electron-terminal-invariants')
+    expect(pullRequestJob).toContain('live-electron-terminal-invariants:')
+    expect(pullRequestJob).toContain('name: Live Electron Terminal Invariants')
+    expect(pullRequestJob).toContain('--scenario first-attachment')
+    expect(pullRequestJob).toContain('--scenario detach-during-recovery')
+    expect(pullRequestJob).toContain('artifacts/desktop-test/ci-terminal-invariants')
+    expect(pullRequestJob).toContain('name: live-electron-terminal-invariants')
+    expect(pullRequestJob).toContain('uses: oven-sh/setup-bun@v2')
 
     expect(idleWorkflow).toContain('schedule:')
     expect(idleWorkflow).toContain('workflow_dispatch:')
@@ -60,5 +64,6 @@ describe('invariant package commands', () => {
     expect(idleWorkflow).toContain('--scenario idle-resources')
     expect(idleWorkflow).toContain('artifacts/desktop-test/ci-idle-resources')
     expect(idleWorkflow).toContain('name: live-electron-idle-invariant')
+    expect(idleWorkflow).toContain('uses: oven-sh/setup-bun@v2')
   })
 })
