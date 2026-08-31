@@ -49,6 +49,13 @@ export interface DesktopTerminalTransportPort {
   resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void>
 }
 
+export interface DesktopTerminalTransportOptions {
+  afterReadReplay?(
+    shellSessionKey: string,
+    details: { ptyInstanceId: number | null; watermark: number | null },
+  ): Promise<void> | undefined
+}
+
 function decodeBase64(value: string): Uint8Array {
   const binary = atob(value)
   return Uint8Array.from(binary, character => character.charCodeAt(0))
@@ -56,6 +63,7 @@ function decodeBase64(value: string): Uint8Array {
 
 export function createDesktopTerminalTransport(
   port: DesktopTerminalTransportPort,
+  options: DesktopTerminalTransportOptions = {},
 ): TerminalTransport {
   const activeSubscriptions = new Set<TerminalTransportDisposable>()
   let disposed = false
@@ -113,6 +121,9 @@ export function createDesktopTerminalTransport(
           ensureActive()
           await modelOutputLifecycle.setEnabled(enabled)
         },
+        snapshot() {
+          return modelOutputLifecycle.snapshot()
+        },
         dispose() {
           if (!active) return
           active = false
@@ -150,6 +161,11 @@ export function createDesktopTerminalTransport(
     async readReplay(shellSessionKey) {
       ensureActive()
       const replay = await port.getPtyBuffer(shellSessionKey)
+      const checkpoint = options.afterReadReplay?.(shellSessionKey, {
+        ptyInstanceId: replay.snapshot?.instanceId ?? replay.instanceId,
+        watermark: replay.snapshot?.watermark ?? null,
+      })
+      if (checkpoint) await checkpoint
       return {
         historicalData: replay.buffer,
         isLive: replay.isLive,

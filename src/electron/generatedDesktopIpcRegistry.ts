@@ -154,6 +154,7 @@ export const desktopCommandContracts = [
   {"functionName":"killPty","moduleName":"terminal","ipcCommand":"pty_kill","payloadKeys":["shellSessionKey"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"killShellsForTask","moduleName":"terminal","ipcCommand":"pty_kill_shells_for_task","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getPtyBuffer","moduleName":"terminal","ipcCommand":"get_pty_buffer","payloadKeys":["shellSessionKey"],"owner":"rust-sidecar","domain":"agent-session-pty"},
+  {"functionName":"emitTerminalFixtureOutput","moduleName":"terminal","ipcCommand":"e2e_emit_terminal_fixture","payloadKeys":["shellSessionKey","marker","byteCount"],"owner":"rust-sidecar","domain":"agent-session-pty"},
 ] as const
 
 const internalDesktopCommandContracts = [

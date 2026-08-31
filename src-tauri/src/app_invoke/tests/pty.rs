@@ -5,6 +5,122 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+static E2E_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+struct EnvironmentRestore {
+    key: &'static str,
+    original: Option<std::ffi::OsString>,
+}
+
+impl EnvironmentRestore {
+    fn set(key: &'static str, value: Option<&str>) -> Self {
+        let original = std::env::var_os(key);
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvironmentRestore {
+    fn drop(&mut self) {
+        match &self.original {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
+#[tokio::test]
+async fn e2e_fixture_output_is_gated_bounded_and_fixed() {
+    let _environment_lock = E2E_ENV_LOCK.lock().await;
+    let environment = EnvironmentRestore::set("OPENFORGE_E2E", None);
+    let (state, _database_dir) = test_state("app_invoke_e2e_fixture_output");
+    let request = json!({
+        "shellSessionKey": "T-e2e-shell-0",
+        "marker": "fixture-complete",
+        "byteCount": 32,
+    });
+
+    let missing_flag = invoke(&state, "e2e_emit_terminal_fixture", request.clone())
+        .await
+        .expect_err("fixture output must require OPENFORGE_E2E=1");
+    assert_eq!(missing_flag.0, StatusCode::FORBIDDEN);
+
+    std::env::set_var("OPENFORGE_E2E", "1");
+    for (payload, expected) in [
+        (
+            json!({ "shellSessionKey": "T-e2e-shell-0", "marker": "$(whoami)", "byteCount": 32 }),
+            "marker",
+        ),
+        (
+            json!({ "shellSessionKey": "T-e2e-shell-0", "marker": "fixture-complete", "byteCount": 67_108_865_u64 }),
+            "byteCount",
+        ),
+        (
+            json!({
+                "shellSessionKey": "T-e2e-shell-0",
+                "marker": "fixture-complete",
+                "byteCount": 32,
+                "command": "rm -rf /",
+            }),
+            "command",
+        ),
+    ] {
+        let error = invoke(&state, "e2e_emit_terminal_fixture", payload)
+            .await
+            .expect_err("invalid fixture output must be rejected");
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert!(
+            error.1.contains(expected),
+            "expected {expected:?} in {:?}",
+            error.1
+        );
+    }
+
+    let unknown_terminal = invoke(&state, "e2e_emit_terminal_fixture", request.clone())
+        .await
+        .expect_err("unknown terminal must be rejected");
+    assert_eq!(unknown_terminal.0, StatusCode::NOT_FOUND);
+
+    let repository = tempfile::tempdir().expect("fixture repository");
+    std::fs::write(
+        repository.path().join("terminal-output.mjs"),
+        "const n=Number(process.argv[2].split('=')[1]); const m=process.argv[3].split('=')[1]; process.stdout.write('x'.repeat(n)+'\\n'+m+'\\n');\n",
+    )
+    .expect("fixture output generator");
+    invoke_ok(
+        &state,
+        "pty_spawn_shell",
+        json!({
+            "taskId": "T-e2e",
+            "cwd": repository.path(),
+            "cols": 80,
+            "rows": 24,
+            "terminalIndex": 0,
+        }),
+    )
+    .await;
+
+    let receipt = invoke(&state, "e2e_emit_terminal_fixture", request)
+        .await
+        .expect("fixed fixture output invocation should succeed");
+    assert_eq!(receipt["shellSessionKey"], "T-e2e-shell-0");
+    assert_eq!(receipt["marker"], "fixture-complete");
+    assert_eq!(receipt["byteCount"], 32);
+    assert!(receipt["ptyInstanceId"].as_u64().is_some());
+    state
+        .pty_manager
+        .as_ref()
+        .expect("PTY manager")
+        .kill_shells_for_task("T-e2e")
+        .await
+        .expect("fixture terminal cleanup");
+
+    drop(environment);
+}
+
 #[tokio::test]
 async fn handles_commands_that_do_not_require_spawn() {
     let (state, _temp_dir) = test_state("app_invoke_pty_commands");

@@ -29,6 +29,8 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "electron:test-app": "node scripts/desktop-test-app.mjs",
     "performance:terminal:full-app": "node scripts/terminal-performance-full-app.mjs",
+    "e2e:dev": "node scripts/e2e-invariants.mjs --dev",
+    "e2e:invariants": "node scripts/e2e-invariants.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build --configLoader native",
     "lint": "node scripts/check-svelte-unused-imports.mjs && node scripts/check-plugin-import-boundaries.mjs",
     "markdown:visual": "RUN_MARKDOWN_VISUALS=1 vitest run packages/pr-review-ui/src/RichMarkdownDiff.visual.test.ts",

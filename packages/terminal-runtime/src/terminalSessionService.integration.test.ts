@@ -44,4 +44,28 @@ describe('host-owned terminal session service', () => {
     expect(runtime.hasTerminal('T-1')).toBe(false)
     expect(runtime.hasTerminal('T-1-shell-0')).toBe(true)
   })
+
+  it('can hold acquisition after the runtime entry exists and is inert without a hook', async () => {
+    const runtime = createTerminalRuntime({ ...createHost(), createTerminalView: createFakeTerminalView })
+    let releaseCheckpoint!: () => void
+    const afterAcquire = vi.fn(() => new Promise<void>(resolve => { releaseCheckpoint = resolve }))
+    const service = createTerminalSessionService(runtime, { afterAcquire })
+    const client = service.createClient('agent')
+
+    let returned = false
+    const acquisition = client.acquire('T-gated-shell-0').then((entry) => {
+      returned = true
+      return entry
+    })
+    await vi.waitFor(() => expect(afterAcquire).toHaveBeenCalledOnce())
+
+    expect(runtime._getPool().has('T-gated-shell-0')).toBe(true)
+    expect(returned).toBe(false)
+
+    releaseCheckpoint()
+    await expect(acquisition).resolves.toBe(runtime._getPool().get('T-gated-shell-0'))
+
+    const ungatedService = createTerminalSessionService(runtime)
+    await expect(ungatedService.createClient('terminal-plugin').acquire('T-ungated-shell-0')).resolves.toBeDefined()
+  })
 })

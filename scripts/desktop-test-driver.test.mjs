@@ -14,7 +14,10 @@ function createPage() {
   const project = locator('project')
   const task = locator('task')
   const backlog = locator('backlog')
+  const backToTaskBoard = locator('back-to-task-board')
   const terminal = locator('terminal')
+  const visibleTerminalText = locator('visible-terminal-text')
+  terminal.getByText = vi.fn(() => visibleTerminalText)
   const terminalInput = {
     press: vi.fn(async () => undefined),
     fill: vi.fn(async () => undefined),
@@ -22,7 +25,10 @@ function createPage() {
   terminal.getByRole = vi.fn(() => terminalInput)
   const shellTab = locator('shell-tab')
   const terminalTab = locator('terminal-tab')
-  const taskWorkbenchTabs = { getByRole: vi.fn(() => terminalTab) }
+  const agentTab = locator('agent-tab')
+  const taskWorkbenchTabs = {
+    getByRole: vi.fn((_role, options) => options?.name === 'agent' ? agentTab : terminalTab),
+  }
   const newShell = locator('new-shell')
   const page = {
     keyboard: {
@@ -36,6 +42,7 @@ function createPage() {
       if (role === 'navigation' && options?.name === 'Task workbench tabs') return taskWorkbenchTabs
       if (role === 'tab' && String(options?.name).includes('Shell 1')) return shellTab
       if (role === 'button' && String(options?.name).includes('Backlog')) return backlog
+      if (role === 'button' && options?.name === 'Back to task board') return backToTaskBoard
       if (role === 'button' && String(options?.name).includes('Terminal performance fixture')) return task
       if (role === 'button' && options?.name === 'Open new shell') return newShell
       if (role === 'region') return terminal
@@ -44,7 +51,10 @@ function createPage() {
     getByText: vi.fn(() => project),
     waitForFunction: vi.fn(async () => undefined),
   }
-  return { backlog, newShell, page, project, shellTab, task, taskWorkbenchTabs, terminal, terminalInput, terminalTab }
+  return {
+    agentTab, backToTaskBoard, backlog, newShell, page, project, shellTab, task, taskWorkbenchTabs, terminal,
+    terminalInput, terminalTab, visibleTerminalText,
+  }
 }
 
 const manifest = {
@@ -110,5 +120,76 @@ describe('desktop app driver', () => {
     const missingDriver = createDesktopAppDriver(missing.page)
     await missingDriver.verifyDesktopBridge()
     await expect(missingDriver.openSeededTerminal(manifest)).rejects.toThrow('No observed shell terminal for task T-1')
+  })
+
+  it('attaches and detaches the terminal through normal task workbench controls', async () => {
+    const harness = createPage()
+    harness.page.evaluate.mockReset().mockResolvedValueOnce(['T-1-shell-0'])
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    const attached = await driver.attachTerminalView('T-1')
+    await driver.detachTerminalView(attached.region)
+
+    expect(harness.taskWorkbenchTabs.getByRole).toHaveBeenCalledWith('button', { name: 'Terminal' })
+    expect(harness.terminalTab.click).toHaveBeenCalledOnce()
+    expect(attached).toEqual({ region: harness.terminal, terminalKey: 'T-1-shell-0' })
+    expect(harness.page.getByRole).toHaveBeenCalledWith('button', { name: 'Back to task board' })
+    expect(harness.backToTaskBoard.click).toHaveBeenCalledOnce()
+    expect(harness.terminal.waitFor).toHaveBeenLastCalledWith({ state: 'hidden', timeout: 2_000 })
+  })
+
+  it('falls back to project navigation when back navigation does not detach the view', async () => {
+    const harness = createPage()
+    harness.terminal.waitFor
+      .mockRejectedValueOnce(new Error('terminal remained visible'))
+      .mockResolvedValueOnce(undefined)
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.detachTerminalView(harness.terminal, { projectName: manifest.projectName })
+
+    expect(harness.backToTaskBoard.click).toHaveBeenCalledOnce()
+    expect(harness.page.getByText).toHaveBeenCalledWith('Desktop Test Project', { exact: true })
+    expect(harness.project.click).toHaveBeenCalledOnce()
+    expect(harness.terminal.waitFor).toHaveBeenLastCalledWith({ state: 'hidden', timeout: 8_000 })
+  })
+
+  it('uses only bounded gate, marker, visible-output, and diagnostic controls', async () => {
+    const harness = createPage()
+    harness.page.evaluate.mockReset()
+      .mockResolvedValueOnce({ id: 'gate-1', state: 'armed' })
+      .mockResolvedValueOnce({ id: 'gate-1', state: 'reached' })
+      .mockResolvedValueOnce({ operationId: 'output-1', marker: 'fixture-complete', sequenceBaseline: 4 })
+      .mockResolvedValueOnce({
+        terminal: { lifecycle: { attachmentGeneration: 1 }, output: { sequenceContinuous: true } },
+        gates: [{ id: 'gate-1', state: 'reached' }],
+      })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await expect(driver.armTerminalGate('acquisition', 'T-1-shell-0', { timeoutMs: 5_000 }))
+      .resolves.toEqual({ id: 'gate-1', state: 'armed' })
+    await expect(driver.waitForTerminalGate('gate-1', 'reached'))
+      .resolves.toEqual({ id: 'gate-1', state: 'reached' })
+    await expect(driver.emitTerminalFixtureOutput('T-1-shell-0', 'fixture-complete', 32))
+      .resolves.toMatchObject({ operationId: 'output-1', marker: 'fixture-complete' })
+    await expect(driver.captureTerminalDiagnostics('T-1-shell-0')).resolves.toMatchObject({
+      terminal: { output: { sequenceContinuous: true } },
+      gates: [{ id: 'gate-1' }],
+    })
+    await driver.resumeTerminalGate('gate-1')
+    await driver.cancelTerminalGate('gate-2')
+    await driver.waitForVisibleTerminalText(harness.terminal, 'fixture-complete')
+
+    expect(harness.terminal.getByText).toHaveBeenCalledWith('fixture-complete', { exact: false })
+    expect(harness.visibleTerminalText.waitFor).toHaveBeenCalledWith({ state: 'visible', timeout: 8_000 })
+    expect(harness.page.evaluate.mock.calls.map(([, argument]) => argument)).toEqual([
+      { kind: 'acquisition', key: 'T-1-shell-0', options: { timeoutMs: 5_000 } },
+      { id: 'gate-1', state: 'reached' },
+      { key: 'T-1-shell-0', marker: 'fixture-complete', byteCount: 32 },
+      'T-1-shell-0',
+      'gate-1',
+      'gate-2',
+    ])
   })
 })

@@ -17,6 +17,14 @@ __pycache__/
 # Local screenshot scratch output (scripts/capture-screenshots.mjs)
 /screenshots/
 
+# Live Electron invariant reports and Playwright runtime output
+/artifacts/desktop-test/
+/artifacts/terminal-presentation/
+/playwright-report/
+/test-results/
+/openforge-desktop-test-*/
+/.openforge-desktop-test-*/
+
 # Babysitter (a5c) local orchestration workspace — per-developer, not shared
 # (covers .a5c/processes and .a5c/cache)
 .a5c/

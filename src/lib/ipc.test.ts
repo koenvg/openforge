@@ -19,6 +19,7 @@ import {
   checkPiInstalled,
   createTask,
   deleteTaskLabel,
+  emitTerminalFixtureOutput,
   enqueuePullRequest,
   fsSearchFiles,
   fsWriteFile,
@@ -276,6 +277,29 @@ describe("ipc spawnShellPty", () => {
 		await getPtyBuffer("T-pty-shell-2");
 		expect(invokeMock).toHaveBeenLastCalledWith(buffer.command, buffer.payload);
 	});
+
+  it('exposes fixture output through a bounded camelCase wrapper', async () => {
+    invokeMock.mockResolvedValueOnce({
+      shellSessionKey: 'T-e2e-shell-0',
+      marker: 'fixture-complete',
+      byteCount: 32,
+      ptyInstanceId: 7,
+    })
+
+    await expect(emitTerminalFixtureOutput('T-e2e-shell-0', 'fixture-complete', 32)).resolves.toMatchObject({
+      ptyInstanceId: 7,
+    })
+    expect(invokeMock).toHaveBeenLastCalledWith('e2e_emit_terminal_fixture', {
+      shellSessionKey: 'T-e2e-shell-0',
+      marker: 'fixture-complete',
+      byteCount: 32,
+    })
+
+    invokeMock.mockClear()
+    await expect(emitTerminalFixtureOutput('T-e2e-shell-0', '$(whoami)', 32)).rejects.toThrow('marker')
+    await expect(emitTerminalFixtureOutput('T-e2e-shell-0', 'fixture-complete', 67_108_865)).rejects.toThrow('byteCount')
+    expect(invokeMock).not.toHaveBeenCalled()
+  })
 
 	it("normalizes legacy board statuses in task responses", async () => {
 		invokeMock.mockResolvedValueOnce([

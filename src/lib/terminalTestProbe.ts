@@ -1,10 +1,17 @@
 import type {
   PoolEntry,
+  LiveModelOutputSubscriptionSnapshot,
   TerminalViewPresentationEvidence,
 } from '@openforge-app/terminal-runtime'
 import { getTerminalEntriesForObservation } from './terminalPool'
+import { createTerminalE2eGateCoordinator, type TerminalE2eGateCoordinator } from './terminalE2eGates'
+import {
+  configureTerminalE2eRuntime,
+  getAcquiredTerminalForE2eDiagnostics,
+} from './terminalE2eRuntime'
+import { emitTerminalFixtureOutput, type E2eTerminalFixtureOutputReceipt } from './ipc'
 
-const DESKTOP_TEST_QUERY_PARAMETER = 'openforge-desktop-test'
+const E2E_TOKEN_QUERY_PARAMETER = 'openforge-e2e-token'
 const DEFAULT_DRAIN_TIMEOUT_MS = 10_000
 const DRAIN_POLL_INTERVAL_MS = 16
 
@@ -12,12 +19,17 @@ export interface TerminalProbeObservation {
   key: string
   lifecycle: {
     attached: boolean
+    attachmentGeneration: number
+    authorityReadApplied: boolean
+    authorityReadPending: boolean
     currentPtyInstance: number | null
+    recoveryNeeded: boolean
     ptyActive: boolean
     shellExited: boolean
     spawnPending: boolean
     stateSource: string
   }
+  modelOutputSubscription: LiveModelOutputSubscriptionSnapshot | null
   output: {
     firstSequence: number | null
     lastSequence: number | null
@@ -42,20 +54,36 @@ export interface TerminalProbeDrainResult {
   visibleText: string
 }
 
+export interface E2eFixtureEmissionReceipt extends E2eTerminalFixtureOutputReceipt {
+  operationId: string
+  sequenceBaseline: number | null
+}
+
 export interface TerminalTestProbeApi {
   terminal: {
     list(): string[]
     observe(key: string): TerminalProbeObservation
     drain(key: string, expectation?: TerminalProbeDrainExpectation): Promise<TerminalProbeDrainResult>
+    emitFixtureOutput(
+      key: string,
+      marker: string,
+      byteCount: number,
+    ): Promise<E2eFixtureEmissionReceipt>
   }
+  gates: Readonly<Omit<TerminalE2eGateCoordinator, 'checkpoint'>>
 }
 
 export interface TerminalTestProbeWindow {
-  __openforgeDesktopTest?: TerminalTestProbeApi
+  __openforgeE2e?: TerminalTestProbeApi
 }
 
 interface InstallTerminalTestProbeOptions {
   isDevelopment: boolean
+  environmentEnabled: boolean
+  launchToken: string | undefined
+  coordinator?: TerminalE2eGateCoordinator
+  emitFixtureOutput?: typeof emitTerminalFixtureOutput
+  createOperationId?: () => string
   url: string
   target?: TerminalTestProbeWindow
   entries?: () => ReadonlyMap<string, PoolEntry>
@@ -63,10 +91,15 @@ interface InstallTerminalTestProbeOptions {
   delay?: (ms: number) => Promise<void>
 }
 
-export function shouldEnableTerminalTestProbe(isDevelopment: boolean, url: string): boolean {
-  if (!isDevelopment) return false
+export function shouldEnableTerminalTestProbe(
+  isDevelopment: boolean,
+  environmentEnabled: boolean,
+  url: string,
+  launchToken: string | undefined,
+): boolean {
+  if (!isDevelopment || !environmentEnabled || !launchToken) return false
   try {
-    return new URL(url).searchParams.get(DESKTOP_TEST_QUERY_PARAMETER) === '1'
+    return new URL(url).searchParams.get(E2E_TOKEN_QUERY_PARAMETER) === launchToken
   } catch {
     return false
   }
@@ -78,12 +111,17 @@ function observeEntry(key: string, entry: PoolEntry): TerminalProbeObservation {
     key,
     lifecycle: {
       attached: entry.attached,
+      attachmentGeneration: entry.attachmentGeneration,
+      authorityReadApplied: entry.terminalStateSource === 'ghostty-snapshot',
+      authorityReadPending: entry.terminalReplayRecovery !== null,
       currentPtyInstance: entry.currentPtyInstance,
+      recoveryNeeded: entry.viewNeedsRecovery,
       ptyActive: entry.ptyActive,
       shellExited: entry.shellExited,
       spawnPending: entry.spawnPending,
       stateSource: entry.terminalStateSource,
     },
+    modelOutputSubscription: entry.transportSubscription?.snapshot?.() ?? null,
     output: {
       firstSequence: output.firstSequence,
       lastSequence: output.lastSequence,
@@ -114,26 +152,57 @@ function missingExpectationMessage(
 
 export function installTerminalTestProbe(options: InstallTerminalTestProbeOptions): TerminalTestProbeApi | null {
   const target: TerminalTestProbeWindow = options.target ?? (window as TerminalTestProbeWindow)
-  if (!shouldEnableTerminalTestProbe(options.isDevelopment, options.url)) {
-    delete target.__openforgeDesktopTest
+  if (!shouldEnableTerminalTestProbe(
+    options.isDevelopment,
+    options.environmentEnabled,
+    options.url,
+    options.launchToken,
+  )) {
+    delete target.__openforgeE2e
+    configureTerminalE2eRuntime(null)
     return null
   }
+  const coordinator = options.coordinator ?? createTerminalE2eGateCoordinator()
+  const emitFixtureOutput = options.emitFixtureOutput ?? emitTerminalFixtureOutput
+  const createOperationId = options.createOperationId ?? (() => crypto.randomUUID())
+  configureTerminalE2eRuntime(coordinator)
 
   const entries = options.entries ?? getTerminalEntriesForObservation
+  const observedTerminalKeys = new Set<string>()
   const now = options.now ?? Date.now
   const wait = options.delay ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
   const requireEntry = (key: string): PoolEntry => {
-    const entry = entries().get(key)
+    const entry = entries().get(key) ?? getAcquiredTerminalForE2eDiagnostics(key)
     if (!entry) throw new Error(`Unknown terminal key: ${key}`)
     return entry
   }
 
   const terminal = Object.freeze({
     list(): string[] {
-      return [...entries().keys()].sort()
+      const keys = [...entries().keys()].sort()
+      for (const key of keys) observedTerminalKeys.add(key)
+      return keys
     },
     observe(key: string): TerminalProbeObservation {
-      return observeEntry(key, requireEntry(key))
+      const entry = requireEntry(key)
+      observedTerminalKeys.add(key)
+      return observeEntry(key, entry)
+    },
+    async emitFixtureOutput(
+      key: string,
+      marker: string,
+      byteCount: number,
+    ): Promise<E2eFixtureEmissionReceipt> {
+      const entry = entries().get(key) ?? getAcquiredTerminalForE2eDiagnostics(key)
+      if (!entry && !observedTerminalKeys.has(key)) throw new Error(`Unknown terminal key: ${key}`)
+      if (entry) observedTerminalKeys.add(key)
+      const sequenceBaseline = entry?.terminalOutputObservation.lastSequence ?? null
+      const receipt = await emitFixtureOutput(key, marker, byteCount)
+      return Object.freeze({
+        ...receipt,
+        operationId: createOperationId(),
+        sequenceBaseline,
+      })
     },
     async drain(
       key: string,
@@ -167,7 +236,15 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
     },
   })
 
-  const probe = Object.freeze({ terminal })
-  target.__openforgeDesktopTest = probe
+  const gates = Object.freeze({
+    arm: coordinator.arm,
+    cancel: coordinator.cancel,
+    get: coordinator.get,
+    list: coordinator.list,
+    resume: coordinator.resume,
+    waitForState: coordinator.waitForState,
+  })
+  const probe = Object.freeze({ gates, terminal })
+  target.__openforgeE2e = probe
   return probe
 }

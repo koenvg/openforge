@@ -19,7 +19,14 @@ export interface TerminalSessionService {
   dispose(): void
 }
 
-export function createTerminalSessionService(runtime: TerminalRuntime): TerminalSessionService {
+export interface TerminalSessionServiceOptions {
+  afterAcquire?(entry: PoolEntry): Promise<void> | undefined
+}
+
+export function createTerminalSessionService(
+  runtime: TerminalRuntime,
+  options: TerminalSessionServiceOptions = {},
+): TerminalSessionService {
   const ownersBySession = new Map<string, Set<string>>()
   const sessionsByOwner = new Map<string, Set<string>>()
 
@@ -77,7 +84,10 @@ export function createTerminalSessionService(runtime: TerminalRuntime): Terminal
     async function acquire(shellSessionKey: string): Promise<PoolEntry> {
       const ownerAdded = addOwner(ownerId, shellSessionKey)
       try {
-        return await runtime.acquire(shellSessionKey)
+        const entry = await runtime.acquire(shellSessionKey)
+        const checkpoint = options.afterAcquire?.(entry)
+        if (checkpoint) await checkpoint
+        return entry
       } catch (error) {
         if (ownerAdded) removeOwner(ownerId, shellSessionKey)
         throw error

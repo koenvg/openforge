@@ -8,6 +8,7 @@ export {
   createLiveModelOutputSubscriptionLifecycle,
   type LiveModelOutputSubscriptionLifecycle,
   type LiveModelOutputSubscriptionLifecycleOptions,
+  type LiveModelOutputSubscriptionSnapshot,
 } from './liveModelOutputSubscription'
 export {
   createTerminalRuntime,
@@ -52,6 +53,7 @@ export {
   createTerminalSessionService,
   type TerminalSessionClient,
   type TerminalSessionService,
+  type TerminalSessionServiceOptions,
 } from './terminalSessionService'
 export {
   TERMINAL_CELL_HEIGHT,

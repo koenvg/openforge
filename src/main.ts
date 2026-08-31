@@ -2,13 +2,18 @@ import './app.css'
 import { mount } from 'svelte'
 import App from './App.svelte'
 import { initTheme } from './lib/theme'
-import { installTerminalTestProbe } from './lib/terminalTestProbe'
 
 initTheme()
-installTerminalTestProbe({
-  isDevelopment: import.meta.env.DEV,
-  url: window.location.href,
-})
+if (import.meta.env.DEV) {
+  void import('./lib/terminalTestProbe').then(({ installTerminalTestProbe }) => {
+    installTerminalTestProbe({
+      isDevelopment: true,
+      environmentEnabled: import.meta.env.VITE_OPENFORGE_E2E === '1',
+      launchToken: import.meta.env.VITE_OPENFORGE_E2E_TOKEN,
+      url: window.location.href,
+    })
+  })
+}
 
 const app = mount(App, {
   target: document.getElementById('app')!,

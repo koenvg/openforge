@@ -36,6 +36,12 @@ function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
     shellExited: false,
     transportSubscription: {
       setModelOutputEnabled: vi.fn(async () => undefined),
+      snapshot: vi.fn(() => ({
+        desired: true,
+        pending: false,
+        registered: true,
+        disposed: false,
+      })),
       dispose: vi.fn(),
     },
     viewSubscriptions: [],
@@ -67,45 +73,97 @@ function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
 }
 
 describe('terminal desktop-test probe', () => {
-  it('is enabled only for explicit development desktop-test sessions', () => {
-    expect(shouldEnableTerminalTestProbe(true, 'http://127.0.0.1:1420/?openforge-desktop-test=1')).toBe(true)
-    expect(shouldEnableTerminalTestProbe(true, 'http://127.0.0.1:1420/')).toBe(false)
-    expect(shouldEnableTerminalTestProbe(false, 'http://127.0.0.1:1420/?openforge-desktop-test=1')).toBe(false)
+  it('is enabled only when development, the E2E flag, and the launch token all match', () => {
+    const url = 'http://127.0.0.1:1420/?openforge-e2e-token=run-secret'
+    expect(shouldEnableTerminalTestProbe(true, true, url, 'run-secret')).toBe(true)
+    expect(shouldEnableTerminalTestProbe(true, false, url, 'run-secret')).toBe(false)
+    expect(shouldEnableTerminalTestProbe(true, true, url, 'wrong-secret')).toBe(false)
+    expect(shouldEnableTerminalTestProbe(true, true, 'http://127.0.0.1:1420/', 'run-secret')).toBe(false)
+    expect(shouldEnableTerminalTestProbe(false, true, url, 'run-secret')).toBe(false)
   })
 
   it('does not install in production or normal development sessions', () => {
     const target = {} as TerminalTestProbeWindow
     const entries = () => new Map([['T-1-shell-0', createEntry()]])
 
-    installTerminalTestProbe({ isDevelopment: false, url: 'http://localhost/?openforge-desktop-test=1', target, entries })
-    expect(target.__openforgeDesktopTest).toBeUndefined()
+    installTerminalTestProbe({
+      isDevelopment: false,
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
+      target,
+      entries,
+    })
+    expect(target.__openforgeE2e).toBeUndefined()
 
-    installTerminalTestProbe({ isDevelopment: true, url: 'http://localhost/', target, entries })
-    expect(target.__openforgeDesktopTest).toBeUndefined()
+    installTerminalTestProbe({
+      isDevelopment: true,
+      environmentEnabled: false,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
+      target,
+      entries,
+    })
+    expect(target.__openforgeE2e).toBeUndefined()
   })
 
   it('exposes serializable read-only lifecycle, sequence, byte, geometry, and drain evidence', async () => {
     const target = {} as TerminalTestProbeWindow
     const entry = createEntry()
+    const emitFixtureOutput = vi.fn(async (shellSessionKey: string, marker: string, byteCount: number) => ({
+      shellSessionKey,
+      marker,
+      byteCount,
+      ptyInstanceId: 7,
+    }))
     installTerminalTestProbe({
       isDevelopment: true,
-      url: 'http://localhost/?openforge-desktop-test=1',
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
       target,
+      emitFixtureOutput,
       entries: () => new Map([['T-1-shell-0', entry]]),
     })
 
-    const terminal = target.__openforgeDesktopTest!.terminal
-    expect(Object.keys(terminal).sort()).toEqual(['drain', 'list', 'observe'])
+    const control = target.__openforgeE2e!
+    const terminal = control.terminal
+    expect(Object.isFrozen(control)).toBe(true)
+    expect(Object.isFrozen(control.gates)).toBe(true)
+    expect(Object.isFrozen(terminal)).toBe(true)
+    expect(Object.keys(control).sort()).toEqual(['gates', 'terminal'])
+    expect(Object.keys(control.gates).sort()).toEqual(['arm', 'cancel', 'get', 'list', 'resume', 'waitForState'])
+    expect(Object.keys(terminal).sort()).toEqual(['drain', 'emitFixtureOutput', 'list', 'observe'])
+    const gate = control.gates.arm('acquisition', 'T-1-shell-0', { timeoutMs: 100 })
+    expect(control.gates.get(gate.id)).toMatchObject({ state: 'armed', shellSessionKey: 'T-1-shell-0' })
+    control.gates.cancel(gate.id)
     expect(terminal.list()).toEqual(['T-1-shell-0'])
+    await expect(terminal.emitFixtureOutput('T-1-shell-0', 'fixture-complete', 32)).resolves.toMatchObject({
+      marker: 'fixture-complete',
+      byteCount: 32,
+      ptyInstanceId: 7,
+      sequenceBaseline: 4,
+    })
+    expect(emitFixtureOutput).toHaveBeenCalledWith('T-1-shell-0', 'fixture-complete', 32)
     expect(terminal.observe('T-1-shell-0')).toEqual({
       key: 'T-1-shell-0',
       lifecycle: {
         attached: true,
+        attachmentGeneration: 1,
+        authorityReadApplied: true,
+        authorityReadPending: false,
         currentPtyInstance: 7,
         ptyActive: true,
+        recoveryNeeded: false,
         shellExited: false,
         spawnPending: false,
         stateSource: 'ghostty-snapshot',
+      },
+      modelOutputSubscription: {
+        desired: true,
+        pending: false,
+        registered: true,
+        disposed: false,
       },
       output: {
         firstSequence: 1,
@@ -130,16 +188,90 @@ describe('terminal desktop-test probe', () => {
     })
   })
 
+  it('permits bounded fixture output for a previously observed terminal after its view entry detaches', async () => {
+    const target = {} as TerminalTestProbeWindow
+    const entry = createEntry()
+    const currentEntries = new Map([['T-1-shell-0', entry]])
+    const emitFixtureOutput = vi.fn(async (shellSessionKey: string, marker: string, byteCount: number) => ({
+      shellSessionKey, marker, byteCount, ptyInstanceId: 7,
+    }))
+    installTerminalTestProbe({
+      isDevelopment: true,
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
+      target,
+      emitFixtureOutput,
+      entries: () => currentEntries,
+    })
+    const terminal = target.__openforgeE2e!.terminal
+    expect(terminal.list()).toEqual(['T-1-shell-0'])
+    currentEntries.clear()
+
+    await expect(terminal.emitFixtureOutput('T-1-shell-0', 'detached-marker', 32)).resolves.toMatchObject({
+      marker: 'detached-marker',
+      ptyInstanceId: 7,
+      sequenceBaseline: null,
+    })
+    await expect(terminal.emitFixtureOutput('unknown-shell-0', 'detached-marker', 32))
+      .rejects.toThrow('Unknown terminal key: unknown-shell-0')
+  })
+
+  it('reports pending recovery and subscription transitions without exposing mutable internals', () => {
+    const target = {} as TerminalTestProbeWindow
+    const entry = createEntry({
+      attachmentGeneration: 3,
+      currentPtyInstance: 9,
+      viewNeedsRecovery: true,
+      terminalStateSource: 'bootstrapping',
+      terminalReplayRecovery: Promise.resolve(),
+      terminalOutputObservation: {
+        ptyInstanceId: 9,
+        receivedBytes: 4,
+        firstSequence: 5,
+        lastSequence: 7,
+        sequenceContinuous: false,
+      },
+    })
+    entry.transportSubscription = {
+      setModelOutputEnabled: vi.fn(async () => undefined),
+      snapshot: () => ({ desired: true, pending: true, registered: false, disposed: false }),
+      dispose: vi.fn(),
+    }
+    installTerminalTestProbe({
+      isDevelopment: true,
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
+      target,
+      entries: () => new Map([['T-1-shell-0', entry]]),
+    })
+
+    expect(target.__openforgeE2e!.terminal.observe('T-1-shell-0')).toMatchObject({
+      lifecycle: {
+        attachmentGeneration: 3,
+        authorityReadApplied: false,
+        authorityReadPending: true,
+        currentPtyInstance: 9,
+        recoveryNeeded: true,
+      },
+      modelOutputSubscription: { desired: true, pending: true, registered: false, disposed: false },
+      output: { sequenceContinuous: false },
+    })
+  })
+
   it('fails drains for incomplete sequences and missing markers', async () => {
     const target = {} as TerminalTestProbeWindow
     const entry = createEntry()
     installTerminalTestProbe({
       isDevelopment: true,
-      url: 'http://localhost/?openforge-desktop-test=1',
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
       target,
       entries: () => new Map([['T-1-shell-0', entry]]),
     })
-    const terminal = target.__openforgeDesktopTest!.terminal
+    const terminal = target.__openforgeE2e!.terminal
 
     entry.terminalOutputObservation.sequenceContinuous = false
     await expect(terminal.drain('T-1-shell-0', { marker: 'TEST_DONE', timeoutMs: 0 }))

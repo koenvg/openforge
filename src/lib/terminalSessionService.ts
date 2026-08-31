@@ -6,6 +6,10 @@ import { listenDesktopEvent } from './desktopIpc'
 import type { TerminalDesktopEventName } from './desktopIpcContract'
 import { createDesktopTerminalTransport } from './desktopTerminalTransport'
 import {
+  checkpointTerminalAcquisition,
+  checkpointTerminalAuthorityRead,
+} from './terminalE2eRuntime'
+import {
   getPtyBuffer,
   openUrl,
   resizePty,
@@ -21,7 +25,7 @@ const transport = createDesktopTerminalTransport({
   getPtyBuffer,
   writePty,
   resizePty,
-})
+}, { afterReadReplay: checkpointTerminalAuthorityRead })
 
 const terminalRuntime = createTerminalRuntime({
   transport,
@@ -33,7 +37,9 @@ const terminalRuntime = createTerminalRuntime({
   },
 })
 
-export const terminalSessionService = createTerminalSessionService(terminalRuntime)
+export const terminalSessionService = createTerminalSessionService(terminalRuntime, {
+  afterAcquire: checkpointTerminalAcquisition,
+})
 export const agentTerminalSessions = terminalSessionService.createClient('agent-terminal-surfaces')
 export const regularTerminalSessions = terminalSessionService.createClient('terminal-plugin-surfaces')
 

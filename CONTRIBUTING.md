@@ -94,6 +94,7 @@ cargo clippy
 
 For idle CPU, event-rate, and macOS peak-footprint regression checks, follow [the idle resource check guide](docs/idle-resource-checks.md).
 For isolated headed terminal testing and the full-app terminal performance scenario, follow the [desktop terminal testing guide](docs/desktop-terminal-testing.md).
+For real-development-app terminal races, isolated/reuse ownership rules, reports, and CI prerequisites, follow the [live Electron invariant guide](docs/live-electron-invariants.md).
 
 Root `pnpm test` includes JavaScript and TypeScript `*.test.*` and `*.spec.*` suites anywhere inside first-level `apps/*`, `packages/*`, and `plugins/*` workspaces. It ignores dependency and generated directories named `node_modules`, `dist`, `build`, `coverage`, `.svelte-kit`, and `target`.
 
