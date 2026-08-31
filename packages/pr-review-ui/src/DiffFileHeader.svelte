@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MessageSquare } from '@lucide/svelte'
+  import { Copy, MessageSquare } from '@lucide/svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { Snippet } from 'svelte'
@@ -13,6 +13,7 @@
     reviewed: boolean
     pendingCommentCount: number
     fileHeaderExtra?: Snippet<[PrFileDiff]>
+    onCopyFilePath?: (filename: string) => void
     onToggleCollapse: () => void
     onSetRichDiffActive: (active: boolean) => void
     onReviewedChange?: (reviewed: boolean) => void
@@ -26,6 +27,7 @@
     reviewed,
     pendingCommentCount,
     fileHeaderExtra,
+    onCopyFilePath,
     onToggleCollapse,
     onSetRichDiffActive,
     onReviewedChange,
@@ -43,9 +45,9 @@
   }
 </script>
 
-<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
+<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
   <button
-    class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors"
+    class="flex min-h-10 flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
     aria-label={getToggleLabel()}
     aria-expanded={!collapsed}
     onclick={onToggleCollapse}
@@ -54,24 +56,35 @@
     <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
       {getFileStatusIcon(file.status)}
     </span>
-    <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[13px] text-base-content" title={file.filename}>
-      {#if file.previous_filename}
-        <span class="text-base-content/50 line-through">{file.previous_filename}</span>
-        <span class="text-primary mx-1">→</span>
-      {/if}
-      {file.filename}
-    </span>
-    {#if pendingCommentCount > 0}
-      <span
-        class="badge badge-sm badge-outline h-5 flex-shrink-0 gap-1 border-base-content/30 bg-base-100 px-1.5 text-xs font-medium tabular-nums text-base-content/80"
-        title={getPendingCommentLabel()}
-        aria-hidden="true"
-      >
-        <MessageSquare size={12} strokeWidth={1.8} />
-        {pendingCommentCount}
-      </span>
-    {/if}
   </button>
+  <div class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap font-mono text-[13px] text-base-content">
+    {#if file.previous_filename}
+      <span class="max-w-[40%] min-w-0 overflow-hidden text-ellipsis text-base-content/50 line-through" title={file.previous_filename}>{file.previous_filename}</span>
+      <span class="text-primary mx-1 flex-shrink-0">→</span>
+    {/if}
+    <span class="min-w-0 overflow-hidden text-ellipsis" title={file.filename}>{file.filename}</span>
+    {#if onCopyFilePath}
+      <button
+        type="button"
+        class="inline-flex h-8 min-h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-md text-base-content/50 transition-colors hover:bg-base-300 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        title="Copy file path"
+        aria-label="Copy file path: {file.filename}"
+        onclick={() => onCopyFilePath(file.filename)}
+      >
+        <Copy size={16} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+    {/if}
+  </div>
+  {#if pendingCommentCount > 0}
+    <span
+      class="badge badge-sm badge-outline h-5 flex-shrink-0 gap-1 border-base-content/30 bg-base-100 px-1.5 text-xs font-medium tabular-nums text-base-content/80"
+      title={getPendingCommentLabel()}
+      aria-hidden="true"
+    >
+      <MessageSquare size={12} strokeWidth={1.8} />
+      {pendingCommentCount}
+    </span>
+  {/if}
   {#if fileHeaderExtra}
     {@render fileHeaderExtra(file)}
   {/if}

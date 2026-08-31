@@ -123,16 +123,15 @@ describe('DiffViewer accessibility', () => {
     const mainHeader = screen.getByRole('button', {
       name: 'Collapse diff for src/main.ts, 2 pending comments',
     })
-    expect(mainHeader.textContent).toContain('2')
-    expect(screen.getByRole('button', {
-      name: 'Collapse diff for src/other.ts, 1 pending comment',
-    }).textContent).toContain('1')
+    expect(screen.getByTitle('2 pending comments').textContent).toContain('2')
+    expect(screen.getByTitle('1 pending comment').textContent).toContain('1')
 
     await fireEvent.click(mainHeader)
 
     expect(screen.getByRole('button', {
       name: 'Expand diff for src/main.ts, 2 pending comments',
-    }).textContent).toContain('2')
+    })).toBeTruthy()
+    expect(screen.getByTitle('2 pending comments').textContent).toContain('2')
   })
   it('announces large change sets and auto-collapses oversized files', () => {
     const largeFiles = Array.from({ length: 12 }, (_, index) => ({
@@ -175,5 +174,51 @@ describe('DiffViewer accessibility', () => {
 
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark src/large-diff-3.ts reviewed' }))
     expect(screen.getByText(warningCopy)).toBeTruthy()
+  })
+
+  it('copies the current file path without changing expanded or collapsed state', async () => {
+    const onCopyFilePath = vi.fn()
+    render(DiffViewer, { props: { files, onCopyFilePath } })
+
+    const copyPathButton = screen.getByRole('button', { name: 'Copy file path: src/main.ts' })
+    const pathText = screen.getByText('src/main.ts')
+    expect(pathText.tagName).toBe('SPAN')
+    expect(pathText.nextElementSibling).toBe(copyPathButton)
+    expect(copyPathButton.querySelector('svg')).not.toBeNull()
+    const collapseButton = screen.getByRole('button', { name: 'Collapse diff for src/main.ts' })
+    expect(collapseButton.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(copyPathButton)
+
+    expect(onCopyFilePath).toHaveBeenLastCalledWith('src/main.ts')
+    expect(screen.getByRole('button', { name: 'Collapse diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(collapseButton)
+    const expandButton = screen.getByRole('button', { name: 'Expand diff for src/main.ts' })
+    expect(expandButton.getAttribute('aria-expanded')).toBe('false')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy file path: src/main.ts' }))
+
+    expect(onCopyFilePath).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: 'Expand diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('copies only the current path for a renamed file', async () => {
+    const renamedFile = {
+      ...files[0],
+      filename: 'src/current.ts',
+      previous_filename: 'src/previous.ts',
+    }
+    const onCopyFilePath = vi.fn()
+    render(DiffViewer, { props: { files: [renamedFile], onCopyFilePath } })
+
+    const copyPathButton = screen.getByRole('button', { name: 'Copy file path: src/current.ts' })
+    copyPathButton.focus()
+    expect(document.activeElement).toBe(copyPathButton)
+
+    await fireEvent.click(copyPathButton)
+
+    expect(onCopyFilePath).toHaveBeenCalledWith('src/current.ts')
+    expect(onCopyFilePath).not.toHaveBeenCalledWith('src/previous.ts')
   })
 })
