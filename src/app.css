@@ -480,8 +480,10 @@
 .markdown-body ol { list-style-type: decimal; }
 
 .markdown-body table {
-  border-collapse: collapse;
+  display: block;
   width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
   margin-bottom: 0.75em;
 }
 
