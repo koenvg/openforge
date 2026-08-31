@@ -6,6 +6,8 @@
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
   import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
   import type { OpenReviewImage } from './reviewImages'
+  import type { OpenReviewMedia, ReviewImageOpenRequest, ReviewMediaOpenRequest } from './reviewMedia'
+  import MediaViewerDialog from './MediaViewerDialog.svelte'
   import { createDiffSearch } from './useDiffSearch.svelte'
   import { createDiffWorker } from './useDiffWorker.svelte'
   import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
@@ -42,6 +44,7 @@
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenImage?: OpenReviewImage
+    onOpenMedia?: OpenReviewMedia
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
     onScrollTopChange?: (scrollTop: number) => void
@@ -68,11 +71,13 @@
     onRemovePendingReply?: (commentId: number) => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
+  let mediaRequest = $state<ReviewImageOpenRequest | null>(null)
+  let mediaContextKey = $state<string | null>(null)
   const inlineCommentDrafts = createInlineCommentDrafts({
     getPendingComments: () => pendingComments,
     getOnPendingCommentsChange: () => onPendingCommentsChange,
@@ -88,6 +93,61 @@
     getFetchFileContents: () => fetchFileContents,
     getBatchFetchFileContents: () => batchFetchFileContents,
   })
+  function getMediaContextKey(request: ReviewMediaOpenRequest): string | null {
+    const filenames = new Set(request.items.map(item => item.filename))
+    const file = files.find(candidate => filenames.has(candidate.filename)
+      || (candidate.previous_filename !== null && filenames.has(candidate.previous_filename)))
+    if (!file) return null
+
+    return [
+      file.filename,
+      file.sha,
+      file.status,
+      file.patch ?? '',
+      file.previous_filename ?? '',
+    ].join('\u0000')
+  }
+
+  function closeMediaPreview(): void {
+    mediaRequest = null
+    mediaContextKey = null
+  }
+
+  function handleOpenMedia(request: ReviewMediaOpenRequest): void {
+    if (onOpenMedia) {
+      onOpenMedia(request)
+      return
+    }
+
+    const activeItem = request.items[request.activeIndex]
+    if (!activeItem || activeItem.kind !== 'image') return
+    const items = request.items.filter(item => item.kind === 'image')
+    const imageRequest: ReviewImageOpenRequest = {
+      items,
+      activeIndex: items.indexOf(activeItem),
+    }
+
+    if (onOpenImage) {
+      onOpenImage({
+        activeIndex: imageRequest.activeIndex,
+        images: imageRequest.items.map(({ kind: _kind, ...image }) => image),
+      })
+      return
+    }
+
+    mediaContextKey = getMediaContextKey(imageRequest)
+    mediaRequest = imageRequest
+  }
+
+  $effect(() => {
+    if (!mediaRequest) return
+
+    const currentContextKey = getMediaContextKey(mediaRequest)
+    if (!currentContextKey || currentContextKey !== mediaContextKey) {
+      closeMediaPreview()
+    }
+  })
+
   const fileCollapse = createDiffFileCollapse({
     getFiles: () => files,
     getReviewedFileIdentities: () => reviewedFileShas,
@@ -358,6 +418,7 @@
               fileContents={fileContentsFetcher.fileContentsMap.get(file.filename)}
               fileContentError={fileContentsFetcher.fileContentErrors.get(file.filename)}
               onRetryFileContents={() => fileContentsFetcher.retryFileContents(file.filename)}
+              onRequestFileContents={() => fileContentsFetcher.requestFileContents(file.filename)}
               canFetchFileContents={Boolean(fetchFileContents || batchFetchFileContents)}
               workerDiffFile={diffWorker.getDiffFile(file.filename)}
               {diffViewMode}
@@ -371,7 +432,7 @@
               {resolveRepositoryImage}
               onOpenRepositoryPath={openRepositoryPath}
               {onOpenUrl}
-              {onOpenImage}
+              onOpenMedia={handleOpenMedia}
               onOpenInlineCommentWidget={(lineNumber, side) => inlineCommentDrafts.open(file.filename, lineNumber, side)}
               getInlineCommentText={(lineNumber, side) => inlineCommentDrafts.getText(file.filename, lineNumber, side)}
               onSetInlineCommentText={(lineNumber, side, text) => inlineCommentDrafts.setText(file.filename, lineNumber, side, text)}
@@ -403,6 +464,10 @@
     {@render footer?.()}
   </div>
 </div>
+
+{#if mediaRequest}
+  <MediaViewerDialog request={mediaRequest} onClose={closeMediaPreview} />
+{/if}
 
 <style>
   .diff-viewer-toolbar > :global(.btn),

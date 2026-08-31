@@ -4,6 +4,7 @@
   import type { FileContent } from '@openforge-app/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
+  import { onDestroy } from 'svelte'
 
   const RETURN_TO_TREE_BUTTON_CLASS = 'btn btn-outline btn-sm h-9 min-h-9 shrink-0 px-3 text-xs font-medium'
 
@@ -43,6 +44,9 @@
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
   let appliedFocusRequestKey = $state<number | null>(null)
+  let activeVideoElement: HTMLVideoElement | null = null
+  let activeVideoKey: string | null = null
+  let videoPlaybackError = $state(false)
 
   const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
   const language = $derived(getLanguageForFile(fileName))
@@ -79,6 +83,10 @@
     }
   }
 
+  function trackVideoElement(element: HTMLVideoElement) {
+    activeVideoElement = element
+  }
+
   const scrollKey = $derived(`${fileName}:${content?.type ?? 'none'}:${scrollTop}`)
 
   $effect(() => {
@@ -92,6 +100,21 @@
     if (focusRequestKey === null || appliedFocusRequestKey === focusRequestKey) return
     appliedFocusRequestKey = focusRequestKey
     previewPane?.focus({ preventScroll: true })
+  })
+
+  $effect(() => {
+    const nextVideoKey = content?.type === 'video'
+      ? `${filePath}\u0000${modifiedAt ?? ''}\u0000${content.mimeType ?? ''}\u0000${content.size}`
+      : null
+    if (activeVideoKey !== null && activeVideoKey !== nextVideoKey) {
+      activeVideoElement?.pause()
+    }
+    if (activeVideoKey !== nextVideoKey) videoPlaybackError = false
+    activeVideoKey = nextVideoKey
+  })
+
+  onDestroy(() => {
+    activeVideoElement?.pause()
   })
 </script>
 
@@ -215,6 +238,31 @@
             alt={`${fileName} preview`}
             class="max-w-full max-h-full object-contain"
           />
+        </div>
+      {:else if content.type === 'video'}
+        <div
+          class="relative flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto"
+          role="region"
+          aria-label="Video file content"
+        >
+          <!-- Project files do not include caption sidecars. Native controls remain available. -->
+          <!-- svelte-ignore a11y_media_has_caption -->
+          <video
+            use:trackVideoElement
+            src={`data:${content.mimeType ?? 'video/*'};base64,${content.content}`}
+            aria-label={`${fileName} preview`}
+            controls
+            preload="metadata"
+            onerror={() => { videoPlaybackError = true }}
+            class="max-w-full max-h-full rounded bg-black object-contain"
+          >
+            Video playback is unavailable for this file.
+          </video>
+          {#if videoPlaybackError}
+            <div class="absolute bottom-6 rounded bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
+              Video playback unavailable. This file may use a codec that Electron cannot decode.
+            </div>
+          {/if}
         </div>
       {:else if content.type === 'binary'}
         <div class="flex-1 flex items-center justify-center p-6">

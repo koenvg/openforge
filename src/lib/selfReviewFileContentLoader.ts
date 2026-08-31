@@ -21,30 +21,30 @@ export interface SelfReviewFileContentLoaderOptions {
     status: string,
     includeCommitted: boolean,
     includeUncommitted: boolean,
-  ) => Promise<[string, string]>
+  ) => Promise<FileContents>
   getTaskBatchFileContents: (
     taskId: string,
     files: FileContentRequest[],
     includeCommitted: boolean,
     includeUncommitted: boolean,
-  ) => Promise<Array<[string, string]>>
+  ) => Promise<FileContents[]>
   getCommitFileContents: (
     taskId: string,
     commitSha: string,
     path: string,
     oldPath: string | null,
     status: string,
-  ) => Promise<[string, string]>
+  ) => Promise<FileContents>
   getCommitBatchFileContents: (
     taskId: string,
     commitSha: string,
     files: FileContentRequest[],
-  ) => Promise<Array<[string, string]>>
+  ) => Promise<FileContents[]>
 }
 
 interface FileContentSource {
-  fetch(request: FileContentRequest): Promise<[string, string]>
-  fetchBatch(requests: FileContentRequest[]): Promise<Array<[string, string]>>
+  fetch(request: FileContentRequest): Promise<FileContents>
+  fetchBatch(requests: FileContentRequest[]): Promise<FileContents[]>
 }
 
 function createFileContentSource(
@@ -104,12 +104,11 @@ export function createSelfReviewFileContentLoader(
 
   async function fetchCurrent(file: PrFileDiff): Promise<FileContents> {
     const source = createFileContentSource(options, options.getContext())
-    const [oldContent, newContent] = await source.fetch({
+    return source.fetch({
       path: file.filename,
       oldPath: file.previous_filename ?? null,
       status: file.status,
     })
-    return { oldContent, newContent }
   }
 
   async function fetchCurrentBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
@@ -130,10 +129,7 @@ export function createSelfReviewFileContentLoader(
       )
     }
 
-    return new Map(files.map((file, index) => {
-      const [oldContent, newContent] = results[index]!
-      return [file.filename, { oldContent, newContent }]
-    }))
+    return new Map(files.map((file, index) => [file.filename, results[index]!]))
   }
 
   async function fetchBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
@@ -158,12 +154,12 @@ export function createSelfReviewFileContentLoader(
 
   async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
     const source = createFileContentSource(options, options.getContext())
-    const [, content] = await source.fetch({
+    const { newContent } = await source.fetch({
       path: repositoryPath,
       oldPath: null,
       status: 'modified',
     })
-    return getImagePreviewDataUrl(repositoryPath, content)
+    return getImagePreviewDataUrl(repositoryPath, newContent)
   }
 
   return { fetch, fetchCurrent, fetchCurrentBatch, fetchBatch, resolveRepositoryImage }

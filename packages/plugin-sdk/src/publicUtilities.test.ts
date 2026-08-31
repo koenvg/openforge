@@ -44,6 +44,30 @@ describe('public plugin utilities', () => {
     expect(content.type).toBe('text')
   })
 
+  it('exposes video and oversized-video file content contracts', () => {
+    const video: FileContent = {
+      type: 'video',
+      content: 'AAECAw==',
+      mimeType: 'video/mp4',
+      size: 4,
+    }
+    const oversizedVideo: FileContent = {
+      type: 'large-file',
+      content: '',
+      mimeType: 'video/webm',
+      size: 25 * 1024 * 1024 + 1,
+    }
+
+    expect(video).toEqual({
+      type: 'video',
+      content: 'AAECAw==',
+      mimeType: 'video/mp4',
+      size: 4,
+    })
+    expect(oversizedVideo.content).toBe('')
+    expect(oversizedVideo.mimeType).toBe('video/webm')
+  })
+
   it('exposes PR domain helpers for GitHub plugins', () => {
     expect(hasMergeConflicts({ state: 'open', mergeable: false, mergeable_state: 'dirty' })).toBe(true)
     expect(isReadyToMerge({ state: 'open', mergeable: true, mergeable_state: 'clean' })).toBe(true)

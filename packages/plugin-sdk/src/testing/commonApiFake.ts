@@ -391,7 +391,8 @@ export class TestingCommonApiFake {
       },
       fs: {
         readDir: async () => [],
-        readFile: async () => ({ type: 'text', content: '', mimeType: null, size: 0 }),
+        readFile: async ({ path }) => this.services.projectFileContents[path]
+          ?? { type: 'text', content: '', mimeType: null, size: 0 },
         writeFile: async (request) => {
           this.services.calls.fsWrites.push(request)
         },

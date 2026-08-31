@@ -9,10 +9,10 @@ import type { PrFileDiff } from '../../lib/types'
 import { createSelfReviewFileStateController } from './selfReviewFileStateController.svelte'
 
 vi.mock('../../lib/ipc', () => ({
-  getTaskFileContents: vi.fn().mockResolvedValue(['base\n', 'current\n']),
-  getTaskBatchFileContents: vi.fn().mockResolvedValue([['base\n', 'current\n']]),
-  getCommitFileContents: vi.fn().mockResolvedValue(['base\n', 'current\n']),
-  getCommitBatchFileContents: vi.fn().mockResolvedValue([['base\n', 'current\n']]),
+  getTaskFileContents: vi.fn().mockResolvedValue({ oldContent: 'base\n', newContent: 'current\n' }),
+  getTaskBatchFileContents: vi.fn().mockResolvedValue([{ oldContent: 'base\n', newContent: 'current\n' }]),
+  getCommitFileContents: vi.fn().mockResolvedValue({ oldContent: 'base\n', newContent: 'current\n' }),
+  getCommitBatchFileContents: vi.fn().mockResolvedValue([{ oldContent: 'base\n', newContent: 'current\n' }]),
 }))
 
 const taskId = 'task-1'

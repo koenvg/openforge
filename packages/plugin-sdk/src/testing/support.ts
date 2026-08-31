@@ -13,7 +13,7 @@ import type {
   StartPromptContribution,
   SubscriptionSink,
 } from '../types'
-import type { AgentSession, Task } from '../domain'
+import type { AgentSession, FileContent, Task } from '../domain'
 import type {
   TestingCommandContribution,
   TestingMaybePromise,
@@ -246,6 +246,7 @@ export class TestingRegistryServices {
   readonly agentSessionWorkspaces: Readonly<Record<string, AgentSessionWorkspace>>
   readonly externalTextFiles: TestingExternalTextFile[]
   readonly userDataTextFiles = new Map<string, string>()
+  readonly projectFileContents: Readonly<Record<string, FileContent>>
   readonly claims = new TestingContributionClaims()
 
   constructor(options: TestingOpenForgeApiOptions = {}) {
@@ -265,6 +266,7 @@ export class TestingRegistryServices {
     this.seededAgentSessions = options.agentSessions ?? []
     this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {}
     this.externalTextFiles = options.externalTextFiles ?? []
+    this.projectFileContents = options.projectFileContents ?? {}
     for (const file of options.userDataTextFiles ?? []) {
       this.userDataTextFiles.set(file.path, file.content)
     }

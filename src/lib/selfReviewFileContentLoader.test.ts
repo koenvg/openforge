@@ -4,6 +4,11 @@ import {
   type SelfReviewFileContentContext,
 } from './selfReviewFileContentLoader'
 import type { PrFileDiff } from './types'
+import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
+
+function contents(oldContent: string, newContent: string): FileContents {
+  return { oldContent, newContent }
+}
 
 const file: PrFileDiff = {
   sha: 'current-sha',
@@ -30,9 +35,24 @@ describe('createSelfReviewFileContentLoader', () => {
 
   it('uses task-scoped content for single files, batches, and repository images', async () => {
     const getTaskFileContents = vi.fn()
-      .mockResolvedValueOnce(['old', 'new'])
-      .mockResolvedValueOnce(['', 'base64-diagram'])
-    const getTaskBatchFileContents = vi.fn().mockResolvedValue([['batch old', 'batch new']])
+      .mockResolvedValueOnce({
+        oldContent: 'old',
+        newContent: 'new',
+        oldAvailability: { status: 'available', size: 3 },
+        newAvailability: { status: 'available', size: 3 },
+      })
+      .mockResolvedValueOnce({
+        oldContent: '',
+        newContent: 'base64-diagram',
+        oldAvailability: { status: 'missing' },
+        newAvailability: { status: 'available', size: 14 },
+      })
+    const getTaskBatchFileContents = vi.fn().mockResolvedValue([{
+      oldContent: 'batch old',
+      newContent: '',
+      oldAvailability: { status: 'available', size: 9 },
+      newAvailability: { status: 'too-large', size: 26_214_401 },
+    }])
     const getCommitFileContents = vi.fn()
     const getCommitBatchFileContents = vi.fn()
     const loader = createSelfReviewFileContentLoader({
@@ -49,9 +69,19 @@ describe('createSelfReviewFileContentLoader', () => {
       getCommitBatchFileContents,
     })
 
-    await expect(loader.fetchCurrent(file)).resolves.toEqual({ oldContent: 'old', newContent: 'new' })
+    await expect(loader.fetchCurrent(file)).resolves.toEqual({
+      oldContent: 'old',
+      newContent: 'new',
+      oldAvailability: { status: 'available', size: 3 },
+      newAvailability: { status: 'available', size: 3 },
+    })
     await expect(loader.fetchCurrentBatch([file])).resolves.toEqual(new Map([
-      [file.filename, { oldContent: 'batch old', newContent: 'batch new' }],
+      [file.filename, {
+        oldContent: 'batch old',
+        newContent: '',
+        oldAvailability: { status: 'available', size: 9 },
+        newAvailability: { status: 'too-large', size: 26_214_401 },
+      }],
     ]))
     await expect(loader.resolveRepositoryImage('docs/diagram.png')).resolves.toBe(
       'data:image/png;base64,base64-diagram',
@@ -87,9 +117,9 @@ describe('createSelfReviewFileContentLoader', () => {
 
   it('uses commit-scoped content for single files, batches, and repository images', async () => {
     const getCommitFileContents = vi.fn()
-      .mockResolvedValueOnce(['before commit', 'after commit'])
-      .mockResolvedValueOnce(['', 'base64-commit-diagram'])
-    const getCommitBatchFileContents = vi.fn().mockResolvedValue([['batch before', 'batch after']])
+      .mockResolvedValueOnce(contents('before commit', 'after commit'))
+      .mockResolvedValueOnce(contents('', 'base64-commit-diagram'))
+    const getCommitBatchFileContents = vi.fn().mockResolvedValue([contents('batch before', 'batch after')])
     const getTaskFileContents = vi.fn()
     const getTaskBatchFileContents = vi.fn()
     const loader = createSelfReviewFileContentLoader({
@@ -146,7 +176,7 @@ describe('createSelfReviewFileContentLoader', () => {
     const comparedFile = { ...file, filename: 'src/compared.ts' }
     const currentFile = { ...file, filename: 'src/current.ts', previous_filename: 'src/old.ts' }
     const comparisonContents = { oldContent: 'reviewed', newContent: 'compared' }
-    const getTaskBatchFileContents = vi.fn().mockResolvedValue([['before', 'current']])
+    const getTaskBatchFileContents = vi.fn().mockResolvedValue([contents('before', 'current')])
     const loader = createSelfReviewFileContentLoader({
       getContext: () => ({
         taskId: 'task-1',
@@ -184,7 +214,7 @@ describe('createSelfReviewFileContentLoader', () => {
       }),
       getComparisonContents: () => undefined,
       getTaskFileContents: vi.fn(),
-      getTaskBatchFileContents: vi.fn().mockResolvedValue([['before', 'after']]),
+      getTaskBatchFileContents: vi.fn().mockResolvedValue([contents('before', 'after')]),
       getCommitFileContents: vi.fn(),
       getCommitBatchFileContents: vi.fn(),
     })
@@ -228,7 +258,7 @@ describe('createSelfReviewFileContentLoader', () => {
       getTaskFileContents: vi.fn(),
       getTaskBatchFileContents: vi.fn(),
       getCommitFileContents: vi.fn(),
-      getCommitBatchFileContents: vi.fn().mockResolvedValue([['before', 'after']]),
+      getCommitBatchFileContents: vi.fn().mockResolvedValue([contents('before', 'after')]),
     })
 
     await expect(loader.fetchCurrentBatch([file, secondFile])).rejects.toThrow(

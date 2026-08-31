@@ -6,8 +6,7 @@
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { getDiffTheme, themeMode } from '../../../../lib/theme'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
-  import type { OpenReviewImage, ReviewImageOpenRequest } from '@openforge-app/pr-review-ui/reviewImages'
-  import ReviewImageLightbox from './ReviewImageLightbox.svelte'
+  import type { OpenReviewImage } from '@openforge-app/pr-review-ui/reviewImages'
   import type { Snippet } from 'svelte'
 
   interface BaseProps {
@@ -83,47 +82,8 @@
   }
 
   let sharedViewer = $state<SharedDiffViewerHandle | null>(null)
-  let imageRequest = $state<ReviewImageOpenRequest | null>(null)
-  let imageContextKey = $state<string | null>(null)
   const visiblePendingComments = $derived(pendingComments ?? $pendingManualComments)
 
-  function getImageContextKey(request: ReviewImageOpenRequest): string | null {
-    const filenames = new Set(request.images.map(image => image.filename))
-    const file = files.find(candidate => filenames.has(candidate.filename))
-    if (!file) return null
-
-    return [
-      file.filename,
-      file.sha,
-      file.status,
-      file.patch ?? '',
-      file.previous_filename ?? '',
-    ].join('\u0000')
-  }
-
-  $effect(() => {
-    if (!imageRequest) return
-
-    const currentContextKey = getImageContextKey(imageRequest)
-    if (!currentContextKey || currentContextKey !== imageContextKey) {
-      closeImagePreview()
-    }
-  })
-
-  function handleOpenImage(request: ReviewImageOpenRequest) {
-    if (onOpenImage) {
-      onOpenImage(request)
-      return
-    }
-
-    imageContextKey = getImageContextKey(request)
-    imageRequest = request
-  }
-
-  function closeImagePreview() {
-    imageRequest = null
-    imageContextKey = null
-  }
 
   async function copyFilePath(filename: string): Promise<void> {
     try {
@@ -186,7 +146,7 @@
   onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
   onUpdateAgentCommentStatus={updateAgentReviewCommentStatus}
   {onOpenUrl}
-  onOpenImage={handleOpenImage}
+  {onOpenImage}
   {onScrollTopChange}
   {initialScrollTop}
   {inlineDraftScopeId}
@@ -198,9 +158,3 @@
   clearInlineDraft={clearSelfReviewInlineCommentDraft}
   diffTheme={getDiffTheme($themeMode)}
 />
-
-{#if imageRequest}
-  {#key imageRequest}
-    <ReviewImageLightbox request={imageRequest} onClose={closeImagePreview} />
-  {/key}
-{/if}

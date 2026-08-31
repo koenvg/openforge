@@ -23,7 +23,7 @@ vi.mock('../../lib/ipc', () => ({
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
   getTaskDiff: vi.fn().mockResolvedValue([]),
-  getTaskFileContents: vi.fn().mockResolvedValue(['', '']),
+  getTaskFileContents: vi.fn().mockResolvedValue({ oldContent: '', newContent: '' }),
   getTaskBatchFileContents: vi.fn().mockResolvedValue([]),
 }))
 

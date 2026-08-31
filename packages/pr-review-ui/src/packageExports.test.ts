@@ -13,6 +13,7 @@ import { createDiffSearch } from '@openforge-app/pr-review-ui/useDiffSearch.svel
 import { createDiffWorker } from '@openforge-app/pr-review-ui/useDiffWorker.svelte'
 import { createFileContentsFetcher } from '@openforge-app/pr-review-ui/useFileContentsFetcher.svelte'
 import { createVirtualizer } from '@openforge-app/pr-review-ui/useVirtualizer.svelte'
+import type { ReviewMediaOpenRequest } from '@openforge-app/pr-review-ui/reviewMedia'
 
 /**
  * Keeps shared diff helper subpath exports intentional. The host app and bundled
@@ -52,5 +53,17 @@ describe('@openforge-app/pr-review-ui diff helper exports', () => {
 
     expect(request.type).toBe('process')
     expect(response.type).toBe('error')
+  })
+
+  it('exports a discriminated image and video review media contract', () => {
+    const request = {
+      items: [
+        { kind: 'image', src: 'data:image/png;base64,a', alt: 'Before logo', filename: 'logo.png', label: 'Before' },
+        { kind: 'video', src: 'data:video/mp4;base64,b', alt: 'After demo', filename: 'demo.mp4', label: 'After' },
+      ],
+      activeIndex: 1,
+    } satisfies ReviewMediaOpenRequest
+
+    expect(request.items[request.activeIndex]?.kind).toBe('video')
   })
 })

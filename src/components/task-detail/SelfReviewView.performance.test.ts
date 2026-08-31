@@ -51,7 +51,7 @@ describe("SelfReviewView integration performance", () => {
 
 	it("DiffViewer toolbar visible after toggle (DiffViewer successfully re-mounted)", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "", newContent: "" }]);
 
 		renderSelfReviewView();
 

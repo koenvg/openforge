@@ -282,8 +282,10 @@ async fn handles_git_workspace_extraction_commands() {
             json!({ "taskId": task_id, "path": "tracked.txt", "oldPath": null, "status": "modified", "includeCommitted": true, "includeUncommitted": true }),
         )
         .await;
-    assert_eq!(task_contents[0], "base\n");
-    assert_eq!(task_contents[1], "base\nfeature\n");
+    assert_eq!(task_contents["oldContent"], "base\n");
+    assert_eq!(task_contents["newContent"], "base\nfeature\n");
+    assert_eq!(task_contents["oldAvailability"]["status"], "available");
+    assert_eq!(task_contents["newAvailability"]["status"], "available");
 
     let batch = invoke_ok(
             &state,
@@ -291,7 +293,7 @@ async fn handles_git_workspace_extraction_commands() {
             json!({ "taskId": task_id, "files": [{ "path": "tracked.txt", "old_path": null, "status": "modified" }], "includeCommitted": true, "includeUncommitted": true }),
         )
         .await;
-    assert_eq!(batch[0][1], "base\nfeature\n");
+    assert_eq!(batch[0]["newContent"], "base\nfeature\n");
 
     let commit_contents = invoke_ok(
             &state,
@@ -299,7 +301,7 @@ async fn handles_git_workspace_extraction_commands() {
             json!({ "taskId": task_id, "commitSha": feature_sha, "path": "tracked.txt", "oldPath": null, "status": "modified" }),
         )
         .await;
-    assert_eq!(commit_contents[1], "base\nfeature\n");
+    assert_eq!(commit_contents["newContent"], "base\nfeature\n");
 
     let commit_batch = invoke_ok(
             &state,
@@ -307,7 +309,7 @@ async fn handles_git_workspace_extraction_commands() {
             json!({ "taskId": task_id, "commitSha": feature_sha, "files": [{ "path": "tracked.txt", "old_path": null, "status": "modified" }] }),
         )
         .await;
-    assert_eq!(commit_batch[0][0], "base\n");
+    assert_eq!(commit_batch[0]["oldContent"], "base\n");
 }
 
 #[tokio::test]

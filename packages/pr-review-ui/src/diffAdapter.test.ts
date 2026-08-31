@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
-import { getFileLanguage, toGitDiffViewData, isTruncated, getTruncationStats, getImageMimeType, isImageFileDiff, getImagePreviewDataUrl } from './diffAdapter'
+import {
+  getFileLanguage,
+  toGitDiffViewData,
+  isTruncated,
+  getTruncationStats,
+  getImageMimeType,
+  getVideoMimeType,
+  getMediaMimeType,
+  isImageFileDiff,
+  isVideoFileDiff,
+  isMediaFileDiff,
+  getImagePreviewDataUrl,
+  getMediaPreviewDataUrl,
+} from './diffAdapter'
 
 // ============================================================================
 // Test Fixtures
@@ -302,6 +315,53 @@ describe('image diff helpers', () => {
   it('returns null when image content is empty or the file type is unsupported', () => {
     expect(getImagePreviewDataUrl('assets/logo.png', '')).toBeNull()
     expect(getImagePreviewDataUrl('src/main.ts', 'abc123')).toBeNull()
+  })
+})
+
+describe('video and media diff helpers', () => {
+  it.each([
+    ['recording.mp4', 'video/mp4'],
+    ['recording.M4V', 'video/mp4'],
+    ['recording.webm', 'video/webm'],
+    ['recording.OGV', 'video/ogg'],
+    ['recording.ogg', 'video/ogg'],
+    ['recording.MOV', 'video/quicktime'],
+  ])('maps %s to %s', (filename, expectedMimeType) => {
+    expect(getVideoMimeType(filename)).toBe(expectedMimeType)
+    expect(getMediaMimeType(filename)).toBe(expectedMimeType)
+  })
+
+  it('preserves image MIME detection through the media helper', () => {
+    expect(getMediaMimeType('assets/logo.PNG')).toBe('image/png')
+    expect(getMediaMimeType('src/main.ts')).toBeNull()
+  })
+
+  it('detects video paths on either side of a renamed diff', () => {
+    const currentVideo: PrFileDiff = { ...baseFile, filename: 'demo.mp4', patch: null }
+    const previousVideo: PrFileDiff = {
+      ...baseFile,
+      filename: 'demo.txt',
+      previous_filename: 'DEMO.WEBM',
+      patch: null,
+    }
+
+    expect(isVideoFileDiff(currentVideo)).toBe(true)
+    expect(isMediaFileDiff(currentVideo)).toBe(true)
+    expect(isVideoFileDiff(previousVideo)).toBe(true)
+    expect(isMediaFileDiff(previousVideo)).toBe(true)
+    expect(isMediaFileDiff(baseFile)).toBe(false)
+  })
+
+  it('builds media data URLs without changing the image helper contract', () => {
+    expect(getMediaPreviewDataUrl('demo.mov', 'video-bytes')).toBe('data:video/quicktime;base64,video-bytes')
+    expect(getMediaPreviewDataUrl('assets/logo.png', 'image-bytes')).toBe('data:image/png;base64,image-bytes')
+    expect(getMediaPreviewDataUrl('demo.mp4', '')).toBeNull()
+    expect(getImagePreviewDataUrl('demo.mp4', 'video-bytes')).toBeNull()
+  })
+
+  it('keeps image-only detection narrow', () => {
+    const video: PrFileDiff = { ...baseFile, filename: 'demo.mp4', patch: null }
+    expect(isImageFileDiff(video)).toBe(false)
   })
 })
 

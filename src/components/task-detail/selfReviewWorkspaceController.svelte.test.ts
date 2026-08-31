@@ -19,9 +19,9 @@ vi.mock('../../lib/ipc', () => ({
   getTaskDiff: vi.fn().mockResolvedValue([]),
   getTaskCommits: vi.fn().mockResolvedValue([]),
   getCommitDiff: vi.fn().mockResolvedValue([]),
-  getTaskFileContents: vi.fn().mockResolvedValue(['', '']),
+  getTaskFileContents: vi.fn().mockResolvedValue({ oldContent: '', newContent: '' }),
   getTaskBatchFileContents: vi.fn().mockResolvedValue([]),
-  getCommitFileContents: vi.fn().mockResolvedValue(['', '']),
+  getCommitFileContents: vi.fn().mockResolvedValue({ oldContent: '', newContent: '' }),
   getCommitBatchFileContents: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
@@ -132,7 +132,7 @@ describe('createSelfReviewWorkspaceController', () => {
     )
     setPendingSelfReviewComments(taskId, [hiddenComment, visibleComment])
     vi.mocked(getTaskDiff).mockResolvedValue([sourceFile])
-    vi.mocked(getTaskBatchFileContents).mockResolvedValue([['base\n', 'current\n']])
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: 'base\n', newContent: 'current\n' }])
     const controller = createController()
 
     await controller.load()

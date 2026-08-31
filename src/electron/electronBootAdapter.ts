@@ -230,7 +230,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
     window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-      callback(rendererTrustAdapter.shouldGrantMediaPermission({
+      callback(rendererTrustAdapter.shouldGrantRendererPermission({
         permission,
         isMainWindowWebContents: webContents.id === mainWebContentsId,
         requestingUrl: details.requestingUrl,

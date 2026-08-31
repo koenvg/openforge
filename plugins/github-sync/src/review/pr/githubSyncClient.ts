@@ -24,6 +24,7 @@ export type FileContentRequest = {
   owner: string
   repo: string
   sha: string
+  maxSize?: number
 }
 
 export type FileAtRefRequest = {
@@ -31,6 +32,13 @@ export type FileAtRefRequest = {
   repo: string
   path: string
   refSha: string
+  maxSize?: number
+}
+
+export type Base64FileContentResult = {
+  content: string
+  size: number
+  tooLarge: boolean
 }
 
 export type GithubAssetRequest = {
@@ -69,9 +77,9 @@ export interface GithubSyncPrReviewClient {
   markReviewPullRequestUnviewed(request: { prId: number }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
   getFileContent(request: FileContentRequest): Promise<string>
-  getFileContentBase64(request: FileContentRequest): Promise<string>
+  getFileContentBase64(request: FileContentRequest): Promise<Base64FileContentResult>
   getFileAtRef(request: FileAtRefRequest): Promise<string>
-  getFileAtRefBase64(request: FileAtRefRequest): Promise<string>
+  getFileAtRefBase64(request: FileAtRefRequest): Promise<Base64FileContentResult>
   resolveGithubAsset(request: GithubAssetRequest): Promise<ResolvedMarkdownMedia | null>
   listReviewComments(request: PullRequestRepositoryRequest): Promise<ReviewComment[]>
   listPullRequestOverviewComments(request: PullRequestRepositoryRequest): Promise<PrOverviewComment[]>
@@ -144,9 +152,9 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     markReviewPullRequestUnviewed: ({ prId }) => invokeBackend<void>(api, 'markReviewPrUnviewed', { prId }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
-    getFileContentBase64: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContentBase64', { owner, repo, sha }),
+    getFileContentBase64: (request) => invokeBackend<Base64FileContentResult>(api, 'getFileContentBase64', request),
     getFileAtRef: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRef', { owner, repo, path, refSha }),
-    getFileAtRefBase64: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRefBase64', { owner, repo, path, refSha }),
+    getFileAtRefBase64: (request) => invokeBackend<Base64FileContentResult>(api, 'getFileAtRefBase64', request),
     resolveGithubAsset: ({ owner, repo, url }) => invokeBackend<ResolvedMarkdownMedia | null>(api, 'resolveGithubAsset', { owner, repo, url }),
     listReviewComments: ({ owner, repo, prNumber }) => invokeBackend<ReviewComment[]>(api, 'getReviewComments', { owner, repo, prNumber }),
     listPullRequestOverviewComments: ({ owner, repo, prNumber }) => invokeBackend<PrOverviewComment[]>(api, 'getPrOverviewComments', { owner, repo, prNumber }),
