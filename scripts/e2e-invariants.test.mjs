@@ -41,4 +41,24 @@ describe('invariant package commands', () => {
       expect(INVARIANT_HELP).toContain(command)
     }
   })
+
+  it('runs terminal races on pull requests and keeps the macOS idle gate scheduled or manual', async () => {
+    const pullRequestWorkflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+    const idleWorkflow = await readFile(new URL('../.github/workflows/live-electron-idle.yml', import.meta.url), 'utf8')
+
+    expect(pullRequestWorkflow).toContain('live-electron-terminal-invariants:')
+    expect(pullRequestWorkflow).toContain('name: Live Electron Terminal Invariants')
+    expect(pullRequestWorkflow).toContain('--scenario first-attachment')
+    expect(pullRequestWorkflow).toContain('--scenario detach-during-recovery')
+    expect(pullRequestWorkflow).toContain('artifacts/desktop-test/ci-terminal-invariants')
+    expect(pullRequestWorkflow).toContain('name: live-electron-terminal-invariants')
+
+    expect(idleWorkflow).toContain('schedule:')
+    expect(idleWorkflow).toContain('workflow_dispatch:')
+    expect(idleWorkflow).not.toContain('pull_request:')
+    expect(idleWorkflow).toContain('runs-on: macos-14')
+    expect(idleWorkflow).toContain('--scenario idle-resources')
+    expect(idleWorkflow).toContain('artifacts/desktop-test/ci-idle-resources')
+    expect(idleWorkflow).toContain('name: live-electron-idle-invariant')
+  })
 })

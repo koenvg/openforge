@@ -54,7 +54,7 @@
 - [x] 7.1 Add `e2e:dev` and `e2e:invariants` package scripts with individual scenario filtering and reuse options; verify package-script tests and `--help` output list the supported commands and consent rules.
 - [x] 7.2 Ignore default desktop E2E reports, Playwright output, test results, and temporary runtime paths; verify `git status --ignored` identifies generated test artifacts as ignored.
 - [x] 7.3 Document isolated use, the remote-debugging reuse handshake, terminal-control consent, filters, ownership, security checks, expected runtime, macOS idle limitation, report contents, and failure debugging; verify every documented command matches `--help` output.
-- [x] 7.4 Document CI suitability without adding a required workflow, including runner prerequisites and the distinction between portable terminal races and macOS peak-footprint evidence; verify no required CI configuration changes are present.
+- [x] 7.4 Document CI suitability, including runner prerequisites and the distinction between pull-request terminal races and scheduled macOS peak-footprint evidence.
 
 ## 8. Affected-system validation and handoff
 
@@ -64,3 +64,10 @@
 - [x] 8.4 Run `pnpm e2e:invariants` in isolated mode and run each scenario through its individual filter; verify one boot is used for the full suite, all reports pass, and no owned process or temporary runtime artifact survives cleanup.
 - [x] 8.5 Inspect a successful report and a forced failure bundle for required readiness, trace, screenshot, event, process, idle, and cleanup evidence; verify generated paths remain outside source control.
 - [x] 8.6 Update Handoff Notes with every validation command and result, observed runtime, supported platforms, reuse limitations, CI status, cleanup confirmation, skipped checks, coverage gaps, and follow-up work; verify the notes match the final task diff and artifacts.
+
+## 9. CI enforcement after runner confirmation
+
+- [x] 9.1 Add a failing workflow contract test for pull-request terminal races, separate scheduled/manual macOS idle execution, and retained artifact roots; verify it fails before workflow changes.
+- [x] 9.2 Add a `macos-14` pull-request CI job that runs `first-attachment` and `detach-during-recovery` in one boot after frontend and Rust checks and always uploads evidence.
+- [x] 9.3 Add a weekly and manually dispatchable `macos-14` idle workflow that runs `idle-resources` and always uploads evidence without joining the pull-request gate.
+- [ ] 9.4 Update operator and Handoff Notes, validate workflow syntax and OpenSpec coherence, run focused and affected-system checks, and verify the new pull-request job starts on the hosted runner.

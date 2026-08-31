@@ -10,7 +10,7 @@ OpenForge's terminal race coverage stops at unit and simulated integration tests
 - Prove the first-attachment and detach-during-recovery terminal invariants through both user-visible Playwright assertions and internal diagnostics.
 - Reuse the existing idle-resource measurement logic to require complete CPU, event-rate, process-liveness, RSS, and Sidecar peak-footprint evidence, and fail when required evidence disappears.
 - Produce a versioned JSON report and failure bundle with logs, Playwright traces and screenshots, event timelines and counts, process identities, idle results, and cleanup evidence.
-- Add focused commands, scenario filters, unit coverage, live E2E coverage, documentation, generated-artifact ignores, and Handoff Notes guidance without enabling a required platform-specific CI job.
+- Add focused commands, scenario filters, unit coverage, live E2E coverage, documentation, generated-artifact ignores, a pull-request terminal-race job, and a separate scheduled/manual macOS idle job.
 
 ## Capabilities
 

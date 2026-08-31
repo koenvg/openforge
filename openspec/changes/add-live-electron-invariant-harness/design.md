@@ -23,7 +23,7 @@ Terminal Runtime already rejects stale attachment generations and queues model o
 - Replace the terminal-runtime integration suites or terminal performance benchmark.
 - Add general-purpose test RPC, arbitrary shell execution, or a production diagnostics API.
 - Make the macOS `vmmap` peak-footprint check portable in this change.
-- Add a required CI job before a supported runner and runtime budget are confirmed.
+- Make the macOS idle-resource gate a required check on every pull request; it remains scheduled and manually dispatchable.
 - Promise scenario isolation after a failed mutating scenario. The runner stops later scenarios when the shared app state is no longer trustworthy.
 
 ## Decisions
@@ -158,6 +158,12 @@ Reuse cleanup will stop event recording and disconnect the CDP client. It will n
 
 Signal handlers will route through the same idempotent cleanup path so interruption cannot bypass ownership rules.
 
+### 11. Split continuous terminal enforcement from scheduled idle evidence
+
+The repository's existing `macos-14` Rust and packaged-Electron jobs confirm an Electron-capable hosted runner. Pull-request CI will run `first-attachment` and `detach-during-recovery` in one boot after frontend and Rust checks pass. The job will always upload its report root so failed races retain the same diagnostics as local runs.
+
+The 30-second idle gate will run in a separate weekly and manually dispatchable macOS workflow. This keeps `vmmap` evidence on a supported host without making every pull request wait for a platform-specific idle measurement. Both workflows use the same checked-in commands as local operators.
+
 ## Risks / Trade-offs
 
 - [Playwright Electron launch handles differ from Node child processes] -> Normalize only the process operations the shared launcher needs and test graceful and forced cleanup through injected adapters.
@@ -166,7 +172,7 @@ Signal handlers will route through the same idempotent cleanup path so interrupt
 - [One boot lets a failed scenario contaminate later scenarios] -> Run serially, restore a known UI state after success, and stop after a mutating failure.
 - [Tracing and active Playwright polling can disturb idle CPU] -> Quiesce UI interaction before sampling, avoid polling during the sample, and keep Playwright outside the Electron process tree accounting.
 - [Short idle samples can hide low-rate event churn] -> Keep the existing 30-second default and allow explicit characterization overrides in local runs.
-- [macOS peak footprint is not portable] -> Mark unsupported platforms as unable to pass the full idle invariant and keep the command optional in CI.
+- [macOS peak footprint is not portable] -> Keep idle evidence out of the pull-request gate and run it in a separate scheduled/manual macOS workflow.
 - [Process role matching can mistake transient utilities for required processes] -> Define required stable roles explicitly and report optional process arrivals separately.
 
 ## Migration Plan
@@ -176,7 +182,8 @@ Signal handlers will route through the same idempotent cleanup path so interrupt
 3. Add the gated terminal controls and unit tests proving they are absent from normal development and production builds.
 4. Add the serial live scenarios, report writer, artifacts, documentation, and source-control ignores.
 5. Run focused tests, full renderer and package checks, Electron contract checks, terminal presentation checks, Rust validation for the E2E Sidecar command, and the live isolated suite.
-6. Record commands, results, platform limits, runtime, and follow-up work in Handoff Notes. Do not add a required CI job.
+6. Record commands, results, platform limits, runtime, and follow-up work in Handoff Notes.
+7. After confirming the existing macOS runner and runtime budget, add pull-request terminal-race enforcement and a separate scheduled/manual macOS idle workflow.
 
 Rollback removes the new commands and control module, restores the idle CLI wrapper to its previous entry point, and leaves production terminal and event contracts unchanged.
 
@@ -188,7 +195,7 @@ Implementation and validation completed on a macOS arm64 development host.
 
 - `pnpm i` completed before implementation; `pnpm-lock.yaml` did not change.
 - Focused Vitest command covering 18 launcher, lifecycle, policy, readiness, control, transport, sampler, recorder, report, runner, driver, and scenario files: 18 files and 167 tests passed.
-- `pnpm test`: 613 files passed, 1 file skipped; 5,029 tests passed and 7 skipped.
+- `pnpm test`: 613 files passed, 1 file skipped; 5,030 tests passed and 7 skipped.
 - `pnpm exec tsc --noEmit`: passed with no diagnostics.
 - `pnpm lint`: passed with no diagnostics.
 - `pnpm electron:contract:check`: passed with no generated-contract drift.
@@ -200,6 +207,10 @@ Implementation and validation completed on a macOS arm64 development host.
 - `pnpm e2e:invariants -- --scenario first-attachment --output artifacts/desktop-test/final-first-attachment`: passed in 13.6 seconds.
 - `pnpm e2e:invariants -- --scenario detach-during-recovery --output artifacts/desktop-test/final-detach-during-recovery`: final run passed in 12.9 seconds. An earlier run exposed a task-navigation race; the driver now falls back to normal project navigation when the Back action does not detach within its bounded presentation check, with regression coverage.
 - `pnpm e2e:invariants -- --scenario idle-resources --output artifacts/desktop-test/final-idle-resources`: passed in 40.1 seconds with the default 30-second macOS idle sample.
+- Workflow contract TDD: `scripts/e2e-invariants.test.mjs` failed before the CI workflows existed, then passed 3/3 tests after implementation.
+- The exact pull-request CI command (`first-attachment` plus `detach-during-recovery` with the CI output root) passed locally in one boot in 32.5 seconds.
+- The exact scheduled idle command (`idle-resources` with the CI output root) passed locally in 41.2 seconds.
+- `actionlint .github/workflows/ci.yml .github/workflows/live-electron-idle.yml` and Ruby YAML parsing passed.
 - Observational reuse used an explicitly remote-debuggable E2E development app and `pnpm e2e:invariants -- --reuse <loopback-endpoint> --scenario idle-resources --idle-duration 15 --output artifacts/desktop-test/live-reuse-observational`: passed without terminal-control consent. The attached Electron and Sidecar PIDs and the owner-created runtime directory remained present after the reuse runner disconnected; its report records null fixture paths, no removals, and `processExitVerified: false`.
 - `pnpm e2e:invariants -- --scenario first-attachment --scenario-timeout 1 --output artifacts/desktop-test/final-forced-failure`: exited 1 as intended in 6.8 seconds and retained a readable report, trace, screenshot, child log, event evidence, process snapshot, error, and passing cleanup evidence.
 - `pnpm e2e:invariants -- --help`: exited 0 and matched every harness command and option documented in `docs/live-electron-invariants.md`.
@@ -218,8 +229,8 @@ The first-attachment and detach-during-recovery scenarios are portable to hosts 
 
 Reuse accepts only HTTP loopback CDP endpoints and verifies an OpenForge development renderer. It is observational unless both `--allow-terminal-control` and matching token-gated renderer controls are present. Reuse does not own fixture data, application processes, or paths. Observational reuse was exercised live; consented terminal control in reuse remains covered by policy/control tests and by the same controls exercised in isolated live terminal scenarios.
 
-No required CI workflow was added. A future optional job needs Node/pnpm, Rust, Zig/Ghostty, Playwright Electron, loopback/process-inspection access, a desktop session or virtual display, and artifact retention. Portable terminal scenarios and macOS peak-footprint validation should remain separate until runner availability is confirmed.
+Pull-request CI now runs both terminal race scenarios in one boot on the existing `macos-14` runner after frontend and Rust checks. A separate weekly/manual macOS workflow runs the full idle gate. Both jobs always upload their report roots; the PR job retains evidence for seven days and the idle job for fourteen days.
 
 ### Skips, gaps, and follow-up
 
-All requested validation commands ran. The root suite retained its existing 1 skipped file/7 skipped tests, and Cargo retained 1 ignored test. There was no non-macOS live run and no live consented reuse terminal run; neither is required for this change, and the relevant portable policy/control paths have focused coverage. No mandatory CI execution was attempted because this change intentionally adds no required workflow. No adjacent cleanup task or additional follow-up work was identified.
+All requested validation commands ran. The root suite retained its existing 1 skipped file/7 skipped tests, and Cargo retained 1 ignored test. There was no non-macOS live run and no live consented reuse terminal run; neither is required for this change, and the relevant portable policy/control paths have focused coverage. Hosted CI execution of the newly added jobs remains pending on the pull request. No adjacent cleanup task or additional follow-up work was identified.

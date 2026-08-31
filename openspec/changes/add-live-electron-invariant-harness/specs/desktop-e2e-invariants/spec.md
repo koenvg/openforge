@@ -166,12 +166,16 @@ Isolated mode SHALL stop every process owned by the suite and remove temporary r
 - **THEN** the runner disconnects its debugging client and leaves the existing app, processes, app data, database, and repository unchanged
 
 ### Requirement: Operator documentation and CI boundary
-The project SHALL document isolated use, reuse handshake and consent rules, scenario filters, failure debugging, security boundaries, expected runtime, platform limits, and the checks suitable for CI. The change SHALL NOT enable a long-running or platform-specific required CI job without confirmed runner support.
+The project SHALL document isolated use, reuse handshake and consent rules, scenario filters, failure debugging, security boundaries, expected runtime, platform limits, and CI execution. Pull-request CI SHALL run the terminal race scenarios on a confirmed Electron-capable runner and retain evidence on success or failure. The macOS idle gate SHALL run separately on a schedule and by manual dispatch rather than delaying every pull request.
 
 #### Scenario: Local operator follows documentation
 - **WHEN** an operator follows the documented isolated or reuse procedure
 - **THEN** the commands state which resources the runner owns, which operations may mutate terminal state, and where reports are written
 
-#### Scenario: CI configuration remains optional
-- **WHEN** the E2E commands are added
-- **THEN** they are available for supported runners but are not added as a required CI check by this change
+#### Scenario: Pull request runs terminal invariants
+- **WHEN** CI evaluates a pull request targeting the main branch
+- **THEN** it runs `first-attachment` and `detach-during-recovery` in one live Electron boot and uploads the artifact root regardless of outcome
+
+#### Scenario: Scheduled macOS idle evidence
+- **WHEN** the scheduled or manually dispatched idle workflow runs
+- **THEN** it runs `idle-resources` on macOS and uploads the complete artifact root without making the idle gate part of every pull request

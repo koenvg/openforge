@@ -1,0 +1,67 @@
+name: Live Electron Idle Invariant
+
+on:
+  schedule:
+    - cron: "30 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-electron-idle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  idle-resources:
+    name: Live Electron Idle Resources
+    timeout-minutes: 30
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve backend layout
+        id: backend-layout
+        run: echo "backend-crate-root=$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
+          cache-bin: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run live idle invariant
+        run: |
+          mkdir -p artifacts/desktop-test/ci-idle-resources
+          set -o pipefail
+          pnpm e2e:invariants -- \
+            --scenario idle-resources \
+            --output artifacts/desktop-test/ci-idle-resources \
+            2>&1 | tee artifacts/desktop-test/ci-idle-resources/ci.log
+
+      - name: Upload live idle invariant evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: live-electron-idle-invariant
+          path: artifacts/desktop-test/ci-idle-resources/
+          retention-days: 14
+          if-no-files-found: warn

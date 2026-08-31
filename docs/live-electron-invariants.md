@@ -75,6 +75,8 @@ Failure artifacts are copied before cleanup. A cleanup failure changes the final
 
 The terminal race scenarios are portable to supported Electron development hosts. The idle scenario's Sidecar peak-footprint assertion uses macOS `vmmap`; complete peak-footprint evidence therefore requires macOS. CPU, event-rate, liveness, RSS, and `/debug/process-memory` evidence remain useful elsewhere, but do not substitute for the macOS peak check.
 
-A CI runner needs the repository's Node, pnpm, Rust, Zig/Ghostty, and Playwright Electron prerequisites; loopback ports; enough process-inspection permissions; and a desktop session or virtual display suitable for headed Electron. CI should retain the artifact root on both success and failure. Terminal scenarios can be selected independently on a suitable non-macOS runner. The complete idle gate belongs on a macOS runner with `vmmap` and representative idle conditions.
+Pull-request CI runs `first-attachment` and `detach-during-recovery` in one boot through the `Live Electron Terminal Invariants` job in `.github/workflows/ci.yml`. The job uses the existing `macos-14`, Rust, Zig/Ghostty, Node, and pnpm setup after frontend and Rust checks pass. It uploads the complete invariant artifact root on success or failure with seven-day retention.
 
-This harness does not add a required CI workflow. Enable it only after confirming runner availability, expected runtime, process-inspection permissions, and artifact retention policy.
+The complete idle gate runs separately through `.github/workflows/live-electron-idle.yml` every Monday at 05:30 UTC and on manual dispatch. It uses a macOS runner with `vmmap`, preserves evidence for fourteen days, and does not delay every pull request with a platform-specific idle measurement.
+
+Both jobs require loopback/process-inspection access and a desktop session suitable for Electron. The PR job continuously enforces the portable terminal races; the scheduled job detects macOS idle-resource regressions without conflating them with terminal correctness.
