@@ -197,6 +197,12 @@ try {
     fail(`Packed identity ${packedManifest.name}@${packedManifest.version} does not match ${sourceManifest.name}@${sourceManifest.version}.`)
   }
 
+  const packedReadmePath = join(installedPackageRoot, 'README.md')
+  if (!existsSync(packedReadmePath)) fail('Packed Plugin SDK README.md is missing.')
+  const sourceReadme = readFileSync(join(packageRoot, 'README.md'), 'utf8')
+  const packedReadme = readFileSync(packedReadmePath, 'utf8')
+  if (packedReadme !== sourceReadme) fail('Packed Plugin SDK README.md does not match the package README.')
+
   for (const [dependencyName, range] of Object.entries(packedManifest.dependencies ?? {})) {
     if (typeof range !== 'string' || validRange(range) === null) {
       fail(`Packed dependency ${dependencyName} must use a concrete semver range; received ${String(range)}.`)
