@@ -63,19 +63,19 @@
     });
 
     const pluginTimeline = gsap.timeline({
-      scrollTrigger: { trigger: '.plugin-architecture', start: 'top 78%', once: true },
+      scrollTrigger: { trigger: '.plugin-building', start: 'top 78%', once: true },
       defaults: { ease: 'power3.out' },
     });
     pluginTimeline
-      .from('[data-plugin-core]', { autoAlpha: 0, scale: 0.9, duration: 0.46 })
-      .from('[data-plugin-pipe]', { autoAlpha: 0, duration: 0.3, stagger: 0.05 }, 0.18)
+      .from('[data-plugin-core]', { autoAlpha: 0, y: 22, duration: 0.44 })
       .from('[data-plugin-node]', {
         autoAlpha: 0,
-        x: (index) => (index % 2 === 0 ? -26 : 26),
-        scale: 0.96,
-        duration: 0.5,
-        stagger: 0.08,
-      }, 0.24);
+        y: 44,
+        scale: 0.97,
+        duration: 0.48,
+        stagger: { each: 0.08, from: 'end' },
+      }, 0.16)
+      .from('[data-building-piece]', { autoAlpha: 0, y: -26, duration: 0.42 }, 0.48);
 
     gsap.from('.final-cta-copy > *', {
       autoAlpha: 0,

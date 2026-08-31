@@ -1,13 +1,22 @@
 <div class="hero-visual" data-vgpu-visual>
   <canvas class="hero-canvas" aria-hidden="true"></canvas>
-  <div class="hero-visual-fallback" aria-hidden="true"></div>
-  <div class="hero-orbit-label hero-orbit-label-top" aria-hidden="true">
-    <span></span>
-    5 agents running
+  <div class="hero-visual-fallback" aria-hidden="true">
+    <div class="fallback-building">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <i></i>
+    </div>
   </div>
-  <div class="hero-orbit-label hero-orbit-label-bottom" aria-hidden="true">
+  <div class="hero-build-label hero-build-label-top" aria-hidden="true">
     <span></span>
-    review stays human
+    5 plugins installed
+  </div>
+  <div class="hero-build-label hero-build-label-bottom" aria-hidden="true">
+    <span></span>
+    SDK v1 · stable core
   </div>
 </div>
 
@@ -24,57 +33,347 @@
 
     @group(0) @binding(0) var<uniform> params: Params;
 
-    fn lineMask(value: f32, width: f32) -> f32 {
-      return 1.0 - smoothstep(width, width + 0.002, abs(value));
+    const ISO_C: f32 = 0.8660254;
+    const ISO_S: f32 = 0.5;
+    const SCENE_SCALE: f32 = 0.092;
+    const SCENE_ORIGIN: vec2f = vec2f(0.0, 0.15);
+    const INK: vec3f = vec3f(0.09, 0.10, 0.13);
+    const BLUE: vec3f = vec3f(0.16, 0.29, 0.96);
+    const VIOLET: vec3f = vec3f(0.49, 0.23, 0.85);
+    const MINT: vec3f = vec3f(0.01, 0.56, 0.41);
+    const AMBER: vec3f = vec3f(0.82, 0.40, 0.03);
+    const SLATE: vec3f = vec3f(0.30, 0.36, 0.48);
+
+    // Isometric projection: grid (x right, y up, z left) -> screen point.
+    fn iso(g: vec3f) -> vec2f {
+      return SCENE_ORIGIN + vec2f((g.x - g.z) * ISO_C, (g.x + g.z) * ISO_S - g.y) * SCENE_SCALE;
     }
 
-    fn ring(point: vec2f, radius: f32, width: f32) -> f32 {
-      return 1.0 - smoothstep(width, width + 0.012, abs(length(point) - radius));
+    fn boxSdf(point: vec2f, halfSize: vec2f) -> f32 {
+      let delta = abs(point) - halfSize;
+      return length(max(delta, vec2f(0.0))) + min(max(delta.x, delta.y), 0.0);
+    }
+
+    fn segmentMask(point: vec2f, start: vec2f, end: vec2f, width: f32, feather: f32) -> f32 {
+      let relative = point - start;
+      let axis = end - start;
+      let position = clamp(dot(relative, axis) / max(dot(axis, axis), 0.000001), 0.0, 1.0);
+      return 1.0 - smoothstep(width, width + feather, length(relative - axis * position));
+    }
+
+    // Face quad helper: returns (inside mask, u, v, signed inset distance in point units).
+    fn faceInfo(point: vec2f, origin: vec2f, axisU: vec2f, axisV: vec2f, aa: f32) -> vec4f {
+      let relative = point - origin;
+      let determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+      let u = (relative.x * axisV.y - relative.y * axisV.x) / determinant;
+      let v = (axisU.x * relative.y - axisU.y * relative.x) / determinant;
+      let edgeU = min(u, 1.0 - u) * length(axisU);
+      let edgeV = min(v, 1.0 - v) * length(axisV);
+      let edgeDist = min(edgeU, edgeV);
+      return vec4f(smoothstep(-aa, aa, edgeDist), u, v, edgeDist);
+    }
+
+    fn dropEase(time: f32, start: f32, duration: f32) -> f32 {
+      let t = clamp((time - start) / duration, 0.0, 1.0);
+      let inverse = 1.0 - t;
+      return 1.0 - inverse * inverse * inverse;
+    }
+
+    fn appear(time: f32, start: f32) -> f32 {
+      return clamp((time - start) * 18.0, 0.0, 1.0);
+    }
+
+    fn led(level: f32, phase: f32, time: f32, motion: f32) -> f32 {
+      return mix(0.85, 0.5 + 0.5 * sin(time * 2.2 + phase), motion) * level;
+    }
+
+    // Soft contact shadow on the deck, ellipse in screen space.
+    fn dropShadow(initialColor: vec3f, point: vec2f, cx: f32, cz: f32, sx: f32, sz: f32, strength: f32) -> vec3f {
+      let center = iso(vec3f(cx, 0.345, cz));
+      let radius = (sx + sz) * 0.5 * SCENE_SCALE;
+      let d = length((point - center) / vec2f(radius * 1.1, radius * 0.62));
+      let shade = (1.0 - smoothstep(0.45, 1.0, d)) * strength;
+      return mix(initialColor, INK, shade);
+    }
+
+    // Extruded module with three shaded faces, crisp edge lines, vents, pins, label, LED, screws.
+    fn paintModule(
+      initialColor: vec3f,
+      point: vec2f,
+      base: vec3f,
+      size: vec3f,
+      accent: vec3f,
+      visibility: f32,
+      signal: f32,
+      detail: f32,
+      dark: f32,
+      aa: f32,
+    ) -> vec3f {
+      var color = initialColor;
+      let axisX = vec2f(ISO_C, ISO_S) * size.x * SCENE_SCALE;
+      let axisZ = vec2f(-ISO_C, ISO_S) * size.z * SCENE_SCALE;
+      let axisY = vec2f(0.0, size.y * SCENE_SCALE);
+      let lw = aa * 1.1;
+
+      let xInfo = faceInfo(point, iso(base + vec3f(size.x, size.y, 0.0)), axisZ, axisY, aa);
+      let zInfo = faceInfo(point, iso(base + vec3f(0.0, size.y, size.z)), axisX, axisY, aa);
+      let tInfo = faceInfo(point, iso(base + vec3f(0.0, size.y, 0.0)), axisX, axisZ, aa);
+      let xMask = xInfo.x * visibility;
+      let zMask = zInfo.x * visibility;
+      let tMask = tInfo.x * visibility;
+
+      var xCol = mix(mix(vec3f(0.78, 0.81, 0.88), accent, 0.40), mix(vec3f(0.12, 0.14, 0.19), accent, 0.22), dark);
+      var zCol = mix(mix(vec3f(0.90, 0.92, 0.96), accent, 0.30), mix(vec3f(0.18, 0.20, 0.26), accent, 0.28), dark);
+      let tCol = mix(mix(vec3f(1.0), accent, 0.16), mix(vec3f(0.26, 0.29, 0.36), accent, 0.34), dark);
+      xCol *= 1.0 - 0.16 * xInfo.z;
+      zCol *= 1.0 - 0.12 * zInfo.z;
+
+      color = mix(color, xCol, xMask);
+      color = mix(color, zCol, zMask);
+      color = mix(color, tCol, tMask);
+
+      let edgeCol = mix(mix(accent, INK, 0.45), mix(accent, vec3f(1.0), 0.30), dark);
+      let xEdge = (1.0 - smoothstep(lw, lw + aa, xInfo.w)) * xMask;
+      let zEdge = (1.0 - smoothstep(lw, lw + aa, zInfo.w)) * zMask;
+      let tEdge = (1.0 - smoothstep(lw * 1.15, lw * 1.15 + aa, tInfo.w)) * tMask;
+      color = mix(color, edgeCol, max(max(xEdge, zEdge), tEdge) * 0.9);
+
+      // Vent slits on the right face.
+      let ventRow = 1.0 - smoothstep(0.09, 0.17, abs(fract(xInfo.z * 5.0) - 0.5));
+      let ventGate = smoothstep(0.16, 0.24, xInfo.y) * (1.0 - smoothstep(0.68, 0.76, xInfo.y))
+        * smoothstep(0.14, 0.22, xInfo.z) * (1.0 - smoothstep(0.80, 0.88, xInfo.z));
+      color = mix(color, mix(INK, accent, 0.30), ventRow * ventGate * xMask * detail * 0.45);
+
+      // Pin field on the left face.
+      let pinUv = fract(vec2f(zInfo.y * 6.0, zInfo.z * 3.0)) - vec2f(0.5);
+      let pinDist = length(pinUv * vec2f(length(axisX) / 6.0, length(axisY) / 3.0));
+      let pinGate = smoothstep(0.10, 0.17, zInfo.y) * (1.0 - smoothstep(0.85, 0.92, zInfo.y))
+        * smoothstep(0.20, 0.27, zInfo.z) * (1.0 - smoothstep(0.68, 0.75, zInfo.z));
+      let pins = (1.0 - smoothstep(0.0026, 0.0026 + aa, pinDist)) * pinGate * zMask * detail;
+      color = mix(color, mix(INK, accent, 0.25), pins * 0.55);
+
+      // Etched label bar on the left face.
+      let labelD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.27, 0.88), vec2f(0.15, 0.032));
+      let label = (1.0 - smoothstep(0.0, 0.03, labelD)) * zMask * detail;
+      color = mix(color, INK, label * 0.30);
+
+      // Status LED with soft glow, top right of the left face.
+      let ledD = boxSdf(vec2f(zInfo.y, zInfo.z) - vec2f(0.85, 0.14), vec2f(0.042, 0.048));
+      let ledGlow = (1.0 - smoothstep(0.0, 0.20, ledD)) * zMask * detail;
+      let ledCore = (1.0 - smoothstep(0.0, 0.03, ledD)) * zMask * detail;
+      color = mix(color, accent, ledGlow * 0.30 * signal);
+      color = mix(color, mix(accent, vec3f(1.0), 0.35), ledCore * (0.30 + 0.70 * signal));
+
+      // Recessed roof panel and corner screws on the top face.
+      let roofD = abs(boxSdf(tInfo.yz - vec2f(0.5), vec2f(0.30)));
+      let roofLine = (1.0 - smoothstep(0.012, 0.028, roofD)) * tMask * detail;
+      color = mix(color, edgeCol, roofLine * 0.5);
+      let screwScale = vec2f(length(axisX), length(axisZ));
+      let screwDist = min(
+        min(length((tInfo.yz - vec2f(0.11, 0.11)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.11)) * screwScale)),
+        min(length((tInfo.yz - vec2f(0.11, 0.89)) * screwScale), length((tInfo.yz - vec2f(0.89, 0.89)) * screwScale))
+      );
+      let screws = (1.0 - smoothstep(0.0030, 0.0030 + aa, screwDist)) * tMask * detail;
+      color = mix(color, mix(INK, accent, 0.40), screws * 0.6);
+      return color;
+    }
+
+    // Host foundation slab: dark ink sides with accent rim, light deck with grid.
+    fn paintFoundation(initialColor: vec3f, point: vec2f, lift: f32, visibility: f32, aa: f32) -> vec3f {
+      var color = initialColor;
+      let axisX = vec2f(ISO_C, ISO_S) * 4.0 * SCENE_SCALE;
+      let axisZ = vec2f(-ISO_C, ISO_S) * 4.0 * SCENE_SCALE;
+      let axisY = vec2f(0.0, 0.33 * SCENE_SCALE);
+      let lw = aa * 1.2;
+
+      let xInfo = faceInfo(point, iso(vec3f(2.0, lift + 0.33, -2.0)), axisZ, axisY, aa);
+      let zInfo = faceInfo(point, iso(vec3f(-2.0, lift + 0.33, 2.0)), axisX, axisY, aa);
+      let dInfo = faceInfo(point, iso(vec3f(-2.0, lift + 0.33, -2.0)), axisX, axisZ, aa);
+      let xMask = xInfo.x * visibility;
+      let zMask = zInfo.x * visibility;
+      let dMask = dInfo.x * visibility;
+
+      color = mix(color, vec3f(0.10, 0.11, 0.15) * (1.0 - 0.15 * xInfo.z), xMask);
+      color = mix(color, vec3f(0.14, 0.15, 0.20) * (1.0 - 0.10 * zInfo.z), zMask);
+
+      var deckCol = vec3f(0.955, 0.963, 0.978);
+      let cells = dInfo.yz * 8.0;
+      let cellX = 1.0 - smoothstep(0.025, 0.065, min(fract(cells.x), 1.0 - fract(cells.x)));
+      let cellY = 1.0 - smoothstep(0.025, 0.065, min(fract(cells.y), 1.0 - fract(cells.y)));
+      deckCol = mix(deckCol, vec3f(0.76, 0.80, 0.88), max(cellX, cellY) * 0.45);
+      color = mix(color, deckCol, dMask);
+
+      let sideEdge = max(
+        (1.0 - smoothstep(lw, lw + aa, xInfo.w)) * xMask,
+        (1.0 - smoothstep(lw, lw + aa, zInfo.w)) * zMask
+      );
+      let dEdge = (1.0 - smoothstep(lw, lw + aa, dInfo.w)) * dMask;
+      color = mix(color, vec3f(0.05, 0.06, 0.09), sideEdge * 0.85);
+      color = mix(color, BLUE, dEdge * 0.7);
+
+      let rim = max(
+        (1.0 - smoothstep(0.09, 0.17, xInfo.z)) * xMask,
+        (1.0 - smoothstep(0.09, 0.17, zInfo.z)) * zMask
+      );
+      color = mix(color, BLUE, rim * 0.4);
+      return color;
+    }
+
+    // Docking socket recessed into the deck under a module footprint.
+    fn paintSocket(
+      initialColor: vec3f,
+      point: vec2f,
+      fx: f32,
+      fz: f32,
+      sx: f32,
+      sz: f32,
+      accent: vec3f,
+      visibility: f32,
+      aa: f32,
+    ) -> vec3f {
+      var color = initialColor;
+      let info = faceInfo(
+        point,
+        iso(vec3f(fx - 0.08, 0.336, fz - 0.08)),
+        vec2f(ISO_C, ISO_S) * (sx + 0.16) * SCENE_SCALE,
+        vec2f(-ISO_C, ISO_S) * (sz + 0.16) * SCENE_SCALE,
+        aa
+      );
+      let mask = info.x * visibility;
+      color = mix(color, mix(vec3f(0.86, 0.88, 0.93), accent, 0.24), mask);
+      let edge = (1.0 - smoothstep(aa * 1.1, aa * 1.1 + aa, info.w)) * mask;
+      color = mix(color, mix(accent, INK, 0.25), edge * 0.8);
+      return color;
+    }
+
+    // Data bus trace on the deck with a traveling pulse.
+    fn paintBus(
+      initialColor: vec3f,
+      point: vec2f,
+      a: vec3f,
+      b: vec3f,
+      phase: f32,
+      time: f32,
+      visibility: f32,
+      aa: f32,
+    ) -> vec3f {
+      var color = initialColor;
+      let pa = iso(a);
+      let pb = iso(b);
+      let line = segmentMask(point, pa, pb, aa * 1.1, aa) * visibility;
+      color = mix(color, vec3f(0.38, 0.44, 0.62), line * 0.55);
+      let head = mix(pa, pb, fract(time * 0.4 + phase));
+      let pulse = (1.0 - smoothstep(0.0042, 0.0042 + aa, length(point - head))) * visibility;
+      color = mix(color, BLUE, pulse * 0.9);
+      return color;
     }
 
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       let aspect = params.resolution.x / max(params.resolution.y, 1.0);
       var point = (uv - vec2f(0.5)) * vec2f(aspect, 1.0);
       let cursor = (params.pointer - vec2f(0.5)) * vec2f(aspect, 1.0);
-      let time = params.time * params.motion;
+      let aa = 1.3 / max(params.resolution.y, 1.0);
+      let animationTime = params.time * params.motion;
+      // Structural timeline: pinned at the fully assembled end state for reduced motion.
+      let sceneTime = mix(10.0, params.time, params.motion);
 
-      let gridUv = uv * vec2f(26.0 * aspect, 26.0);
-      let gridCell = abs(fract(gridUv) - 0.5);
-      let grid = max(lineMask(gridCell.x - 0.5, 0.012), lineMask(gridCell.y - 0.5, 0.012));
+      point -= cursor * 0.012;
+      point.y += (1.0 - smoothstep(0.72, 1.05, aspect)) * 0.08;
+      point /= mix(0.74, 1.0, smoothstep(0.5, 0.9, aspect));
 
-      let drift = vec2f(sin(time * 0.21), cos(time * 0.17)) * 0.035 + cursor * 0.025;
-      point -= drift;
+      // Blueprint background, pixel-crisp grid.
+      var color = vec3f(0.986, 0.989, 0.984);
+      let gridUv = uv * vec2f(30.0 * aspect, 30.0);
+      let gridPx = vec2f(30.0 * aspect, 30.0) / max(params.resolution, vec2f(1.0));
+      let gridX = 1.0 - smoothstep(gridPx.x * 0.7, gridPx.x * 1.5, abs(fract(gridUv.x) - 0.5));
+      let gridY = 1.0 - smoothstep(gridPx.y * 0.7, gridPx.y * 1.5, abs(fract(gridUv.y) - 0.5));
+      color -= vec3f(0.030, 0.036, 0.046) * max(gridX, gridY);
 
-      let outer = ring(point * vec2f(0.82, 1.0), 0.37, 0.004);
-      let middle = ring((point - vec2f(0.08, -0.02)) * vec2f(1.0, 0.72), 0.29, 0.006);
-      let inner = ring((point + vec2f(0.11, 0.04)) * vec2f(0.9, 1.18), 0.17, 0.004);
+      // Ground contact shadow under the platform.
+      let groundD = length((point - iso(vec3f(0.0))) / vec2f(0.40, 0.145));
+      color = mix(color, vec3f(0.55, 0.58, 0.66), (1.0 - smoothstep(0.5, 1.0, groundD)) * 0.13);
 
-      let angle = atan2(point.y, point.x);
-      let sweep = 0.5 + 0.5 * sin(angle * 3.0 - time * 0.7);
-      let spectral = vec3f(
-        0.22 + 0.18 * sin(angle + 0.0),
-        0.43 + 0.17 * sin(angle + 2.1),
-        0.92 + 0.08 * sin(angle + 4.2)
-      );
+      // Foundation slab drops in first.
+      let foundationLift = (1.0 - dropEase(sceneTime, 0.0, 0.5)) * 4.5;
+      color = paintFoundation(color, point, foundationLift, appear(sceneTime, 0.0), aa);
 
-      let ribbonY = point.y + 0.11 * sin(point.x * 7.0 - time * 0.55);
-      let ribbon = exp(-86.0 * ribbonY * ribbonY) * smoothstep(0.78, 0.06, abs(point.x));
-      let core = exp(-15.0 * dot(point, point));
-      let nodeA = exp(-520.0 * dot(point - vec2f(0.31, -0.12), point - vec2f(0.31, -0.12)));
-      let nodeB = exp(-620.0 * dot(point + vec2f(0.24, -0.17), point + vec2f(0.24, -0.17)));
+      // Docking sockets fade in on the deck.
+      let socketVis = appear(sceneTime, 0.34);
+      color = paintSocket(color, point, -1.6, -1.6, 1.1, 1.1, BLUE, socketVis, aa);
+      color = paintSocket(color, point, 0.2, -1.7, 1.4, 1.1, VIOLET, socketVis, aa);
+      color = paintSocket(color, point, -1.75, 0.15, 1.25, 1.25, MINT, socketVis, aa);
+      color = paintSocket(color, point, 0.65, 0.25, 1.05, 1.15, AMBER, socketVis, aa);
+      color = paintSocket(color, point, 0.025, -0.45, 0.95, 0.95, SLATE, socketVis, aa);
 
-      var color = vec3f(0.985, 0.988, 0.982);
-      color -= vec3f(0.035, 0.045, 0.055) * grid;
-      color = mix(color, vec3f(0.73, 0.84, 1.0), core * 0.42);
-      color += spectral * ribbon * 0.42;
-      color += vec3f(0.22, 0.47, 1.0) * outer * (0.34 + sweep * 0.22);
-      color += vec3f(0.58, 0.31, 1.0) * middle * 0.24;
-      color += vec3f(0.05, 0.72, 0.61) * inner * 0.27;
-      color += vec3f(0.12, 0.36, 1.0) * nodeA * 0.9;
-      color += vec3f(0.72, 0.2, 0.92) * nodeB * 0.72;
+      // Bus traces from each socket to the host core.
+      let busVis = appear(sceneTime, 0.5);
+      color = paintBus(color, point, vec3f(-1.05, 0.345, -0.5), vec3f(0.0, 0.345, 1.28), 0.0, animationTime, busVis, aa);
+      color = paintBus(color, point, vec3f(0.9, 0.345, -0.6), vec3f(0.0, 0.345, 1.28), 0.2, animationTime, busVis, aa);
+      color = paintBus(color, point, vec3f(-0.5, 0.345, 0.775), vec3f(0.0, 0.345, 1.28), 0.4, animationTime, busVis, aa);
+      color = paintBus(color, point, vec3f(0.65, 0.345, 0.825), vec3f(0.0, 0.345, 1.28), 0.6, animationTime, busVis, aa);
+      color = paintBus(color, point, vec3f(0.5, 0.345, 0.5), vec3f(0.0, 0.345, 1.28), 0.8, animationTime, busVis, aa);
 
-      let vignette = smoothstep(0.92, 0.25, length(uv - vec2f(0.5)));
-      color = mix(vec3f(1.0), color, 0.68 + 0.32 * vignette);
+      // Modules A-D drop onto their sockets in quick succession.
+      let easeA = dropEase(sceneTime, 0.45, 0.42);
+      let easeB = dropEase(sceneTime, 0.62, 0.42);
+      let easeC = dropEase(sceneTime, 0.79, 0.42);
+      let easeD = dropEase(sceneTime, 0.96, 0.42);
+      color = dropShadow(color, point, -1.05, -1.05, 1.1, 1.1, 0.16 * easeA);
+      color = dropShadow(color, point, 0.9, -1.15, 1.4, 1.1, 0.16 * easeB);
+      color = dropShadow(color, point, -1.125, 0.775, 1.25, 1.25, 0.16 * easeC);
+      color = dropShadow(color, point, 1.175, 0.825, 1.05, 1.15, 0.16 * easeD);
+
+      // Crane-delivered module E: rides the trolley, then lowers onto its socket.
+      let eVis = clamp((sceneTime - 1.0) * 8.0, 0.0, 1.0);
+      let trolleyHome = mix(2.05, 0.5, smoothstep(1.0, 1.35, sceneTime));
+      let assembled = smoothstep(2.05, 2.5, sceneTime);
+      let trolleyX = mix(trolleyHome, 1.05 + sin(animationTime * 0.5) * 0.55, assembled);
+      let eX = trolleyHome - 0.475;
+      let eDock = smoothstep(1.35, 1.92, sceneTime);
+      let eBaseY = mix(1.56, 0.33, eDock);
+      let attach = 1.0 - smoothstep(1.9, 2.0, sceneTime);
+      color = dropShadow(color, point, eX + 0.475, 0.025, 0.95, 0.95, 0.18 * eDock * eVis);
+
+      // Paint order is far to near: A, B, C, E, host core, D.
+      color = paintModule(color, point, vec3f(-1.6, 0.33 + (1.0 - easeA) * 4.5, -1.6), vec3f(1.1, 1.05, 1.1), BLUE, appear(sceneTime, 0.45), led(1.0, 0.0, animationTime, params.motion), 1.0, 0.0, aa);
+      color = paintModule(color, point, vec3f(0.2, 0.33 + (1.0 - easeB) * 4.5, -1.7), vec3f(1.4, 1.5, 1.1), VIOLET, appear(sceneTime, 0.62), led(1.0, 1.3, animationTime, params.motion), 1.0, 0.0, aa);
+      color = paintModule(color, point, vec3f(-1.75, 0.33 + (1.0 - easeC) * 4.5, 0.15), vec3f(1.25, 1.85, 1.25), MINT, appear(sceneTime, 0.79), led(1.0, 2.6, animationTime, params.motion), 1.0, 0.0, aa);
+      color = paintModule(color, point, vec3f(eX, eBaseY, -0.45), vec3f(0.95, 1.15, 0.95), SLATE, eVis, led(1.0, 3.9, animationTime, params.motion), 1.0, 0.0, aa);
+
+      // Host core chip on the deck, front center.
+      let coreEase = dropEase(sceneTime, 0.55, 0.4);
+      color = paintModule(color, point, vec3f(-0.35, 0.33 + (1.0 - coreEase) * 2.0, 1.3), vec3f(0.7, 0.26, 0.45), BLUE, appear(sceneTime, 0.55), led(1.0, 0.7, animationTime, params.motion), 1.0, 1.0, aa);
+
+      color = paintModule(color, point, vec3f(0.65, 0.33 + (1.0 - easeD) * 4.5, 0.25), vec3f(1.05, 0.85, 1.15), AMBER, appear(sceneTime, 0.96), led(1.0, 5.2, animationTime, params.motion), 1.0, 0.0, aa);
+
+      // Antenna with beacon on the tallest module.
+      let mastTop = iso(vec3f(-1.125, 0.33 + (1.0 - easeC) * 4.5 + 1.85, 0.775));
+      let antenna = segmentMask(point, mastTop, mastTop + vec2f(0.0, -0.038), aa * 0.9, aa) * appear(sceneTime, 0.79);
+      let beacon = (1.0 - smoothstep(0.0035, 0.0035 + aa, length(point - mastTop + vec2f(0.0, 0.034)))) * appear(sceneTime, 0.79);
+      color = mix(color, INK, antenna * 0.7);
+      color = mix(color, vec3f(0.94, 0.25, 0.20), beacon * led(1.0, 1.9, animationTime, params.motion));
+
+      // Tower crane: footing, mast, jib, counter-jib.
+      let craneVis = appear(sceneTime, 0.15);
+      let craneLift = (1.0 - dropEase(sceneTime, 0.15, 0.5)) * 2.0;
+      color = paintModule(color, point, vec3f(2.30, craneLift, -0.13), vec3f(0.42, 0.12, 0.36), SLATE, craneVis, 0.0, 0.0, 0.45, aa);
+      color = paintModule(color, point, vec3f(2.44, craneLift, -0.04), vec3f(0.13, 2.85, 0.13), SLATE, craneVis, 0.0, 0.0, 0.45, aa);
+      color = paintModule(color, point, vec3f(-0.75, 2.85 + craneLift, -0.04), vec3f(3.32, 0.11, 0.13), SLATE, craneVis, 0.0, 0.0, 0.45, aa);
+      color = paintModule(color, point, vec3f(2.57, 2.85 + craneLift, -0.04), vec3f(0.4, 0.11, 0.13), SLATE, craneVis, 0.0, 0.0, 0.45, aa);
+
+      // Trolley, cable, hook and the carried module.
+      let hookY = mix(eBaseY + 1.15, 2.3, smoothstep(1.95, 2.35, sceneTime));
+      let sway = sin(animationTime * 1.2) * 0.05 * assembled * (1.0 - attach);
+      let cableBottomX = mix(trolleyX, eX + 0.475, attach) + sway;
+      let cableBottomY = mix(hookY, eBaseY + 1.15, attach);
+      let rigVis = craneVis * eVis;
+      let cable = segmentMask(point, iso(vec3f(trolleyX, 2.74, 0.025)), iso(vec3f(cableBottomX, cableBottomY, 0.025)), aa * 0.9, aa) * rigVis;
+      color = mix(color, INK, cable * 0.75);
+      color = paintModule(color, point, vec3f(trolleyX - 0.10, 2.74, -0.015), vec3f(0.20, 0.11, 0.12), SLATE, craneVis, 0.0, 0.0, 0.45, aa);
+      color = paintModule(color, point, vec3f(cableBottomX - 0.05, cableBottomY - 0.12, -0.02), vec3f(0.10, 0.12, 0.09), SLATE, rigVis, 0.0, 0.0, 0.45, aa);
+
+      let vignette = smoothstep(0.98, 0.32, length(uv - vec2f(0.5)));
+      color = mix(vec3f(1.0), color, 0.88 + 0.12 * vignette);
       return vec4f(color, 1.0);
     }
   `;
@@ -87,11 +386,11 @@
     void (async () => {
       try {
         const gpu = await init();
-        const target = surface(gpu, canvas, { dpr: [1, 1.5] });
+        const target = surface(gpu, canvas, { dpr: [1, 2] });
         const pointer = [0.5, 0.5] as [number, number];
         const timer = clock(gpu);
         const shader = effect(gpu, SHADER_SOURCE, {
-          label: 'openforge-hero-signal',
+          label: 'openforge-plugin-builder',
           set: {
             params: {
               resolution: target.size,

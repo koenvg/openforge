@@ -1,14 +1,31 @@
 ---
-import { PLUGIN_CAPABILITIES } from '../../lib/landingContent';
+import { FIRST_PARTY_PLUGINS } from '../../lib/landingContent';
 import './PluginCustomizationSection.css';
+
+const sdkScopes = [
+  { label: 'UI', value: 'project views · task tabs and sections · review actions · settings' },
+  { label: 'Workflow', value: 'commands · events · prompt injection · start providers · background services' },
+  { label: 'Host', value: 'tasks · projects · storage · files · shell · notifications · browser surfaces' },
+];
+const hostCapabilities = ['tasks', 'projects', 'storage', 'fs', 'shell', 'navigation'];
 ---
 
 <section id="plugins" class="landing-section plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
   <div class="plugin-customization-heading">
-    <h2 id="plugin-customization-title" class="section-title">Plugins belong in the architecture.</h2>
+    <h2 id="plugin-customization-title" class="section-title">Build the control plane, one plugin at a time.</h2>
     <p class="section-intro">
-      Add views, task context, and automations through explicit extension points. The core task system stays stable while your control plane grows.
+      Frontend plugins add native OpenForge surfaces. Backend plugins add methods and long-running services. Both work through typed, capability-gated host APIs.
     </p>
+
+    <dl class="sdk-scope" aria-label="Plugin SDK customization surfaces">
+      {sdkScopes.map((scope) => (
+        <div>
+          <dt>{scope.label}</dt>
+          <dd>{scope.value}</dd>
+        </div>
+      ))}
+    </dl>
+
     <a class="text-link" href="https://www.npmjs.com/package/@openforge-app/plugin-sdk">
       Explore the plugin SDK
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 12 12 4M6 4h6v6" /></svg>
@@ -16,48 +33,55 @@ import './PluginCustomizationSection.css';
   </div>
 
   <div class="plugin-system">
-    <div class="plugin-architecture" aria-label={`OpenForge core connected to ${PLUGIN_CAPABILITIES.length} first-class plugin extension points`}>
-      <div class="plugin-architecture-grid" aria-hidden="true"></div>
-      <svg class="plugin-pipes" viewBox="0 0 1000 680" preserveAspectRatio="none" aria-hidden="true">
-        <g class="plugin-pipes-base">
-          {PLUGIN_CAPABILITIES.map((capability) => <path d={capability.pipePath} />)}
-        </g>
-        <g class="plugin-pipes-active">
-          {PLUGIN_CAPABILITIES.map((capability) => (
-            <path class={`theme-${capability.theme}`} data-plugin-pipe pathLength="1" d={capability.pipePath} />
-          ))}
-        </g>
-      </svg>
-
-      <div class="plugin-core" data-plugin-core>
-        <img src="/app-icon.svg" width="52" height="52" alt="" />
-        <div>
-          <strong>OpenForge core</strong>
-          <span>Tasks · runs · review</span>
-        </div>
-        {PLUGIN_CAPABILITIES.map((capability) => (
-          <i class={`core-port core-port-${capability.slot} theme-${capability.theme}`} aria-hidden="true"></i>
-        ))}
+    <div class="plugin-building" aria-label={`${FIRST_PARTY_PLUGINS.length} first-party plugins assembled on the OpenForge plugin host`}>
+      <div class="plugin-building-grid" aria-hidden="true"></div>
+      <div class="building-crane" aria-hidden="true">
+        <span class="crane-mast"></span>
+        <span class="crane-jib"></span>
+        <span class="crane-cable"></span>
+        <span class="crane-hook"></span>
       </div>
 
-      <ol class="plugin-nodes">
-        {PLUGIN_CAPABILITIES.map((capability) => (
-          <li class={`plugin-node plugin-node-${capability.slot} theme-${capability.theme}`} data-plugin-node>
-            <span class="plugin-node-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                {capability.iconPaths.map((path) => <path d={path} />)}
-              </svg>
-            </span>
-            <div>
-              <h3>{capability.title}</h3>
-              <code>{capability.code}</code>
-              <p>{capability.description}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div class="building-shell">
+        <div class="building-roof" data-building-piece>
+          <span>OpenForge SDK</span>
+          <strong>API v1</strong>
+        </div>
 
-      <p class="plugin-architecture-note">{PLUGIN_CAPABILITIES.length} extension points. One stable core.</p>
+        <ol class="plugin-modules">
+          {FIRST_PARTY_PLUGINS.map((plugin) => (
+            <li class:list={['plugin-module', `theme-${plugin.theme}`, { 'plugin-module-wide': plugin.wide }]} data-plugin-node>
+              <span class="plugin-module-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  {plugin.iconPaths.map((path) => <path d={path} />)}
+                </svg>
+              </span>
+              <div class="plugin-module-copy">
+                <h3>{plugin.title}</h3>
+                <p>{plugin.description}</p>
+                <ul aria-label={`${plugin.title} SDK APIs`}>
+                  {plugin.hooks.map((hook) => <li><code>{hook}</code></li>)}
+                </ul>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div class="building-foundation" data-plugin-core>
+          <div class="building-foundation-title">
+            <img src="/app-icon.svg" width="48" height="48" alt="" />
+            <div>
+              <strong>OpenForge plugin host</strong>
+              <span>Typed contracts. Scoped capabilities.</span>
+            </div>
+          </div>
+          <ul aria-label="Host capabilities">
+            {hostCapabilities.map((capability) => <li>{capability}</li>)}
+          </ul>
+        </div>
+      </div>
+
+      <p class="plugin-building-note">Already shipping in this repository.</p>
     </div>
   </div>
 </section>

@@ -21,25 +21,16 @@ export interface LandingActionLink extends BaseLandingActionLink {
   ariaLabel: string;
 }
 
-export type PluginDiagramSlot = 'northwest' | 'northeast' | 'southwest' | 'southeast';
-export type PluginTheme = 'blue' | 'violet' | 'mint' | 'amber';
+export type PluginTheme = 'blue' | 'violet' | 'mint' | 'amber' | 'slate';
 
-export interface PluginCapability {
+export interface FirstPartyPlugin {
   title: string;
-  code: string;
+  hooks: readonly string[];
   description: string;
   iconPaths: readonly string[];
-  slot: PluginDiagramSlot;
   theme: PluginTheme;
-  pipePath: string;
+  wide?: boolean;
 }
-
-type PluginDiagram = readonly [
-  PluginCapability & { slot: 'northwest'; theme: 'blue' },
-  PluginCapability & { slot: 'northeast'; theme: 'violet' },
-  PluginCapability & { slot: 'southwest'; theme: 'mint' },
-  PluginCapability & { slot: 'southeast'; theme: 'amber' },
-];
 
 export const TOP_REASONS = [
   {
@@ -96,45 +87,41 @@ export const FINAL_CTA_LINKS = [
   }
 ] satisfies readonly LandingActionLink[];
 
-export const PLUGIN_CAPABILITIES = [
+export const FIRST_PARTY_PLUGINS = [
   {
-    title: 'Project views',
-    slot: 'northwest',
-    theme: 'blue',
-    pipePath: 'M430 300 H370 V150 H300',
-    code: 'views.register',
-    description: 'Dashboards, review queues, and repository lenses.',
-    iconPaths: ['M4 5.5h16v13H4z', 'M4 10h16', 'M9 10v8.5']
-  },
-  {
-    title: 'Task context',
-    slot: 'northeast',
+    title: 'GitHub Sync',
+    hooks: ['views.register', 'taskUI.registerSection', 'reviewUI.registerRowAction', 'settings.registerSection'],
+    description: 'Pull-request views, task status, review actions, and Jira settings.',
     theme: 'violet',
-    pipePath: 'M570 300 H630 V150 H700',
-    code: 'taskPane.registerTab',
-    description: 'Notes, checklists, docs, and team review rituals.',
-    iconPaths: ['M5 4.5h14v15H5z', 'M10 4.5v15', 'M13 9h3', 'M13 13h3']
+    wide: true,
+    iconPaths: ['M7 3v4a4 4 0 0 0 4 4h6', 'm14 8 3 3-3 3', 'M7 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M17 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z']
   },
   {
-    title: 'Background automations',
-    slot: 'southwest',
+    title: 'File Viewer',
+    hooks: ['views.register', 'commands.register', 'fs'],
+    description: 'Browse and reveal project files from a rail view.',
+    theme: 'blue',
+    iconPaths: ['M3 6.5h7l2 2h9v10H3z', 'M3 8.5h18']
+  },
+  {
+    title: 'Terminal',
+    hooks: ['views.register', 'taskUI.registerTab', 'shell'],
+    description: 'Project terminals and task-scoped shell sessions.',
+    theme: 'slate',
+    iconPaths: ['m5 7 4 4-4 4', 'M11 17h7']
+  },
+  {
+    title: 'Task Browser',
+    hooks: ['taskUI.registerTab', 'browserSurfaces', 'commands.register'],
+    description: 'A secure, persistent browser surface inside every task.',
     theme: 'mint',
-    pipePath: 'M430 380 H370 V530 H300',
-    code: 'background.register',
-    description: 'Blocked work, CI events, stale tasks, and recurring prompts.',
-    iconPaths: [
-      'M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2',
-      'M9 16.5h3',
-      'm11 13.5 3 3-3 3'
-    ]
+    iconPaths: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z', 'M3.6 9h16.8', 'M3.6 15h16.8', 'M12 3a15 15 0 0 1 0 18', 'M12 3a15 15 0 0 0 0 18']
   },
   {
-    title: 'Host capabilities',
-    slot: 'southeast',
+    title: 'Task Schedules',
+    hooks: ['views.register', 'background.register', 'backend.registerMethod', 'tasks'],
+    description: 'One-off and recurring tasks powered by a background service.',
     theme: 'amber',
-    pipePath: 'M570 380 H630 V530 H700',
-    code: 'tasks · fs · shell · notifications',
-    description: 'Explicit, reviewable access for trusted extensions.',
-    iconPaths: ['M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z', 'm8.8 12.1 2 2 4.6-4.8']
+    iconPaths: ['M12 3a9 9 0 1 0 9 9', 'M12 7v5l3 2', 'M19 3v4h-4']
   }
-] satisfies PluginDiagram;
+] satisfies readonly FirstPartyPlugin[];

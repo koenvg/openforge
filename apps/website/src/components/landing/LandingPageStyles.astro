@@ -284,32 +284,99 @@
 
   .hero-visual-fallback {
     background:
-      radial-gradient(circle at 55% 48%, rgba(98, 126, 255, 0.34), transparent 8%),
-      radial-gradient(ellipse at 54% 48%, transparent 24%, rgba(52, 89, 255, 0.42) 24.2%, transparent 25%),
-      radial-gradient(ellipse at 53% 49%, transparent 34%, rgba(139, 92, 246, 0.28) 34.2%, transparent 35%),
-      linear-gradient(160deg, white, #f1f4ff 45%, #fafafa 72%);
+      linear-gradient(rgba(17, 19, 24, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(17, 19, 24, 0.055) 1px, transparent 1px),
+      linear-gradient(160deg, white, #f2f5ff 48%, #fafafa 78%);
+    background-size: 2.5rem 2.5rem, 2.5rem 2.5rem, auto;
   }
 
-  .hero-visual-fallback::before,
-  .hero-visual-fallback::after {
+  .fallback-building {
     position: absolute;
-    border: 1px solid rgba(41, 71, 255, 0.24);
-    border-radius: 50%;
+    top: 18%;
+    left: 50%;
+    display: grid;
+    width: min(64%, 30rem);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+    padding: 0.4rem;
+    border: 0.32rem solid var(--ink);
+    background: var(--line-strong);
+    box-shadow: 1.2rem 1.4rem 3rem rgba(20, 26, 38, 0.13);
+    transform: translateX(-50%);
+  }
+
+  .fallback-building span {
+    position: relative;
+    min-height: 5.5rem;
+    border: 1px solid color-mix(in srgb, var(--blue) 58%, var(--line));
+    background: rgba(242, 245, 255, 0.96);
+    animation: fallback-module-build 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .fallback-building span:first-child {
+    min-height: 4.4rem;
+    grid-column: 1 / -1;
+    border-color: rgba(124, 58, 237, 0.55);
+    background: #f6f1ff;
+    animation-delay: 0.42s;
+  }
+
+  .fallback-building span:nth-child(2) {
+    animation-delay: 0.34s;
+  }
+
+  .fallback-building span:nth-child(3) {
+    border-color: rgba(71, 85, 105, 0.55);
+    background: #f4f6f8;
+    animation-delay: 0.26s;
+  }
+
+  .fallback-building span:nth-child(4) {
+    border-color: rgba(5, 150, 105, 0.55);
+    background: #effbf6;
+    animation-delay: 0.18s;
+  }
+
+  .fallback-building span:nth-child(5) {
+    border-color: rgba(217, 119, 6, 0.55);
+    background: #fff8eb;
+    animation-delay: 0.1s;
+  }
+
+  .fallback-building span::before,
+  .fallback-building span::after {
+    position: absolute;
+    top: -0.38rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    border: 2px solid white;
+    background: currentColor;
     content: "";
-    transform: rotate(-16deg);
   }
 
-  .hero-visual-fallback::before {
-    inset: 24% 14%;
+  .fallback-building span::before {
+    left: 0.75rem;
   }
 
-  .hero-visual-fallback::after {
-    inset: 34% 25%;
-    border-color: rgba(8, 168, 130, 0.28);
-    transform: rotate(22deg);
+  .fallback-building span::after {
+    right: 0.75rem;
   }
 
-  .hero-orbit-label {
+  .fallback-building i {
+    min-height: 3.2rem;
+    grid-column: 1 / -1;
+    border-top: 0.32rem solid var(--ink);
+    background: var(--surface-soft);
+  }
+
+  @keyframes fallback-module-build {
+    from {
+      opacity: 0;
+      transform: translateY(-2rem) scale(0.96);
+    }
+  }
+
+  .hero-build-label {
     position: absolute;
     z-index: 4;
     display: flex;
@@ -326,25 +393,24 @@
     backdrop-filter: blur(12px);
   }
 
-  .hero-orbit-label span {
+  .hero-build-label span {
     width: 0.36rem;
     height: 0.36rem;
-    border-radius: 50%;
     background: var(--blue);
     box-shadow: 0 0 0 0.22rem rgba(41, 71, 255, 0.1);
   }
 
-  .hero-orbit-label-top {
-    top: 17%;
-    right: 10%;
+  .hero-build-label-top {
+    top: 13%;
+    right: 9%;
   }
 
-  .hero-orbit-label-bottom {
-    right: 17%;
+  .hero-build-label-bottom {
+    right: 13%;
     bottom: 18%;
   }
 
-  .hero-orbit-label-bottom span {
+  .hero-build-label-bottom span {
     background: var(--mint);
     box-shadow: 0 0 0 0.22rem rgba(8, 168, 130, 0.1);
   }
@@ -1066,17 +1132,22 @@
     }
 
     .hero-visual {
-      min-height: 27rem;
+      min-height: 34rem;
     }
 
-    .hero-orbit-label-top {
+    .fallback-building {
       top: 12%;
+      width: min(78%, 30rem);
+    }
+
+    .hero-build-label-top {
+      top: 9%;
       right: 5%;
     }
 
-    .hero-orbit-label-bottom {
+    .hero-build-label-bottom {
       right: 8%;
-      bottom: 13%;
+      bottom: 32%;
     }
 
     .hero-status-strip {
