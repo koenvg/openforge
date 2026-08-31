@@ -16,7 +16,7 @@
 
 <button
   type="button"
-  class="relative mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {active ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
+  class="relative mx-2 flex min-h-11 w-[calc(100%_-_1rem)] items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {active ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
   title={collapsed ? item.title : undefined}
   aria-label={item.title}
   aria-current={active ? 'page' : undefined}
