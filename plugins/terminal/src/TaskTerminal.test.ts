@@ -18,6 +18,7 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
       killPty: vi.fn().mockResolvedValue(undefined),
     },
     mockEntry: {
+      shellSessionKey: 'T-1-shell-0',
       taskId: 'T-1-shell-0',
       view: {
         geometry: { cols: 80, rows: 24 },
@@ -33,17 +34,12 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
     terminalPoolMocks: {
       acquire: vi.fn(),
       attach: vi.fn(),
-      detach: vi.fn(),
-      recoverActiveTerminal: vi.fn(),
-      resetTerminal: vi.fn((entry) => entry.view.reset()),
-      shouldSpawnPty: vi.fn(),
-      markPtySpawnPending: vi.fn(),
-      clearPtySpawnPending: vi.fn(),
-      markShellPtyStarted: vi.fn(),
+      beginPtySpawn: vi.fn(),
       markPerformancePhase: vi.fn(),
+      resetPresentation: vi.fn((entry) => entry.view.reset()),
+      detach: vi.fn(),
       getShellLifecycleState: vi.fn(),
       subscribeShellLifecycle: vi.fn(),
-      getTerminalImageProtocol: vi.fn(() => 'iterm2'),
       emitLifecycle: null as null | ((state: ShellLifecycleState) => void),
     },
   }
@@ -60,17 +56,12 @@ vi.mock('./lib/ipc', () => ({
 vi.mock('./lib/terminalPool', () => ({
   acquire: terminalPoolMocks.acquire,
   attach: terminalPoolMocks.attach,
-  detach: terminalPoolMocks.detach,
-  recoverActiveTerminal: terminalPoolMocks.recoverActiveTerminal,
-  resetTerminal: terminalPoolMocks.resetTerminal,
-  markPtySpawnPending: terminalPoolMocks.markPtySpawnPending,
-  clearPtySpawnPending: terminalPoolMocks.clearPtySpawnPending,
-  shouldSpawnPty: terminalPoolMocks.shouldSpawnPty,
-  markShellPtyStarted: terminalPoolMocks.markShellPtyStarted,
+  beginPtySpawn: terminalPoolMocks.beginPtySpawn,
   markPerformancePhase: terminalPoolMocks.markPerformancePhase,
+  resetPresentation: terminalPoolMocks.resetPresentation,
+  detach: terminalPoolMocks.detach,
   getShellLifecycleState: terminalPoolMocks.getShellLifecycleState,
   subscribeShellLifecycle: terminalPoolMocks.subscribeShellLifecycle,
-  getTerminalImageProtocol: terminalPoolMocks.getTerminalImageProtocol,
 }))
 
 function resetReadyState() {
@@ -106,22 +97,31 @@ describe('TaskTerminal ready affordance', () => {
     terminalPoolMocks.acquire.mockResolvedValue(mockEntry)
     terminalPoolMocks.attach.mockImplementation(async () => {
       mockEntry.attached = true
+      return {
+        generation: 1,
+        refit: vi.fn(async () => ({ ...mockEntry.view.geometry })),
+        detach: vi.fn(() => { mockEntry.attached = false }),
+      }
     })
-    terminalPoolMocks.shouldSpawnPty.mockImplementation(() => !mockEntry.ptyActive && !mockEntry.spawnPending && !mockEntry.needsClear)
-    terminalPoolMocks.markPtySpawnPending.mockImplementation(() => {
+    terminalPoolMocks.beginPtySpawn.mockImplementation(() => {
+      if (mockEntry.ptyActive || mockEntry.spawnPending) return null
       mockEntry.spawnPending = true
-    })
-    terminalPoolMocks.clearPtySpawnPending.mockImplementation(() => {
-      mockEntry.spawnPending = false
-    })
-    terminalPoolMocks.markShellPtyStarted.mockImplementation((_entry, instanceId: number) => {
-      mockEntry.ptyActive = true
-      mockEntry.needsClear = false
-      mockEntry.currentPtyInstance = instanceId
-      lifecycleState.ptyActive = true
-      lifecycleState.shellExited = false
-      lifecycleState.currentPtyInstance = instanceId
-      lifecycleState.hasOutput = false
+      return {
+        generation: 1,
+        geometry: { ...mockEntry.view.geometry },
+        imageProtocol: 'iterm2',
+        started: vi.fn(async (instanceId: number) => {
+          mockEntry.ptyActive = true
+          mockEntry.needsClear = false
+          mockEntry.currentPtyInstance = instanceId
+          lifecycleState.ptyActive = true
+          lifecycleState.shellExited = false
+          lifecycleState.currentPtyInstance = instanceId
+          lifecycleState.hasOutput = false
+          mockEntry.spawnPending = false
+        }),
+        cancel: vi.fn(() => { mockEntry.spawnPending = false }),
+      }
     })
     terminalPoolMocks.getShellLifecycleState.mockImplementation(() => ({ ...lifecycleState }))
     terminalPoolMocks.subscribeShellLifecycle.mockImplementation((_key, callback: (state: typeof lifecycleState) => void) => {

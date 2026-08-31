@@ -2,11 +2,12 @@ import { writable } from 'svelte/store'
 import { vi, type Mock } from 'vitest'
 import type {
   TerminalRuntimeEnvironment,
-  PoolEntry,
   TerminalRuntime,
   TerminalRuntimeOptions,
+  TerminalSession,
   TerminalSessionTransportHandlers,
   TerminalTransport,
+  TerminalViewAttachment,
 } from './terminalRuntime'
 
 interface TestReplaySnapshot {
@@ -100,7 +101,10 @@ function decodeBase64(value: string): Uint8Array {
 }
 
 
-export async function attachTestTerminal(runtime: TerminalRuntime, entry: PoolEntry): Promise<void> {
+export async function attachTestTerminal(
+  runtime: TerminalRuntime,
+  session: TerminalSession,
+): Promise<TerminalViewAttachment> {
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     callback(0)
     return 1
@@ -124,7 +128,7 @@ export async function attachTestTerminal(runtime: TerminalRuntime, entry: PoolEn
   })
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
-  await runtime.attach(entry, document.createElement('div'))
+  return runtime.attach(session, document.createElement('div'))
 }
 export function createHost({ listenerRegistrationFailures }: CreateHostOptions = {}): TestHost {
   const sessionHandlers = new Map<string, Set<TestSessionRegistration>>()

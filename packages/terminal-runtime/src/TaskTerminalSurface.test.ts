@@ -2,7 +2,8 @@ import { cleanup, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TaskTerminalSurface from './TaskTerminalSurface.svelte'
-import type { PoolEntry, ShellLifecycleState, TerminalRuntime } from './terminalRuntime'
+import type { ShellLifecycleState, TerminalRuntime } from './terminalRuntime'
+import { createTerminalSessionHandle } from './terminalRuntimeTypes'
 import type { TerminalSurfaceAdapter } from './terminalSurfaceAdapter'
 
 const readyLifecycle: ShellLifecycleState = {
@@ -13,30 +14,18 @@ const readyLifecycle: ShellLifecycleState = {
 }
 
 function createAdapter(): TerminalSurfaceAdapter {
-  const entry = {
-    attached: false,
-    view: {
-      geometry: { cols: 80, rows: 24 },
-      imageProtocol: null,
-      isMountedIn: vi.fn(() => true),
-    },
-  } as unknown as PoolEntry
-
+  const session = createTerminalSessionHandle('T-1-shell-0')
   const runtime = {
-    acquire: vi.fn(async () => entry),
-    attach: vi.fn(async () => {
-      entry.attached = true
-      return { generation: 1, detach: vi.fn() }
-    }),
-    detach: vi.fn(),
-    recoverActiveTerminal: vi.fn(async () => undefined),
-    resetTerminal: vi.fn(),
-    markPtySpawnPending: vi.fn(),
-    clearPtySpawnPending: vi.fn(),
-    shouldSpawnPty: vi.fn(() => false),
-    markShellPtyStarted: vi.fn(),
+    acquire: vi.fn(async () => session),
+    attach: vi.fn(async () => ({
+      generation: 1,
+      refit: vi.fn(async () => ({ cols: 80, rows: 24 })),
+      detach: vi.fn(),
+    })),
+    beginPtySpawn: vi.fn(() => null),
+    release: vi.fn(),
+    resetPresentation: vi.fn(async () => undefined),
     getShellLifecycleState: vi.fn(() => readyLifecycle),
-    getTerminalImageProtocol: vi.fn(() => null),
     subscribeShellLifecycle: vi.fn(() => () => undefined),
   } as unknown as TerminalRuntime
 

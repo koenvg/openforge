@@ -307,14 +307,14 @@ describe('desktop TerminalTransport async registration', () => {
       }
       await attachment
 
-      expect(entry.terminalOutputObservation).toMatchObject({
+      expect(runtime.diagnostics.observe(terminalKey).output).toMatchObject({
         ptyInstanceId: 7,
         receivedBytes: 512 * 1024,
         firstSequence: 1,
         lastSequence: 64,
         sequenceContinuous: true,
+        modelSequence: 64,
       })
-      expect(entry.terminalModelSequence).toBe(64)
       expect(view.writeLive).toHaveBeenCalledTimes(64)
     } finally {
       runtime.dispose()
@@ -361,8 +361,10 @@ describe.each([
       ptyInstanceId: 9,
       sequence: 1,
     })
-    expect(entry.currentPtyInstance).toBe(9)
-    expect(entry.terminalModelSequence).toBe(4)
+    expect(runtime.diagnostics.observe('T-1-shell-2')).toMatchObject({
+      lifecycle: { currentPtyInstance: 9 },
+      output: { modelSequence: 4 },
+    })
   })
 
   it('pauses live model output while detached and restores it after reattachment', async () => {
@@ -379,10 +381,10 @@ describe.each([
     const firstContainer = document.createElement('div')
     const secondContainer = document.createElement('div')
 
-    await runtime.attach(entry, firstContainer)
+    const firstAttachment = await runtime.attach(entry, firstContainer)
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
 
-    runtime.detach(entry)
+    firstAttachment.detach()
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
     const writesBeforeDetachedOutput = writeLive.mock.calls.length
     harness.emitModelOutput('T-1-shell-2', 'detached output', 7, 1)

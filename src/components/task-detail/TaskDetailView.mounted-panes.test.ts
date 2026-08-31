@@ -7,6 +7,7 @@ import {
   mockOnRunAction,
   resetTaskDetailViewTestState,
   secondaryTask,
+  terminalAttachmentDetach,
 } from './TaskDetailView.testUtils'
 
 const { TaskDetailView, taskActiveView } = getTaskDetailViewTestDependencies()
@@ -68,10 +69,10 @@ describe('TaskDetailView mounted-pane behavior', () => {
 
   it('keeps the agent PTY component mounted while another tab is active', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
-    const { acquire, detach } = await import('../../lib/terminalPool')
+    const { acquire } = await import('../../lib/terminalPool')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
     vi.mocked(acquire).mockClear()
-    vi.mocked(detach).mockClear()
+    terminalAttachmentDetach.mockClear()
 
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(vi.mocked(acquire)).toHaveBeenCalledWith('T-42'))
@@ -80,7 +81,7 @@ describe('TaskDetailView mounted-pane behavior', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true'))
 
     expect(screen.getByTestId('agent-workbench').getAttribute('aria-hidden')).toBe('true')
-    expect(vi.mocked(detach)).not.toHaveBeenCalled()
+    expect(terminalAttachmentDetach).not.toHaveBeenCalled()
 
     await fireEvent.click(screen.getByRole('button', { name: /^agent\b/i }))
     expect(screen.getByTestId('agent-workbench').getAttribute('aria-hidden')).toBe('false')

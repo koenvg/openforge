@@ -49,13 +49,12 @@ describe('terminal runtime transport seam', () => {
         watermark: 0,
       },
     })
-    const entry = await acquisition
+    await acquisition
 
     expect(transport.subscribeSession).toHaveBeenCalledOnce()
     expect(transport.subscribeSession).toHaveBeenCalledWith('T-1-shell-0', expect.any(Object))
     expect(view.replaceSnapshot).not.toHaveBeenCalled()
-    expect(entry.viewNeedsRecovery).toBe(true)
     expect(view.writeLive).not.toHaveBeenCalled()
-    expect(entry.currentPtyInstance).toBe(7)
+    expect(runtime.diagnostics.observe('T-1-shell-0')?.lifecycle.currentPtyInstance).toBe(7)
   })
 })

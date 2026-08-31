@@ -44,7 +44,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     const runtimeFiles = [
       'terminalRuntime.ts',
       'terminalAcquisition.ts',
-      'terminalStateView.ts',
+      'terminalSessionCoordinator.ts',
       'terminalReconnectReplay.ts',
     ]
 
@@ -65,7 +65,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
       'terminalSessionService.ts',
       'terminalAcquisition.ts',
       'terminalAttachment.ts',
-      'terminalStateView.ts',
+      'terminalSessionCoordinator.ts',
       'terminalReconnectReplay.ts',
       'terminalControls.ts',
       'terminalSessionLifecycle.ts',
@@ -139,5 +139,19 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(xtermCss).toContain("font-family: 'Symbols Nerd Font Mono'")
     expect(xtermCss).toContain("url('./fonts/SymbolsNerdFontMono-Regular.woff2')")
     expect(statSync(symbolsFontPath).isFile()).toBe(true)
+  })
+
+  it('does not export the shared mutable PoolEntry contract', () => {
+    const runtimeTypes = readFileSync(
+      join(process.cwd(), 'packages/terminal-runtime/src/terminalRuntimeTypes.ts'),
+      'utf8',
+    )
+    const packageIndex = readFileSync(
+      join(process.cwd(), 'packages/terminal-runtime/src/index.ts'),
+      'utf8',
+    )
+
+    expect(runtimeTypes).not.toMatch(/export interface PoolEntry/)
+    expect(packageIndex).not.toMatch(/type PoolEntry/)
   })
 })

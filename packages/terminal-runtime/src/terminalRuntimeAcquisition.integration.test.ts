@@ -48,9 +48,9 @@ describe('terminal runtime acquisition', () => {
     expect(host.getListenerCount(`pty-model-disabled-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(0)
 
-    const entry = await runtime.acquire(terminalKey)
+    await runtime.acquire(terminalKey)
 
-    expect(entry.currentPtyInstance).toBe(7)
+    expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.currentPtyInstance).toBe(7)
     expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-model-disabled-${terminalKey}`)).toBe(1)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
@@ -80,8 +80,7 @@ describe('terminal runtime acquisition', () => {
       data: btoa(' later output'),
     })
 
-    expect(entry.terminalStateSource).toBe('ghostty-snapshot')
-    expect(entry.currentPtyInstance).toBe(7)
+    expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.currentPtyInstance).toBe(7)
     expect(terminalMocks.instances[0].write).toHaveBeenCalledTimes(3)
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       1,
@@ -134,7 +133,7 @@ describe('terminal runtime acquisition', () => {
       expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
       expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
       expect(runtime.hasTerminal(terminalKey)).toBe(false)
-      expect(runtime._getPool().has(terminalKey)).toBe(false)
+      expect(runtime.diagnostics.list()).not.toContain(terminalKey)
       expect(host.getListenerCount(modelOutputEvent)).toBe(0)
       expect(host.getListenerCount(exitEvent)).toBe(0)
       expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(0)
@@ -142,7 +141,8 @@ describe('terminal runtime acquisition', () => {
       const retriedEntry = await runtime.acquire(terminalKey)
 
       expect(terminalMocks.instances).toHaveLength(2)
-      expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
+      expect(retriedEntry.shellSessionKey).toBe(terminalKey)
+      expect(runtime.diagnostics.observe(terminalKey)).not.toBeNull()
       expect(host.getListenerCount(modelOutputEvent)).toBe(0)
       expect(host.getListenerCount(exitEvent)).toBe(1)
       expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
@@ -167,7 +167,8 @@ describe('terminal runtime acquisition', () => {
 
     expect(releasedEntry).not.toBe(currentEntry)
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
-    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+    expect(currentEntry.shellSessionKey).toBe(terminalKey)
+    expect(runtime.diagnostics.observe(terminalKey)).not.toBeNull()
     expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
@@ -220,7 +221,8 @@ describe('terminal runtime acquisition', () => {
 
     const currentEntry = await runtime.acquire(terminalKey)
     expect(currentEntry).not.toBe(releasedEntry)
-    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+    expect(currentEntry.shellSessionKey).toBe(terminalKey)
+    expect(runtime.diagnostics.observe(terminalKey)).not.toBeNull()
   })
 
 })

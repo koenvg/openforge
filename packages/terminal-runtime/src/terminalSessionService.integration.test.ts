@@ -18,14 +18,14 @@ describe('host-owned terminal session service', () => {
     ])
 
     expect(regularEntry).toBe(agentEntry)
-    expect(runtime._getPool().size).toBe(1)
+    expect(runtime.diagnostics.list()).toHaveLength(1)
 
     agent.release('T-1-shell-0')
-    expect(runtime._getPool().size).toBe(1)
+    expect(runtime.diagnostics.list()).toHaveLength(1)
     expect(view.dispose).not.toHaveBeenCalled()
 
     regularTerminal.release('T-1-shell-0')
-    expect(runtime._getPool().size).toBe(0)
+    expect(runtime.diagnostics.list()).toHaveLength(0)
     expect(view.dispose).toHaveBeenCalledOnce()
   })
 

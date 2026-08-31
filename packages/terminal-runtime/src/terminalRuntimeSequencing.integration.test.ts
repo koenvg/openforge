@@ -43,8 +43,8 @@ describe('terminal output sequencing', () => {
       ptyInstanceId: 7,
       sequence: 3,
     })
-    expect(entry.terminalModelSequence).toBe(4)
-    expect(entry.terminalOutputObservation).toEqual({
+    expect(runtime.diagnostics.observe('T-1-shell-0')?.output).toMatchObject({
+      modelSequence: 4,
       ptyInstanceId: 7,
       receivedBytes: 16,
       firstSequence: 1,

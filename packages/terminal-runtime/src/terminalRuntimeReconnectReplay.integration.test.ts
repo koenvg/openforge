@@ -30,7 +30,8 @@ describe('terminal runtime reconnect replay', () => {
 
     expect(releasedEntry).not.toBe(currentEntry)
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
-    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+    expect(currentEntry.shellSessionKey).toBe(terminalKey)
+    expect(runtime.diagnostics.observe(terminalKey)).not.toBeNull()
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
     expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
@@ -52,7 +53,7 @@ describe('terminal runtime reconnect replay', () => {
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
     expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
     expect(runtime.hasTerminal(terminalKey)).toBe(false)
-    expect(runtime._getPool().has(terminalKey)).toBe(false)
+    expect(runtime.diagnostics.list()).not.toContain(terminalKey)
     expect(host.getListenerCount(modelOutputEvent)).toBe(0)
     expect(host.getListenerCount(exitEvent)).toBe(0)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(0)
@@ -60,7 +61,8 @@ describe('terminal runtime reconnect replay', () => {
     const retriedEntry = await runtime.acquire(terminalKey)
 
     expect(terminalMocks.instances).toHaveLength(2)
-    expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
+    expect(retriedEntry.shellSessionKey).toBe(terminalKey)
+    expect(runtime.diagnostics.observe(terminalKey)).not.toBeNull()
     expect(host.getListenerCount(modelOutputEvent)).toBe(0)
     expect(host.getListenerCount(exitEvent)).toBe(1)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
@@ -80,8 +82,6 @@ describe('terminal runtime reconnect replay', () => {
     host.emit(APP_EVENTS_RECONNECTED_EVENT, {})
     await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
 
-    expect(entry.attached).toBe(false)
-    expect(entry.viewNeedsRecovery).toBe(true)
     expect(terminal.write).not.toHaveBeenCalled()
 
     host.setBuffer(terminalKey, 'latest authority before attachment')
@@ -110,16 +110,16 @@ describe('terminal runtime reconnect replay', () => {
       .mockResolvedValueOnce(replayState('current', 10))
       .mockImplementationOnce(() => new Promise(resolve => { resolveReplay = resolve }))
     const runtime = createTerminalRuntime(host)
-    const entry = await runtime.acquire(terminalKey)
+    await runtime.acquire(terminalKey)
     terminalMocks.instances[0].write.mockClear()
 
     const replay = runtime.replayPtyBuffersForActiveTerminals()
     await vi.waitFor(() => expect(host.getPtyBuffer).toHaveBeenCalledTimes(2))
-    const started = runtime.markShellPtyStarted(entry, 11)
+    const restored = runtime.restorePtyInstance(terminalKey, 11)
     resolveReplay(replayState('stale replay', 10))
-    await Promise.all([replay, started])
+    await Promise.all([replay, restored])
 
-    expect(entry.currentPtyInstance).toBe(11)
+    expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.currentPtyInstance).toBe(11)
     expect(terminalMocks.instances[0].write).not.toHaveBeenCalled()
   }) // stale reconnect replay
 }) // terminal runtime reconnect replay

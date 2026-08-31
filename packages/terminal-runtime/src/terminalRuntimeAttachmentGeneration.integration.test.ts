@@ -46,11 +46,11 @@ describe('terminal attachment generations', () => {
       firstAttachment.detach()
 
       expect(view.isMountedIn(secondHost)).toBe(true)
-      expect(entry.attached).toBe(true)
+      expect(runtime.diagnostics.observe('T-1-shell-0')?.view.attached).toBe(true)
 
       secondAttachment.detach()
 
-      expect(entry.attached).toBe(false)
+      expect(runtime.diagnostics.observe('T-1-shell-0')?.view.attached).toBe(false)
       expect(view.unmount).toHaveBeenCalledTimes(2)
     } finally {
       runtime.release('T-1-shell-0')

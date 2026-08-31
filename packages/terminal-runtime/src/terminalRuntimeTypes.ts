@@ -1,12 +1,13 @@
-import type {
-  TerminalModelOutputEvent,
-  TerminalSessionTransportSubscription,
-} from './terminalTransport'
-import type { TerminalView, TerminalViewDisposable } from './terminalView'
-import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { Readable } from 'svelte/store'
-import type { ThemeMode } from './theme'
+import type { TerminalImageProtocol } from './terminalImages'
+import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
+import type { ThemeMode } from './theme'
+import type { TerminalGeometry } from './terminalTransport'
+import type {
+  TerminalViewPresentationEvidence,
+  TerminalViewPresentationSnapshot,
+} from './terminalView'
 
 export type TerminalRuntimeUnlistenFn = () => void
 
@@ -26,31 +27,55 @@ export interface TerminalRuntimeEnvironment {
   performanceTrace?: TerminalPerformanceTrace
 }
 
-export interface PoolEntry {
-  shellSessionKey: string
-  view: TerminalView
-  ptyActive: boolean
-  needsClear: boolean
-  shellExited: boolean
-  transportSubscription: TerminalSessionTransportSubscription | null
-  viewSubscriptions: TerminalViewDisposable[]
-  resizeObserver: ResizeObserver | null
-  visibilityObserver: IntersectionObserver | null
-  resizeTimeout: ReturnType<typeof setTimeout> | null
-  attached: boolean
-  viewVisible: boolean
-  viewVisibilityGeneration: number
-  viewNeedsRecovery: boolean
-  attachmentGeneration: number
-  spawnPending: boolean
-  currentPtyInstance: number | null
-  terminalStateSource: TerminalStateSource
-  terminalModelSequence: number | null
-  pendingTerminalModelOutput: TerminalModelOutputEvent[]
-  terminalReplayRecovery: Promise<void> | null
-  hasOutput: boolean
-  outputSequence: number
-  terminalOutputObservation: TerminalOutputObservation
+declare const terminalSessionBrand: unique symbol
+
+export interface TerminalSession {
+  readonly shellSessionKey: string
+  readonly [terminalSessionBrand]: true
+}
+
+export function createTerminalSessionHandle(shellSessionKey: string): TerminalSession {
+  return Object.freeze({ shellSessionKey }) as TerminalSession
+}
+
+export interface TerminalViewAttachment {
+  readonly generation: number
+  refit(signal?: AbortSignal): Promise<TerminalGeometry | null>
+  detach(): void
+}
+
+export interface TerminalPtySpawnLease {
+  readonly generation: number
+  readonly geometry: TerminalGeometry
+  readonly imageProtocol: TerminalImageProtocol | null
+  started(instanceId: number): Promise<void>
+  cancel(): void
+}
+
+export interface TerminalSessionDiagnostics {
+  readonly shellSessionKey: string
+  readonly lifecycle: ShellLifecycleState & {
+    attached: boolean
+    spawnPending: boolean
+    stateSource: TerminalStateSource
+  }
+  readonly output: Readonly<TerminalOutputObservation> & {
+    modelSequence: number | null
+  }
+  readonly view: Readonly<{
+    attached: boolean
+    visible: boolean
+    needsRecovery: boolean
+    attachmentGeneration: number
+  }>
+  readonly geometry: TerminalGeometry
+}
+
+export interface TerminalRuntimeDiagnostics {
+  list(): string[]
+  observe(shellSessionKey: string): TerminalSessionDiagnostics
+  capturePresentation(shellSessionKey: string): TerminalViewPresentationSnapshot
+  drainPresentation(shellSessionKey: string): Promise<TerminalViewPresentationEvidence>
 }
 
 export interface TerminalTab {
