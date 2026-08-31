@@ -1,9 +1,9 @@
 import { confirmTerminalTaskAction, isTaskCompleting } from './completeTask'
-import type { PullRequestMergeMethod, Task } from './types'
+import type { PullRequestMergeMethod, TaskDetail } from './types'
 import type { TaskActionRunner } from './taskActionRunner'
 
 interface ActionPaletteControllerOptions {
-  getSelectedTask(): Task | null
+  getSelectedTask(): TaskDetail | null
   taskActions: TaskActionRunner
   goBack(): void
   showSearchTasks(): void
@@ -11,13 +11,13 @@ interface ActionPaletteControllerOptions {
   showProjectSwitcher(): void
   triggerGithubSync(): Promise<void>
   runApp?: {
-    capture(task: Task): (() => Promise<void>) | null
+    capture(task: TaskDetail): (() => Promise<void>) | null
   }
 }
 
 export function useActionPaletteController(options: ActionPaletteControllerOptions) {
   let showActionPalette = $state(false)
-  let actionPaletteTask = $state<Task | null>(null)
+  let actionPaletteTask = $state<TaskDetail | null>(null)
   let actionPaletteRunApp = $state<(() => Promise<void>) | null>(null)
 
   function closeActionPalette(): void {

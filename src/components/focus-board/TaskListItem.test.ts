@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskListItem from './TaskListItem.svelte'
-import type { Task, PullRequestInfo } from '../../lib/types'
+import type { TaskDetail, PullRequestInfo } from '../../lib/types'
 import type { TaskState } from '../../lib/taskState'
 
 vi.mock('../../lib/ipc', () => ({
@@ -9,23 +9,24 @@ vi.mock('../../lib/ipc', () => ({
   updateTaskTitle: vi.fn().mockResolvedValue(undefined),
 }))
 
-const baseTask: Task = {
+const baseTask: TaskDetail = {
   id: 'T-100',
-  initial_prompt: 'Fix login bug',
+  projectId: 'project-1',
   status: 'doing',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Fix login bug',
+  prompt: 'Fix login bug',
+  promptPreview: 'Fix login bug',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
+  createdAt: 1000,
+  updatedAt: 2000,
 }
 
 const basePr: PullRequestInfo = {
@@ -81,7 +82,7 @@ describe('TaskListItem', () => {
     expect(screen.getByText('T-100')).toBeTruthy()
   })
 
-  it('renders title from initial_prompt', () => {
+  it('renders the canonical Task title', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.getByText('Fix login bug')).toBeTruthy()
   })
@@ -127,8 +128,8 @@ describe('TaskListItem', () => {
     expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
   })
 
-  it('renders only first line of initial_prompt as title', () => {
-    const task = { ...baseTask, initial_prompt: 'First line\nSecond line' }
+  it('renders only the first line of the prompt when the title is empty', () => {
+    const task = { ...baseTask, title: '', prompt: 'First line\nSecond line' }
     render(TaskListItem, { props: { ...baseProps, task } })
     expect(screen.getByText('First line')).toBeTruthy()
     expect(screen.queryByText('Second line')).toBeNull()
@@ -136,7 +137,7 @@ describe('TaskListItem', () => {
 
   it('truncates title to 80 chars with ellipsis', () => {
     const longTitle = 'A'.repeat(90)
-    const task = { ...baseTask, initial_prompt: longTitle }
+    const task = { ...baseTask, title: longTitle }
     render(TaskListItem, { props: { ...baseProps, task } })
     expect(screen.getByText('A'.repeat(80) + '...')).toBeTruthy()
   })
@@ -159,14 +160,14 @@ describe('TaskListItem', () => {
   it('renders compact card details with visible label chips', () => {
     const task = {
       ...baseTask,
-      depends_on: ['T-1'],
+      dependsOn: ['T-1'],
       labels: [
-        { id: 1, project_id: 'P-1', name: 'frontend' },
-        { id: 2, project_id: 'P-1', name: 'UX' },
-        { id: 3, project_id: 'P-1', name: 'backend' },
-        { id: 4, project_id: 'P-1', name: 'blocked' },
+        { id: 1, projectId: 'project-1', name: 'frontend' },
+        { id: 2, projectId: 'project-1', name: 'UX' },
+        { id: 3, projectId: 'project-1', name: 'backend' },
+        { id: 4, projectId: 'project-1', name: 'blocked' },
       ],
-    } as Task
+    } satisfies TaskDetail
     render(TaskListItem, { props: { ...baseProps, task, showLabels: true, dependencyHint: 'Waiting on 1 dep' } })
     expect(screen.getByText('1 dep')).toBeTruthy()
     expect(screen.getByText('4 labels')).toBeTruthy()
@@ -274,8 +275,8 @@ describe('TaskListItem', () => {
     expect(screen.queryByText(/PR #7/)).toBeNull()
   })
 
-  it('falls back to prompt if initial_prompt is empty', () => {
-    const task = { ...baseTask, initial_prompt: '', prompt: 'Fallback title' }
+  it('falls back to the prompt when the title is empty', () => {
+    const task = { ...baseTask, title: '', prompt: 'Fallback title' }
     render(TaskListItem, { props: { ...baseProps, task } })
     expect(screen.getByText('Fallback title')).toBeTruthy()
   })

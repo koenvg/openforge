@@ -1,28 +1,30 @@
 import { fireEvent, screen, within } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, TaskRelationshipReference } from '../../lib/types'
+import type { Project, TaskDetail, TaskReference } from '../../lib/types'
+import type { Writable } from 'svelte/store'
 import {
   baseTask,
   getTaskInfoPanelTestDependencies,
   renderTaskInfoPanel,
   resetTaskInfoPanelTestState,
 } from './TaskInfoPanel.testUtils'
-import type { Task } from './TaskInfoPanel.testUtils'
 
 const {
   dependencyReferenceTasks,
   projects,
   tasks,
 } = getTaskInfoPanelTestDependencies()
+const writableTasks = tasks as Writable<TaskDetail[]>
+const writableDependencyReferences = dependencyReferenceTasks as Writable<TaskReference[]>
 
 
-function relationshipReference(task: Task): TaskRelationshipReference {
+function relationshipReference(task: TaskDetail): TaskReference {
   return {
     id: task.id,
     status: task.status,
-    project_id: task.project_id,
-    title: task.title ?? task.initial_prompt,
-    depends_on: task.depends_on,
+    projectId: task.projectId,
+    title: task.title ?? task.prompt,
+    dependsOn: task.dependsOn,
   }
 }
 describe('TaskInfoPanel dependencies', () => {
@@ -36,15 +38,15 @@ describe('TaskInfoPanel dependencies', () => {
 
   it('renders dependency chips with each dependency status and title from the task store', () => {
     const longDependencyTitle = 'Build a very long authentication middleware prerequisite that should remain readable via hover'
-    const parentTask: Task = {
+    const parentTask: TaskDetail = {
       ...baseTask,
       id: 'T-99',
-      depends_on: ['T-41', 'T-17', 'T-03'],
+      dependsOn: ['T-41', 'T-17', 'T-03'],
     }
-    tasks.set([
-      { ...baseTask, id: 'T-41', status: 'done', initial_prompt: longDependencyTitle },
-      { ...baseTask, id: 'T-17', status: 'doing', initial_prompt: 'Prepare database migrations' },
-      { ...baseTask, id: 'T-03', status: 'backlog', initial_prompt: 'Document rollout plan' },
+    writableTasks.set([
+      { ...baseTask, id: 'T-41', status: 'done', prompt: longDependencyTitle, title: longDependencyTitle },
+      { ...baseTask, id: 'T-17', status: 'doing', prompt: 'Prepare database migrations', title: 'Prepare database migrations' },
+      { ...baseTask, id: 'T-03', status: 'backlog', prompt: 'Document rollout plan', title: 'Document rollout plan' },
       parentTask,
     ])
 
@@ -65,27 +67,29 @@ describe('TaskInfoPanel dependencies', () => {
   })
 
   it('shows and opens cross-project dependencies and dependents', async () => {
-    const selectedTask = { ...baseTask, depends_on: ['T-dependency'] }
+    const selectedTask = { ...baseTask, dependsOn: ['T-dependency'] }
     const crossProjectDependency = {
       ...baseTask,
       id: 'T-dependency',
-      project_id: 'proj-2',
-      initial_prompt: 'Prepare release tooling',
+      projectId: 'proj-2',
+      prompt: 'Prepare release tooling',
+      title: 'Prepare release tooling',
     }
     const crossProjectDependent = {
       ...baseTask,
       id: 'T-dependent',
-      project_id: 'proj-2',
-      initial_prompt: 'Ship the release',
-      depends_on: [selectedTask.id],
+      projectId: 'proj-2',
+      prompt: 'Ship the release',
+      title: 'Ship the release',
+      dependsOn: [selectedTask.id],
     }
     const onOpenRelatedTask = vi.fn()
     projects.set([
       { id: 'proj-1', name: 'OpenForge', path: '/openforge' } as Project,
       { id: 'proj-2', name: 'Release Tools', path: '/release-tools' } as Project,
     ])
-    tasks.set([selectedTask])
-    dependencyReferenceTasks.set([
+    writableTasks.set([selectedTask])
+    writableDependencyReferences.set([
       relationshipReference(crossProjectDependency),
       relationshipReference(crossProjectDependent),
     ])
@@ -106,14 +110,14 @@ describe('TaskInfoPanel dependencies', () => {
 
   it('resolves completed dependencies from dependency-only reference tasks', () => {
     const completedDependencyTitle = 'Completed setup task'
-    const parentTask: Task = {
+    const parentTask: TaskDetail = {
       ...baseTask,
       id: 'T-99',
-      depends_on: ['T-done'],
+      dependsOn: ['T-done'],
     }
-    tasks.set([parentTask])
-    dependencyReferenceTasks.set([
-      relationshipReference({ ...baseTask, id: 'T-done', status: 'done', initial_prompt: completedDependencyTitle }),
+    writableTasks.set([parentTask])
+    writableDependencyReferences.set([
+      relationshipReference({ ...baseTask, id: 'T-done', status: 'done', prompt: completedDependencyTitle, title: completedDependencyTitle }),
     ])
 
     renderTaskInfoPanel({ task: parentTask })
@@ -126,12 +130,12 @@ describe('TaskInfoPanel dependencies', () => {
   })
 
   it('shows dependency readiness when every dependency is done', () => {
-    const parentTask: Task = {
+    const parentTask: TaskDetail = {
       ...baseTask,
       id: 'T-99',
-      depends_on: ['T-41', 'T-17'],
+      dependsOn: ['T-41', 'T-17'],
     }
-    tasks.set([
+    writableTasks.set([
       { ...baseTask, id: 'T-41', status: 'done' },
       { ...baseTask, id: 'T-17', status: 'done' },
       parentTask,
@@ -143,12 +147,12 @@ describe('TaskInfoPanel dependencies', () => {
   })
 
   it('renders missing dependency tasks as unknown and still waiting', () => {
-    const parentTask: Task = {
+    const parentTask: TaskDetail = {
       ...baseTask,
       id: 'T-99',
-      depends_on: ['T-missing'],
+      dependsOn: ['T-missing'],
     }
-    tasks.set([parentTask])
+    writableTasks.set([parentTask])
 
     renderTaskInfoPanel({ task: parentTask })
 
@@ -164,16 +168,18 @@ describe('TaskInfoPanel dependencies', () => {
       ...baseTask,
       id: 'T-7',
       status: 'done' as const,
-      initial_prompt: 'Hidden completed prerequisite',
+      prompt: 'Hidden completed prerequisite',
+      title: 'Hidden completed prerequisite',
     }
     const readyDependent = {
       ...baseTask,
       id: 'T-50',
-      initial_prompt: 'Start rollout after auth middleware',
-      depends_on: ['T-42', 'T-7'],
+      prompt: 'Start rollout after auth middleware',
+      title: 'Start rollout after auth middleware',
+      dependsOn: ['T-42', 'T-7'],
     }
-    tasks.set([selectedTask, readyDependent])
-    dependencyReferenceTasks.set([relationshipReference(completedHiddenPrerequisite)])
+    writableTasks.set([selectedTask, readyDependent])
+    writableDependencyReferences.set([relationshipReference(completedHiddenPrerequisite)])
 
     renderTaskInfoPanel({ task: selectedTask, onOpenRelatedTask: vi.fn() })
 
@@ -189,27 +195,31 @@ describe('TaskInfoPanel dependencies', () => {
       ...baseTask,
       id: 'T-7',
       status: 'done' as const,
-      initial_prompt: 'Already completed prerequisite',
+      prompt: 'Already completed prerequisite',
+      title: 'Already completed prerequisite',
     }
     const waitingPrerequisite = {
       ...baseTask,
       id: 'T-8',
       status: 'doing' as const,
-      initial_prompt: 'Still in progress prerequisite',
+      prompt: 'Still in progress prerequisite',
+      title: 'Still in progress prerequisite',
     }
     const readyDependent = {
       ...baseTask,
       id: 'T-50',
-      initial_prompt: 'Start rollout after auth middleware',
-      depends_on: ['T-42', 'T-7'],
+      prompt: 'Start rollout after auth middleware',
+      title: 'Start rollout after auth middleware',
+      dependsOn: ['T-42', 'T-7'],
     }
     const stillBlockedDependent = {
       ...baseTask,
       id: 'T-51',
-      initial_prompt: 'Deploy after remaining prerequisites',
-      depends_on: ['T-42', 'T-8'],
+      prompt: 'Deploy after remaining prerequisites',
+      title: 'Deploy after remaining prerequisites',
+      dependsOn: ['T-42', 'T-8'],
     }
-    tasks.set([selectedTask, readyDependent, stillBlockedDependent, donePrerequisite, waitingPrerequisite])
+    writableTasks.set([selectedTask, readyDependent, stillBlockedDependent, donePrerequisite, waitingPrerequisite])
 
     renderTaskInfoPanel({ task: selectedTask })
 

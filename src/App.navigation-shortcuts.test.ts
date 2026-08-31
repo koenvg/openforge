@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import { installAppTestLifecycle } from './App.test-harness'
+import { setMockTasks } from './App.test-fixtures/stores'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
 import { createTask } from './App.test-fixtures/tasks'
 import App from './App.svelte'
@@ -39,10 +40,10 @@ describe('App navigation shortcuts', () => {
       await tick()
       // Simulate being on a task detail view
       stores.selectedTaskId.set('task-123')
-      stores.tasks.set([
+      setMockTasks([
         createTask({
           id: 'task-123',
-          initial_prompt: 'Finish task',
+          prompt: 'Finish task',
         }),
       ])
       stores.currentView.set('settings')
@@ -165,10 +166,10 @@ describe('App navigation shortcuts', () => {
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
       const selectedTask = createTask({
         id: 'task-123',
-        initial_prompt: 'Finish task',
+        prompt: 'Finish task',
       })
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
       stores.currentView.set('board')

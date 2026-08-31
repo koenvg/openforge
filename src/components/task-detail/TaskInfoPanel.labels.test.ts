@@ -40,7 +40,7 @@ describe('TaskInfoPanel labels', () => {
 
   it('creates and assigns a new label through IPC from unmatched task detail input', async () => {
     vi.mocked(getProjectTaskLabels).mockResolvedValue([bugLabel])
-    vi.mocked(addTaskLabel).mockResolvedValue({ id: 3, project_id: 'proj-1', name: 'feature' })
+    vi.mocked(addTaskLabel).mockResolvedValue({ id: 3, projectId: 'proj-1', name: 'feature' })
     renderTaskInfoPanel({ task: taskWithLabels([]) })
 
     await fireEvent.click(screen.getByRole('button', { name: 'Add label' }))

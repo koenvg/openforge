@@ -1,4 +1,5 @@
 use rusqlite::{Connection, OptionalExtension, Result};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompleteTaskWriteOutcome {
@@ -7,11 +8,46 @@ pub enum CompleteTaskWriteOutcome {
     StaleState { current_status: String },
 }
 
+#[derive(Debug, Error)]
+pub enum TaskStatusUpdateError {
+    #[error("project {project_id} already contains the maximum of {max} active Tasks")]
+    ActiveTaskLimit { project_id: String, max: usize },
+    #[error("{0}")]
+    Storage(#[from] rusqlite::Error),
+}
+
 impl super::Database {
-    pub fn update_task_status(&self, id: &str, status: &str) -> Result<()> {
-        let conn = self.lock_conn()?;
+    pub fn update_task_status(
+        &self,
+        id: &str,
+        status: &str,
+    ) -> std::result::Result<(), TaskStatusUpdateError> {
+        let mut connection = self.lock_conn()?;
+        let transaction = connection.transaction()?;
+        let current = transaction
+            .query_row(
+                "SELECT status, project_id FROM tasks WHERE id = ?1",
+                [id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?;
+        if let Some((current_status, Some(project_id))) = &current {
+            if current_status == "done" && status != "done" {
+                let active_count: i64 = transaction.query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE project_id = ?1 AND status != 'done'",
+                    [project_id],
+                    |row| row.get(0),
+                )?;
+                if active_count >= super::task_creation::MAX_ACTIVE_TASKS_PER_PROJECT as i64 {
+                    return Err(TaskStatusUpdateError::ActiveTaskLimit {
+                        project_id: project_id.clone(),
+                        max: super::task_creation::MAX_ACTIVE_TASKS_PER_PROJECT,
+                    });
+                }
+            }
+        }
         let now = super::current_unix_timestamp()?;
-        conn.execute(
+        transaction.execute(
             "UPDATE tasks
              SET status = ?1,
                  updated_at = ?2,
@@ -22,6 +58,7 @@ impl super::Database {
              WHERE id = ?3",
             rusqlite::params![status, now, id],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -505,5 +542,41 @@ mod tests {
             task_id.replace('\'', "''")
         ))
         .expect("install completion failure trigger");
+    }
+
+    #[test]
+    fn restoring_a_completed_task_respects_the_active_project_limit_atomically() {
+        let (db, _temp_dir) = make_test_db("restore_active_task_limit");
+        let project = db
+            .create_project("Project", "/tmp/restore-active-task-limit")
+            .expect("create project");
+        for index in 0..super::super::task_creation::MAX_ACTIVE_TASKS_PER_PROJECT {
+            db.create_task(
+                &format!("Active {index}"),
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("seed active Task");
+        }
+        let completed = db
+            .create_task("Completed", "done", Some(&project.id), None, None)
+            .expect("create Completed Task");
+
+        let error = db
+            .update_task_status(&completed.id, "backlog")
+            .expect_err("restoration beyond the limit must fail");
+        assert!(matches!(
+            error,
+            super::TaskStatusUpdateError::ActiveTaskLimit { .. }
+        ));
+        assert_eq!(
+            db.get_task(&completed.id)
+                .expect("load Task")
+                .expect("Task exists")
+                .status,
+            "done"
+        );
     }
 }

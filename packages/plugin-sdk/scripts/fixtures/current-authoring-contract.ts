@@ -9,6 +9,12 @@ import {
   type OpenForgePackageMetadata,
   type PluginSidebarNavigationProps,
   type PluginCommandInvocationContext,
+  type ActiveTasks,
+  type CompletedTaskPage,
+  type TaskDetail,
+  type TaskRead,
+  type TaskReference,
+  type TaskSummary,
   type Task,
   type TasksAPI,
 } from '@openforge-app/plugin-sdk'
@@ -52,6 +58,21 @@ void task.summary
 const tasks = null as unknown as TasksAPI
 // @ts-expect-error The host no longer exposes the legacy handoff-summary mutation.
 void tasks.updateSummary('KVG-3423', 'obsolete handoff')
+declare const reference: TaskReference
+declare const summary: TaskSummary
+declare const detail: TaskDetail
+declare const active: ActiveTasks
+declare const page: CompletedTaskPage
+declare const read: TaskRead
+void reference.dependsOn
+void summary.promptPreview
+void detail.prompt
+void active.related
+void page.nextCursor
+void read.task
+void tasks.active('P-4')
+void tasks.completed('P-4', { search: 'completed task' })
+void tasks.detail('P-4', 'KVG-3423')
 
 const listAgentSessionsRequest = {
   provider: 'pi',

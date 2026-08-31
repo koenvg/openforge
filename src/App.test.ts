@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
-import type { Project, Task } from './lib/types'
+import type { Project, TaskDetail } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { callOrder, persistInstalledPluginRow } from './App.test-fixtures/ipc'
@@ -15,7 +15,7 @@ import {
   mockRouterNavigateToTask,
   mockRouterResetToBoard,
 } from './App.test-fixtures/routing'
-import { mockCurrentViewStore } from './App.test-fixtures/stores'
+import { mockCurrentViewStore, setMockTasks } from './App.test-fixtures/stores'
 import { createTask } from './App.test-fixtures/tasks'
 
 async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockInstance<typeof console.error>) => Promise<void>) {
@@ -210,7 +210,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
   describe('new task creation dialog navigation', () => {
     const createdTask = createTask({
       id: 'T-new',
-      initial_prompt: 'Start this immediately',
+      prompt: 'Start this immediately',
       status: 'backlog',
     })
 
@@ -235,7 +235,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       })
 
       return getLatestComponentProps<{
-        onTaskSaved: (task?: Task) => Promise<void> | void
+        onTaskSaved: (task?: TaskDetail) => Promise<void> | void
         onRunAction: (taskId: string, actionPrompt: string) => Promise<void>
       }>(vi.mocked(addTaskDialogModule.default), 'onRunAction')
     }
@@ -247,7 +247,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       const startPromise = new Promise((resolve) => {
         resolveStart = resolve
       })
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [createdTask], related: [] })
       vi.mocked(ipc.startImplementation).mockReturnValue(startPromise as ReturnType<typeof ipc.startImplementation>)
       vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
 
@@ -267,7 +267,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     it('resets to the board before navigating to a newly-created task from a plugin view', async () => {
       const ipc = await import('./lib/ipc')
       const stores = await import('./lib/stores')
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [createdTask], related: [] })
       vi.mocked(ipc.startImplementation).mockResolvedValue({ session_id: 'session-new', workspace_path: '/workspace/T-new', task_id: createdTask.id, port: 0 } as any)
       vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
 
@@ -284,7 +284,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     it('keeps ordinary Add to Backlog creation on the current route', async () => {
       const ipc = await import('./lib/ipc')
       const stores = await import('./lib/stores')
-      vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
+      vi.mocked(ipc.readActiveTasks).mockResolvedValue({ tasks: [createdTask], related: [] })
 
       const dialogProps = await openCreateTaskDialog(FILE_VIEWER_VIEW_KEY)
       await dialogProps.onTaskSaved(createdTask)
@@ -302,16 +302,16 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       const stores = await import('./lib/stores')
       const selectedTask = createTask({
         id: 'task-123',
-        initial_prompt: 'Selected task',
+        prompt: 'Selected task',
       })
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
 
       render(App)
 
-      stores.tasks.set([])
+      setMockTasks([])
 
       await vi.waitFor(() => {
         expect(get(stores.selectedTaskId)).toBeNull()
@@ -323,10 +323,10 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       const stores = await import('./lib/stores')
       const selectedTask = createTask({
         id: 'task-456',
-        initial_prompt: 'Selected task',
+        prompt: 'Selected task',
       })
 
-      stores.tasks.set([selectedTask])
+      setMockTasks([selectedTask])
       stores.pendingTask.set(null)
       stores.selectedTaskId.set(selectedTask.id)
 
@@ -342,11 +342,11 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       const stores = await import('./lib/stores')
       const pendingTask = createTask({
         id: 'task-pending',
-        initial_prompt: 'Pending task',
+        prompt: 'Pending task',
         status: 'backlog',
       })
 
-      stores.tasks.set([])
+      setMockTasks([])
       stores.pendingTask.set(pendingTask)
       stores.selectedTaskId.set(pendingTask.id)
 
@@ -356,6 +356,28 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
         expect(get(stores.selectedTaskId)).toBe(pendingTask.id)
       })
     })
+    it('keeps selectedTaskId when an on-demand detail is cached', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const detail = createTask({
+        id: 'task-completed',
+        prompt: 'Completed task',
+        status: 'done',
+      })
+
+      setMockTasks([])
+      stores.pendingTask.set(null)
+      stores.taskDetailsById.set(new Map([[detail.id, detail]]))
+      stores.selectedTaskId.set(detail.id)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.selectedTaskId)).toBe(detail.id)
+      })
+    })
+
+
 
     it('loads projects and respects saved order', async () => {
       const App = (await import('./App.svelte')).default

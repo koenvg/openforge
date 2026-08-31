@@ -9,6 +9,38 @@ import {
 } from './cli-test-utils.js';
 
 describe('OpenForge task list commands', () => {
+  it('lists a canonical fixed Completed Task page with continuation metadata', async () => {
+    const page = {
+      tasks: [{
+        id: 'T-done',
+        status: 'done',
+        projectId: 'P-1',
+        title: 'Completed work',
+        promptPreview: 'Completed work',
+        dependsOn: [],
+        labels: [],
+        createdAt: 1,
+        updatedAt: 2,
+        sourceTicketUrl: null,
+      }],
+      nextCursor: 'next-page',
+    };
+    const result = await runCliAgainstJsonBridge([
+      'task', 'completed',
+      '--project-id', 'P-1',
+      '--cursor', 'cursor-1',
+      '--search', 'completed',
+      '--label', 'cleanup',
+    ], {
+      url: '/v2/projects/P-1/tasks/completed?search=completed&labels=cleanup&cursor=cursor-1',
+      response: page,
+    });
+
+    expect(result).toEqual(page);
+    expect(result.tasks[0]).not.toHaveProperty('prompt');
+  });
+
+
   it('lists compact non-done task rows through the nested task list command', async () => {
     const tasks = [
       {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { Task, PullRequestInfo, PullRequestMergeMethod } from '../../lib/types'
+  import type { TaskDetail, PullRequestInfo, PullRequestMergeMethod } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { activeProjectId, outOfFocusTaskIdsByProject } from '../../lib/stores'
   import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
@@ -9,7 +9,7 @@
   import PaletteModal from './PaletteModal.svelte'
 
   interface Props {
-    task: Task | null
+    task: TaskDetail | null
     taskPrs: PullRequestInfo[]
     canRunApp?: boolean
     onClose: () => void
@@ -24,7 +24,7 @@
   let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
 
   let outOfFocusTaskIds = $derived.by(() => {
-    const taskProjectId = task?.project_id ?? $activeProjectId
+    const taskProjectId = task?.projectId ?? $activeProjectId
     return taskProjectId ? $outOfFocusTaskIdsByProject.get(taskProjectId) ?? new Set<string>() : new Set<string>()
   })
   let allActions = $derived(getAvailableActions(task, taskPrs, outOfFocusTaskIds, { canRunApp }))

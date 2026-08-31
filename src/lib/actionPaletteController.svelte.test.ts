@@ -1,30 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Task } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 
 import { useActionPaletteController } from './actionPaletteController.svelte'
 import { COMPLETE_TASK_CONFIRM_MESSAGE, DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from './completeTask'
 import { activeProjectId } from './stores'
 
-const selectedTask: Task = {
-  id: 'T-1',
-  initial_prompt: 'Prompt',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
-  status: 'doing',
-  agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 1000,
-}
+const selectedTask = createTask({ id: 'T-1', projectId: 'proj-1', status: 'doing' })
 
-const laterSelectedTask: Task = {
+const laterSelectedTask = {
   ...selectedTask,
   id: 'T-2',
 }
@@ -207,7 +190,7 @@ describe('useActionPaletteController', () => {
   })
 
   it('runs the task-bound app command captured when the palette opened', async () => {
-    let currentSelectedTask: Task | null = selectedTask
+    let currentSelectedTask: typeof selectedTask | null = selectedTask
     let currentRunner: (() => Promise<void>) | null = vi.fn(async () => undefined)
     const capturedRunner = currentRunner
     const runApp = {

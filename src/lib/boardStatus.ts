@@ -1,4 +1,4 @@
-import type { BoardStatus, Task } from './types'
+import type { BoardStatus } from './types'
 
 export const BOARD_STATUSES = ['backlog', 'doing', 'done'] as const satisfies readonly BoardStatus[]
 
@@ -25,9 +25,9 @@ export function parseBoardStatus(status: string): BoardStatus {
   return normalized
 }
 
-type RawTask = Omit<Task, 'status'> & { status: string }
-
-export function normalizeTask(task: RawTask): Task {
+export function normalizeTask<T extends { status: string }>(
+  task: T,
+ ): Omit<T, 'status'> & { status: BoardStatus } {
   return {
     ...task,
     status: parseBoardStatus(task.status),

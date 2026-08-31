@@ -1,4 +1,4 @@
-import type { Task } from '@openforge-app/plugin-sdk'
+import type { TaskDetail } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, BackgroundServiceRegistration } from '@openforge-app/plugin-sdk/backend'
 import { getNextScheduledFireAt } from '../lib/cron'
 import { isTerminalTaskSchedule } from '../lib/taskScheduleLifecycle'
@@ -175,11 +175,11 @@ async function computeFireOutcome(
   isCancellationRequested: () => boolean,
 ): Promise<ScheduledFireOutcome> {
   if (isCancellationRequested()) return createOutcome(now, trigger, 'cancelled', 'Run cancelled before creating a Task')
-  const block = await getPreviousTaskBlock(openforge, schedule)
+  const block = await getPreviousTaskBlock(openforge, projectId, schedule)
   if (block) return createOutcome(now, trigger, 'skipped', block.message, block.taskId)
   if (isCancellationRequested()) return createOutcome(now, trigger, 'cancelled', 'Run cancelled before creating a Task')
 
-  let task: Task
+  let task: { id: string }
   try {
     task = await openforge.tasks.create({ initialPrompt: schedule.prompt, projectId, labelNames: ['scheduled'] })
   } catch (error) {
@@ -204,21 +204,25 @@ async function computeFireOutcome(
 
 type PreviousTaskBlock = { taskId: string; message: string }
 
-async function getPreviousTaskBlock(openforge: BackendOpenForgeAPI, schedule: TaskSchedule): Promise<PreviousTaskBlock | null> {
+async function getPreviousTaskBlock(
+  openforge: BackendOpenForgeAPI,
+  projectId: string,
+  schedule: TaskSchedule,
+): Promise<PreviousTaskBlock | null> {
   if (!schedule.lastTaskId) return null
 
-  let task: Task | null
+  let task: TaskDetail | null
   try {
-    task = await openforge.tasks.get(schedule.lastTaskId)
+    task = (await openforge.tasks.detail(projectId, schedule.lastTaskId))?.task ?? null
   } catch (error) {
-    // A tasks.get rejection (e.g. a locked database) leaves the last Task's
+    // A tasks.detail rejection (e.g. a locked database) leaves the last Task's
     // state unknown. Skip this fire rather than risk spawning a duplicate
     // alongside a Task that may still be open; firing resumes at the next
     // scheduled fire.
     return { taskId: schedule.lastTaskId, message: `Skipped because previous scheduled Task ${schedule.lastTaskId} could not be verified: ${errorMessage(error)}` }
   }
 
-  // Since AVIV-118, completing a Task deletes it: openforge.tasks.get then
+  // Since AVIV-118, completing a Task deletes it: openforge.tasks.detail then
   // resolves to null. A missing last Task is closed, so keep firing instead of
   // skipping forever.
   if (!task) return null

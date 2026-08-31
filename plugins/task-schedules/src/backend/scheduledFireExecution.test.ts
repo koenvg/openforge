@@ -122,7 +122,7 @@ describe('Scheduled Fire execution', () => {
 
   it('skips a Scheduled Fire when the previous scheduled Task is still open', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async () => makeScheduleTask('T-open', 'doing'))
+    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('T-open', 'doing'), related: [] }))
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-open' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -135,7 +135,7 @@ describe('Scheduled Fire execution', () => {
     // Since AVIV-118, completing a Task deletes it and tasks.get resolves to
     // null. A missing last Task is closed, so the schedule keeps firing.
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async () => null)
+    api.tasks.detail = vi.fn(async () => null)
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-completed' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -148,7 +148,7 @@ describe('Scheduled Fire execution', () => {
 
   it('does not skip a due background Scheduled Fire when the previous scheduled Task was deleted', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async () => null)
+    api.tasks.detail = vi.fn(async () => null)
     await setStoredSchedules(api, [makeSchedule({
       lastTaskId: 'T-completed',
       lifecycle: { state: 'active', enabled: true, nextFireAt: Date.UTC(2025, 11, 28, 9) },
@@ -165,7 +165,7 @@ describe('Scheduled Fire execution', () => {
     // 'done' is a recognized-but-unreachable status after AVIV-118: only legacy
     // rows can still resolve as 'done'. Such a last Task counts as closed.
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async () => makeScheduleTask('T-done', 'done'))
+    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('T-done', 'done'), related: [] }))
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-done' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -180,7 +180,7 @@ describe('Scheduled Fire execution', () => {
     // spawn a duplicate Task alongside one that may still be running. Only a
     // genuinely missing/deleted Task counts as closed (see the AVIV-118 tests).
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.get = vi.fn(async () => { throw new Error('failed to get task: database is locked') })
+    api.tasks.detail = vi.fn(async () => { throw new Error('failed to get task: database is locked') })
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-unreadable' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -205,7 +205,7 @@ describe('Scheduled Fire execution', () => {
 
     // The created Task is still open, so the next fire must skip rather than
     // create a second Task.
-    api.tasks.get = vi.fn(async () => makeScheduleTask('mock-task-1', 'backlog'))
+    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('mock-task-1', 'backlog'), related: [] }))
     const second = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 11))
 
     expect(second).toMatchObject({ status: 'skipped', taskId: 'mock-task-1' })

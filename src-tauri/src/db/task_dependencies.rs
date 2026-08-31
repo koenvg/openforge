@@ -3,6 +3,8 @@ use rusqlite::Result;
 use std::collections::HashMap;
 use thiserror::Error;
 
+pub const MAX_DIRECT_TASK_RELATIONSHIPS: usize = 100;
+
 #[derive(Debug, Error)]
 pub enum TaskDependencyPersistenceError {
     #[error("task cannot depend on itself")]
@@ -23,6 +25,8 @@ pub enum TaskDependencyPersistenceError {
         task_id: String,
         dependency_id: String,
     },
+    #[error("task {task_id} already has the maximum of {max} direct relationships")]
+    RelationshipLimit { task_id: String, max: usize },
     #[error("task chain must contain at least two task ids")]
     ChainTooShort,
     #[error("{0}")]
@@ -79,6 +83,52 @@ pub(super) fn load_task_dependency_ids_for_tasks(
     Ok(result)
 }
 
+fn dependency_exists(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    dependency_id: &str,
+) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM task_dependencies WHERE task_id = ?1 AND depends_on_task_id = ?2)",
+        rusqlite::params![task_id, dependency_id],
+        |row| row.get(0),
+    )
+}
+
+fn direct_relationship_count(conn: &rusqlite::Connection, task_id: &str) -> Result<usize> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM task_dependencies WHERE task_id = ?1 OR depends_on_task_id = ?1",
+        [task_id],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count as usize)
+}
+
+fn enforce_relationship_capacity(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+) -> TaskDependencyResult<()> {
+    if direct_relationship_count(conn, task_id)? >= MAX_DIRECT_TASK_RELATIONSHIPS {
+        return Err(TaskDependencyPersistenceError::RelationshipLimit {
+            task_id: task_id.to_string(),
+            max: MAX_DIRECT_TASK_RELATIONSHIPS,
+        });
+    }
+    Ok(())
+}
+
+fn enforce_new_dependency_capacity(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    dependency_id: &str,
+) -> TaskDependencyResult<()> {
+    if dependency_exists(conn, task_id, dependency_id)? {
+        return Ok(());
+    }
+    enforce_relationship_capacity(conn, task_id)?;
+    enforce_relationship_capacity(conn, dependency_id)
+}
+
 pub(super) fn persist_new_task_dependencies(
     conn: &rusqlite::Connection,
     task_id: &str,
@@ -86,8 +136,22 @@ pub(super) fn persist_new_task_dependencies(
     now: i64,
 ) -> TaskDependencyResult<Vec<String>> {
     let dependency_ids = dedupe_dependency_ids(dependency_ids);
+    let new_relationships = dependency_ids
+        .iter()
+        .try_fold(0usize, |count, dependency_id| {
+            dependency_exists(conn, task_id, dependency_id)
+                .map(|exists| count + usize::from(!exists))
+        })?;
+    if direct_relationship_count(conn, task_id)? + new_relationships > MAX_DIRECT_TASK_RELATIONSHIPS
+    {
+        return Err(TaskDependencyPersistenceError::RelationshipLimit {
+            task_id: task_id.to_string(),
+            max: MAX_DIRECT_TASK_RELATIONSHIPS,
+        });
+    }
     for dependency_id in &dependency_ids {
         validate_dependency(conn, task_id, dependency_id)?;
+        enforce_new_dependency_capacity(conn, task_id, dependency_id)?;
     }
 
     for dependency_id in &dependency_ids {
@@ -177,17 +241,24 @@ impl Database {
         task_id: &str,
         depends_on_task_id: &str,
     ) -> TaskDependencyResult<()> {
-        let conn = self.lock_conn()?;
-        validate_dependency(&conn, task_id, depends_on_task_id)?;
+        let mut connection = self.lock_conn()?;
+        let transaction = connection.transaction()?;
+        validate_dependency(&transaction, task_id, depends_on_task_id)?;
+        if dependency_exists(&transaction, task_id, depends_on_task_id)? {
+            transaction.commit()?;
+            return Ok(());
+        }
+        enforce_new_dependency_capacity(&transaction, task_id, depends_on_task_id)?;
         let now = super::current_unix_timestamp()?;
-        conn.execute(
-            "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+        transaction.execute(
+            "INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![task_id, depends_on_task_id, now],
         )?;
-        conn.execute(
+        transaction.execute(
             "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
             rusqlite::params![now, task_id],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -196,30 +267,46 @@ impl Database {
         task_id: &str,
         dependency_ids: &[String],
     ) -> TaskDependencyResult<()> {
-        let mut conn = self.lock_conn()?;
-        task_project_id(&conn, task_id)?
+        let mut connection = self.lock_conn()?;
+        let transaction = connection.transaction()?;
+        task_project_id(&transaction, task_id)?
             .ok_or_else(|| TaskDependencyPersistenceError::TaskNotFound(task_id.to_string()))?;
         let dependency_ids = dedupe_dependency_ids(dependency_ids);
         for dependency_id in &dependency_ids {
-            validate_dependency(&conn, task_id, dependency_id)?;
+            validate_dependency(&transaction, task_id, dependency_id)?;
+        }
+        let incoming_count: i64 = transaction.query_row(
+            "SELECT COUNT(*) FROM task_dependencies WHERE depends_on_task_id = ?1",
+            [task_id],
+            |row| row.get(0),
+        )?;
+        if incoming_count + dependency_ids.len() as i64 > MAX_DIRECT_TASK_RELATIONSHIPS as i64 {
+            return Err(TaskDependencyPersistenceError::RelationshipLimit {
+                task_id: task_id.to_string(),
+                max: MAX_DIRECT_TASK_RELATIONSHIPS,
+            });
+        }
+        for dependency_id in &dependency_ids {
+            if !dependency_exists(&transaction, task_id, dependency_id)? {
+                enforce_relationship_capacity(&transaction, dependency_id)?;
+            }
         }
         let now = super::current_unix_timestamp()?;
-        let tx = conn.transaction()?;
-        tx.execute(
+        transaction.execute(
             "DELETE FROM task_dependencies WHERE task_id = ?1",
             rusqlite::params![task_id],
         )?;
         for dependency_id in dependency_ids {
-            tx.execute(
+            transaction.execute(
                 "INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
                 rusqlite::params![task_id, dependency_id, now],
             )?;
         }
-        tx.execute(
+        transaction.execute(
             "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
             rusqlite::params![now, task_id],
         )?;
-        tx.commit()?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -239,8 +326,13 @@ impl Database {
             let depends_on_task_id = pair[0].trim();
             let task_id = pair[1].trim();
             validate_dependency(&tx, task_id, depends_on_task_id)?;
+            if dependency_exists(&tx, task_id, depends_on_task_id)? {
+                links.push((task_id.to_string(), depends_on_task_id.to_string()));
+                continue;
+            }
+            enforce_new_dependency_capacity(&tx, task_id, depends_on_task_id)?;
             tx.execute(
-                "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+                "INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
                 rusqlite::params![task_id, depends_on_task_id, now],
             )?;
             tx.execute(
@@ -512,5 +604,154 @@ mod tests {
         assert!(second.depends_on.is_empty());
 
         drop(db);
+    }
+
+    #[test]
+    fn direct_relationship_limit_counts_both_directions_and_keeps_duplicates_idempotent() {
+        let (db, _temp_dir) = make_test_db("direct_relationship_limit");
+        let central = db
+            .create_task("Central", "backlog", None, None, None)
+            .expect("create central Task");
+        let mut related = Vec::new();
+        for index in 0..super::MAX_DIRECT_TASK_RELATIONSHIPS {
+            related.push(
+                db.create_task(&format!("Related {index}"), "done", None, None, None)
+                    .expect("create related Task"),
+            );
+        }
+        for task in &related[..50] {
+            db.add_task_dependency(&central.id, &task.id)
+                .expect("add outgoing relationship");
+        }
+        for task in &related[50..] {
+            db.add_task_dependency(&task.id, &central.id)
+                .expect("add incoming relationship");
+        }
+
+        db.add_task_dependency(&central.id, &related[0].id)
+            .expect("duplicate relationship remains idempotent at the limit");
+        let overflow = db
+            .create_task("Overflow", "done", None, None, None)
+            .expect("create overflow Task");
+        let error = db
+            .add_task_dependency(&central.id, &overflow.id)
+            .expect_err("relationship beyond the limit must fail");
+        assert!(matches!(
+            error,
+            TaskDependencyPersistenceError::RelationshipLimit { task_id, max }
+                if task_id == central.id && max == super::MAX_DIRECT_TASK_RELATIONSHIPS
+        ));
+        assert!(!db
+            .get_task(&central.id)
+            .expect("load central Task")
+            .expect("central Task exists")
+            .depends_on
+            .contains(&overflow.id));
+    }
+
+    #[test]
+    fn oversized_dependency_replacement_rolls_back_without_changing_existing_edges() {
+        let (db, _temp_dir) = make_test_db("relationship_replacement_limit");
+        let central = db
+            .create_task("Central", "backlog", None, None, None)
+            .expect("create central Task");
+        let mut related = Vec::new();
+        for index in 0..=super::MAX_DIRECT_TASK_RELATIONSHIPS {
+            related.push(
+                db.create_task(&format!("Related {index}"), "done", None, None, None)
+                    .expect("create related Task"),
+            );
+        }
+        let original = related[..super::MAX_DIRECT_TASK_RELATIONSHIPS]
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        db.set_task_dependencies(&central.id, &original)
+            .expect("set maximum relationships");
+        let oversized = related
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+
+        assert!(matches!(
+            db.set_task_dependencies(&central.id, &oversized),
+            Err(TaskDependencyPersistenceError::RelationshipLimit { .. })
+        ));
+        let persisted = db
+            .get_task(&central.id)
+            .expect("load central Task")
+            .expect("central Task exists")
+            .depends_on
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            persisted,
+            original
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>()
+        );
+    }
+
+    #[test]
+    fn concurrent_relationship_additions_cannot_exceed_the_limit() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let (db, _temp_dir) = make_test_db("concurrent_relationship_limit");
+        let central = db
+            .create_task("Central", "backlog", None, None, None)
+            .expect("create central Task");
+        let mut related = Vec::new();
+        for index in 0..(super::MAX_DIRECT_TASK_RELATIONSHIPS + 1) {
+            related.push(
+                db.create_task(&format!("Related {index}"), "done", None, None, None)
+                    .expect("create related Task"),
+            );
+        }
+        for task in &related[..(super::MAX_DIRECT_TASK_RELATIONSHIPS - 1)] {
+            db.add_task_dependency(&central.id, &task.id)
+                .expect("seed relationship");
+        }
+
+        let db = Arc::new(db);
+        let barrier = Arc::new(Barrier::new(3));
+        let attempts = related[(super::MAX_DIRECT_TASK_RELATIONSHIPS - 1)..]
+            .iter()
+            .map(|task| {
+                let db = Arc::clone(&db);
+                let barrier = Arc::clone(&barrier);
+                let task_id = central.id.clone();
+                let dependency_id = task.id.clone();
+                thread::spawn(move || {
+                    barrier.wait();
+                    db.add_task_dependency(&task_id, &dependency_id)
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+        let results = attempts
+            .into_iter()
+            .map(|attempt| attempt.join().expect("relationship thread"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(
+                    result,
+                    Err(TaskDependencyPersistenceError::RelationshipLimit { .. })
+                ))
+                .count(),
+            1
+        );
+        let central = db
+            .get_task(&central.id)
+            .expect("load central Task")
+            .expect("central Task exists");
+        assert_eq!(
+            central.depends_on.len(),
+            super::MAX_DIRECT_TASK_RELATIONSHIPS
+        );
     }
 }

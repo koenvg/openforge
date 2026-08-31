@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import type { PullRequestInfo, Task } from './types'
+import type { PullRequestInfo } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 
 vi.mock('./ipc', () => ({
   enqueuePullRequest: vi.fn(),
@@ -12,24 +13,7 @@ import { createPullRequestActions } from './pullRequestActions'
 import { enqueuePullRequest, mergePullRequest, refreshTaskGithubStatus } from './ipc'
 import { error, ticketPrs } from './stores'
 
-const task: Task = {
-  id: 'T-42',
-  initial_prompt: 'Prompt',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
-  status: 'doing',
-  agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 1000,
-}
+const task = createTask({ id: 'T-42', projectId: 'proj-1', status: 'doing' })
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {

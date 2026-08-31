@@ -1,23 +1,28 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
-import type { Task } from '../lib/types'
+import type { TaskDetail } from '../lib/types'
 import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
 
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
-    initial_prompt: 'New Task',
+    projectId: 'test-project-id',
     status: 'backlog',
-    prompt: null,
+    title: 'New Task',
+    prompt: 'New Task',
+    promptPreview: 'New Task',
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 1000,
-    updated_at: 1000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    labels: [],
+    titleSource: null,
+    titleGeneratedAt: null,
+    createdAt: 1000,
+    updatedAt: 1000,
   }),
   updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
   getConfig: vi.fn().mockResolvedValue(null),
@@ -92,24 +97,25 @@ function setClipboardRead(read: () => Promise<Array<{ types: string[], getType: 
   })
 }
 
-const mockTask = {
+const mockTask: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Existing Task',
+  prompt: 'Existing Task',
+  promptPreview: 'Existing Task',
   status: 'doing',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Existing Task',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
-} as Task
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  projectId: 'project-1',
+  createdAt: 1000,
+  updatedAt: 2000,
+  labels: [],
+}
 
 describe('AddTaskDialog', () => {
   beforeEach(() => {
@@ -166,8 +172,8 @@ describe('AddTaskDialog', () => {
   })
 
   it('shows an explicit loading state and disables both creation actions while saving', async () => {
-    let resolveCreate!: (task: Task) => void
-    vi.mocked(createTask).mockImplementationOnce(() => new Promise<Task>((resolve) => {
+    let resolveCreate!: (task: TaskDetail) => void
+    vi.mocked(createTask).mockImplementationOnce(() => new Promise<TaskDetail>((resolve) => {
       resolveCreate = resolve
     }))
     render(AddTaskDialog, { props: { mode: 'create' } })
@@ -708,7 +714,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, {
       props: {
         mode: 'edit',
-        task: { ...mockTask, initial_prompt: 'Immutable initial prompt', prompt: 'Mutable prompt text' },
+        task: { ...mockTask, prompt: 'Mutable prompt text' },
       },
     })
 
@@ -722,7 +728,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })
@@ -738,7 +744,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })
@@ -756,7 +762,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })
@@ -799,7 +805,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })
@@ -835,7 +841,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
         onTaskSaved,
       },
@@ -860,7 +866,7 @@ describe('AddTaskDialog', () => {
         mode: 'edit',
         task: {
           ...mockTask,
-          initial_prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })

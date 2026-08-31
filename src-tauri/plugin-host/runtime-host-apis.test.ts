@@ -150,6 +150,48 @@ describe('plugin-host backend host APIs', () => {
     ])
   })
 
+  it('routes canonical backend Task reads without changing request or result shapes', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('canonicalTaskReads', {
+            async handler() {
+              return {
+                active: await openforge.tasks.active('P-1'),
+                completed: await openforge.tasks.completed('P-1', { search: 'done', labels: ['bug'], cursor: 'opaque' }),
+                detail: await openforge.tasks.detail('P-1', 'T-1')
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const results = {
+      active: { tasks: [{ id: 'T-active', projectId: 'P-1' }], related: [] },
+      completed: { tasks: [{ id: 'T-done', projectId: 'P-1' }], nextCursor: 'next' },
+      detail: { task: { id: 'T-1', projectId: 'P-1' }, related: [] },
+    }
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.tasks.active') return results.active
+      if (request.method === 'openforge.tasks.completed') return results.completed
+      if (request.method === 'openforge.tasks.detail') return results.detail
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'canonical-reader',
+      backendPath,
+      command: 'canonicalTaskReads',
+    })).resolves.toEqual(results)
+    expect(calls).toEqual([
+      { method: 'openforge.tasks.active', params: { projectId: 'P-1' } },
+      { method: 'openforge.tasks.completed', params: { projectId: 'P-1', query: { search: 'done', labels: ['bug'], cursor: 'opaque' } } },
+      { method: 'openforge.tasks.detail', params: { projectId: 'P-1', taskId: 'T-1' } },
+    ])
+  })
+
   it('fails backend host capability calls clearly when the callback bridge is unavailable', async () => {
     const backendPath = await writeBackendModule(`
       export default {

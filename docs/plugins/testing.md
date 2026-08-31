@@ -282,7 +282,7 @@ it('records task creation, status updates, and implementation starts', async () 
 })
 ```
 
-`tasks.list()` returns an empty array by default, `tasks.get()` resolves to `null` (a missing Task is not an error), and workspace/session lookups return `null`. If your plugin needs richer task fixtures, wrap the API behind your own test double at your plugin boundary.
+By default, `tasks.active(projectId)` returns empty `tasks` and `related` arrays, `tasks.completed(projectId)` returns an empty fixed page, and `tasks.detail(projectId, taskId)` resolves to `null`. The deprecated version 1 `tasks.list()` and `tasks.get()` fakes preserve their old empty-array and null behavior until version 2. Workspace and session lookups also return `null`. Seed the registry or wrap the API behind a plugin-owned test double when a test needs richer fixtures.
 
 ## Backend RPC
 

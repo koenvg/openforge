@@ -91,6 +91,50 @@ impl PluginHost {
         }
     }
 
+    pub(super) fn active_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let result = db
+            .tasks()
+            .active(&project_id)
+            .map_err(|error| format!("failed to read active Tasks: {error}"))?;
+        serde_json::to_value(result)
+            .map_err(|error| format!("failed to serialize active Tasks: {error}"))
+    }
+
+    pub(super) fn completed_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let query = params
+            .get("query")
+            .cloned()
+            .map(serde_json::from_value::<crate::db::CompletedTaskQuery>)
+            .transpose()
+            .map_err(|error| format!("invalid Completed Task query: {error}"))?
+            .unwrap_or_default();
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let result = db
+            .tasks()
+            .completed(&project_id, query)
+            .map_err(|error| format!("failed to read Completed Tasks: {error}"))?;
+        serde_json::to_value(result)
+            .map_err(|error| format!("failed to serialize Completed Tasks: {error}"))
+    }
+
+    pub(super) fn task_detail_for_host(&self, params: &Value) -> Result<Value, String> {
+        let project_id = required_param_string(params, "projectId")?;
+        let task_id = required_param_string(params, "taskId")?;
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let result = db
+            .tasks()
+            .detail(&project_id, &task_id)
+            .map_err(|error| format!("failed to read Task detail: {error}"))?;
+        serde_json::to_value(result)
+            .map_err(|error| format!("failed to serialize Task detail: {error}"))
+    }
+
     pub(super) fn create_task_for_host(&self, params: &Value) -> Result<Value, String> {
         let initial_prompt = required_param_text(params, "initialPrompt")?;
         let project_id = required_param_string(params, "projectId")?;

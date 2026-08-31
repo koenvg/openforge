@@ -158,6 +158,9 @@ pub async fn create_task_handler(
             &request.labels,
         )
         .map_err(|error| match error {
+            db::TaskCreationError::ActiveTaskLimit { .. } => {
+                (StatusCode::CONFLICT, error.to_string())
+            }
             db::TaskCreationError::Storage(error) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to create task: {error}"),

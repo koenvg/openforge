@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, ReviewPullRequest, Task, TaskAttentionRow, TaskLaneRows } from '../../lib/types'
+import type { Project, ReviewPullRequest, TaskAttentionRow, TaskLaneRows } from '../../lib/types'
+import type { AttentionTaskReference } from '../../lib/attentionOverview'
 import {
   projects,
   reviewPrs,
@@ -37,25 +38,12 @@ function projectRecord(id: string, name: string): Project {
   return { id, name, path: `/repos/${id}`, created_at: 0, updated_at: 0 }
 }
 
-function taskRecord(id: string, projectId: string, title: string): Task {
-  return {
-    id,
-    initial_prompt: title,
-    status: 'doing',
-    prompt: null,
-    title,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: projectId,
-    created_at: 0,
-    updated_at: 0,
-  } as Task
+function taskRecord(id: string, projectId: string, _title: string): AttentionTaskReference {
+  return { id, projectId }
+}
+
+function mockTaskSnapshots(_tasks: AttentionTaskReference[]): void {
+  // Task identity now comes from the narrow lane projection returned by getTaskLanes.
 }
 
 function attentionRow(
@@ -107,7 +95,7 @@ function reviewPr(id: number, owner: string, name: string, title: string): Revie
 
 type DialogProps = {
   onClose: () => void
-  onOpenTask: (task: Task) => void
+  onOpenTask: (task: AttentionTaskReference) => void
   onOpenPr: (pr: ReviewPullRequest, projectId: string | null) => void
 }
 
@@ -136,7 +124,7 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    ipc.getAllTasks.mockResolvedValue([])
+    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)
@@ -167,7 +155,7 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     await vi.waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy())
 
     // Agent finished: the task is now an idle "doing" task that needs the user.
-    ipc.getAllTasks.mockResolvedValue([taskRecord('t1', 'p1', '')])
+    mockTaskSnapshots([taskRecord('t1', 'p1', '')])
     ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [attentionRow('t1', 'p1', 'Investigate flaky test')] }))
     // The orchestrator recomputes attentionCountByProject on the agent-finished event.
     taskAttentionRows.set([attentionRow('t1', 'p1', 'Investigate flaky test')])
@@ -175,11 +163,13 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
     await vi.waitFor(() => expect(screen.getByText('Investigate flaky test')).toBeTruthy())
     expect(screen.getByText(/No agent running\. Start when ready\./)).toBeTruthy()
+    expect(ipc.getTaskLanes).toHaveBeenCalled()
+    expect(ipc.getAllTasks).not.toHaveBeenCalled()
   })
 
   it('keeps the newest Task attention snapshot when refreshes finish out of order', async () => {
     projects.set([projectRecord('p1', 'Project One')])
-    ipc.getAllTasks.mockResolvedValue([
+    mockTaskSnapshots([
       taskRecord('older', 'p1', 'Older result'),
       taskRecord('newer', 'p1', 'Newer result'),
     ])
@@ -209,7 +199,7 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
   it('preserves the collapsed-project state across a refresh (does not re-read config)', async () => {
     projects.set([projectRecord('p1', 'Project One'), projectRecord('p2', 'Project Two')])
-    ipc.getAllTasks.mockResolvedValue([
+    mockTaskSnapshots([
       taskRecord('t1', 'p1', 'Task One'),
       taskRecord('t2', 'p2', 'Task Two'),
     ])
@@ -245,7 +235,7 @@ describe('AttentionOverviewDialog — initial focus', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    ipc.getAllTasks.mockResolvedValue([taskRecord('t1', 'p1', 'Task One'), taskRecord('t2', 'p1', 'Task Two')])
+    mockTaskSnapshots([taskRecord('t1', 'p1', 'Task One'), taskRecord('t2', 'p1', 'Task Two')])
     ipc.getTaskLanes.mockResolvedValue(laneRows({
       focus: [attentionRow('t1', 'p1', 'Task One'), attentionRow('t2', 'p1', 'Task Two')],
     }))
@@ -270,7 +260,7 @@ describe('AttentionOverviewDialog — initial focus', () => {
 
   it('keeps the shortcuts alive after a filter empties the list', async () => {
     // Reviews only: hiding them removes every row, including the one holding DOM focus.
-    ipc.getAllTasks.mockResolvedValue([])
+    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'Please review my fix')])
 
@@ -318,7 +308,7 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    ipc.getAllTasks.mockResolvedValue([
+    mockTaskSnapshots([
       taskRecord('t1', 'p1', 'Focus task'),
       taskRecord('t2', 'p1', 'Parked one'),
       taskRecord('t3', 'p2', 'Parked two'),
@@ -593,7 +583,7 @@ describe('AttentionOverviewDialog — plugin review row actions', () => {
     runtimeContributionSources.set(new Map())
     clearComponentRegistry()
 
-    ipc.getAllTasks.mockResolvedValue([])
+    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)

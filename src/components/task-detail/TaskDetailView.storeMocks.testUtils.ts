@@ -21,3 +21,7 @@ vi.mock('../../lib/stores', () => ({
   taskDraftNotes: writable(new Map()),
   commandHeld: writable(false),
 }))
+
+vi.mock('../../lib/tasksState', () => ({
+  updateTaskDetail: vi.fn(),
+}))

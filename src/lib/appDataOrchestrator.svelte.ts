@@ -13,7 +13,6 @@ import {
   projectResolvedRepos,
   projects,
   reviewPrs,
-  dependencyReferenceTasks,
   tasks,
   ticketPrs,
 } from './stores'
@@ -27,9 +26,8 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
-  getTaskRelationshipReferences,
-  getTasksForProject,
 } from './ipc'
+import { clearActiveTasks, getActiveTasksForProject, pruneTaskProjects, refreshActiveTasks } from './tasksState'
 import { applyProjectOrder } from './projectOrder'
 import { loadHiddenProjectIds } from './projectVisibility'
 import { githubSyncFailureMessage } from './githubSyncResult'
@@ -53,6 +51,8 @@ interface TaskLoadState {
   refreshPending: boolean
   promise: Promise<void>
 }
+
+
 function defaultLogError(message: string, errorValue: unknown): void {
   console.error(message, errorValue)
 }
@@ -81,6 +81,11 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   let attentionRefreshGeneration = 0
   let projectAttentionLoadPromise: Promise<void> | null = null
   const taskLoads = new Map<string, TaskLoadState>()
+  let knownProjectIds: Set<string> | null = null
+
+  function detachVisibleTasks(): void {
+    clearActiveTasks()
+  }
 
   async function loadProjects(): Promise<void> {
     try {
@@ -94,6 +99,11 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
       }
 
       const orderedProjects = applyProjectOrder(fetchedProjects, savedOrder)
+      knownProjectIds = new Set(orderedProjects.map((project) => project.id))
+      pruneTaskProjects(knownProjectIds)
+      for (const projectId of taskLoads.keys()) {
+        if (!knownProjectIds.has(projectId)) taskLoads.delete(projectId)
+      }
       projects.set(orderedProjects)
 
       try {
@@ -136,41 +146,37 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
   async function refreshTasksForProject(projectId: string): Promise<void> {
     try {
-      const [activeTasks, relationshipReferences] = await Promise.all([
-        getTasksForProject(projectId),
-        getTaskRelationshipReferences(projectId),
-      ])
-      // A newer project switch may have started while this fetch was in flight (e.g.
-      // rapid ⌘-cycling or a sidebar switch, each of which also kicks off a load).
-      // Don't clobber the tasks store with a stale project's data — the newer load
-      // will populate the correct tasks for the now-active project.
-      if (get(activeProjectId) !== projectId) {
-        return
+      const result = await refreshActiveTasks(
+        projectId,
+        undefined,
+        () => get(activeProjectId) === projectId
+          && (knownProjectIds === null || knownProjectIds.has(projectId)),
+      )
+      if (result) await loadSessions()
+    } catch (loadError) {
+      if (get(activeProjectId) === projectId) {
+        logError('Failed to load tasks:', loadError)
+        error.set(String(loadError))
       }
-      tasks.set(activeTasks)
-      dependencyReferenceTasks.set(relationshipReferences)
-      await loadSessions()
-    } catch (e) {
-      dependencyReferenceTasks.set([])
-      logError('Failed to load tasks:', e)
-      error.set(String(e))
     }
   }
 
   function loadTasks(): Promise<void> {
     const projectId = get(activeProjectId)
     if (!projectId) {
-      dependencyReferenceTasks.set([])
+      detachVisibleTasks()
       return Promise.resolve()
     }
 
+    const hasCurrentTasks = getActiveTasksForProject(projectId) !== null
+    if (!hasCurrentTasks) clearActiveTasks()
     const currentLoad = taskLoads.get(projectId)
     if (currentLoad) {
       if (currentLoad.started) currentLoad.refreshPending = true
       return currentLoad.promise
     }
 
-    isLoading.set(true)
+    isLoading.set(taskLoads.size > 0 || !hasCurrentTasks)
     const taskLoad: TaskLoadState = {
       started: false,
       refreshPending: false,

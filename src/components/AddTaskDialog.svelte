@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { Task } from '../lib/types'
+  import type { TaskDetail } from '../lib/types'
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
@@ -20,7 +20,7 @@
 
   interface Props {
     mode?: 'create' | 'edit'
-    task?: Task | null
+    task?: TaskDetail | null
     projectPath?: string | null
     projectName?: string | null
     /** Seeds the prompt in create mode — used when a plugin composes a task. */
@@ -30,7 +30,7 @@
     worktreeSourceSeed?: WorktreeSource | null
     worktreeBranchSeed?: string | null
     onClose?: () => void
-    onTaskSaved?: (task?: Task, options?: { started: boolean }) => void | Promise<void>
+    onTaskSaved?: (task?: TaskDetail, options?: { started: boolean }) => void | Promise<void>
     onRunAction?: (taskId: string, actionPrompt: string) => Promise<void>
   }
 
@@ -272,7 +272,7 @@
     submissionIntent = mode === 'create' ? (autoStart ? 'start' : 'backlog') : null
     isSaving = true
     try {
-      let savedTask: Task
+      let savedTask: TaskDetail
       const taskPrompt = promptAttachments?.formatPrompt(normalizedPrompt) ?? normalizedPrompt
 
       if (mode === 'edit' && task) {

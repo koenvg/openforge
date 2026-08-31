@@ -88,8 +88,9 @@ mod tests {
         assert!(skill_content.contains("openforge task create"));
         assert!(skill_content.contains("openforge task update"));
         assert!(skill_content.contains("openforge task start --task-id"));
-        assert!(skill_content.contains("openforge task get"));
-        assert!(skill_content.contains("openforge task list"));
+        assert!(skill_content.contains("openforge task active"));
+        assert!(skill_content.contains("openforge task completed"));
+        assert!(skill_content.contains("openforge task detail"));
         assert!(skill_content.contains("openforge project labels list"));
         assert!(skill_content.contains("openforge task labels add"));
         assert!(skill_content.contains("openforge task labels remove"));
@@ -106,12 +107,12 @@ mod tests {
         assert!(skill_content.contains("Before creating follow-up Tasks"));
         assert!(skill_content.contains("add useful --label values and dependency links"));
         assert!(skill_content.contains("When creating multiple related Tasks"));
-        assert_eq!(skill_content.matches("openforge task get").count(), 1);
+        assert_eq!(skill_content.matches("openforge task detail").count(), 2);
         assert_eq!(
             skill_content
                 .matches("openforge project labels list")
                 .count(),
-            2
+            1
         );
         assert_eq!(
             skill_content.matches("openforge task labels list").count(),

@@ -1,4 +1,3 @@
-import type { Task } from './types'
 
 export interface TaskPromptImageReference {
   marker: string
@@ -19,8 +18,8 @@ function dataUrlByteSize(base64Payload: string): number {
   return Math.max(0, Math.floor(base64Payload.length * 3 / 4) - padding)
 }
 
-function rawTaskPromptText(task: Pick<Task, 'initial_prompt' | 'prompt'>): string {
-  return task.prompt || task.initial_prompt || ''
+function rawTaskPromptText(task: { prompt: string }): string {
+  return task.prompt
 }
 
 function trimTrailingBlankLines(lines: string[]): string[] {
@@ -70,12 +69,12 @@ export function formatTaskPromptWithImageReferences(
   return `${prompt.trim()}\n\n${references}`
 }
 
-export function getTaskPromptText(task: Pick<Task, 'initial_prompt' | 'prompt'>): string {
+export function getTaskPromptText(task: { prompt: string }): string {
   return parseTaskPrompt(rawTaskPromptText(task)).text
 }
 
 export function getTaskPromptImageReferences(
-  task: Pick<Task, 'initial_prompt' | 'prompt'>,
+  task: { prompt: string },
 ): TaskPromptImageReference[] {
   return parseTaskPrompt(rawTaskPromptText(task)).imageReferences
 }

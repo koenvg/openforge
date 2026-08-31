@@ -1,28 +1,30 @@
-import type { Task } from '../lib/types'
+import type { TaskDetail } from '../lib/types'
 
-const defaultTask: Task = {
+const defaultTask: TaskDetail = {
   id: 'task-1',
-  initial_prompt: 'Test task',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  prompt: 'Test task',
+  promptPreview: 'Test task',
+  title: 'Test task',
   status: 'doing',
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 1000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  projectId: 'proj-1',
+  createdAt: 1000,
+  updatedAt: 1000,
+  titleSource: null,
+  titleGeneratedAt: null,
+  labels: [],
 }
 
-export function createTask(overrides: Partial<Task> = {}): Task {
+export function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {
     ...defaultTask,
-    depends_on: [],
+    dependsOn: [],
+    labels: [],
     ...overrides,
   }
 }

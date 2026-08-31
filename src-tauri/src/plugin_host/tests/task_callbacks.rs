@@ -34,6 +34,100 @@ async fn plugin_host_create_task_uses_project_worktree_default() {
 }
 
 #[tokio::test]
+async fn plugin_host_bounded_task_reads_match_shared_contract() {
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_bounded_task_reads");
+    let project = database
+        .create_project("Plugin Tasks", "/tmp/plugin-bounded-tasks")
+        .expect("project fixture");
+    let completed = database
+        .create_task(
+            "Completed authoring",
+            "done",
+            Some(&project.id),
+            Some("legacy execution override"),
+            None,
+        )
+        .expect("completed Task fixture");
+    database
+        .create_task("Second completed", "done", Some(&project.id), None, None)
+        .expect("second completed Task fixture");
+    let active = database
+        .create_task("Active authoring", "backlog", Some(&project.id), None, None)
+        .expect("active Task fixture");
+    database
+        .add_task_dependency(&active.id, &completed.id)
+        .expect("dependency fixture");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+
+    let active_result = host
+        .handle_host_callback(
+            "openforge.tasks.active",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("active callback");
+    assert_eq!(active_result["tasks"][0]["id"], active.id);
+    assert_eq!(active_result["tasks"][0]["prompt"], "Active authoring");
+    assert!(active_result["tasks"][0].get("initial_prompt").is_none());
+    assert_eq!(active_result["related"][0]["id"], completed.id);
+
+    let completed_result = host
+        .handle_host_callback(
+            "openforge.tasks.completed",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("completed callback");
+    assert_eq!(
+        completed_result["tasks"]
+            .as_array()
+            .expect("completed items")
+            .len(),
+        2
+    );
+    assert!(completed_result["nextCursor"].is_null());
+    assert!(completed_result["tasks"][0].get("prompt").is_none());
+
+    let detail = host
+        .handle_host_callback(
+            "openforge.tasks.detail",
+            &json!({ "projectId": project.id, "taskId": completed.id }),
+        )
+        .await
+        .expect("detail callback");
+    assert_eq!(detail["task"]["prompt"], "Completed authoring");
+    assert!(!detail.to_string().contains("legacy execution override"));
+    assert_eq!(
+        host.handle_host_callback(
+            "openforge.tasks.detail",
+            &json!({ "projectId": project.id, "taskId": "T-missing" }),
+        )
+        .await
+        .expect("missing detail callback"),
+        Value::Null
+    );
+
+    let error = host
+        .handle_host_callback(
+            "openforge.tasks.completed",
+            &json!({ "projectId": project.id, "query": { "cursor": "invalid" } }),
+        )
+        .await
+        .expect_err("invalid Completed Task cursor");
+    assert!(error.contains("cursor"));
+
+    let legacy = host
+        .handle_host_callback("openforge.tasks.list", &json!({}))
+        .await
+        .expect("legacy list callback");
+    assert!(legacy.as_array().expect("legacy tasks").len() >= 3);
+    assert!(legacy[0].get("initial_prompt").is_some());
+}
+
+#[tokio::test]
 async fn plugin_host_prompt_contribution_order_requires_i64_and_preserves_safe_maximum() {
     const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
     let (database, _temp_dir) =

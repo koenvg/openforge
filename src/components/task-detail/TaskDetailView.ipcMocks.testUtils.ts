@@ -3,6 +3,12 @@ import { vi } from 'vitest'
 vi.mock('../../lib/ipc', () => ({
   updateTaskFields: vi.fn().mockResolvedValue(undefined),
   updateTaskTitle: vi.fn().mockResolvedValue(undefined),
+  getProjectTaskLabels: vi.fn().mockResolvedValue([]),
+  addTaskLabel: vi.fn().mockResolvedValue(null),
+  removeTaskLabel: vi.fn().mockResolvedValue(undefined),
+  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
+  getPullRequests: vi.fn().mockResolvedValue([]),
+  forceGithubSync: vi.fn().mockResolvedValue({}),
   deleteTask: vi.fn().mockResolvedValue(undefined),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +34,7 @@ vi.mock('../../lib/ipc', () => ({
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
+  invokeDesktopCommand: vi.fn().mockResolvedValue(null),
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 

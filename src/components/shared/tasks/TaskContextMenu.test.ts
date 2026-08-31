@@ -1,9 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { readable } from 'svelte/store'
+import type { Writable } from 'svelte/store'
 import TaskContextMenu from './TaskContextMenu.svelte'
-import type { Task, BoardStatus } from '../../../lib/types'
-import { completingTasks, tasks, error } from '../../../lib/stores'
+import type { TaskDetail, BoardStatus } from '../../../lib/types'
+import { completingTasks, error } from '../../../lib/stores'
+import { activeTasks } from '../../../lib/tasksState'
 import { DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from '../../../lib/completeTask'
 
 vi.mock('../../../lib/ipc', () => ({
@@ -20,28 +22,41 @@ vi.mock('../../../lib/plugin/pluginStore', () => ({
   enabledPluginIds: readable(new Set<string>()),
 }))
 
+
+vi.mock('../../../lib/tasksState', async (importOriginal) => {
+  const { writable } = await import('svelte/store')
+  return {
+    ...await importOriginal<typeof import('../../../lib/tasksState')>(),
+    activeTasks: writable<TaskDetail[]>([]),
+    evictTask: vi.fn(),
+  }
+})
+
 import {
   listTaskStartPrefixProvidersAcrossPlugins,
   requestTaskStartPrefix,
 } from '../../../lib/plugin/pluginRegistry'
 
-const makeTask = (id: string, status: BoardStatus): Task => ({
+const tasks = activeTasks as Writable<TaskDetail[]>
+
+const makeTask = (id: string, status: BoardStatus): TaskDetail => ({
   id,
-  initial_prompt: 'Test task',
+  prompt: 'Test task',
+  promptPreview: 'Test task',
   status,
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
-  prompt: '',
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  projectId: 'project-1',
+  createdAt: 1000,
+  updatedAt: 2000,
+  title: 'Test task',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: 'default',
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
+  permissionMode: 'default',
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
 })
 
 beforeEach(() => {

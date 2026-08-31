@@ -13,7 +13,7 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { createTaskPaneController } from './taskPaneController'
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInspectorPanel from './TaskInspectorPanel.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
@@ -22,7 +22,7 @@
   import TaskDetailToolbar from './TaskDetailToolbar.svelte'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     onRunAction: (data: { taskId: string; actionPrompt: string }) => void
     onEdit?: (taskId: string) => void
     onOpenTask?: (taskId: string, projectId?: string | null) => void | Promise<void>
@@ -233,6 +233,7 @@
             slotType="taskPaneTabs"
             slotId={tab.namespacedId}
             taskId={task.id}
+            {task}
             projectId={$activeProjectId}
           />
         </div>

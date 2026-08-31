@@ -1,6 +1,12 @@
 import { writable, derived } from "svelte/store";
-import type { Task, TaskRelationshipReference, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
+import type { TaskDetail, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from './types'
 import type { BoardFilter } from './boardFilters'
+import {
+  activeTasks as canonicalActiveTasks,
+  dependencyReferenceTasks,
+  setVisibleTaskContext,
+  taskDetailsById,
+} from './tasksState'
 import { buildReviewRequestCountByProject, countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
 import { buildAttentionCountByProject } from './attentionCounts'
 
@@ -8,11 +14,9 @@ export interface TaskRuntimeInfo {
   workspacePath: string;
 }
 
-export const tasks = writable<Task[]>([]);
-// Completed tasks stay out of active board/search lists, but visible tasks can
-// still resolve them as read-only dependency metadata for dependency chips.
-export const dependencyReferenceTasks = writable<TaskRelationshipReference[]>([]);
-export const pendingTask = writable<Task | null>(null);
+export const tasks = canonicalActiveTasks
+export { dependencyReferenceTasks, taskDetailsById }
+export const pendingTask = writable<TaskDetail | null>(null)
 // selectedTaskId serves as both selection state and navigation:
 // - null = show Flow board
 // - non-null = show full-page detail view for that task
@@ -45,6 +49,16 @@ export const projects = writable<Project[]>([]);
 // Persisted to the global config key `project_sidebar_hidden`. See projectVisibility.ts.
 export const hiddenProjectIds = writable<Set<string>>(new Set());
 export const activeProjectId = writable<string | null>(null);
+let visibleTaskId: string | null = null
+let visibleProjectId: string | null = null
+selectedTaskId.subscribe((taskId) => {
+  visibleTaskId = taskId
+  setVisibleTaskContext(visibleProjectId, visibleTaskId)
+})
+activeProjectId.subscribe((projectId) => {
+  visibleProjectId = projectId
+  setVisibleTaskContext(visibleProjectId, visibleTaskId)
+})
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 // Backend-authoritative Task-only attention projection used by the Focus board and badges.
 export const taskAttentionRows = writable<TaskAttentionRow[]>([]);

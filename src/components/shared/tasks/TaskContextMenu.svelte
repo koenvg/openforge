@@ -1,7 +1,8 @@
 <script lang="ts">
   import { getTaskActionPresentation } from '../../../lib/actionPalettePresentation'
   import type { BoardStatus } from '../../../lib/types'
-  import { activeProjectId, completingTasks, tasks } from '../../../lib/stores'
+  import { activeProjectId, completingTasks } from '../../../lib/stores'
+  import { activeTasks } from '../../../lib/tasksState'
   import { confirmTerminalTaskAction, runCompleteTask } from '../../../lib/completeTask'
   import { enabledPluginIds } from '../../../lib/plugin/pluginStore'
   import {
@@ -33,7 +34,7 @@
 
   let { visible, x, y, taskId, onClose, onStart, onEdit, onDelete, outOfFocusTaskIds = new Set(), onMoveToOutOfFocus, onReturnToBoard }: Props = $props()
 
-  let taskStatus = $derived<BoardStatus | ''>($tasks.find(t => t.id === taskId)?.status ?? '')
+  let taskStatus = $derived<BoardStatus | ''>($activeTasks.find(t => t.id === taskId)?.status ?? '')
   let isOutOfFocusTask = $derived(outOfFocusTaskIds.has(taskId))
   let isCompleting = $derived($completingTasks.has(taskId))
   let hasStartAction = $derived(taskStatus === 'backlog' && Boolean(onStart))

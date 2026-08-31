@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, TaskLabel } from '../../lib/types'
+import type { TaskDetail } from '../../lib/types'
 import TaskInspectorPanel from './TaskInspectorPanel.svelte'
 
 vi.mock('../../lib/stores', () => ({
@@ -9,13 +9,18 @@ vi.mock('../../lib/stores', () => ({
   mergingTaskIds: writable(new Set()),
   projects: writable([]),
   tasks: writable([]),
+  taskDetailsById: writable(new Map()),
   dependencyReferenceTasks: writable([]),
   activeSessions: writable(new Map()),
   setTaskMerging: vi.fn(),
 }))
 
+vi.mock('../../lib/tasksState', () => ({
+  updateTaskDetail: vi.fn(),
+}))
+
 vi.mock('../../lib/ipc', () => ({
-  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'project-1', name: 'bug' }),
+  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, projectId: 'project-1', name: 'bug' }),
   forceGithubSync: vi.fn().mockResolvedValue({
     new_comments: 0,
     ci_changes: 0,
@@ -40,24 +45,25 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
-const baseTask: Task = {
+const baseTask: TaskDetail = {
   id: 'T-748',
-  initial_prompt: 'Fix the dashboard bug.',
+  projectId: 'project-1',
   status: 'doing',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Fix the dashboard bug.',
+  prompt: 'Fix the dashboard bug.',
+  promptPreview: 'Fix the dashboard bug.',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'project-1',
-  created_at: 1700000000,
-  updated_at: 1700000000,
-} as Task & { labels?: TaskLabel[] }
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
+  createdAt: 1700000000,
+  updatedAt: 1700000000,
+}
 
 describe('TaskInspectorPanel', () => {
   beforeEach(async () => {
@@ -66,7 +72,7 @@ describe('TaskInspectorPanel', () => {
     stores.ticketPrs.set(new Map())
     stores.mergingTaskIds.set(new Set())
     stores.projects.set([])
-    stores.tasks.set([])
+    ;(stores.tasks as unknown as { set(value: never[]): void }).set([])
     stores.activeSessions.set(new Map())
   })
 
@@ -153,8 +159,10 @@ describe('TaskInspectorPanel', () => {
     const dependentTask = {
       ...baseTask,
       id: 'T-900',
-      initial_prompt: 'Continue after the dashboard bug is fixed.',
-      depends_on: [baseTask.id],
+      title: 'Continue after the dashboard bug is fixed.',
+      prompt: 'Continue after the dashboard bug is fixed.',
+      promptPreview: 'Continue after the dashboard bug is fixed.',
+      dependsOn: [baseTask.id],
     }
 
     render(TaskInspectorPanel, {

@@ -42,12 +42,16 @@ pub(super) async fn handle_app_core_task_project_command(
                         )
                     })?
                     .and_then(|task| task.project_id);
-                db.update_task_status(&id, status.as_str()).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task status: {e}"),
-                    )
-                })?;
+                db.update_task_status(&id, status.as_str())
+                    .map_err(|error| match error {
+                        crate::db::TaskStatusUpdateError::ActiveTaskLimit { .. } => {
+                            (StatusCode::CONFLICT, error.to_string())
+                        }
+                        crate::db::TaskStatusUpdateError::Storage(_) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to update task status: {error}"),
+                        ),
+                    })?;
                 project_id
             };
             publish_task_changed(state, &id, project_id.as_deref());

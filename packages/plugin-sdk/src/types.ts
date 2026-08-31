@@ -10,6 +10,11 @@ import type {
   FileEntry,
   Project,
   ProjectAttention,
+  ActiveTasks,
+  CompletedTaskPage,
+  CompletedTaskQuery,
+  TaskRead,
+  TaskDetail,
   ReviewPullRequest,
   Task,
   TaskWorkspaceInfo,
@@ -304,6 +309,7 @@ export interface PluginTaskPaneProps extends Record<string, unknown> {
   api: FrontendOpenForgeAPI
   context: OpenForgeContextSnapshot
   taskId: string
+  task: TaskDetail
   projectId: string | null
 }
 
@@ -802,14 +808,16 @@ export interface AgentSessionsAPI {
 
 export interface TasksAPI {
   /**
-   * Lists tasks, optionally scoped to a project. By default done tasks are
-   * excluded (matching the app board's active-only view); pass
-   * `includeDone: true` to include tasks in the terminal `done` state. The
-   * unscoped listing (no `projectId`) always returns all states, so
-   * `includeDone` only affects the project-scoped path.
+   * Lists legacy Task rows. Project-scoped reads exclude Completed Tasks unless
+   * `includeDone` is true; unscoped reads preserve the complete legacy array.
+   * @deprecated Use `active`, `completed`, or `detail`. Removed in version 2.
    */
   list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
+  /** @deprecated Use `detail`. Removed in version 2. */
   get(taskId: string): Promise<Task | null>
+  active(projectId: string): Promise<ActiveTasks>
+  completed(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>
+  detail(projectId: string, taskId: string): Promise<TaskRead | null>
   create(request: CreateTaskRequest): Promise<Task>
   /**
    * Opens the host's create-task dialog pre-filled, letting the user edit the

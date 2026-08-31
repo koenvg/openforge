@@ -26,4 +26,4 @@ export {
   taskWithLabels,
   uiLabel,
 }
-export type { Task } from './TaskInfoPanel.testFixtures'
+export type { TaskDetail } from './TaskInfoPanel.testFixtures'

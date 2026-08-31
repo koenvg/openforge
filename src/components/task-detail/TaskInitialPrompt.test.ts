@@ -2,25 +2,26 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskInitialPrompt from './TaskInitialPrompt.svelte'
 import { clearRenderedMarkdownCache, getRenderedMarkdownCacheStats } from '@openforge-app/plugin-sdk/markdown'
-import type { Task } from '../../lib/types'
+import type { TaskDetail } from '../../lib/types'
 
-const baseTask: Task = {
+const baseTask: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Implement auth middleware',
+  projectId: 'project-1',
   status: 'backlog',
-  prompt: 'Build the auth middleware implementation with JWT support',
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Implement auth middleware',
+  prompt: 'Implement auth middleware',
+  promptPreview: 'Implement auth middleware',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
+  createdAt: 1000,
+  updatedAt: 2000,
 }
 
 describe('TaskInitialPrompt', () => {
@@ -29,7 +30,7 @@ describe('TaskInitialPrompt', () => {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: 'Line one\nLine two\nLine three\nLine four',
+          prompt: 'Line one\nLine two\nLine three\nLine four',
         },
       },
     })
@@ -46,7 +47,7 @@ describe('TaskInitialPrompt', () => {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: '# Release plan\n\nShip the **renderer**\nFourth line',
+          prompt: '# Release plan\n\nShip the **renderer**\nFourth line',
         },
       },
     })
@@ -62,7 +63,7 @@ describe('TaskInitialPrompt', () => {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: '# Cached prompt',
+          prompt: '# Cached prompt',
         },
       },
     })
@@ -82,7 +83,7 @@ describe('TaskInitialPrompt', () => {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: 'Inspect [image#1] carefully\nSecond line\nThird line\nFourth line\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          prompt: 'Inspect [image#1] carefully\nSecond line\nThird line\nFourth line\n\n[image#1]: data:image/png;base64,aW1hZ2UtYnl0ZXM=',
         },
       },
     })

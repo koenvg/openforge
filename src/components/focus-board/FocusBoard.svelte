@@ -13,13 +13,14 @@
   import { createOutOfFocusController } from './outOfFocusController.svelte'
   import { createFocusBoardFilterController } from './focusBoardFilterController.svelte'
   import { createFocusBoardInteractionController } from './focusBoardInteractionController.svelte'
-  import type { Task, TaskRelationshipReference, TaskAttentionRow, AgentSession, PullRequestInfo } from '../../lib/types'
+  import type { TaskDetail, TaskReference, TaskAttentionRow, AgentSession, PullRequestInfo } from '../../lib/types'
 
   interface Props {
     projectId: string | null
     projectName: string
-    tasks: Task[]
-    dependencyReferenceTasks?: TaskRelationshipReference[]
+    tasks: TaskDetail[]
+    taskDetailsById?: Map<string, TaskDetail>
+    dependencyReferenceTasks?: TaskReference[]
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
     attentionRows?: TaskAttentionRow[]
@@ -37,6 +38,7 @@
     projectId,
     projectName,
     tasks,
+    taskDetailsById = new Map(),
     dependencyReferenceTasks = [],
     activeSessions,
     ticketPrs,
@@ -55,7 +57,7 @@
   })
   let dependencyResolutionTasks = $derived([...tasks, ...dependencyReferenceTasks])
   type TaskRow = {
-    task: Task
+    task: TaskDetail
     taskIndex: number
   }
 
@@ -115,6 +117,7 @@
 
   let selectedTaskIdLocal = $derived(interactionController.selectedTaskId)
   let selectedTask = $derived(interactionController.selectedTask)
+  let selectedTaskDetail = $derived(selectedTaskIdLocal ? taskDetailsById.get(selectedTaskIdLocal) ?? null : null)
   let recentlyViewedTaskId = $derived(interactionController.recentlyViewedTaskId)
   let contextMenu = $derived(interactionController.contextMenu)
 
@@ -246,7 +249,7 @@
       onfocusout={() => interactionController.setPaneHasFocus(false)}
     >
       <TaskInspectorPanel
-        task={selectedTask}
+        task={selectedTaskDetail ?? selectedTask}
         allTasks={tasks}
         {dependencyReferenceTasks}
         {onTaskUpdated}

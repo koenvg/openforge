@@ -71,6 +71,47 @@ describe('plugin host commands', () => {
     expect(get(taskActiveView)).toEqual(new Map())
   })
 
+  it('routes canonical Task reads through the frontend host contract', async () => {
+    const { invoke } = installDesktopBridge()
+    const detail = {
+      id: 'T-1',
+      status: 'backlog',
+      projectId: 'P-1',
+      title: 'Task',
+      dependsOn: [],
+      createdAt: 1,
+      updatedAt: 2,
+      promptPreview: 'Authoring prompt',
+      labels: [],
+      sourceTicketUrl: null,
+      prompt: 'Authoring prompt',
+      agent: null,
+      permissionMode: null,
+      worktreeSource: null,
+      worktreeBranch: null,
+      titleSource: null,
+      titleGeneratedAt: null,
+    }
+    invoke
+      .mockResolvedValueOnce({ tasks: [detail], related: [] })
+      .mockResolvedValueOnce({ tasks: [], nextCursor: null })
+      .mockResolvedValueOnce({ task: detail, related: [] })
+      .mockResolvedValueOnce(null)
+    const host = createPluginRuntimeHost('com.example.tasks')
+
+    await expect(host.activeTasks?.('P-1')).resolves.toMatchObject({ tasks: [detail] })
+    await expect(host.completedTasks?.('P-1', { search: 'task' }))
+      .resolves.toEqual({ tasks: [], nextCursor: null })
+    await expect(host.taskDetail?.('P-1', 'T-1')).resolves.toEqual({ task: detail, related: [] })
+    await expect(host.taskDetail?.('P-1', 'T-missing')).resolves.toBeNull()
+
+    expect(invoke.mock.calls).toEqual([
+      ['tasks_active', { projectId: 'P-1' }],
+      ['tasks_completed', { projectId: 'P-1', query: { search: 'task' } }],
+      ['tasks_detail', { projectId: 'P-1', taskId: 'T-1' }],
+      ['tasks_detail', { projectId: 'P-1', taskId: 'T-missing' }],
+    ])
+  })
   it('routes plugin task creation and implementation starts through the approved host contract', async () => {
     const { invoke } = installDesktopBridge()
     const task = {

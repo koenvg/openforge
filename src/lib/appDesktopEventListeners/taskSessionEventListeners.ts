@@ -1,20 +1,23 @@
 import { get } from 'svelte/store'
 import { shouldHydratePtyInstanceFromAgentStatusMetadata } from '../agentPanelSessionSync'
 import type { AgentStatusChangedKind } from '../agentPanelSessionSync'
-import { finalizeAgentSession, getLatestSession, getTaskDetail } from '../ipc'
+import { finalizeAgentSession, getLatestSession } from '../ipc'
 import { getOpenCodeSessionUpdate } from '../opencodeSessionEvents'
 import {
+  activeProjectId,
   activeSessions,
   checkpointNotification,
+  selectedTaskId,
   taskRuntimeInfo,
   taskSpawned,
+  taskDetailsById,
   tasks,
 } from '../stores'
+import { evictTask, getVisibleRelationshipOwner, loadTaskDetail } from '../tasksState'
 import {
   release as releaseTerminal,
   restorePtyInstance,
 } from '../terminalPool'
-import { getTaskPromptText } from '../taskPrompt'
 import type { AgentSession } from '../types'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
@@ -272,17 +275,47 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
     taskChanged: defineDesktopEventListener(
       'task-changed',
       async (event) => {
+        const taskId = event.payload.task_id
         if (event.payload.action === 'deleted') {
-          const taskId = event.payload.task_id
+          evictTask(taskId)
           deleteActiveSession(taskId)
           releaseTerminal(taskId)
           clearCheckpointForTask(taskId)
         } else if (event.payload.action === 'created') {
-          try {
-            const task = await getTaskDetail(event.payload.task_id)
-            taskSpawned.set({ taskId: task.id, promptText: getTaskPromptText(task) })
-          } catch (e) {
-            console.error('Failed to load created task for toast:', e)
+          const projectId = event.payload.project_id ?? get(activeProjectId)
+          if (projectId) {
+            try {
+              const result = await loadTaskDetail(projectId, taskId)
+              if (result) taskSpawned.set({ taskId, promptText: result.task.prompt })
+            } catch (loadError) {
+              console.error('Failed to load created task for toast:', loadError)
+            }
+          }
+        } else {
+          const visibleOwnerId = getVisibleRelationshipOwner(taskId)
+          const changedCachedTaskId = get(taskDetailsById).has(taskId)
+            && !get(tasks).some((task) => task.id === taskId)
+            ? taskId
+            : null
+          const refreshTaskIds = [...new Set(
+            [changedCachedTaskId, visibleOwnerId].filter((candidate): candidate is string => Boolean(candidate)),
+          )]
+          const expectedProjectId = get(activeProjectId)
+          const expectedSelectedTaskId = get(selectedTaskId)
+          if (expectedProjectId) {
+            for (const refreshTaskId of refreshTaskIds) {
+              try {
+                await loadTaskDetail(
+                  expectedProjectId,
+                  refreshTaskId,
+                  undefined,
+                  () => get(activeProjectId) === expectedProjectId
+                    && get(selectedTaskId) === expectedSelectedTaskId,
+                )
+              } catch (loadError) {
+                console.error('Failed to refresh changed task detail:', loadError)
+              }
+            }
           }
         }
         await deps.loadTasks()

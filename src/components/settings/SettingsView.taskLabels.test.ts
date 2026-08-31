@@ -9,7 +9,7 @@ describe('SettingsView Task Labels integration', () => {
   beforeEach(resetSettingsViewTaskLabelsTest)
 
   it('renders Task Labels management on the project settings page', async () => {
-    vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, project_id: 'test-project-id', name: 'bug' }])
+    vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, projectId: 'test-project-id', name: 'bug' }])
     render(SettingsView, { props: defaultProps })
 
     await fireEvent.click(screen.getByRole('button', { name: /Labels/ }))

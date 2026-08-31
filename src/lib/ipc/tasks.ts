@@ -1,11 +1,56 @@
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import { normalizeTask, parseBoardStatus } from '../boardStatus'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
-import type { BoardStatus, DivergenceResolution, ExistingBranchPlan, GitBranchInfo, ImplementationStatus, Project, ProjectAttention, Task, TaskAttentionRow, TaskLabel, TaskLaneRows, TaskRelationshipReference, TaskWorkspaceInfo, WorktreeInfo, WorktreeSource, WritableBoardStatus } from '../types'
+import type {
+  ActiveTasks,
+  BoardStatus,
+  CompletedTaskPage,
+  CompletedTaskQuery,
+  DivergenceResolution,
+  ExistingBranchPlan,
+  GitBranchInfo,
+  ImplementationStatus,
+  Project,
+  ProjectAttention,
+  Task,
+  TaskAttentionRow,
+  TaskDetail,
+  TaskLabel,
+  TaskLaneRows,
+  TaskRead,
+  TaskReference,
+  TaskSummary,
+  TaskWorkspaceInfo,
+  WorktreeInfo,
+  WorktreeSource,
+  WritableBoardStatus,
+} from '../types'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
-type RawTaskRelationshipReference = Omit<TaskRelationshipReference, 'status'> & { status: string }
+type RawTaskReference = Omit<TaskReference, 'status'> & { status: string }
+type RawTaskSummary = Omit<TaskSummary, 'status'> & { status: string }
+type RawTaskDetail = Omit<TaskDetail, 'status'> & { status: string }
+type RawActiveTasks = Omit<ActiveTasks, 'tasks' | 'related'> & {
+  tasks: RawTaskDetail[]
+  related: RawTaskReference[]
+}
+type RawCompletedTaskPage = Omit<CompletedTaskPage, 'tasks'> & { tasks: RawTaskSummary[] }
+type RawTaskRead = Omit<TaskRead, 'task' | 'related'> & {
+  task: RawTaskDetail
+  related: RawTaskReference[]
+}
+function normalizeTaskReference(reference: RawTaskReference): TaskReference {
+  return { ...reference, status: parseBoardStatus(reference.status) }
+}
+
+function normalizeTaskSummary(summary: RawTaskSummary): TaskSummary {
+  return { ...summary, status: parseBoardStatus(summary.status) }
+}
+
+function normalizeTaskDetail(detail: RawTaskDetail): TaskDetail {
+  return { ...detail, status: parseBoardStatus(detail.status) }
+}
 export interface CreateTaskOptions {
   dependsOn?: string[]
   labelNames?: string[]
@@ -21,7 +66,7 @@ export interface CreateTaskOptions {
   aiProvider?: string | null
 }
 
-export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<Task> {
+export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string, permissionMode: string | null, options: CreateTaskOptions = {}): Promise<TaskDetail> {
   const {
     dependsOn = [],
     labelNames = [],
@@ -32,8 +77,8 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     taskDisplayTitleUpdatesEnabled,
     aiProvider = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, taskDisplayTitleUpdatesEnabled, aiProvider });
-  return normalizeTask(task)
+  const task = await invoke<RawTaskDetail>('create_task', { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, taskDisplayTitleUpdatesEnabled, aiProvider })
+  return normalizeTaskDetail(task)
 }
 
 export async function updateTaskInitialPrompt(id: string, initialPrompt: string): Promise<void> {
@@ -110,10 +155,31 @@ export async function getAllTasks(): Promise<Task[]> {
 }
 
 
-export async function getTaskRelationshipReferences(projectId: string): Promise<TaskRelationshipReference[]> {
-  const references = await invoke<RawTaskRelationshipReference[]>("get_task_relationship_references", { projectId })
-  return references.map((reference) => ({ ...reference, status: parseBoardStatus(reference.status) }))
+export async function readActiveTasks(projectId: string): Promise<ActiveTasks> {
+  const result = await invoke<RawActiveTasks>('tasks_active', { projectId })
+  return {
+    tasks: result.tasks.map(normalizeTaskDetail),
+    related: result.related.map(normalizeTaskReference),
+  }
 }
+
+export async function readCompletedTasks(
+  projectId: string,
+  query: CompletedTaskQuery = {},
+): Promise<CompletedTaskPage> {
+  const result = await invoke<RawCompletedTaskPage>('tasks_completed', { projectId, query })
+  return { ...result, tasks: result.tasks.map(normalizeTaskSummary) }
+}
+
+export async function readTaskDetail(projectId: string, taskId: string): Promise<TaskRead | null> {
+  const result = await invoke<RawTaskRead | null>('tasks_detail', { projectId, taskId })
+  if (result === null) return null
+  return {
+    task: normalizeTaskDetail(result.task),
+    related: result.related.map(normalizeTaskReference),
+  }
+}
+
 
 export async function getTasksForProject(projectId: string, includeDone = false): Promise<Task[]> {
   const tasks = await invoke<RawTask[]>("get_tasks_for_project", { projectId, includeDone });

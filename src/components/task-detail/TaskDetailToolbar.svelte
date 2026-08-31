@@ -10,7 +10,7 @@
   import { createOutOfFocusController } from '../focus-board/outOfFocusController.svelte'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
-  import type { Task } from '../../lib/types'
+  import type { TaskDetail } from '../../lib/types'
   import type { TaskRunAppState } from './taskRunAppController'
   import AnchoredMenu from '../shared/ui/AnchoredMenu.svelte'
   import ContextMenuItem from '../shared/ui/ContextMenuItem.svelte'
@@ -18,7 +18,7 @@
   import AgentStatusPill from './AgentStatusPill.svelte'
 
   interface Props {
-    task: Task
+    task: TaskDetail
     workspacePath: string | null
     activeView: string
     tabs: readonly ResolvedTab[]

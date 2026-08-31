@@ -114,6 +114,8 @@ describe('TaskDetailView — shell and header', () => {
 
   it('saves the new title on Enter and refreshes', async () => {
     const { updateTaskTitle } = await import('../../lib/ipc')
+    const { updateTaskDetail } = await import('../../lib/tasksState')
+    vi.mocked(updateTaskDetail).mockClear()
     vi.mocked(updateTaskTitle).mockClear()
     const onTaskUpdated = vi.fn()
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onTaskUpdated } })
@@ -124,6 +126,7 @@ describe('TaskDetailView — shell and header', () => {
     await waitFor(() => {
       expect(updateTaskTitle).toHaveBeenCalledWith('T-42', 'Renamed task')
     })
+    expect(updateTaskDetail).toHaveBeenCalledWith('T-42', expect.any(Function))
     expect(onTaskUpdated).toHaveBeenCalled()
   })
 
@@ -150,13 +153,13 @@ describe('TaskDetailView — shell and header', () => {
   })
 
   it('falls back to first line of prompt when title is empty', () => {
-    const taskNoTitle = { ...baseTask, initial_prompt: '', prompt: 'First prompt line\nSecond line' }
+    const taskNoTitle = { ...baseTask, title: '', prompt: 'First prompt line\nSecond line' }
     render(TaskDetailView, { props: { task: taskNoTitle, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('First prompt line')
   })
 
-  it('falls back to task id when title and prompt are both empty/null', () => {
-    const taskNoTitleNoPrompt = { ...baseTask, initial_prompt: '', prompt: null }
+  it('falls back to task id when title and prompt are empty', () => {
+    const taskNoTitleNoPrompt = { ...baseTask, title: '', prompt: '' }
     render(TaskDetailView, { props: { task: taskNoTitleNoPrompt, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('T-42')
   })

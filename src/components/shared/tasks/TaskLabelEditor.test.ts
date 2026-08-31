@@ -11,7 +11,7 @@ vi.mock('../../../lib/ipc', () => ({
 const mockedGetProjectTaskLabels = vi.mocked(getProjectTaskLabels)
 
 function makeLabel(id: number, name: string): TaskLabel {
-  return { id, project_id: 'P-1', name }
+  return { id, projectId: 'P-1', name }
 }
 
 const AVAILABLE_LABELS: TaskLabel[] = [

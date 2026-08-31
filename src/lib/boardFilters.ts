@@ -1,4 +1,4 @@
-import type { Task } from './types'
+import type { TaskDetail } from './types'
 import type { TaskState } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 import { getTaskLabels } from './taskLabels'
@@ -65,13 +65,12 @@ function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
   )
 }
 
-export function taskMatchesTextFilter(task: Task, query: string): boolean {
+export function taskMatchesTextFilter(task: TaskDetail, query: string): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase()
   if (!normalizedQuery) return true
 
   return [
     task.title,
-    task.initial_prompt,
     task.prompt,
     ...getTaskLabels(task).map((label) => label.name),
   ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery))
@@ -82,11 +81,11 @@ export function taskMatchesTextFilter(task: Task, query: string): boolean {
  * owns the non-attention lanes, but it no longer derives whether a Task needs user action.
  */
 export function filterTasks(
-  tasks: Task[],
+  tasks: TaskDetail[],
   filter: BoardFilter,
   attentionTaskIds: ReadonlySet<string>,
   outOfFocusTaskIds: ReadonlySet<string> = new Set(),
-): Task[] {
+): TaskDetail[] {
   if (filter === 'backlog') {
     return tasks.filter((task) => task.status === 'backlog')
   }
@@ -104,7 +103,7 @@ export function filterTasks(
 }
 
 export function getFilterCounts(
-  tasks: Task[],
+  tasks: TaskDetail[],
   attentionTaskIds: ReadonlySet<string>,
   outOfFocusTaskIds: ReadonlySet<string> = new Set(),
 ): Record<BoardFilter, number> {

@@ -1,7 +1,7 @@
 import { render } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
-import type { Task } from '../lib/types'
+import type { TaskDetail } from '../lib/types'
 
 // Capture the props passed to InjectionPointSlot by the dialog.
 const { injectionSlotProps } = vi.hoisted(() => ({
@@ -23,17 +23,22 @@ vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
-    initial_prompt: 'New Task',
+    projectId: 'test-project-id',
     status: 'backlog',
-    prompt: null,
+    title: 'New Task',
+    prompt: 'New Task',
+    promptPreview: 'New Task',
+    titleSource: null,
+    titleGeneratedAt: null,
     agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 1000,
-    updated_at: 1000,
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    sourceTicketUrl: null,
+    dependsOn: [],
+    labels: [],
+    createdAt: 1000,
+    updatedAt: 1000,
   }),
   updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue(null),
@@ -54,23 +59,24 @@ vi.mock('../lib/stores', () => {
   }
 })
 
-const mockTask: Task = {
+const mockTask: TaskDetail = {
   id: 'T-42',
-  initial_prompt: 'Existing Task',
+  projectId: 'test-project-id',
   status: 'doing',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: 'Existing Task',
+  prompt: 'Existing Task',
+  promptPreview: 'Existing Task',
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: null,
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  labels: [],
+  createdAt: 1000,
+  updatedAt: 2000,
 }
 
 describe('AddTaskDialog injection point', () => {

@@ -1,5 +1,4 @@
-import { getTaskTitle } from './taskTitle'
-import type { BoardStatus, Task, TaskRelationshipReference } from './types'
+import type { BoardStatus, TaskDetail, TaskReference } from './types'
 
 export interface TaskDependencySummary {
   id: string
@@ -16,21 +15,17 @@ export interface TaskDependentSummary extends TaskDependencySummary {
 }
 
 
-type TaskRelationshipTask = Task | TaskRelationshipReference
-
-function getRelationshipTaskTitle(task: TaskRelationshipTask): string {
-  return 'initial_prompt' in task ? getTaskTitle(task) : task.title
-}
+type TaskRelationshipTask = TaskDetail | TaskReference
 export function getTaskDependencySummaries(
-  task: Task,
+  task: TaskDetail,
   allTasks: TaskRelationshipTask[],
   projectNames: ReadonlyMap<string, string> = new Map(),
 ): TaskDependencySummary[] {
   const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
-  return task.depends_on.map((dependencyId) => {
+  return task.dependsOn.map((dependencyId) => {
     const dependencyTask = tasksById.get(dependencyId)
-    const displayTitle = dependencyTask ? getRelationshipTaskTitle(dependencyTask) : null
-    const projectId = dependencyTask?.project_id ?? null
+    const displayTitle = dependencyTask?.title ?? null
+    const projectId = dependencyTask?.projectId ?? null
     return {
       id: dependencyId,
       status: dependencyTask?.status ?? null,
@@ -38,13 +33,13 @@ export function getTaskDependencySummaries(
       displayTitle,
       tooltipTitle: displayTitle ?? dependencyId,
       projectId,
-      projectName: projectId && projectId !== task.project_id ? projectNames.get(projectId) ?? projectId : null,
+      projectName: projectId && projectId !== task.projectId ? projectNames.get(projectId) ?? projectId : null,
     }
   })
 }
 
 export function getTaskDependentSummaries(
-  task: Task,
+  task: TaskDetail,
   allTasks: TaskRelationshipTask[],
   dependencyResolutionTasks: TaskRelationshipTask[] = allTasks,
   projectNames: ReadonlyMap<string, string> = new Map(),
@@ -52,10 +47,10 @@ export function getTaskDependentSummaries(
   const tasksById = new Map(dependencyResolutionTasks.map((knownTask) => [knownTask.id, knownTask]))
 
   return allTasks
-    .filter((knownTask) => knownTask.id !== task.id && knownTask.depends_on.includes(task.id))
+    .filter((knownTask) => knownTask.id !== task.id && knownTask.dependsOn.includes(task.id))
     .map((dependentTask) => {
-      const displayTitle = getRelationshipTaskTitle(dependentTask)
-      const remainingDependencyCountAfterCurrentDone = dependentTask.depends_on
+      const displayTitle = dependentTask.title
+      const remainingDependencyCountAfterCurrentDone = dependentTask.dependsOn
         .filter((dependencyId) => dependencyId !== task.id)
         .filter((dependencyId) => tasksById.get(dependencyId)?.status !== 'done')
         .length
@@ -66,16 +61,16 @@ export function getTaskDependentSummaries(
         title: displayTitle,
         displayTitle,
         tooltipTitle: displayTitle,
-        projectId: dependentTask.project_id,
-        projectName: dependentTask.project_id && dependentTask.project_id !== task.project_id
-          ? projectNames.get(dependentTask.project_id) ?? dependentTask.project_id
+        projectId: dependentTask.projectId,
+        projectName: dependentTask.projectId !== task.projectId
+          ? projectNames.get(dependentTask.projectId) ?? dependentTask.projectId
           : null,
         remainingDependencyCountAfterCurrentDone,
       }
     })
 }
 
-export function getWaitingDependencyCount(task: Task, allTasks: TaskRelationshipTask[]): number {
+export function getWaitingDependencyCount(task: TaskDetail, allTasks: TaskRelationshipTask[]): number {
   return getTaskDependencySummaries(task, allTasks).filter((dependency) => dependency.status !== 'done').length
 }
 
@@ -85,7 +80,7 @@ export function getDependentReadinessLabel(dependent: TaskDependentSummary, long
   return `still waits on ${dependent.remainingDependencyCountAfterCurrentDone} ${dependencyLabel}${dependent.remainingDependencyCountAfterCurrentDone === 1 ? '' : 's'}`
 }
 
-export function getDependencyWaitLabel(task: Task, allTasks: TaskRelationshipTask[]): string | null {
+export function getDependencyWaitLabel(task: TaskDetail, allTasks: TaskRelationshipTask[]): string | null {
   const waitingCount = getWaitingDependencyCount(task, allTasks)
   if (waitingCount === 0) return null
   return `Waiting on ${waitingCount} ${waitingCount === 1 ? 'dep' : 'deps'}`

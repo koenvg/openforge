@@ -33,6 +33,7 @@ mod task_persistence;
 mod task_persistence_benchmark;
 #[cfg(test)]
 mod task_persistence_test_support;
+mod task_reads;
 mod task_start;
 mod task_workspaces;
 mod tasks;
@@ -58,7 +59,7 @@ pub use review::ReviewPrRow;
 pub use task_creation::TaskWorktreeOptions;
 pub use task_creation::{NewTaskOptions, TaskCreationError};
 pub use task_labels::{TaskLabelPersistenceError, TaskLabelRow};
-pub use task_lifecycle::CompleteTaskWriteOutcome;
+pub use task_lifecycle::{CompleteTaskWriteOutcome, TaskStatusUpdateError};
 pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 // This is part of the Database API even though production callers currently only format it.
@@ -66,7 +67,8 @@ pub use task_workspaces::TaskWorkspaceRow;
 pub use task_dependencies::TaskDependencyPersistenceError;
 pub(crate) use tasks::TaskDetailRelationshipRow;
 pub use tasks::{
-    CompactTaskRow, TaskInitialPromptUpdateError, TaskRelationshipReferenceRow, TaskRow,
+    ActiveTasks, CompactTaskRow, CompletedTaskPage, CompletedTaskQuery, TaskDetail,
+    TaskInitialPromptUpdateError, TaskRead, TaskReadError, TaskRow,
 };
 pub use worktrees::WorktreeRow;
 

@@ -231,11 +231,37 @@ describe('OpenForge task commands', () => {
     expect(result).toEqual({ task_id: 'T-1', status: 'updated' });
   });
 
+  it('reads canonical active, Completed, and detail projections', async () => {
+    const active = { tasks: [{ id: 'T-1', projectId: 'P 1', prompt: 'Active' }], related: [] };
+    await expect(runCliAgainstJsonBridge(['task', 'active', '--project-id', 'P 1'], {
+      url: '/v2/projects/P%201/tasks/active',
+      response: active,
+    })).resolves.toEqual(active);
+
+    const page = { tasks: [{ id: 'T-2', projectId: 'P 1', promptPreview: 'Done' }], nextCursor: 'opaque' };
+    await expect(runCliAgainstJsonBridge([
+      'task', 'completed', '--project-id', 'P 1', '--search', 'done now',
+      '--label', 'urgent,backend', '--cursor', 'opaque',
+    ], {
+      url: '/v2/projects/P%201/tasks/completed?search=done+now&labels=urgent&labels=backend&cursor=opaque',
+      response: page,
+    })).resolves.toEqual(page);
+
+    const detail = { task: { id: 'T/1', projectId: 'P 1', prompt: 'Full prompt' }, related: [] };
+    await expect(runCliAgainstJsonBridge([
+      'task', 'detail', '--project-id', 'P 1', '--task-id', 'T/1',
+    ], {
+      url: '/v2/projects/P%201/tasks/T%2F1',
+      response: detail,
+    })).resolves.toEqual(detail);
+  });
+
   it('retrieves task rows through the nested task get command', async () => {
     const task = {
       id: 'T-1',
-      initial_prompt: 'Nested get',
       prompt: 'Nested get full prompt',
+      prompt_preview: 'Nested get full prompt',
+      title: 'Nested get',
       status: 'backlog',
       labels: [],
       depends_on: [],

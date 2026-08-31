@@ -2,12 +2,14 @@ use super::{
     task_dependencies::{load_task_dependency_ids, load_task_dependency_ids_for_tasks},
     task_labels::{load_task_labels, load_task_labels_for_tasks},
     tasks::{
-        CompactTaskRow, TaskDetailRelationshipRow, TaskDetailRelationships,
-        TaskRelationshipReferenceRow, TaskRow,
+        resolved_projection_title, CompactTaskRow, TaskDetail, TaskDetailRelationshipRow,
+        TaskDetailRelationships, TaskRelationshipReferenceRow, TaskRow,
     },
     Database,
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
+
+pub(super) const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
 
 macro_rules! task_row_query {
     ($suffix:literal) => {
@@ -25,8 +27,7 @@ macro_rules! compact_task_row_query {
         concat!(
             "SELECT id, status, project_id, created_at, updated_at, agent, permission_mode, ",
             "worktree_source, worktree_branch, ",
-            "COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, ",
-            "title_source, title_generated_at, source_ticket_url FROM tasks ",
+            "title, prompt_preview, title_source, title_generated_at, source_ticket_url FROM tasks ",
             $suffix
         )
     };
@@ -69,18 +70,19 @@ relationship_tasks AS (
         tasks.id,
         tasks.status,
         tasks.project_id,
-        COALESCE(NULLIF(tasks.title, ''), substr(tasks.initial_prompt, 1, 120)) AS title,
+        tasks.title,
+        tasks.prompt_preview,
         tasks.updated_at
     FROM tasks
     INNER JOIN relationship_ids ON relationship_ids.id = tasks.id
     WHERE NOT EXISTS (SELECT 1 FROM active_tasks WHERE active_tasks.id = tasks.id)
 )
-SELECT id, status, project_id, title
+SELECT id, status, project_id, title, prompt_preview
 FROM relationship_tasks
 ORDER BY updated_at DESC
 "#;
 
-fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
+pub(super) fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
     Ok(TaskRow {
         id: row.get(0)?,
         initial_prompt: row.get(1)?,
@@ -103,8 +105,12 @@ fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
 }
 
 fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
+    let id: String = row.get(0)?;
+    let explicit_title: Option<String> = row.get(9)?;
+    let prompt_preview: String = row.get(10)?;
     Ok(CompactTaskRow {
-        id: row.get(0)?,
+        title: resolved_projection_title(&id, explicit_title.as_deref(), &prompt_preview),
+        id,
         status: row.get(1)?,
         project_id: row.get(2)?,
         created_at: row.get(3)?,
@@ -113,23 +119,25 @@ fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
         permission_mode: row.get(6)?,
         worktree_source: row.get(7)?,
         worktree_branch: row.get(8)?,
-        title: row.get(9)?,
-        title_source: row.get(10)?,
-        title_generated_at: row.get(11)?,
-        source_ticket_url: row.get(12)?,
+        title_source: row.get(11)?,
+        title_generated_at: row.get(12)?,
+        source_ticket_url: row.get(13)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
 }
 
-fn task_relationship_reference_from_row(
+pub(super) fn task_relationship_reference_from_row(
     row: &rusqlite::Row<'_>,
 ) -> Result<TaskRelationshipReferenceRow> {
+    let id: String = row.get(0)?;
+    let explicit_title: Option<String> = row.get(3)?;
+    let prompt_preview: String = row.get(4)?;
     Ok(TaskRelationshipReferenceRow {
-        id: row.get(0)?,
+        title: resolved_projection_title(&id, explicit_title.as_deref(), &prompt_preview),
+        id,
         status: row.get(1)?,
         project_id: row.get(2)?,
-        title: row.get(3)?,
         depends_on: Vec::new(),
     })
 }
@@ -175,7 +183,10 @@ fn hydrate_task_row(conn: &rusqlite::Connection, mut task: TaskRow) -> Result<Ta
     Ok(task)
 }
 
-fn hydrate_task_rows(conn: &rusqlite::Connection, mut tasks: Vec<TaskRow>) -> Result<Vec<TaskRow>> {
+pub(super) fn hydrate_task_rows(
+    conn: &rusqlite::Connection,
+    mut tasks: Vec<TaskRow>,
+) -> Result<Vec<TaskRow>> {
     let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
     let mut dependencies = load_task_dependency_ids_for_tasks(conn, &task_ids)?;
     let mut labels = load_task_labels_for_tasks(conn, &task_ids)?;
@@ -200,7 +211,7 @@ fn hydrate_compact_task_rows(
     Ok(tasks)
 }
 
-fn hydrate_task_relationship_references(
+pub(super) fn hydrate_task_relationship_references(
     conn: &rusqlite::Connection,
     mut tasks: Vec<TaskRelationshipReferenceRow>,
 ) -> Result<Vec<TaskRelationshipReferenceRow>> {
@@ -294,6 +305,22 @@ impl Database {
         query_task_rows(&conn, TASKS_FOR_PROJECT_BY_STATE_SQL, [project_id, state])
     }
 
+    pub fn get_active_task_details(&self, project_id: Option<&str>) -> Result<Vec<TaskDetail>> {
+        let conn = self.lock_conn()?;
+        let tasks = if let Some(project_id) = project_id {
+            let query = format!(
+                "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != 'done' ORDER BY updated_at DESC, id DESC"
+            );
+            query_task_rows(&conn, &query, [project_id])?
+        } else {
+            let query = format!(
+                "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE status != 'done' ORDER BY updated_at DESC, id DESC"
+            );
+            query_task_rows(&conn, &query, [])?
+        };
+        Ok(tasks.iter().map(TaskDetail::from).collect())
+    }
+
     pub fn get_task_relationship_references_for_project(
         &self,
         project_id: &str,
@@ -302,6 +329,51 @@ impl Database {
         let mut statement = conn.prepare(TASK_RELATIONSHIP_REFERENCES_FOR_PROJECT_SQL)?;
         let rows = statement.query_map([project_id], task_relationship_reference_from_row)?;
         let tasks = rows.collect::<Result<Vec<_>>>()?;
+        hydrate_task_relationship_references(&conn, tasks)
+    }
+
+    pub fn get_active_task_relationship_references(
+        &self,
+    ) -> Result<Vec<TaskRelationshipReferenceRow>> {
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(
+            r#"
+WITH active_tasks AS (
+    SELECT id
+    FROM tasks
+    WHERE status != 'done'
+),
+relationship_ids AS (
+    SELECT dependencies.depends_on_task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.task_id
+    UNION
+    SELECT dependencies.task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.depends_on_task_id
+    INNER JOIN tasks dependent ON dependent.id = dependencies.task_id
+    WHERE dependent.status != 'done'
+),
+relationship_tasks AS (
+    SELECT
+        tasks.id,
+        tasks.status,
+        tasks.project_id,
+        tasks.title,
+        tasks.prompt_preview,
+        tasks.updated_at
+    FROM tasks
+    INNER JOIN relationship_ids ON relationship_ids.id = tasks.id
+    WHERE NOT EXISTS (SELECT 1 FROM active_tasks WHERE active_tasks.id = tasks.id)
+)
+SELECT id, status, project_id, title, prompt_preview
+FROM relationship_tasks
+ORDER BY updated_at DESC, id DESC
+            "#,
+        )?;
+        let rows = statement.query_map([], task_relationship_reference_from_row)?;
+        let tasks = rows.collect::<Result<Vec<_>>>()?;
+        drop(statement);
         hydrate_task_relationship_references(&conn, tasks)
     }
 

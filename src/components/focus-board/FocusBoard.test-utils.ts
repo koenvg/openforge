@@ -1,11 +1,12 @@
 import { render } from '@testing-library/svelte'
 import { vi } from 'vitest'
+import type { Writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import type {
   AgentSession,
   BoardStatus,
   PullRequestInfo,
-  Task,
+  TaskDetail,
   TaskAttentionRow,
   TaskLabel,
 } from '../../lib/types'
@@ -17,11 +18,21 @@ import {
   focusBoardFilters,
   lastViewedTaskId,
   outOfFocusTaskIdsByProject,
-  tasks as taskStore,
 } from '../../lib/stores'
+import { activeTasks } from '../../lib/tasksState'
+
 import FocusBoard from './FocusBoard.svelte'
 
+vi.mock('../../lib/tasksState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/tasksState')>()
+  const { writable } = await import('svelte/store')
+  return { ...actual, activeTasks: writable<TaskDetail[]>([]) }
+})
+
+const taskStore = activeTasks as Writable<TaskDetail[]>
+
 vi.mock('../../lib/ipc', () => ({
+  readTaskDetail: vi.fn(),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
@@ -32,33 +43,35 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
 }))
 
-export const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
-export const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
+export const bugLabel: TaskLabel = { id: 1, projectId: 'proj-1', name: 'bug' }
+export const uiLabel: TaskLabel = { id: 2, projectId: 'proj-1', name: 'ui' }
 
 export const makeTask = (
   id: string,
   status: BoardStatus,
   prompt: string,
   labels: TaskLabel[] = [],
-): Task => ({
+): TaskDetail => ({
   id,
-  initial_prompt: prompt,
+  prompt,
+  promptPreview: prompt.slice(0, 120),
   status,
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
+  title: prompt,
+  titleSource: null,
+  titleGeneratedAt: null,
   agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 2000,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  sourceTicketUrl: null,
+  dependsOn: [],
+  projectId: 'proj-1',
+  createdAt: 1000,
+  updatedAt: 2000,
   labels,
-} as Task & { labels: TaskLabel[] })
+})
+
+export const taskDetailFromTask = (task: TaskDetail): TaskDetail => task
 
 export const makeSession = (
   taskId: string,
@@ -137,15 +150,17 @@ export function getCurrentVimItem(): HTMLElement {
 
 export function renderBoard(overrides?: {
   projectId?: string | null
-  tasks?: Task[]
+  tasks?: TaskDetail[]
+  taskDetailsById?: Map<string, TaskDetail>
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
   attentionRows?: TaskAttentionRow[]
-  dependencyReferenceTasks?: Task[]
+  dependencyReferenceTasks?: TaskDetail[]
   onProjectAttentionChanged?: () => void | Promise<void>
 }) {
   const projectId = overrides?.projectId ?? 'proj-1'
   const tasks = overrides?.tasks ?? [taskFocus, taskDoing, taskDone, taskBacklog]
+  const taskDetailsById = overrides?.taskDetailsById ?? new Map(tasks.map(task => [task.id, taskDetailFromTask(task)]))
   const sessions = overrides?.sessions ?? new Map([
     [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
     [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
@@ -153,9 +168,9 @@ export function renderBoard(overrides?: {
   const dependencyReferenceTasks = (overrides?.dependencyReferenceTasks ?? []).map((task) => ({
     id: task.id,
     status: task.status,
-    project_id: task.project_id,
-    title: task.title ?? task.initial_prompt,
-    depends_on: task.depends_on,
+    projectId: task.projectId,
+    title: task.title,
+    dependsOn: task.dependsOn,
   }))
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
   const attentionRows = overrides?.attentionRows ?? tasks
@@ -167,12 +182,12 @@ export function renderBoard(overrides?: {
       if (state === 'active') return []
       return [{
         task_id: task.id,
-        project_id: projectId ?? task.project_id ?? '',
+        project_id: projectId ?? task.projectId,
         project_name: 'Test Project',
-        title: task.title?.trim() || task.initial_prompt || 'Untitled task',
+        title: task.title,
         state: state as TaskAttentionRow['state'],
         reason: getTaskReasonText(state, taskPrs),
-        activity_at: session?.updated_at ?? task.updated_at,
+        activity_at: session?.updated_at ?? task.updatedAt,
       }]
     })
   taskStore.set(tasks)
@@ -182,6 +197,7 @@ export function renderBoard(overrides?: {
       projectId,
       projectName: 'Test Project',
       tasks,
+      taskDetailsById,
       activeSessions: sessions,
       ticketPrs: prs,
       attentionRows,

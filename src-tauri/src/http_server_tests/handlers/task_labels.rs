@@ -45,7 +45,7 @@ async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
     assert_eq!(labels.len(), 2);
     assert_eq!(labels[0]["name"], "Bug");
     assert_eq!(labels[1]["name"], "cleanup");
-    assert!(labels.iter().all(|label| label["project_id"] == "P-1"));
+    assert!(labels.iter().all(|label| label["projectId"] == "P-1"));
 }
 
 #[tokio::test]

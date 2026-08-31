@@ -1,13 +1,17 @@
 use super::*;
 
-fn load_task_relationship_references(
-    state: &AppState,
-    project_id: &str,
-) -> Result<Vec<db::TaskRelationshipReferenceRow>, String> {
-    let database = crate::db::acquire_db(&state.db);
-    database
-        .get_task_relationship_references_for_project(project_id)
-        .map_err(|error| format!("Failed to get task relationship references: {error}"))
+fn task_read_error(error: db::TaskReadError) -> (StatusCode, String) {
+    match error {
+        db::TaskReadError::ProjectNotFound(_) => (StatusCode::NOT_FOUND, error.to_string()),
+        db::TaskReadError::SearchTooLong { .. }
+        | db::TaskReadError::TooManyLabels { .. }
+        | db::TaskReadError::LabelNameTooLong { .. }
+        | db::TaskReadError::InvalidCursor => (StatusCode::BAD_REQUEST, error.to_string()),
+        db::TaskReadError::Database(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read Tasks: {error}"),
+        ),
+    }
 }
 
 pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_json::Value> {
@@ -115,6 +119,48 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                 })?;
             Ok(serde_json::Value::Null)
         }
+        "tasks_active" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let result = {
+                let db = crate::db::acquire_db(&state.db);
+                db.tasks().active(&project_id).map_err(task_read_error)?
+            };
+            json_value(result)
+        }
+        "tasks_completed" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let query = request
+                .payload
+                .get("query")
+                .cloned()
+                .map(serde_json::from_value::<db::CompletedTaskQuery>)
+                .transpose()
+                .map_err(|error| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        format!("Invalid Completed Task query: {error}"),
+                    )
+                })?
+                .unwrap_or_default();
+            let result = {
+                let db = crate::db::acquire_db(&state.db);
+                db.tasks()
+                    .completed(&project_id, query)
+                    .map_err(task_read_error)?
+            };
+            json_value(result)
+        }
+        "tasks_detail" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let result = {
+                let db = crate::db::acquire_db(&state.db);
+                db.tasks()
+                    .detail(&project_id, &task_id)
+                    .map_err(task_read_error)?
+            };
+            json_value(result)
+        }
         "get_tasks" => {
             let tasks = {
                 let db = crate::db::acquire_db(&state.db);
@@ -126,12 +172,6 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                 })?
             };
             json_value(tasks)
-        }
-        "get_task_relationship_references" => {
-            let project_id = payload_string(&request.payload, "projectId")?;
-            let references = load_task_relationship_references(state, &project_id)
-                .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
-            json_value(references)
         }
         "get_project_attention" => {
             let attention = {
@@ -239,8 +279,10 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
 
     let task = {
         let db = crate::db::acquire_db(&state.db);
-        let task = db
-            .create_task_with_options(crate::db::NewTaskOptions {
+        let dependencies = depends_on.unwrap_or_default();
+        let labels = label_names.unwrap_or_default();
+        db.create_task_with_metadata(
+            crate::db::NewTaskOptions {
                 initial_prompt: &initial_prompt,
                 status: &status,
                 project_id: project_id.as_deref(),
@@ -252,45 +294,25 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
                 source_ticket_url: source_ticket_url.as_deref(),
                 task_display_title_updates_enabled,
                 ai_provider: ai_provider.as_deref(),
-            })
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to create task: {e}"),
-                )
-            })?;
-        if let Some(depends_on) = depends_on {
-            if !depends_on.is_empty() {
-                if let Err(e) = db.set_task_dependencies(&task.id, &depends_on) {
-                    let _ = db.hard_delete_task(&task.id);
-                    return Err((
-                        StatusCode::BAD_REQUEST,
-                        format!("Failed to set task dependencies: {e}"),
-                    ));
-                }
+            },
+            &dependencies,
+            &labels,
+        )
+        .map_err(|error| match error {
+            crate::db::TaskCreationError::ActiveTaskLimit { .. } => {
+                (StatusCode::CONFLICT, error.to_string())
             }
-        }
-        if let Some(label_names) = label_names {
-            if !label_names.is_empty() {
-                if let Err(e) = db.set_task_labels(&task.id, &label_names) {
-                    let _ = db.hard_delete_task(&task.id);
-                    return Err((
-                        StatusCode::BAD_REQUEST,
-                        format!("Failed to set task labels: {e}"),
-                    ));
-                }
+            crate::db::TaskCreationError::Storage(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create task: {error}"),
+            ),
+            crate::db::TaskCreationError::Dependencies(_)
+            | crate::db::TaskCreationError::Labels(_) => {
+                (StatusCode::BAD_REQUEST, error.to_string())
             }
-        }
-        db.get_task(&task.id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to reload task: {e}"),
-                )
-            })?
-            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task {} not found", task.id)))?
+        })?
     };
 
     publish_task_changed(state, &task.id, task.project_id.as_deref());
-    json_value(task)
+    json_value(db::TaskDetail::from(&task))
 }

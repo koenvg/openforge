@@ -1,4 +1,4 @@
-import type { Task, AgentSession } from './types'
+import type { TaskDetail, AgentSession } from './types'
 
 export interface DoingStatus {
   doingCount: number
@@ -7,7 +7,7 @@ export interface DoingStatus {
   allDone: boolean
 }
 
-export function computeDoingStatus(tasks: Task[], sessions: Map<string, AgentSession>): DoingStatus {
+export function computeDoingStatus(tasks: TaskDetail[], sessions: Map<string, AgentSession>): DoingStatus {
   const doingTasks = tasks.filter(t => t.status === 'doing')
   const doingCount = doingTasks.length
 

@@ -1,19 +1,19 @@
-import type { Task } from './types'
+import type { TaskDetail } from './types'
 import type { RunActionData } from './taskActionRunner'
-import type { ComposeTaskResult } from '@openforge-app/plugin-sdk'
+import type { TaskComposeResult } from './taskCompose'
 import { settleTaskCompose } from './taskCompose'
 
 interface AppTaskCreationControllerOptions {
-  getTasks(): Task[]
+  getTasks(): TaskDetail[]
   loadTasks(): Promise<void>
   resetToBoard(): void
   navigateToTask(taskId: string): void
   runAction(data: RunActionData): Promise<void>
-  settleCompose?(result: ComposeTaskResult | null): void
+  settleCompose?(result: TaskComposeResult | null): void
 }
 
 export function useAppTaskCreationController(options: AppTaskCreationControllerOptions) {
-  let dialog = $state<{ mode: 'create' | 'edit'; task: Task | null } | null>(null)
+  let dialog = $state<{ mode: 'create' | 'edit'; task: TaskDetail | null } | null>(null)
   const settleCompose = options.settleCompose ?? settleTaskCompose
 
   function openNewTask(): void {
@@ -49,7 +49,7 @@ export function useAppTaskCreationController(options: AppTaskCreationControllerO
     settleCompose(null)
   }
 
-  async function saveComposedTask(task?: Task, saveOptions?: { started: boolean }): Promise<void> {
+  async function saveComposedTask(task?: TaskDetail, saveOptions?: { started: boolean }): Promise<void> {
     await options.loadTasks()
     if (task) {
       settleCompose({ task, started: saveOptions?.started ?? false })

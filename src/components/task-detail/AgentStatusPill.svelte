@@ -49,7 +49,7 @@
     void writeAgentTerminalTranscription(taskId, text, 'AgentStatusPill')
   }
 
-  let injectableProjectId = $derived($tasks.find((t) => t.id === taskId)?.project_id ?? null)
+  let injectableProjectId = $derived($tasks.find((t) => t.id === taskId)?.projectId ?? null)
 </script>
 
 <InjectionPointSlot

@@ -310,6 +310,33 @@ async function removeTaskLabel(flags) {
   }));
 }
 
+function canonicalProjectPath(flags) {
+  return encodeURIComponent(requireFlag(flags, 'projectId'));
+}
+
+async function readActiveTasks(flags) {
+  printJson(await requestJson(`/v2/projects/${canonicalProjectPath(flags)}/tasks/active`));
+}
+
+async function readCompletedTasks(flags) {
+  const params = new URLSearchParams();
+  const search = optionalString(flags, 'search');
+  const cursor = optionalString(flags, 'cursor');
+  if (search !== undefined) params.set('search', search);
+  for (const label of labelNamesFromFlag(flags)) params.append('labels', label);
+  if (cursor !== undefined) params.set('cursor', cursor);
+  const query = params.toString();
+  printJson(await requestJson(`/v2/projects/${canonicalProjectPath(flags)}/tasks/completed${query ? `?${query}` : ''}`));
+}
+
+async function readTaskDetail(flags) {
+  const projectId = canonicalProjectPath(flags);
+  const taskId = encodeURIComponent(requireFlag(flags, 'taskId'));
+  printJson(await requestJson(`/v2/projects/${projectId}/tasks/${taskId}`));
+}
+
+
+
 async function listTasks(flags) {
   const params = new URLSearchParams({ project_id: requireFlag(flags, 'projectId') });
   if (typeof flags.state === 'string') {
@@ -365,9 +392,27 @@ export const TASK_COMMAND_SPECS = [
     handler: linkTasks,
   },
   {
+    path: ['task', 'active'],
+    flags: ['projectId'],
+    usage: 'openforge task active --project-id <id>',
+    handler: readActiveTasks,
+  },
+  {
+    path: ['task', 'completed'],
+    flags: ['projectId', 'search', 'label', 'cursor'],
+    usage: 'openforge task completed --project-id <id> [--search <text>] [--label <name>] [--cursor <cursor>]',
+    handler: readCompletedTasks,
+  },
+  {
+    path: ['task', 'detail'],
+    flags: ['projectId', 'taskId'],
+    usage: 'openforge task detail --project-id <id> --task-id <id>',
+    handler: readTaskDetail,
+  },
+  {
     path: ['task', 'get'],
     flags: ['taskId'],
-    usage: 'openforge task get --task-id <id>',
+    usage: '[deprecated; removed in v2] openforge task get --task-id <id>',
     handler: getTask,
   },
   {
@@ -391,7 +436,7 @@ export const TASK_COMMAND_SPECS = [
   {
     path: ['task', 'list'],
     flags: ['projectId', 'state', 'full'],
-    usage: 'openforge task list --project-id <id> [--state backlog|doing|done] [--full]',
+    usage: '[deprecated; removed in v2] openforge task list --project-id <id> [--state backlog|doing|done] [--full]',
     handler: listTasks,
   },
   {

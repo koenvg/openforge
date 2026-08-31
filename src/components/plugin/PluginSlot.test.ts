@@ -8,17 +8,19 @@ import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import type { RuntimeContributionSource } from '../../lib/plugin/contributionResolver'
 import type { PluginEntry, PluginManifest } from '../../lib/plugin/types'
+import type { TaskDetail } from '../../lib/types'
 import { clearComponentRegistry, registerRenderableContributionComponent, registerViewComponent } from '../../lib/plugin/componentRegistry'
 import { makePluginViewKey } from '../../lib/plugin/types'
 
-const { activatePluginMock } = vi.hoisted(() => ({
+const { activatePluginMock, taskDetailMock } = vi.hoisted(() => ({
   activatePluginMock: vi.fn(async () => true),
+  taskDetailMock: vi.fn(),
 }))
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
   activatePlugin: activatePluginMock,
   getPluginRenderProps: (pluginId: string, options: { projectId: string | null; taskId?: string | null }) => ({
-    api: {},
+    api: { tasks: { detail: taskDetailMock } },
     context: { pluginId, projectId: options.projectId, taskId: options.taskId ?? null },
   }),
 }))
@@ -47,6 +49,28 @@ function makeManifest(pluginId: string = 'test-plugin'): PluginManifest {
   }
 }
 
+
+function taskDetail(): TaskDetail {
+  return {
+    id: 'T-42',
+    status: 'doing',
+    projectId: 'P-1',
+    title: 'Cached task',
+    dependsOn: [],
+    createdAt: 1,
+    updatedAt: 2,
+    promptPreview: 'Cached authoring prompt',
+    labels: [],
+    sourceTicketUrl: null,
+    prompt: 'Cached authoring prompt',
+    agent: 'pi',
+    permissionMode: null,
+    worktreeSource: null,
+    worktreeBranch: null,
+    titleSource: null,
+    titleGeneratedAt: null,
+  }
+}
 function makeViewSource(pluginId: string = 'test-plugin'): RuntimeContributionSource {
   return {
     pluginId,
@@ -289,6 +313,7 @@ describe('PluginSlot', () => {
         slotType: 'taskUISections',
         projectId: 'P-1',
         taskId: 'T-42',
+        task: taskDetail(),
         projectName: 'Project Sections',
       },
     })
@@ -297,6 +322,8 @@ describe('PluginSlot', () => {
       expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Sections')
       expect(screen.getByTestId('plugin-runtime-props').textContent).toContain('plugin.sections:P-1:T-42:T-42:P-1:api')
     })
+    expect(screen.getByTestId('plugin-task-prompt').textContent).toBe('Cached authoring prompt')
+    expect(taskDetailMock).not.toHaveBeenCalled()
   })
 
   it('filters disabled task UI sections before component loading', async () => {

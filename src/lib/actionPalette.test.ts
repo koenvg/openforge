@@ -1,28 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { filterActions, getAvailableActions, getGlobalActions, getTaskActions } from './actionPalette'
 import { APP_SHORTCUT_DEFINITIONS } from './appShortcutDefinitions'
-import type { Task, PullRequestInfo } from './types'
+import type { TaskDetail, PullRequestInfo } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'T-100',
-    initial_prompt: 'Test task',
-    status: 'backlog',
-    prompt: null,
-    title: null,
-    title_source: null,
-    title_generated_at: null,
-    agent: null,
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: null,
-    created_at: 0,
-    updated_at: 0,
-    ...overrides,
-  }
+function makeTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
+  return createTask({ id: 'T-100', status: 'backlog', ...overrides })
 }
 
 function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {

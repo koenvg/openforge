@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Project, Task } from './types'
+import type { Project } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 import { createAppProjectController } from './appProjectController'
 
-const task = { id: 'T-1' } as Task
+const task = createTask({ id: 'T-1' })
 
 function createOptions() {
   let filters = new Map<string, unknown>([['P-1', { query: 'stale' }]])
@@ -34,8 +35,15 @@ describe('App project controller', () => {
     expect(options.clearPendingTask).toHaveBeenCalledOnce()
     expect(options.clearSelectedTask).not.toHaveBeenCalled()
 
-    controller.reconcileTasks({ tasks: [], pendingTask: null, selectedTaskId: task.id })
+    controller.reconcileTasks({
+      tasks: [],
+      pendingTask: null,
+      selectedTaskId: task.id,
+      selectedTaskDetailExists: true,
+    })
+    expect(options.clearSelectedTask).not.toHaveBeenCalled()
 
+    controller.reconcileTasks({ tasks: [], pendingTask: null, selectedTaskId: task.id })
     expect(options.clearSelectedTask).toHaveBeenCalledOnce()
   })
 

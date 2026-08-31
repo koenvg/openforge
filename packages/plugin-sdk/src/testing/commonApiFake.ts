@@ -8,6 +8,7 @@ import type {
   JsonValue,
   OpenForgeCommonAPI,
 } from '../types'
+import type { ActiveTasks, CompletedTaskPage, CompletedTaskQuery, Task, TaskDetail, TaskLabel, TaskRead, TaskReference, TaskSummary } from '../domain.js'
 import {
   assertFunction,
   assertTitle,
@@ -172,6 +173,184 @@ function* splitExternalTextFile(content: string, maxBytes: number): Generator<st
   if (chunk.length > 0) yield chunk
 }
 
+function isTestingImageReferenceDefinition(line: string): boolean {
+  const separator = line.indexOf(':')
+  if (separator < 0) return false
+  const marker = line.slice(0, separator)
+  const value = line.slice(separator + 1)
+  const imageNumber = marker.startsWith('[image#') && marker.endsWith(']')
+    ? marker.slice('[image#'.length, -1)
+    : null
+  return imageNumber !== null
+    && imageNumber.length > 0
+    && /^\d+$/u.test(imageNumber)
+    && value.trimStart().startsWith('data:image/')
+    && value.includes(';base64,')
+}
+
+function testingTaskPromptPreview(task: Task): string {
+  const lines = task.initial_prompt
+    .split(/\r?\n/u)
+    .filter(line => !isTestingImageReferenceDefinition(line))
+  while (lines.at(-1)?.trim() === '') lines.pop()
+  return [...lines.join('\n')].slice(0, 120).join('')
+}
+
+function testingTaskTitle(task: Task, preview: string): string {
+  const explicitTitle = task.title?.trim()
+  if (explicitTitle) return explicitTitle
+  const fallback = preview.split(/\r?\n/u).map(line => line.trim()).find(Boolean) || task.id
+  return [...fallback].slice(0, 120).join('')
+}
+
+function taskReference(task: Task): TaskReference {
+  const preview = testingTaskPromptPreview(task)
+  if (!task.project_id) throw new Error(`Task ${task.id} must belong to a project`)
+  return {
+    id: task.id,
+    status: task.status,
+    projectId: task.project_id,
+    title: testingTaskTitle(task, preview),
+    dependsOn: [...task.depends_on],
+  }
+}
+
+function taskSummary(task: Task, labels: TaskLabel[] = []): TaskSummary {
+  return {
+    ...taskReference(task),
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+    promptPreview: testingTaskPromptPreview(task),
+    labels: [...labels],
+    sourceTicketUrl: task.source_ticket_url,
+  }
+}
+
+function taskDetail(task: Task, labels: TaskLabel[] = []): TaskDetail {
+  return {
+    ...taskSummary(task, labels),
+    prompt: task.initial_prompt,
+    agent: task.agent,
+    permissionMode: task.permission_mode,
+    worktreeSource: task.worktree_source,
+    worktreeBranch: task.worktree_branch,
+    titleSource: task.title_source,
+    titleGeneratedAt: task.title_generated_at,
+  }
+}
+
+interface TestingCompletedTaskScope {
+  projectId: string
+  search: string
+  labels: string[]
+}
+
+interface TestingCompletedTaskCursor {
+  version: 1
+  scope: TestingCompletedTaskScope
+  updatedAt: number
+  id: string
+}
+
+function asciiLowercase(value: string): string {
+  return value.replace(/[A-Z]/gu, character => character.toLowerCase())
+}
+
+function compareCompletedTasks(left: Task, right: Task): number {
+  if (left.updated_at !== right.updated_at) return right.updated_at - left.updated_at
+  if (left.id === right.id) return 0
+  return left.id > right.id ? -1 : 1
+}
+
+function testingCompletedTaskScope(
+  projectId: string,
+  query: CompletedTaskQuery,
+ ): TestingCompletedTaskScope {
+  return {
+    projectId,
+    search: asciiLowercase(query.search?.trim() ?? ''),
+    labels: [...new Set((query.labels ?? [])
+      .map(name => name.trim().toLowerCase())
+      .filter(Boolean))].sort(),
+  }
+}
+
+function encodeTestingCompletedTaskCursor(cursor: TestingCompletedTaskCursor): string {
+  return `testing:${encodeURIComponent(JSON.stringify(cursor))}`
+}
+
+function decodeTestingCompletedTaskCursor(
+  encoded: string,
+  scope: TestingCompletedTaskScope,
+ ): TestingCompletedTaskCursor {
+  try {
+    if (!encoded.startsWith('testing:')) throw new Error('wrong cursor format')
+    const cursor = JSON.parse(decodeURIComponent(encoded.slice('testing:'.length))) as TestingCompletedTaskCursor
+    if (cursor.version !== 1
+      || !Number.isSafeInteger(cursor.updatedAt)
+      || typeof cursor.id !== 'string'
+      || JSON.stringify(cursor.scope) !== JSON.stringify(scope)) {
+      throw new Error('invalid cursor payload')
+    }
+    return cursor
+  } catch {
+    throw new Error('Invalid Task cursor')
+  }
+}
+
+function listTestingCompletedTasks(
+  allTasks: Task[],
+  projectId: string,
+  query: CompletedTaskQuery = {},
+  labelsByTaskId: ReadonlyMap<string, TaskLabel[]> = new Map(),
+): CompletedTaskPage {
+  if (!projectId.trim()) throw new RangeError('projectId is required')
+  const submittedLabels = query.labels ?? []
+  if (submittedLabels.length > 20) {
+    throw new RangeError('Completed Task reads support at most 20 Task Label filters')
+  }
+  if (submittedLabels.some(name => [...name.trim()].length > 40)) {
+    throw new RangeError('Completed Task Label filters must be 40 characters or fewer')
+  }
+  if ([...(query.search?.trim() ?? '')].length > 200) {
+    throw new RangeError('Completed Task search must be 200 characters or fewer')
+  }
+  const scope = testingCompletedTaskScope(projectId, query)
+  const labels = new Set(scope.labels)
+  const cursor = query.cursor ? decodeTestingCompletedTaskCursor(query.cursor, scope) : null
+  const matching = allTasks
+    .filter(task => task.status === 'done' && task.project_id === projectId)
+    .filter(task => {
+      const summary = taskSummary(task, labelsByTaskId.get(task.id))
+      return !scope.search || [summary.id, summary.title, summary.promptPreview]
+        .some(value => asciiLowercase(value).includes(scope.search))
+    })
+    .filter(task => {
+      if (labels.size === 0) return true
+      const names = taskSummary(task, labelsByTaskId.get(task.id))
+        .labels.map(label => label.name.toLowerCase())
+      return [...labels].every(label => names.includes(label))
+    })
+    .sort(compareCompletedTasks)
+  const remaining = cursor
+    ? matching.filter(task => task.updated_at < cursor.updatedAt
+      || (task.updated_at === cursor.updatedAt && task.id < cursor.id))
+    : matching
+  const pageTasks = remaining.slice(0, 50)
+  const tasks = pageTasks.map(task => taskSummary(task, labelsByTaskId.get(task.id)))
+  const last = pageTasks.at(-1)
+  const nextCursor = remaining.length > 50 && last
+    ? encodeTestingCompletedTaskCursor({
+        version: 1,
+        scope,
+        updatedAt: last.updated_at,
+        id: last.id,
+      })
+    : null
+  return { tasks, nextCursor }
+}
+
+
 export type TestingCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, 'navigation'>
 
 export class TestingCommonApiFake {
@@ -303,11 +482,59 @@ export class TestingCommonApiFake {
           this.services.calls.taskListRequests.push({ projectId, includeDone })
           return this.services.seededTasks.filter((task) => {
             if (projectId !== null && task.project_id !== projectId) return false
-            if (!includeDone && task.status === 'done') return false
+            if (projectId !== null && !includeDone && task.status === 'done') return false
             return true
           })
         },
-        get: async () => null,
+        get: async (taskId) => this.services.seededTasks.find(task => task.id === taskId) ?? null,
+        active: async (projectId): Promise<ActiveTasks> => {
+          this.services.calls.taskActiveRequests.push({ projectId })
+          const activeTasks = this.services.seededTasks.filter(task =>
+            task.project_id === projectId && task.status !== 'done')
+          const activeIds = new Set(activeTasks.map(task => task.id))
+          const relatedIds = new Set<string>()
+          for (const task of this.services.seededTasks) {
+            if (activeIds.has(task.id)) {
+              for (const dependencyId of task.depends_on) relatedIds.add(dependencyId)
+            } else if (task.depends_on.some(dependencyId => activeIds.has(dependencyId))) {
+              relatedIds.add(task.id)
+            }
+          }
+          return {
+            tasks: activeTasks.map(task => taskDetail(
+              task,
+              this.services.seededTaskLabelAssignments.get(task.id),
+            )),
+            related: this.services.seededTasks
+              .filter(task => relatedIds.has(task.id) && !activeIds.has(task.id))
+              .map(taskReference),
+          }
+        },
+        completed: async (projectId, query = {}) => {
+          this.services.calls.taskCompletedRequests.push({ projectId, ...query })
+          return listTestingCompletedTasks(
+            this.services.seededTasks,
+            projectId,
+            query,
+            this.services.seededTaskLabelAssignments,
+          )
+        },
+        detail: async (projectId, taskId): Promise<TaskRead | null> => {
+          this.services.calls.taskDetailRequests.push({ projectId, taskId })
+          const task = this.services.seededTasks.find(candidate =>
+            candidate.id === taskId && candidate.project_id === projectId)
+          if (!task) return null
+          const relatedIds = new Set(task.depends_on)
+          for (const candidate of this.services.seededTasks) {
+            if (candidate.depends_on.includes(taskId)) relatedIds.add(candidate.id)
+          }
+          return {
+            task: taskDetail(task, this.services.seededTaskLabelAssignments.get(task.id)),
+            related: this.services.seededTasks
+              .filter(candidate => relatedIds.has(candidate.id))
+              .map(taskReference),
+          }
+        },
         create: async (request) => {
           this.services.calls.taskCreations.push(request)
           return {

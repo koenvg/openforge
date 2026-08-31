@@ -774,3 +774,104 @@ fn test_create_task_agent_fields_default_to_none() {
 
     drop(db);
 }
+
+#[test]
+fn concurrent_active_task_creation_enforces_the_project_limit_atomically() {
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    let (db, _temp_dir) = make_test_db("active_task_creation_limit");
+    let project = db
+        .create_project("Project", "/tmp/active-task-creation-limit")
+        .expect("create project");
+    for index in 0..(super::MAX_ACTIVE_TASKS_PER_PROJECT - 1) {
+        db.create_task(
+            &format!("Existing {index}"),
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("seed active Task");
+    }
+
+    let db = Arc::new(db);
+    let barrier = Arc::new(Barrier::new(3));
+    let attempts = (0..2)
+        .map(|index| {
+            let db = Arc::clone(&db);
+            let barrier = Arc::clone(&barrier);
+            let project_id = project.id.clone();
+            thread::spawn(move || {
+                barrier.wait();
+                db.create_task_with_metadata(
+                    super::NewTaskOptions {
+                        initial_prompt: if index == 0 {
+                            "First contender"
+                        } else {
+                            "Second contender"
+                        },
+                        status: "backlog",
+                        project_id: Some(&project_id),
+                        prompt: None,
+                        permission_mode: None,
+                        worktree_source: None,
+                        worktree_branch: None,
+                        title: None,
+                        source_ticket_url: None,
+                        task_display_title_updates_enabled: None,
+                        ai_provider: None,
+                    },
+                    &[],
+                    &[],
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    barrier.wait();
+    let results = attempts
+        .into_iter()
+        .map(|attempt| attempt.join().expect("creation thread"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(
+                result,
+                Err(super::TaskCreationError::ActiveTaskLimit { .. })
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        db.tasks()
+            .active(&project.id)
+            .expect("active Tasks")
+            .tasks
+            .len(),
+        super::MAX_ACTIVE_TASKS_PER_PROJECT
+    );
+}
+
+#[test]
+fn completed_task_creation_is_not_subject_to_the_active_limit() {
+    let (db, _temp_dir) = make_test_db("completed_task_creation_limit");
+    let project = db
+        .create_project("Project", "/tmp/completed-task-creation-limit")
+        .expect("create project");
+    for index in 0..super::MAX_ACTIVE_TASKS_PER_PROJECT {
+        db.create_task(
+            &format!("Active {index}"),
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("seed active Task");
+    }
+
+    db.create_task("Completed", "done", Some(&project.id), None, None)
+        .expect("Completed Task remains allowed");
+}

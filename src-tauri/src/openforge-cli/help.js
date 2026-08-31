@@ -21,10 +21,11 @@ Task starting:
   Existing dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain enforced.
 
 Task listing:
-  task list prints compact rows by default for broad scans: id, prompt_preview, status, labels, depends_on, updated_at.
-  Pass --full to print complete TaskRow objects.
-  task list excludes done tasks unless --state done is passed.
-
+  task active requires --project-id and returns all bounded non-Completed TaskDetail records plus relationship references.
+  task completed requires --project-id and returns a fixed page of at most 50 TaskSummary records plus nextCursor.
+  Repeat task completed with --cursor <nextCursor>; cursors are opaque and bound to the project and filters.
+  task detail requires --project-id and --task-id and returns the TaskDetail plus immediate relationship references.
+  task list and task get are deprecated version 1 compatibility commands and will be removed in version 2.
 Diagnostics:
   debug process-memory prints read-only Rust sidecar, plugin host V8 heap and bounded lifecycle metrics, and PTY process-tree RSS attribution.
   debug process-memory-history prints the opt-in, totals-only one-hour RSS history.
@@ -40,7 +41,9 @@ Examples:
   openforge project labels list --project-id P-1
   openforge debug process-memory
   openforge debug process-memory-history
-  openforge task list --project-id P-1
+  openforge task active --project-id P-1
+  openforge task completed --project-id P-1 --label cleanup
+  openforge task detail --project-id P-1 --task-id T-123
   openforge task start --task-id T-123
   openforge task delete --task-id T-123
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup

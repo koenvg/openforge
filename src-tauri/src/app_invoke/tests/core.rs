@@ -149,10 +149,10 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         }),
     )
     .await;
-    assert_eq!(task["initial_prompt"], "Plan migration");
+    assert_eq!(task["prompt"], "Plan migration");
     assert_eq!(task["agent"], serde_json::Value::Null);
-    assert_eq!(task["worktree_source"], "existingBranch");
-    assert_eq!(task["worktree_branch"], "feature/open-pr");
+    assert_eq!(task["worktreeSource"], "existingBranch");
+    assert_eq!(task["worktreeBranch"], "feature/open-pr");
     let task_id = task["id"].as_str().expect("task id");
 
     let tasks = invoke_ok(&state, "get_tasks", serde_json::Value::Null).await;
@@ -311,10 +311,7 @@ async fn create_task_dependency_domain_errors_keep_the_existing_bad_request_cont
     .expect_err("missing dependency should fail");
 
     assert_eq!(error.0, StatusCode::BAD_REQUEST);
-    assert_eq!(
-        error.1,
-        "Failed to set task dependencies: dependency task T-404 does not exist"
-    );
+    assert_eq!(error.1, "dependency task T-404 does not exist");
     assert!(crate::db::acquire_db(&state.db)
         .get_all_tasks()
         .expect("list tasks")
@@ -608,8 +605,8 @@ async fn app_invoke_create_task_uses_project_worktree_default_when_source_omitte
     )
     .await;
 
-    assert_eq!(task["worktree_source"], "disabled");
-    assert_eq!(task["worktree_branch"], serde_json::Value::Null);
+    assert_eq!(task["worktreeSource"], "disabled");
+    assert_eq!(task["worktreeBranch"], serde_json::Value::Null);
 }
 
 #[tokio::test]
@@ -1078,4 +1075,95 @@ async fn repo_agent_generate_reports_unreadable_project_provider_config() {
     .expect_err("unreadable project provider must fail");
 
     assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
+}
+
+#[tokio::test]
+async fn exposes_bounded_task_read_contracts() {
+    let (state, _temp_dir) = test_state("app_invoke_task_read_contracts");
+    let (project_id, active_id, completed_id) = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Tasks", "/tmp/app-invoke-task-reads")
+            .expect("create project");
+        let completed = db
+            .create_task(
+                &format!("Completed authoring prompt {}", "x".repeat(8 * 1024)),
+                "done",
+                Some(&project.id),
+                Some("legacy execution override"),
+                None,
+            )
+            .expect("create completed task");
+        let _second_completed = db
+            .create_task("Second completed", "done", Some(&project.id), None, None)
+            .expect("create second completed task");
+        let active = db
+            .create_task(
+                "Active authoring prompt",
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("create active task");
+        db.add_task_dependency(&active.id, &completed.id)
+            .expect("link dependency");
+        db.add_task_label(&active.id, "feature")
+            .expect("label active task");
+        (project.id, active.id, completed.id)
+    };
+
+    let active = invoke_ok(&state, "tasks_active", json!({ "projectId": project_id })).await;
+    assert_eq!(active["tasks"].as_array().expect("active tasks").len(), 1);
+    assert_eq!(active["tasks"][0]["id"], active_id);
+    assert_eq!(active["tasks"][0]["prompt"], "Active authoring prompt");
+    assert!(active["tasks"][0].get("initial_prompt").is_none());
+    assert_eq!(
+        active["related"].as_array().expect("related tasks").len(),
+        1
+    );
+    assert_eq!(active["related"][0]["id"], completed_id);
+    assert!(active["related"][0].get("prompt").is_none());
+    assert_eq!(active["tasks"][0]["labels"][0]["name"], "feature");
+
+    let page = invoke_ok(
+        &state,
+        "tasks_completed",
+        json!({ "projectId": project_id }),
+    )
+    .await;
+    assert_eq!(page["tasks"].as_array().expect("completed items").len(), 2);
+    assert!(page["nextCursor"].is_null());
+    assert!(page["tasks"][0].get("prompt").is_none());
+    assert!(page["tasks"][0].get("initial_prompt").is_none());
+
+    let detail = invoke_ok(
+        &state,
+        "tasks_detail",
+        json!({ "projectId": project_id, "taskId": completed_id }),
+    )
+    .await;
+    assert!(detail["task"]["prompt"]
+        .as_str()
+        .expect("canonical prompt")
+        .starts_with("Completed authoring prompt"));
+    assert!(!detail.to_string().contains("legacy execution override"));
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "tasks_detail",
+            json!({ "projectId": project_id, "taskId": "T-missing" }),
+        )
+        .await,
+        serde_json::Value::Null
+    );
+
+    let cursor_error = invoke(
+        &state,
+        "tasks_completed",
+        json!({ "projectId": project_id, "query": { "cursor": "invalid" } }),
+    )
+    .await
+    .expect_err("invalid cursor must fail");
+    assert_eq!(cursor_error.0, StatusCode::BAD_REQUEST);
 }

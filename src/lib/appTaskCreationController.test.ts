@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Task } from './types'
+import { createTask } from '../App.test-fixtures/tasks'
 import { useAppTaskCreationController } from './appTaskCreationController.svelte'
 
-const backlogTask = {
-  id: 'T-1',
-  status: 'backlog',
-} as Task
+const backlogTask = createTask({ id: 'T-1', status: 'backlog' })
 
 describe('App task creation controller', () => {
   it('opens create and editable backlog task dialogs through one interface', () => {

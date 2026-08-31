@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/svelte'
 import { get } from 'svelte/store'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as taskIpc from '../../lib/ipc'
 import { commandHeld, lastViewedTaskId } from '../../lib/stores'
 import {
   getCurrentVimItem,
@@ -25,6 +26,32 @@ describe('FocusBoard keyboard and selection interaction', () => {
     const detailPane = screen.getByTestId('task-info-panel')
     expect(within(detailPane).getByText('Initial Prompt')).toBeTruthy()
     expect(within(detailPane).getByRole('region', { name: 'Initial Prompt content' }).textContent).toContain('Focus task')
+  })
+
+  it('switches inspector selection from active data without detail reads or loading placeholders', async () => {
+    const detailRead = vi.spyOn(taskIpc, 'readTaskDetail')
+    renderBoard({
+      tasks: [taskFocus, taskDoing, taskDone],
+      sessions: new Map([
+        [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+        [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
+      ]),
+    })
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('task-info-panel')).getByText('Focus task')).toBeTruthy()
+    })
+    await fireEvent.keyDown(window, { key: 'j' })
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
+    const doingRow = screen.getAllByText('Doing task')[0].closest('[data-vim-item]')
+    expect(doingRow).toBeTruthy()
+    await fireEvent.click(doingRow as HTMLElement)
+    await waitFor(() => {
+      expect(within(screen.getByTestId('task-info-panel')).getByText('Doing task')).toBeTruthy()
+    })
+
+    expect(detailRead).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Loading task/i)).toBeNull()
   })
 
   it('moves vim focus down on j key', async () => {
