@@ -5,11 +5,13 @@ import type {
   TerminalTransport,
 } from './terminalTransport'
 import type { PoolEntry } from './terminalRuntimeTypes'
+import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
 import { recordTerminalOutput, synchronizeTerminalOutputObservation } from './terminalOutputObservation'
 
 interface TerminalStateViewOptions {
   transport: TerminalTransport
   markOutput(entry: PoolEntry): void
+  getPerformanceTrace: () => TerminalPerformanceTrace | undefined
 }
 
 interface TerminalRenderRevision {
@@ -27,6 +29,7 @@ function pushBounded<T>(queue: T[], value: T): void {
 export function createTerminalStateView({
   transport,
   markOutput,
+  getPerformanceTrace,
 }: TerminalStateViewOptions) {
 
   function writeTerminalModelOutput(
@@ -38,6 +41,10 @@ export function createTerminalStateView({
     if (currentSequence === null || event.sequence <= currentSequence) return true
     if (event.startSequence !== currentSequence + 1) return false
     entry.outputSequence += 1
+    getPerformanceTrace()?.mark('modelPublication', {
+      terminalKey: entry.shellSessionKey,
+      ptyInstanceId: event.ptyInstanceId,
+    })
     entry.view.writeLive({
       data: event.data,
       ptyInstanceId: event.ptyInstanceId,
@@ -174,6 +181,10 @@ export function createTerminalStateView({
 
 
   function handleTerminalModelOutput(entry: PoolEntry, event: TerminalModelOutputEvent): void {
+    getPerformanceTrace()?.mark('firstOutput', {
+      terminalKey: entry.shellSessionKey,
+      ptyInstanceId: event.ptyInstanceId,
+    })
     recordTerminalOutput(entry.terminalOutputObservation, event)
     if (!entry.attached || !entry.viewVisible) {
       if (entry.currentPtyInstance === event.ptyInstanceId) {

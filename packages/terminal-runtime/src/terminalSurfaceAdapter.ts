@@ -12,6 +12,7 @@ export type TerminalSurfaceRuntime = Pick<TerminalRuntime,
   | 'markPtySpawnPending'
   | 'clearPtySpawnPending'
   | 'markShellPtyStarted'
+  | 'markPerformancePhase'
   | 'subscribeShellLifecycle'
   | 'getShellLifecycleState'
   | 'getTaskTerminalTabsSession'

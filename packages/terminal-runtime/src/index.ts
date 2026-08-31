@@ -49,6 +49,14 @@ export {
   type TerminalSessionConfiguration,
 } from './terminalRuntime'
 export {
+  createTerminalPerformanceTrace,
+  TERMINAL_PERFORMANCE_PHASES,
+  type TerminalPerformanceMarkContext,
+  type TerminalPerformancePhase,
+  type TerminalPerformanceTrace,
+  type TerminalPerformanceTraceSnapshot,
+} from './terminalPerformanceTrace'
+export {
   createTerminalSessionService,
   type TerminalSessionClient,
   type TerminalSessionService,

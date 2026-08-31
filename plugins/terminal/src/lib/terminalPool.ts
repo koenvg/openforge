@@ -41,6 +41,7 @@ export function markPtySpawnPending(...args: Parameters<TerminalSessionClient['m
 export function clearPtySpawnPending(...args: Parameters<TerminalSessionClient['clearPtySpawnPending']>) { return client().clearPtySpawnPending(...args) }
 export function restorePtyInstance(...args: Parameters<TerminalSessionClient['restorePtyInstance']>) { return client().restorePtyInstance(...args) }
 export function markShellPtyStarted(...args: Parameters<TerminalSessionClient['markShellPtyStarted']>) { return client().markShellPtyStarted(...args) }
+export function markPerformancePhase(...args: Parameters<TerminalSessionClient['markPerformancePhase']>) { return client().markPerformancePhase(...args) }
 export function subscribeShellLifecycle(...args: Parameters<TerminalSessionClient['subscribeShellLifecycle']>) { return client().subscribeShellLifecycle(...args) }
 export function isShellExited(...args: Parameters<TerminalSessionClient['isShellExited']>) { return client().isShellExited(...args) }
 export function getShellLifecycleState(...args: Parameters<TerminalSessionClient['getShellLifecycleState']>) { return client().getShellLifecycleState(...args) }

@@ -10,6 +10,7 @@ import {
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
+import { createTerminalPerformanceTrace } from './terminalPerformanceTrace'
 
 function stubAttachmentObservers(): void {
   vi.stubGlobal('ResizeObserver', class {
@@ -59,6 +60,38 @@ function stubAnimationFrameQueue() {
 }
 describe('terminal runtime attachment', () => {
   beforeEach(resetTerminalRuntimeMocks)
+
+  it('marks terminal attachment before the first xterm mount without changing attachment work', async () => {
+    let timestamp = 1
+    const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
+    performanceTrace.start()
+    const host = createHost()
+    host.environment.performanceTrace = performanceTrace
+    host.setBuffer('T-1-shell-0', '')
+    const runtime = createTerminalRuntime(host)
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    stubAttachmentObservers()
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
+
+    try {
+      const entry = await runtime.acquire('T-1-shell-0')
+      await runtime.attach(entry, document.createElement('div'))
+
+      expect(performanceTrace.snapshot()?.timestamps).toMatchObject({
+        lifecycleStart: 1,
+        terminalAttachment: 2,
+        xtermMount: 3,
+      })
+    } finally {
+      runtime.dispose()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
 
   it('defers xterm opening and WebGL setup until the first DOM attachment', async () => {
     const terminalKey = 'T-1-shell-0'

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { TERMINAL_PERFORMANCE_PHASES as RUNTIME_TERMINAL_PERFORMANCE_PHASES } from '../packages/terminal-runtime/src/terminalPerformanceTrace.ts'
 import {
   assertCorrectnessChecks,
   calculateThroughput,
   createEnvironmentMetadata,
   createTerminalPerformanceReport,
+  createTerminalPhaseTimeline,
   serializeTerminalPerformanceReport,
   summarizeSamples,
+  TERMINAL_PERFORMANCE_PHASES,
   unavailableMemoryMeasurement,
 } from './desktop-test/terminal-performance-report.mjs'
 
@@ -88,11 +91,18 @@ describe('terminal performance report', () => {
     expect(createTerminalPerformanceReport({ checks: failedChecks }).status).toBe('failed')
   })
 
-  it('serializes a versioned JSON report with a trailing newline', () => {
+  it('serializes the version 2 phase schema with preserved shell readiness evidence', () => {
+    const phaseTimeline = createTerminalPhaseTimeline(Object.fromEntries(
+      TERMINAL_PERFORMANCE_PHASES.map((phase, index) => [phase, index + 1]),
+    ))
     const report = createTerminalPerformanceReport({
       generatedAt: '2025-01-01T00:00:00.000Z',
       checks: [],
-      metrics: {},
+      metrics: {
+        shellReady: { durationMs: 42, unit: 'ms', phaseTimeline },
+        driverToPaintedEcho: { mode: 'already-focused', median: 8, p95: 11, unit: 'ms' },
+        fullDriverToPaintedEcho: { durationMs: 17, unit: 'ms' },
+      },
       environment: {},
       memory: {},
       fixture: {},
@@ -102,9 +112,105 @@ describe('terminal performance report', () => {
 
     expect(serialized.endsWith('\n')).toBe(true)
     expect(JSON.parse(serialized)).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scenario: 'full-app-terminal-performance',
       status: 'passed',
+      metrics: {
+        shellReady: { durationMs: 42, phaseTimeline: { clockDomain: 'renderer-performance' } },
+        driverToPaintedEcho: { mode: 'already-focused' },
+        fullDriverToPaintedEcho: { durationMs: 17 },
+      },
+    })
+  })
+
+  it('normalizes renderer phase marks and derives every adjacent segment', () => {
+    expect(TERMINAL_PERFORMANCE_PHASES).toEqual(RUNTIME_TERMINAL_PERFORMANCE_PHASES)
+    expect(TERMINAL_PERFORMANCE_PHASES).toEqual([
+      'lifecycleStart',
+      'terminalAttachment',
+      'xtermMount',
+      'shellSpawnRequest',
+      'ptyCreation',
+      'inputAcceptance',
+      'firstOutput',
+      'modelPublication',
+      'xtermParse',
+      'renderCallback',
+      'presentationProof',
+    ])
+    const timestamps = Object.fromEntries(
+      TERMINAL_PERFORMANCE_PHASES.map((phase, index) => [phase, 100 + index * 5]),
+    )
+
+    const timeline = createTerminalPhaseTimeline(timestamps)
+
+    expect(timeline.clockDomain).toBe('renderer-performance')
+    expect(timeline.marks).toEqual(
+      TERMINAL_PERFORMANCE_PHASES.map((phase, index) => ({
+        phase,
+        timestampMs: 100 + index * 5,
+        available: true,
+      })),
+    )
+    expect(timeline.segments).toHaveLength(TERMINAL_PERFORMANCE_PHASES.length - 1)
+    expect(timeline.segments[0]).toEqual({
+      startPhase: 'lifecycleStart',
+      endPhase: 'terminalAttachment',
+      durationMs: 5,
+      unit: 'ms',
+      available: true,
+    })
+    expect(timeline.diagnostics).toEqual([])
+  })
+
+  it('keeps missing and out-of-order phase evidence diagnostic instead of inventing durations', () => {
+    const missing = createTerminalPhaseTimeline({
+      lifecycleStart: 10,
+      terminalAttachment: 12,
+    })
+
+    expect(missing.marks.find(mark => mark.phase === 'xtermMount')).toEqual({
+      phase: 'xtermMount',
+      timestampMs: null,
+      available: false,
+    })
+    expect(missing.segments[1]).toEqual({
+      startPhase: 'terminalAttachment',
+      endPhase: 'xtermMount',
+      durationMs: null,
+      unit: 'ms',
+      available: false,
+    })
+    expect(missing.diagnostics).toContainEqual({
+      type: 'missing-phase',
+      phase: 'xtermMount',
+      message: 'missing phase: xtermMount',
+    })
+
+    const reversedAcrossMissingPhase = createTerminalPhaseTimeline({
+      lifecycleStart: 20,
+      xtermMount: 19,
+    })
+    expect(reversedAcrossMissingPhase.diagnostics).toContainEqual({
+      type: 'out-of-order',
+      earlierPhase: 'lifecycleStart',
+      laterPhase: 'xtermMount',
+      message: 'phase order violated: xtermMount precedes lifecycleStart',
+    })
+    const reversed = createTerminalPhaseTimeline({
+      lifecycleStart: 20,
+      terminalAttachment: 19,
+    })
+    expect(reversed.marks.slice(0, 2)).toEqual([
+      { phase: 'lifecycleStart', timestampMs: 20, available: true },
+      { phase: 'terminalAttachment', timestampMs: 19, available: true },
+    ])
+    expect(reversed.segments[0]).toMatchObject({ available: false, durationMs: null })
+    expect(reversed.diagnostics).toContainEqual({
+      type: 'out-of-order',
+      earlierPhase: 'lifecycleStart',
+      laterPhase: 'terminalAttachment',
+      message: 'phase order violated: terminalAttachment precedes lifecycleStart',
     })
   })
 })

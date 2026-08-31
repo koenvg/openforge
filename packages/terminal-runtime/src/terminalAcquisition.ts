@@ -55,6 +55,7 @@ export function createTerminalAcquisition({
   const terminalStateView = createTerminalStateView({
     transport,
     markOutput: lifecycle.markPtyOutput,
+    getPerformanceTrace: () => environment.performanceTrace,
   })
 
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
@@ -130,6 +131,10 @@ export function createTerminalAcquisition({
     attachAgentTerminalKeyHandler(entry)
     entry.viewSubscriptions.push(entry.view.onUserInput((data: string) => {
       if (!entry.ptyActive) return
+      environment.performanceTrace?.mark('inputAcceptance', {
+        terminalKey,
+        ptyInstanceId: entry.currentPtyInstance,
+      })
       transport.writeUserInput(terminalKey, data).catch(error => {
         console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
       })

@@ -97,6 +97,7 @@ vi.mock('../../lib/terminalPool', () => ({
     entry.ptyActive = true
     entry.needsClear = false
   }),
+  markPerformancePhase: vi.fn(),
   subscribeShellLifecycle: vi.fn((_taskId, callback) => {
     listenCallback = (event: { payload: unknown }) => {
       const exitInstance = (event.payload as { instance_id?: number } | null)?.instance_id

@@ -16,6 +16,7 @@ function createPage() {
   const backlog = locator('backlog')
   const terminal = locator('terminal')
   const terminalInput = {
+    focus: vi.fn(async () => undefined),
     press: vi.fn(async () => undefined),
     fill: vi.fn(async () => undefined),
   }
@@ -27,6 +28,7 @@ function createPage() {
   const page = {
     keyboard: {
       press: vi.fn(async () => undefined),
+      insertText: vi.fn(async () => undefined),
       type: vi.fn(async () => undefined),
     },
     evaluate: vi.fn()
@@ -62,7 +64,7 @@ describe('desktop app driver', () => {
     await expect(driver.verifyDesktopBridge()).resolves.toEqual({ ok: true, projectCount: 1 })
     const opened = await driver.openSeededTerminal(manifest)
 
-    expect(harness.page.waitForFunction).toHaveBeenCalledTimes(3)
+    expect(harness.page.waitForFunction).toHaveBeenCalledTimes(4)
     expect(harness.page.getByText).toHaveBeenCalledWith('Desktop Test Project', { exact: true })
     expect(harness.project.click).toHaveBeenCalledOnce()
     expect(harness.page.getByRole).toHaveBeenCalledWith('button', { name: /^Backlog\b/i })
@@ -92,9 +94,37 @@ describe('desktop app driver', () => {
 
     expect(harness.shellTab.click).toHaveBeenCalledOnce()
     expect(harness.terminal.click).not.toHaveBeenCalled()
-    expect(harness.terminal.getByRole).toHaveBeenCalledWith('textbox', { name: 'Terminal input' })
-    expect(harness.terminalInput.fill).toHaveBeenCalledWith('printf TEST_READY')
-    expect(harness.terminalInput.press).toHaveBeenCalledWith('Enter')
+    expect(harness.page.keyboard.insertText).toHaveBeenCalledWith('printf TEST_READY')
+    expect(harness.page.keyboard.press).toHaveBeenCalledWith('Enter')
+  })
+
+  it('types through an already-focused terminal without clicking the shell tab', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page)
+
+    await driver.focusTerminal()
+    expect(harness.shellTab.click).toHaveBeenCalledOnce()
+    harness.shellTab.click.mockClear()
+
+    await driver.typeFocusedTerminalCommand(harness.terminal, 'printf STEADY_STATE')
+
+    expect(harness.shellTab.click).not.toHaveBeenCalled()
+    expect(harness.page.keyboard.insertText).toHaveBeenCalledWith('printf STEADY_STATE')
+    expect(harness.page.keyboard.press).toHaveBeenCalledWith('Enter')
+  })
+
+  it('waits for the development performance probe before starting a trace', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.startTerminalPerformanceTrace()
+
+    expect(harness.page.waitForFunction).toHaveBeenCalledOnce()
+    expect(harness.page.waitForFunction).toHaveBeenCalledWith(
+      expect.any(Function),
+      null,
+      { timeout: 8_000 },
+    )
   })
 
   it('rejects unavailable desktop bridges and missing probe terminal keys', async () => {

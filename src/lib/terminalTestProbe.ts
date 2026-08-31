@@ -1,10 +1,14 @@
 import type {
   PoolEntry,
+  TerminalPerformanceTrace,
+  TerminalPerformanceTraceSnapshot,
   TerminalViewPresentationEvidence,
 } from '@openforge-app/terminal-runtime'
 import { getTerminalEntriesForObservation } from './terminalPool'
+import { shouldEnableTerminalTestProbe } from './desktopTestMode'
 
-const DESKTOP_TEST_QUERY_PARAMETER = 'openforge-desktop-test'
+export { shouldEnableTerminalTestProbe } from './desktopTestMode'
+
 const DEFAULT_DRAIN_TIMEOUT_MS = 10_000
 const DRAIN_POLL_INTERVAL_MS = 16
 
@@ -47,6 +51,11 @@ export interface TerminalTestProbeApi {
     list(): string[]
     observe(key: string): TerminalProbeObservation
     drain(key: string, expectation?: TerminalProbeDrainExpectation): Promise<TerminalProbeDrainResult>
+    performance?: {
+      start(): void
+      finish(): TerminalPerformanceTraceSnapshot | null
+      snapshot(): TerminalPerformanceTraceSnapshot | null
+    }
   }
 }
 
@@ -61,16 +70,9 @@ interface InstallTerminalTestProbeOptions {
   entries?: () => ReadonlyMap<string, PoolEntry>
   now?: () => number
   delay?: (ms: number) => Promise<void>
+  performanceTrace?: TerminalPerformanceTrace
 }
 
-export function shouldEnableTerminalTestProbe(isDevelopment: boolean, url: string): boolean {
-  if (!isDevelopment) return false
-  try {
-    return new URL(url).searchParams.get(DESKTOP_TEST_QUERY_PARAMETER) === '1'
-  } catch {
-    return false
-  }
-}
 
 function observeEntry(key: string, entry: PoolEntry): TerminalProbeObservation {
   const output = entry.terminalOutputObservation
@@ -128,7 +130,13 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
     return entry
   }
 
+  const performance = options.performanceTrace && Object.freeze({
+    start: () => options.performanceTrace!.start(),
+    finish: () => options.performanceTrace!.finish(),
+    snapshot: () => options.performanceTrace!.snapshot(),
+  })
   const terminal = Object.freeze({
+    ...(performance ? { performance } : {}),
     list(): string[] {
       return [...entries().keys()].sort()
     },

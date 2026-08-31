@@ -159,6 +159,7 @@ vi.mock('../../lib/terminalPool', () => {
     markPtySpawnPending: vi.fn(terminalRuntime.markPtySpawnPending),
     clearPtySpawnPending: vi.fn(terminalRuntime.clearPtySpawnPending),
     markShellPtyStarted: vi.fn(terminalRuntime.markShellPtyStarted),
+    markPerformancePhase: vi.fn(terminalRuntime.markPerformancePhase),
     subscribeShellLifecycle: vi.fn(terminalRuntime.subscribeShellLifecycle),
     getShellLifecycleState: vi.fn(terminalRuntime.getShellLifecycleState),
     updateShellLifecycleState: vi.fn(terminalRuntime.updateShellLifecycleState),

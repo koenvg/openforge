@@ -5,6 +5,7 @@ import type { TerminalImageProtocol } from './terminalImages'
 import { terminalLogMessage } from './terminalLogging'
 import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
 import { createTerminalOutputObservation } from './terminalOutputObservation'
+import type { TerminalPerformanceMarkContext, TerminalPerformancePhase } from './terminalPerformanceTrace'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
 import type { TerminalTransport } from './terminalTransport'
 import { createXtermTerminalView } from './xtermTerminalView'
@@ -90,6 +91,7 @@ export function createTerminalRuntime({
         enableImages: configuration.enableImages,
         loggerName: environment.loggerName,
         fontReadiness,
+        performanceTrace: environment.performanceTrace,
       }),
       ptyActive: false,
       needsClear: false,
@@ -258,6 +260,13 @@ export function createTerminalRuntime({
     }
   }
 
+  function markPerformancePhase(
+    phase: TerminalPerformancePhase,
+    context: TerminalPerformanceMarkContext,
+  ): void {
+    environment.performanceTrace?.mark(phase, context)
+  }
+
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
     return entry.view.imageProtocol
   }
@@ -269,6 +278,7 @@ export function createTerminalRuntime({
   return {
     isValidTerminalDimensions,
     getTerminalImageProtocol,
+    markPerformancePhase,
     acquire: acquisition.acquire,
     attach: attachments.attach,
     detach: attachments.detach,

@@ -57,6 +57,7 @@ function createAdapter(runtimeOverrides: Partial<TerminalSurfaceRuntime> = {}): 
     clearPtySpawnPending: vi.fn(),
     shouldSpawnPty: vi.fn(() => false),
     markShellPtyStarted: vi.fn(),
+    markPerformancePhase: vi.fn(),
     getShellLifecycleState: vi.fn(() => inactiveLifecycle),
     getTerminalImageProtocol: vi.fn(() => null),
     subscribeShellLifecycle: vi.fn(() => () => undefined),
@@ -144,6 +145,19 @@ describe('createTaskTerminalController', () => {
 
     await vi.waitFor(() => expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(entry, 42))
     expect(adapter.runtime.markPtySpawnPending).toHaveBeenCalledWith(entry)
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      1,
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      2,
+      'ptyCreation',
+      { terminalKey: 'T-1-shell-0', ptyInstanceId: 42 },
+    )
+    expect(vi.mocked(adapter.runtime.attach).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(adapter.spawnShellPty).mock.invocationCallOrder[0]!,
+    )
     expect(adapter.spawnShellPty).toHaveBeenCalledWith(
       'T-1',
       '/worktrees/T-1',
@@ -190,6 +204,11 @@ describe('createTaskTerminalController', () => {
     await vi.waitFor(() => expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(firstEntry, 21))
 
     expect(onLifecycleChange).toHaveBeenLastCalledWith(secondLifecycle)
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenCalledOnce()
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenCalledWith(
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
     expect(adapter.runtime.clearPtySpawnPending).toHaveBeenCalledWith(firstEntry)
   })
 
@@ -235,6 +254,16 @@ describe('createTaskTerminalController', () => {
       'iterm2',
     )
     expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(entry, 13)
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      1,
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      2,
+      'ptyCreation',
+      { terminalKey: 'T-1-shell-0', ptyInstanceId: 13 },
+    )
     expect(adapter.runtime.clearPtySpawnPending).toHaveBeenCalledWith(entry)
   })
 })

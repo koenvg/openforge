@@ -1,6 +1,8 @@
 import {
   createTerminalRuntime,
   createTerminalSessionService,
+  type TerminalPerformanceTrace,
+  type TerminalRuntimeEnvironment,
 } from '@openforge-app/terminal-runtime'
 import { listenDesktopEvent } from './desktopIpc'
 import type { TerminalDesktopEventName } from './desktopIpcContract'
@@ -23,15 +25,21 @@ const transport = createDesktopTerminalTransport({
   resizePty,
 })
 
+const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
+  sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
+  openLink: url => openUrl(url),
+  themeMode,
+  loggerName: 'terminalSessionService',
+}
+
 const terminalRuntime = createTerminalRuntime({
   transport,
-  environment: {
-    sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
-    openLink: url => openUrl(url),
-    themeMode,
-    loggerName: 'terminalSessionService',
-  },
+  environment: terminalRuntimeEnvironment,
 })
+
+export function configureTerminalPerformanceTrace(trace: TerminalPerformanceTrace | undefined): void {
+  terminalRuntimeEnvironment.performanceTrace = trace
+}
 
 export const terminalSessionService = createTerminalSessionService(terminalRuntime)
 export const agentTerminalSessions = terminalSessionService.createClient('agent-terminal-surfaces')

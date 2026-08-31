@@ -132,13 +132,15 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
 
   const presentation = createXtermPresentationController({
     terminal,
+    terminalKey: options.terminalKey,
+    performanceTrace: options.performanceTrace,
     rendererName: () => webglRenderer.rendererName,
     canPresent: () => opened && visible && Boolean(hostDiv.parentNode),
     refresh,
   })
 
-  function write(data: string | Uint8Array): void {
-    presentation.recordWrite()
+  function write(data: string | Uint8Array, ptyInstanceId?: number | null): void {
+    presentation.recordWrite(ptyInstanceId)
     terminal.write(data)
   }
 
@@ -181,6 +183,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       reportFontReadinessBeforeOpen()
       terminal.open(hostDiv)
       opened = true
+      options.performanceTrace?.mark('xtermMount', { terminalKey: options.terminalKey })
       webglRenderer.load()
     },
     setVisible(nextVisible) {
@@ -207,7 +210,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     },
     replaceSnapshot,
     writeLive(output) {
-      write(output.data)
+      write(output.data, output.ptyInstanceId)
     },
     drainPresentation() {
       return presentation.drain()
