@@ -2,140 +2,88 @@
 ---
 
 <script>
-      import { gsap } from 'gsap';
-      import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { gsap } from 'gsap';
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      if (!prefersReducedMotion) {
-        gsap.registerPlugin(ScrollTrigger);
+  if (!prefersReducedMotion) {
+    gsap.registerPlugin(ScrollTrigger);
 
-        const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
-        heroTimeline
-          .from('.wordmark', { autoAlpha: 0, y: -12, duration: 0.45 })
-          .from('#hero-title', { autoAlpha: 0, y: 34, rotate: -1.5, duration: 0.75 }, 0.05)
-          .from('.lede', { autoAlpha: 0, y: 22, duration: 0.62 }, 0.24)
-          .from('.hero-actions .button', { autoAlpha: 0, y: 18, scale: 0.96, duration: 0.5, stagger: 0.07 }, 0.42)
-          .from('.bento-card', {
-            autoAlpha: 0,
-            y: 34,
-            scale: 0.92,
-            rotate: -2,
-            duration: 0.72,
-            ease: 'back.out(1.25)',
-            stagger: 0.08
-          }, 0.28)
-          .from('.flow-line', { scaleX: 0, scaleY: 0, duration: 0.36, stagger: 0.08, transformOrigin: 'center center' }, 0.86)
-          .from('.flow-dot', { autoAlpha: 0, scale: 0.35, duration: 0.34, ease: 'back.out(2)', stagger: 0.08 }, 0.96);
+    const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    heroTimeline
+      .from('.site-header', { autoAlpha: 0, y: -12, duration: 0.45 })
+      .from('#hero-title', { autoAlpha: 0, y: 30, duration: 0.78 }, 0.14)
+      .from('.hero .lede', { autoAlpha: 0, y: 20, duration: 0.58 }, 0.3)
+      .from('.hero-actions .button', { autoAlpha: 0, y: 14, duration: 0.46, stagger: 0.06 }, 0.42)
+      .from('.hero-proof', { autoAlpha: 0, y: 12, duration: 0.45 }, 0.54)
+      .from('.hero-visual', { autoAlpha: 0, scale: 0.97, duration: 0.8 }, 0.2)
+      .from('.hero-status-strip', { autoAlpha: 0, y: 18, duration: 0.5 }, 0.66);
 
-        gsap.to('.bento-card', {
-          y: -6,
-          duration: 2.8,
-          delay: 1.25,
-          repeat: -1,
-          yoyo: true,
-          ease: 'sine.inOut',
-          stagger: { each: 0.14 }
-        });
-
-        const topReasonsSection = document.querySelector<HTMLElement>('.top-reasons');
-
-        if (topReasonsSection) {
-          const title = topReasonsSection.querySelector<HTMLElement>('#top-reasons-title');
-          const reasonCards = Array.from(topReasonsSection.querySelectorAll<HTMLElement>('[data-animate-card]'));
-          const revealTargets = [title, ...reasonCards].filter((target): target is HTMLElement => Boolean(target));
-
-          if (revealTargets.length > 0) {
-            gsap.from(revealTargets, {
-              autoAlpha: 0,
-              y: 16,
-              duration: 0.5,
-              ease: 'power3.out',
-              stagger: 0.06,
-              scrollTrigger: {
-                trigger: topReasonsSection,
-                start: 'top 78%',
-                once: true
-              }
-            });
-          }
-        }
-
-        const proofSection = document.querySelector<HTMLElement>('.product-proof');
-
-        if (proofSection) {
-          const proofCopy = proofSection.querySelectorAll<HTMLElement>('.product-proof-copy > *');
-          const proofFrame = proofSection.querySelector<HTMLElement>('.proof-bento-frame');
-          const proofChromeDots = proofSection.querySelectorAll<HTMLElement>('.proof-window-chrome span');
-
-          const proofTimeline = gsap.timeline({
-            defaults: { ease: 'power3.out' },
-            scrollTrigger: {
-              trigger: proofSection,
-              start: 'top 72%',
-              once: true
-            }
-          });
-
-          proofTimeline
-            .from(proofCopy, { autoAlpha: 0, y: 24, duration: 0.58, stagger: 0.08 })
-            .from(proofFrame, { autoAlpha: 0, x: 34, y: 18, rotate: -1.4, scale: 0.96, duration: 0.72, ease: 'back.out(1.08)' }, 0.16)
-            .from(proofChromeDots, { autoAlpha: 0, scale: 0.35, duration: 0.28, ease: 'back.out(2)', stagger: 0.05 }, 0.62);
-        }
-
-        const finalCta = document.querySelector<HTMLElement>('.final-cta');
-
-        if (finalCta) {
-          const finalCtaCopy = finalCta.querySelector<HTMLElement>('.final-cta-copy');
-          const finalCtaItems = finalCta.querySelectorAll<HTMLElement>('#final-cta-title, .final-cta-lede, .final-cta-actions .button');
-          const finalCtaButtons = finalCta.querySelectorAll<HTMLElement>('.final-cta-actions .button');
-
-          const finalCtaTimeline = gsap.timeline({
-            scrollTrigger: {
-              trigger: finalCta,
-              start: 'top 78%',
-              once: true
-            }
-          });
-
-          if (finalCtaCopy) {
-            finalCtaTimeline.from(finalCtaCopy, { autoAlpha: 0, y: 24, scale: 0.98, duration: 0.58, ease: 'power3.out' });
-          }
-
-          finalCtaTimeline
-            .from(finalCtaItems, { autoAlpha: 0, y: 16, duration: 0.46, ease: 'power3.out', stagger: 0.06 }, finalCtaCopy ? '-=0.28' : 0)
-            .to(finalCtaButtons, { y: -3, scale: 1.025, duration: 0.24, ease: 'power2.out', stagger: 0.05 }, '>-0.02')
-            .to(finalCtaButtons, { y: 0, scale: 1, duration: 0.28, ease: 'power2.out', stagger: 0.05 }, '>-0.02');
-        }
-
-        gsap.utils.toArray<HTMLElement>('[data-animate-section]').forEach((section) => {
-          if (
-            section.classList.contains('hero') ||
-            section.classList.contains('top-reasons') ||
-            section.classList.contains('product-proof') ||
-            section.classList.contains('final-cta')
-          ) return;
-
-          const isPluginCustomization = section.classList.contains('plugin-customization');
-          const cards = isPluginCustomization
-            ? section.querySelectorAll<HTMLElement>('[data-extension-card]')
-            : section.querySelectorAll<HTMLElement>('[data-animate-card]');
-
-          if (cards.length === 0) return;
-
-          gsap.from(cards, {
-            autoAlpha: 0,
-            y: isPluginCustomization ? 24 : 18,
-            scale: isPluginCustomization ? 0.97 : 1,
-            duration: isPluginCustomization ? 0.62 : 0.55,
-            ease: 'power3.out',
-            stagger: isPluginCustomization ? 0.09 : 0.07,
-            scrollTrigger: {
-              trigger: section,
-              start: 'top 78%',
-              once: true
-            }
-          });
+    document.querySelectorAll<HTMLElement>('.landing-section').forEach((section) => {
+      const heading = section.querySelector<HTMLElement>('.section-heading, .plugin-customization-heading');
+      if (heading) {
+        gsap.from(heading.children, {
+          autoAlpha: 0,
+          y: 20,
+          duration: 0.55,
+          ease: 'power3.out',
+          stagger: 0.06,
+          scrollTrigger: { trigger: heading, start: 'top 82%', once: true },
         });
       }
-    </script>
+    });
+
+    gsap.from('.reason-card', {
+      autoAlpha: 0,
+      y: 28,
+      duration: 0.62,
+      ease: 'power3.out',
+      stagger: 0.09,
+      scrollTrigger: { trigger: '.reason-rail', start: 'top 80%', once: true },
+    });
+
+    gsap.from('[data-product-window]', {
+      autoAlpha: 0,
+      y: 34,
+      scale: 0.98,
+      duration: 0.72,
+      ease: 'power3.out',
+      stagger: 0.14,
+      scrollTrigger: { trigger: '.product-stage', start: 'top 76%', once: true },
+    });
+
+    gsap.from('.product-facts li', {
+      autoAlpha: 0,
+      y: 16,
+      duration: 0.42,
+      ease: 'power3.out',
+      stagger: 0.05,
+      scrollTrigger: { trigger: '.product-facts', start: 'top 88%', once: true },
+    });
+
+    const pluginTimeline = gsap.timeline({
+      scrollTrigger: { trigger: '.plugin-building', start: 'top 78%', once: true },
+      defaults: { ease: 'power3.out' },
+    });
+    pluginTimeline
+      .from('[data-plugin-core]', { autoAlpha: 0, y: 22, duration: 0.44 })
+      .from('[data-plugin-node]', {
+        autoAlpha: 0,
+        y: 44,
+        scale: 0.97,
+        duration: 0.48,
+        stagger: { each: 0.08, from: 'end' },
+      }, 0.16)
+      .from('[data-building-piece]', { autoAlpha: 0, y: -26, duration: 0.42 }, 0.48);
+
+    gsap.from('.final-cta-copy > *', {
+      autoAlpha: 0,
+      y: 18,
+      duration: 0.52,
+      ease: 'power3.out',
+      stagger: 0.07,
+      scrollTrigger: { trigger: '.final-cta', start: 'top 78%', once: true },
+    });
+  }
+</script>

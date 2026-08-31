@@ -21,38 +21,42 @@ export interface LandingActionLink extends BaseLandingActionLink {
   ariaLabel: string;
 }
 
-export interface PluginCapability {
+export type PluginTheme = 'blue' | 'violet' | 'mint' | 'amber' | 'slate';
+
+export interface FirstPartyPlugin {
   title: string;
-  code: string;
+  hooks: readonly string[];
   description: string;
   iconPaths: readonly string[];
+  theme: PluginTheme;
+  wide?: boolean;
 }
 
 export const TOP_REASONS = [
   {
-    title: 'See every task state.',
-    description: 'Tasks, agent owners, and review state stay visible so scoped work never turns into guesswork.'
+    title: 'Frame the task.',
+    description: 'Write the outcome once. Keep the prompt, project, owner, and dependencies attached to the work.'
   },
   {
-    title: 'Run agents in parallel.',
-    description: 'Start, pause, and compare multiple agent threads without losing the active task or context.'
+    title: 'Let agents run.',
+    description: 'Give each run its own worktree and terminal. Follow progress without babysitting every process.'
   },
   {
-    title: 'Review before it lands.',
-    description: 'Human checkpoints keep blocked work, CI failures, and risky decisions in front of you.'
+    title: 'Review the evidence.',
+    description: 'See diffs, blockers, CI, and agent questions in context before you decide what ships.'
   }
 ] satisfies readonly TopReason[];
 
 const LANDING_ACTIONS = {
   install: {
-    label: 'Install OpenForge',
+    label: 'Download for macOS',
     href: GITHUB_RELEASES_URL,
     variant: 'primary',
     icon: 'download',
     iconClass: 'button-icon download-icon'
   },
   source: {
-    label: 'GitHub',
+    label: 'View source',
     href: GITHUB_REPOSITORY_URL,
     variant: 'secondary',
     icon: 'github',
@@ -63,55 +67,61 @@ const LANDING_ACTIONS = {
 export const HERO_CTA_LINKS = [
   {
     ...LANDING_ACTIONS.install,
-    ariaLabel: 'Install OpenForge from releases'
+    ariaLabel: 'Download OpenForge for macOS from GitHub releases'
   },
   {
     ...LANDING_ACTIONS.source,
-    label: 'See GitHub',
-    ariaLabel: 'View OpenForge on GitHub'
+    ariaLabel: 'View the OpenForge source on GitHub'
   }
 ] satisfies readonly LandingActionLink[];
 
 export const FINAL_CTA_LINKS = [
   {
     ...LANDING_ACTIONS.install,
-    ariaLabel: 'Install OpenForge from releases'
+    ariaLabel: 'Download OpenForge for macOS from GitHub releases'
   },
   {
     ...LANDING_ACTIONS.source,
     iconClass: 'button-icon github-icon',
-    ariaLabel: 'View OpenForge source on GitHub'
+    ariaLabel: 'View the OpenForge source on GitHub'
   }
 ] satisfies readonly LandingActionLink[];
 
-export const PLUGIN_CAPABILITIES = [
+export const FIRST_PARTY_PLUGINS = [
   {
-    title: 'Your views',
-    code: 'views.register',
-    description: 'project dashboards, review queues, repo lenses',
-    iconPaths: ['M4 5.5h16v13H4z', 'M4 10h16', 'M9 10v8.5']
+    title: 'GitHub Sync',
+    hooks: ['views.register', 'taskUI.registerSection', 'reviewUI.registerRowAction', 'settings.registerSection'],
+    description: 'Pull-request views, task status, review actions, and Jira settings.',
+    theme: 'violet',
+    wide: true,
+    iconPaths: ['M7 3v4a4 4 0 0 0 4 4h6', 'm14 8 3 3-3 3', 'M7 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M17 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z']
   },
   {
-    title: 'Your task context',
-    code: 'taskPane.registerTab',
-    description: 'notes, checklists, docs, review rituals',
-    iconPaths: ['M5 4.5h14v15H5z', 'M10 4.5v15', 'M13 9h3', 'M13 13h3']
+    title: 'File Viewer',
+    hooks: ['views.register', 'commands.register', 'fs'],
+    description: 'Browse and reveal project files from a rail view.',
+    theme: 'blue',
+    iconPaths: ['M3 6.5h7l2 2h9v10H3z', 'M3 8.5h18']
   },
   {
-    title: 'Your automations',
-    code: 'background.register',
-    description: 'blocked work, CI, stale work, recurring prompts',
-    iconPaths: [
-      'M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2',
-      'M9 16.5h3',
-      'm11 13.5 3 3-3 3'
-    ]
+    title: 'Terminal',
+    hooks: ['views.register', 'taskUI.registerTab', 'shell'],
+    description: 'Project terminals and task-scoped shell sessions.',
+    theme: 'slate',
+    iconPaths: ['m5 7 4 4-4 4', 'M11 17h7']
   },
   {
-    title: 'Your host capabilities',
-    code: 'tasks · fs · shell · notifications',
-    description: 'explicit access for extensions',
-    iconPaths: ['M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z', 'm8.8 12.1 2 2 4.6-4.8']
+    title: 'Task Browser',
+    hooks: ['taskUI.registerTab', 'browserSurfaces', 'commands.register'],
+    description: 'A secure, persistent browser surface inside every task.',
+    theme: 'mint',
+    iconPaths: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z', 'M3.6 9h16.8', 'M3.6 15h16.8', 'M12 3a15 15 0 0 1 0 18', 'M12 3a15 15 0 0 0 0 18']
+  },
+  {
+    title: 'Task Schedules',
+    hooks: ['views.register', 'background.register', 'backend.registerMethod', 'tasks'],
+    description: 'One-off and recurring tasks powered by a background service.',
+    theme: 'amber',
+    iconPaths: ['M12 3a9 9 0 1 0 9 9', 'M12 7v5l3 2', 'M19 3v4h-4']
   }
-] satisfies readonly PluginCapability[];
-
+] satisfies readonly FirstPartyPlugin[];

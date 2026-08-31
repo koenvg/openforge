@@ -1,31 +1,57 @@
-<section class="landing-section product-proof" aria-labelledby="product-proof-title" data-animate-section>
-  <div class="product-proof-copy">
-    <h2 id="product-proof-title" class="section-title">See the work without chasing it</h2>
-    <p class="proof-lede">
-      OpenForge keeps task attention and review blockers in one quiet desktop surface.
-    </p>
-    <p class="proof-context">
-      Review what changed, what is blocked, and what needs your attention without opening every agent thread.
+<section id="product" class="landing-section product-proof" aria-labelledby="product-proof-title" data-animate-section>
+  <div class="section-heading section-heading-split product-proof-heading">
+    <h2 id="product-proof-title" class="section-title">Know what every agent is doing.</h2>
+    <p class="section-intro">
+      OpenForge joins tasks, terminals, diffs, reviews, and decisions in one local desktop app.
     </p>
   </div>
 
-  <figure class="proof-figure" aria-label="OpenForge Task Attention Pane screenshot">
-    <div class="proof-bento-frame">
-      <div class="proof-screenshot-shell">
-        <div class="proof-window-chrome" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <img
-          class="proof-screenshot"
-          src="/images/openforge-task-attention-pane.png"
-          width="793"
-          height="1020"
-          loading="lazy"
-          alt="OpenForge Task Attention Pane showing the current task, pull request review blockers, and reviewer comments"
-        />
+  <div class="product-stage">
+    <div class="product-stage-grid" aria-hidden="true"></div>
+    <figure class="product-window product-window-board" data-product-window>
+      <div class="window-bar">
+        <div aria-hidden="true"><span></span><span></span><span></span></div>
+        <p>OpenForge / Board</p>
+        <span class="window-status"><i></i> local</span>
       </div>
+      <img
+        src="/images/openforge-board.webp"
+        width="1440"
+        height="900"
+        loading="lazy"
+        alt="OpenForge board showing agent tasks grouped by workflow state with the selected task open in the inspector"
+      />
+    </figure>
+
+    <figure class="product-window product-window-review" data-product-window>
+      <div class="window-bar">
+        <div aria-hidden="true"><span></span><span></span><span></span></div>
+        <p>Task review</p>
+        <span class="window-status"><i></i> diff visible</span>
+      </div>
+      <img
+        src="/images/openforge-task-review.webp"
+        width="1440"
+        height="900"
+        loading="lazy"
+        alt="OpenForge Review tab showing a README diff and changed-file list"
+      />
+    </figure>
+
+    <div class="product-callout product-callout-left" aria-hidden="true">
+      <span>01</span>
+      one task identity
     </div>
-  </figure>
+    <div class="product-callout product-callout-right" aria-hidden="true">
+      <span>02</span>
+      evidence before approval
+    </div>
+  </div>
+
+  <ul class="product-facts" aria-label="OpenForge product facts">
+    <li><strong>Isolated</strong><span>worktree per run</span></li>
+    <li><strong>Live</strong><span>terminal and status</span></li>
+    <li><strong>Local</strong><span>desktop-first workflow</span></li>
+    <li><strong>Explicit</strong><span>human approval</span></li>
+  </ul>
 </section>
