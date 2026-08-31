@@ -23,7 +23,7 @@ Terminal Runtime already rejects stale attachment generations and queues model o
 - Replace the terminal-runtime integration suites or terminal performance benchmark.
 - Add general-purpose test RPC, arbitrary shell execution, or a production diagnostics API.
 - Make the macOS `vmmap` peak-footprint check portable in this change.
-- Make the macOS idle-resource gate a required check on every pull request; it remains scheduled and manually dispatchable.
+- Automate the macOS idle-resource gate through GitHub Actions; it remains an operator-invoked local validation.
 - Promise scenario isolation after a failed mutating scenario. The runner stops later scenarios when the shared app state is no longer trustworthy.
 
 ## Decisions
@@ -158,11 +158,11 @@ Reuse cleanup will stop event recording and disconnect the CDP client. It will n
 
 Signal handlers will route through the same idempotent cleanup path so interruption cannot bypass ownership rules.
 
-### 11. Split continuous terminal enforcement from scheduled idle evidence
+### 11. Keep continuous terminal enforcement separate from local idle evidence
 
 The repository's existing `macos-14` Rust and packaged-Electron jobs confirm an Electron-capable hosted runner. Pull-request CI will run `first-attachment` and `detach-during-recovery` in one boot after frontend and Rust checks pass. The job will always upload its report root so failed races retain the same diagnostics as local runs.
 
-The 30-second idle gate will run in a separate weekly and manually dispatchable macOS workflow. This keeps `vmmap` evidence on a supported host without making every pull request wait for a platform-specific idle measurement. Both workflows use the same checked-in commands as local operators.
+The 30-second idle gate remains available through the checked-in `idle-resources` scenario for operator-invoked macOS validation. It is not scheduled or manually dispatched through GitHub Actions.
 
 ## Risks / Trade-offs
 
@@ -172,7 +172,7 @@ The 30-second idle gate will run in a separate weekly and manually dispatchable 
 - [One boot lets a failed scenario contaminate later scenarios] -> Run serially, restore a known UI state after success, and stop after a mutating failure.
 - [Tracing and active Playwright polling can disturb idle CPU] -> Quiesce UI interaction before sampling, avoid polling during the sample, and keep Playwright outside the Electron process tree accounting.
 - [Short idle samples can hide low-rate event churn] -> Keep the existing 30-second default and allow explicit characterization overrides in local runs.
-- [macOS peak footprint is not portable] -> Keep idle evidence out of the pull-request gate and run it in a separate scheduled/manual macOS workflow.
+- [macOS peak footprint is not portable] -> Keep idle evidence out of automated CI and document the local macOS command for operators.
 - [Process role matching can mistake transient utilities for required processes] -> Define required stable roles explicitly and report optional process arrivals separately.
 
 ## Migration Plan
@@ -183,7 +183,7 @@ The 30-second idle gate will run in a separate weekly and manually dispatchable 
 4. Add the serial live scenarios, report writer, artifacts, documentation, and source-control ignores.
 5. Run focused tests, full renderer and package checks, Electron contract checks, terminal presentation checks, Rust validation for the E2E Sidecar command, and the live isolated suite.
 6. Record commands, results, platform limits, runtime, and follow-up work in Handoff Notes.
-7. After confirming the existing macOS runner and runtime budget, add pull-request terminal-race enforcement and a separate scheduled/manual macOS idle workflow.
+7. After confirming the existing macOS runner and runtime budget, add pull-request terminal-race enforcement while keeping macOS idle validation operator-invoked.
 
 Rollback removes the new commands and control module, restores the idle CLI wrapper to its previous entry point, and leaves production terminal and event contracts unchanged.
 
@@ -209,8 +209,8 @@ Implementation and validation completed on a macOS arm64 development host.
 - `pnpm e2e:invariants -- --scenario idle-resources --output artifacts/desktop-test/final-idle-resources`: passed in 40.1 seconds with the default 30-second macOS idle sample.
 - Workflow contract TDD: `scripts/e2e-invariants.test.mjs` failed before the CI workflows existed, then passed 3/3 tests after implementation.
 - The exact pull-request CI command (`first-attachment` plus `detach-during-recovery` with the CI output root) passed locally in one boot in 32.5 seconds.
-- The exact scheduled idle command (`idle-resources` with the CI output root) passed locally in 41.2 seconds.
-- `actionlint .github/workflows/ci.yml .github/workflows/live-electron-idle.yml` and Ruby YAML parsing passed.
+- The operator-invoked idle command (`idle-resources` with an explicit output root) passed locally in 41.2 seconds.
+- `actionlint .github/workflows/ci.yml` and strict OpenSpec validation passed after removing the standalone idle workflow.
 - Observational reuse used an explicitly remote-debuggable E2E development app and `pnpm e2e:invariants -- --reuse <loopback-endpoint> --scenario idle-resources --idle-duration 15 --output artifacts/desktop-test/live-reuse-observational`: passed without terminal-control consent. The attached Electron and Sidecar PIDs and the owner-created runtime directory remained present after the reuse runner disconnected; its report records null fixture paths, no removals, and `processExitVerified: false`.
 - `pnpm e2e:invariants -- --scenario first-attachment --scenario-timeout 1 --output artifacts/desktop-test/final-forced-failure`: exited 1 as intended in 6.8 seconds and retained a readable report, trace, screenshot, child log, event evidence, process snapshot, error, and passing cleanup evidence.
 - `pnpm e2e:invariants -- --help`: exited 0 and matched every harness command and option documented in `docs/live-electron-invariants.md`.
@@ -229,8 +229,8 @@ The first-attachment and detach-during-recovery scenarios are portable to hosts 
 
 Reuse accepts only HTTP loopback CDP endpoints and verifies an OpenForge development renderer. It is observational unless both `--allow-terminal-control` and matching token-gated renderer controls are present. Reuse does not own fixture data, application processes, or paths. Observational reuse was exercised live; consented terminal control in reuse remains covered by policy/control tests and by the same controls exercised in isolated live terminal scenarios.
 
-Pull-request CI now runs both terminal race scenarios in one boot on the existing `macos-14` runner after frontend and Rust checks. A separate weekly/manual macOS workflow runs the full idle gate. Both jobs always upload their report roots; the PR job retains evidence for seven days and the idle job for fourteen days.
+Pull-request CI runs both terminal race scenarios in one boot on the existing `macos-14` runner after frontend and Rust checks and always uploads its report root with seven-day retention. Hosted run 33420854051 passed. The full idle gate remains available only through the local `idle-resources` scenario.
 
 ### Skips, gaps, and follow-up
 
-All requested validation commands ran. The root suite retained its existing 1 skipped file/7 skipped tests, and Cargo retained 1 ignored test. There was no non-macOS live run and no live consented reuse terminal run; neither is required for this change, and the relevant portable policy/control paths have focused coverage. Hosted CI execution of the newly added jobs remains pending on the pull request. No adjacent cleanup task or additional follow-up work was identified.
+All requested validation commands ran. The root suite retained its existing 1 skipped file/7 skipped tests, and Cargo retained 1 ignored test. There was no non-macOS live run and no live consented reuse terminal run; neither is required for this change, and the relevant portable policy/control paths have focused coverage. Pull-request CI, including the live Electron terminal invariant job, passed on the hosted runner. Automated idle execution was intentionally removed; complete idle evidence remains a local macOS operator check. No adjacent cleanup task or additional follow-up work was identified.

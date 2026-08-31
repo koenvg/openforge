@@ -54,7 +54,7 @@
 - [x] 7.1 Add `e2e:dev` and `e2e:invariants` package scripts with individual scenario filtering and reuse options; verify package-script tests and `--help` output list the supported commands and consent rules.
 - [x] 7.2 Ignore default desktop E2E reports, Playwright output, test results, and temporary runtime paths; verify `git status --ignored` identifies generated test artifacts as ignored.
 - [x] 7.3 Document isolated use, the remote-debugging reuse handshake, terminal-control consent, filters, ownership, security checks, expected runtime, macOS idle limitation, report contents, and failure debugging; verify every documented command matches `--help` output.
-- [x] 7.4 Document CI suitability, including runner prerequisites and the distinction between pull-request terminal races and scheduled macOS peak-footprint evidence.
+- [x] 7.4 Document CI suitability, including runner prerequisites and the distinction between pull-request terminal races and operator-invoked macOS peak-footprint evidence.
 
 ## 8. Affected-system validation and handoff
 
@@ -67,7 +67,7 @@
 
 ## 9. CI enforcement after runner confirmation
 
-- [x] 9.1 Add a failing workflow contract test for pull-request terminal races, separate scheduled/manual macOS idle execution, and retained artifact roots; verify it fails before workflow changes.
+- [x] 9.1 Add a failing workflow contract test for pull-request terminal races, retained artifact roots, and the absence of a standalone idle workflow; verify it fails before workflow changes.
 - [x] 9.2 Add a `macos-14` pull-request CI job that runs `first-attachment` and `detach-during-recovery` in one boot after frontend and Rust checks and always uploads evidence.
-- [x] 9.3 Add a weekly and manually dispatchable `macos-14` idle workflow that runs `idle-resources` and always uploads evidence without joining the pull-request gate.
-- [ ] 9.4 Update operator and Handoff Notes, validate workflow syntax and OpenSpec coherence, run focused and affected-system checks, and verify the new pull-request job starts on the hosted runner.
+- [x] 9.3 Keep `idle-resources` operator-invoked by removing the standalone scheduled/manual macOS workflow and documenting the local command.
+- [x] 9.4 Update operator and Handoff Notes, validate workflow syntax and OpenSpec coherence, run focused and affected-system checks, and verify the pull-request job passes on the hosted runner.

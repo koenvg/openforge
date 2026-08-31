@@ -166,7 +166,7 @@ Isolated mode SHALL stop every process owned by the suite and remove temporary r
 - **THEN** the runner disconnects its debugging client and leaves the existing app, processes, app data, database, and repository unchanged
 
 ### Requirement: Operator documentation and CI boundary
-The project SHALL document isolated use, reuse handshake and consent rules, scenario filters, failure debugging, security boundaries, expected runtime, platform limits, and CI execution. Pull-request CI SHALL run the terminal race scenarios on a confirmed Electron-capable runner and retain evidence on success or failure. The macOS idle gate SHALL run separately on a schedule and by manual dispatch rather than delaying every pull request.
+The project SHALL document isolated use, reuse handshake and consent rules, scenario filters, failure debugging, security boundaries, expected runtime, platform limits, and CI execution. Pull-request CI SHALL run the terminal race scenarios on a confirmed Electron-capable runner and retain evidence on success or failure. The macOS idle gate SHALL remain available as an operator-invoked local scenario rather than an automated GitHub Actions workflow.
 
 #### Scenario: Local operator follows documentation
 - **WHEN** an operator follows the documented isolated or reuse procedure
@@ -176,6 +176,6 @@ The project SHALL document isolated use, reuse handshake and consent rules, scen
 - **WHEN** CI evaluates a pull request targeting the main branch
 - **THEN** it runs `first-attachment` and `detach-during-recovery` in one live Electron boot and uploads the artifact root regardless of outcome
 
-#### Scenario: Scheduled macOS idle evidence
-- **WHEN** the scheduled or manually dispatched idle workflow runs
-- **THEN** it runs `idle-resources` on macOS and uploads the complete artifact root without making the idle gate part of every pull request
+#### Scenario: Operator runs macOS idle evidence
+- **WHEN** an operator runs the `idle-resources` scenario on macOS
+- **THEN** it captures complete idle evidence locally without requiring a scheduled or manually dispatched GitHub Actions workflow

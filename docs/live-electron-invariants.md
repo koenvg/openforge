@@ -77,6 +77,6 @@ The terminal race scenarios are portable to supported Electron development hosts
 
 Pull-request CI runs `first-attachment` and `detach-during-recovery` in one boot through the `Live Electron Terminal Invariants` job in `.github/workflows/ci.yml`. The job uses the existing `macos-14`, Rust, Zig/Ghostty, Bun, Node, and pnpm setup after frontend and Rust checks pass. It uploads the complete invariant artifact root on success or failure with seven-day retention.
 
-The complete idle gate runs separately through `.github/workflows/live-electron-idle.yml` every Monday at 05:30 UTC and on manual dispatch. It uses a macOS runner with `vmmap`, preserves evidence for fourteen days, and does not delay every pull request with a platform-specific idle measurement.
+The complete `idle-resources` gate remains available for local macOS validation but is not scheduled or manually dispatched through GitHub Actions. Operators can run `pnpm e2e:invariants -- --scenario idle-resources` when peak-footprint evidence is needed.
 
-Both jobs require loopback/process-inspection access and a desktop session suitable for Electron. The PR job continuously enforces the portable terminal races; the scheduled job detects macOS idle-resource regressions without conflating them with terminal correctness.
+The pull-request job requires loopback/process-inspection access and a desktop session suitable for Electron. It continuously enforces the portable terminal races without adding the platform-specific idle measurement to CI.

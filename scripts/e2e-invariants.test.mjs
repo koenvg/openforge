@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { INVARIANT_HELP, main } from './e2e-invariants.mjs'
 
@@ -42,9 +42,8 @@ describe('invariant package commands', () => {
     }
   })
 
-  it('runs terminal races on pull requests and keeps the macOS idle gate scheduled or manual', async () => {
+  it('runs terminal races on pull requests without a separate idle workflow', async () => {
     const pullRequestWorkflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
-    const idleWorkflow = await readFile(new URL('../.github/workflows/live-electron-idle.yml', import.meta.url), 'utf8')
     const pullRequestJob = pullRequestWorkflow.slice(
       pullRequestWorkflow.indexOf('  live-electron-terminal-invariants:'),
     )
@@ -56,14 +55,7 @@ describe('invariant package commands', () => {
     expect(pullRequestJob).toContain('artifacts/desktop-test/ci-terminal-invariants')
     expect(pullRequestJob).toContain('name: live-electron-terminal-invariants')
     expect(pullRequestJob).toContain('uses: oven-sh/setup-bun@v2')
-
-    expect(idleWorkflow).toContain('schedule:')
-    expect(idleWorkflow).toContain('workflow_dispatch:')
-    expect(idleWorkflow).not.toContain('pull_request:')
-    expect(idleWorkflow).toContain('runs-on: macos-14')
-    expect(idleWorkflow).toContain('--scenario idle-resources')
-    expect(idleWorkflow).toContain('artifacts/desktop-test/ci-idle-resources')
-    expect(idleWorkflow).toContain('name: live-electron-idle-invariant')
-    expect(idleWorkflow).toContain('uses: oven-sh/setup-bun@v2')
+    await expect(access(new URL('../.github/workflows/live-electron-idle.yml', import.meta.url)))
+      .rejects.toMatchObject({ code: 'ENOENT' })
   })
 })
