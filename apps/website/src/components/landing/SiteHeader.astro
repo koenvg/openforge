@@ -1,10 +1,28 @@
 ---
-import { HOME_PATH } from '../../lib/urls';
+import { GITHUB_REPOSITORY_URL, HOME_PATH } from '../../lib/urls';
 ---
 
-<header class="site-header" aria-label="OpenForge home">
+<header class="site-header" aria-label="Primary navigation">
   <a class="wordmark" href={HOME_PATH} aria-label="OpenForge home">
-    <img class="wordmark-logo" src="/app-icon.svg" alt="" width="1024" height="1024" aria-hidden="true" />
+    <span class="wordmark-mark" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
     <span>OpenForge</span>
+  </a>
+
+  <nav class="site-nav" aria-label="Site links">
+    <a href="#workflow">Workflow</a>
+    <a href="#product">Product</a>
+    <a href="#plugins">Plugins</a>
+  </nav>
+
+  <a class="header-github" href={GITHUB_REPOSITORY_URL} aria-label="Open OpenForge on GitHub">
+    GitHub
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 12 12 4M6 4h6v6" />
+    </svg>
   </a>
 </header>

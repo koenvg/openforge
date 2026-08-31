@@ -3,17 +3,48 @@ import { PLUGIN_CAPABILITIES } from '../../lib/landingContent';
 import PluginCapabilityRow from './PluginCapabilityRow.astro';
 ---
 
-<section class="landing-section plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
+<section id="plugins" class="landing-section plugin-customization" aria-labelledby="plugin-customization-title" data-animate-section>
   <div class="plugin-customization-heading">
-    <h2 id="plugin-customization-title" class="section-title">Extend OpenForge around your workflow</h2>
-    <p class="plugin-customization-lede">
-      Extensions add workflow-specific surfaces around the same stable OpenForge Tasks.
+    <p class="eyebrow">Open by design</p>
+    <h2 id="plugin-customization-title" class="section-title">Shape the control plane around your team.</h2>
+    <p class="section-intro">
+      Add focused views and automations without rebuilding the task system underneath them.
     </p>
+    <a class="text-link" href="https://www.npmjs.com/package/@openforge-app/plugin-sdk">
+      Explore the plugin SDK
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 12 12 4M6 4h6v6" /></svg>
+    </a>
   </div>
 
-  <div class="capability-ledger" aria-label="Extension customization examples">
-    <ol class="ledger-list">
-      {PLUGIN_CAPABILITIES.map((capability) => <PluginCapabilityRow capability={capability} />)}
-    </ol>
+  <div class="plugin-system">
+    <div class="plugin-code-card" aria-label="Plugin registration code example">
+      <div class="code-card-bar">
+        <span>attention-plugin.ts</span>
+        <span>TypeScript</span>
+      </div>
+      <pre><code><span class="code-keyword">import</span> &#123; <span class="code-function">defineFrontendPlugin</span> &#125; <span class="code-keyword">from</span> <span class="code-string">'@openforge-app/plugin-sdk/frontend'</span>
+
+<span class="code-keyword">export default</span> <span class="code-function">defineFrontendPlugin</span>(&#123;
+  <span class="code-property">activate</span>(openforge, context) &#123;
+    context.subscriptions.<span class="code-function">add</span>(
+      openforge.views.<span class="code-function">register</span>(&#123;
+        <span class="code-property">id</span>: <span class="code-string">'attention'</span>, <span class="code-property">title</span>: <span class="code-string">'Needs review'</span>,
+        <span class="code-property">icon</span>: <span class="code-string">'scan-eye'</span>, <span class="code-property">placement</span>: <span class="code-string">'rail'</span>,
+        <span class="code-property">component</span>: () =&gt; <span class="code-keyword">import</span>(<span class="code-string">'./AttentionView.svelte'</span>)
+      &#125;)
+    )
+  &#125;
+&#125;)</code></pre>
+      <div class="code-card-output">
+        <span><i></i> Plugin active</span>
+        <span>4 capabilities granted</span>
+      </div>
+    </div>
+
+    <div class="capability-ledger" aria-label="Plugin capabilities">
+      <ol class="ledger-list">
+        {PLUGIN_CAPABILITIES.map((capability) => <PluginCapabilityRow capability={capability} />)}
+      </ol>
+    </div>
   </div>
 </section>

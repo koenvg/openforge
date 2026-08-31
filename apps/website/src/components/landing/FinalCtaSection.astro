@@ -1,15 +1,33 @@
 ---
 import { FINAL_CTA_LINKS } from '../../lib/landingContent';
+import { GITHUB_REPOSITORY_URL, HOME_PATH } from '../../lib/urls';
 import LandingActions from './LandingActions.astro';
 ---
 
 <section class="landing-section final-cta" aria-labelledby="final-cta-title" data-animate-section>
+  <div class="final-cta-signal" aria-hidden="true">
+    <span></span><span></span><span></span><span></span>
+  </div>
   <div class="final-cta-copy">
-    <h2 id="final-cta-title" class="section-title">Run agent work from one desktop.</h2>
+    <p class="eyebrow">Your agents are ready</p>
+    <h2 id="final-cta-title" class="section-title">Give their work a place to land.</h2>
     <p class="final-cta-lede">
-      Install OpenForge to keep parallel coding agents visible, reviewable, and under your control.
+      OpenForge is the local desktop app for running, following, and reviewing coding agents.
     </p>
 
     <LandingActions links={FINAL_CTA_LINKS} ariaLabel="Final actions" class="final-cta-actions" />
   </div>
 </section>
+
+<footer class="site-footer">
+  <a class="wordmark footer-wordmark" href={HOME_PATH} aria-label="OpenForge home">
+    <span class="wordmark-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+    <span>OpenForge</span>
+  </a>
+  <p>Agent speed. Human judgment.</p>
+  <nav aria-label="Footer links">
+    <a href={GITHUB_REPOSITORY_URL}>GitHub</a>
+    <a href={`${GITHUB_REPOSITORY_URL}/releases`}>Releases</a>
+    <a href={`${GITHUB_REPOSITORY_URL}/blob/main/CONTRIBUTING.md`}>Contribute</a>
+  </nav>
+</footer>

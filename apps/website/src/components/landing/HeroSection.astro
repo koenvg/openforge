@@ -1,5 +1,6 @@
 ---
 import { HERO_CTA_LINKS } from '../../lib/landingContent';
+import HeroCanvas from './HeroCanvas.astro';
 import LandingActions from './LandingActions.astro';
 import SiteHeader from './SiteHeader.astro';
 ---
@@ -8,75 +9,50 @@ import SiteHeader from './SiteHeader.astro';
   <SiteHeader />
 
   <section class="hero" aria-describedby="hero-description" data-animate-section>
+    <div class="hero-grid-lines" aria-hidden="true"></div>
+
     <div class="hero-copy">
-      <h1 id="hero-title" data-animate-item>Ship with agents. Review like a human.</h1>
+      <p class="hero-kicker" data-animate-item>
+        <span></span>
+        Desktop control plane for coding agents
+      </p>
+      <h1 id="hero-title" data-animate-item>
+        Orchestrate the work.<br />
+        <span>Keep the judgment.</span>
+      </h1>
       <p id="hero-description" class="lede" data-animate-item>
-        OpenForge turns parallel AI coding work into clear tasks, visible changes, and approvals.
+        Run coding agents in parallel, follow every task, and review the changes before they land.
       </p>
 
       <LandingActions links={HERO_CTA_LINKS} ariaLabel="Primary actions" class="hero-actions" animateItem />
+
+      <div class="hero-proof" data-animate-item aria-label="Supported coding agents">
+        <span>Works with</span>
+        <ul>
+          <li>Claude Code</li>
+          <li>Codex</li>
+          <li>Pi</li>
+          <li>OpenCode</li>
+        </ul>
+      </div>
     </div>
 
-    <div class="bento-stage" aria-label="Task, agent, changes, and review workflow">
-      <article class="bento-card bento-card-task">
-        <span class="bento-label">Task</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 7h10" />
-          <path d="M8 12h10" />
-          <path d="M8 17h10" />
-          <path d="m3.5 7 1 1 2-2" />
-          <path d="m3.5 12 1 1 2-2" />
-          <path d="m3.5 17 1 1 2-2" />
-        </svg>
-        <p>Define clear work.</p>
-      </article>
+    <HeroCanvas />
 
-      <article class="bento-card bento-card-agent">
-        <span class="bento-label">Agent</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 9a4 4 0 0 1 8 0v3a4 4 0 0 1-8 0Z" />
-          <path d="M9 16h6" />
-          <path d="M12 3v2" />
-          <path d="M5 11H3" />
-          <path d="M21 11h-2" />
-          <path d="M10 10h.01" />
-          <path d="M14 10h.01" />
-        </svg>
-        <p>Run parallel agents.</p>
-      </article>
-
-      <article class="bento-card bento-card-changes">
-        <span class="bento-label">Changes</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m7 8-4 4 4 4" />
-          <path d="m17 8 4 4-4 4" />
-          <path d="m14 4-4 16" />
-        </svg>
-        <p>Collect context and diffs.</p>
-      </article>
-
-      <article class="bento-card bento-card-review">
-        <span class="bento-label">Review</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
-          <circle cx="12" cy="12" r="3" />
-          <path d="m15.5 17.5 1.5 1.5 3-3" />
-        </svg>
-        <p>Approve with confidence.</p>
-      </article>
-
-      <span class="flow-arrow flow-arrow-task-agent" aria-hidden="true">
-        <span class="flow-line"></span>
-        <span class="flow-dot">→</span>
-      </span>
-      <span class="flow-arrow flow-arrow-agent-changes" aria-hidden="true">
-        <span class="flow-line"></span>
-        <span class="flow-dot">↓</span>
-      </span>
-      <span class="flow-arrow flow-arrow-changes-review" aria-hidden="true">
-        <span class="flow-line"></span>
-        <span class="flow-dot">←</span>
-      </span>
+    <div class="hero-status-strip" aria-label="Example agent activity">
+      <div>
+        <span class="status-dot"></span>
+        <strong>3</strong>
+        running
+      </div>
+      <div>
+        <strong>2</strong>
+        ready for review
+      </div>
+      <div>
+        <strong>1</strong>
+        needs a decision
+      </div>
     </div>
   </section>
 </div>

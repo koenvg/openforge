@@ -30,29 +30,29 @@ export interface PluginCapability {
 
 export const TOP_REASONS = [
   {
-    title: 'See every task state.',
-    description: 'Tasks, agent owners, and review state stay visible so scoped work never turns into guesswork.'
+    title: 'Frame the task.',
+    description: 'Write the outcome once. Keep the prompt, project, owner, and dependencies attached to the work.'
   },
   {
-    title: 'Run agents in parallel.',
-    description: 'Start, pause, and compare multiple agent threads without losing the active task or context.'
+    title: 'Let agents run.',
+    description: 'Give each run its own worktree and terminal. Follow progress without babysitting every process.'
   },
   {
-    title: 'Review before it lands.',
-    description: 'Human checkpoints keep blocked work, CI failures, and risky decisions in front of you.'
+    title: 'Review the evidence.',
+    description: 'See diffs, blockers, CI, and agent questions in context before you decide what ships.'
   }
 ] satisfies readonly TopReason[];
 
 const LANDING_ACTIONS = {
   install: {
-    label: 'Install OpenForge',
+    label: 'Download for macOS',
     href: GITHUB_RELEASES_URL,
     variant: 'primary',
     icon: 'download',
     iconClass: 'button-icon download-icon'
   },
   source: {
-    label: 'GitHub',
+    label: 'View source',
     href: GITHUB_REPOSITORY_URL,
     variant: 'secondary',
     icon: 'github',
@@ -63,44 +63,43 @@ const LANDING_ACTIONS = {
 export const HERO_CTA_LINKS = [
   {
     ...LANDING_ACTIONS.install,
-    ariaLabel: 'Install OpenForge from releases'
+    ariaLabel: 'Download OpenForge for macOS from GitHub releases'
   },
   {
     ...LANDING_ACTIONS.source,
-    label: 'See GitHub',
-    ariaLabel: 'View OpenForge on GitHub'
+    ariaLabel: 'View the OpenForge source on GitHub'
   }
 ] satisfies readonly LandingActionLink[];
 
 export const FINAL_CTA_LINKS = [
   {
     ...LANDING_ACTIONS.install,
-    ariaLabel: 'Install OpenForge from releases'
+    ariaLabel: 'Download OpenForge for macOS from GitHub releases'
   },
   {
     ...LANDING_ACTIONS.source,
     iconClass: 'button-icon github-icon',
-    ariaLabel: 'View OpenForge source on GitHub'
+    ariaLabel: 'View the OpenForge source on GitHub'
   }
 ] satisfies readonly LandingActionLink[];
 
 export const PLUGIN_CAPABILITIES = [
   {
-    title: 'Your views',
+    title: 'Project views',
     code: 'views.register',
-    description: 'project dashboards, review queues, repo lenses',
+    description: 'Dashboards, review queues, and repository lenses.',
     iconPaths: ['M4 5.5h16v13H4z', 'M4 10h16', 'M9 10v8.5']
   },
   {
-    title: 'Your task context',
+    title: 'Task context',
     code: 'taskPane.registerTab',
-    description: 'notes, checklists, docs, review rituals',
+    description: 'Notes, checklists, docs, and team review rituals.',
     iconPaths: ['M5 4.5h14v15H5z', 'M10 4.5v15', 'M13 9h3', 'M13 13h3']
   },
   {
-    title: 'Your automations',
+    title: 'Background automations',
     code: 'background.register',
-    description: 'blocked work, CI, stale work, recurring prompts',
+    description: 'Blocked work, CI events, stale tasks, and recurring prompts.',
     iconPaths: [
       'M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2',
       'M9 16.5h3',
@@ -108,10 +107,9 @@ export const PLUGIN_CAPABILITIES = [
     ]
   },
   {
-    title: 'Your host capabilities',
+    title: 'Host capabilities',
     code: 'tasks · fs · shell · notifications',
-    description: 'explicit access for extensions',
+    description: 'Explicit, reviewable access for trusted extensions.',
     iconPaths: ['M12 3 20 6.5v5.7c0 4.5-3.1 7.4-8 8.8-4.9-1.4-8-4.3-8-8.8V6.5L12 3Z', 'm8.8 12.1 2 2 4.6-4.8']
   }
 ] satisfies readonly PluginCapability[];
-

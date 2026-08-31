@@ -1,0 +1,223 @@
+<div class="hero-visual" data-vgpu-visual>
+  <canvas class="hero-canvas" aria-hidden="true"></canvas>
+  <div class="hero-visual-fallback" aria-hidden="true"></div>
+  <div class="hero-orbit-label hero-orbit-label-top" aria-hidden="true">
+    <span></span>
+    5 agents running
+  </div>
+  <div class="hero-orbit-label hero-orbit-label-bottom" aria-hidden="true">
+    <span></span>
+    review stays human
+  </div>
+</div>
+
+<script>
+  import { clock, effect, frame, init, surface } from 'vgpu';
+
+  const SHADER_SOURCE = `
+    struct Params {
+      resolution: vec2f,
+      pointer: vec2f,
+      time: f32,
+      motion: f32,
+    }
+
+    @group(0) @binding(0) var<uniform> params: Params;
+
+    fn lineMask(value: f32, width: f32) -> f32 {
+      return 1.0 - smoothstep(width, width + 0.002, abs(value));
+    }
+
+    fn ring(point: vec2f, radius: f32, width: f32) -> f32 {
+      return 1.0 - smoothstep(width, width + 0.012, abs(length(point) - radius));
+    }
+
+    @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+      let aspect = params.resolution.x / max(params.resolution.y, 1.0);
+      var point = (uv - vec2f(0.5)) * vec2f(aspect, 1.0);
+      let cursor = (params.pointer - vec2f(0.5)) * vec2f(aspect, 1.0);
+      let time = params.time * params.motion;
+
+      let gridUv = uv * vec2f(26.0 * aspect, 26.0);
+      let gridCell = abs(fract(gridUv) - 0.5);
+      let grid = max(lineMask(gridCell.x - 0.5, 0.012), lineMask(gridCell.y - 0.5, 0.012));
+
+      let drift = vec2f(sin(time * 0.21), cos(time * 0.17)) * 0.035 + cursor * 0.025;
+      point -= drift;
+
+      let outer = ring(point * vec2f(0.82, 1.0), 0.37, 0.004);
+      let middle = ring((point - vec2f(0.08, -0.02)) * vec2f(1.0, 0.72), 0.29, 0.006);
+      let inner = ring((point + vec2f(0.11, 0.04)) * vec2f(0.9, 1.18), 0.17, 0.004);
+
+      let angle = atan2(point.y, point.x);
+      let sweep = 0.5 + 0.5 * sin(angle * 3.0 - time * 0.7);
+      let spectral = vec3f(
+        0.22 + 0.18 * sin(angle + 0.0),
+        0.43 + 0.17 * sin(angle + 2.1),
+        0.92 + 0.08 * sin(angle + 4.2)
+      );
+
+      let ribbonY = point.y + 0.11 * sin(point.x * 7.0 - time * 0.55);
+      let ribbon = exp(-86.0 * ribbonY * ribbonY) * smoothstep(0.78, 0.06, abs(point.x));
+      let core = exp(-15.0 * dot(point, point));
+      let nodeA = exp(-520.0 * dot(point - vec2f(0.31, -0.12), point - vec2f(0.31, -0.12)));
+      let nodeB = exp(-620.0 * dot(point + vec2f(0.24, -0.17), point + vec2f(0.24, -0.17)));
+
+      var color = vec3f(0.985, 0.988, 0.982);
+      color -= vec3f(0.035, 0.045, 0.055) * grid;
+      color = mix(color, vec3f(0.73, 0.84, 1.0), core * 0.42);
+      color += spectral * ribbon * 0.42;
+      color += vec3f(0.22, 0.47, 1.0) * outer * (0.34 + sweep * 0.22);
+      color += vec3f(0.58, 0.31, 1.0) * middle * 0.24;
+      color += vec3f(0.05, 0.72, 0.61) * inner * 0.27;
+      color += vec3f(0.12, 0.36, 1.0) * nodeA * 0.9;
+      color += vec3f(0.72, 0.2, 0.92) * nodeB * 0.72;
+
+      let vignette = smoothstep(0.92, 0.25, length(uv - vec2f(0.5)));
+      color = mix(vec3f(1.0), color, 0.68 + 0.32 * vignette);
+      return vec4f(color, 1.0);
+    }
+  `;
+
+  const visual = document.querySelector<HTMLElement>('[data-vgpu-visual]');
+  const canvas = visual?.querySelector<HTMLCanvasElement>('canvas');
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (visual && canvas && 'gpu' in navigator) {
+    void (async () => {
+      try {
+        const gpu = await init();
+        const target = surface(gpu, canvas, { dpr: [1, 1.5] });
+        const pointer = [0.5, 0.5] as [number, number];
+        const timer = clock(gpu);
+        const shader = effect(gpu, SHADER_SOURCE, {
+          label: 'openforge-hero-signal',
+          set: {
+            params: {
+              resolution: target.size,
+              pointer,
+              time: 0,
+              motion: prefersReducedMotion ? 0 : 1,
+            },
+          },
+        });
+
+        const unsubscribeResize = target.onResize(() => {
+          shader.set({ params: { resolution: target.size } });
+        });
+
+        const updatePointer = (event: PointerEvent) => {
+          const bounds = canvas.getBoundingClientRect();
+          pointer[0] = (event.clientX - bounds.left) / bounds.width;
+          pointer[1] = (event.clientY - bounds.top) / bounds.height;
+          shader.set({ params: { pointer } });
+        };
+
+        canvas.addEventListener('pointermove', updatePointer, { passive: true });
+
+        let animationFrameId: number | null = null;
+        let resizeFrameId: number | null = null;
+        let isInViewport = false;
+        let isDisposed = false;
+        let lastTimestamp = performance.now();
+
+        const drawFrame = (timestamp = performance.now()) => {
+          if (isDisposed) return;
+
+          if (!prefersReducedMotion) {
+            const deltaSeconds = Math.min(Math.max((timestamp - lastTimestamp) / 1000, 0), 0.1);
+            timer.advance(deltaSeconds);
+          }
+          lastTimestamp = timestamp;
+          shader.set({ params: { time: timer.time } });
+          frame(gpu, (currentFrame) => currentFrame.pass(target, shader));
+          visual.dataset.vgpuReady = 'true';
+        };
+
+        const stopRendering = () => {
+          if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        };
+
+        const renderLoop = (timestamp: number) => {
+          if (document.hidden || !isInViewport || isDisposed) {
+            animationFrameId = null;
+            return;
+          }
+
+          if (timestamp - lastTimestamp >= 1000 / 30) drawFrame(timestamp);
+          animationFrameId = requestAnimationFrame(renderLoop);
+        };
+
+        const startRendering = () => {
+          if (document.hidden || !isInViewport || isDisposed) return;
+
+          if (prefersReducedMotion) {
+            drawFrame();
+            return;
+          }
+
+          if (animationFrameId === null) {
+            lastTimestamp = performance.now();
+            animationFrameId = requestAnimationFrame(renderLoop);
+          }
+        };
+
+        const intersectionObserver = new IntersectionObserver(
+          ([entry]) => {
+            isInViewport = entry?.isIntersecting ?? false;
+            if (isInViewport) startRendering();
+            else stopRendering();
+          },
+          { rootMargin: '120px' },
+        );
+
+        const handleVisibilityChange = () => {
+          if (document.hidden) stopRendering();
+          else startRendering();
+        };
+
+        const handleResize = () => {
+          if (!prefersReducedMotion || !isInViewport || resizeFrameId !== null) return;
+          resizeFrameId = requestAnimationFrame(() => {
+            resizeFrameId = null;
+            drawFrame();
+          });
+        };
+
+        const dispose = () => {
+          if (isDisposed) return;
+          isDisposed = true;
+          stopRendering();
+          if (resizeFrameId !== null) cancelAnimationFrame(resizeFrameId);
+          intersectionObserver.disconnect();
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          window.removeEventListener('resize', handleResize);
+          window.removeEventListener('pagehide', handlePageHide);
+          window.removeEventListener('pageshow', handlePageShow);
+          unsubscribeResize();
+          canvas.removeEventListener('pointermove', updatePointer);
+          target.dispose();
+          gpu.dispose();
+        };
+
+        const handlePageHide = (event: PageTransitionEvent) => {
+          stopRendering();
+          if (!event.persisted) dispose();
+        };
+
+        const handlePageShow = (event: PageTransitionEvent) => {
+          if (event.persisted) startRendering();
+        };
+
+        intersectionObserver.observe(visual);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('resize', handleResize, { passive: true });
+        window.addEventListener('pagehide', handlePageHide);
+        window.addEventListener('pageshow', handlePageShow);
+      } catch (error) {
+        visual.dataset.vgpuError = error instanceof Error ? error.message : 'WebGPU unavailable';
+      }
+    })();
+  }
+</script>
