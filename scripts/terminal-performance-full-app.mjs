@@ -118,10 +118,16 @@ export async function runFullAppTerminalPerformance(options = {}, dependencies =
   await persist(paths.reportPath, serializeTerminalPerformanceReport(report))
 
   log(`Full-app terminal performance ${report.status}: ${paths.reportPath}`)
+  const shellReady = report.metrics.shellReady?.durationMs
+  if (shellReady != null) log(`Shell ready: ${shellReady.toFixed(1)} ms`)
+  for (const segment of report.metrics.shellReady?.phaseTimeline?.segments ?? []) {
+    const label = `  ${segment.startPhase} -> ${segment.endPhase}`
+    log(segment.available
+      ? `${label}: ${segment.durationMs.toFixed(1)} ms`
+      : `${label}: unavailable`)
+  }
   if (report.status === 'passed') {
-    const shellReady = report.metrics.shellReady?.durationMs
     const throughput = report.metrics.ptyOutput?.bytesPerSecond
-    if (shellReady != null) log(`Shell ready: ${shellReady.toFixed(1)} ms`)
     if (throughput != null) log(`Painted PTY throughput: ${(throughput / 1024 / 1024).toFixed(2)} MiB/s`)
   } else {
     log(`Failure: ${failure?.message ?? 'correctness checks failed'}`)

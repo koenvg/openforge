@@ -6,6 +6,7 @@ import type { TerminalView, TerminalViewDisposable } from './terminalView'
 import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { Readable } from 'svelte/store'
 import type { ThemeMode } from './theme'
+import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
 
 export type TerminalRuntimeUnlistenFn = () => void
 
@@ -22,6 +23,7 @@ export interface TerminalRuntimeEnvironment {
   themeMode?: Readable<ThemeMode>
   loggerName?: string
   enableImages?: boolean
+  performanceTrace?: TerminalPerformanceTrace
 }
 
 export interface PoolEntry {

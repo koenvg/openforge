@@ -30,6 +30,7 @@ export const markPtySpawnPending = agentTerminalSessions.markPtySpawnPending
 export const clearPtySpawnPending = agentTerminalSessions.clearPtySpawnPending
 export const restorePtyInstance = agentTerminalSessions.restorePtyInstance
 export const markShellPtyStarted = agentTerminalSessions.markShellPtyStarted
+export const markPerformancePhase = agentTerminalSessions.markPerformancePhase
 export const subscribeShellLifecycle = agentTerminalSessions.subscribeShellLifecycle
 export const isShellExited = agentTerminalSessions.isShellExited
 export const getShellLifecycleState = agentTerminalSessions.getShellLifecycleState

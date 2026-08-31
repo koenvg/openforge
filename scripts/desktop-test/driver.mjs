@@ -36,7 +36,7 @@ export function createDesktopAppDriver(page, options = {}) {
       .click()
   }
 
-  async function focusShellTerminal() {
+  async function focusTerminal() {
     await page.getByRole('tab', { name: /^Shell 1\b/i }).click()
     await page.waitForFunction(
       label => [...document.querySelectorAll('[role="region"]')]
@@ -60,7 +60,7 @@ export function createDesktopAppDriver(page, options = {}) {
 
     const region = page.getByRole('region', { name: 'Terminal region for Shell 1' })
     await region.waitFor({ state: 'visible', timeout: timeoutMs })
-    await focusShellTerminal()
+    await focusTerminal()
     await page.waitForFunction(
       taskId => window.__openforgeDesktopTest?.terminal.list()
         .some(key => key.startsWith(`${taskId}-shell-`)),
@@ -72,14 +72,43 @@ export function createDesktopAppDriver(page, options = {}) {
     )
     const terminalKey = terminalKeys.find(key => key.startsWith(`${manifest.taskId}-shell-`))
     if (!terminalKey) throw new Error(`No observed shell terminal for task ${manifest.taskId}`)
+    await page.waitForFunction(
+      key => window.__openforgeDesktopTest?.terminal.observe(key).lifecycle.ptyActive === true,
+      terminalKey,
+      { timeout: timeoutMs },
+    )
     return { region, terminalKey }
   }
 
+  async function typeFocusedTerminalCommand(_region, command) {
+    await page.keyboard.insertText(command)
+    await page.keyboard.press('Enter')
+  }
+
   async function typeTerminalCommand(region, command) {
-    await focusShellTerminal()
-    const terminalInput = region.getByRole('textbox', { name: 'Terminal input' })
-    await terminalInput.fill(command)
-    await terminalInput.press('Enter')
+    await focusTerminal()
+    await typeFocusedTerminalCommand(region, command)
+  }
+
+  async function startTerminalPerformanceTrace() {
+    await page.waitForFunction(
+      () => typeof window.__openforgeDesktopTest?.terminal.performance?.start === 'function',
+      null,
+      { timeout: timeoutMs },
+    )
+    return page.evaluate(() => {
+      const performanceTrace = window.__openforgeDesktopTest?.terminal.performance
+      if (!performanceTrace) throw new Error('Terminal performance trace is unavailable')
+      performanceTrace.start()
+    })
+  }
+
+  async function finishTerminalPerformanceTrace() {
+    return page.evaluate(() => {
+      const performanceTrace = window.__openforgeDesktopTest?.terminal.performance
+      if (!performanceTrace) throw new Error('Terminal performance trace is unavailable')
+      return performanceTrace.finish()
+    })
   }
 
   async function observeTerminal(terminalKey) {
@@ -102,9 +131,13 @@ export function createDesktopAppDriver(page, options = {}) {
 
   return {
     drainTerminal,
+    finishTerminalPerformanceTrace,
+    focusTerminal,
     observeTerminal,
     selectTaskView,
+    startTerminalPerformanceTrace,
     openSeededTerminal,
+    typeFocusedTerminalCommand,
     typeTerminalCommand,
     verifyDesktopBridge,
   }

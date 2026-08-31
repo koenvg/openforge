@@ -1,6 +1,7 @@
 import type { Terminal } from '@xterm/xterm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createXtermPresentationController } from './xtermPresentation'
+import { createTerminalPerformanceTrace } from './terminalPerformanceTrace'
 
 function createTerminal(overrides: Partial<Terminal> = {}): Terminal {
   return {
@@ -113,6 +114,59 @@ describe('xterm presentation evidence and capture', () => {
       geometry: { cols: 4, rows: 2 },
     })
     expect(terminal.refresh).toHaveBeenCalled()
+  })
+
+  it('correlates parse, render, and presentation proof with the traced live write', async () => {
+    let timestamp = 1
+    const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
+    performanceTrace.start()
+    performanceTrace.mark('terminalAttachment', { terminalKey: 'T-1-shell-0' })
+    performanceTrace.mark('xtermMount', { terminalKey: 'T-1-shell-0' })
+    performanceTrace.mark('shellSpawnRequest', { terminalKey: 'T-1-shell-0' })
+    performanceTrace.mark('ptyCreation', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
+    performanceTrace.mark('inputAcceptance', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
+    performanceTrace.mark('firstOutput', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
+    performanceTrace.mark('modelPublication', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
+
+    const writeParsedCallbacks: Array<() => void> = []
+    const renderCallbacks: Array<(range: { start: number; end: number }) => void> = []
+    const animationFrames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      animationFrames.push(callback)
+      return animationFrames.length
+    }))
+    const terminal = createTerminal({
+      onWriteParsed: vi.fn((callback: () => void) => {
+        writeParsedCallbacks.push(callback)
+        return { dispose: vi.fn() }
+      }),
+      onRender: vi.fn((callback: (range: { start: number; end: number }) => void) => {
+        renderCallbacks.push(callback)
+        return { dispose: vi.fn() }
+      }),
+    })
+    const presentation = createXtermPresentationController({
+      terminal,
+      terminalKey: 'T-1-shell-0',
+      performanceTrace,
+      rendererName: () => 'xterm-webgl',
+      canPresent: () => true,
+      refresh: () => terminal.refresh(0, terminal.rows - 1),
+    })
+
+    presentation.recordWrite(7)
+    const drained = presentation.drain()
+    writeParsedCallbacks[0]?.()
+    renderCallbacks[0]?.({ start: 0, end: 1 })
+    animationFrames.shift()?.(1)
+    animationFrames.shift()?.(2)
+    await drained
+
+    expect(performanceTrace.snapshot()?.timestamps).toMatchObject({
+      xtermParse: 9,
+      renderCallback: 10,
+      presentationProof: 11,
+    })
   })
 
   it('rejects pending drains on detach or disposal and releases event listeners', async () => {

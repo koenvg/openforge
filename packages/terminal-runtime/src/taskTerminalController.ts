@@ -89,6 +89,9 @@ export function createTaskTerminalController({
     adapter.runtime.markPtySpawnPending(entry)
     try {
       if (!shouldStart()) return
+      adapter.runtime.markPerformancePhase('shellSpawnRequest', {
+        terminalKey: binding.terminalKey,
+      })
       const instanceId = await adapter.spawnShellPty(
         binding.taskId,
         binding.workspacePath,
@@ -97,6 +100,12 @@ export function createTaskTerminalController({
         binding.terminalIndex,
         adapter.runtime.getTerminalImageProtocol(entry),
       )
+      if (shouldStart()) {
+        adapter.runtime.markPerformancePhase('ptyCreation', {
+          terminalKey: binding.terminalKey,
+          ptyInstanceId: instanceId,
+        })
+      }
       await adapter.runtime.markShellPtyStarted(entry, instanceId)
       if (isCurrentBinding(binding)) {
         updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))

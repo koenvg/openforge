@@ -253,6 +253,9 @@ export function createTerminalAttachmentController(
     }
     if (entry.attached) detach(entry)
 
+    environment.performanceTrace?.mark('terminalAttachment', {
+      terminalKey: entry.shellSessionKey,
+    })
     entry.attachmentGeneration += 1
     entry.viewVisibilityGeneration += 1
     const generation = entry.attachmentGeneration

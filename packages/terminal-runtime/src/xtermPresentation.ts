@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
+import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
 import type {
   TerminalViewPresentationEvidence,
   TerminalViewPresentationLine,
@@ -14,13 +15,15 @@ interface PendingPresentationDrain {
 
 export interface XtermPresentationOptions {
   terminal: Terminal
+  terminalKey?: string
+  performanceTrace?: TerminalPerformanceTrace
   rendererName(): string
   canPresent(): boolean
   refresh(): void
 }
 
 export interface XtermPresentationController {
-  recordWrite(): void
+  recordWrite(ptyInstanceId?: number | null): number
   drain(): Promise<TerminalViewPresentationEvidence>
   detach(): void
   capture(): TerminalViewPresentationSnapshot
@@ -28,7 +31,7 @@ export interface XtermPresentationController {
 }
 
 export function createXtermPresentationController(
-  { terminal, rendererName, canPresent, refresh }: XtermPresentationOptions,
+  { terminal, terminalKey, performanceTrace, rendererName, canPresent, refresh }: XtermPresentationOptions,
 ): XtermPresentationController {
   let writeGeneration = 0
   let parsedGeneration = 0
@@ -59,6 +62,12 @@ export function createXtermPresentationController(
         || parsedGeneration < pending.targetWriteGeneration
         || renderFrame < pending.minimumRenderFrame) continue
       pendingDrains.splice(index, 1)
+      if (terminalKey) {
+        performanceTrace?.mark('presentationProof', {
+          terminalKey,
+          writeGeneration: parsedGeneration,
+        })
+      }
       pending.resolve(createEvidence())
     }
   }
@@ -91,18 +100,28 @@ export function createXtermPresentationController(
 
   const writeParsedDisposable = terminal.onWriteParsed(() => {
     parsedGeneration = writeGeneration
+    if (terminalKey) {
+      performanceTrace?.mark('xtermParse', { terminalKey, writeGeneration: parsedGeneration })
+    }
     requestRefresh()
   })
   const renderDisposable = terminal.onRender(range => {
     renderFrame += 1
+    if (terminalKey) {
+      performanceTrace?.mark('renderCallback', { terminalKey, writeGeneration: parsedGeneration })
+    }
     renderedRows = range
     refreshRequested = false
     scheduleFrame()
   })
 
   return {
-    recordWrite() {
+    recordWrite(ptyInstanceId) {
       writeGeneration += 1
+      if (terminalKey && ptyInstanceId !== undefined) {
+        performanceTrace?.recordWrite({ terminalKey, ptyInstanceId, writeGeneration })
+      }
+      return writeGeneration
     },
     drain() {
       if (disposed) return Promise.reject(new Error('Cannot drain a disposed TerminalView'))

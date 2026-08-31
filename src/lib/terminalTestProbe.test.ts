@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { PoolEntry, TerminalView } from '@openforge-app/terminal-runtime'
+import { createTerminalPerformanceTrace } from '@openforge-app/terminal-runtime'
 import {
   installTerminalTestProbe,
   shouldEnableTerminalTestProbe,
@@ -128,6 +129,31 @@ describe('terminal desktop-test probe', () => {
       presentation: { writeGeneration: 4, parsedGeneration: 4, renderFrame: 9 },
       visibleText: 'ready TEST_DONE',
     })
+  })
+
+  it('controls an injected performance trace through serializable methods only', () => {
+    let timestamp = 50
+    const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
+    const target = {} as TerminalTestProbeWindow
+    installTerminalTestProbe({
+      isDevelopment: true,
+      url: 'http://localhost/?openforge-desktop-test=1',
+      target,
+      entries: () => new Map(),
+      performanceTrace,
+    })
+
+    const traceApi = target.__openforgeDesktopTest!.terminal.performance!
+    expect(Object.keys(traceApi).sort()).toEqual(['finish', 'snapshot', 'start'])
+    traceApi.start()
+    expect(traceApi.snapshot()).toEqual({
+      clockDomain: 'renderer-performance',
+      terminalKey: null,
+      ptyInstanceId: null,
+      timestamps: { lifecycleStart: 50 },
+    })
+    expect(traceApi.finish()).toEqual(traceApi.snapshot())
+    expect(JSON.stringify(traceApi.snapshot())).not.toMatch(/recordWrite|mark|now/)
   })
 
   it('fails drains for incomplete sequences and missing markers', async () => {
