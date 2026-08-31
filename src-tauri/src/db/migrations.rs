@@ -2077,8 +2077,14 @@ fn remove_retired_handoff_notes_contributions(conn: &Connection) -> Result<()> {
         };
         let original_len = contributions.len();
         contributions.retain(|contribution| {
-            contribution.get("id").and_then(serde_json::Value::as_str)
-                != Some(RETIRED_HANDOFF_NOTES_CONTRIBUTION_ID)
+            let is_retired_handoff_notes =
+                contribution.get("id").and_then(serde_json::Value::as_str)
+                    == Some(RETIRED_HANDOFF_NOTES_CONTRIBUTION_ID);
+            let is_plugin_owned = contribution
+                .get("ownerPluginId")
+                .and_then(serde_json::Value::as_str)
+                .is_some();
+            !is_retired_handoff_notes || is_plugin_owned
         });
         if contributions.len() == original_len {
             continue;
@@ -3226,7 +3232,7 @@ mod tests {
             .expect("insert global setting");
             conn.execute(
                 "INSERT INTO project_config (project_id, key, value) VALUES ('P-legacy', 'handoff_notes_enabled', 'true'), ('P-legacy', 'handoff_notes_template', 'Legacy template'), ('P-legacy', 'start_prompt_contributions', ?1)",
-                [r#"[{"id":"handoff-notes-workflow","enabled":true,"content":"Legacy workflow","order":0},{"id":"keep-me","enabled":true,"content":"Keep this","order":10}]"#],
+                [r#"[{"id":"handoff-notes-workflow","enabled":true,"content":"Legacy workflow","order":0},{"ownerPluginId":"com.openforge.handoff-notes-workflow","id":"handoff-notes-workflow","enabled":true,"content":"Plugin workflow","order":0},{"id":"keep-me","enabled":true,"content":"Keep this","order":10}]"#],
             )
             .expect("insert project settings");
         }
@@ -3274,6 +3280,12 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&contributions).expect("parse contributions"),
             serde_json::json!([{
+                "ownerPluginId": "com.openforge.handoff-notes-workflow",
+                "id": "handoff-notes-workflow",
+                "enabled": true,
+                "content": "Plugin workflow",
+                "order": 0
+            }, {
                 "id": "keep-me",
                 "enabled": true,
                 "content": "Keep this",

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTaskTerminalController, type TaskTerminalBinding } from './taskTerminalController'
-import type { PoolEntry, ShellLifecycleState } from './terminalRuntime'
+import type {
+  ShellLifecycleState,
+  TerminalPtySpawnLease,
+  TerminalSession,
+  TerminalViewAttachment,
+} from './terminalRuntime'
+import { createTerminalSessionHandle } from './terminalRuntimeTypes'
 import type { TerminalSurfaceAdapter, TerminalSurfaceRuntime } from './terminalSurfaceAdapter'
 
 const inactiveLifecycle: ShellLifecycleState = {
@@ -18,20 +24,29 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function createEntry(key: string): PoolEntry {
+function createSession(key: string): TerminalSession {
+  return createTerminalSessionHandle(key)
+}
+
+function createAttachment(): TerminalViewAttachment {
   return {
-    shellSessionKey: key,
-    attached: false,
-    spawnPending: false,
-    ptyActive: false,
-    currentPtyInstance: null,
-    hasOutput: false,
-    view: {
-      geometry: { cols: 80, rows: 24 },
-      imageProtocol: null,
-      isMountedIn: vi.fn(() => false),
-    },
-  } as unknown as PoolEntry
+    generation: 1,
+    refit: vi.fn(async () => ({ cols: 80, rows: 24 })),
+    detach: vi.fn(),
+  }
+}
+
+function createSpawnLease(
+  overrides: Partial<TerminalPtySpawnLease> = {},
+): TerminalPtySpawnLease {
+  return {
+    generation: 1,
+    geometry: { cols: 80, rows: 24 },
+    imageProtocol: null,
+    started: vi.fn(async () => undefined),
+    cancel: vi.fn(),
+    ...overrides,
+  }
 }
 
 function binding(terminalKey: string, overrides: Partial<TaskTerminalBinding> = {}): TaskTerminalBinding {
@@ -47,18 +62,13 @@ function binding(terminalKey: string, overrides: Partial<TaskTerminalBinding> = 
 
 function createAdapter(runtimeOverrides: Partial<TerminalSurfaceRuntime> = {}): TerminalSurfaceAdapter {
   const runtime = {
-    acquire: vi.fn(async (key: string) => createEntry(key)),
-    attach: vi.fn(async (entry: PoolEntry) => { entry.attached = true }),
-    detach: vi.fn((entry: PoolEntry) => { entry.attached = false }),
+    acquire: vi.fn(async (key: string) => createSession(key)),
+    attach: vi.fn(async () => createAttachment()),
+    beginPtySpawn: vi.fn(() => null),
+    markPerformancePhase: vi.fn(),
     release: vi.fn(),
-    recoverActiveTerminal: vi.fn(async () => undefined),
-    resetTerminal: vi.fn(),
-    markPtySpawnPending: vi.fn(),
-    clearPtySpawnPending: vi.fn(),
-    shouldSpawnPty: vi.fn(() => false),
-    markShellPtyStarted: vi.fn(),
+    resetPresentation: vi.fn(async () => undefined),
     getShellLifecycleState: vi.fn(() => inactiveLifecycle),
-    getTerminalImageProtocol: vi.fn(() => null),
     subscribeShellLifecycle: vi.fn(() => () => undefined),
     getTaskTerminalTabsSession: vi.fn(),
     updateTaskTerminalTabsSession: vi.fn(),
@@ -80,12 +90,12 @@ function createAdapter(runtimeOverrides: Partial<TerminalSurfaceRuntime> = {}): 
 
 describe('createTaskTerminalController', () => {
   it('ignores a stale acquisition after rebinding to another shell session key', async () => {
-    const firstAcquisition = deferred<PoolEntry>()
-    const secondEntry = createEntry('T-1-shell-1')
+    const firstAcquisition = deferred<TerminalSession>()
+    const secondSession = createSession('T-1-shell-1')
     const adapter = createAdapter({
       acquire: vi.fn((key: string) => key === 'T-1-shell-0'
         ? firstAcquisition.promise
-        : Promise.resolve(secondEntry)),
+        : Promise.resolve(secondSession)),
     })
     const controller = createTaskTerminalController({
       adapter,
@@ -95,21 +105,25 @@ describe('createTaskTerminalController', () => {
 
     controller.mount(binding('T-1-shell-0'))
     controller.sync(binding('T-1-shell-1', { terminalIndex: 1 }))
-    await vi.waitFor(() => expect(adapter.runtime.attach).toHaveBeenCalledWith(secondEntry, expect.any(HTMLDivElement)))
+    await vi.waitFor(() => expect(adapter.runtime.attach).toHaveBeenCalledWith(
+      secondSession,
+      expect.any(HTMLDivElement),
+    ))
 
-    firstAcquisition.resolve(createEntry('T-1-shell-0'))
+    firstAcquisition.resolve(createSession('T-1-shell-0'))
     await Promise.resolve()
 
     expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalledTimes(1)
-    expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalledWith('T-1-shell-1', expect.any(Function))
+    expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalledWith(
+      'T-1-shell-1',
+      expect.any(Function),
+    )
     expect(controller.getSnapshot().boundTerminalKey).toBe('T-1-shell-1')
   })
 
-  it('recovers an attached terminal when its binding becomes active again', async () => {
-    const entry = createEntry('T-1-shell-0')
-    entry.attached = true
-    vi.mocked(entry.view.isMountedIn).mockReturnValue(true)
-    const adapter = createAdapter({ acquire: vi.fn(async () => entry) })
+  it('reattaches a terminal when its binding becomes active again', async () => {
+    const session = createSession('T-1-shell-0')
+    const adapter = createAdapter({ acquire: vi.fn(async () => session) })
     const controller = createTaskTerminalController({
       adapter,
       terminalHost: document.createElement('div'),
@@ -121,16 +135,18 @@ describe('createTaskTerminalController', () => {
 
     controller.sync(binding('T-1-shell-0', { isActive: true }))
 
-    await vi.waitFor(() => expect(adapter.runtime.recoverActiveTerminal).toHaveBeenCalledWith(entry))
-    expect(adapter.runtime.attach).toHaveBeenCalledWith(entry, expect.any(HTMLDivElement))
+    await vi.waitFor(() => expect(adapter.runtime.attach).toHaveBeenCalledWith(
+      session,
+      expect.any(HTMLDivElement),
+    ))
   })
 
-  it('starts a missing PTY with the bound shell geometry and records its instance', async () => {
-    const entry = createEntry('T-1-shell-0')
+  it('starts a missing PTY with geometry and image protocol from its spawn lease', async () => {
+    const session = createSession('T-1-shell-0')
+    const lease = createSpawnLease({ imageProtocol: 'iterm2' })
     const adapter = createAdapter({
-      acquire: vi.fn(async () => entry),
-      shouldSpawnPty: vi.fn(() => true),
-      getTerminalImageProtocol: vi.fn((): 'iterm2' => 'iterm2'),
+      acquire: vi.fn(async () => session),
+      beginPtySpawn: vi.fn(() => lease),
     })
     vi.mocked(adapter.spawnShellPty).mockResolvedValue(42)
     const onLifecycleChange = vi.fn()
@@ -142,8 +158,20 @@ describe('createTaskTerminalController', () => {
 
     controller.mount(binding('T-1-shell-0'))
 
-    await vi.waitFor(() => expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(entry, 42))
-    expect(adapter.runtime.markPtySpawnPending).toHaveBeenCalledWith(entry)
+    await vi.waitFor(() => expect(lease.started).toHaveBeenCalledWith(42))
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      1,
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      2,
+      'ptyCreation',
+      { terminalKey: 'T-1-shell-0', ptyInstanceId: 42 },
+    )
+    expect(vi.mocked(adapter.runtime.attach).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(adapter.spawnShellPty).mock.invocationCallOrder[0]!,
+    )
     expect(adapter.spawnShellPty).toHaveBeenCalledWith(
       'T-1',
       '/worktrees/T-1',
@@ -152,14 +180,15 @@ describe('createTaskTerminalController', () => {
       0,
       'iterm2',
     )
-    expect(adapter.runtime.clearPtySpawnPending).toHaveBeenCalledWith(entry)
+    expect(lease.cancel).toHaveBeenCalledOnce()
     expect(onLifecycleChange).toHaveBeenLastCalledWith(inactiveLifecycle)
   })
 
-  it('records a stale shell spawn instance without publishing stale lifecycle state', async () => {
-    const firstEntry = createEntry('T-1-shell-0')
-    const secondEntry = createEntry('T-1-shell-1')
+  it('completes a stale spawn lease without publishing stale lifecycle state', async () => {
+    const firstSession = createSession('T-1-shell-0')
+    const secondSession = createSession('T-1-shell-1')
     const firstSpawn = deferred<number>()
+    const firstLease = createSpawnLease()
     const secondLifecycle: ShellLifecycleState = {
       ptyActive: true,
       shellExited: false,
@@ -167,8 +196,8 @@ describe('createTaskTerminalController', () => {
       hasOutput: true,
     }
     const adapter = createAdapter({
-      acquire: vi.fn(async (key: string) => key === 'T-1-shell-0' ? firstEntry : secondEntry),
-      shouldSpawnPty: vi.fn((entry: PoolEntry) => entry === firstEntry),
+      acquire: vi.fn(async (key: string) => key === 'T-1-shell-0' ? firstSession : secondSession),
+      beginPtySpawn: vi.fn((session: TerminalSession) => session === firstSession ? firstLease : null),
       getShellLifecycleState: vi.fn((key: string) => key === 'T-1-shell-1'
         ? secondLifecycle
         : inactiveLifecycle),
@@ -187,26 +216,32 @@ describe('createTaskTerminalController', () => {
     controller.sync(binding('T-1-shell-1', { terminalIndex: 1 }))
     await vi.waitFor(() => expect(onLifecycleChange).toHaveBeenLastCalledWith(secondLifecycle))
     firstSpawn.resolve(21)
-    await vi.waitFor(() => expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(firstEntry, 21))
+    await vi.waitFor(() => expect(firstLease.started).toHaveBeenCalledWith(21))
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenCalledOnce()
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenCalledWith(
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
 
     expect(onLifecycleChange).toHaveBeenLastCalledWith(secondLifecycle)
-    expect(adapter.runtime.clearPtySpawnPending).toHaveBeenCalledWith(firstEntry)
+    expect(firstLease.cancel).toHaveBeenCalledOnce()
   })
 
-  it('restarts an exited shell under the same shell session key with a new PTY instance', async () => {
+  it('restarts an exited shell with a new spawn lease', async () => {
     const exitedLifecycle: ShellLifecycleState = {
       ptyActive: false,
       shellExited: true,
       currentPtyInstance: 12,
       hasOutput: true,
     }
-    const entry = createEntry('T-1-shell-0')
+    const session = createSession('T-1-shell-0')
     const reset = deferred<void>()
+    const lease = createSpawnLease({ imageProtocol: 'iterm2' })
     const adapter = createAdapter({
-      resetTerminal: vi.fn(() => reset.promise),
-      acquire: vi.fn(async () => entry),
+      resetPresentation: vi.fn(() => reset.promise),
+      acquire: vi.fn(async () => session),
+      beginPtySpawn: vi.fn(() => lease),
       getShellLifecycleState: vi.fn(() => exitedLifecycle),
-      getTerminalImageProtocol: vi.fn((): 'iterm2' => 'iterm2'),
     })
     vi.mocked(adapter.spawnShellPty).mockResolvedValue(13)
     const controller = createTaskTerminalController({
@@ -218,14 +253,12 @@ describe('createTaskTerminalController', () => {
     await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
 
     const restarting = controller.restart()
-    await vi.waitFor(() => expect(adapter.runtime.resetTerminal).toHaveBeenCalledWith(entry))
+    await vi.waitFor(() => expect(adapter.runtime.resetPresentation).toHaveBeenCalledWith(session))
     expect(adapter.spawnShellPty).not.toHaveBeenCalled()
     reset.resolve()
     await restarting
 
     expect(adapter.killPty).toHaveBeenCalledWith('T-1-shell-0')
-    expect(adapter.runtime.resetTerminal).toHaveBeenCalledWith(entry)
-    expect(adapter.runtime.markPtySpawnPending).toHaveBeenCalledWith(entry)
     expect(adapter.spawnShellPty).toHaveBeenLastCalledWith(
       'T-1',
       '/worktrees/T-1',
@@ -234,7 +267,17 @@ describe('createTaskTerminalController', () => {
       0,
       'iterm2',
     )
-    expect(adapter.runtime.markShellPtyStarted).toHaveBeenCalledWith(entry, 13)
-    expect(adapter.runtime.clearPtySpawnPending).toHaveBeenCalledWith(entry)
+    expect(lease.started).toHaveBeenCalledWith(13)
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      1,
+      'shellSpawnRequest',
+      { terminalKey: 'T-1-shell-0' },
+    )
+    expect(adapter.runtime.markPerformancePhase).toHaveBeenNthCalledWith(
+      2,
+      'ptyCreation',
+      { terminalKey: 'T-1-shell-0', ptyInstanceId: 13 },
+    )
+    expect(lease.cancel).toHaveBeenCalledOnce()
   })
 })

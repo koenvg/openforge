@@ -122,6 +122,26 @@ describe('detach-during-recovery invariant scenario', () => {
     })
   })
 
+  it('accepts a detached pending session that clears its cancelled PTY identity', async () => {
+    const harness = createHarness({
+      detachedMutator: terminal => { terminal.lifecycle.currentPtyInstance = null },
+    })
+
+    await expect(runDetachDuringRecoveryScenario(
+      { context: harness.context, options: { scenarioTimeoutMs: 8_000 } },
+      {
+        createDriver: () => harness.driver,
+        createMarker: () => 'latest-output-marker',
+        outputBytes: 32,
+      },
+    )).resolves.toMatchObject({
+      assertions: expect.arrayContaining([
+        { name: 'detached recovery remained pending', passed: true },
+        { name: 'fresh attachment presented latest output', passed: true },
+      ]),
+    })
+  })
+
   it.each([
     ['recovered detached state', { detachedMutator: terminal => { terminal.lifecycle.recoveryNeeded = false } }, 'detached recovery was marked complete'],
     ['output re-enable', { detachedMutator: terminal => { terminal.modelOutputSubscription.desired = true } }, 'model output was re-enabled'],

@@ -15,9 +15,14 @@ const rootModuleAssetPaths = (await readdir(join(packageRoot, 'src'), { withFile
   .map(({ name }) => `src/${name}`)
   .sort()
 
+
+const privateUiRuntimeAssetPaths = [
+  'src/ui/MermaidDiagramPreview.svelte',
+]
 const assetPaths = [
   ...rootModuleAssetPaths,
   ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ sourcePath }) => sourcePath),
+  ...privateUiRuntimeAssetPaths,
 ]
 await Promise.all(assetPaths.map(async (assetPath) => {
   const relativeOutputPath = assetPath.replace(/^src\//, '')

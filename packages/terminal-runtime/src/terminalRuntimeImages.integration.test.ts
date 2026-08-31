@@ -6,7 +6,15 @@ import {
 } from './terminalRuntimeFeatures.testSupport'
 import { INLINE_IMAGE_COMPATIBILITY_REPLAY } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTerminalRuntime } from './terminalRuntime'
+import { createTerminalRuntime, type TerminalRuntime, type TerminalSession } from './terminalRuntime'
+
+function getSpawnImageProtocol(runtime: TerminalRuntime, session: TerminalSession) {
+  const lease = runtime.beginPtySpawn(session)
+  expect(lease).not.toBeNull()
+  const imageProtocol = lease?.imageProtocol ?? null
+  lease?.cancel()
+  return imageProtocol
+}
 
 describe('terminal runtime inline image lifecycle', () => {
   beforeEach(resetTerminalRuntimeMocks)
@@ -25,7 +33,7 @@ describe('terminal runtime inline image lifecycle', () => {
       sixelSupport: false,
       showPlaceholder: true,
     })
-    expect(runtime.getTerminalImageProtocol(entry)).toBe('iterm2')
+    expect(getSpawnImageProtocol(runtime, entry)).toBe('iterm2')
   })
 
   it('keeps the fallback protocol when image rendering is disabled', async () => {
@@ -36,7 +44,7 @@ describe('terminal runtime inline image lifecycle', () => {
     const entry = await runtime.acquire('T-1')
 
     expect(imageAddonMocks.instances).toHaveLength(0)
-    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+    expect(getSpawnImageProtocol(runtime, entry)).toBeNull()
   })
 
   it('uses the configured logger name when image fallback initialization fails', async () => {
@@ -50,7 +58,7 @@ describe('terminal runtime inline image lifecycle', () => {
     try {
       const entry = await runtime.acquire('T-1')
 
-      expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+      expect(getSpawnImageProtocol(runtime, entry)).toBeNull()
       expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
       expect(warn).toHaveBeenCalledWith(
         '[terminalPluginPool] Inline images unavailable; keeping text fallbacks:',
@@ -68,7 +76,7 @@ describe('terminal runtime inline image lifecycle', () => {
 
     const entry = await runtime.acquire('T-1')
 
-    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+    expect(getSpawnImageProtocol(runtime, entry)).toBeNull()
     expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
     warn.mockRestore()
   })

@@ -48,6 +48,24 @@ describe('desktop IPC transport', () => {
     expect(unsubscribe).toHaveBeenCalledOnce()
   })
 
+  it('waits for Electron main to retain terminal event subscriptions', async () => {
+    const unsubscribe = vi.fn()
+    const onEventReady = vi.fn().mockResolvedValue(unsubscribe)
+    window.openforge = {
+      version: 1,
+      invoke: vi.fn(),
+      onEvent: vi.fn(),
+      onEventReady,
+    }
+    const handler = vi.fn()
+
+    const unlisten = await listenDesktopEvent('pty-model-output-T-1-shell-0', handler)
+
+    expect(onEventReady).toHaveBeenCalledWith('pty-model-output-T-1-shell-0', expect.any(Function))
+    unlisten()
+    expect(unsubscribe).toHaveBeenCalledOnce()
+  })
+
   it('fails fast outside the Electron shell instead of falling back to Tauri events', async () => {
     await expect(listenDesktopEvent('task-changed', vi.fn())).rejects.toThrow('Electron shell')
   })

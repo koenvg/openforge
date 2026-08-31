@@ -1,9 +1,13 @@
 import type {
-  PoolEntry,
   LiveModelOutputSubscriptionSnapshot,
   TerminalViewPresentationEvidence,
+  TerminalPerformanceTrace,
+  TerminalPerformanceTraceSnapshot,
+  TerminalRuntimeDiagnostics,
+  TerminalSessionDiagnostics,
 } from '@openforge-app/terminal-runtime'
-import { getTerminalEntriesForObservation } from './terminalPool'
+import { terminalDiagnostics } from './terminalPool'
+import { shouldEnableTerminalTestProbe as shouldEnableTerminalPerformanceProbe } from './desktopTestMode'
 import { createTerminalE2eGateCoordinator, type TerminalE2eGateCoordinator } from './terminalE2eGates'
 import {
   configureTerminalE2eRuntime,
@@ -73,8 +77,22 @@ export interface TerminalTestProbeApi {
   gates: Readonly<Omit<TerminalE2eGateCoordinator, 'checkpoint'>>
 }
 
+export interface TerminalPerformanceProbeApi {
+  terminal: {
+    list(): string[]
+    observe(key: string): TerminalProbeObservation
+    drain(key: string, expectation?: TerminalProbeDrainExpectation): Promise<TerminalProbeDrainResult>
+    performance: {
+      start(): void
+      finish(): TerminalPerformanceTraceSnapshot | null
+      snapshot(): TerminalPerformanceTraceSnapshot | null
+    }
+  }
+}
+
 export interface TerminalTestProbeWindow {
   __openforgeE2e?: TerminalTestProbeApi
+  __openforgeDesktopTest?: TerminalPerformanceProbeApi
 }
 
 interface InstallTerminalTestProbeOptions {
@@ -86,7 +104,17 @@ interface InstallTerminalTestProbeOptions {
   createOperationId?: () => string
   url: string
   target?: TerminalTestProbeWindow
-  entries?: () => ReadonlyMap<string, PoolEntry>
+  diagnostics?: TerminalRuntimeDiagnostics
+  now?: () => number
+  delay?: (ms: number) => Promise<void>
+}
+
+interface InstallTerminalPerformanceProbeOptions {
+  isDevelopment: boolean
+  url: string
+  performanceTrace: TerminalPerformanceTrace | undefined
+  target?: TerminalTestProbeWindow
+  diagnostics?: TerminalRuntimeDiagnostics
   now?: () => number
   delay?: (ms: number) => Promise<void>
 }
@@ -105,34 +133,30 @@ export function shouldEnableTerminalTestProbe(
   }
 }
 
-function observeEntry(key: string, entry: PoolEntry): TerminalProbeObservation {
-  const output = entry.terminalOutputObservation
+function toDiagnosticsObservation(diagnostics: TerminalSessionDiagnostics): TerminalProbeObservation {
   return {
-    key,
+    key: diagnostics.shellSessionKey,
     lifecycle: {
-      attached: entry.attached,
-      attachmentGeneration: entry.attachmentGeneration,
-      authorityReadApplied: entry.terminalStateSource === 'ghostty-snapshot',
-      authorityReadPending: entry.terminalReplayRecovery !== null,
-      currentPtyInstance: entry.currentPtyInstance,
-      recoveryNeeded: entry.viewNeedsRecovery,
-      ptyActive: entry.ptyActive,
-      shellExited: entry.shellExited,
-      spawnPending: entry.spawnPending,
-      stateSource: entry.terminalStateSource,
+      attached: diagnostics.lifecycle.attached,
+      attachmentGeneration: diagnostics.view.attachmentGeneration,
+      authorityReadApplied: diagnostics.lifecycle.stateSource === 'ghostty-snapshot',
+      authorityReadPending: diagnostics.view.authorityReadPending,
+      currentPtyInstance: diagnostics.lifecycle.currentPtyInstance,
+      recoveryNeeded: diagnostics.view.needsRecovery,
+      ptyActive: diagnostics.lifecycle.ptyActive,
+      shellExited: diagnostics.lifecycle.shellExited,
+      spawnPending: diagnostics.lifecycle.spawnPending,
+      stateSource: diagnostics.lifecycle.stateSource,
     },
-    modelOutputSubscription: entry.transportSubscription?.snapshot?.() ?? null,
+    modelOutputSubscription: diagnostics.modelOutputSubscription,
     output: {
-      firstSequence: output.firstSequence,
-      lastSequence: output.lastSequence,
-      modelSequence: entry.terminalModelSequence,
-      receivedBytes: output.receivedBytes,
-      sequenceContinuous: output.sequenceContinuous,
+      firstSequence: diagnostics.output.firstSequence,
+      lastSequence: diagnostics.output.lastSequence,
+      modelSequence: diagnostics.output.modelSequence,
+      receivedBytes: diagnostics.output.receivedBytes,
+      sequenceContinuous: diagnostics.output.sequenceContinuous,
     },
-    geometry: {
-      cols: entry.view.geometry.cols,
-      rows: entry.view.geometry.rows,
-    },
+    geometry: { ...diagnostics.geometry },
   }
 }
 
@@ -167,36 +191,41 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
   const createOperationId = options.createOperationId ?? (() => crypto.randomUUID())
   configureTerminalE2eRuntime(coordinator)
 
-  const entries = options.entries ?? getTerminalEntriesForObservation
+  const diagnostics = options.diagnostics ?? terminalDiagnostics
   const observedTerminalKeys = new Set<string>()
   const now = options.now ?? Date.now
   const wait = options.delay ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
-  const requireEntry = (key: string): PoolEntry => {
-    const entry = entries().get(key) ?? getAcquiredTerminalForE2eDiagnostics(key)
-    if (!entry) throw new Error(`Unknown terminal key: ${key}`)
-    return entry
+  const currentDiagnostics = (key: string): TerminalSessionDiagnostics | null => (
+    diagnostics.list().includes(key)
+      ? diagnostics.observe(key)
+      : getAcquiredTerminalForE2eDiagnostics(key)
+  )
+  const requireObservation = (key: string): TerminalProbeObservation => {
+    const observation = currentDiagnostics(key)
+    if (!observation) throw new Error(`Unknown terminal key: ${key}`)
+    return toDiagnosticsObservation(observation)
   }
 
   const terminal = Object.freeze({
     list(): string[] {
-      const keys = [...entries().keys()].sort()
+      const keys = diagnostics.list()
       for (const key of keys) observedTerminalKeys.add(key)
       return keys
     },
     observe(key: string): TerminalProbeObservation {
-      const entry = requireEntry(key)
+      const observation = requireObservation(key)
       observedTerminalKeys.add(key)
-      return observeEntry(key, entry)
+      return observation
     },
     async emitFixtureOutput(
       key: string,
       marker: string,
       byteCount: number,
     ): Promise<E2eFixtureEmissionReceipt> {
-      const entry = entries().get(key) ?? getAcquiredTerminalForE2eDiagnostics(key)
-      if (!entry && !observedTerminalKeys.has(key)) throw new Error(`Unknown terminal key: ${key}`)
-      if (entry) observedTerminalKeys.add(key)
-      const sequenceBaseline = entry?.terminalOutputObservation.lastSequence ?? null
+      const observation = currentDiagnostics(key)
+      if (!observation && !observedTerminalKeys.has(key)) throw new Error(`Unknown terminal key: ${key}`)
+      if (observation) observedTerminalKeys.add(key)
+      const sequenceBaseline = observation?.output.lastSequence ?? null
       const receipt = await emitFixtureOutput(key, marker, byteCount)
       return Object.freeze({
         ...receipt,
@@ -212,14 +241,13 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
       const deadline = now() + timeoutMs
 
       do {
-        const entry = requireEntry(key)
-        const observation = observeEntry(key, entry)
+        const observation = requireObservation(key)
         if (!observation.output.sequenceContinuous) {
           throw new Error(`Terminal ${key} has an incomplete output sequence`)
         }
 
-        const presentation = await entry.view.drainPresentation()
-        const visibleText = entry.view.capturePresentation().lines.map(line => line.text).join('\n')
+        const presentation = await diagnostics.drainPresentation(key)
+        const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
         const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
         const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
         const reachedModelSequence = expectation.minimumModelSequence === undefined
@@ -246,5 +274,71 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
   })
   const probe = Object.freeze({ gates, terminal })
   target.__openforgeE2e = probe
+  return probe
+}
+
+export function installTerminalPerformanceProbe(
+  options: InstallTerminalPerformanceProbeOptions,
+): TerminalPerformanceProbeApi | null {
+  const target: TerminalTestProbeWindow = options.target ?? (window as TerminalTestProbeWindow)
+  if (!shouldEnableTerminalPerformanceProbe(options.isDevelopment, options.url) || !options.performanceTrace) {
+    delete target.__openforgeDesktopTest
+    return null
+  }
+
+  const diagnostics = options.diagnostics ?? terminalDiagnostics
+  const now = options.now ?? Date.now
+  const wait = options.delay ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
+  const requireObservation = (key: string): TerminalProbeObservation => {
+    if (!diagnostics.list().includes(key)) throw new Error(`Unknown terminal key: ${key}`)
+    return toDiagnosticsObservation(diagnostics.observe(key))
+  }
+  const performanceTrace = options.performanceTrace
+  const performance = Object.freeze({
+    start: () => performanceTrace.start(),
+    finish: () => performanceTrace.finish(),
+    snapshot: () => performanceTrace.snapshot(),
+  })
+  const terminal = Object.freeze({
+    performance,
+    list(): string[] {
+      return diagnostics.list()
+    },
+    observe(key: string): TerminalProbeObservation {
+      return requireObservation(key)
+    },
+    async drain(
+      key: string,
+      expectation: TerminalProbeDrainExpectation = {},
+    ): Promise<TerminalProbeDrainResult> {
+      const timeoutMs = expectation.timeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
+      const deadline = now() + timeoutMs
+
+      do {
+        const observation = requireObservation(key)
+        if (!observation.output.sequenceContinuous) {
+          throw new Error(`Terminal ${key} has an incomplete output sequence`)
+        }
+
+        const presentation = await diagnostics.drainPresentation(key)
+        const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
+        const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
+        const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
+        const reachedModelSequence = expectation.minimumModelSequence === undefined
+          || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence
+
+        if (markerFound && receivedEnoughBytes && reachedModelSequence) {
+          return { observation, markerFound, presentation, visibleText }
+        }
+        if (now() >= deadline) {
+          throw new Error(missingExpectationMessage(expectation, observation, markerFound))
+        }
+        await wait(DRAIN_POLL_INTERVAL_MS)
+      } while (true)
+    },
+  })
+
+  const probe = Object.freeze({ terminal })
+  target.__openforgeDesktopTest = probe
   return probe
 }

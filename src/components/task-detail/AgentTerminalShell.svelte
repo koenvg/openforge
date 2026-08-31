@@ -8,8 +8,7 @@
     acquire,
     attach,
     getShellLifecycleState,
-    recoverActiveTerminal,
-    type PoolEntry,
+    type TerminalSession,
     type TerminalViewAttachment,
   } from '../../lib/terminalPool'
   import { hydrateAgentTerminalPtyInstance } from '../../lib/agentTerminalPanel'
@@ -35,7 +34,7 @@
 
   let terminalEl: HTMLDivElement
   let unlisteners: DesktopUnlistenFn[] = []
-  let poolEntry: PoolEntry | null = null
+  let poolEntry: TerminalSession | null = null
   let viewAttachment: TerminalViewAttachment | null = null
   let poolEntryAttached = $state(false)
   let terminalActive = $state(false)
@@ -78,7 +77,7 @@
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!poolEntry) return
-        poolEntry.view.fit()
+        void viewAttachment?.refit()
       })
     })
   })
@@ -91,7 +90,7 @@
     const recoveryController = new AbortController()
     const frame = requestAnimationFrame(() => {
       if (isActive && poolEntryAttached && poolEntry === activeEntry) {
-        void recoverActiveTerminal(activeEntry, recoveryController.signal)
+        void viewAttachment?.refit(recoveryController.signal)
       }
     })
 

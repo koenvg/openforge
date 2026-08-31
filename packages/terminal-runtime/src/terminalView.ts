@@ -1,5 +1,6 @@
 import type { TerminalImageProtocol } from './terminalImages'
 import type { TerminalFontReadiness } from './terminalOptions'
+import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
 import type { ThemeMode } from './theme'
 
 export type TerminalViewData = string | Uint8Array
@@ -138,6 +139,7 @@ export interface TerminalViewFactoryOptions {
   enableImages?: boolean
   loggerName?: string
   fontReadiness: TerminalFontReadiness
+  performanceTrace?: TerminalPerformanceTrace
 }
 
 export type TerminalViewFactory = (options: TerminalViewFactoryOptions) => TerminalView

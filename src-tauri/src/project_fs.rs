@@ -75,6 +75,8 @@ pub(crate) struct ProjectFileContent {
     pub(crate) size: u64,
 }
 
+const MAX_INLINE_VIDEO_PREVIEW_SIZE: u64 = 25 * 1024 * 1024;
+
 fn file_type_key(path: &Path) -> String {
     if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
         return ext.to_ascii_lowercase();
@@ -91,6 +93,7 @@ fn file_type_key(path: &Path) -> String {
 pub(crate) enum ProjectFilePreviewType {
     Text,
     Image,
+    Video,
     Document,
     Binary,
 }
@@ -100,6 +103,7 @@ impl ProjectFilePreviewType {
         match self {
             Self::Text => "text",
             Self::Image => "image",
+            Self::Video => "video",
             Self::Document => "document",
             Self::Binary => "binary",
         }
@@ -180,6 +184,14 @@ pub(crate) fn file_preview_metadata(path: &Path) -> ProjectFilePreviewMetadata {
         "webp" => ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Image, "image/webp"),
         "ico" => ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Image, "image/x-icon"),
         "bmp" => ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Image, "image/bmp"),
+        "mp4" | "m4v" => {
+            ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Video, "video/mp4")
+        }
+        "webm" => ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Video, "video/webm"),
+        "ogv" | "ogg" => {
+            ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Video, "video/ogg")
+        }
+        "mov" => ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Video, "video/quicktime"),
         "pdf" => {
             ProjectFilePreviewMetadata::new(ProjectFilePreviewType::Document, "application/pdf")
         }
@@ -415,6 +427,25 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
                 size,
             })
         }
+        ProjectFilePreviewType::Video => {
+            if size > MAX_INLINE_VIDEO_PREVIEW_SIZE {
+                return Ok(ProjectFileContent {
+                    r#type: "large-file".to_string(),
+                    content: String::new(),
+                    mime_type,
+                    size,
+                });
+            }
+
+            let bytes = read_file_bytes(full_path).await?;
+            use base64::Engine;
+            Ok(ProjectFileContent {
+                r#type: "video".to_string(),
+                content: base64::engine::general_purpose::STANDARD.encode(bytes),
+                mime_type,
+                size,
+            })
+        }
         ProjectFilePreviewType::Binary => {
             if size > MAX_INLINE_PREVIEW_SIZE {
                 let sample = read_file_sample(full_path, CONTENT_SAMPLE_SIZE).await?;
@@ -519,6 +550,69 @@ mod tests {
         }
     }
 
+    #[test]
+    fn classifies_supported_video_extensions_and_mime_types_case_insensitively() {
+        let cases = [
+            ("clip.mp4", "video/mp4"),
+            ("clip.m4v", "video/mp4"),
+            ("clip.webm", "video/webm"),
+            ("clip.ogv", "video/ogg"),
+            ("clip.ogg", "video/ogg"),
+            ("clip.mov", "video/quicktime"),
+            ("CLIP.MP4", "video/mp4"),
+        ];
+
+        for (path, expected_mime) in cases {
+            let metadata = file_preview_metadata(Path::new(path));
+            assert_eq!(
+                metadata.preview_type,
+                ProjectFilePreviewType::Video,
+                "preview type for {path}"
+            );
+            assert_eq!(
+                metadata.mime_type,
+                Some(expected_mime),
+                "MIME type for {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn returns_small_video_as_base64_with_mime_and_size() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let video_path = temp_dir.path().join("clip.mp4");
+        tokio::fs::write(&video_path, [0_u8, 1, 2, 3])
+            .await
+            .expect("video fixture");
+
+        let preview = read_file_preview(&video_path).await.expect("video preview");
+
+        assert_eq!(preview.r#type, "video");
+        assert_eq!(preview.content, "AAECAw==");
+        assert_eq!(preview.mime_type.as_deref(), Some("video/mp4"));
+        assert_eq!(preview.size, 4);
+    }
+
+    #[tokio::test]
+    async fn returns_large_file_metadata_without_reading_oversized_video() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let video_path = temp_dir.path().join("clip.webm");
+        let file = tokio::fs::File::create(&video_path)
+            .await
+            .expect("video fixture");
+        file.set_len(25 * 1024 * 1024 + 1)
+            .await
+            .expect("oversized video fixture");
+
+        let preview = read_file_preview(&video_path)
+            .await
+            .expect("large video metadata");
+
+        assert_eq!(preview.r#type, "large-file");
+        assert!(preview.content.is_empty());
+        assert_eq!(preview.mime_type.as_deref(), Some("video/webm"));
+        assert_eq!(preview.size, 25 * 1024 * 1024 + 1);
+    }
     #[tokio::test]
     async fn previews_extensionless_utf8_content_as_text() {
         let temp_dir = tempfile::tempdir().expect("project root");

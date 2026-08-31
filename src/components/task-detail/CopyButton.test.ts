@@ -14,11 +14,14 @@ describe('CopyButton', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
   it('cancels its copied-state timer when unmounted', async () => {
     vi.useFakeTimers()
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
     const { unmount } = render(CopyButton, {
       props: { text: 'copy me', timeout: 2_000 },
     })
@@ -27,11 +30,13 @@ describe('CopyButton', () => {
     await Promise.resolve()
 
     expect(writeClipboardText).toHaveBeenCalledWith('copy me')
-    expect(vi.getTimerCount()).toBe(1)
+    const timerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 2_000)
+    expect(timerIndex).toBeGreaterThanOrEqual(0)
+    const copiedStateTimer = setTimeoutSpy.mock.results[timerIndex]?.value
 
     unmount()
 
-    expect(vi.getTimerCount()).toBe(0)
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(copiedStateTimer)
   })
 
   it('does not create a copied-state timer when clipboard IPC resolves after unmount', async () => {

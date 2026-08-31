@@ -1,9 +1,9 @@
-import {
-  createTerminalRuntime,
-  type PoolEntry,
-  type TerminalTransport,
+import type {
+  ShellLifecycleState,
+  TerminalPtySpawnLease,
+  TerminalSession,
+  TerminalViewAttachment,
 } from '@openforge-app/terminal-runtime'
-import { createFakeTerminalView } from '@openforge-app/terminal-runtime/testUtils'
 import { vi } from 'vitest'
 
 const { taskTabSessions, terminalRuntimeState, terminalAttachmentDetach } = vi.hoisted(() => ({
@@ -15,154 +15,131 @@ const { taskTabSessions, terminalRuntimeState, terminalAttachmentDetach } = vi.h
 }))
 
 vi.mock('../../lib/terminalPool', () => {
-  function createTerminalView() {
-    const geometry = { cols: 80, rows: 24 }
-    let mountedHost: HTMLElement | null = null
-
-    return createFakeTerminalView({
-      geometry,
-      imageProtocol: 'iterm2',
-      mount: vi.fn((host: HTMLElement) => {
-        mountedHost = host
-      }),
-      unmount: vi.fn(() => {
-        mountedHost = null
-      }),
-      isMountedIn: vi.fn((host: HTMLElement) => mountedHost === host),
-      drainPresentation: vi.fn(async () => ({
-        writeGeneration: 0,
-        parsedGeneration: 0,
-        renderFrame: 0,
-        renderedRows: { start: 0, end: geometry.rows - 1 },
-        renderer: 'dom',
-        presentedAt: 0,
-        devicePixelRatio: 1,
-        geometry,
-      })),
-      capturePresentation: vi.fn(() => ({
-        geometry,
-        activeBuffer: 'normal' as const,
-        cursor: { x: 0, y: 0 },
-        selectionText: '',
-        lines: [],
-      })),
-      fit: vi.fn(() => geometry),
-      dispose: vi.fn(() => {
-        mountedHost = null
-      }),
-    })
+  interface SessionModel {
+    session: TerminalSession
+    lifecycle: ShellLifecycleState
+    geometry: { cols: number; rows: number }
+    attached: boolean
+    attachmentGeneration: number
+    spawnGeneration: number
+    spawnPending: boolean
+    listeners: Set<(state: ShellLifecycleState) => void>
   }
 
-  const transport: TerminalTransport = {
-    subscribeSession: vi.fn(async () => ({
-      setModelOutputEnabled: vi.fn(async () => undefined),
-      dispose: vi.fn(),
-    })),
-    subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
-    readReplay: vi.fn(async () => ({
-      historicalData: null,
-      isLive: false,
-      ptyInstanceId: null,
-    })),
-    writeUserInput: vi.fn(async () => undefined),
-    resize: vi.fn(async () => undefined),
-    dispose: vi.fn(),
-  }
-  const terminalRuntime = createTerminalRuntime({
-    transport,
-    environment: { openLink: vi.fn(async () => undefined) },
-    createTerminalView: () => createTerminalView(),
-  })
-  const terminalPoolEntries = terminalRuntime._getPool()
-  terminalRuntimeState.reset = () => terminalRuntime.releaseAll()
+  const models = new Map<string, SessionModel>()
 
-  function createPoolEntry(shellSessionKey: string): PoolEntry {
+  function modelFor(session: TerminalSession): SessionModel {
+    const model = models.get(session.shellSessionKey)
+    if (!model || model.session !== session) throw new Error(`Unknown test Terminal Session: ${session.shellSessionKey}`)
+    return model
+  }
+
+  function notify(model: SessionModel): void {
+    const snapshot = { ...model.lifecycle }
+    for (const listener of model.listeners) listener(snapshot)
+  }
+
+  function createModel(shellSessionKey: string): SessionModel {
     return {
-      shellSessionKey,
-      view: createTerminalView(),
-      ptyActive: false,
-      needsClear: false,
-      shellExited: false,
-      transportSubscription: null,
-      viewSubscriptions: [],
-      resizeObserver: null,
-      visibilityObserver: null,
-      resizeTimeout: null,
-      attached: false,
-      viewVisible: false,
-      viewVisibilityGeneration: 0,
-      viewNeedsRecovery: false,
-      attachmentGeneration: 0,
-      spawnPending: false,
-      currentPtyInstance: null,
-      terminalStateSource: 'bootstrapping',
-      terminalModelSequence: null,
-      pendingTerminalModelOutput: [],
-      terminalReplayRecovery: null,
-      hasOutput: false,
-      outputSequence: 0,
-      terminalOutputObservation: {
-        ptyInstanceId: null,
-        receivedBytes: 0,
-        firstSequence: null,
-        lastSequence: null,
-        sequenceContinuous: true,
+      session: Object.freeze({ shellSessionKey }) as TerminalSession,
+      lifecycle: {
+        ptyActive: false,
+        shellExited: false,
+        currentPtyInstance: null,
+        hasOutput: false,
       },
+      geometry: { cols: 80, rows: 24 },
+      attached: false,
+      attachmentGeneration: 0,
+      spawnGeneration: 0,
+      spawnPending: false,
+      listeners: new Set(),
     }
   }
 
-  return {
+  const api = {
     acquire: vi.fn(async (shellSessionKey: string) => {
-      const existing = terminalPoolEntries.get(shellSessionKey)
-      if (existing) return existing
-      const entry = createPoolEntry(shellSessionKey)
-      terminalPoolEntries.set(shellSessionKey, entry)
-      return entry
+      const existing = models.get(shellSessionKey)
+      if (existing) return existing.session
+      const model = createModel(shellSessionKey)
+      models.set(shellSessionKey, model)
+      return model.session
     }),
-    attach: vi.fn(async (entry: PoolEntry, host: HTMLElement) => {
-      if (entry.attached) entry.view.unmount()
-      entry.attachmentGeneration += 1
-      const generation = entry.attachmentGeneration
-      entry.viewVisibilityGeneration += 1
-      entry.viewVisible = true
-      entry.view.setVisible(true)
-      entry.view.mount(host)
-      entry.attached = true
+    attach: vi.fn(async (session: TerminalSession): Promise<TerminalViewAttachment> => {
+      const model = modelFor(session)
+      model.attachmentGeneration += 1
+      const generation = model.attachmentGeneration
+      model.attached = true
       return {
         generation,
+        refit: vi.fn(async () => model.geometry),
         detach: () => {
-          if (!entry.attached || entry.attachmentGeneration !== generation) return
+          if (!model.attached || model.attachmentGeneration !== generation) return
           terminalAttachmentDetach()
-          entry.viewVisible = false
-          entry.viewVisibilityGeneration += 1
-          entry.view.setVisible(false)
-          entry.view.unmount()
-          entry.attached = false
+          model.attached = false
         },
       }
     }),
-    detach: vi.fn((entry: PoolEntry) => {
-      entry.view.unmount()
-      entry.viewVisible = false
-      entry.viewVisibilityGeneration += 1
-      entry.view.setVisible(false)
-      entry.attached = false
+    beginPtySpawn: vi.fn((session: TerminalSession): TerminalPtySpawnLease | null => {
+      const model = modelFor(session)
+      if (model.lifecycle.ptyActive || model.spawnPending) return null
+      model.spawnPending = true
+      model.spawnGeneration += 1
+      const generation = model.spawnGeneration
+      return {
+        generation,
+        geometry: { ...model.geometry },
+        imageProtocol: 'iterm2' as const,
+        started: vi.fn(async (instanceId: number) => {
+          if (model.spawnGeneration !== generation) return
+          model.spawnPending = false
+          model.lifecycle = {
+            ptyActive: true,
+            shellExited: false,
+            currentPtyInstance: instanceId,
+            hasOutput: false,
+          }
+          notify(model)
+        }),
+        cancel: vi.fn(() => {
+          if (model.spawnGeneration === generation) model.spawnPending = false
+        }),
+      }
     }),
-    recoverActiveTerminal: vi.fn(async () => undefined),
-    restorePtyInstance: vi.fn(terminalRuntime.restorePtyInstance),
-    release: vi.fn(terminalRuntime.release),
-    resetTerminal: vi.fn(terminalRuntime.resetTerminal),
-    releaseAllForTask: vi.fn(terminalRuntime.releaseAllForTask),
-    focusTerminal: vi.fn(terminalRuntime.focusTerminal),
-    shouldSpawnPty: vi.fn(terminalRuntime.shouldSpawnPty),
-    getTerminalImageProtocol: vi.fn((entry: PoolEntry) => entry.view.imageProtocol),
-    markPtySpawnPending: vi.fn(terminalRuntime.markPtySpawnPending),
-    clearPtySpawnPending: vi.fn(terminalRuntime.clearPtySpawnPending),
-    markShellPtyStarted: vi.fn(terminalRuntime.markShellPtyStarted),
-    subscribeShellLifecycle: vi.fn(terminalRuntime.subscribeShellLifecycle),
-    getShellLifecycleState: vi.fn(terminalRuntime.getShellLifecycleState),
-    updateShellLifecycleState: vi.fn(terminalRuntime.updateShellLifecycleState),
-    isShellExited: vi.fn(terminalRuntime.isShellExited),
+    markPerformancePhase: vi.fn(),
+    restorePtyInstance: vi.fn(async (shellSessionKey: string, instanceId: number) => {
+      const model = models.get(shellSessionKey)
+      if (!model) return
+      model.lifecycle = {
+        ...model.lifecycle,
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: instanceId,
+      }
+      notify(model)
+    }),
+    release: vi.fn((shellSessionKey: string) => { models.delete(shellSessionKey) }),
+    resetPresentation: vi.fn(async () => undefined),
+    releaseAllForTask: vi.fn((taskId: string) => {
+      const keys = [...models.keys()].filter(key => key.startsWith(`${taskId}-shell-`))
+      for (const key of keys) models.delete(key)
+      return keys.length
+    }),
+    focusTerminal: vi.fn(),
+    subscribeShellLifecycle: vi.fn((shellSessionKey: string, listener: (state: ShellLifecycleState) => void) => {
+      const model = models.get(shellSessionKey)
+      model?.listeners.add(listener)
+      return () => model?.listeners.delete(listener)
+    }),
+    getShellLifecycleState: vi.fn((shellSessionKey: string) => ({
+      ...(models.get(shellSessionKey)?.lifecycle ?? {
+        ptyActive: false,
+        shellExited: false,
+        currentPtyInstance: null,
+        hasOutput: false,
+      }),
+    })),
+    isShellExited: vi.fn((shellSessionKey: string) => models.get(shellSessionKey)?.lifecycle.shellExited ?? false),
     getTaskTerminalTabsSession: vi.fn((taskId: string) => {
       const existing = taskTabSessions.get(taskId)
       if (existing) return existing
@@ -174,13 +151,16 @@ vi.mock('../../lib/terminalPool', () => {
       taskTabSessions.set(taskId, session)
       return session
     }),
-    updateTaskTerminalTabsSession: vi.fn((taskId: string, session) => {
+    updateTaskTerminalTabsSession: vi.fn((taskId: string, session: { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }) => {
       taskTabSessions.set(taskId, session)
     }),
     clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
       taskTabSessions.delete(taskId)
     }),
   }
+
+  terminalRuntimeState.reset = () => models.clear()
+  return api
 })
 
 vi.mock('../../lib/liveTerminalPool', async (importOriginal) => {

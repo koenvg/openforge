@@ -18,6 +18,7 @@ export interface OpenForgeDesktopBridge {
   readonly version: 1
   invoke(command: string, payload?: unknown): Promise<unknown>
   onEvent(eventName: string, handler: (payload: unknown) => void): DesktopUnlistenFn
+  onEventReady?(eventName: string, handler: (payload: unknown) => void): Promise<DesktopUnlistenFn>
 }
 
 declare global {
@@ -52,10 +53,15 @@ export async function invokeDesktopCommand<T>(command: string, payload?: unknown
 async function listenRawDesktopEvent<TPayload>(
   eventName: string,
   handler: (event: DesktopEvent<TPayload>) => void | Promise<void>,
+  awaitRegistration = false,
 ): Promise<DesktopUnlistenFn> {
-  const unsubscribe = requireElectronBridge().onEvent(eventName, (payload) => {
+  const bridge = requireElectronBridge()
+  const onPayload = (payload: unknown) => {
     void handler({ event: eventName, payload: payload as TPayload })
-  })
+  }
+  const unsubscribe = awaitRegistration && bridge.onEventReady
+    ? await bridge.onEventReady(eventName, onPayload)
+    : bridge.onEvent(eventName, onPayload)
 
   return () => unsubscribe()
 }
@@ -76,7 +82,7 @@ export function listenDesktopEvent(
   eventName: KnownDesktopEventName,
   handler: (event: DesktopEvent<never>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn> {
-  return listenRawDesktopEvent(eventName, handler)
+  return listenRawDesktopEvent(eventName, handler, true)
 }
 
 export function listenPluginDesktopEvent(

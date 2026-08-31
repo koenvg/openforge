@@ -18,14 +18,14 @@ describe('host-owned terminal session service', () => {
     ])
 
     expect(regularEntry).toBe(agentEntry)
-    expect(runtime._getPool().size).toBe(1)
+    expect(runtime.diagnostics.list()).toHaveLength(1)
 
     agent.release('T-1-shell-0')
-    expect(runtime._getPool().size).toBe(1)
+    expect(runtime.diagnostics.list()).toHaveLength(1)
     expect(view.dispose).not.toHaveBeenCalled()
 
     regularTerminal.release('T-1-shell-0')
-    expect(runtime._getPool().size).toBe(0)
+    expect(runtime.diagnostics.list()).toHaveLength(0)
     expect(view.dispose).toHaveBeenCalledOnce()
   })
 
@@ -45,27 +45,52 @@ describe('host-owned terminal session service', () => {
     expect(runtime.hasTerminal('T-1-shell-0')).toBe(true)
   })
 
-  it('can hold acquisition after the runtime entry exists and is inert without a hook', async () => {
-    const runtime = createTerminalRuntime({ ...createHost(), createTerminalView: createFakeTerminalView })
+  it('can hold acquisition at session creation and is inert without a hook', async () => {
     let releaseCheckpoint!: () => void
-    const afterAcquire = vi.fn(() => new Promise<void>(resolve => { releaseCheckpoint = resolve }))
-    const service = createTerminalSessionService(runtime, { afterAcquire })
+    let checkpointSession: object | null = null
+    const beforeSessionStart = vi.fn((session, getDiagnostics) => {
+      checkpointSession = session
+      expect(getDiagnostics().shellSessionKey).toBe('T-gated-shell-0')
+      return new Promise<void>(resolve => { releaseCheckpoint = resolve })
+    })
+    const runtime = createTerminalRuntime({
+      ...createHost(),
+      createTerminalView: () => createFakeTerminalView(),
+      beforeSessionStart,
+    })
+    const service = createTerminalSessionService(runtime)
     const client = service.createClient('agent')
 
     let returned = false
-    const acquisition = client.acquire('T-gated-shell-0').then((entry) => {
+    const acquisition = client.acquire('T-gated-shell-0').then((session) => {
       returned = true
-      return entry
+      return session
     })
-    await vi.waitFor(() => expect(afterAcquire).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(beforeSessionStart).toHaveBeenCalledOnce())
 
-    expect(runtime._getPool().has('T-gated-shell-0')).toBe(true)
     expect(returned).toBe(false)
 
     releaseCheckpoint()
-    await expect(acquisition).resolves.toBe(runtime._getPool().get('T-gated-shell-0'))
+    await expect(acquisition).resolves.toBe(checkpointSession)
 
-    const ungatedService = createTerminalSessionService(runtime)
+    const ungatedRuntime = createTerminalRuntime({
+      ...createHost(),
+      createTerminalView: () => createFakeTerminalView(),
+    })
+    const ungatedService = createTerminalSessionService(ungatedRuntime)
     await expect(ungatedService.createClient('terminal-plugin').acquire('T-ungated-shell-0')).resolves.toBeDefined()
+  })
+
+  it('fails acquisition when the session-start checkpoint rejects', async () => {
+    const runtime = createTerminalRuntime({
+      ...createHost(),
+      createTerminalView: () => createFakeTerminalView(),
+      beforeSessionStart: () => Promise.reject(new Error('checkpoint timed out')),
+    })
+    const service = createTerminalSessionService(runtime)
+
+    await expect(service.createClient('agent').acquire('T-timeout-shell-0'))
+      .rejects.toThrow('checkpoint timed out')
+    expect(runtime.hasTerminal('T-timeout-shell-0')).toBe(false)
   })
 })

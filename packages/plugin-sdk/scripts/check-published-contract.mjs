@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { validRange } from 'semver'
+import { compile } from 'svelte/compiler'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -68,6 +69,34 @@ function run(command, args, options = {}) {
     ].filter(Boolean).join('\n'))
   }
   return result
+}
+
+function resolvePackedLocalImport(importerPath, specifier) {
+  const unresolvedPath = resolve(dirname(importerPath), specifier)
+  const candidates = [
+    unresolvedPath,
+    `${unresolvedPath}.js`,
+    `${unresolvedPath}.mjs`,
+    `${unresolvedPath}.svelte`,
+    join(unresolvedPath, 'index.js'),
+  ]
+  const resolvedPath = candidates.find(existsSync)
+  if (!resolvedPath) fail(`Packed Svelte dependency is missing: ${specifier} imported by ${importerPath}`)
+  return resolvedPath
+}
+
+function compilePackedSvelteTree(entryPath, visited = new Set()) {
+  if (visited.has(entryPath)) return
+  visited.add(entryPath)
+
+  const source = readFileSync(entryPath, 'utf8')
+  compile(source, { filename: entryPath, generate: 'client' })
+
+  const importPattern = /(?:\bfrom\s*|\bimport\s*)['"](\.[^'"]+)['"]/g
+  for (const match of source.matchAll(importPattern)) {
+    const dependencyPath = resolvePackedLocalImport(entryPath, match[1])
+    if (dependencyPath.endsWith('.svelte')) compilePackedSvelteTree(dependencyPath, visited)
+  }
 }
 
 function exportTargets(value) {
@@ -178,6 +207,13 @@ try {
   for (const target of new Set(targets.filter(value => typeof value === 'string'))) {
     const targetPath = join(installedPackageRoot, target.replace(/^\.\//, ''))
     if (!existsSync(targetPath)) fail(`Packed export target is missing: ${target}`)
+  }
+
+  const packedSvelteExports = new Set(
+    exportTargets(packedManifest.exports).filter(target => typeof target === 'string' && target.endsWith('.svelte')),
+  )
+  for (const target of packedSvelteExports) {
+    compilePackedSvelteTree(join(installedPackageRoot, target.replace(/^\.\//, '')))
   }
 
   writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')

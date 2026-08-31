@@ -24,7 +24,7 @@ setupSelfReviewViewTestSuite();
 describe("SelfReviewView reviewed file snapshots", () => {
 	it("marks a file reviewed from the diff header while keeping the file tree row in place", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "", newContent: "" }]);
 
 		renderSelfReviewView();
 
@@ -66,8 +66,8 @@ describe("SelfReviewView reviewed file snapshots", () => {
 		};
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
 		mockGetTaskDiff.mockResolvedValueOnce([originalDiff]).mockResolvedValue([changedDiff]);
-		vi.mocked(getTaskFileContents).mockResolvedValue(["base content\n", "reviewed content\n"]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["base content\n", "changed content\n"]]);
+		vi.mocked(getTaskFileContents).mockResolvedValue({ oldContent: "base content\n", newContent: "reviewed content\n" });
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "base content\n", newContent: "changed content\n" }]);
 
 		const firstRender = renderSelfReviewView();
 

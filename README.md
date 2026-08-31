@@ -18,7 +18,13 @@
 
 ---
 
-![Open Forge board showing focused task flow](docs/images/board.png)
+### Follow the board
+
+![OpenForge board showing a selected agent task and its inspector](docs/images/board.png)
+
+### Review task context
+
+![OpenForge Review tab showing a README diff and changed-file list](docs/images/task-view.png)
 
 ## Why Open Forge exists
 

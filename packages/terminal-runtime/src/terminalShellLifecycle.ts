@@ -1,52 +1,53 @@
 import type {
-  PoolEntry,
   ShellLifecycleListener,
   ShellLifecycleState,
   TerminalRuntimeUnlistenFn,
 } from './terminalRuntimeTypes'
 
-function getStateFromEntry(entry: PoolEntry | undefined): ShellLifecycleState {
-  return {
-    ptyActive: entry?.ptyActive ?? false,
-    shellExited: entry?.shellExited ?? false,
-    currentPtyInstance: entry?.currentPtyInstance ?? null,
-    hasOutput: entry?.hasOutput ?? false,
-  }
+const inactiveShellLifecycle: ShellLifecycleState = {
+  ptyActive: false,
+  shellExited: false,
+  currentPtyInstance: null,
+  hasOutput: false,
 }
 
-export function createTerminalShellLifecycleStore(getEntry: (terminalKey: string) => PoolEntry | undefined) {
+export function createTerminalShellLifecycleStore(
+  getStateForSession: (shellSessionKey: string) => ShellLifecycleState | undefined,
+) {
   const listenersByTerminal = new Map<string, Set<ShellLifecycleListener>>()
 
-  function getState(terminalKey: string): ShellLifecycleState {
-    return getStateFromEntry(getEntry(terminalKey))
+  function getState(shellSessionKey: string): ShellLifecycleState {
+    return getStateForSession(shellSessionKey) ?? inactiveShellLifecycle
   }
 
-  function notify(terminalKey: string): void {
-    const listeners = listenersByTerminal.get(terminalKey)
+  function notify(shellSessionKey: string): void {
+    const listeners = listenersByTerminal.get(shellSessionKey)
     if (!listeners || listeners.size === 0) return
-
-    const state = getState(terminalKey)
+    const state = getState(shellSessionKey)
     for (const listener of listeners) listener(state)
   }
 
-  function subscribe(terminalKey: string, listener: ShellLifecycleListener): TerminalRuntimeUnlistenFn {
-    let listeners = listenersByTerminal.get(terminalKey)
+  function subscribe(
+    shellSessionKey: string,
+    listener: ShellLifecycleListener,
+  ): TerminalRuntimeUnlistenFn {
+    let listeners = listenersByTerminal.get(shellSessionKey)
     if (!listeners) {
       listeners = new Set()
-      listenersByTerminal.set(terminalKey, listeners)
+      listenersByTerminal.set(shellSessionKey, listeners)
     }
     listeners.add(listener)
 
     return () => {
-      const current = listenersByTerminal.get(terminalKey)
+      const current = listenersByTerminal.get(shellSessionKey)
       if (!current) return
       current.delete(listener)
-      if (current.size === 0) listenersByTerminal.delete(terminalKey)
+      if (current.size === 0) listenersByTerminal.delete(shellSessionKey)
     }
   }
 
-  function clear(terminalKey: string): void {
-    listenersByTerminal.delete(terminalKey)
+  function clear(shellSessionKey: string): void {
+    listenersByTerminal.delete(shellSessionKey)
   }
 
   function clearAll(): void {

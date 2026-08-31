@@ -40,3 +40,22 @@ export class RendererEventSubscriptions {
     this.subscriptions.delete(rendererId)
   }
 }
+
+interface RendererEventSubscriptionIpc {
+  handle(
+    channel: string,
+    handler: (event: { sender: { id: number } }, request: unknown) => boolean,
+  ): void
+}
+
+export function registerRendererEventSubscriptionHandler(
+  ipc: RendererEventSubscriptionIpc,
+  subscriptions: RendererEventSubscriptions,
+  currentRendererId: () => number | null,
+): void {
+  ipc.handle(OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL, (event, request) => {
+    const rendererId = currentRendererId()
+    if (rendererId === null || event.sender.id !== rendererId) return false
+    return subscriptions.update(rendererId, request)
+  })
+}

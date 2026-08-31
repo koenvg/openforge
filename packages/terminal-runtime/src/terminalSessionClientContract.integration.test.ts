@@ -60,7 +60,7 @@ describe('Terminal Session client contract', () => {
     }))
 
     instanceId = 2
-    await client.markShellPtyStarted(entry, 2)
+    await client.restorePtyInstance(shellSessionKey, 2)
     host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('stale'), instance_id: 1, sequence: 1 })
     host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('current'), instance_id: 2, sequence: 1 })
 
@@ -121,7 +121,7 @@ describe('Terminal Session client contract', () => {
     })
 
     const entry = await client.acquire(shellSessionKey)
-    client.markShellPtyStarted(entry, 1)
+    await client.restorePtyInstance(shellSessionKey, 1)
     const firstHost = document.createElement('div')
     const secondHost = document.createElement('div')
     const firstAttachment = await client.attach(entry, firstHost)
@@ -132,7 +132,7 @@ describe('Terminal Session client contract', () => {
     expect(resizePty).toHaveBeenCalledWith(shellSessionKey, 100, 30)
 
     secondAttachment.detach()
-    expect(entry.attached).toBe(false)
+    expect(runtime.diagnostics.observe(shellSessionKey)?.view.attached).toBe(false)
 
     const reattached = await client.attach(entry, firstHost)
     expect(view.isMountedIn(firstHost)).toBe(true)

@@ -168,9 +168,9 @@ describe('AgentTerminalShell', () => {
     })
   })
 
-  it('recovers dimensions only while the Agent workbench remains active', async () => {
+  it('refits only while the Agent workbench remains active', async () => {
     setActiveSession(baseSession)
-    const { attach, recoverActiveTerminal } = await import('../../lib/terminalPool')
+    const { attach } = await import('../../lib/terminalPool')
 
     const view = render(AgentTerminalShell, {
       props: {
@@ -183,7 +183,7 @@ describe('AgentTerminalShell', () => {
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
-    expect(recoverActiveTerminal).not.toHaveBeenCalled()
+    expect(mockAttachment.refit).not.toHaveBeenCalled()
 
     await view.rerender({
       taskId: 'T-1',
@@ -192,10 +192,10 @@ describe('AgentTerminalShell', () => {
     })
 
     await vi.waitFor(() => {
-      expect(recoverActiveTerminal).toHaveBeenCalledWith(mockPoolEntry, expect.any(AbortSignal))
+      expect(mockAttachment.refit).toHaveBeenCalledWith(expect.any(AbortSignal))
     })
 
-    const recoverySignal = vi.mocked(recoverActiveTerminal).mock.calls[0]?.[1]
+    const recoverySignal = vi.mocked(mockAttachment.refit).mock.calls[0]?.[0]
     expect(recoverySignal?.aborted).toBe(false)
 
     await view.rerender({

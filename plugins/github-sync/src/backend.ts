@@ -13,7 +13,7 @@ import type {
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
-import type { CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, GithubAssetRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+import type { Base64FileContentResult, CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, GithubAssetRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
 type TaskPullRequestActionRequest = {
   taskId: string
@@ -124,16 +124,16 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<string>(openforge, 'getFileContent', request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<FileContentRequest, string>('getFileContentBase64', {
-      handler: (request) => invokeHostCommand<string>(openforge, 'getFileContentBase64', request),
+    context.subscriptions.add(openforge.backend.registerMethod<FileContentRequest, Base64FileContentResult>('getFileContentBase64', {
+      handler: (request) => invokeHostCommand<Base64FileContentResult>(openforge, 'getFileContentBase64', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, string>('getFileAtRef', {
       handler: (request) => invokeHostCommand<string>(openforge, 'getFileAtRef', request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, string>('getFileAtRefBase64', {
-      handler: (request) => invokeHostCommand<string>(openforge, 'getFileAtRefBase64', request),
+    context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, Base64FileContentResult>('getFileAtRefBase64', {
+      handler: (request) => invokeHostCommand<Base64FileContentResult>(openforge, 'getFileAtRefBase64', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<GithubAssetRequest, ResolvedMarkdownMedia | null>('resolveGithubAsset', {

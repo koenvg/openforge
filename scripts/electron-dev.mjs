@@ -325,7 +325,11 @@ export async function prepareElectronDevCargoEnv(cargoEnv, deps = {}) {
   const prepareGhosttyVt = deps.prepareGhosttyVt ?? defaultPrepareGhosttyVt
   const logger = deps.logger ?? (message => logStep(message))
   const ghosttyEnv = await prepareGhosttyVt({ logger })
-  return { ...cargoEnv, ...ghosttyEnv }
+  return {
+    LIBGHOSTTY_VT_SYS_OPTIMIZE: 'ReleaseSafe',
+    ...cargoEnv,
+    ...ghosttyEnv,
+  }
 }
 
 export async function assertVitePortAvailable(portOrDeps = VITE_PORT, deps = { isPortOpen }) {

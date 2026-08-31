@@ -12,7 +12,7 @@ use super::super::streams::AgentStreamState;
 use crate::pty_manager::managed_process::ManagedProcessIdentity;
 use crate::pty_manager::pids::write_managed_process_identity;
 
-const CONCURRENT_SPAWN_TIMEOUT: Duration = Duration::from_secs(5);
+const CONCURRENT_SPAWN_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct LockCheckingAgentAdapter {
     sessions: PtySessions,

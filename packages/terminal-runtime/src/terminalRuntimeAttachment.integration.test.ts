@@ -10,6 +10,7 @@ import {
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
+import { createTerminalPerformanceTrace } from './terminalPerformanceTrace'
 
 function stubAttachmentObservers(): void {
   vi.stubGlobal('ResizeObserver', class {
@@ -60,6 +61,38 @@ function stubAnimationFrameQueue() {
 describe('terminal runtime attachment', () => {
   beforeEach(resetTerminalRuntimeMocks)
 
+  it('marks terminal attachment before the first xterm mount without changing attachment work', async () => {
+    let timestamp = 1
+    const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
+    performanceTrace.start()
+    const host = createHost()
+    host.environment.performanceTrace = performanceTrace
+    host.setBuffer('T-1-shell-0', '')
+    const runtime = createTerminalRuntime(host)
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    stubAttachmentObservers()
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
+
+    try {
+      const entry = await runtime.acquire('T-1-shell-0')
+      await runtime.attach(entry, document.createElement('div'))
+
+      expect(performanceTrace.snapshot()?.timestamps).toMatchObject({
+        lifecycleStart: 1,
+        terminalAttachment: 2,
+        xtermMount: 3,
+      })
+    } finally {
+      runtime.dispose()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('defers xterm opening and WebGL setup until the first DOM attachment', async () => {
     const terminalKey = 'T-1-shell-0'
     const host = createHost()
@@ -83,7 +116,7 @@ describe('terminal runtime attachment', () => {
       expect(terminal.loadAddon).toHaveBeenCalledTimes(4)
 
       const wrapper = document.createElement('div')
-      await runtime.attach(entry, wrapper)
+      const attachment = await runtime.attach(entry, wrapper)
       const mountedHost = wrapper.firstElementChild
 
       expect(terminal.open).toHaveBeenCalledOnce()
@@ -91,7 +124,7 @@ describe('terminal runtime attachment', () => {
       expect(terminal.loadAddon).toHaveBeenCalledTimes(5)
       expect(resizePty).toHaveBeenCalledWith(terminalKey, 80, 24)
 
-      runtime.detach(entry)
+      attachment.detach()
       await runtime.attach(entry, wrapper)
 
       expect(terminal.open).toHaveBeenCalledOnce()
@@ -134,7 +167,7 @@ describe('terminal runtime attachment', () => {
     }
   })
 
-  it('cancels a pending initial-fit frame when detached', async () => {
+  it('cancels a pending initial-fit frame when the session is released', async () => {
     const host = createHost()
     const view = createFakeTerminalView({ fit: vi.fn(() => null) })
     const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
@@ -147,7 +180,7 @@ describe('terminal runtime attachment', () => {
       await vi.waitFor(() => expect(animationFrames.frames.size).toBe(1))
       expect(animationFrames.frames.size).toBe(1)
 
-      runtime.detach(entry)
+      runtime.release('T-1-shell-0')
 
       expect(animationFrames.cancelFrame).toHaveBeenCalledOnce()
       expect(animationFrames.frames.size).toBe(0)
@@ -189,11 +222,11 @@ describe('terminal runtime attachment', () => {
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
 
       const wrapper = document.createElement('div')
-      await runtime.attach(entry, wrapper)
+      const attachment = await runtime.attach(entry, wrapper)
       expect(terminal.write).toHaveBeenCalledTimes(2)
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
 
-      runtime.detach(entry)
+      attachment.detach()
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
       host.emit(`pty-model-output-${terminalKey}`, {
         instance_id: 1,
@@ -283,15 +316,13 @@ describe('terminal runtime attachment', () => {
 
     const staleAttachment = attachTestTerminal(runtime, entry)
     await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
-    runtime.detach(entry)
     const currentAttachment = attachTestTerminal(runtime, entry)
     resolveStaleRecovery()
 
     await Promise.all([staleAttachment, currentAttachment])
 
     expect(reads).toHaveBeenCalledTimes(3)
-    expect(entry.attached).toBe(true)
-    expect(entry.viewNeedsRecovery).toBe(false)
+    expect(runtime.diagnostics.observe(terminalKey)?.view.attached).toBe(true)
     expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
       Uint8Array.from(new TextEncoder().encode('latest authority')),
       expect.any(Function),
@@ -300,7 +331,7 @@ describe('terminal runtime attachment', () => {
   })
 
 
-  it('keeps recovery pending when detachment races an authority read', async () => {
+  it('keeps recovery pending when a replacement attachment races an authority read', async () => {
     const terminalKey = 'T-detach-during-recovery-shell-0'
     const host = createHost()
     host.setBuffer(terminalKey, 'initial')
@@ -311,17 +342,15 @@ describe('terminal runtime attachment', () => {
 
     const pendingAttachment = attachTestTerminal(runtime, entry)
     await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
-    runtime.detach(entry)
+    const replacementAttachment = attachTestTerminal(runtime, entry)
     resumeRead()
-    await pendingAttachment
+    await Promise.all([pendingAttachment, replacementAttachment])
 
-    expect(entry.attached).toBe(false)
-    expect(entry.viewNeedsRecovery).toBe(true)
-    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+    expect(runtime.diagnostics.observe(terminalKey)?.view.attached).toBe(true)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
 
     host.setBuffer(terminalKey, 'output after raced detach')
     await attachTestTerminal(runtime, entry)
-    expect(entry.viewNeedsRecovery).toBe(false)
     expect(terminalMocks.instances[0].write).toHaveBeenLastCalledWith(
       Uint8Array.from(new TextEncoder().encode('output after raced detach')),
       expect.any(Function),
@@ -342,11 +371,11 @@ describe('terminal runtime attachment', () => {
     await expect(attachTestTerminal(runtime, entry)).rejects.toThrow(
       `listener registration failed: pty-model-output-${terminalKey}`,
     )
-    expect(entry.attached).toBe(false)
+    expect(runtime.diagnostics.observe(terminalKey)?.view.attached).toBe(false)
     expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
 
     await attachTestTerminal(runtime, entry)
-    expect(entry.attached).toBe(true)
+    expect(runtime.diagnostics.observe(terminalKey)?.view.attached).toBe(true)
     expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
     runtime.release(terminalKey)
   })

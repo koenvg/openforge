@@ -11,6 +11,19 @@ fn normalize_base64_content(content: &str) -> String {
     content.replace('\n', "")
 }
 
+fn bounded_base64_content(blob: BlobResponse, max_size: Option<usize>) -> Base64FileContent {
+    let too_large = max_size.is_some_and(|limit| blob.size > limit);
+    Base64FileContent {
+        content: if too_large {
+            String::new()
+        } else {
+            normalize_base64_content(&blob.content)
+        },
+        size: blob.size,
+        too_large,
+    }
+}
+
 fn decode_base64_content(content: &str) -> Result<String, GitHubError> {
     let decoded = general_purpose::STANDARD
         .decode(normalize_base64_content(content))
@@ -374,7 +387,8 @@ impl GitHubClient {
         repo: &str,
         sha: &str,
         token: &str,
-    ) -> Result<String, GitHubError> {
+        max_size: Option<usize>,
+    ) -> Result<Base64FileContent, GitHubError> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/blobs/{}",
             owner, repo, sha
@@ -390,8 +404,7 @@ impl GitHubClient {
             .json()
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(normalize_base64_content(&blob.content))
+        Ok(bounded_base64_content(blob, max_size))
     }
 
     pub async fn get_blob_content(
@@ -454,7 +467,8 @@ impl GitHubClient {
         path: &str,
         ref_sha: &str,
         token: &str,
-    ) -> Result<String, GitHubError> {
+        max_size: Option<usize>,
+    ) -> Result<Base64FileContent, GitHubError> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
             owner, repo, path, ref_sha
@@ -470,8 +484,7 @@ impl GitHubClient {
             .json()
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-        Ok(normalize_base64_content(&blob.content))
+        Ok(bounded_base64_content(blob, max_size))
     }
 }
 
@@ -479,6 +492,45 @@ impl GitHubClient {
 mod tests {
     use super::*;
 
+    #[test]
+    fn bounded_base64_content_omits_content_over_the_limit() {
+        let content = bounded_base64_content(
+            BlobResponse {
+                content: "YWJj\n".to_string(),
+                size: 26_214_401,
+            },
+            Some(25 * 1024 * 1024),
+        );
+
+        assert_eq!(
+            content,
+            Base64FileContent {
+                content: String::new(),
+                size: 26_214_401,
+                too_large: true,
+            }
+        );
+    }
+
+    #[test]
+    fn bounded_base64_content_normalizes_content_within_the_limit() {
+        let content = bounded_base64_content(
+            BlobResponse {
+                content: "YWJj\n".to_string(),
+                size: 3,
+            },
+            Some(25 * 1024 * 1024),
+        );
+
+        assert_eq!(
+            content,
+            Base64FileContent {
+                content: "YWJj".to_string(),
+                size: 3,
+                too_large: false,
+            }
+        );
+    }
     fn make_search_pr_result(id: i64, draft: bool) -> SearchPrResult {
         SearchPrResult {
             id,

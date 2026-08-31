@@ -2,10 +2,25 @@ import './app.css'
 import { mount } from 'svelte'
 import App from './App.svelte'
 import { initTheme } from './lib/theme'
+import { configureTerminalPerformanceTrace } from './lib/terminalSessionService'
+import { createTerminalPerformanceTestTrace } from './lib/terminalPerformanceTesting'
 
 initTheme()
+const terminalPerformanceTrace = createTerminalPerformanceTestTrace(
+  import.meta.env.DEV,
+  window.location.href,
+)
+configureTerminalPerformanceTrace(terminalPerformanceTrace)
 if (import.meta.env.DEV) {
-  void import('./lib/terminalTestProbe').then(({ installTerminalTestProbe }) => {
+  void import('./lib/terminalTestProbe').then(({
+    installTerminalPerformanceProbe,
+    installTerminalTestProbe,
+  }) => {
+    installTerminalPerformanceProbe({
+      isDevelopment: true,
+      url: window.location.href,
+      performanceTrace: terminalPerformanceTrace,
+    })
     installTerminalTestProbe({
       isDevelopment: true,
       environmentEnabled: import.meta.env.VITE_OPENFORGE_E2E === '1',

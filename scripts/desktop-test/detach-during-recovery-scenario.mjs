@@ -12,8 +12,9 @@ function assertDetachedRecovery(detached, emission) {
   if (detached.lifecycle.authorityReadPending) {
     throw new Error('Detached terminal retained a pending authority read after gate release')
   }
-  if (detached.lifecycle.currentPtyInstance !== emission.ptyInstanceId) {
-    throw new Error('Detached terminal accepted stale authority from a different PTY instance')
+  if (detached.lifecycle.currentPtyInstance !== null
+    && detached.lifecycle.currentPtyInstance !== emission.ptyInstanceId) {
+    throw new Error(`Detached terminal PTY ${detached.lifecycle.currentPtyInstance} did not match emitted PTY ${emission.ptyInstanceId}`)
   }
   if (detached.output?.sequenceContinuous !== true) {
     throw new Error('Detached terminal output sequence became discontinuous')

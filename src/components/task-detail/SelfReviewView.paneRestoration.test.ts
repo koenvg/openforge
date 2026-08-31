@@ -57,7 +57,7 @@ describe("SelfReviewView pane restoration", () => {
 
 	it("restores the diff scroll position when the review pane is remounted for the same task", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "", newContent: "" }]);
 
 		const firstRender = renderSelfReviewView();
 
@@ -82,7 +82,7 @@ describe("SelfReviewView pane restoration", () => {
 
 	it("hides and restores the full left pane while keeping reviewed file state synced", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "", newContent: "" }]);
 
 		renderSelfReviewView();
 
@@ -114,7 +114,7 @@ describe("SelfReviewView pane restoration", () => {
 	it("keeps a left pane restore control when a hidden pane refreshes to an empty diff", async () => {
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
 		mockGetTaskDiff.mockResolvedValueOnce([baseDiff]).mockResolvedValueOnce([]);
-		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: "", newContent: "" }]);
 
 		renderSelfReviewView();
 

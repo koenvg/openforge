@@ -2,73 +2,34 @@
   color-scheme: light;
 
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "IBM Plex Sans", var(--font-sans);
-  --font-serif: Georgia, "Times New Roman", serif;
+  --font-display: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  --font-code: "SFMono-Regular", Consolas, monospace;
 
-  --background: #f7f2e8;
-  --ink: #10151f;
-  --muted: #485465;
-  --line: #1e293b;
-  --green: #0f6f38;
-  --green-bright: #128341;
-  --green-deep: #0a4f29;
+  --background: #fbfbfa;
+  --surface: #ffffff;
+  --surface-soft: #f4f5f5;
+  --surface-tint: #f0f3ff;
+  --ink: #111318;
+  --muted: #626872;
+  --muted-strong: #434954;
+  --line: #e1e3e6;
+  --line-strong: #c9cdd2;
+  --blue: #2947ff;
+  --blue-deep: #1830c9;
+  --violet: #8b5cf6;
+  --mint: #08a882;
+  --amber: #df8c16;
+  --focus-ring: rgba(41, 71, 255, 0.42);
 
-  --hero-blue: #0437e8;
-  --hero-paper: #fff8df;
-  --hero-ink: #05070d;
-  --hero-card-task: #ff5757;
-  --hero-card-agent: #c9ff39;
-  --hero-card-changes: #6a5cff;
-  --hero-card-review: #ffd43b;
-  --hero-dot: rgba(255, 255, 255, 0.28);
-  --hero-text-soft: rgba(255, 248, 223, 0.92);
-
-  --surface-page-wash: rgba(255, 250, 240, 0.82);
-  --surface-background-wash: rgba(247, 242, 232, 0.96);
-  --surface-background-soft: rgba(247, 242, 232, 0.75);
-  --surface-paper-soft: rgba(255, 250, 240, 0.62);
-  --surface-paper-card: rgba(255, 250, 240, 0.66);
-  --surface-paper-raised: rgba(255, 250, 240, 0.72);
-  --surface-paper-row: rgba(255, 250, 240, 0.78);
-  --surface-paper-strong: rgba(255, 250, 240, 0.88);
-  --surface-proof-dark: rgba(16, 21, 31, 0.94);
-  --surface-proof-sheen-light: rgba(255, 250, 240, 0.16);
-  --surface-proof-sheen-dark: rgba(16, 21, 31, 0.06);
-
-  --border-soft: rgba(30, 41, 59, 0.14);
-  --border-row: rgba(30, 41, 59, 0.16);
-  --border-medium: rgba(30, 41, 59, 0.2);
-  --border-strong: rgba(30, 41, 59, 0.22);
-  --border-subtle: rgba(30, 41, 59, 0.12);
-  --border-paper: rgba(255, 250, 240, 0.72);
-  --border-green-soft: rgba(15, 111, 56, 0.18);
-  --border-green-medium: rgba(15, 111, 56, 0.22);
-
-  --shadow-card: 0 1.2rem 3rem rgba(46, 36, 24, 0.14);
-  --shadow-float: 0 1.6rem 4.5rem rgba(46, 36, 24, 0.12);
-  --shadow-row: 0 0.55rem 1.5rem rgba(46, 36, 24, 0.06);
-  --shadow-button: 0 1rem 2rem rgba(15, 111, 56, 0.18);
-  --shadow-button-hover: 0 1.25rem 2.5rem rgba(15, 111, 56, 0.24);
-  --shadow-hero-text: 0 0.18rem 0 rgba(5, 7, 13, 0.18);
-  --shadow-hero-title: 0 0.22rem 0 rgba(5, 7, 13, 0.18);
-  --shadow-hero-button: 0 0.55rem 0 rgba(5, 7, 13, 0.25);
-  --shadow-hero-button-hover: 0 0.7rem 0 rgba(5, 7, 13, 0.28);
-  --shadow-flow-dot: 0 0.3rem 0 rgba(5, 7, 13, 0.16);
-  --shadow-bento: 0.48rem 0.48rem 0 var(--hero-ink);
-  --shadow-bento-compact: 0.35rem 0.35rem 0 var(--hero-ink);
-
-  --glow-green-page: rgba(15, 111, 56, 0.09);
-  --glow-green-badge: rgba(15, 111, 56, 0.07);
-  --glow-green-icon: rgba(15, 111, 56, 0.12);
-  --glow-green-inset: rgba(15, 111, 56, 0.05);
-  --glow-amber-page: rgba(191, 114, 0, 0.08);
-  --focus-ring: rgba(15, 111, 56, 0.42);
+  --shadow-small: 0 0.5rem 1.5rem rgba(20, 26, 38, 0.07);
+  --shadow-medium: 0 1.5rem 4rem rgba(20, 26, 38, 0.1);
+  --shadow-window: 0 2.5rem 7rem rgba(20, 26, 38, 0.15);
 
   font-family: var(--font-sans);
   background: var(--background);
   color: var(--ink);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -85,14 +46,38 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 68% 46%, var(--glow-green-page), transparent 34rem),
-    radial-gradient(circle at 82% 58%, var(--glow-amber-page), transparent 26rem),
-    linear-gradient(135deg, var(--surface-page-wash), var(--surface-background-wash));
+  background: var(--background);
 }
 
-button {
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(rgba(17, 19, 24, 0.07) 0.65px, transparent 0.65px);
+  background-size: 12px 12px;
+  content: "";
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+button,
+a {
   font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+}
+
+::selection {
+  background: rgba(41, 71, 255, 0.16);
+  color: var(--ink);
 }
 
 :focus-visible {

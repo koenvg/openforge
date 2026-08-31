@@ -7,7 +7,7 @@ export const PLUGIN_PROTOCOL_SCHEME = 'plugin'
 
 export type MediaPermissionSubtype = 'audio' | 'video' | 'microphone' | 'camera' | 'unknown'
 
-export interface MediaPermissionRequest {
+export interface RendererPermissionRequest {
   permission: string
   isMainWindowWebContents: boolean
   requestingUrl?: string
@@ -15,6 +15,8 @@ export interface MediaPermissionRequest {
   mediaType?: MediaPermissionSubtype | string
   mediaTypes?: readonly (MediaPermissionSubtype | string)[]
 }
+
+export type MediaPermissionRequest = RendererPermissionRequest
 
 export interface PluginAssetRoot {
   pluginId: string
@@ -136,7 +138,7 @@ function isInsideDirectory(candidate: string, base: string): boolean {
  * Renderer Trust Policy Module.
  *
  * The Interface is intentionally small: one Seam for protocol privilege, CSP,
- * trusted renderer origins, and audio-only media permission. The Implementation
+ * trusted renderer origins, trusted fullscreen, and audio-only media permission. The Implementation
  * gives Electron boot Leverage and security Locality instead of scattering the
  * trust rules across callers.
  */
@@ -159,6 +161,7 @@ export class RendererTrustPolicy {
       `script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}`,
       "style-src 'self' plugin: 'unsafe-inline'",
       "img-src 'self' plugin: https: data:",
+      "media-src 'self' https: data: blob:",
       "font-src 'self' plugin: data:",
       `connect-src 'self' ${[sidecarOrigin(sidecarConfig), ...TRUSTED_CONNECT_SRC].join(' ')}`,
     ].join('; ')
@@ -197,13 +200,18 @@ export class RendererTrustPolicy {
     }
   }
 
-  shouldGrantMediaPermission(request: MediaPermissionRequest): boolean {
-    if (request.permission !== 'media') return false
+  shouldGrantRendererPermission(request: RendererPermissionRequest): boolean {
     if (!request.isMainWindowWebContents) return false
-    if (!requestsOnlyAudio(request)) return false
 
     const origin = requestOrigin(request.requestingUrl)
-    return origin !== null && request.trustedOrigins.has(origin)
+    if (origin === null || !request.trustedOrigins.has(origin)) return false
+
+    if (request.permission === 'fullscreen') return true
+    return request.permission === 'media' && requestsOnlyAudio(request)
+  }
+
+  shouldGrantMediaPermission(request: MediaPermissionRequest): boolean {
+    return request.permission === 'media' && this.shouldGrantRendererPermission(request)
   }
 }
 
@@ -238,6 +246,10 @@ export class ElectronRendererTrustAdapter {
 
   trustedRendererOrigins(rendererUrl: string | null): Set<string> {
     return this.policy.trustedRendererOrigins(rendererUrl)
+  }
+
+  shouldGrantRendererPermission(request: RendererPermissionRequest): boolean {
+    return this.policy.shouldGrantRendererPermission(request)
   }
 
   shouldGrantMediaPermission(request: MediaPermissionRequest): boolean {

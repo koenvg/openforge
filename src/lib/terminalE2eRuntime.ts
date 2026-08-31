@@ -1,11 +1,11 @@
-import type { PoolEntry } from '@openforge-app/terminal-runtime'
+import type { TerminalSession, TerminalSessionDiagnostics } from '@openforge-app/terminal-runtime'
 import type { TerminalE2eGateCoordinator } from './terminalE2eGates'
 
 let coordinator: TerminalE2eGateCoordinator | null = null
-const acquiredEntriesForDiagnostics = new Map<string, PoolEntry>()
+const acquiredDiagnostics = new Map<string, () => TerminalSessionDiagnostics>()
 
 export function configureTerminalE2eRuntime(value: TerminalE2eGateCoordinator | null): void {
-  if (coordinator !== value) acquiredEntriesForDiagnostics.clear()
+  if (coordinator !== value) acquiredDiagnostics.clear()
   coordinator = value
 }
 
@@ -13,16 +13,22 @@ export function getTerminalE2eGateCoordinator(): TerminalE2eGateCoordinator | nu
   return coordinator
 }
 
-export function getAcquiredTerminalForE2eDiagnostics(shellSessionKey: string): PoolEntry | null {
-  return acquiredEntriesForDiagnostics.get(shellSessionKey) ?? null
+export function getAcquiredTerminalForE2eDiagnostics(
+  shellSessionKey: string,
+): TerminalSessionDiagnostics | null {
+  return acquiredDiagnostics.get(shellSessionKey)?.() ?? null
 }
 
-export function checkpointTerminalAcquisition(entry: PoolEntry): Promise<void> | undefined {
+export function checkpointTerminalAcquisition(
+  session: TerminalSession,
+  getDiagnostics: () => TerminalSessionDiagnostics,
+): Promise<void> | undefined {
   if (!coordinator) return undefined
-  acquiredEntriesForDiagnostics.set(entry.shellSessionKey, entry)
-  return coordinator.checkpoint('acquisition', entry.shellSessionKey, {
-    attachmentGeneration: entry.attachmentGeneration,
-    ptyInstanceId: entry.currentPtyInstance,
+  acquiredDiagnostics.set(session.shellSessionKey, getDiagnostics)
+  const diagnostics = getDiagnostics()
+  return coordinator.checkpoint('acquisition', session.shellSessionKey, {
+    attachmentGeneration: diagnostics.view.attachmentGeneration,
+    ptyInstanceId: diagnostics.lifecycle.currentPtyInstance,
   })
 }
 

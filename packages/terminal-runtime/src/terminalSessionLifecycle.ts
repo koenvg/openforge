@@ -1,87 +1,34 @@
 import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
 import { createTerminalShellLifecycleStore } from './terminalShellLifecycle'
-import { synchronizeTerminalOutputObservation } from './terminalOutputObservation'
-import type { PoolEntry, ShellLifecycleState, TaskTerminalTabsSession } from './terminalRuntimeTypes'
+import type { TerminalSessionCoordinator } from './terminalSessionCoordinator'
+import type { TaskTerminalTabsSession } from './terminalRuntimeTypes'
 
-export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) => PoolEntry | undefined) {
+export function createTerminalSessionLifecycle(
+  getCoordinator: (shellSessionKey: string) => TerminalSessionCoordinator | undefined,
+) {
   const pendingPtyInstances = new Map<string, number>()
   const taskTabSessions = createTaskTerminalTabsSessionStore()
-  const shellLifecycle = createTerminalShellLifecycleStore(getEntry)
+  const shellLifecycle = createTerminalShellLifecycleStore(
+    shellSessionKey => getCoordinator(shellSessionKey)?.getLifecycleState(),
+  )
 
-  function markPtyStarted(entry: PoolEntry, instanceId: number): void {
-    setCurrentPtyInstance(entry, instanceId)
-    entry.spawnPending = false
-    entry.ptyActive = true
-    entry.shellExited = false
-    entry.needsClear = false
-    shellLifecycle.notify(entry.shellSessionKey)
-  }
-
-  function restorePtyInstance(terminalKey: string, instanceId: number): void {
-    const entry = getEntry(terminalKey)
-    if (!entry) {
-      pendingPtyInstances.set(terminalKey, instanceId)
+  async function restorePtyInstance(shellSessionKey: string, instanceId: number): Promise<void> {
+    const coordinator = getCoordinator(shellSessionKey)
+    if (!coordinator) {
+      pendingPtyInstances.set(shellSessionKey, instanceId)
       return
     }
-    markPtyStarted(entry, instanceId)
+    await coordinator.restorePtyInstance(instanceId)
   }
 
-  function applyRestoredPtyInstance(entry: PoolEntry): void {
-    const restoredPtyInstance = pendingPtyInstances.get(entry.shellSessionKey)
+  async function applyRestoredPtyInstance(
+    coordinator: TerminalSessionCoordinator,
+  ): Promise<void> {
+    const shellSessionKey = coordinator.session.shellSessionKey
+    const restoredPtyInstance = pendingPtyInstances.get(shellSessionKey)
     if (restoredPtyInstance === undefined) return
-    pendingPtyInstances.delete(entry.shellSessionKey)
-    if (entry.ptyActive && entry.currentPtyInstance !== null) return
-    markPtyStarted(entry, restoredPtyInstance)
-  }
-
-  function markPtyOutput(entry: PoolEntry): void {
-    entry.ptyActive = true
-    entry.shellExited = false
-    entry.hasOutput = true
-    shellLifecycle.notify(entry.shellSessionKey)
-  }
-
-  function markPtyExited(entry: PoolEntry): void {
-    entry.ptyActive = false
-    entry.shellExited = true
-    entry.needsClear = true
-    shellLifecycle.notify(entry.shellSessionKey)
-  }
-
-  function shouldSpawnPty(entry: PoolEntry): boolean {
-    return !entry.ptyActive && !entry.spawnPending && !entry.shellExited
-  }
-
-  function markPtySpawnPending(entry: PoolEntry): void {
-    entry.spawnPending = true
-    entry.hasOutput = false
-  }
-
-  function clearPtySpawnPending(entry: PoolEntry): void {
-    entry.spawnPending = false
-  }
-
-  function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
-    if (entry.currentPtyInstance !== instanceId) {
-      entry.outputSequence = 0
-      synchronizeTerminalOutputObservation(entry.terminalOutputObservation, instanceId)
-    }
-    entry.currentPtyInstance = instanceId
-  }
-
-  function isShellExited(terminalKey: string): boolean {
-    const entry = getEntry(terminalKey)
-    return entry?.shellExited ?? false
-  }
-
-  function updateShellLifecycleState(terminalKey: string, state: ShellLifecycleState): void {
-    const entry = getEntry(terminalKey)
-    if (!entry) return
-    entry.ptyActive = state.ptyActive
-    entry.shellExited = state.shellExited
-    setCurrentPtyInstance(entry, state.currentPtyInstance)
-    entry.hasOutput = state.hasOutput
-    shellLifecycle.notify(terminalKey)
+    pendingPtyInstances.delete(shellSessionKey)
+    await coordinator.applyPendingRestoredPtyInstance(restoredPtyInstance)
   }
 
   function getTaskTerminalTabsSession(taskId: string): TaskTerminalTabsSession {
@@ -92,9 +39,9 @@ export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) =
     taskTabSessions.update(taskId, session)
   }
 
-  function clearTerminal(terminalKey: string): void {
-    pendingPtyInstances.delete(terminalKey)
-    shellLifecycle.clear(terminalKey)
+  function clearTerminal(shellSessionKey: string): void {
+    pendingPtyInstances.delete(shellSessionKey)
+    shellLifecycle.clear(shellSessionKey)
   }
 
   function clearTaskTerminalTabsSession(taskId: string): void {
@@ -109,21 +56,14 @@ export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) =
   return {
     applyRestoredPtyInstance,
     clearAll,
-    clearPtySpawnPending,
     clearTaskTerminalTabsSession,
     clearTerminal,
     getShellLifecycleState: shellLifecycle.getState,
     getTaskTerminalTabsSession,
-    isShellExited,
-    markPtyExited,
-    markPtyOutput,
-    markPtySpawnPending,
-    markPtyStarted,
+    isShellExited: (shellSessionKey: string) => getCoordinator(shellSessionKey)?.isShellExited() ?? false,
     notifyShellLifecycle: shellLifecycle.notify,
     restorePtyInstance,
-    shouldSpawnPty,
     subscribeShellLifecycle: shellLifecycle.subscribe,
-    updateShellLifecycleState,
     updateTaskTerminalTabsSession,
   }
 }

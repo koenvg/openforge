@@ -9,20 +9,25 @@ const children = createRawSnippet(() => ({
 
 describe('HoverTooltip', () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
   it('cancels a pending hover timer when unmounted', async () => {
     vi.useFakeTimers()
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
     const { unmount } = render(HoverTooltip, {
       props: { text: 'Helpful context', children },
     })
 
     await fireEvent.mouseOver(screen.getByRole('button', { name: 'Tooltip anchor' }))
-    expect(vi.getTimerCount()).toBe(1)
+    const timerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 200)
+    expect(timerIndex).toBeGreaterThanOrEqual(0)
+    const hoverTimer = setTimeoutSpy.mock.results[timerIndex]?.value
 
     unmount()
 
-    expect(vi.getTimerCount()).toBe(0)
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(hoverTimer)
   })
 })

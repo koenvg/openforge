@@ -1,8 +1,16 @@
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
+export type FileRevisionAvailability =
+  | { status: 'available'; size?: number }
+  | { status: 'missing' }
+  | { status: 'too-large'; size: number }
+  | { status: 'load-failed'; message: string }
+
 export interface FileContents {
   oldContent: string
   newContent: string
+  oldAvailability?: FileRevisionAvailability
+  newAvailability?: FileRevisionAvailability
 }
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -14,6 +22,15 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   svg: 'image/svg+xml',
   bmp: 'image/bmp',
   ico: 'image/x-icon',
+}
+
+const VIDEO_MIME_TYPES: Record<string, string> = {
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  webm: 'video/webm',
+  ogv: 'video/ogg',
+  ogg: 'video/ogg',
+  mov: 'video/quicktime',
 }
 
 export interface DiffViewData {
@@ -64,13 +81,37 @@ export function getImageMimeType(filename: string): string | null {
   return IMAGE_MIME_TYPES[ext] ?? null
 }
 
+export function getVideoMimeType(filename: string): string | null {
+  const ext = filename.toLowerCase().split('.').pop() || ''
+  return VIDEO_MIME_TYPES[ext] ?? null
+}
+
+export function getMediaMimeType(filename: string): string | null {
+  return getImageMimeType(filename) ?? getVideoMimeType(filename)
+}
+
 export function isImageFileDiff(file: PrFileDiff): boolean {
   return getImageMimeType(file.filename) !== null || (file.previous_filename !== null && getImageMimeType(file.previous_filename) !== null)
+}
+
+export function isVideoFileDiff(file: PrFileDiff): boolean {
+  return getVideoMimeType(file.filename) !== null || (file.previous_filename !== null && getVideoMimeType(file.previous_filename) !== null)
+}
+
+export function isMediaFileDiff(file: PrFileDiff): boolean {
+  return isImageFileDiff(file) || isVideoFileDiff(file)
 }
 
 export function getImagePreviewDataUrl(filename: string, base64Content: string): string | null {
   if (base64Content.length === 0) return null
   const mimeType = getImageMimeType(filename)
+  if (mimeType === null) return null
+  return `data:${mimeType};base64,${base64Content}`
+}
+
+export function getMediaPreviewDataUrl(filename: string, base64Content: string): string | null {
+  if (base64Content.length === 0) return null
+  const mimeType = getMediaMimeType(filename)
   if (mimeType === null) return null
   return `data:${mimeType};base64,${base64Content}`
 }

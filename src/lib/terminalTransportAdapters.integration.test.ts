@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDesktopTerminalTransport } from './desktopTerminalTransport'
+import { listenDesktopEvent } from './desktopIpc'
+import type { TerminalDesktopEventName } from './desktopIpcContract'
 import { createTrustedPluginTerminalTransport } from '../../plugins/terminal/src/lib/trustedPluginTerminalTransport'
 import {
   createTerminalRuntime,
@@ -233,6 +235,93 @@ describe('desktop TerminalTransport async registration', () => {
     await enabling
     expect(modelOutputUnlisten).toHaveBeenCalledOnce()
   })
+
+  it('holds terminal replay until main retains a sustained model-output subscription', async () => {
+    stubAttachmentObservers()
+    const terminalKey = 'T-1-shell-3'
+    const modelEventName = `pty-model-output-${terminalKey}`
+    const eventHandlers = new Map<string, (payload: unknown) => void>()
+    let acknowledgeModelOutput!: (unlisten: () => void) => void
+    let watermark = 0
+    window.openforge = {
+      version: 1,
+      invoke: vi.fn(),
+      onEvent: vi.fn(),
+      onEventReady: vi.fn((eventName: string, handler: (payload: unknown) => void) => {
+        eventHandlers.set(eventName, handler)
+        if (eventName === modelEventName) {
+          return new Promise<() => void>(resolve => { acknowledgeModelOutput = resolve })
+        }
+        return Promise.resolve(vi.fn())
+      }),
+    }
+    const getPtyBuffer = vi.fn(async () => ({
+      buffer: null,
+      isLive: true,
+      instanceId: 7,
+      snapshot: { instanceId: 7, watermark, data: btoa('snapshot') },
+    }))
+    const transport = createDesktopTerminalTransport({
+      listenEvent: (eventName, handler) => listenDesktopEvent(
+        eventName as TerminalDesktopEventName,
+        handler,
+      ),
+      getPtyBuffer,
+      writePty: vi.fn(async () => undefined),
+      resizePty: vi.fn(async () => undefined),
+    })
+    const view = createFakeTerminalView()
+    const runtime = createTerminalRuntime({
+      transport,
+      environment: { openLink: vi.fn(async () => undefined) },
+      createTerminalView: () => view,
+    })
+
+    try {
+      const entry = await runtime.acquire(terminalKey)
+      getPtyBuffer.mockClear()
+      const attachment = runtime.attach(entry, document.createElement('div'))
+
+      await vi.waitFor(() => expect(acknowledgeModelOutput).toBeTypeOf('function'))
+      expect(getPtyBuffer).not.toHaveBeenCalled()
+
+      acknowledgeModelOutput(vi.fn())
+      const frameData = 'x'.repeat(8 * 1024)
+      const encodedFrame = btoa(frameData)
+      for (let sequence = 1; sequence <= 64; sequence += 1) {
+        watermark = sequence
+        eventHandlers.get(modelEventName)?.({
+          data: encodedFrame,
+          instance_id: 7,
+          start_sequence: sequence,
+          sequence,
+        })
+        if (sequence === 32) {
+          eventHandlers.get(modelEventName)?.({
+            data: btoa('stale'),
+            instance_id: 8,
+            start_sequence: sequence + 1,
+            sequence: sequence + 1,
+          })
+        }
+      }
+      await attachment
+
+      expect(runtime.diagnostics.observe(terminalKey).output).toMatchObject({
+        ptyInstanceId: 7,
+        receivedBytes: 512 * 1024,
+        firstSequence: 1,
+        lastSequence: 64,
+        sequenceContinuous: true,
+        modelSequence: 64,
+      })
+      expect(view.writeLive).toHaveBeenCalledTimes(64)
+    } finally {
+      runtime.dispose()
+      delete window.openforge
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe.each([
@@ -272,8 +361,10 @@ describe.each([
       ptyInstanceId: 9,
       sequence: 1,
     })
-    expect(entry.currentPtyInstance).toBe(9)
-    expect(entry.terminalModelSequence).toBe(4)
+    expect(runtime.diagnostics.observe('T-1-shell-2')).toMatchObject({
+      lifecycle: { currentPtyInstance: 9 },
+      output: { modelSequence: 4 },
+    })
   })
 
   it('pauses live model output while detached and restores it after reattachment', async () => {
@@ -290,10 +381,10 @@ describe.each([
     const firstContainer = document.createElement('div')
     const secondContainer = document.createElement('div')
 
-    await runtime.attach(entry, firstContainer)
+    const firstAttachment = await runtime.attach(entry, firstContainer)
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
 
-    runtime.detach(entry)
+    firstAttachment.detach()
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
     const writesBeforeDetachedOutput = writeLive.mock.calls.length
     harness.emitModelOutput('T-1-shell-2', 'detached output', 7, 1)

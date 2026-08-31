@@ -1,20 +1,26 @@
 import { get } from 'svelte/store'
 import { createTerminalAcquisition } from './terminalAcquisition'
-import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
-import type { TerminalImageProtocol } from './terminalImages'
-import { terminalLogMessage } from './terminalLogging'
+import { isValidTerminalDimensions } from './terminalGeometry'
 import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
-import { createTerminalOutputObservation } from './terminalOutputObservation'
+import type { TerminalPerformanceMarkContext, TerminalPerformancePhase } from './terminalPerformanceTrace'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
-import type { TerminalTransport } from './terminalTransport'
-import { createXtermTerminalView } from './xtermTerminalView'
-import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
-import type { TerminalViewFactory } from './terminalView'
+import {
+  createTerminalSessionCoordinator,
+  type TerminalSessionCoordinator,
+} from './terminalSessionCoordinator'
 import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
+import type { TerminalTransport } from './terminalTransport'
+import type {
+  TerminalRuntimeDiagnostics,
+  TerminalRuntimeEnvironment,
+  TerminalSession,
+  TerminalSessionDiagnostics,
+} from './terminalRuntimeTypes'
 import { applyTerminalTheme } from './terminalThemePropagation'
+import type { TerminalViewFactory } from './terminalView'
+import { createXtermTerminalView } from './xtermTerminalView'
 import { themeMode as defaultThemeMode } from './theme'
 
-export type { TerminalViewAttachment } from './terminalAttachment'
 export type { TerminalOutputObservation } from './terminalOutputObservation'
 export type { TerminalImageProtocol } from './terminalImages'
 export type {
@@ -30,23 +36,27 @@ export type {
   TerminalTransportDisposable,
 } from './terminalTransport'
 export type {
-  PoolEntry,
-  TerminalStateSource,
   ShellLifecycleState,
   TaskTerminalTabsSession,
+  TerminalPtySpawnLease,
+  TerminalRuntimeDiagnostics,
   TerminalRuntimeEnvironment,
-  TerminalSessionConfiguration,
   TerminalRuntimeUnlistenFn,
+  TerminalSession,
+  TerminalSessionConfiguration,
+  TerminalSessionDiagnostics,
+  TerminalStateSource,
   TerminalTab,
+  TerminalViewAttachment,
 } from './terminalRuntimeTypes'
 export type {
   TerminalView,
   TerminalViewData,
-  TerminalViewLiveOutput,
   TerminalViewDisposable,
   TerminalViewFactory,
   TerminalViewFactoryOptions,
   TerminalViewGeometry,
+  TerminalViewLiveOutput,
   TerminalViewPresentationCell,
   TerminalViewPresentationEvidence,
   TerminalViewPresentationLine,
@@ -59,122 +69,103 @@ export interface TerminalRuntimeOptions {
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
   createTerminalView?: TerminalViewFactory
+  beforeSessionStart?(
+    session: TerminalSession,
+    getDiagnostics: () => TerminalSessionDiagnostics,
+  ): Promise<void> | undefined
 }
 
 export function createTerminalRuntime({
   transport,
   environment,
   createTerminalView = createXtermTerminalView,
+  beforeSessionStart,
 }: TerminalRuntimeOptions) {
   const activeThemeMode = environment.themeMode ?? defaultThemeMode
-  const pool = new Map<string, PoolEntry>()
-  let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
-  const attachments = createTerminalAttachmentController(
-    transport,
-    environment,
-    entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
-  )
-  const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key))
+  const coordinators = new Map<string, TerminalSessionCoordinator>()
+  const coordinatorsBySession = new WeakMap<TerminalSession, TerminalSessionCoordinator>()
+  const sessionLifecycle = createTerminalSessionLifecycle(key => coordinators.get(key))
 
-  function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
-    const configuration = environment.sampleSessionConfiguration?.(terminalKey) ?? {
+  function createCoordinator(
+    shellSessionKey: string,
+    fontReadiness: TerminalFontReadiness,
+  ): TerminalSessionCoordinator {
+    const configuration = environment.sampleSessionConfiguration?.(shellSessionKey) ?? {
       renderer: 'xterm' as const,
       enableImages: environment.enableImages,
     }
-    return {
-      shellSessionKey: terminalKey,
+    const coordinator = createTerminalSessionCoordinator({
+      shellSessionKey,
       view: createTerminalView({
-        terminalKey,
+        terminalKey: shellSessionKey,
         themeMode: get(activeThemeMode),
         openLink: url => environment.openLink(url),
         enableImages: configuration.enableImages,
         loggerName: environment.loggerName,
         fontReadiness,
+        performanceTrace: environment.performanceTrace,
       }),
-      ptyActive: false,
-      needsClear: false,
-      shellExited: false,
-      transportSubscription: null,
-      viewSubscriptions: [],
-      resizeObserver: null,
-      visibilityObserver: null,
-      resizeTimeout: null,
-      attached: false,
-      viewVisible: false,
-      viewVisibilityGeneration: 0,
-      viewNeedsRecovery: false,
-      attachmentGeneration: 0,
-      spawnPending: false,
-      currentPtyInstance: null,
-      terminalStateSource: 'bootstrapping',
-      terminalModelSequence: null,
-      pendingTerminalModelOutput: [],
-      terminalReplayRecovery: null,
-      hasOutput: false,
-      outputSequence: 0,
-      terminalOutputObservation: createTerminalOutputObservation(),
-    }
-  }
-
-  async function resetTerminal(entry: PoolEntry): Promise<void> {
-    await entry.view.replaceSnapshot({
-      data: '',
-      ptyInstanceId: null,
-      sequence: 0,
+      transport,
+      environment,
+      notifyLifecycle: sessionLifecycle.notifyShellLifecycle,
     })
+    coordinatorsBySession.set(coordinator.session, coordinator)
+    return coordinator
   }
 
-  function disposeTerminalEntry(entry: PoolEntry): void {
-    attachments.detach(entry)
-
-    if (entry.transportSubscription) {
-      try {
-        entry.transportSubscription.dispose()
-      } catch (error) {
-        console.warn(
-          terminalLogMessage(environment.loggerName, 'Failed to remove terminal transport subscription:'),
-          error,
-        )
-      }
-      entry.transportSubscription = null
+  function coordinatorFor(session: TerminalSession): TerminalSessionCoordinator {
+    const coordinator = coordinatorsBySession.get(session)
+    if (!coordinator || coordinators.get(session.shellSessionKey) !== coordinator) {
+      throw new Error(`Terminal Session "${session.shellSessionKey}" is not acquired by this runtime`)
     }
+    return coordinator
+  }
 
-    for (const subscription of entry.viewSubscriptions.splice(0)) {
-      try {
-        subscription.dispose()
-      } catch (error) {
-        console.warn(
-          terminalLogMessage(environment.loggerName, 'Failed to remove terminal view listener:'),
-          error,
-        )
-      }
-    }
-
-    entry.view.dispose()
+  function coordinatorForKey(shellSessionKey: string): TerminalSessionCoordinator {
+    const coordinator = coordinators.get(shellSessionKey)
+    if (!coordinator) throw new Error(`Unknown Terminal Session: ${shellSessionKey}`)
+    return coordinator
   }
 
   const reconnectReplay = createTerminalReconnectReplay({
     transport,
     environment,
-    getEntries: () => pool.values(),
-    hasEntries: () => pool.size > 0,
-    notifyLifecycle: sessionLifecycle.notifyShellLifecycle,
-    recoverEntry: entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
+    getCoordinators: () => coordinators.values(),
+    hasCoordinators: () => coordinators.size > 0,
   })
   const acquisition = createTerminalAcquisition({
-    transport,
-    environment,
-    pool,
-    createEntry,
+    coordinators,
+    createCoordinator,
+    beforeSessionStart,
     preloadEntry: preloadTerminalFonts,
-    disposeEntry: disposeTerminalEntry,
     lifecycle: sessionLifecycle,
     reconnectReplay,
   })
-  recoverTerminalState = acquisition.recoverTerminalState
 
-  const unsubscribeThemeMode = activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
+  const unsubscribeThemeMode = activeThemeMode.subscribe(mode => {
+    applyTerminalTheme(coordinators.values(), mode)
+  })
   let disposed = false
+
+  function releaseAll(): void {
+    let releaseError: unknown = null
+    try {
+      acquisition.releaseAll()
+    } catch (error) {
+      releaseError = error
+    }
+    try {
+      sessionLifecycle.clearAll()
+    } catch (error) {
+      releaseError ??= error
+    }
+    try {
+      reconnectReplay.releaseListenerIfIdle()
+    } catch (error) {
+      releaseError ??= error
+    }
+    if (releaseError) throw releaseError
+  }
 
   function dispose(): void {
     if (disposed) return
@@ -203,98 +194,45 @@ export function createTerminalRuntime({
     if (disposalError) throw disposalError
   }
 
-  function releaseAll(): void {
-    let releaseError: unknown = null
-    try {
-      acquisition.releaseAll()
-    } catch (error) {
-      releaseError = error
-    }
-    try {
-      sessionLifecycle.clearAll()
-    } catch (error) {
-      releaseError ??= error
-    }
-    try {
-      reconnectReplay.releaseListenerIfIdle()
-    } catch (error) {
-      releaseError ??= error
-    }
-    if (releaseError) throw releaseError
+  function markPerformancePhase(
+    phase: TerminalPerformancePhase,
+    context: TerminalPerformanceMarkContext,
+  ): void {
+    environment.performanceTrace?.mark(phase, context)
   }
 
-  function focusTerminal(terminalKey: string): void {
-    attachments.focus(pool.get(terminalKey))
-  }
-
-  function hasTerminal(terminalKey: string): boolean {
-    return pool.has(terminalKey)
-  }
-
-  function isPtyActive(terminalKey: string): boolean {
-    return pool.get(terminalKey)?.ptyActive ?? false
-  }
-
-  async function restorePtyInstance(terminalKey: string, instanceId: number): Promise<void> {
-    const entry = pool.get(terminalKey)
-    const shouldRecoverState = entry !== undefined
-      && (!entry.ptyActive || entry.currentPtyInstance !== instanceId)
-    sessionLifecycle.restorePtyInstance(terminalKey, instanceId)
-    if (!entry || !shouldRecoverState) return
-    try {
-      await acquisition.recoverTerminalState(entry)
-      if (entry.attached) await attachments.recoverActiveTerminal(entry)
-    } catch (error) {
-      console.error(terminalLogMessage(environment.loggerName, 'Failed to resolve restored terminal authority:'), error)
-    }
-  }
-
-  async function markShellPtyStarted(entry: PoolEntry, instanceId: number): Promise<void> {
-    sessionLifecycle.markPtyStarted(entry, instanceId)
-    try {
-      await acquisition.recoverTerminalState(entry)
-    } catch (error) {
-      console.error(terminalLogMessage(environment.loggerName, 'Failed to resolve spawned terminal authority:'), error)
-    }
-  }
-
-  function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
-    return entry.view.imageProtocol
-  }
-
-  function _getPool(): Map<string, PoolEntry> {
-    return pool
-  }
+  const diagnostics: TerminalRuntimeDiagnostics = Object.freeze({
+    list: () => [...coordinators.keys()].sort(),
+    observe: (shellSessionKey: string) => coordinatorForKey(shellSessionKey).diagnostics(),
+    capturePresentation: (shellSessionKey: string) => coordinatorForKey(shellSessionKey).capturePresentation(),
+    drainPresentation: (shellSessionKey: string) => coordinatorForKey(shellSessionKey).drainPresentation(),
+  })
 
   return {
     isValidTerminalDimensions,
-    getTerminalImageProtocol,
     acquire: acquisition.acquire,
-    attach: attachments.attach,
-    detach: attachments.detach,
+    attach: (session: TerminalSession, host: HTMLDivElement) => coordinatorFor(session).attach(host),
+    beginPtySpawn: (session: TerminalSession) => coordinatorFor(session).beginPtySpawn(),
+    markPerformancePhase,
     release: acquisition.release,
-    resetTerminal,
-    shouldSpawnPty: sessionLifecycle.shouldSpawnPty,
-    markPtySpawnPending: sessionLifecycle.markPtySpawnPending,
-    clearPtySpawnPending: sessionLifecycle.clearPtySpawnPending,
-    restorePtyInstance,
-    markShellPtyStarted,
+    resetPresentation: (session: TerminalSession) => coordinatorFor(session).resetPresentation(),
+    restorePtyInstance: sessionLifecycle.restorePtyInstance,
     subscribeShellLifecycle: sessionLifecycle.subscribeShellLifecycle,
     isShellExited: sessionLifecycle.isShellExited,
     getShellLifecycleState: sessionLifecycle.getShellLifecycleState,
-    updateShellLifecycleState: sessionLifecycle.updateShellLifecycleState,
     getTaskTerminalTabsSession: sessionLifecycle.getTaskTerminalTabsSession,
     updateTaskTerminalTabsSession: sessionLifecycle.updateTaskTerminalTabsSession,
     clearTaskTerminalTabsSession: sessionLifecycle.clearTaskTerminalTabsSession,
     releaseAll,
     dispose,
     releaseAllForTask: acquisition.releaseAllForTask,
-    focusTerminal,
-    hasTerminal,
-    isPtyActive,
-    recoverActiveTerminal: attachments.recoverActiveTerminal,
+    focusTerminal: (shellSessionKey: string) => coordinators.get(shellSessionKey)?.focus(),
+    hasTerminal: (shellSessionKey: string) => coordinators.has(shellSessionKey),
+    isPtyActive: (shellSessionKey: string) => (
+      coordinators.get(shellSessionKey)?.getLifecycleState().ptyActive ?? false
+    ),
     replayPtyBuffersForActiveTerminals: reconnectReplay.replayActiveTerminals,
-    _getPool,
+    diagnostics,
   }
 }
 

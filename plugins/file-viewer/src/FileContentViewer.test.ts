@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { FileContent } from '@openforge-app/plugin-sdk/domain'
 import FileContentViewer from './FileContentViewer.svelte'
@@ -26,6 +26,10 @@ const sampleModifiedAt = Date.UTC(2024, 2, 9, 15, 30)
 const formattedModifiedAt = new Date(sampleModifiedAt).toLocaleString('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 function renderViewer(props: Partial<{
@@ -170,6 +174,65 @@ describe('plugin FileContentViewer recovery and accessibility states', () => {
     expect(screen.getByText(`Modified ${formattedModifiedAt}`)).toBeTruthy()
   })
 
+
+  it('shows selected-video metadata and native controls without autoplay', () => {
+    const content: FileContent = {
+      type: 'video',
+      content: 'AAECAw==',
+      mimeType: 'video/mp4',
+      size: 4,
+    }
+    renderViewer({ content, error: null, fileName: 'demo.mp4', filePath: 'assets/demo.mp4', modifiedAt: sampleModifiedAt })
+
+    const video = screen.getByLabelText('demo.mp4 preview') as HTMLVideoElement
+    expect(video.getAttribute('src')).toBe('data:video/mp4;base64,AAECAw==')
+    expect(video.controls).toBe(true)
+    expect(video.autoplay).toBe(false)
+    expect(video.preload).toBe('metadata')
+    expect(screen.getByText('4 B')).toBeTruthy()
+    expect(screen.getByText('video/mp4')).toBeTruthy()
+    expect(screen.getByText(`Modified ${formattedModifiedAt}`)).toBeTruthy()
+  })
+
+  it('reports decode errors while keeping selected-video metadata visible', async () => {
+    const content: FileContent = { type: 'video', content: 'invalid', mimeType: 'video/webm', size: 7 }
+    renderViewer({ content, error: null, fileName: 'broken.webm', filePath: 'broken.webm' })
+
+    await fireEvent.error(screen.getByLabelText('broken.webm preview'))
+
+    expect(screen.getByRole('alert').textContent).toContain('Video playback unavailable')
+    expect(screen.getByText('broken.webm')).toBeTruthy()
+    expect(screen.getByText('video/webm')).toBeTruthy()
+    expect(screen.getByText('7 B')).toBeTruthy()
+  })
+
+  it('pauses video playback when the selected file changes', async () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    const content: FileContent = { type: 'video', content: 'video', mimeType: 'video/mp4', size: 5 }
+    const { rerender } = renderViewer({ content, error: null, fileName: 'first.mp4', filePath: 'first.mp4' })
+
+    await rerender({
+      api: makeApi(),
+      content: textContent,
+      fileName: 'README.md',
+      filePath: 'README.md',
+      projectId: 'test-project-id',
+      error: null,
+      modifiedAt: null,
+    })
+
+    await waitFor(() => expect(pause).toHaveBeenCalledTimes(1))
+  })
+
+  it('pauses video playback during teardown', () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+    const content: FileContent = { type: 'video', content: 'video', mimeType: 'video/mp4', size: 5 }
+    const { unmount } = renderViewer({ content, error: null, fileName: 'demo.mp4', filePath: 'demo.mp4' })
+
+    unmount()
+
+    expect(pause).toHaveBeenCalledTimes(1)
+  })
   it('shows metadata-only preview fallbacks for binary, document, and large files', () => {
     const fallbackCases: Array<{ content: FileContent, fileName: string, expected: RegExp | string, metadata: string }> = [
       {
@@ -189,6 +252,12 @@ describe('plugin FileContentViewer recovery and accessibility states', () => {
         fileName: 'huge_log.txt',
         expected: /File too large to preview/i,
         metadata: '10.0 MB',
+      },
+      {
+        content: { type: 'large-file', content: '', mimeType: 'video/quicktime', size: 30 * 1024 * 1024 },
+        fileName: 'recording.mov',
+        expected: /File too large to preview/i,
+        metadata: '30.0 MB',
       },
     ]
 

@@ -4,12 +4,13 @@
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
-  import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
-  import type { OpenReviewImage, ReviewImage } from './reviewImages'
+  import { getMediaPreviewDataUrl, getVideoMimeType, isMediaFileDiff, isVideoFileDiff, type FileContents, type FileRevisionAvailability } from './diffAdapter'
+  import type { OpenReviewMedia, ReviewMedia } from './reviewMedia'
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
   import FileContentsError from './FileContentsError.svelte'
   import RichMarkdownDiff from './RichMarkdownDiff.svelte'
+  import ReviewVideoPreview from './ReviewVideoPreview.svelte'
 
   interface Props {
     file: PrFileDiff
@@ -17,6 +18,7 @@
     fileContents: FileContents | undefined
     fileContentError: string | undefined
     onRetryFileContents: () => void
+    onRequestFileContents?: () => void
     canFetchFileContents: boolean
     workerDiffFile: DiffFile | undefined
     diffViewMode: DiffModeEnum
@@ -29,7 +31,7 @@
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath: (repositoryPath: string, suffix: string) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
-    onOpenImage?: OpenReviewImage
+    onOpenMedia?: OpenReviewMedia
     onOpenInlineCommentWidget: (lineNumber: number, side: SplitSide) => void
     getInlineCommentText: (lineNumber: number, side: SplitSide) => string
     onSetInlineCommentText: (lineNumber: number, side: SplitSide, text: string) => void
@@ -55,6 +57,7 @@
     fileContents,
     fileContentError,
     onRetryFileContents,
+    onRequestFileContents,
     canFetchFileContents,
     workerDiffFile,
     diffViewMode,
@@ -67,7 +70,7 @@
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
-    onOpenImage,
+    onOpenMedia,
     onOpenInlineCommentWidget,
     getInlineCommentText,
     onSetInlineCommentText,
@@ -92,50 +95,70 @@
     return side === SplitSide.old ? 'LEFT' : 'RIGHT'
   }
 
-  function buildImageGallery(oldImageSrc: string | null, newImageSrc: string | null): ReviewImage[] {
-    const images: ReviewImage[] = []
+  function buildMediaGallery(oldSrc: string | null, newSrc: string | null): ReviewMedia[] {
+    const items: ReviewMedia[] = []
 
-    if (oldImageSrc) {
-      images.push({
-        src: oldImageSrc,
-        alt: `${file.previous_filename || file.filename} old preview`,
-        filename: file.filename,
+    if (oldSrc) {
+      const filename = file.previous_filename || file.filename
+      items.push({
+        kind: getVideoMimeType(filename) ? 'video' : 'image',
+        src: oldSrc,
+        alt: `${filename} old preview`,
+        filename,
         label: 'Before',
       })
     }
 
-    if (newImageSrc) {
-      images.push({
-        src: newImageSrc,
+    if (newSrc) {
+      items.push({
+        kind: getVideoMimeType(file.filename) ? 'video' : 'image',
+        src: newSrc,
         alt: `${file.filename} new preview`,
         filename: file.filename,
         label: 'After',
       })
     }
 
-    return images
+    return items
   }
+
+  function formatByteSize(size: number): string {
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`
+    return `${(size / (1024 * 1024)).toFixed(1)} MiB`
+  }
+
+  function revisionAvailability(content: string, availability: FileRevisionAvailability | undefined): FileRevisionAvailability {
+    if (availability) return availability
+    return content.length > 0 ? { status: 'available' } : { status: 'missing' }
+  }
+
+  $effect(() => {
+    if (isVideoFileDiff(file)) onRequestFileContents?.()
+  })
 </script>
 
-{#snippet imagePreview(src: string, alt: string, openLabel: string, images: ReviewImage[], activeIndex: number)}
-  {#if onOpenImage}
+{#snippet mediaPreview(item: ReviewMedia, openLabel: string, items: ReviewMedia[], activeIndex: number)}
+  {#if item.kind === 'video'}
+    <ReviewVideoPreview {item} />
+  {:else if onOpenMedia}
     <button
       type="button"
       class="cursor-zoom-in rounded border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       aria-label={openLabel}
       onclick={(event) => {
         event.currentTarget.focus()
-        onOpenImage?.({ images, activeIndex })
+        onOpenMedia?.({ items, activeIndex })
       }}
     >
-      <img {src} {alt} class="max-h-96 max-w-full object-contain" />
+      <img src={item.src} alt={item.alt} class="max-h-96 max-w-full object-contain" />
     </button>
   {:else}
-    <img {src} {alt} class="max-h-96 max-w-full object-contain" />
+    <img src={item.src} alt={item.alt} class="max-h-96 max-w-full object-contain" />
   {/if}
 {/snippet}
 
-{#if !file.patch && !isImageFileDiff(file) && file.status === 'renamed' && file.changes === 0}
+{#if !file.patch && !isMediaFileDiff(file) && file.status === 'renamed' && file.changes === 0}
   <div class="flex items-center justify-center py-8 text-base-content/50">
     <span class="text-xs">File renamed without content changes.</span>
   </div>
@@ -149,9 +172,9 @@
         {resolveRepositoryImage}
         {onOpenRepositoryPath}
         {onOpenUrl}
-        onOpenImage={onOpenImage ? (image) => onOpenImage({
+        onOpenImage={onOpenMedia ? (image) => onOpenMedia({
           activeIndex: 0,
-          images: [{ ...image, filename: file.filename, label: 'Rich preview' }],
+          items: [{ ...image, kind: 'image', filename: file.filename, label: 'Rich preview' }],
         }) : undefined}
         {existingComments}
         {pendingComments}
@@ -189,56 +212,68 @@
       <p class="text-sm text-base-content/50">Rich preview unavailable</p>
     {/if}
   </div>
-{:else if isImageFileDiff(file)}
+{:else if isMediaFileDiff(file)}
   {#if fileContentError}
     <div class="bg-base-100 p-4">
       <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
     </div>
   {:else}
-    {@const oldImageSrc = fileContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, fileContents.oldContent) : null}
-    {@const newImageSrc = fileContents ? getImagePreviewDataUrl(file.filename, fileContents.newContent) : null}
-    {@const imageGallery = buildImageGallery(oldImageSrc, newImageSrc)}
+    {@const oldContent = fileContents?.oldContent ?? ''}
+    {@const newContent = fileContents?.newContent ?? ''}
+    {@const oldAvailability = fileContents ? revisionAvailability(oldContent, fileContents.oldAvailability) : undefined}
+    {@const newAvailability = fileContents ? revisionAvailability(newContent, fileContents.newAvailability) : undefined}
+    {@const oldSrc = getMediaPreviewDataUrl(file.previous_filename || file.filename, oldContent)}
+    {@const newSrc = getMediaPreviewDataUrl(file.filename, newContent)}
+    {@const mediaGallery = buildMediaGallery(oldSrc, newSrc)}
     <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
-    {#if file.status !== 'added'}
-      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
-        <div class="flex flex-1 items-center justify-center overflow-auto">
-          {#if oldImageSrc}
-            {@render imagePreview(
-              oldImageSrc,
-              `${file.previous_filename || file.filename} old preview`,
-              `Open ${file.filename} before preview`,
-              imageGallery,
-              imageGallery.findIndex(image => image.label === 'Before'),
-            )}
-          {:else if fileContents === undefined && canFetchFileContents}
-            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading old image preview"></span>
-          {:else}
-            <span class="text-sm text-base-content/50">No previous image preview</span>
-          {/if}
+      {#if file.status !== 'added'}
+        {@const oldItem = mediaGallery.find(item => item.label === 'Before')}
+        <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
+          <div class="flex flex-1 items-center justify-center overflow-auto">
+            {#if oldItem}
+              {@render mediaPreview(
+                oldItem,
+                `Open ${file.previous_filename || file.filename} before preview`,
+                mediaGallery,
+                mediaGallery.indexOf(oldItem),
+              )}
+            {:else if oldAvailability === undefined && canFetchFileContents}
+              <span class="loading loading-spinner loading-sm text-primary" aria-label={isVideoFileDiff(file) ? 'Loading old video preview' : 'Loading old image preview'}></span>
+            {:else if oldAvailability?.status === 'too-large'}
+              <span class="text-sm text-base-content/60">Video is too large to preview ({formatByteSize(oldAvailability.size)}).</span>
+            {:else if oldAvailability?.status === 'load-failed'}
+              <FileContentsError filename={file.filename} error={oldAvailability.message} onRetry={onRetryFileContents} />
+            {:else}
+              <span class="text-sm text-base-content/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No previous image preview'}</span>
+            {/if}
+          </div>
         </div>
-      </div>
-    {/if}
-    {#if file.status !== 'removed' && file.status !== 'deleted'}
-      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
-        <div class="flex flex-1 items-center justify-center overflow-auto">
-          {#if newImageSrc}
-            {@render imagePreview(
-              newImageSrc,
-              `${file.filename} new preview`,
-              `Open ${file.filename} after preview`,
-              imageGallery,
-              imageGallery.findIndex(image => image.label === 'After'),
-            )}
-          {:else if fileContents === undefined && canFetchFileContents}
-            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading new image preview"></span>
-          {:else}
-            <span class="text-sm text-base-content/50">No image preview</span>
-          {/if}
+      {/if}
+      {#if file.status !== 'removed' && file.status !== 'deleted'}
+        {@const newItem = mediaGallery.find(item => item.label === 'After')}
+        <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
+          <div class="flex flex-1 items-center justify-center overflow-auto">
+            {#if newItem}
+              {@render mediaPreview(
+                newItem,
+                `Open ${file.filename} after preview`,
+                mediaGallery,
+                mediaGallery.indexOf(newItem),
+              )}
+            {:else if newAvailability === undefined && canFetchFileContents}
+              <span class="loading loading-spinner loading-sm text-primary" aria-label={isVideoFileDiff(file) ? 'Loading new video preview' : 'Loading new image preview'}></span>
+            {:else if newAvailability?.status === 'too-large'}
+              <span class="text-sm text-base-content/60">Video is too large to preview ({formatByteSize(newAvailability.size)}).</span>
+            {:else if newAvailability?.status === 'load-failed'}
+              <FileContentsError filename={file.filename} error={newAvailability.message} onRetry={onRetryFileContents} />
+            {:else}
+              <span class="text-sm text-base-content/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No image preview'}</span>
+            {/if}
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
     </div>
   {/if}
 {:else if !file.patch && file.status === 'binary'}

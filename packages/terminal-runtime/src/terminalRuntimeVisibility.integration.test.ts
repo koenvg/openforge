@@ -65,7 +65,7 @@ describe('terminal runtime visibility', () => {
     vi.unstubAllGlobals()
   })
 
-  it('settles attachment when detached before the initial visibility notification', async () => {
+  it('settles attachment when released before the initial visibility notification', async () => {
     const terminalKey = 'T-detach-before-visibility-shell-0'
     installVisibilityHarness(false)
     const host = createHost()
@@ -76,13 +76,12 @@ describe('terminal runtime visibility', () => {
     try {
       const entry = await runtime.acquire(terminalKey)
       const pendingAttachment = runtime.attach(entry, document.createElement('div'))
-      await vi.waitFor(() => expect(entry.attached).toBe(true))
+      await vi.waitFor(() => expect(runtime.diagnostics.observe(terminalKey)?.view.attached).toBe(true))
 
-      runtime.detach(entry)
+      runtime.release(terminalKey)
 
       await expect(pendingAttachment).resolves.toMatchObject({ generation: 1 })
-      expect(entry.attached).toBe(false)
-      expect(entry.visibilityObserver).toBeNull()
+      expect(runtime.diagnostics.list()).not.toContain(terminalKey)
     } finally {
       runtime.dispose()
     }
@@ -132,8 +131,10 @@ describe('terminal runtime visibility', () => {
         sequence: 0,
       })
       expect(view.writeLive).not.toHaveBeenCalled()
-      expect(entry.attached).toBe(true)
-      expect(entry.viewVisible).toBe(true)
+      expect(runtime.diagnostics.observe(terminalKey)?.view).toMatchObject({
+        attached: true,
+        visible: true,
+      })
     } finally {
       runtime.dispose()
     }
@@ -178,7 +179,7 @@ describe('terminal runtime visibility', () => {
         ptyInstanceId: 1,
         sequence: 0,
       })
-      expect(entry.terminalModelSequence).toBe(8)
+      expect(runtime.diagnostics.observe(terminalKey)?.output.modelSequence).toBe(8)
     } finally {
       runtime.dispose()
     }
@@ -214,7 +215,6 @@ describe('terminal runtime visibility', () => {
         ptyInstanceId: 1,
         sequence: 0,
       })
-      expect(entry.viewNeedsRecovery).toBe(false)
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
     } finally {
       runtime.dispose()
@@ -241,8 +241,7 @@ describe('terminal runtime visibility', () => {
       visibility.show(true)
 
       await vi.waitFor(() => expect(view.replaceSnapshot).toHaveBeenCalledOnce())
-      expect(entry.viewVisible).toBe(true)
-      expect(entry.viewNeedsRecovery).toBe(false)
+      expect(runtime.diagnostics.observe(terminalKey)?.view.visible).toBe(true)
       expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('Visible terminal recovery failed; retrying in 100ms:'),
@@ -257,6 +256,7 @@ describe('terminal runtime visibility', () => {
     const terminalKey = 'T-visibility-race-shell-0'
     const visibility = installVisibilityHarness()
     const host = createHost()
+    const reads = vi.spyOn(host, 'getPtyBuffer')
     host.setBuffer(terminalKey, 'initial snapshot')
     const view = createFakeTerminalView()
     const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
@@ -267,14 +267,13 @@ describe('terminal runtime visibility', () => {
       const resumeRecovery = host.deferBufferRead(terminalKey)
 
       visibility.show(true)
-      await vi.waitFor(() => expect(entry.terminalReplayRecovery).not.toBeNull())
+      await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
       visibility.show(false)
       visibility.show(true)
       resumeRecovery()
 
       await vi.waitFor(() => {
-        expect(entry.viewVisible).toBe(true)
-        expect(entry.viewNeedsRecovery).toBe(false)
+        expect(runtime.diagnostics.observe(terminalKey)?.view.visible).toBe(true)
         expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
       })
 

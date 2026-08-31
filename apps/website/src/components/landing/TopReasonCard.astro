@@ -12,7 +12,13 @@ const stepNumber = String(index + 1).padStart(2, '0');
 
 <li class="reason-step">
   <article class="reason-card" data-animate-card>
-    <span class="step-badge" aria-hidden="true">{stepNumber}</span>
+    <div class="reason-card-topline">
+      <span class="step-badge" aria-hidden="true">{stepNumber}</span>
+      <span class="reason-signal" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+    <div class:list={['reason-diagram', `reason-diagram-${index + 1}`]} aria-hidden="true">
+      <span></span><span></span><span></span><span></span>
+    </div>
     <h3>{reason.title}</h3>
     <p>{reason.description}</p>
   </article>

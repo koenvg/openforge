@@ -13,12 +13,14 @@ function locator(name) {
 function createPage() {
   const project = locator('project')
   const task = locator('task')
+  const openFullView = locator('open-full-view')
   const backlog = locator('backlog')
   const backToTaskBoard = locator('back-to-task-board')
   const terminal = locator('terminal')
   const visibleTerminalText = locator('visible-terminal-text')
   terminal.getByText = vi.fn(() => visibleTerminalText)
   const terminalInput = {
+    focus: vi.fn(async () => undefined),
     press: vi.fn(async () => undefined),
     fill: vi.fn(async () => undefined),
   }
@@ -27,12 +29,14 @@ function createPage() {
   const terminalTab = locator('terminal-tab')
   const agentTab = locator('agent-tab')
   const taskWorkbenchTabs = {
+    waitFor: vi.fn(async () => undefined),
     getByRole: vi.fn((_role, options) => options?.name === 'agent' ? agentTab : terminalTab),
   }
   const newShell = locator('new-shell')
   const page = {
     keyboard: {
       press: vi.fn(async () => undefined),
+      insertText: vi.fn(async () => undefined),
       type: vi.fn(async () => undefined),
     },
     evaluate: vi.fn()
@@ -44,6 +48,7 @@ function createPage() {
       if (role === 'button' && String(options?.name).includes('Backlog')) return backlog
       if (role === 'button' && options?.name === 'Back to task board') return backToTaskBoard
       if (role === 'button' && String(options?.name).includes('Terminal performance fixture')) return task
+      if (role === 'button' && String(options?.name).includes('Open full view')) return openFullView
       if (role === 'button' && options?.name === 'Open new shell') return newShell
       if (role === 'region') return terminal
       throw new Error(`Unexpected role ${role}`)
@@ -52,7 +57,7 @@ function createPage() {
     waitForFunction: vi.fn(async () => undefined),
   }
   return {
-    agentTab, backToTaskBoard, backlog, newShell, page, project, shellTab, task, taskWorkbenchTabs, terminal,
+    agentTab, backToTaskBoard, backlog, newShell, openFullView, page, project, shellTab, task, taskWorkbenchTabs, terminal,
     terminalInput, terminalTab, visibleTerminalText,
   }
 }
@@ -72,7 +77,7 @@ describe('desktop app driver', () => {
     await expect(driver.verifyDesktopBridge()).resolves.toEqual({ ok: true, projectCount: 1 })
     const opened = await driver.openSeededTerminal(manifest)
 
-    expect(harness.page.waitForFunction).toHaveBeenCalledTimes(3)
+    expect(harness.page.waitForFunction).toHaveBeenCalledTimes(4)
     expect(harness.page.getByText).toHaveBeenCalledWith('Desktop Test Project', { exact: true })
     expect(harness.project.click).toHaveBeenCalledOnce()
     expect(harness.page.getByRole).toHaveBeenCalledWith('button', { name: /^Backlog\b/i })
@@ -94,6 +99,22 @@ describe('desktop app driver', () => {
     expect(JSON.stringify(opened)).not.toContain('xterm')
   })
 
+  it('opens the full task view when board selection stays in the preview pane', async () => {
+    const harness = createPage()
+    harness.taskWorkbenchTabs.waitFor
+      .mockRejectedValueOnce(new Error('workbench not visible'))
+      .mockResolvedValueOnce(undefined)
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.selectSeededTask(manifest)
+
+    expect(harness.openFullView.click).toHaveBeenCalledOnce()
+    expect(harness.taskWorkbenchTabs.waitFor).toHaveBeenLastCalledWith({
+      state: 'visible',
+      timeout: 8_000,
+    })
+  })
+
   it('types terminal commands through the focused terminal landmark', async () => {
     const harness = createPage()
     const driver = createDesktopAppDriver(harness.page)
@@ -102,9 +123,37 @@ describe('desktop app driver', () => {
 
     expect(harness.shellTab.click).toHaveBeenCalledOnce()
     expect(harness.terminal.click).not.toHaveBeenCalled()
-    expect(harness.terminal.getByRole).toHaveBeenCalledWith('textbox', { name: 'Terminal input' })
-    expect(harness.terminalInput.fill).toHaveBeenCalledWith('printf TEST_READY')
-    expect(harness.terminalInput.press).toHaveBeenCalledWith('Enter')
+    expect(harness.page.keyboard.insertText).toHaveBeenCalledWith('printf TEST_READY')
+    expect(harness.page.keyboard.press).toHaveBeenCalledWith('Enter')
+  })
+
+  it('types through an already-focused terminal without clicking the shell tab', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page)
+
+    await driver.focusTerminal()
+    expect(harness.shellTab.click).toHaveBeenCalledOnce()
+    harness.shellTab.click.mockClear()
+
+    await driver.typeFocusedTerminalCommand(harness.terminal, 'printf STEADY_STATE')
+
+    expect(harness.shellTab.click).not.toHaveBeenCalled()
+    expect(harness.page.keyboard.insertText).toHaveBeenCalledWith('printf STEADY_STATE')
+    expect(harness.page.keyboard.press).toHaveBeenCalledWith('Enter')
+  })
+
+  it('waits for the development performance probe before starting a trace', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.startTerminalPerformanceTrace()
+
+    expect(harness.page.waitForFunction).toHaveBeenCalledOnce()
+    expect(harness.page.waitForFunction).toHaveBeenCalledWith(
+      expect.any(Function),
+      null,
+      { timeout: 8_000 },
+    )
   })
 
   it('rejects unavailable desktop bridges and missing probe terminal keys', async () => {

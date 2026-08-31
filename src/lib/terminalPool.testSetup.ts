@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { _getPool, releaseAll, type PoolEntry } from "./terminalPool";
+import { releaseAll } from './terminalPool'
 
 type ListenCallback = (event: unknown) => void;
 type UnlistenMock = Mock<() => void>;
-type TerminalPoolEntry = PoolEntry;
 
 // Track listen callbacks so tests can simulate events
 export const listenCallbacks = new Map<string, ListenCallback>();
@@ -81,6 +80,29 @@ export function requireValue<T>(value: T | null | undefined, message: string): T
 	return value;
 }
 
+export function getTerminalMockAt(index: number): TerminalMock {
+  return requireValue(terminalInstances[index], `Expected xterm adapter instance ${index}`)
+}
+
+export function getTerminalMocksAt(index: number) {
+  const terminal = getTerminalMockAt(index)
+  return {
+    open: vi.mocked(terminal.open),
+    write: vi.mocked(terminal.write),
+    dispose: vi.mocked(terminal.dispose),
+    loadAddon: vi.mocked(terminal.loadAddon),
+    attachCustomKeyEventHandler: vi.mocked(terminal.attachCustomKeyEventHandler),
+    refresh: vi.mocked(terminal.refresh),
+    focus: vi.mocked(terminal.focus),
+    reset: vi.mocked(terminal.reset),
+  }
+}
+
+export function getLoadedAddonNamesAt(index: number): string[] {
+  return vi.mocked(getTerminalMockAt(index).loadAddon).mock.calls
+    .map(call => Object.getPrototypeOf(call[0])?.constructor?.name ?? '')
+}
+
 export function getListenCallback(eventName: string): ListenCallback {
 	return requireValue(
 		listenCallbacks.get(eventName),
@@ -95,40 +117,6 @@ export function getWebLinksHandler(): (event: MouseEvent, uri: string) => void {
 	);
 }
 
-export function getEntryIndex(entry: TerminalPoolEntry): number {
-	const index = [..._getPool().values()].indexOf(entry);
-	if (index < 0) throw new Error(`Terminal entry ${entry.shellSessionKey} is not pooled`);
-	return index;
-}
-
-export function getTerminalMock(entry: TerminalPoolEntry): TerminalMock {
-	return requireValue(terminalInstances[getEntryIndex(entry)], "Expected xterm adapter instance");
-}
-
-export function getTerminalMocks(entry: TerminalPoolEntry) {
-	const terminal = getTerminalMock(entry);
-	return {
-		open: vi.mocked(terminal.open),
-		write: vi.mocked(terminal.write),
-		dispose: vi.mocked(terminal.dispose),
-		loadAddon: vi.mocked(terminal.loadAddon),
-		attachCustomKeyEventHandler: vi.mocked(terminal.attachCustomKeyEventHandler),
-		refresh: vi.mocked(terminal.refresh),
-		focus: vi.mocked(terminal.focus),
-		reset: vi.mocked(terminal.reset),
-	};
-}
-
-export function getFitAddonMocks(entry: TerminalPoolEntry) {
-	const fitAddon = requireValue(fitAddonInstances[getEntryIndex(entry)], "Expected fit addon instance");
-	return { fit: vi.mocked(fitAddon.fit) };
-}
-
-export function getLoadedAddonNames(entry: TerminalPoolEntry): string[] {
-	return vi
-		.mocked(getTerminalMock(entry).loadAddon)
-		.mock.calls.map(call => Object.getPrototypeOf(call[0])?.constructor?.name ?? "");
-}
 
 vi.mock("./desktopIpc", () => ({
 	listenDesktopEvent: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {

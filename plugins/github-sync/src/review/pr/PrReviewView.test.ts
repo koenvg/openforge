@@ -478,8 +478,8 @@ describe('PrReviewView reviewed files', () => {
     }
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [imageDiff])
-    const getFileContentBase64 = vi.fn().mockResolvedValue('new-image-base64')
-    const getFileAtRefBase64 = vi.fn().mockResolvedValue('old-image-base64')
+    const getFileContentBase64 = vi.fn().mockResolvedValue({ content: 'new-image-base64', size: 16, tooLarge: false })
+    const getFileAtRefBase64 = vi.fn().mockResolvedValue({ content: 'old-image-base64', size: 16, tooLarge: false })
     registry.backendApi.backend.registerMethod('getFileContentBase64', { handler: getFileContentBase64 })
     registry.backendApi.backend.registerMethod('getFileAtRefBase64', { handler: getFileAtRefBase64 })
 
@@ -503,6 +503,43 @@ describe('PrReviewView reviewed files', () => {
     expect(oldPreview.getAttribute('src')).toBe('data:image/png;base64,old-image-base64')
     expect(getFileContentBase64).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', sha: 'new-image-sha' })
     expect(getFileAtRefBase64).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', path: 'assets/screenshot.png', refSha: 'main' })
+  })
+
+  it('uses native controls for GitHub video revisions', async () => {
+    const videoDiff: PrFileDiff = {
+      ...baseDiff,
+      sha: 'new-video-sha',
+      filename: 'assets/demo.mp4',
+      status: 'modified',
+      additions: 0,
+      deletions: 0,
+      changes: 1,
+      patch: null,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [videoDiff])
+    const getFileContentBase64 = vi.fn().mockResolvedValue({ content: 'new-video-base64', size: 16, tooLarge: false })
+    const getFileAtRefBase64 = vi.fn().mockResolvedValue({ content: 'old-video-base64', size: 16, tooLarge: false })
+    registry.backendApi.backend.registerMethod('getFileContentBase64', { handler: getFileContentBase64 })
+    registry.backendApi.backend.registerMethod('getFileAtRefBase64', { handler: getFileAtRefBase64 })
+
+    renderPrReviewView(registry)
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
+
+    const video = await screen.findByLabelText('assets/demo.mp4 new preview') as HTMLVideoElement
+
+    expect(screen.queryByRole('button', { name: 'Open assets/demo.mp4 after preview' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Media preview' })).toBeNull()
+    expect(video.controls).toBe(true)
+    expect(video.autoplay).toBe(false)
+    expect(getFileContentBase64).toHaveBeenCalledWith({
+      owner: 'acme', repo: 'repo', sha: 'new-video-sha', maxSize: 25 * 1024 * 1024,
+    })
+    expect(getFileAtRefBase64).toHaveBeenCalledWith({
+      owner: 'acme', repo: 'repo', path: 'assets/demo.mp4', refSha: 'main', maxSize: 25 * 1024 * 1024,
+    })
   })
 
   it('does not prune a selected pull request reviewed files against stale diffs from the previous PR', async () => {
@@ -1364,7 +1401,7 @@ describe('PrReviewView Rich Diff repository paths', () => {
       async () => undefined,
       '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md#installation)',
     )
-    const getFileAtRefBase64 = vi.fn().mockResolvedValue('base64-diagram')
+    const getFileAtRefBase64 = vi.fn().mockResolvedValue({ content: 'base64-diagram', size: 14, tooLarge: false })
     registry.backendApi.backend.registerMethod('getFileAtRefBase64', { handler: getFileAtRefBase64 })
 
     renderPrReviewView(registry)
@@ -1374,7 +1411,7 @@ describe('PrReviewView Rich Diff repository paths', () => {
     await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
 
     await waitFor(() => {
-      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+      expect(screen.getByAltText('Diagram').getAttribute('src'))
         .toBe('data:image/png;base64,base64-diagram')
     })
     expect(getFileAtRefBase64).toHaveBeenCalledWith({

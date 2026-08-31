@@ -1,6 +1,6 @@
 import type {
-  PoolEntry,
   ShellLifecycleState,
+  TerminalSession,
   TerminalViewAttachment,
 } from './terminalRuntime'
 import type { TerminalSurfaceAdapter } from './terminalSurfaceAdapter'
@@ -51,13 +51,13 @@ export function createTaskTerminalController({
   let mounted = false
   let currentBinding: TaskTerminalBinding | null = null
   let boundContextSignature: string | null = null
-  let poolEntry: PoolEntry | null = null
+  let terminalSession: TerminalSession | null = null
   let viewAttachment: TerminalViewAttachment | null = null
   let unsubscribeShellLifecycle: (() => void) | null = null
   let lifecycle = initialLifecycle
   let bindRun = 0
   let previousIsActive: boolean | null = null
-  let activatingEntry: PoolEntry | null = null
+  let activatingSession: TerminalSession | null = null
 
   function isCurrentBinding(binding: TaskTerminalBinding): boolean {
     return mounted
@@ -76,60 +76,68 @@ export function createTaskTerminalController({
     unsubscribeShellLifecycle = null
     viewAttachment?.detach()
     viewAttachment = null
-    poolEntry = null
+    terminalSession = null
     previousIsActive = null
-    activatingEntry = null
+    activatingSession = null
   }
 
   async function spawnShellPty(
-    entry: PoolEntry,
+    session: TerminalSession,
     binding: TaskTerminalBinding,
     shouldStart: () => boolean = () => true,
   ): Promise<void> {
-    adapter.runtime.markPtySpawnPending(entry)
+    const lease = adapter.runtime.beginPtySpawn(session)
+    if (!lease) return
+
     try {
       if (!shouldStart()) return
+      adapter.runtime.markPerformancePhase('shellSpawnRequest', {
+        terminalKey: binding.terminalKey,
+      })
       const instanceId = await adapter.spawnShellPty(
         binding.taskId,
         binding.workspacePath,
-        entry.view.geometry.cols,
-        entry.view.geometry.rows,
+        lease.geometry.cols,
+        lease.geometry.rows,
         binding.terminalIndex,
-        adapter.runtime.getTerminalImageProtocol(entry),
+        lease.imageProtocol,
       )
-      await adapter.runtime.markShellPtyStarted(entry, instanceId)
+      if (shouldStart()) {
+        adapter.runtime.markPerformancePhase('ptyCreation', {
+          terminalKey: binding.terminalKey,
+          ptyInstanceId: instanceId,
+        })
+      }
+      await lease.started(instanceId)
       if (isCurrentBinding(binding)) {
         updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))
       }
     } finally {
-      adapter.runtime.clearPtySpawnPending(entry)
+      lease.cancel()
     }
   }
 
-  async function ensureShellStarted(entry: PoolEntry, binding: TaskTerminalBinding): Promise<void> {
-    if (!isCurrentBinding(binding) || !adapter.runtime.shouldSpawnPty(entry)) return
-
-    await spawnShellPty(entry, binding, () => isCurrentBinding(binding))
+  async function ensureShellStarted(session: TerminalSession, binding: TaskTerminalBinding): Promise<void> {
+    if (!isCurrentBinding(binding)) return
+    if (adapter.runtime.getShellLifecycleState(binding.terminalKey).shellExited) return
+    await spawnShellPty(session, binding, () => isCurrentBinding(binding))
   }
 
-  async function activateTerminal(entry: PoolEntry, binding: TaskTerminalBinding): Promise<void> {
-    if (activatingEntry === entry) return
-    activatingEntry = entry
+  async function activateTerminal(session: TerminalSession, binding: TaskTerminalBinding): Promise<void> {
+    if (activatingSession === session) return
+    activatingSession = session
     try {
-      const wasAttached = entry.attached
-      const attachment = await adapter.runtime.attach(entry, terminalHost)
-      if (!entry.attached || poolEntry !== entry || !isCurrentBinding(binding)) {
+      const attachment = await adapter.runtime.attach(session, terminalHost)
+      if (terminalSession !== session || !isCurrentBinding(binding)) {
         attachment.detach()
         return
       }
       viewAttachment = attachment
-      if (wasAttached) {
-        await adapter.runtime.recoverActiveTerminal(entry)
-        if (poolEntry !== entry || !isCurrentBinding(binding)) return
-      }
-      await ensureShellStarted(entry, binding)
+      await attachment.refit()
+      if (terminalSession !== session || !isCurrentBinding(binding)) return
+      await ensureShellStarted(session, binding)
     } finally {
-      if (activatingEntry === entry) activatingEntry = null
+      if (activatingSession === session) activatingSession = null
     }
   }
 
@@ -138,18 +146,18 @@ export function createTaskTerminalController({
     clearBindingResources()
     boundContextSignature = bindingContextSignature(binding)
 
-    const entry = await adapter.runtime.acquire(binding.terminalKey)
+    const session = await adapter.runtime.acquire(binding.terminalKey)
     if (bindRun !== currentRun || !isCurrentBinding(binding)) return
 
-    poolEntry = entry
+    terminalSession = session
     updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))
     unsubscribeShellLifecycle = adapter.runtime.subscribeShellLifecycle(binding.terminalKey, (state) => {
-      if (poolEntry !== entry || !isCurrentBinding(binding)) return
+      if (terminalSession !== session || !isCurrentBinding(binding)) return
       updateLifecycle(state)
     })
 
     if (currentBinding?.isActive) {
-      await activateTerminal(entry, binding)
+      await activateTerminal(session, binding)
       if (bindRun !== currentRun || !isCurrentBinding(binding)) return
     }
 
@@ -164,19 +172,12 @@ export function createTaskTerminalController({
       return
     }
 
-    const entry = poolEntry
-    if (!entry) return
+    const session = terminalSession
+    if (!session) return
 
     updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))
-    const needsActiveHostRestore = binding.isActive && !entry.view.isMountedIn(terminalHost)
-    if (previousIsActive === null) {
-      if (needsActiveHostRestore) void activateTerminal(entry, binding)
-      previousIsActive = binding.isActive
-      return
-    }
-
-    if ((!previousIsActive && binding.isActive) || needsActiveHostRestore) {
-      void activateTerminal(entry, binding)
+    if (binding.isActive && (!previousIsActive || viewAttachment === null)) {
+      void activateTerminal(session, binding)
     }
     previousIsActive = binding.isActive
   }
@@ -187,16 +188,16 @@ export function createTaskTerminalController({
   }
 
   async function restart(): Promise<void> {
-    const entry = poolEntry
+    const session = terminalSession
     const binding = currentBinding
-    if (!entry || !binding || lifecycle.ptyActive) return
+    if (!session || !binding || lifecycle.ptyActive) return
 
     try {
       await adapter.killPty(binding.terminalKey).catch((error: unknown) => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', error)
       })
-      await adapter.runtime.resetTerminal(entry)
-      await spawnShellPty(entry, binding)
+      await adapter.runtime.resetPresentation(session)
+      await spawnShellPty(session, binding)
     } catch (error) {
       console.error('[TaskTerminal] Failed to restart shell:', error)
     }

@@ -18,7 +18,7 @@ describe("SelfReviewView — non-application file filter", () => {
 
 	beforeEach(() => {
 		vi.mocked(getTaskBatchFileContents).mockImplementation(
-			async (_taskId, files) => files.map(() => ["", ""] as [string, string]),
+			async (_taskId, files) => files.map(() => ({ oldContent: "", newContent: "" })),
 		);
 	});
 	it("shows every file by default and hides non-application files when the toggle is deselected", async () => {

@@ -1,13 +1,15 @@
 ---
 import { TOP_REASONS } from '../../lib/landingContent';
-import SectionHeading from '../common/SectionHeading.astro';
 import TopReasonCard from './TopReasonCard.astro';
 ---
 
-<section class="landing-section top-reasons" aria-labelledby="top-reasons-title" data-animate-section>
-  <SectionHeading title="Three ways to keep agent work reviewable" titleId="top-reasons-title" />
+<section id="workflow" class="landing-section top-reasons" aria-labelledby="top-reasons-title" data-animate-section>
+  <div class="section-heading section-heading-split">
+    <h2 id="top-reasons-title" class="section-title">Agents can move fast.<br />Your process stays legible.</h2>
+    <p class="section-intro">OpenForge keeps planning, execution, and review attached to the same task.</p>
+  </div>
 
-  <ol class="reason-rail" aria-label="Top reasons to use OpenForge">
+  <ol class="reason-rail" aria-label="OpenForge workflow">
     {TOP_REASONS.map((reason, index) => <TopReasonCard reason={reason} index={index} />)}
   </ol>
 </section>

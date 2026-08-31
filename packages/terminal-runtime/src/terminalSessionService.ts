@@ -1,13 +1,14 @@
 import { parsePtySessionKey } from './ptySessionKey'
-import type { PoolEntry, TerminalRuntime } from './terminalRuntime'
+import type { TerminalRuntime } from './terminalRuntime'
+import type { TerminalSession } from './terminalRuntimeTypes'
 
 type SharedTerminalRuntimeOperations = Omit<
   TerminalRuntime,
-  'acquire' | 'release' | 'releaseAll' | 'releaseAllForTask' | 'dispose' | '_getPool'
+  'acquire' | 'release' | 'releaseAll' | 'releaseAllForTask' | 'dispose' | 'diagnostics'
 >
 
 export interface TerminalSessionClient extends SharedTerminalRuntimeOperations {
-  acquire(shellSessionKey: string): Promise<PoolEntry>
+  acquire(shellSessionKey: string): Promise<TerminalSession>
   release(shellSessionKey: string): void
   releaseAll(): void
   releaseAllForTask(taskId: string): number
@@ -19,14 +20,7 @@ export interface TerminalSessionService {
   dispose(): void
 }
 
-export interface TerminalSessionServiceOptions {
-  afterAcquire?(entry: PoolEntry): Promise<void> | undefined
-}
-
-export function createTerminalSessionService(
-  runtime: TerminalRuntime,
-  options: TerminalSessionServiceOptions = {},
-): TerminalSessionService {
+export function createTerminalSessionService(runtime: TerminalRuntime): TerminalSessionService {
   const ownersBySession = new Map<string, Set<string>>()
   const sessionsByOwner = new Map<string, Set<string>>()
 
@@ -71,7 +65,7 @@ export function createTerminalSessionService(
       releaseAll: _releaseAll,
       releaseAllForTask: _releaseAllForTask,
       dispose: _dispose,
-      _getPool,
+      diagnostics: _diagnostics,
       ...sharedOperations
     } = runtime
     void _acquire
@@ -79,15 +73,12 @@ export function createTerminalSessionService(
     void _releaseAll
     void _releaseAllForTask
     void _dispose
-    void _getPool
+    void _diagnostics
 
-    async function acquire(shellSessionKey: string): Promise<PoolEntry> {
+    async function acquire(shellSessionKey: string): Promise<TerminalSession> {
       const ownerAdded = addOwner(ownerId, shellSessionKey)
       try {
-        const entry = await runtime.acquire(shellSessionKey)
-        const checkpoint = options.afterAcquire?.(entry)
-        if (checkpoint) await checkpoint
-        return entry
+        return await runtime.acquire(shellSessionKey)
       } catch (error) {
         if (ownerAdded) removeOwner(ownerId, shellSessionKey)
         throw error

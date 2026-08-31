@@ -2,14 +2,16 @@ import { join } from 'node:path'
 import {
   assertCorrectnessChecks,
   calculateThroughput,
+  createTerminalPhaseChecks,
+  createTerminalPhaseTimeline,
   summarizeSamples,
 } from './terminal-performance-report.mjs'
 
 const DEFAULT_ECHO_SAMPLE_COUNT = 8
 const DEFAULT_ECHO_WARMUP_COUNT = 2
 const DEFAULT_BULK_INPUT_BYTES = 2_048
-const DEFAULT_PTY_OUTPUT_BYTES = 256 * 1_024
-const DEFAULT_DRAIN_TIMEOUT_MS = 30_000
+const DEFAULT_PTY_OUTPUT_BYTES = 1_024 * 1_024
+const DEFAULT_DRAIN_TIMEOUT_MS = 120_000
 
 function byteLength(text) {
   return new TextEncoder().encode(text).byteLength
@@ -66,16 +68,17 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
   const ptyOutputBytes = options.ptyOutputBytes ?? DEFAULT_PTY_OUTPUT_BYTES
   const drainTimeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
   const checks = []
+  await driver.startTerminalPerformanceTrace()
   const scenarioStartedAt = now()
 
   await driver.verifyDesktopBridge()
   const { region, terminalKey } = await driver.openSeededTerminal(context.fixture.manifest)
 
-  async function executeMeasurement(name, command, marker, expectedBytes) {
+  async function executeMeasurement(name, command, marker, expectedBytes, typeCommand) {
     const baseline = await driver.observeTerminal(terminalKey)
     if (!baseline) throw new Error(`Terminal observation is unavailable for ${terminalKey}`)
     const startedAt = now()
-    await driver.typeTerminalCommand(region, command)
+    await typeCommand(region, command)
     const drained = await driver.drainTerminal(terminalKey, {
       marker,
       minimumReceivedBytes: baseline.output.receivedBytes + expectedBytes,
@@ -95,11 +98,25 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     `printf '${shellReadyMarker}\\n'`,
     shellReadyMarker,
     byteLength(`${shellReadyMarker}\n`),
+    driver.typeTerminalCommand,
   )
   const shellReadyDurationMs = now() - scenarioStartedAt
+  const phaseTrace = await driver.finishTerminalPerformanceTrace()
+  const phaseTimeline = createTerminalPhaseTimeline(phaseTrace?.timestamps)
+  const phaseChecks = createTerminalPhaseChecks(phaseTimeline)
+  checks.push(...phaseChecks)
 
   const loadedMemory = await sampleMemory('after-shell-ready')
   const echoDurations = []
+  const fullDriverMarker = 'OPENFORGE_PERF_FULL_DRIVER_ECHO'
+  const fullDriverEcho = await executeMeasurement(
+    'full-driver-echo',
+    `printf '${fullDriverMarker}\\n'`,
+    fullDriverMarker,
+    byteLength(`${fullDriverMarker}\n`),
+    driver.typeTerminalCommand,
+  )
+  await driver.focusTerminal()
   for (let index = 0; index < echoSampleCount; index += 1) {
     const marker = `OPENFORGE_PERF_ECHO_${index}`
     const echo = await executeMeasurement(
@@ -107,6 +124,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
       `printf '${marker}\\n'`,
       marker,
       byteLength(`${marker}\n`),
+      driver.typeFocusedTerminalCommand,
     )
     echoDurations.push(echo.durationMs)
   }
@@ -119,6 +137,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     bulkCommand,
     bulkMarker,
     byteLength(`${bulkMarker}\n`),
+    driver.typeFocusedTerminalCommand,
   )
   const bulkInput = calculateThroughput(byteLength(bulkCommand), bulk.durationMs)
 
@@ -132,6 +151,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     ptyCommand,
     ptyMarker,
     expectedPtyBytes,
+    driver.typeFocusedTerminalCommand,
   )
 
   const recoveryStartedAt = now()
@@ -157,8 +177,12 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
   return {
     checks,
     metrics: {
-      shellReady: { durationMs: shellReadyDurationMs, unit: 'ms' },
-      driverToPaintedEcho: summarizeSamples(echoDurations, { warmupCount: echoWarmupCount }),
+      shellReady: { durationMs: shellReadyDurationMs, unit: 'ms', phaseTimeline },
+      driverToPaintedEcho: {
+        ...summarizeSamples(echoDurations, { warmupCount: echoWarmupCount }),
+        mode: 'already-focused',
+      },
+      fullDriverToPaintedEcho: { durationMs: fullDriverEcho.durationMs, unit: 'ms' },
       bulkInput,
       ptyOutput: calculateThroughput(ptyOutputBytes, ptyOutput.durationMs),
       viewRecovery: { durationMs: recoveryDurationMs, unit: 'ms' },
@@ -177,6 +201,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     },
     evidence: {
       shellReady: shellReady.drained,
+      fullDriverEcho: fullDriverEcho.drained,
       bulkInput: bulk.drained,
       ptyOutput: ptyOutput.drained,
       recovery: recoveryDrain,

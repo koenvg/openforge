@@ -14,9 +14,9 @@ vi.mock('./ptySubmit', () => ({
 }))
 
 vi.mock('./terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue({}),
+  acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-42' }),
+  beginPtySpawn: vi.fn(),
   focusTerminal: vi.fn(),
-  getTerminalImageProtocol: vi.fn(() => null),
   hasTerminal: vi.fn(() => false),
   isPtyActive: vi.fn(() => false),
   release: vi.fn(),
@@ -27,8 +27,8 @@ import { deleteTask, getSessionStatus, inspectExistingBranch, startImplementatio
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import {
   acquire,
+  beginPtySpawn,
   focusTerminal,
-  getTerminalImageProtocol,
   hasTerminal,
   isPtyActive,
   release,
@@ -42,6 +42,16 @@ import {
   taskRuntimeInfo,
   tasks,
 } from './stores'
+
+function createSpawnLease(imageProtocol: 'iterm2' | null = null) {
+  return {
+    generation: 1,
+    geometry: { cols: 80, rows: 24 },
+    imageProtocol,
+    started: vi.fn(async () => undefined),
+    cancel: vi.fn(),
+  }
+}
 
 const activeProject: Project = {
   id: 'proj-1',
@@ -108,8 +118,8 @@ describe('createTaskSessionActions', () => {
     tasks.set([])
     branchDivergenceRequest.set(null)
     vi.mocked(isPtyActive).mockReturnValue(false)
-    vi.mocked(acquire).mockResolvedValue({} as never)
-    vi.mocked(getTerminalImageProtocol).mockReturnValue(null)
+    vi.mocked(acquire).mockResolvedValue({ shellSessionKey: 'T-42' } as never)
+    vi.mocked(beginPtySpawn).mockReturnValue(createSpawnLease())
     vi.mocked(hasTerminal).mockReturnValue(false)
   })
 
@@ -117,7 +127,7 @@ describe('createTaskSessionActions', () => {
     const loadTasks = vi.fn(async () => undefined)
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as never)
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: task.id, status: 'running' } as never)
-    vi.mocked(getTerminalImageProtocol).mockReturnValue('iterm2')
+    vi.mocked(beginPtySpawn).mockReturnValue(createSpawnLease('iterm2'))
     const actions = createActions(loadTasks)
 
     tasks.set([task])
