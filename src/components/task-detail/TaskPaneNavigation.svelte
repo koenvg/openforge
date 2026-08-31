@@ -35,7 +35,7 @@
 <nav class="absolute left-1/2 top-0 z-10 flex h-full -translate-x-1/2 items-center gap-0.5 bg-base-100" aria-label="Task workbench tabs">
   {#each navigationItems as item (item.id)}
     <button
-      class="h-full min-w-16 border-b-2 px-3 text-[13px] font-semibold transition-colors {item.capitalize ? 'capitalize' : ''} {activeView === item.id ? activeClasses : inactiveClasses}"
+      class="inline-flex h-full min-w-16 items-center justify-center gap-1 border-b-2 px-3 text-[13px] font-semibold transition-colors {item.capitalize ? 'capitalize' : ''} {activeView === item.id ? activeClasses : inactiveClasses}"
       aria-pressed={activeView === item.id}
       onclick={() => onSelect(item.id)}
     >{item.title}{#if commandHeld && item.shortcut !== null}<kbd class="kbd kbd-xs opacity-50">{item.shortcut}</kbd>{/if}</button>
