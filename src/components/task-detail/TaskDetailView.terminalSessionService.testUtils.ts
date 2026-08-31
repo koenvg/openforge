@@ -1,6 +1,7 @@
 import type {
   ShellLifecycleState,
   TerminalPtySpawnLease,
+  TerminalRuntime,
   TerminalSession,
   TerminalViewAttachment,
 } from '@openforge-app/terminal-runtime'
@@ -14,7 +15,8 @@ const { taskTabSessions, terminalRuntimeState, terminalAttachmentDetach } = vi.h
   terminalAttachmentDetach: vi.fn(),
 }))
 
-vi.mock('../../lib/terminalPool', () => {
+vi.mock('../../lib/terminalSessionService', async () => {
+  const { createTerminalSessionService } = await import('@openforge-app/terminal-runtime')
   interface SessionModel {
     session: TerminalSession
     lifecycle: ShellLifecycleState
@@ -119,6 +121,8 @@ vi.mock('../../lib/terminalPool', () => {
       notify(model)
     }),
     release: vi.fn((shellSessionKey: string) => { models.delete(shellSessionKey) }),
+    releaseAll: vi.fn(() => { models.clear() }),
+    dispose: vi.fn(() => { models.clear() }),
     resetPresentation: vi.fn(async () => undefined),
     releaseAllForTask: vi.fn((taskId: string) => {
       const keys = [...models.keys()].filter(key => key.startsWith(`${taskId}-shell-`))
@@ -159,15 +163,33 @@ vi.mock('../../lib/terminalPool', () => {
     }),
   }
 
-  terminalRuntimeState.reset = () => models.clear()
-  return api
-})
+  const terminalSessionService = createTerminalSessionService(api as unknown as TerminalRuntime)
+  function createClient(ownerId: string) {
+    const client = terminalSessionService.createClient(ownerId)
+    return {
+      ...client,
+      acquire: vi.fn(client.acquire),
+      release: vi.fn(client.release),
+      releaseAll: vi.fn(client.releaseAll),
+      releaseAllForTask: vi.fn(client.releaseAllForTask),
+    }
+  }
+  const agentTerminalSessions = createClient('agent-terminal-surfaces')
+  const regularTerminalSessions = createClient('terminal-plugin-surfaces')
 
-vi.mock('../../lib/liveTerminalPool', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/liveTerminalPool')>()
+  terminalRuntimeState.reset = () => {
+    terminalSessionService.releaseAll()
+    for (const client of [agentTerminalSessions, regularTerminalSessions]) {
+      for (const operation of Object.values(client)) {
+        if (vi.isMockFunction(operation)) operation.mockClear()
+      }
+    }
+  }
   return {
-    ...actual,
-    releaseAllForTask: vi.fn().mockReturnValue(0),
+    terminalSessionService,
+    agentTerminalSessions,
+    regularTerminalSessions,
+    getTerminalRuntimeForTests: () => api,
   }
 })
 

@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finalizeAgentSession, getLatestSession } from '../ipc'
 import { activeProjectId, activeSessions, checkpointNotification, selectedTaskId, taskRuntimeInfo } from '../stores'
 import { evictTask, getVisibleRelationshipOwner, loadTaskDetail } from '../tasksState'
-import { release, restorePtyInstance } from '../terminalPool'
+import { agentTerminalSessions } from '../terminalSessionService'
 import { createTaskSessionEventListeners } from './taskSessionEventListeners'
 import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
 
-vi.mock('../terminalPool', () => ({
-  release: vi.fn(),
-  restorePtyInstance: vi.fn(),
+const { release, restorePtyInstance } = agentTerminalSessions
+
+vi.mock('../terminalSessionService', () => ({
+  agentTerminalSessions: {
+    release: vi.fn(),
+    restorePtyInstance: vi.fn(),
+  },
 }))
 vi.mock('../tasksState', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../tasksState')>()
@@ -105,7 +109,7 @@ describe('createTaskSessionEventListeners', () => {
     })
   })
 
-  it('hydrates terminalPool with current PTY instance metadata from provider-neutral status events', async () => {
+  it('hydrates the agent Terminal Session with current PTY instance metadata from provider-neutral status events', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
     activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
     await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)

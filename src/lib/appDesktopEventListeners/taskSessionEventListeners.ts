@@ -14,10 +14,7 @@ import {
   tasks,
 } from '../stores'
 import { evictTask, getVisibleRelationshipOwner, loadTaskDetail } from '../tasksState'
-import {
-  release as releaseTerminal,
-  restorePtyInstance,
-} from '../terminalPool'
+import { agentTerminalSessions } from '../terminalSessionService'
 import type { AgentSession } from '../types'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
@@ -54,7 +51,7 @@ function hydratePtyInstanceFromStatusMetadata(
   if (typeof ptyInstanceId !== 'number') return
   if (!shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)) return
 
-  void restorePtyInstance(taskId, ptyInstanceId)
+  void agentTerminalSessions.restorePtyInstance(taskId, ptyInstanceId)
 }
 
 function setAgentNeedsPermissionNotification(taskId: string, session: AgentSession): boolean {
@@ -129,7 +126,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       async (event) => {
         const taskId = event.payload.task_id
         if (typeof event.payload.pty_instance_id === 'number') {
-          await restorePtyInstance(taskId, event.payload.pty_instance_id)
+          await agentTerminalSessions.restorePtyInstance(taskId, event.payload.pty_instance_id)
         }
         const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
         updatedRuntimeInfo.set(taskId, {
@@ -198,7 +195,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       'session-aborted',
       (event) => {
         deleteActiveSession(event.payload.ticket_id)
-        releaseTerminal(event.payload.ticket_id)
+        agentTerminalSessions.release(event.payload.ticket_id)
         clearCheckpointForTask(event.payload.ticket_id)
         void deps.loadProjectAttention()
       },
@@ -279,7 +276,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         if (event.payload.action === 'deleted') {
           evictTask(taskId)
           deleteActiveSession(taskId)
-          releaseTerminal(taskId)
+          agentTerminalSessions.release(taskId)
           clearCheckpointForTask(taskId)
         } else if (event.payload.action === 'created') {
           const projectId = event.payload.project_id ?? get(activeProjectId)

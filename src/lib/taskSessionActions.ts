@@ -9,14 +9,7 @@ import {
   taskRuntimeInfo,
   tasks,
 } from './stores'
-import {
-  acquire,
-  beginPtySpawn,
-  focusTerminal,
-  hasTerminal,
-  isPtyActive,
-  release,
-} from './terminalPool'
+import { agentTerminalSessions } from './terminalSessionService'
 import { resolveBranchStart } from './branchStart'
 import type { DivergenceResolution, Project } from './types'
 
@@ -50,10 +43,10 @@ export function createTaskSessionActions(options: TaskSessionActionOptions) {
 
     const { taskId, actionPrompt, promptPrefix = null } = data
 
-    if (isPtyActive(taskId)) {
+    if (agentTerminalSessions.isPtyActive(taskId)) {
       try {
         await writePtyWithSubmit(taskId, actionPrompt)
-        focusTerminal(taskId)
+        agentTerminalSessions.focusTerminal(taskId)
       } catch (errorValue) {
         options.logError('[session] Failed to write action to PTY:', errorValue)
         setError(errorValue)
@@ -85,10 +78,10 @@ export function createTaskSessionActions(options: TaskSessionActionOptions) {
     try {
       let terminalImageProtocol = null
       try {
-        const terminalAlreadyExists = hasTerminal(taskId)
-        const terminalEntry = await acquire(taskId)
+        const terminalAlreadyExists = agentTerminalSessions.hasTerminal(taskId)
+        const terminalEntry = await agentTerminalSessions.acquire(taskId)
         releaseTerminalOnStartFailure = !terminalAlreadyExists
-        const spawnLease = beginPtySpawn(terminalEntry)
+        const spawnLease = agentTerminalSessions.beginPtySpawn(terminalEntry)
         terminalImageProtocol = spawnLease?.imageProtocol ?? null
         spawnLease?.cancel()
       } catch (terminalError) {
@@ -118,9 +111,9 @@ export function createTaskSessionActions(options: TaskSessionActionOptions) {
       }
 
       await options.loadTasks()
-      focusTerminal(taskId)
+      agentTerminalSessions.focusTerminal(taskId)
     } catch (errorValue) {
-      if (releaseTerminalOnStartFailure) release(taskId)
+      if (releaseTerminalOnStartFailure) agentTerminalSessions.release(taskId)
       options.logError('[session] Failed to start task:', errorValue)
       setError(errorValue)
     } finally {

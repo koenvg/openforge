@@ -4,13 +4,8 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import {
-    acquire,
-    attach,
-    getShellLifecycleState,
-    type TerminalSession,
-    type TerminalViewAttachment,
-  } from '../../lib/terminalPool'
+  import type { TerminalSession, TerminalViewAttachment } from '@openforge-app/terminal-runtime'
+  import { agentTerminalSessions } from '../../lib/terminalSessionService'
   import { hydrateAgentTerminalPtyInstance } from '../../lib/agentTerminalPanel'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
@@ -48,7 +43,7 @@
   )
 
   function syncTerminalActiveFromLifecycle() {
-    terminalActive = getShellLifecycleState(taskId).ptyActive
+    terminalActive = agentTerminalSessions.getShellLifecycleState(taskId).ptyActive
   }
 
   $effect(() => {
@@ -101,9 +96,9 @@
   })
 
   onMount(async () => {
-    poolEntry = await acquire(taskId)
+    poolEntry = await agentTerminalSessions.acquire(taskId)
     if (destroyed || !poolEntry) return
-    viewAttachment = await attach(poolEntry, terminalEl)
+    viewAttachment = await agentTerminalSessions.attach(poolEntry, terminalEl)
     if (destroyed) {
       viewAttachment.detach()
       viewAttachment = null

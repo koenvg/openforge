@@ -6,7 +6,7 @@ import type {
   TerminalRuntimeDiagnostics,
   TerminalSessionDiagnostics,
 } from '@openforge-app/terminal-runtime'
-import { terminalDiagnostics } from './terminalPool'
+import { terminalDiagnostics } from './terminalSessionService'
 import { shouldEnableTerminalTestProbe as shouldEnableTerminalPerformanceProbe } from './desktopTestMode'
 import { createTerminalE2eGateCoordinator, type TerminalE2eGateCoordinator } from './terminalE2eGates'
 import {

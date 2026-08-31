@@ -87,7 +87,8 @@ describe('TaskDetailView active-view persistence', () => {
 
   it('restores terminal mode and completes terminal activation without unhandled errors', async () => {
     const { getTaskWorkspace, spawnShellPty } = await import('../../lib/ipc')
-    const { acquire, attach, beginPtySpawn, getShellLifecycleState } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach, beginPtySpawn, getShellLifecycleState } = regularTerminalSessions
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
     vi.mocked(spawnShellPty).mockClear()
     vi.mocked(acquire).mockClear()

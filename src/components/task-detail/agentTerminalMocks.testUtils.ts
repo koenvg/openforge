@@ -59,7 +59,7 @@ vi.mock('@xterm/addon-fit', () => {
 
 vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
-vi.mock('../../lib/terminalPool', () => ({
+vi.mock('../../lib/terminalSessionService', () => ({ agentTerminalSessions: {
   acquire: vi.fn().mockResolvedValue(mocks.poolEntry),
   attach: vi.fn().mockResolvedValue(mocks.attachment),
   detach: vi.fn(),
@@ -74,7 +74,7 @@ vi.mock('../../lib/terminalPool', () => ({
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
   isValidTerminalDimensions: vi.fn().mockReturnValue(true),
-}))
+} }))
 
 export const mockPoolEntry = mocks.poolEntry
 export const mockAttachment = mocks.attachment

@@ -36,7 +36,8 @@ describe('TaskDetailView keyboard shortcuts', () => {
 
   it('Cmd+1 switches from an active terminal pane to agent without selecting a shell tab', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
-    const { focusTerminal } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { focusTerminal } = regularTerminalSessions
     const { createTerminalShortcutController } = await import('../../lib/terminalShortcutController')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 

@@ -3,7 +3,7 @@ import './TaskDetailView.terminalRuntimeMocks.testUtils'
 import './TaskDetailView.reviewMocks.testUtils'
 import './TaskDetailView.storeMocks.testUtils'
 import './TaskDetailView.ipcMocks.testUtils'
-import './TaskDetailView.terminalPool.testUtils'
+import './TaskDetailView.terminalSessionService.testUtils'
 import './TaskDetailView.routerMocks.testUtils'
 
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
@@ -28,7 +28,7 @@ import {
   mockOnRunAction,
   secondaryTask,
 } from './TaskDetailView.testFixtures'
-import { taskTabSessions, terminalAttachmentDetach } from './TaskDetailView.terminalPool.testUtils'
+import { taskTabSessions, terminalAttachmentDetach } from './TaskDetailView.terminalSessionService.testUtils'
 import { mockRunAppCommandInTaskTerminal } from './TaskDetailView.terminalRuntimeMocks.testUtils'
 
 function getTaskDetailViewTestDependencies() {

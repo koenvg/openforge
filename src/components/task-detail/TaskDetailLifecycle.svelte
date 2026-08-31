@@ -2,7 +2,7 @@
   import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
   import { onDestroy } from 'svelte'
   import { getProjectConfig, getTaskWorkspace, writePty } from '../../lib/ipc'
-  import { getShellLifecycleState, getTaskTerminalTabsSession, releaseAllForTask } from '../../lib/liveTerminalPool'
+  import { regularTerminalSessions } from '../../lib/terminalSessionService'
   import {
     createTaskRunAppController,
     type TaskRunAppRegistration,
@@ -55,7 +55,7 @@
       }
     },
     getWorkspacePath: (path) => path,
-    releaseAllForTask,
+    releaseAllForTask: regularTerminalSessions.releaseAllForTask,
     setWorkspacePath,
     onWorkspaceResolved: (resolvedTaskId, path) => onWorkspaceResolved(resolvedTaskId, path),
     onWorkspaceLookupError: (requestedTaskId, lookupError) => {
@@ -65,8 +65,8 @@
 
   const taskRunAppController = createTaskRunAppController({
     getProjectConfig,
-    getSession: getTaskTerminalTabsSession,
-    getShellLifecycleState,
+    getSession: regularTerminalSessions.getTaskTerminalTabsSession,
+    getShellLifecycleState: regularTerminalSessions.getShellLifecycleState,
     writePty,
     openTerminalView: (requestedTaskId, viewId) => onOpenTerminalView(requestedTaskId, viewId),
     onStateChange: (state) => onRunAppStateChange(state),

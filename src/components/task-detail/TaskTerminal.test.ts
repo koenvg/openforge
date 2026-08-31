@@ -73,7 +73,7 @@ const { attachmentDetaches, attachmentRefit, mockPoolEntry, presentationReset, s
   spawnStarted: vi.fn(),
 }))
 
-vi.mock('../../lib/terminalPool', () => ({
+vi.mock('../../lib/terminalSessionService', () => ({ regularTerminalSessions: {
   acquire: vi.fn().mockImplementation(async (taskId: string) => {
     mockPoolEntry.taskId = taskId
     mockPoolEntry.shellSessionKey = taskId
@@ -136,10 +136,10 @@ vi.mock('../../lib/terminalPool', () => ({
   isShellExited: vi.fn(() => {
     return !mockPoolEntry.ptyActive && mockPoolEntry.needsClear
   }),
-}))
+} }))
 
 import TaskTerminal from './TaskTerminal.svelte'
-import type { TerminalSession, TerminalViewAttachment } from '../../lib/terminalPool'
+import type { TerminalSession, TerminalViewAttachment } from '@openforge-app/terminal-runtime'
 
 describe('TaskTerminal', () => {
   it('marks the terminal exited when the pool reports a matching shell exit', async () => {
@@ -216,7 +216,8 @@ describe('TaskTerminal', () => {
   })
 
   it('calls acquire with terminalKey prop on mount', async () => {
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
@@ -225,7 +226,8 @@ describe('TaskTerminal', () => {
   })
 
   it('calls attach with pool entry and wrapper element', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
@@ -234,7 +236,8 @@ describe('TaskTerminal', () => {
   })
 
   it('does not attach when inactive, then attaches when activated', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     const { rerender } = render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false } })
 
@@ -252,7 +255,8 @@ describe('TaskTerminal', () => {
   })
 
   it('retries binding when workspacePath changes while acquiring the same terminal key', async () => {
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = regularTerminalSessions
 
     const staleEntry = {
       ...mockPoolEntry,
@@ -300,7 +304,8 @@ describe('TaskTerminal', () => {
   })
 
   it('cancels stale acquire and attaches the new key when terminalKey changes while acquiring', async () => {
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = regularTerminalSessions
     const { spawnShellPty } = await import('../../lib/ipc')
 
     const staleEntry = {
@@ -350,7 +355,8 @@ describe('TaskTerminal', () => {
   })
 
   it('records a captured PTY spawn when terminalKey changes before spawn resolves', async () => {
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
     const { spawnShellPty } = await import('../../lib/ipc')
 
     const nextEntry = {
@@ -386,7 +392,8 @@ describe('TaskTerminal', () => {
   })
 
   it('restart records the captured PTY when terminalKey changes before restart spawn resolves', async () => {
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
     const { killPty, spawnShellPty } = await import('../../lib/ipc')
 
     mockPoolEntry.ptyActive = false
@@ -432,7 +439,8 @@ describe('TaskTerminal', () => {
   })
 
   it('reacquires and attaches when the terminal key changes while the component stays mounted', async () => {
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = regularTerminalSessions
 
     const nextEntry = {
       ...mockPoolEntry,
@@ -465,7 +473,8 @@ describe('TaskTerminal', () => {
   })
 
   it('attaches when activated before a remounted inactive terminal finishes acquiring its pool entry', async () => {
-    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire, attach } = regularTerminalSessions
 
     let resolveAcquire!: (entry: TerminalSession) => void
     const acquirePromise = new Promise<TerminalSession>((resolve) => {
@@ -487,7 +496,8 @@ describe('TaskTerminal', () => {
   })
 
   it('does not detach when becoming inactive, so pooled terminal stays mounted in place', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     const { rerender } = render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
 
@@ -503,7 +513,8 @@ describe('TaskTerminal', () => {
   })
 
   it('refits when activating an already attached terminal', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
     mockPoolEntry.attached = true
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
@@ -515,7 +526,8 @@ describe('TaskTerminal', () => {
   })
 
   it('calls detach on component destroy', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     const { unmount } = render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
@@ -538,7 +550,8 @@ describe('TaskTerminal', () => {
 
   it('does not spawn shell PTY when ptyActive is true', async () => {
     const { spawnShellPty } = await import('../../lib/ipc')
-    const { acquire } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { acquire } = regularTerminalSessions
     mockPoolEntry.ptyActive = true
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
@@ -564,7 +577,8 @@ describe('TaskTerminal', () => {
 
   it('waits for pooled attach sizing before spawning the shell PTY', async () => {
     const { spawnShellPty } = await import('../../lib/ipc')
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     let resolveAttach!: () => void
     const attachPromise = new Promise<TerminalViewAttachment>((resolve) => {
@@ -598,7 +612,8 @@ describe('TaskTerminal', () => {
 
   it('does not spawn a shell after unmount when attach resolves late', async () => {
     const { spawnShellPty } = await import('../../lib/ipc')
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     let resolveAttach!: () => void
     const attachPromise = new Promise<TerminalViewAttachment>((resolve) => {
@@ -672,7 +687,8 @@ describe('TaskTerminal', () => {
   })
 
   it('does not override terminal theme on mount', async () => {
-    const { attach } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { attach } = regularTerminalSessions
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
@@ -684,7 +700,8 @@ describe('TaskTerminal', () => {
 
   it('subscribes to pool lifecycle with terminalKey instead of listening to desktop pty-exit directly', async () => {
     const { listenDesktopEvent } = await import('../../lib/desktopIpc')
-    const { subscribeShellLifecycle } = await import('../../lib/terminalPool')
+    const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+    const { subscribeShellLifecycle } = regularTerminalSessions
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
 

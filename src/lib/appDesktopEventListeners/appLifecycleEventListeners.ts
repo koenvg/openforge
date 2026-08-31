@@ -1,4 +1,4 @@
-import { replayPtyBuffersForActiveTerminals } from '../terminalPool'
+import { agentTerminalSessions } from '../terminalSessionService'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
 
@@ -15,7 +15,7 @@ export function createAppLifecycleEventListeners(deps: AppLifecycleEventDeps) {
       void deps.loadPullRequests()
       void deps.loadProjectAttention()
       void deps.refreshPrCounts()
-      void replayPtyBuffersForActiveTerminals()
+      void agentTerminalSessions.replayPtyBuffersForActiveTerminals()
     }),
   }
 }

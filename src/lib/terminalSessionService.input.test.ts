@@ -1,15 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openUrl, writePty } from './ipc'
-import { acquire, beginPtySpawn, restorePtyInstance } from './terminalPool'
+import { agentTerminalSessions } from './terminalSessionService'
 import {
   getLoadedAddonNamesAt,
   getTerminalMockAt,
   getTerminalMocksAt,
   getWebLinksHandler,
   webLinksHandler,
-} from './terminalPool.testSetup'
+} from './terminalSessionService.testSetup'
 
-describe('terminalPool input', () => {
+const { acquire, beginPtySpawn, restorePtyInstance } = agentTerminalSessions
+
+describe('desktop Terminal Session input', () => {
   it('opens detected Agent Terminal Surface links externally', async () => {
     const session = await acquire('T-42')
     const { loadAddon } = getTerminalMocksAt(0)

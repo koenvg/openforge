@@ -4,20 +4,27 @@ vi.mock('./ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('./terminalPool', () => ({
-  getShellLifecycleState: vi.fn(),
-  restorePtyInstance: vi.fn(),
-}))
+vi.mock('./terminalSessionService', () => {
+  const agentTerminalSessions = {
+    getShellLifecycleState: vi.fn(),
+    restorePtyInstance: vi.fn(),
+  }
+  return {
+    agentTerminalSessions,
+    regularTerminalSessions: { ...agentTerminalSessions },
+  }
+})
 
 import {
   hydrateAgentTerminalPtyInstance,
   writeAgentTerminalTranscription,
 } from './agentTerminalPanel'
 import { writePty } from './ipc'
-import { getShellLifecycleState, restorePtyInstance } from './terminalPool'
+import { agentTerminalSessions } from './terminalSessionService'
+const { getShellLifecycleState, restorePtyInstance } = agentTerminalSessions
 
 describe('agent terminal panel lifecycle', () => {
-  it('writes transcription only when terminalPool reports an active PTY', async () => {
+  it('writes transcription only when the agent Terminal Session reports an active PTY', async () => {
     vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: false, currentPtyInstance: null, hasOutput: false })
     await writeAgentTerminalTranscription('T-1', 'hello', 'TestPanel')
     expect(writePty).not.toHaveBeenCalled()
@@ -27,7 +34,7 @@ describe('agent terminal panel lifecycle', () => {
     expect(writePty).toHaveBeenCalledWith('T-1', 'hello')
   })
 
-  it('restores current PTY instance through terminalPool lifecycle ownership', () => {
+  it('restores current PTY instance through agent Terminal Session lifecycle ownership', () => {
     hydrateAgentTerminalPtyInstance('T-1', 123)
 
     expect(restorePtyInstance).toHaveBeenCalledWith('T-1', 123)
