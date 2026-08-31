@@ -137,7 +137,7 @@ describe('xterm terminal view rendering', () => {
     expect(mocks.terminalRefresh).toHaveBeenCalledOnce()
   })
 
-  it('clears the WebGL glyph atlas when delayed bundled fonts become ready', async () => {
+  it('refreshes the terminal without clearing the shared WebGL atlas when delayed fonts become ready', async () => {
     let reportReady!: (outcome: { status: 'ready' }) => void
     const completion = new Promise<{ status: 'ready' }>(resolve => {
       reportReady = resolve
@@ -156,7 +156,8 @@ describe('xterm terminal view rendering', () => {
     await completion
     await Promise.resolve()
 
-    expect(mocks.webglClearTextureAtlas).toHaveBeenCalledOnce()
+    expect(mocks.webglClearTextureAtlas).not.toHaveBeenCalled()
+    expect(mocks.terminalRefresh).toHaveBeenCalledOnce()
   })
 
   it('reports when delayed bundled font loading fails after xterm opens', async () => {
