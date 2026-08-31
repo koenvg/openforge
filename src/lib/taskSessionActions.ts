@@ -11,8 +11,8 @@ import {
 } from './stores'
 import {
   acquire,
+  beginPtySpawn,
   focusTerminal,
-  getTerminalImageProtocol,
   hasTerminal,
   isPtyActive,
   release,
@@ -88,7 +88,9 @@ export function createTaskSessionActions(options: TaskSessionActionOptions) {
         const terminalAlreadyExists = hasTerminal(taskId)
         const terminalEntry = await acquire(taskId)
         releaseTerminalOnStartFailure = !terminalAlreadyExists
-        terminalImageProtocol = getTerminalImageProtocol(terminalEntry)
+        const spawnLease = beginPtySpawn(terminalEntry)
+        terminalImageProtocol = spawnLease?.imageProtocol ?? null
+        spawnLease?.cancel()
       } catch (terminalError) {
         console.warn('[session] Inline terminal images unavailable; starting with text fallbacks:', terminalError)
       }

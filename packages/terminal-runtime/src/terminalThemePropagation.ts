@@ -1,7 +1,10 @@
 import { getTerminalTheme, type ThemeMode } from './theme'
-import type { PoolEntry } from './terminalRuntimeTypes'
+import type { TerminalSessionCoordinator } from './terminalSessionCoordinator'
 
-export function applyTerminalTheme(entries: Iterable<PoolEntry>, mode: ThemeMode): void {
+export function applyTerminalTheme(
+  coordinators: Iterable<TerminalSessionCoordinator>,
+  mode: ThemeMode,
+): void {
   const theme = getTerminalTheme(mode)
-  for (const entry of entries) entry.view.setTheme(theme)
+  for (const coordinator of coordinators) coordinator.setTheme(theme)
 }

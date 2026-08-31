@@ -1,10 +1,11 @@
 import type {
-  PoolEntry,
   TerminalPerformanceTrace,
   TerminalPerformanceTraceSnapshot,
+  TerminalRuntimeDiagnostics,
+  TerminalSessionDiagnostics,
   TerminalViewPresentationEvidence,
 } from '@openforge-app/terminal-runtime'
-import { getTerminalEntriesForObservation } from './terminalPool'
+import { terminalDiagnostics } from './terminalPool'
 import { shouldEnableTerminalTestProbe } from './desktopTestMode'
 
 export { shouldEnableTerminalTestProbe } from './desktopTestMode'
@@ -67,36 +68,32 @@ interface InstallTerminalTestProbeOptions {
   isDevelopment: boolean
   url: string
   target?: TerminalTestProbeWindow
-  entries?: () => ReadonlyMap<string, PoolEntry>
+  diagnostics?: TerminalRuntimeDiagnostics
   now?: () => number
   delay?: (ms: number) => Promise<void>
   performanceTrace?: TerminalPerformanceTrace
 }
 
 
-function observeEntry(key: string, entry: PoolEntry): TerminalProbeObservation {
-  const output = entry.terminalOutputObservation
+function toObservation(diagnostics: TerminalSessionDiagnostics): TerminalProbeObservation {
   return {
-    key,
+    key: diagnostics.shellSessionKey,
     lifecycle: {
-      attached: entry.attached,
-      currentPtyInstance: entry.currentPtyInstance,
-      ptyActive: entry.ptyActive,
-      shellExited: entry.shellExited,
-      spawnPending: entry.spawnPending,
-      stateSource: entry.terminalStateSource,
+      attached: diagnostics.lifecycle.attached,
+      currentPtyInstance: diagnostics.lifecycle.currentPtyInstance,
+      ptyActive: diagnostics.lifecycle.ptyActive,
+      shellExited: diagnostics.lifecycle.shellExited,
+      spawnPending: diagnostics.lifecycle.spawnPending,
+      stateSource: diagnostics.lifecycle.stateSource,
     },
     output: {
-      firstSequence: output.firstSequence,
-      lastSequence: output.lastSequence,
-      modelSequence: entry.terminalModelSequence,
-      receivedBytes: output.receivedBytes,
-      sequenceContinuous: output.sequenceContinuous,
+      firstSequence: diagnostics.output.firstSequence,
+      lastSequence: diagnostics.output.lastSequence,
+      modelSequence: diagnostics.output.modelSequence,
+      receivedBytes: diagnostics.output.receivedBytes,
+      sequenceContinuous: diagnostics.output.sequenceContinuous,
     },
-    geometry: {
-      cols: entry.view.geometry.cols,
-      rows: entry.view.geometry.rows,
-    },
+    geometry: { ...diagnostics.geometry },
   }
 }
 
@@ -121,13 +118,12 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
     return null
   }
 
-  const entries = options.entries ?? getTerminalEntriesForObservation
+  const diagnostics = options.diagnostics ?? terminalDiagnostics
   const now = options.now ?? Date.now
   const wait = options.delay ?? (ms => new Promise(resolve => setTimeout(resolve, ms)))
-  const requireEntry = (key: string): PoolEntry => {
-    const entry = entries().get(key)
-    if (!entry) throw new Error(`Unknown terminal key: ${key}`)
-    return entry
+  const requireObservation = (key: string): TerminalProbeObservation => {
+    if (!diagnostics.list().includes(key)) throw new Error(`Unknown terminal key: ${key}`)
+    return toObservation(diagnostics.observe(key))
   }
 
   const performance = options.performanceTrace && Object.freeze({
@@ -138,10 +134,10 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
   const terminal = Object.freeze({
     ...(performance ? { performance } : {}),
     list(): string[] {
-      return [...entries().keys()].sort()
+      return diagnostics.list()
     },
     observe(key: string): TerminalProbeObservation {
-      return observeEntry(key, requireEntry(key))
+      return requireObservation(key)
     },
     async drain(
       key: string,
@@ -151,14 +147,13 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
       const deadline = now() + timeoutMs
 
       do {
-        const entry = requireEntry(key)
-        const observation = observeEntry(key, entry)
+        const observation = requireObservation(key)
         if (!observation.output.sequenceContinuous) {
           throw new Error(`Terminal ${key} has an incomplete output sequence`)
         }
 
-        const presentation = await entry.view.drainPresentation()
-        const visibleText = entry.view.capturePresentation().lines.map(line => line.text).join('\n')
+        const presentation = await diagnostics.drainPresentation(key)
+        const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
         const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
         const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
         const reachedModelSequence = expectation.minimumModelSequence === undefined

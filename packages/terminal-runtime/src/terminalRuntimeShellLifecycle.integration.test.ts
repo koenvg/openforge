@@ -4,7 +4,7 @@ import {
   terminalMocks,
 } from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTerminalRuntime } from './terminalRuntime'
+import { createTerminalRuntime, type TerminalRuntime, type TerminalSession } from './terminalRuntime'
 
 function liveReplay(instanceId: number, data = '') {
   return {
@@ -14,6 +14,17 @@ function liveReplay(instanceId: number, data = '') {
     instanceId,
   }
 }
+async function completeSpawn(
+  runtime: TerminalRuntime,
+  session: TerminalSession,
+  ptyInstanceId: number,
+): Promise<void> {
+  const lease = runtime.beginPtySpawn(session)
+  expect(lease).not.toBeNull()
+  await lease?.started(ptyInstanceId)
+  lease?.cancel()
+}
+
 describe('terminal runtime tab sessions', () => {
   it('creates, retains, and clears task-scoped shell tab state', () => {
     const runtime = createTerminalRuntime(createHost())
@@ -59,8 +70,8 @@ describe('terminal runtime resumed agent input', () => {
     const runtime = createTerminalRuntime(host)
 
     await runtime.restorePtyInstance('T-1', 42)
-    const entry = await runtime.acquire('T-1')
-    expect(entry.currentPtyInstance).toBe(42)
+    await runtime.acquire('T-1')
+    expect(runtime.diagnostics.observe('T-1')?.lifecycle.currentPtyInstance).toBe(42)
 
     const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
       | ((data: string) => void)
@@ -77,10 +88,12 @@ describe('terminal runtime resumed agent input', () => {
     const runtime = createTerminalRuntime(host)
 
     await runtime.restorePtyInstance('T-ghostty-agent', 42)
-    const entry = await runtime.acquire('T-ghostty-agent')
+    await runtime.acquire('T-ghostty-agent')
 
-    expect(entry.currentPtyInstance).toBe(42)
-    expect(entry.terminalStateSource).toBe('ghostty-snapshot')
+    expect(runtime.diagnostics.observe('T-ghostty-agent')?.lifecycle).toMatchObject({
+      currentPtyInstance: 42,
+      stateSource: 'ghostty-snapshot',
+    })
   })
 
   it('prefers the live backend instance over stale resumed-agent metadata after restart', async () => {
@@ -90,13 +103,13 @@ describe('terminal runtime resumed agent input', () => {
     const runtime = createTerminalRuntime(host)
 
     await runtime.restorePtyInstance('T-restarted-agent', 42)
-    const entry = await runtime.acquire('T-restarted-agent')
+    await runtime.acquire('T-restarted-agent')
     const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
       | ((data: string) => void)
       | undefined
     onData?.('continue')
 
-    expect(entry.currentPtyInstance).toBe(43)
+    expect(runtime.diagnostics.observe('T-restarted-agent')?.lifecycle.currentPtyInstance).toBe(43)
     expect(writePty).toHaveBeenCalledWith('T-restarted-agent', 'continue')
   })
 
@@ -104,13 +117,13 @@ describe('terminal runtime resumed agent input', () => {
     const terminalKey = 'T-resumed-ghostty-agent'
     const host = createHost()
     const runtime = createTerminalRuntime(host)
-    const entry = await runtime.acquire(terminalKey)
+    await runtime.acquire(terminalKey)
     host.getPtyBuffer = async () => liveReplay(43, 'resumed')
 
     await runtime.restorePtyInstance(terminalKey, 43)
 
     await vi.waitFor(() => {
-      expect(entry.currentPtyInstance).toBe(43)
+      expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.currentPtyInstance).toBe(43)
     })
   })
 
@@ -120,13 +133,13 @@ describe('terminal runtime resumed agent input', () => {
     const writePty = vi.spyOn(host, 'writePty')
     const runtime = createTerminalRuntime(host)
 
-    const entry = await runtime.acquire('T-2')
+    await runtime.acquire('T-2')
     const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
       | ((data: string) => void)
       | undefined
     onData?.('continue')
 
-    expect(entry.ptyActive).toBe(true)
+    expect(runtime.getShellLifecycleState('T-2').ptyActive).toBe(true)
     expect(writePty).toHaveBeenCalledWith('T-2', 'continue')
   })
 })
@@ -155,7 +168,7 @@ describe('terminal runtime shell output lifecycle', () => {
       'completed replay',
       expect.any(Function),
     )
-    expect(entry.ptyActive).toBe(false)
+    expect(runtime.getShellLifecycleState('T-1').ptyActive).toBe(false)
     expect(writePty).not.toHaveBeenCalled()
   })
 
@@ -189,7 +202,7 @@ describe('terminal runtime shell output lifecycle', () => {
     runtime.subscribeShellLifecycle('T-1-shell-0', (state) => lifecycleUpdates.push(state))
 
     host.getPtyBuffer = async () => liveReplay(7)
-    await runtime.markShellPtyStarted(entry, 7)
+    await completeSpawn(runtime, entry, 7)
     expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(false)
 
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('stale'), instance_id: 8, sequence: 1 })
@@ -206,7 +219,7 @@ describe('terminal runtime shell output lifecycle', () => {
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
 
-    await runtime.markShellPtyStarted(entry, 7)
+    await completeSpawn(runtime, entry, 7)
     host.emit('pty-exit-T-1-shell-0', { instance_id: 8 })
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
@@ -227,12 +240,14 @@ describe('terminal runtime shell output lifecycle', () => {
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
 
-    runtime.markPtySpawnPending(entry)
+    const lease = runtime.beginPtySpawn(entry)
+    expect(lease).not.toBeNull()
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('$ '), instance_id: 1, sequence: 1 })
     expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(false)
 
     host.getPtyBuffer = async () => liveReplay(1, 'snapshot')
-    await runtime.markShellPtyStarted(entry, 1)
+    await lease?.started(1)
+    lease?.cancel()
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
       ptyActive: true,
@@ -249,11 +264,10 @@ describe('terminal runtime shell output lifecycle', () => {
     await attachTestTerminal(runtime, entry)
     host.getPtyBuffer = async () => liveReplay(9, 'snapshot')
 
-    runtime.markPtySpawnPending(entry)
-    await runtime.markShellPtyStarted(entry, 9)
+    await completeSpawn(runtime, entry, 9)
 
     await vi.waitFor(() => {
-      expect(entry.currentPtyInstance).toBe(9)
+      expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.currentPtyInstance).toBe(9)
     })
     host.emit(`pty-model-output-${terminalKey}`, {
       instance_id: 9,
@@ -261,8 +275,8 @@ describe('terminal runtime shell output lifecycle', () => {
       data: btoa('model output'),
     })
 
-    expect(entry.terminalStateSource).toBe('ghostty-snapshot')
-    expect(entry.terminalModelSequence).toBe(1)
+    expect(runtime.diagnostics.observe(terminalKey)?.lifecycle.stateSource).toBe('ghostty-snapshot')
+    expect(runtime.diagnostics.observe(terminalKey)?.output.modelSequence).toBe(1)
   })
 
   it('rejects pending output when the completed spawn selects another PTY instance', async () => {
@@ -270,10 +284,12 @@ describe('terminal runtime shell output lifecycle', () => {
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
 
-    runtime.markPtySpawnPending(entry)
+    const lease = runtime.beginPtySpawn(entry)
+    expect(lease).not.toBeNull()
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('stale'), instance_id: 1, sequence: 1 })
     host.getPtyBuffer = async () => liveReplay(2)
-    await runtime.markShellPtyStarted(entry, 2)
+    await lease?.started(2)
+    lease?.cancel()
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
       currentPtyInstance: 2,
@@ -288,14 +304,14 @@ describe('terminal runtime shell output lifecycle', () => {
     await attachTestTerminal(runtime, entry)
 
     host.getPtyBuffer = async () => liveReplay(1)
-    await runtime.markShellPtyStarted(entry, 1)
+    await completeSpawn(runtime, entry, 1)
     host.emit('pty-model-output-T-1-shell-0', { data: btoa('$ '), instance_id: 1, sequence: 1 })
     expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(true)
 
-    runtime.markPtySpawnPending(entry)
+    host.emit('pty-exit-T-1-shell-0', { instance_id: 1 })
     host.getPtyBuffer = async () => liveReplay(2)
-    await runtime.markShellPtyStarted(entry, 2)
-    expect(entry.currentPtyInstance).toBe(2)
+    await completeSpawn(runtime, entry, 2)
+    expect(runtime.diagnostics.observe('T-1-shell-0')?.lifecycle.currentPtyInstance).toBe(2)
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
       ptyActive: true,

@@ -1,34 +1,27 @@
 import { terminalLogMessage } from './terminalLogging'
+import type { TerminalSessionCoordinator } from './terminalSessionCoordinator'
+import type { TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 import type { TerminalTransport, TerminalTransportDisposable } from './terminalTransport'
-import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
 interface TerminalReconnectReplayOptions {
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
-  getEntries(): Iterable<PoolEntry>
-  hasEntries(): boolean
-  notifyLifecycle(terminalKey: string): void
-  recoverEntry(entry: PoolEntry): Promise<void>
+  getCoordinators(): Iterable<TerminalSessionCoordinator>
+  hasCoordinators(): boolean
 }
 
 export function createTerminalReconnectReplay({
   transport,
   environment,
-  getEntries,
-  hasEntries,
-  notifyLifecycle,
-  recoverEntry,
+  getCoordinators,
+  hasCoordinators,
 }: TerminalReconnectReplayOptions) {
   let connectionRestoredSubscription: TerminalTransportDisposable | null = null
   let connectionRestoredSubscriptionPending: Promise<void> | null = null
 
-  async function replayEntry(entry: PoolEntry): Promise<void> {
-    if (entry.needsClear) return
-
+  async function replayCoordinator(coordinator: TerminalSessionCoordinator): Promise<void> {
     try {
-      await recoverEntry(entry)
-      notifyLifecycle(entry.shellSessionKey)
-      if (entry.attached) entry.view.refresh()
+      await coordinator.recoverAfterReconnect()
     } catch (error) {
       console.error(
         terminalLogMessage(environment.loggerName, 'Failed to restore terminal state after transport reconnect:'),
@@ -38,7 +31,7 @@ export function createTerminalReconnectReplay({
   }
 
   async function replayActiveTerminals(): Promise<void> {
-    await Promise.all([...getEntries()].map(entry => replayEntry(entry)))
+    await Promise.all([...getCoordinators()].map(replayCoordinator))
   }
 
   async function retainListener(): Promise<void> {
@@ -49,7 +42,7 @@ export function createTerminalReconnectReplay({
       void replayActiveTerminals()
     })
       .then((subscription) => {
-        if (!hasEntries()) {
+        if (!hasCoordinators()) {
           subscription.dispose()
           return
         }
@@ -63,7 +56,7 @@ export function createTerminalReconnectReplay({
   }
 
   function releaseListenerIfIdle(): void {
-    if (hasEntries()) return
+    if (hasCoordinators()) return
     connectionRestoredSubscription?.dispose()
     connectionRestoredSubscription = null
   }
@@ -73,10 +66,5 @@ export function createTerminalReconnectReplay({
     connectionRestoredSubscription = null
   }
 
-  return {
-    dispose,
-    releaseListenerIfIdle,
-    replayActiveTerminals,
-    retainListener,
-  }
+  return { dispose, releaseListenerIfIdle, replayActiveTerminals, retainListener }
 }

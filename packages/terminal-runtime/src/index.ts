@@ -11,7 +11,6 @@ export {
 } from './liveModelOutputSubscription'
 export {
   createTerminalRuntime,
-  type PoolEntry,
   type ShellLifecycleState,
   type TaskTerminalTabsSession,
   type TerminalExitEvent,
@@ -20,11 +19,16 @@ export {
   type TerminalModelOutputEvent,
   type TerminalOutputObservation,
   type TerminalImageProtocol,
+  type TerminalPtySpawnLease,
   type TerminalReplay,
-  type TerminalSnapshot,
   type TerminalRuntime,
+  type TerminalRuntimeDiagnostics,
   type TerminalRuntimeOptions,
   type TerminalRuntimeEnvironment,
+  type TerminalSession,
+  type TerminalSessionConfiguration,
+  type TerminalSessionDiagnostics,
+  type TerminalSnapshot,
   type TerminalRuntimeUnlistenFn,
   type TerminalSessionTransportHandlers,
   type TerminalSessionTransportSubscription,
@@ -46,7 +50,6 @@ export {
   type TerminalViewRendererFailure,
   type TerminalViewTheme,
   type TerminalViewAttachment,
-  type TerminalSessionConfiguration,
 } from './terminalRuntime'
 export {
   createTerminalPerformanceTrace,

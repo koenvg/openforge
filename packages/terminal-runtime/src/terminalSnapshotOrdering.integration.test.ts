@@ -30,7 +30,7 @@ describe('terminal snapshot ordering', () => {
 
     const entry = await runtime.acquire(shellSessionKey)
 
-    expect(entry.currentPtyInstance).toBe(61)
+    expect(runtime.diagnostics.observe(shellSessionKey)?.lifecycle.currentPtyInstance).toBe(61)
     expect(view.replaceSnapshot).not.toHaveBeenCalled()
 
     await attachTestTerminal(runtime, entry)

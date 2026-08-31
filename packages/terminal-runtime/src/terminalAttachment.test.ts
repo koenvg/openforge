@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isValidTerminalDimensions, safeFit } from './terminalAttachment'
-import type { PoolEntry } from './terminalRuntimeTypes'
 
-function createEntry(dimensions: { cols: number; rows: number } | null): PoolEntry {
-  return {
-    view: { fit: vi.fn(() => dimensions) },
-  } as unknown as PoolEntry
+function createFittable(dimensions: { cols: number; rows: number } | null) {
+  return { fit: vi.fn(() => dimensions) }
 }
 
 describe('terminal attachment sizing', () => {
@@ -34,11 +31,11 @@ describe('terminal attachment sizing', () => {
   })
 
   it('delegates fitting to the renderer-neutral terminal view', () => {
-    const measurable = createEntry({ cols: 80, rows: 24 })
-    const unmeasurable = createEntry(null)
+    const measurable = createFittable({ cols: 80, rows: 24 })
+    const unmeasurable = createFittable(null)
 
     expect(safeFit(measurable)).toBe(true)
-    expect(measurable.view.fit).toHaveBeenCalledOnce()
+    expect(measurable.fit).toHaveBeenCalledOnce()
     expect(safeFit(unmeasurable)).toBe(false)
   })
 })

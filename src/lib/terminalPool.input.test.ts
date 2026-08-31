@@ -1,91 +1,81 @@
-import { describe, expect, it, vi } from "vitest";
-import { openUrl, writePty } from "./ipc";
-import { acquire } from "./terminalPool";
+import { describe, expect, it, vi } from 'vitest'
+import { openUrl, writePty } from './ipc'
+import { acquire, beginPtySpawn, restorePtyInstance } from './terminalPool'
 import {
-	getLoadedAddonNames,
-	getTerminalMock,
-	getTerminalMocks,
-	getWebLinksHandler,
-	webLinksHandler,
-} from "./terminalPool.testSetup";
+  getLoadedAddonNamesAt,
+  getTerminalMockAt,
+  getTerminalMocksAt,
+  getWebLinksHandler,
+  webLinksHandler,
+} from './terminalPool.testSetup'
 
-describe("terminalPool input", () => {
+describe('terminalPool input', () => {
+  it('opens detected Agent Terminal Surface links externally', async () => {
+    const session = await acquire('T-42')
+    const { loadAddon } = getTerminalMocksAt(0)
+    const event = new MouseEvent('click')
+    const preventDefault = vi.spyOn(event, 'preventDefault')
+    const stopPropagation = vi.spyOn(event, 'stopPropagation')
+    const spawnLease = beginPtySpawn(session)
 
-	it("opens detected Agent Terminal Surface links externally", async () => {
-		const entry = await acquire("T-42");
-		const { loadAddon: loadAddonSpy } = getTerminalMocks(entry);
-		const event = new MouseEvent("click");
-		const preventDefault = vi.spyOn(event, "preventDefault");
-		const stopPropagation = vi.spyOn(event, "stopPropagation");
+    expect(getLoadedAddonNamesAt(0).slice(0, 2)).toEqual(['FitAddon', 'WebLinksAddon'])
+    expect(spawnLease?.imageProtocol).toBe('iterm2')
+    spawnLease?.cancel()
+    expect(loadAddon).toHaveBeenCalledTimes(4)
+    expect(webLinksHandler).not.toBeNull()
 
-		expect(getLoadedAddonNames(entry).slice(0, 2)).toEqual(["FitAddon", "WebLinksAddon"]);
-		expect(entry.view.imageProtocol).toBe("iterm2");
-		expect(loadAddonSpy).toHaveBeenCalledTimes(4);
-		expect(webLinksHandler).not.toBeNull();
+    getWebLinksHandler()(event, 'https://example.com/pool')
 
-		getWebLinksHandler()(event, "https://example.com/pool");
+    expect(preventDefault).toHaveBeenCalled()
+    expect(stopPropagation).toHaveBeenCalled()
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/pool')
+  })
 
-		expect(preventDefault).toHaveBeenCalled();
-		expect(stopPropagation).toHaveBeenCalled();
-		expect(openUrl).toHaveBeenCalledWith("https://example.com/pool");
-	});
+  it('opens OSC 8 Agent Terminal Surface links instead of xterm default browser handling', async () => {
+    await acquire('T-43')
+    const event = new MouseEvent('click')
+    const preventDefault = vi.spyOn(event, 'preventDefault')
+    const stopPropagation = vi.spyOn(event, 'stopPropagation')
 
-	it("opens OSC 8 Agent Terminal Surface links instead of xterm default browser handling", async () => {
-		const entry = await acquire("T-43");
-		const event = new MouseEvent("click");
-		const preventDefault = vi.spyOn(event, "preventDefault");
-		const stopPropagation = vi.spyOn(event, "stopPropagation");
+    getTerminalMockAt(0).options.linkHandler?.activate(
+      event,
+      'https://example.com/osc8',
+      { start: { x: 1, y: 1 }, end: { x: 10, y: 1 } },
+    )
 
-		getTerminalMock(entry).options.linkHandler?.activate(
-			event,
-			"https://example.com/osc8",
-			{ start: { x: 1, y: 1 }, end: { x: 10, y: 1 } },
-		);
+    expect(preventDefault).toHaveBeenCalled()
+    expect(stopPropagation).toHaveBeenCalled()
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/osc8')
+  })
 
-		expect(preventDefault).toHaveBeenCalled();
-		expect(stopPropagation).toHaveBeenCalled();
-		expect(openUrl).toHaveBeenCalledWith("https://example.com/osc8");
-	});
+  it('agent terminals suppress Shift+Enter and send Ctrl+J only while the PTY is active', async () => {
+    await acquire('T-120')
+    await acquire('T-120-shell-0')
+    const { attachCustomKeyEventHandler: agentKeyHandlerSpy } = getTerminalMocksAt(0)
+    const { attachCustomKeyEventHandler: shellKeyHandlerSpy } = getTerminalMocksAt(1)
 
-	it("agent terminals send Ctrl+J once and suppress xterm Shift+Enter keydown/keypress handling", async () => {
-		const agentEntry = await acquire("T-120");
-		const shellEntry = await acquire("T-120-shell-0");
-		agentEntry.ptyActive = true;
-		shellEntry.ptyActive = true;
-		const { attachCustomKeyEventHandler: agentKeyHandlerSpy } = getTerminalMocks(agentEntry);
-		const { attachCustomKeyEventHandler: shellKeyHandlerSpy } = getTerminalMocks(shellEntry);
+    expect(shellKeyHandlerSpy).not.toHaveBeenCalled()
+    expect(agentKeyHandlerSpy).toHaveBeenCalledTimes(1)
+    const handleKeyEvent = agentKeyHandlerSpy.mock.calls[0][0]
 
-		expect(shellKeyHandlerSpy).not.toHaveBeenCalled();
-		expect(agentKeyHandlerSpy).toHaveBeenCalledTimes(1);
-		const handleKeyEvent = agentKeyHandlerSpy.mock.calls[0][0];
-		const keydownEvent = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, cancelable: true });
-		const keypressEvent = new KeyboardEvent("keypress", { key: "Enter", shiftKey: true, cancelable: true });
-		const keydownStopPropagation = vi.spyOn(keydownEvent, "stopPropagation");
-		const keypressStopPropagation = vi.spyOn(keypressEvent, "stopPropagation");
+    const inactiveEvent = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, cancelable: true })
+    expect(handleKeyEvent(inactiveEvent)).toBe(false)
+    expect(inactiveEvent.defaultPrevented).toBe(true)
+    expect(writePty).not.toHaveBeenCalled()
 
-		const handledKeydown = handleKeyEvent(keydownEvent);
-		const handledKeypress = handleKeyEvent(keypressEvent);
+    await restorePtyInstance('T-120', 7)
+    const keydownEvent = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, cancelable: true })
+    const keypressEvent = new KeyboardEvent('keypress', { key: 'Enter', shiftKey: true, cancelable: true })
+    const keydownStopPropagation = vi.spyOn(keydownEvent, 'stopPropagation')
+    const keypressStopPropagation = vi.spyOn(keypressEvent, 'stopPropagation')
 
-		expect(handledKeydown).toBe(false);
-		expect(handledKeypress).toBe(false);
-		expect(keydownEvent.defaultPrevented).toBe(true);
-		expect(keypressEvent.defaultPrevented).toBe(true);
-		expect(keydownStopPropagation).toHaveBeenCalledTimes(1);
-		expect(keypressStopPropagation).toHaveBeenCalledTimes(1);
-		expect(writePty).toHaveBeenCalledTimes(1);
-		expect(writePty).toHaveBeenCalledWith("T-120", "\n");
-		expect(writePty).not.toHaveBeenCalledWith("T-120", "\r");
-		expect(writePty).not.toHaveBeenCalledWith("T-120", "\u001b[13;2u");
-
-		vi.mocked(writePty).mockClear();
-		agentEntry.ptyActive = false;
-		const inactiveKeydownEvent = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, cancelable: true });
-		const inactiveStopPropagation = vi.spyOn(inactiveKeydownEvent, "stopPropagation");
-		const handledInactive = handleKeyEvent(inactiveKeydownEvent);
-
-		expect(handledInactive).toBe(false);
-		expect(inactiveKeydownEvent.defaultPrevented).toBe(true);
-		expect(inactiveStopPropagation).toHaveBeenCalledTimes(1);
-		expect(writePty).not.toHaveBeenCalled();
-	});
-});
+    expect(handleKeyEvent(keydownEvent)).toBe(false)
+    expect(handleKeyEvent(keypressEvent)).toBe(false)
+    expect(keydownEvent.defaultPrevented).toBe(true)
+    expect(keypressEvent.defaultPrevented).toBe(true)
+    expect(keydownStopPropagation).toHaveBeenCalledOnce()
+    expect(keypressStopPropagation).toHaveBeenCalledOnce()
+    expect(writePty).toHaveBeenCalledOnce()
+    expect(writePty).toHaveBeenCalledWith('T-120', '\n')
+  })
+})

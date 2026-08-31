@@ -110,11 +110,6 @@ vi.mock('../../lib/terminalPool', () => ({
   detach: vi.fn(),
   release: releaseMock,
   focusTerminal: vi.fn(),
-  markShellPtyStarted: vi.fn((entry, instanceId) => {
-    entry.currentPtyInstance = instanceId
-    entry.ptyActive = true
-    entry.needsClear = false
-  }),
   subscribeShellLifecycle: vi.fn((terminalKey: string, callback) => {
     shellLifecycleCallbacks.set(terminalKey, callback)
     return () => {
@@ -126,7 +121,6 @@ vi.mock('../../lib/terminalPool', () => ({
     shellExited: false,
     currentPtyInstance: null,
   })),
-  updateShellLifecycleState: vi.fn(),
   getTaskTerminalTabsSession: vi.fn((taskId: string) => {
       const existing = taskTabSessions.get(taskId)
       if (existing) return existing

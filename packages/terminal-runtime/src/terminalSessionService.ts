@@ -1,13 +1,14 @@
 import { parsePtySessionKey } from './ptySessionKey'
-import type { PoolEntry, TerminalRuntime } from './terminalRuntime'
+import type { TerminalRuntime } from './terminalRuntime'
+import type { TerminalSession } from './terminalRuntimeTypes'
 
 type SharedTerminalRuntimeOperations = Omit<
   TerminalRuntime,
-  'acquire' | 'release' | 'releaseAll' | 'releaseAllForTask' | 'dispose' | '_getPool'
+  'acquire' | 'release' | 'releaseAll' | 'releaseAllForTask' | 'dispose' | 'diagnostics'
 >
 
 export interface TerminalSessionClient extends SharedTerminalRuntimeOperations {
-  acquire(shellSessionKey: string): Promise<PoolEntry>
+  acquire(shellSessionKey: string): Promise<TerminalSession>
   release(shellSessionKey: string): void
   releaseAll(): void
   releaseAllForTask(taskId: string): number
@@ -64,7 +65,7 @@ export function createTerminalSessionService(runtime: TerminalRuntime): Terminal
       releaseAll: _releaseAll,
       releaseAllForTask: _releaseAllForTask,
       dispose: _dispose,
-      _getPool,
+      diagnostics: _diagnostics,
       ...sharedOperations
     } = runtime
     void _acquire
@@ -72,9 +73,9 @@ export function createTerminalSessionService(runtime: TerminalRuntime): Terminal
     void _releaseAll
     void _releaseAllForTask
     void _dispose
-    void _getPool
+    void _diagnostics
 
-    async function acquire(shellSessionKey: string): Promise<PoolEntry> {
+    async function acquire(shellSessionKey: string): Promise<TerminalSession> {
       const ownerAdded = addOwner(ownerId, shellSessionKey)
       try {
         return await runtime.acquire(shellSessionKey)

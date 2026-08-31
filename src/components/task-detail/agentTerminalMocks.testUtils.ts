@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   poolEntry: {
+    shellSessionKey: '',
     taskId: '',
     view: {
       geometry: { cols: 80, rows: 24 },
@@ -21,12 +22,14 @@ const mocks = vi.hoisted(() => ({
   },
   attachment: {
     generation: 1,
+    refit: vi.fn(async (_signal?: AbortSignal) => mocks.poolEntry.view.fit()),
     detach: vi.fn(),
   },
   shellLifecycleState: {
     ptyActive: false,
     shellExited: false,
     currentPtyInstance: null as number | null,
+    hasOutput: false,
   },
 }))
 
@@ -60,7 +63,6 @@ vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue(mocks.poolEntry),
   attach: vi.fn().mockResolvedValue(mocks.attachment),
   detach: vi.fn(),
-  recoverActiveTerminal: vi.fn(),
   focusTerminal: vi.fn(),
   restorePtyInstance: vi.fn().mockImplementation((_taskId: string, instanceId: number) => {
     mocks.shellLifecycleState.ptyActive = true
@@ -72,12 +74,6 @@ vi.mock('../../lib/terminalPool', () => ({
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
   isValidTerminalDimensions: vi.fn().mockReturnValue(true),
-  updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mocks.shellLifecycleState) => {
-    mocks.shellLifecycleState.ptyActive = state.ptyActive
-    mocks.shellLifecycleState.shellExited = state.shellExited
-    mocks.shellLifecycleState.currentPtyInstance = state.currentPtyInstance
-  }),
-  _getPool: vi.fn().mockReturnValue(new Map()),
 }))
 
 export const mockPoolEntry = mocks.poolEntry
@@ -86,10 +82,12 @@ export const mockShellLifecycleState = mocks.shellLifecycleState
 
 export function resetAgentTerminalMocks() {
   mocks.poolEntry.taskId = ''
+  mocks.poolEntry.shellSessionKey = ''
   mocks.poolEntry.ptyActive = false
   mocks.poolEntry.needsClear = false
   mocks.poolEntry.attached = false
   mocks.attachment.detach.mockClear()
+  mocks.attachment.refit.mockClear()
   mocks.poolEntry.view.setTheme.mockClear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false

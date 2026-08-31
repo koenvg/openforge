@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { PoolEntry, TerminalView } from '@openforge-app/terminal-runtime'
+import type {
+  TerminalRuntimeDiagnostics,
+  TerminalSessionDiagnostics,
+  TerminalViewPresentationSnapshot,
+} from '@openforge-app/terminal-runtime'
 import { createTerminalPerformanceTrace } from '@openforge-app/terminal-runtime'
 import {
   installTerminalTestProbe,
@@ -7,9 +11,44 @@ import {
   type TerminalTestProbeWindow,
 } from './terminalTestProbe'
 
-function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
-  const view = {
+function createDiagnostics() {
+  const session: TerminalSessionDiagnostics = {
+    shellSessionKey: 'T-1-shell-0',
+    lifecycle: {
+      attached: true,
+      spawnPending: false,
+      stateSource: 'ghostty-snapshot',
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 7,
+      hasOutput: true,
+    },
+    output: {
+      ptyInstanceId: 7,
+      receivedBytes: 15,
+      firstSequence: 1,
+      lastSequence: 4,
+      sequenceContinuous: true,
+      modelSequence: 4,
+    },
+    view: {
+      attached: true,
+      visible: true,
+      needsRecovery: false,
+      attachmentGeneration: 1,
+    },
     geometry: { cols: 80, rows: 24 },
+  }
+  const presentation: TerminalViewPresentationSnapshot = {
+    geometry: { cols: 80, rows: 24 },
+    activeBuffer: 'normal',
+    cursor: { x: 0, y: 1 },
+    selectionText: '',
+    lines: [{ row: 0, text: 'ready TEST_DONE', wrapped: false, cells: [] }],
+  }
+  const diagnostics: TerminalRuntimeDiagnostics = {
+    list: vi.fn(() => [session.shellSessionKey]),
+    observe: vi.fn(() => session),
     drainPresentation: vi.fn(async () => ({
       writeGeneration: 4,
       parsedGeneration: 4,
@@ -20,51 +59,9 @@ function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
       devicePixelRatio: 2,
       geometry: { cols: 80, rows: 24 },
     })),
-    capturePresentation: vi.fn(() => ({
-      geometry: { cols: 80, rows: 24 },
-      activeBuffer: 'normal',
-      cursor: { x: 0, y: 1 },
-      selectionText: '',
-      lines: [{ row: 0, text: 'ready TEST_DONE', wrapped: false, cells: [] }],
-    })),
-  } as unknown as TerminalView
-
-  return {
-    shellSessionKey: 'T-1-shell-0',
-    view,
-    ptyActive: true,
-    needsClear: false,
-    shellExited: false,
-    transportSubscription: {
-      setModelOutputEnabled: vi.fn(async () => undefined),
-      dispose: vi.fn(),
-    },
-    viewSubscriptions: [],
-    resizeObserver: null,
-    visibilityObserver: null,
-    resizeTimeout: null,
-    attached: true,
-    viewVisible: true,
-    viewVisibilityGeneration: 1,
-    viewNeedsRecovery: false,
-    attachmentGeneration: 1,
-    spawnPending: false,
-    currentPtyInstance: 7,
-    terminalStateSource: 'ghostty-snapshot',
-    terminalModelSequence: 4,
-    pendingTerminalModelOutput: [],
-    terminalReplayRecovery: null,
-    hasOutput: true,
-    outputSequence: 4,
-    terminalOutputObservation: {
-      ptyInstanceId: 7,
-      receivedBytes: 15,
-      firstSequence: 1,
-      lastSequence: 4,
-      sequenceContinuous: true,
-    },
-    ...overrides,
+    capturePresentation: vi.fn(() => presentation),
   }
+  return { diagnostics, session, presentation }
 }
 
 describe('terminal desktop-test probe', () => {
@@ -76,23 +73,23 @@ describe('terminal desktop-test probe', () => {
 
   it('does not install in production or normal development sessions', () => {
     const target = {} as TerminalTestProbeWindow
-    const entries = () => new Map([['T-1-shell-0', createEntry()]])
+    const { diagnostics } = createDiagnostics()
 
-    installTerminalTestProbe({ isDevelopment: false, url: 'http://localhost/?openforge-desktop-test=1', target, entries })
+    installTerminalTestProbe({ isDevelopment: false, url: 'http://localhost/?openforge-desktop-test=1', target, diagnostics })
     expect(target.__openforgeDesktopTest).toBeUndefined()
 
-    installTerminalTestProbe({ isDevelopment: true, url: 'http://localhost/', target, entries })
+    installTerminalTestProbe({ isDevelopment: true, url: 'http://localhost/', target, diagnostics })
     expect(target.__openforgeDesktopTest).toBeUndefined()
   })
 
   it('exposes serializable read-only lifecycle, sequence, byte, geometry, and drain evidence', async () => {
     const target = {} as TerminalTestProbeWindow
-    const entry = createEntry()
+    const { diagnostics } = createDiagnostics()
     installTerminalTestProbe({
       isDevelopment: true,
       url: 'http://localhost/?openforge-desktop-test=1',
       target,
-      entries: () => new Map([['T-1-shell-0', entry]]),
+      diagnostics,
     })
 
     const terminal = target.__openforgeDesktopTest!.terminal
@@ -135,11 +132,12 @@ describe('terminal desktop-test probe', () => {
     let timestamp = 50
     const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
     const target = {} as TerminalTestProbeWindow
+    const { diagnostics } = createDiagnostics()
     installTerminalTestProbe({
       isDevelopment: true,
       url: 'http://localhost/?openforge-desktop-test=1',
       target,
-      entries: () => new Map(),
+      diagnostics,
       performanceTrace,
     })
 
@@ -158,20 +156,20 @@ describe('terminal desktop-test probe', () => {
 
   it('fails drains for incomplete sequences and missing markers', async () => {
     const target = {} as TerminalTestProbeWindow
-    const entry = createEntry()
+    const { diagnostics, session } = createDiagnostics()
     installTerminalTestProbe({
       isDevelopment: true,
       url: 'http://localhost/?openforge-desktop-test=1',
       target,
-      entries: () => new Map([['T-1-shell-0', entry]]),
+      diagnostics,
     })
     const terminal = target.__openforgeDesktopTest!.terminal
 
-    entry.terminalOutputObservation.sequenceContinuous = false
+    ;(session.output as { sequenceContinuous: boolean }).sequenceContinuous = false
     await expect(terminal.drain('T-1-shell-0', { marker: 'TEST_DONE', timeoutMs: 0 }))
       .rejects.toThrow('incomplete output sequence')
 
-    entry.terminalOutputObservation.sequenceContinuous = true
+    ;(session.output as { sequenceContinuous: boolean }).sequenceContinuous = true
     await expect(terminal.drain('T-1-shell-0', { marker: 'MISSING', timeoutMs: 0 }))
       .rejects.toThrow('marker "MISSING" was not presented')
   })
