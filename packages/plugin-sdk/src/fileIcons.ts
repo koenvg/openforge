@@ -36,6 +36,7 @@ const EXTENSION_ICONS: Readonly<Record<string, string>> = {
   svg: 'svg',
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image',
   webp: 'image', bmp: 'image', ico: 'image', avif: 'image',
+  mp4: 'video', m4v: 'video', webm: 'video', ogv: 'video', ogg: 'video', mov: 'video',
   pdf: 'pdf',
   zip: 'zip', tar: 'zip', gz: 'zip', tgz: 'zip', rar: 'zip', '7z': 'zip',
   lock: 'lock',

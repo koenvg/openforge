@@ -33,6 +33,7 @@
     fileContents,
     fileContentError,
     onRetryFileContents,
+    onRequestFileContents,
     canFetchFileContents,
     workerDiffFile,
     diffViewMode,
@@ -47,7 +48,7 @@
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
-    onOpenImage,
+    onOpenMedia,
     onToggleCollapse,
     onSetRichDiffActive,
     onReviewedChange,
@@ -102,6 +103,7 @@
       {fileContents}
       {fileContentError}
       {onRetryFileContents}
+      {onRequestFileContents}
       {canFetchFileContents}
       {workerDiffFile}
       {diffViewMode}
@@ -114,7 +116,7 @@
       {resolveRepositoryImage}
       {onOpenRepositoryPath}
       {onOpenUrl}
-      {onOpenImage}
+      {onOpenMedia}
       {onOpenInlineCommentWidget}
       {getInlineCommentText}
       {onSetInlineCommentText}

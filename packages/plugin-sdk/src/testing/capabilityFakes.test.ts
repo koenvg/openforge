@@ -36,6 +36,27 @@ describe('testing capability fakes', () => {
     expect(start).toHaveBeenCalledOnce()
   })
 
+
+  it('serves typed video fixtures through the filesystem fake', async () => {
+    const api = createMockBackendOpenForgeApi({
+      projectId: 'project-1',
+      projectFileContents: {
+        'assets/demo.mp4': {
+          type: 'video',
+          content: 'AAECAw==',
+          mimeType: 'video/mp4',
+          size: 4,
+        },
+      },
+    })
+
+    await expect(api.fs.readFile({ projectId: 'project-1', path: 'assets/demo.mp4' })).resolves.toEqual({
+      type: 'video',
+      content: 'AAECAw==',
+      mimeType: 'video/mp4',
+      size: 4,
+    })
+  })
   it('records backend user data and external filesystem calls', async () => {
     const api = createMockBackendOpenForgeApi({
       pluginId: 'skill-usage',

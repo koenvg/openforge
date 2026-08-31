@@ -410,6 +410,8 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'script-src')).not.toContain("'unsafe-inline'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'style-src')).toBe("style-src 'self' plugin: 'unsafe-inline'")
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'img-src')).toBe("img-src 'self' plugin: https: data:")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'media-src')).toBe("media-src 'self' https: data: blob:")
+    expect(cspDirective(ELECTRON_RENDERER_CSP, 'media-src')).not.toContain('file:')
     expect(cspDirective(ELECTRON_RENDERER_CSP, 'font-src')).toBe("font-src 'self' plugin: data:")
     expect(ELECTRON_RENDERER_CSP).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT} https://api.github.com https://*.atlassian.net`)
     expect(createElectronRendererCsp({ host: '127.0.0.1', port: 18000 })).toContain('http://127.0.0.1:18000')

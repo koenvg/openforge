@@ -35,7 +35,7 @@ import type {
   UserDataFileRequest,
   UserDataFileWriteRequest,
 } from '../types'
-import type { AgentSession, Task } from '../domain'
+import type { AgentSession, FileContent, Task } from '../domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
@@ -64,6 +64,8 @@ export interface TestingOpenForgeApiOptions {
   storage?: PluginStorage
   /** Initial files exposed through `fs.userData`. Defaults to none. */
   userDataTextFiles?: UserDataFileWriteRequest[]
+  /** File contents returned by `fs.readFile`, keyed by project-relative path. */
+  projectFileContents?: Readonly<Record<string, FileContent>>
   /**
    * Tasks returned by `tasks.list`. The mock filters them by the requested
    * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,

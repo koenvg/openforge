@@ -11,6 +11,27 @@ fn runtime_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)
 }
 
+fn payload_optional_usize(payload: &serde_json::Value, key: &str) -> AppResult<Option<usize>> {
+    let Some(value) = payload.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let number = value.as_u64().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("payload field '{key}' must be a non-negative integer"),
+        )
+    })?;
+    usize::try_from(number).map(Some).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("payload field '{key}' is too large"),
+        )
+    })
+}
+
 fn link_pull_request_error(error: String) -> (StatusCode, String) {
     if error.starts_with("Invalid pull request URL") {
         (StatusCode::BAD_REQUEST, error)
@@ -267,12 +288,14 @@ pub(super) async fn handle_app_github_review_command(
                     .map_err(runtime_error)?,
                 )?
             } else {
+                let max_size = payload_optional_usize(&request.payload, "maxSize")?;
                 to_app_value(
                     crate::github_runtime::get_file_content_base64(
                         &state.github_client,
                         &owner,
                         &repo,
                         &sha,
+                        max_size,
                     )
                     .await
                     .map_err(runtime_error)?,
@@ -297,6 +320,7 @@ pub(super) async fn handle_app_github_review_command(
                     .map_err(runtime_error)?,
                 )?
             } else {
+                let max_size = payload_optional_usize(&request.payload, "maxSize")?;
                 to_app_value(
                     crate::github_runtime::get_file_at_ref_base64(
                         &state.github_client,
@@ -304,6 +328,7 @@ pub(super) async fn handle_app_github_review_command(
                         &repo,
                         &path,
                         &ref_sha,
+                        max_size,
                     )
                     .await
                     .map_err(runtime_error)?,

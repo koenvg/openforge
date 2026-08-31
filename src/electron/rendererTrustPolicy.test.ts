@@ -47,7 +47,7 @@ describe('Renderer Trust Policy Module', () => {
         corsEnabled: true,
       },
     })
-    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}; style-src 'self' plugin: 'unsafe-inline'; img-src 'self' plugin: https: data:; font-src 'self' plugin: data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
+    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}; style-src 'self' plugin: 'unsafe-inline'; img-src 'self' plugin: https: data:; media-src 'self' https: data: blob:; font-src 'self' plugin: data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
     expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain(rendererImportMapScriptHashSource())
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain("'wasm-unsafe-eval'")
@@ -72,6 +72,24 @@ describe('Renderer Trust Policy Module', () => {
       requestingUrl: 'http://localhost:1420/tasks',
       trustedOrigins: new Set(['http://localhost:1420']),
       mediaTypes: ['video'],
+    })).toBe(false)
+    expect(policy.shouldGrantRendererPermission({
+      permission: 'fullscreen',
+      isMainWindowWebContents: true,
+      requestingUrl: 'http://localhost:1420/tasks',
+      trustedOrigins: new Set(['http://localhost:1420']),
+    })).toBe(true)
+    expect(policy.shouldGrantRendererPermission({
+      permission: 'fullscreen',
+      isMainWindowWebContents: false,
+      requestingUrl: 'http://localhost:1420/tasks',
+      trustedOrigins: new Set(['http://localhost:1420']),
+    })).toBe(false)
+    expect(policy.shouldGrantRendererPermission({
+      permission: 'fullscreen',
+      isMainWindowWebContents: true,
+      requestingUrl: 'https://evil.example/tasks',
+      trustedOrigins: new Set(['http://localhost:1420']),
     })).toBe(false)
   })
 

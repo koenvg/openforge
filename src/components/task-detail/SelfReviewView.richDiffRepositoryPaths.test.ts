@@ -26,11 +26,8 @@ describe('SelfReviewView Rich Diff repository paths', () => {
   it('loads nested worktree images and reveals relative links in the file viewer', async () => {
     const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'docs-sha' };
     vi.mocked(getTaskDiff).mockResolvedValue([markdownFile]);
-    vi.mocked(getTaskBatchFileContents).mockResolvedValue([[
-      '',
-      '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
-    ]]);
-    vi.mocked(getTaskFileContents).mockResolvedValue(['', 'base64-diagram']);
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([{ oldContent: '', newContent: '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)' }]);
+    vi.mocked(getTaskFileContents).mockResolvedValue({ oldContent: '', newContent: 'base64-diagram' });
 
     renderSelfReviewView();
 

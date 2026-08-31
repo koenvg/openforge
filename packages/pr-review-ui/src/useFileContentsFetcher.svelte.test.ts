@@ -49,6 +49,13 @@ const fileNoPatch: PrFileDiff = {
   patch_line_count: null,
 }
 
+
+const videoFile: PrFileDiff = {
+  ...fileNoPatch,
+  filename: 'recordings/demo.MP4',
+  previous_filename: null,
+  status: 'binary',
+}
 // ============================================================================
 // Tests
 // ============================================================================
@@ -160,6 +167,108 @@ describe('createFileContentsFetcher', () => {
     cleanup()
   })
 
+  it('loads a video only after an explicit request and only once', async () => {
+    const contents: FileContents = {
+      oldContent: '',
+      newContent: '',
+      oldAvailability: { status: 'missing' },
+      newAvailability: { status: 'too-large', size: 26_214_401 },
+    }
+    const perFileFn = vi.fn<(file: PrFileDiff) => Promise<FileContents>>().mockResolvedValue(contents)
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [videoFile],
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => perFileFn,
+        getBatchFetchFileContents: () => undefined,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(perFileFn).not.toHaveBeenCalled()
+
+    fetcher.requestFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(perFileFn).toHaveBeenCalledTimes(1)
+    expect(fetcher.fileContentsMap.get(videoFile.filename)).toEqual(contents)
+
+    fetcher.requestFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(perFileFn).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('retries an explicitly requested video after a failed load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const recovered: FileContents = {
+      oldContent: '',
+      newContent: '',
+      oldAvailability: { status: 'missing' },
+      newAvailability: { status: 'load-failed', message: 'Browser could not decode this video.' },
+    }
+    const perFileFn = vi.fn<(file: PrFileDiff) => Promise<FileContents>>()
+      .mockRejectedValueOnce(new Error('network failed'))
+      .mockResolvedValueOnce(recovered)
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [videoFile],
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => perFileFn,
+        getBatchFetchFileContents: () => undefined,
+      })
+    })
+
+    fetcher.requestFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(fetcher.fileContentErrors.get(videoFile.filename)).toBe('network failed')
+
+    fetcher.retryFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(perFileFn).toHaveBeenCalledTimes(2)
+    expect(fetcher.fileContentErrors.has(videoFile.filename)).toBe(false)
+    expect(fetcher.fileContentsMap.get(videoFile.filename)?.newAvailability).toEqual(recovered.newAvailability)
+    cleanup()
+    consoleError.mockRestore()
+  })
+
+  it('discards an explicitly requested video result after the file leaves the review', async () => {
+    let resolveVideo!: (contents: FileContents) => void
+    const pending = new Promise<FileContents>(resolve => { resolveVideo = resolve })
+    const perFileFn = vi.fn<(file: PrFileDiff) => Promise<FileContents>>().mockReturnValue(pending)
+    let files = $state<PrFileDiff[]>([videoFile])
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => files,
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => perFileFn,
+        getBatchFetchFileContents: () => undefined,
+      })
+    })
+
+    fetcher.requestFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    files = []
+    flushSync()
+    resolveVideo({ oldContent: '', newContent: 'stale-video' })
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(fetcher.fileContentsMap.has(videoFile.filename)).toBe(false)
+    cleanup()
+  })
+
   // --------------------------------------------------------------------------
   // Batch fetching
   // --------------------------------------------------------------------------
@@ -226,6 +335,45 @@ describe('createFileContentsFetcher', () => {
     expect(batchFn).toHaveBeenCalledTimes(1)
     const [calledFiles] = batchFn.mock.calls[0] as [PrFileDiff[]]
     expect(calledFiles).toHaveLength(2)
+    cleanup()
+  })
+
+  it('does not duplicate an in-flight batch when a video is requested later', async () => {
+    let resolveText!: (contents: Map<string, FileContents>) => void
+    let resolveVideo!: (contents: Map<string, FileContents>) => void
+    const textBatch = new Promise<Map<string, FileContents>>(resolve => { resolveText = resolve })
+    const videoBatch = new Promise<Map<string, FileContents>>(resolve => { resolveVideo = resolve })
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockReturnValueOnce(textBatch)
+      .mockReturnValueOnce(videoBatch)
+    let fetcher!: FileContentsFetcherState
+
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [fileWithPatch, videoFile],
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(batchFn).toHaveBeenCalledTimes(1)
+    expect(batchFn.mock.calls[0]?.[0].map(file => file.filename)).toEqual([fileWithPatch.filename])
+
+    fetcher.requestFileContents(videoFile.filename)
+    flushSync()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(batchFn).toHaveBeenCalledTimes(2)
+    expect(batchFn.mock.calls[1]?.[0].map(file => file.filename)).toEqual([videoFile.filename])
+
+    resolveVideo(new Map([[videoFile.filename, { oldContent: '', newContent: 'video' }]]))
+    resolveText(new Map([[fileWithPatch.filename, { oldContent: 'old', newContent: 'text' }]]))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(fetcher.fileContentsMap.get(fileWithPatch.filename)?.newContent).toBe('text')
+    expect(fetcher.fileContentsMap.get(videoFile.filename)?.newContent).toBe('video')
     cleanup()
   })
 

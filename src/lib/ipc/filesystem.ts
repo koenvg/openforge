@@ -1,5 +1,6 @@
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { CommitInfo, FileContent, FileEntry, GitStatusSummary, PrFileDiff } from '../types'
+import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
 export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeCommitted, includeUncommitted });
@@ -9,8 +10,8 @@ export async function getTaskGitStatus(taskId: string): Promise<GitStatusSummary
   return invoke<GitStatusSummary>("get_task_git_status", { taskId });
 }
 
-export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<[string, string]> {
-  return invoke<[string, string]>("get_task_file_contents", { taskId, path, oldPath, status, includeCommitted, includeUncommitted });
+export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<FileContents> {
+  return invoke<FileContents>("get_task_file_contents", { taskId, path, oldPath, status, includeCommitted, includeUncommitted });
 }
 
 export interface FileContentRequest {
@@ -19,8 +20,8 @@ export interface FileContentRequest {
   status: string;
 }
 
-export async function getTaskBatchFileContents(taskId: string, files: FileContentRequest[], includeCommitted: boolean, includeUncommitted: boolean): Promise<[string, string][]> {
-  return invoke<[string, string][]>("get_task_batch_file_contents", { taskId, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })), includeCommitted, includeUncommitted });
+export async function getTaskBatchFileContents(taskId: string, files: FileContentRequest[], includeCommitted: boolean, includeUncommitted: boolean): Promise<FileContents[]> {
+  return invoke<FileContents[]>("get_task_batch_file_contents", { taskId, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })), includeCommitted, includeUncommitted });
 }
 
 export async function getTaskCommits(taskId: string): Promise<CommitInfo[]> {
@@ -31,12 +32,12 @@ export async function getCommitDiff(taskId: string, commitSha: string): Promise<
   return invoke<PrFileDiff[]>("get_commit_diff", { taskId, commitSha });
 }
 
-export async function getCommitFileContents(taskId: string, commitSha: string, path: string, oldPath: string | null, status: string): Promise<[string, string]> {
-  return invoke<[string, string]>("get_commit_file_contents", { taskId, commitSha, path, oldPath, status });
+export async function getCommitFileContents(taskId: string, commitSha: string, path: string, oldPath: string | null, status: string): Promise<FileContents> {
+  return invoke<FileContents>("get_commit_file_contents", { taskId, commitSha, path, oldPath, status });
 }
 
-export async function getCommitBatchFileContents(taskId: string, commitSha: string, files: FileContentRequest[]): Promise<[string, string][]> {
-  return invoke<[string, string][]>("get_commit_batch_file_contents", { taskId, commitSha, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })) });
+export async function getCommitBatchFileContents(taskId: string, commitSha: string, files: FileContentRequest[]): Promise<FileContents[]> {
+  return invoke<FileContents[]>("get_commit_batch_file_contents", { taskId, commitSha, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })) });
 }
 
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {

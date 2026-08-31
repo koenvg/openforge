@@ -589,6 +589,7 @@ var TestingRegistryServices = class {
 	agentSessionWorkspaces;
 	externalTextFiles;
 	userDataTextFiles = /* @__PURE__ */ new Map();
+	projectFileContents;
 	claims = new TestingContributionClaims();
 	constructor(options = {}) {
 		this.pluginId = options.pluginId ?? "test-plugin";
@@ -607,6 +608,7 @@ var TestingRegistryServices = class {
 		this.seededAgentSessions = options.agentSessions ?? [];
 		this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {};
 		this.externalTextFiles = options.externalTextFiles ?? [];
+		this.projectFileContents = options.projectFileContents ?? {};
 		for (const file of options.userDataTextFiles ?? []) this.userDataTextFiles.set(file.path, file.content);
 	}
 	localQualifiedId(kind, id) {
@@ -990,12 +992,12 @@ var TestingCommonApiFake = class {
 			},
 			fs: {
 				readDir: async () => [],
-				readFile: async () => ({
+				readFile: async ({ path }) => this.services.projectFileContents[path] ?? {
 					type: "text",
 					content: "",
 					mimeType: null,
 					size: 0
-				}),
+				},
 				writeFile: async (request) => {
 					this.services.calls.fsWrites.push(request);
 				},

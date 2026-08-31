@@ -1049,8 +1049,8 @@ export interface FileEntry {
 
 /** File content with type information */
 export interface FileContent {
-  type: 'text' | 'image' | 'binary' | 'document' | 'large-file';
-  content: string;       // text content, base64 for images, empty for binary
+  type: 'text' | 'image' | 'video' | 'binary' | 'document' | 'large-file';
+  content: string;       // text content, base64 for images/videos, empty for unavailable categories
   mimeType: string | null;
   size: number;
 }

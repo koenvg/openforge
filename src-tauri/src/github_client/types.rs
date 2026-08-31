@@ -336,6 +336,15 @@ pub(crate) struct SearchUser {
 #[derive(Debug, Deserialize)]
 pub(crate) struct BlobResponse {
     pub content: String,
+    pub size: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Base64FileContent {
+    pub content: String,
+    pub size: usize,
+    pub too_large: bool,
 }
 
 /// PR review from GitHub API

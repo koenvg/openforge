@@ -77,10 +77,11 @@ pub async fn get_file_content_base64(
     owner: &str,
     repo: &str,
     sha: &str,
-) -> Result<String, String> {
+    max_size: Option<usize>,
+) -> Result<crate::github_client::Base64FileContent, String> {
     let token = github_token().await?;
     github_client
-        .get_blob_content_base64(owner, repo, sha, &token)
+        .get_blob_content_base64(owner, repo, sha, &token, max_size)
         .await
         .map_err(|e| format!("Failed to get blob content: {e}"))
 }
@@ -105,10 +106,11 @@ pub async fn get_file_at_ref_base64(
     repo: &str,
     path: &str,
     ref_sha: &str,
-) -> Result<String, String> {
+    max_size: Option<usize>,
+) -> Result<crate::github_client::Base64FileContent, String> {
     let token = github_token().await?;
     github_client
-        .get_file_at_ref_base64(owner, repo, path, ref_sha, &token)
+        .get_file_at_ref_base64(owner, repo, path, ref_sha, &token, max_size)
         .await
         .map_err(|e| format!("Failed to get file at ref: {e}"))
 }

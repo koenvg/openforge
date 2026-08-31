@@ -1,10 +1,11 @@
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
-import { isImageFileDiff, type FileContents } from './diffAdapter'
+import { isImageFileDiff, isVideoFileDiff, type FileContents } from './diffAdapter'
 import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
 
 export interface FileContentsFetcherState {
   readonly fileContentsMap: Map<string, FileContents>
   readonly fileContentErrors: Map<string, string>
+  requestFileContents: (filename: string) => void
   retryFileContents: (filename: string) => void
 }
 
@@ -31,10 +32,12 @@ export function createFileContentsFetcher(deps: {
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
   let fileContentErrors = $state<Map<string, string>>(new Map())
   let fetchedKeys = new Map<string, string>()
+  let requestedFilenames = new Set<string>()
   let activeFileKeys = new Map<string, string>()
   let activePerFileRequestIds = new Map<string, number>()
+  let activeBatchRequestIds = new Map<string, number>()
+  let nextBatchRequestId = 0
   let nextPerFileRequestId = 0
-  let fetchGeneration = 0
   let prevBasis: string | undefined = undefined
   // Incremented on reset to force the fetch effect to re-run
 
@@ -49,9 +52,9 @@ export function createFileContentsFetcher(deps: {
       // Clear fetch state to trigger re-fetch with the new diff basis
       fetchedKeys = new Map()
       activePerFileRequestIds = new Map()
+      activeBatchRequestIds = new Map()
       fileContentsMap = new Map()
       fileContentErrors = new Map()
-      fetchGeneration++ // invalidate any in-flight fetches
       resetSignal++ // signal fetch effect to re-run
     }
     prevBasis = current
@@ -63,7 +66,7 @@ export function createFileContentsFetcher(deps: {
     const batchFetchFileContents = deps.getBatchFetchFileContents()
     const fetchFileContents = deps.getFetchFileContents()
     const hasFetcher = batchFetchFileContents || fetchFileContents
-    if (!hasFetcher || files.length === 0) return
+    if (!hasFetcher) return
 
     const currentFileKeys = new Map(files.map(file => [file.filename, getDiffFileSectionInputKey(file)]))
     let nextContentsMap: Map<string, FileContents> | null = null
@@ -72,8 +75,10 @@ export function createFileContentsFetcher(deps: {
     for (const [filename, previousKey] of activeFileKeys) {
       if (currentFileKeys.get(filename) !== previousKey) {
         didFileKeyChange = true
+        if (!currentFileKeys.has(filename)) requestedFilenames.delete(filename)
         fetchedKeys.delete(filename)
         activePerFileRequestIds.delete(filename)
+        activeBatchRequestIds.delete(filename)
         if (fileContentsMap.has(filename)) {
           nextContentsMap ??= new Map(fileContentsMap)
           nextContentsMap.delete(filename)
@@ -92,29 +97,44 @@ export function createFileContentsFetcher(deps: {
       if (nextErrorsMap !== null) {
         fileContentErrors = nextErrorsMap
       }
-      fetchGeneration++
       resetSignal++
       return
     }
 
-    const pendingFiles = files.filter(f => (f.patch || isImageFileDiff(f)) && fetchedKeys.get(f.filename) !== currentFileKeys.get(f.filename))
+    const pendingFiles = files.filter(file => {
+      const currentKey = currentFileKeys.get(file.filename)
+      if (currentKey === undefined || fetchedKeys.get(file.filename) === currentKey) return false
+      if (isVideoFileDiff(file)) return requestedFilenames.has(file.filename)
+      return Boolean(file.patch || isImageFileDiff(file))
+    })
     if (pendingFiles.length === 0) return
 
 
-    const thisGeneration = ++fetchGeneration
-
     if (batchFetchFileContents) {
       // ===========================================================================
-      // Batch mode: single IPC call → single Map update → single re-render
+      // Batch mode: reserve each file before dispatch so staggered video requests
+      // can start independently without duplicating in-flight work.
       // ===========================================================================
+      const requestId = ++nextBatchRequestId
+      const requestKeys = new Map<string, string>()
+      for (const file of pendingFiles) {
+        const fetchKey = currentFileKeys.get(file.filename)
+        if (fetchKey === undefined) continue
+        requestKeys.set(file.filename, fetchKey)
+        fetchedKeys.set(file.filename, fetchKey)
+        activeBatchRequestIds.set(file.filename, requestId)
+      }
+
       batchFetchFileContents(pendingFiles).then(results => {
-        if (thisGeneration !== fetchGeneration) return // stale, discard
         const next = new Map(fileContentsMap)
         const nextErrors = new Map(fileContentErrors)
         for (const file of pendingFiles) {
           const filename = file.filename
-          const fetchKey = currentFileKeys.get(filename)
-          if (fetchKey === undefined) continue
+          const fetchKey = requestKeys.get(filename)
+          if (fetchKey === undefined
+            || activeBatchRequestIds.get(filename) !== requestId
+            || fetchedKeys.get(filename) !== fetchKey) continue
+          activeBatchRequestIds.delete(filename)
           const contents = results.get(filename)
           if (contents === undefined) {
             next.delete(filename)
@@ -123,17 +143,26 @@ export function createFileContentsFetcher(deps: {
             continue
           }
           next.set(filename, contents)
-          fetchedKeys.set(filename, fetchKey)
           nextErrors.delete(filename)
         }
         fileContentsMap = next
         fileContentErrors = nextErrors
       }).catch(err => {
-        if (thisGeneration !== fetchGeneration) return
-        console.error('Failed to batch-fetch file contents:', err)
         const message = getFetchErrorMessage(err)
         const nextErrors = new Map(fileContentErrors)
-        for (const file of pendingFiles) nextErrors.set(file.filename, message)
+        let hasActiveRequest = false
+        for (const file of pendingFiles) {
+          const filename = file.filename
+          const fetchKey = requestKeys.get(filename)
+          if (fetchKey === undefined
+            || activeBatchRequestIds.get(filename) !== requestId
+            || fetchedKeys.get(filename) !== fetchKey) continue
+          activeBatchRequestIds.delete(filename)
+          nextErrors.set(filename, message)
+          hasActiveRequest = true
+        }
+        if (!hasActiveRequest) return
+        console.error('Failed to batch-fetch file contents:', err)
         fileContentErrors = nextErrors
       })
     } else {
@@ -167,9 +196,17 @@ export function createFileContentsFetcher(deps: {
     }
   })
 
+  function requestFileContents(filename: string) {
+    const file = deps.getFiles().find(candidate => candidate.filename === filename)
+    if (!file || !isVideoFileDiff(file) || requestedFilenames.has(filename)) return
+    requestedFilenames = new Set(requestedFilenames).add(filename)
+    resetSignal++
+  }
+
   function retryFileContents(filename: string) {
     if (!activeFileKeys.has(filename)) return
     fetchedKeys.delete(filename)
+    activeBatchRequestIds.delete(filename)
     if (deps.getBatchFetchFileContents()) {
       fileContentErrors = new Map()
     } else if (fileContentErrors.has(filename)) {
@@ -183,6 +220,7 @@ export function createFileContentsFetcher(deps: {
   return {
     get fileContentsMap() { return fileContentsMap },
     get fileContentErrors() { return fileContentErrors },
+    requestFileContents,
     retryFileContents,
   }
 }

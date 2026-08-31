@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 
 const SELF_REVIEW_BASE_CANDIDATES: &[&str] = &["origin/main", "origin/HEAD", "main", "master"];
+const MAX_INLINE_VIDEO_PREVIEW_SIZE: usize = 25 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CommitInfo {
@@ -197,6 +198,29 @@ async fn resolve_content_base_ref(
 // File content helpers
 // ============================================================================
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "kebab-case")]
+pub enum FileRevisionAvailability {
+    Available { size: usize },
+    Missing,
+    TooLarge { size: usize },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileContentsResult {
+    pub old_content: String,
+    pub new_content: String,
+    pub old_availability: FileRevisionAvailability,
+    pub new_availability: FileRevisionAvailability,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileRevisionContent {
+    content: String,
+    availability: FileRevisionAvailability,
+}
+
 fn is_image_path(path: &str) -> bool {
     let extension = std::path::Path::new(path)
         .extension()
@@ -209,15 +233,65 @@ fn is_image_path(path: &str) -> bool {
     )
 }
 
+fn video_mime_type(path: &str) -> Option<&'static str> {
+    let extension = std::path::Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())?;
+
+    match extension.to_ascii_lowercase().as_str() {
+        "mp4" | "m4v" => Some("video/mp4"),
+        "webm" => Some("video/webm"),
+        "ogv" | "ogg" => Some("video/ogg"),
+        "mov" => Some("video/quicktime"),
+        _ => None,
+    }
+}
+
+fn is_video_path(path: &str) -> bool {
+    video_mime_type(path).is_some()
+}
+
 fn is_removed_status(status: &str) -> bool {
     status == "removed" || status == "deleted"
 }
 
-fn bytes_to_frontend_content(path: &str, bytes: &[u8]) -> String {
-    if is_image_path(path) {
+fn bytes_to_frontend_revision(path: &str, bytes: &[u8]) -> FileRevisionContent {
+    let size = bytes.len();
+    if is_video_path(path) && size > MAX_INLINE_VIDEO_PREVIEW_SIZE {
+        return FileRevisionContent {
+            content: String::new(),
+            availability: FileRevisionAvailability::TooLarge { size },
+        };
+    }
+
+    let content = if is_image_path(path) || is_video_path(path) {
         general_purpose::STANDARD.encode(bytes)
     } else {
         String::from_utf8_lossy(bytes).to_string()
+    };
+
+    FileRevisionContent {
+        content,
+        availability: FileRevisionAvailability::Available { size },
+    }
+}
+
+fn missing_frontend_revision() -> FileRevisionContent {
+    FileRevisionContent {
+        content: String::new(),
+        availability: FileRevisionAvailability::Missing,
+    }
+}
+
+fn into_file_contents_result(
+    old_revision: FileRevisionContent,
+    new_revision: FileRevisionContent,
+) -> FileContentsResult {
+    FileContentsResult {
+        old_content: old_revision.content,
+        new_content: new_revision.content,
+        old_availability: old_revision.availability,
+        new_availability: new_revision.availability,
     }
 }
 
@@ -240,9 +314,9 @@ async fn fetch_file_contents(
     old_path: Option<&str>,
     status: &str,
     include_uncommitted: bool,
-) -> Result<(String, String), String> {
-    let old_content = if status == "added" {
-        String::new()
+) -> Result<FileContentsResult, String> {
+    let old_revision = if status == "added" {
+        missing_frontend_revision()
     } else {
         let old_file_path = old_path.unwrap_or(path);
         let old_output = tokio::process::Command::new("git")
@@ -254,18 +328,18 @@ async fn fetch_file_contents(
             .map_err(|e| format!("Failed to run git show: {}", e))?;
 
         if old_output.status.success() {
-            bytes_to_frontend_content(old_file_path, &old_output.stdout)
+            bytes_to_frontend_revision(old_file_path, &old_output.stdout)
         } else {
-            String::new()
+            missing_frontend_revision()
         }
     };
 
-    let new_content = if is_removed_status(status) {
-        String::new()
+    let new_revision = if is_removed_status(status) {
+        missing_frontend_revision()
     } else if include_uncommitted {
         match read_contained_worktree_file(worktree_path, path).await {
-            Some(bytes) => bytes_to_frontend_content(path, &bytes),
-            None => String::new(),
+            Some(bytes) => bytes_to_frontend_revision(path, &bytes),
+            None => missing_frontend_revision(),
         }
     } else {
         let new_output = tokio::process::Command::new("git")
@@ -276,13 +350,13 @@ async fn fetch_file_contents(
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
         if new_output.status.success() {
-            bytes_to_frontend_content(path, &new_output.stdout)
+            bytes_to_frontend_revision(path, &new_output.stdout)
         } else {
-            String::new()
+            missing_frontend_revision()
         }
     };
 
-    Ok((old_content, new_content))
+    Ok(into_file_contents_result(old_revision, new_revision))
 }
 
 // ============================================================================
@@ -296,7 +370,7 @@ pub async fn get_task_file_contents_for_workspace(
     status: &str,
     include_committed: bool,
     include_uncommitted: bool,
-) -> Result<(String, String), String> {
+) -> Result<FileContentsResult, String> {
     let base_ref = resolve_content_base_ref(worktree_path, include_committed).await?;
 
     fetch_file_contents(
@@ -326,7 +400,7 @@ pub async fn get_task_batch_file_contents_for_workspace(
     files: &[FileContentRequest],
     include_committed: bool,
     include_uncommitted: bool,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<FileContentsResult>, String> {
     let base_ref = resolve_content_base_ref(worktree_path, include_committed).await?;
 
     // Fetch each file using the single pre-computed base ref.
@@ -407,9 +481,9 @@ async fn fetch_commit_file_contents(
     path: &str,
     old_path: Option<&str>,
     status: &str,
-) -> Result<(String, String), String> {
-    let old_content = if status == "added" {
-        String::new()
+) -> Result<FileContentsResult, String> {
+    let old_revision = if status == "added" {
+        missing_frontend_revision()
     } else {
         let old_file_path = old_path.unwrap_or(path);
         let old_output = tokio::process::Command::new("git")
@@ -421,14 +495,14 @@ async fn fetch_commit_file_contents(
             .map_err(|e| format!("Failed to run git show: {}", e))?;
 
         if old_output.status.success() {
-            bytes_to_frontend_content(old_file_path, &old_output.stdout)
+            bytes_to_frontend_revision(old_file_path, &old_output.stdout)
         } else {
-            String::new()
+            missing_frontend_revision()
         }
     };
 
-    let new_content = if is_removed_status(status) {
-        String::new()
+    let new_revision = if is_removed_status(status) {
+        missing_frontend_revision()
     } else {
         let new_output = tokio::process::Command::new("git")
             .arg("-C")
@@ -438,13 +512,13 @@ async fn fetch_commit_file_contents(
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
         if new_output.status.success() {
-            bytes_to_frontend_content(path, &new_output.stdout)
+            bytes_to_frontend_revision(path, &new_output.stdout)
         } else {
-            String::new()
+            missing_frontend_revision()
         }
     };
 
-    Ok((old_content, new_content))
+    Ok(into_file_contents_result(old_revision, new_revision))
 }
 
 // ============================================================================
@@ -480,7 +554,7 @@ pub async fn get_commit_file_contents_for_workspace(
     path: &str,
     old_path: Option<&str>,
     status: &str,
-) -> Result<(String, String), String> {
+) -> Result<FileContentsResult, String> {
     let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
 
     fetch_commit_file_contents(
@@ -498,7 +572,7 @@ pub async fn get_commit_batch_file_contents_for_workspace(
     worktree_path: &str,
     commit_sha: &str,
     files: &[FileContentRequest],
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<FileContentsResult>, String> {
     let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
 
     let mut results = Vec::with_capacity(files.len());
@@ -1105,7 +1179,7 @@ mod tests {
     async fn test_task_file_contents_committed_only_uses_merge_base_and_head() {
         let repo = setup_committed_and_uncommitted_repo();
 
-        let (old_content, new_content) = get_task_file_contents_for_workspace(
+        let contents = get_task_file_contents_for_workspace(
             repo.path().to_str().unwrap(),
             "tracked.txt",
             None,
@@ -1116,15 +1190,18 @@ mod tests {
         .await
         .expect("committed-only file contents");
 
-        assert_eq!(old_content, "base\n", "old = merge-base version");
-        assert_eq!(new_content, "base\ncommitted\n", "new = HEAD version");
+        assert_eq!(contents.old_content, "base\n", "old = merge-base version");
+        assert_eq!(
+            contents.new_content, "base\ncommitted\n",
+            "new = HEAD version"
+        );
     }
 
     #[tokio::test]
     async fn test_task_file_contents_uncommitted_only_uses_head_and_worktree() {
         let repo = setup_committed_and_uncommitted_repo();
 
-        let (old_content, new_content) = get_task_file_contents_for_workspace(
+        let contents = get_task_file_contents_for_workspace(
             repo.path().to_str().unwrap(),
             "tracked.txt",
             None,
@@ -1135,9 +1212,12 @@ mod tests {
         .await
         .expect("uncommitted-only file contents");
 
-        assert_eq!(old_content, "base\ncommitted\n", "old = HEAD version");
         assert_eq!(
-            new_content, "base\ncommitted\nuncommitted\n",
+            contents.old_content, "base\ncommitted\n",
+            "old = HEAD version"
+        );
+        assert_eq!(
+            contents.new_content, "base\ncommitted\nuncommitted\n",
             "new = working-tree version"
         );
     }
@@ -1376,14 +1456,88 @@ mod tests {
     }
 
     #[test]
+    fn test_video_path_detection_and_mime_types_are_case_insensitive() {
+        let cases = [
+            ("recordings/demo.mp4", "video/mp4"),
+            ("recordings/demo.M4V", "video/mp4"),
+            ("recordings/demo.webm", "video/webm"),
+            ("recordings/demo.OGV", "video/ogg"),
+            ("recordings/demo.ogg", "video/ogg"),
+            ("recordings/demo.MOV", "video/quicktime"),
+        ];
+
+        for (path, expected_mime_type) in cases {
+            assert!(is_video_path(path), "expected {path} to be a video");
+            assert_eq!(video_mime_type(path), Some(expected_mime_type));
+        }
+        assert!(!is_video_path("src/main.rs"));
+        assert_eq!(video_mime_type("src/main.rs"), None);
+    }
+
+    #[test]
+    fn test_video_content_is_encoded_for_frontend() {
+        let revision = bytes_to_frontend_revision("recordings/demo.mp4", &[0xff, 0x00, 0x7f]);
+
+        assert_eq!(revision.content, "/wB/");
+        assert_eq!(
+            revision.availability,
+            FileRevisionAvailability::Available { size: 3 }
+        );
+    }
+
+    #[test]
+    fn test_video_content_over_the_inline_limit_is_not_encoded() {
+        let bytes = vec![0_u8; MAX_INLINE_VIDEO_PREVIEW_SIZE + 1];
+        let revision = bytes_to_frontend_revision("recordings/demo.webm", &bytes);
+
+        assert!(revision.content.is_empty());
+        assert_eq!(
+            revision.availability,
+            FileRevisionAvailability::TooLarge { size: bytes.len() }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_added_video_has_a_missing_old_revision_and_base64_new_revision() {
+        let repo = init_git_repo();
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        fs::create_dir_all(repo.path().join("recordings")).expect("create recordings directory");
+        fs::write(repo.path().join("recordings/demo.MP4"), [0xff, 0x00, 0x7f])
+            .expect("write video");
+        commit_all(repo.path(), "add video");
+
+        let contents = get_task_file_contents_for_workspace(
+            repo.path().to_str().expect("repo path is UTF-8"),
+            "recordings/demo.MP4",
+            None,
+            "added",
+            true,
+            false,
+        )
+        .await
+        .expect("video contents");
+
+        assert!(contents.old_content.is_empty());
+        assert_eq!(contents.old_availability, FileRevisionAvailability::Missing);
+        assert_eq!(contents.new_content, "/wB/");
+        assert_eq!(
+            contents.new_availability,
+            FileRevisionAvailability::Available { size: 3 }
+        );
+    }
+
+    #[test]
     fn test_image_content_is_encoded_for_frontend() {
-        let content = bytes_to_frontend_content("assets/logo.png", &[0x89, b'P', b'N', b'G']);
+        let content =
+            bytes_to_frontend_revision("assets/logo.png", &[0x89, b'P', b'N', b'G']).content;
         assert_eq!(content, "iVBORw==");
     }
 
     #[test]
     fn test_text_content_stays_text_for_frontend() {
-        let content = bytes_to_frontend_content("src/main.rs", b"fn main() {}\n");
+        let content = bytes_to_frontend_revision("src/main.rs", b"fn main() {}\n").content;
         assert_eq!(content, "fn main() {}\n");
     }
 

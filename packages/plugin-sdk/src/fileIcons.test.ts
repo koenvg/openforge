@@ -21,6 +21,12 @@ describe('getFileIconName', () => {
     ['README.notes.md', 'markdown'],
     ['logo.svg', 'svg'],
     ['pic.PNG', 'image'],
+    ['recording.mp4', 'video'],
+    ['recording.WEBM', 'video'],
+    ['recording.mov', 'video'],
+    ['recording.m4v', 'video'],
+    ['recording.ogv', 'video'],
+    ['recording.ogg', 'video'],
     ['Component.svelte', 'svelte'],
   ])('maps %s -> %s by extension', (name, expected) => {
     expect(getFileIconName(name)).toBe(expected)
@@ -74,6 +80,7 @@ describe('BUNDLED_ICON_NAMES', () => {
       'a.vue', 'a.rb', 'a.go', 'a.java', 'a.kt', 'a.swift', 'a.c', 'a.h',
       'a.cpp', 'a.cs', 'a.php', 'a.sh', 'a.sql', 'a.graphql', 'a.xml',
       'a.svg', 'a.png', 'a.pdf', 'a.zip', 'a.toml', 'a.txt', 'a.env',
+      'a.mp4', 'a.m4v', 'a.webm', 'a.ogv', 'a.ogg', 'a.mov',
       'package.json', 'pnpm-lock.yaml', '.gitignore', 'Dockerfile',
       'types.d.ts', 'README', '.env.local', '.npmrc', 'mystery.xyz',
     ]

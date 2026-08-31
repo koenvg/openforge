@@ -17,7 +17,7 @@ const NAMES = [
   'image', 'java', 'javascript', 'json', 'kotlin', 'lock', 'markdown',
   'nodejs', 'npm', 'pdf', 'php', 'python', 'react', 'react_ts', 'readme',
   'ruby', 'rust', 'sass', 'settings', 'svelte', 'svg', 'swift', 'tune',
-  'typescript', 'typescript-def', 'vue', 'xml', 'yaml', 'zip',
+  'typescript', 'typescript-def', 'video', 'vue', 'xml', 'yaml', 'zip',
 ]
 
 const require = createRequire(import.meta.url)
