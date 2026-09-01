@@ -111,6 +111,18 @@ describe('renderMarkdownHtml', () => {
     expect(getRenderedMarkdownCacheStats()).toMatchObject({ hits: 1, misses: 1 })
   })
 
+  it('wraps tables in a local horizontal scroll container', () => {
+    const html = renderMarkdownHtml([
+      '| Service | Status |',
+      '| --- | --- |',
+      '| Search API | Ready |',
+    ].join('\n'))
+    const template = document.createElement('template')
+    template.innerHTML = html
+
+    expect(template.content.querySelector('.markdown-table-scroll > table')).toBeTruthy()
+  })
+
   it('resolves relative image sources against the supplied image base URL', () => {
     const html = renderMarkdownHtml('![Architecture](docs/architecture.png)', {
       imageBaseUrl: 'https://raw.githubusercontent.com/acme/repo/abc123/',
