@@ -142,20 +142,21 @@
 
   <div class="flex flex-col gap-3 px-6 py-4">
     {#if includedFindings.length > 0}
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex flex-col gap-1.5">
         {#each includedFindings as finding (finding.id)}
-          <span class="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 text-[0.7rem] font-medium bg-warning/15 text-warning rounded-full">
-            {finding.label}
+          <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-warning/10 border border-warning/30 rounded-md">
+            <span class="badge badge-sm badge-warning shrink-0 mt-0.5">{finding.label}</span>
+            <span class="flex-1 text-[0.8rem] text-base-content leading-snug">{finding.text}</span>
             <button
               type="button"
-              class="btn btn-ghost btn-xs btn-square h-4 w-4 min-h-0"
+              class="btn btn-ghost btn-xs btn-square shrink-0"
               onclick={() => onRemoveIncludedFinding?.(finding.id)}
               title="Remove from review"
               aria-label={`Remove "${finding.label}" from review`}
             >
               <X size={12} aria-hidden="true" />
             </button>
-          </span>
+          </div>
         {/each}
       </div>
     {/if}

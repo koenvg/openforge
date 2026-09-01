@@ -240,17 +240,31 @@ describe('ReviewSubmitPanel', () => {
     })
   })
 
-  it('renders a removable chip for each included finding', async () => {
+  it('renders a removable row with the full finding text for each included finding', async () => {
     const onRemoveIncludedFinding = vi.fn()
     renderPanel({
-      includedFindings: [{ id: 'crit-1', label: 'Partial', text: 'gap' }],
+      includedFindings: [{ id: 'crit-1', label: 'Partial', text: 'Domains label stays plural' }],
       onRemoveIncludedFinding,
     })
 
     expect(screen.getByText('Partial')).toBeTruthy()
+    expect(screen.getByText('Domains label stays plural')).toBeTruthy()
 
     await fireEvent.click(screen.getByLabelText('Remove "Partial" from review'))
     expect(onRemoveIncludedFinding).toHaveBeenCalledWith('crit-1')
+  })
+
+  it('keeps same-label findings distinguishable by showing each one\'s own text', () => {
+    renderPanel({
+      includedFindings: [
+        { id: 'crit-1', label: 'Missing', text: 'Sessions expire after 30 minutes' },
+        { id: 'crit-2', label: 'Missing', text: 'Password reset emails are not sent' },
+      ],
+    })
+
+    expect(screen.getByText('Sessions expire after 30 minutes')).toBeTruthy()
+    expect(screen.getByText('Password reset emails are not sent')).toBeTruthy()
+    expect(screen.getAllByText('Missing')).toHaveLength(2)
   })
 
   it('enables submitting when only an included finding exists (no summary, no pending)', () => {
