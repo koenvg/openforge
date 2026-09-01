@@ -18,7 +18,7 @@
 
 ## 4. Project dashboard replacement
 
-- [ ] 4.1 Add characterization tests for the core Focus Board route, selected-task precedence, dashboard shortcut, project restoration, attention metadata, and repeat invocation before introducing the provider wrapper; verify the tests pass against current behavior.
+- [x] 4.1 Add characterization tests for the core Focus Board route, selected-task precedence, dashboard shortcut, project restoration, attention metadata, and repeat invocation before introducing the provider wrapper; verify the tests pass against current behavior.
 - [ ] 4.2 Add failing component tests for plugin dashboard props, title and icon projection, core selection, unavailable-provider fallback, loader failure, render failure, and recovery navigation; verify the tests fail before implementation.
 - [ ] 4.3 Implement the host-owned project dashboard wrapper and error boundary, using logical project and provider identity for mount and teardown; verify the dashboard replacement component tests pass.
 - [ ] 4.4 Integrate the effective dashboard provider into `App.svelte`, icon-rail presentation, shortcut help, and router invocation behavior while keeping the internal `board` destination stable; verify existing app navigation and icon-rail tests plus the new replacement tests pass.

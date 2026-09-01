@@ -50,9 +50,9 @@ export function createDesktopAppDriver(page, options = {}) {
   async function attachTerminalView(taskId, { focus = true, observe = true } = {}) {
     await selectTaskView('Terminal')
     const region = page.getByRole('region', { name: 'Terminal region for Shell 1' })
+    if (!observe) return { region, terminalKey: null }
     await region.waitFor({ state: 'visible', timeout: timeoutMs })
     if (focus) await focusTerminal()
-    if (!observe) return { region, terminalKey: null }
     await page.waitForFunction(
       expectedTaskId => window.__openforgeE2e?.terminal.list()
         .some(key => key.startsWith(`${expectedTaskId}-shell-`)),
