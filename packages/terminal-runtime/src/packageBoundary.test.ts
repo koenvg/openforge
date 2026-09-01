@@ -45,6 +45,9 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
       'terminalRuntime.ts',
       'terminalAcquisition.ts',
       'terminalSessionCoordinator.ts',
+      'terminalAuthorityCoordinator.ts',
+      'terminalPtyCoordinator.ts',
+      'terminalViewAttachmentCoordinator.ts',
       'terminalReconnectReplay.ts',
     ]
 
@@ -57,6 +60,23 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     }
   })
 
+
+  it('keeps extracted coordinator dependencies directed toward leaf components', () => {
+    const source = (fileName: string) => readFileSync(
+      join(process.cwd(), 'packages/terminal-runtime/src', fileName),
+      'utf8',
+    )
+
+    expect(source('terminalPtyCoordinator.ts')).not.toMatch(
+      /from ['"]\.\/terminal(?:Authority|Session|ViewAttachment)Coordinator['"]/,
+    )
+    expect(source('terminalViewAttachmentCoordinator.ts')).not.toMatch(
+      /from ['"]\.\/terminal(?:Authority|Pty|Session)Coordinator['"]/,
+    )
+    expect(source('terminalAuthorityCoordinator.ts')).not.toMatch(
+      /from ['"]\.\/terminalSessionCoordinator['"]/,
+    )
+  })
   it('keeps xterm types behind the TerminalView adapter', () => {
     const rendererNeutralSources = [
       'terminalRuntimeTypes.ts',
@@ -66,6 +86,9 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
       'terminalAcquisition.ts',
       'terminalAttachment.ts',
       'terminalSessionCoordinator.ts',
+      'terminalAuthorityCoordinator.ts',
+      'terminalPtyCoordinator.ts',
+      'terminalViewAttachmentCoordinator.ts',
       'terminalReconnectReplay.ts',
       'terminalControls.ts',
       'terminalSessionLifecycle.ts',

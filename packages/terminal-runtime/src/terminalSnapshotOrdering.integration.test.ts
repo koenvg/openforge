@@ -75,4 +75,62 @@ describe('terminal snapshot ordering', () => {
       sequence: 1,
     })
   })
+
+  it('recovers from Ghostty authority when live output skips a sequence', async () => {
+    const shellSessionKey = 'T-sequence-gap-shell-0'
+    const view = createFakeTerminalView()
+    const host = createHost()
+    host.setBuffer(shellSessionKey, 'initial snapshot')
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
+    const entry = await runtime.acquire(shellSessionKey)
+    await attachTestTerminal(runtime, entry)
+
+    host.emit(`pty-model-output-${shellSessionKey}`, {
+      data: btoa('contiguous output'),
+      instance_id: 1,
+      sequence: 1,
+    })
+    expect(view.writeLive).toHaveBeenCalledOnce()
+
+    host.getPtyBuffer = vi.fn(async () => ({
+      buffer: null,
+      isLive: true,
+      instanceId: 1,
+      snapshot: { instanceId: 1, watermark: 3, data: btoa('recovered snapshot') },
+    }))
+    host.emit(`pty-model-output-${shellSessionKey}`, {
+      data: btoa('gap output'),
+      instance_id: 1,
+      start_sequence: 3,
+      sequence: 3,
+    })
+
+    await vi.waitFor(() => expect(view.replaceSnapshot).toHaveBeenCalledTimes(2))
+    expect(host.getPtyBuffer).toHaveBeenCalledOnce()
+    expect(view.replaceSnapshot).toHaveBeenLastCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('recovered snapshot')),
+      ptyInstanceId: 1,
+      sequence: 0,
+    })
+    expect(view.writeLive).toHaveBeenCalledOnce()
+    expect(runtime.diagnostics.observe(shellSessionKey)?.output.modelSequence).toBe(3)
+
+    host.emit(`pty-model-output-${shellSessionKey}`, {
+      data: btoa('stale output'),
+      instance_id: 2,
+      sequence: 4,
+    })
+    host.emit(`pty-model-output-${shellSessionKey}`, {
+      data: btoa('contiguous after recovery'),
+      instance_id: 1,
+      sequence: 4,
+    })
+
+    expect(view.writeLive).toHaveBeenCalledTimes(2)
+    expect(view.writeLive).toHaveBeenLastCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('contiguous after recovery')),
+      ptyInstanceId: 1,
+      sequence: 1,
+    })
+  })
 })
