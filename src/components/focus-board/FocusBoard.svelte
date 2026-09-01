@@ -10,6 +10,7 @@
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
   import BoardTextFilter from './BoardTextFilter.svelte'
+  import BacklogLabelFilterDropdown from './BacklogLabelFilterDropdown.svelte'
   import { createOutOfFocusController } from './outOfFocusController.svelte'
   import { createFocusBoardFilterController } from './focusBoardFilterController.svelte'
   import { createFocusBoardInteractionController } from './focusBoardInteractionController.svelte'
@@ -178,21 +179,16 @@
   <div class="flex min-h-0 flex-1">
     <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 py-6 pr-6">
       {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
-        <div class="flex flex-wrap items-center gap-2 border-b border-base-300 py-2" role="group" aria-label="Backlog label filters">
-          <span class="text-xs font-semibold text-base-content/50">Labels</span>
-          {#each visibleFilterLabels as label (label.id)}
-            <button
-              class="badge badge-sm gap-1 {selectedLabelIds.has(label.id) ? 'badge-primary' : 'badge-ghost'}"
-              aria-pressed={selectedLabelIds.has(label.id)}
-              onclick={() => {
-                filterController.toggleLabelFilter(label.id)
-                interactionController.resetToFirstTask()
-              }}
-            >
-              <span>{label.name}</span>
-              <span class="opacity-70">{labelCounts.get(label.id) ?? 0}</span>
-            </button>
-          {/each}
+        <div class="flex items-center border-b border-base-300 py-2">
+          <BacklogLabelFilterDropdown
+            labels={visibleFilterLabels}
+            {labelCounts}
+            {selectedLabelIds}
+            onToggle={(labelId) => {
+              filterController.toggleLabelFilter(labelId)
+              interactionController.resetToFirstTask()
+            }}
+          />
         </div>
       {/if}
 

@@ -23,6 +23,12 @@ import {
 describe('FocusBoard filtering and labels', () => {
   beforeEach(resetFocusBoardTestState)
 
+  async function openBacklogLabelFilterMenu(): Promise<HTMLElement> {
+    const trigger = await screen.findByRole('button', { name: 'Filter by Task Labels' })
+    await fireEvent.click(trigger)
+    return screen.getByRole('menu')
+  }
+
   it('opens a bottom filter with slash and filters the visible Tasks as the user types', async () => {
     const authTask = { ...makeTask('T-10', 'doing', 'Update login flow'), title: 'Authentication overhaul' }
     const billingTask = { ...makeTask('T-11', 'doing', 'Update invoices'), title: 'Billing cleanup' }
@@ -204,19 +210,37 @@ describe('FocusBoard filtering and labels', () => {
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
-  it('keeps backlog label filters outside the task list scroll region', async () => {
+  it('renders a Backlog Task Label dropdown outside the task list without changing board filters', async () => {
     const ipc = await import('../../lib/ipc')
     vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel])
     const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
 
     renderBoard({ tasks: [bugTask], sessions: new Map() })
 
+    const boardFilters = screen.getByRole('group', { name: 'Board filters' })
+    await fireEvent.click(within(boardFilters).getByRole('button', { name: /Backlog 1/i }))
+
+    const trigger = await screen.findByRole('button', { name: 'Filter by Task Labels' })
+    const taskList = screen.getByRole('region', { name: 'Task list' })
+    expect(taskList.contains(trigger)).toBe(false)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(within(boardFilters).getByRole('button', { name: /Backlog 1/i }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(boardFilters).getByRole('button', { name: /^Focus 0$/i }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByRole('group', { name: 'Backlog label filters' })).toBeNull()
+
+    await fireEvent.click(trigger)
+
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.getByRole('menuitemcheckbox', { name: /bug 1/i })).toBeTruthy()
+    expect(within(taskList).getByText('Bug task')).toBeTruthy()
+  })
+
+  it('hides the Backlog Task Label dropdown when no Backlog labels are available', async () => {
+    renderBoard()
+
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
 
-    const filters = await screen.findByRole('group', { name: 'Backlog label filters' })
-    const taskList = screen.getByRole('region', { name: 'Task list' })
-    expect(taskList.contains(filters)).toBe(false)
-    expect(within(taskList).getByText('Bug task')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Filter by Task Labels' })).toBeNull()
   })
 
   it('shows backlog label filters on the first backlog navigation when labeled tasks arrive before label metadata', async () => {
@@ -227,7 +251,7 @@ describe('FocusBoard filtering and labels', () => {
     const view = renderBoard({ tasks: [], sessions: new Map() })
 
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 0/i }))
-    expect(screen.queryByLabelText('Backlog label filters')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Filter by Task Labels' })).toBeNull()
 
     const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
     const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
@@ -242,23 +266,23 @@ describe('FocusBoard filtering and labels', () => {
       onRunAction,
     })
 
-    const firstVisitFilters = await screen.findByLabelText('Backlog label filters')
-    expect(within(firstVisitFilters).getByRole('button', { name: /bug 1/i })).toBeTruthy()
-    expect(within(firstVisitFilters).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+    const firstVisitMenu = await openBacklogLabelFilterMenu()
+    expect(within(firstVisitMenu).getByRole('menuitemcheckbox', { name: /bug 1/i })).toBeTruthy()
+    expect(within(firstVisitMenu).getByRole('menuitemcheckbox', { name: /ui 1/i })).toBeTruthy()
     expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
     expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
 
     await fireEvent.click(screen.getByRole('button', { name: /^Focus 0$/i }))
     await fireEvent.click(screen.getByRole('button', { name: /^Backlog 2$/i }))
-    const revisitedFilters = screen.getByLabelText('Backlog label filters')
-    expect(within(revisitedFilters).getByRole('button', { name: /bug 1/i })).toBeTruthy()
-    expect(within(revisitedFilters).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+    const revisitedMenu = await openBacklogLabelFilterMenu()
+    expect(within(revisitedMenu).getByRole('menuitemcheckbox', { name: /bug 1/i })).toBeTruthy()
+    expect(within(revisitedMenu).getByRole('menuitemcheckbox', { name: /ui 1/i })).toBeTruthy()
 
     projectLabels.resolve([bugLabel, uiLabel])
     await waitFor(() => {
       expect(ipc.getProjectTaskLabels).toHaveBeenCalledWith('proj-1')
-      expect(within(screen.getByLabelText('Backlog label filters')).getByRole('button', { name: /bug 1/i })).toBeTruthy()
-      expect(within(screen.getByLabelText('Backlog label filters')).getByRole('button', { name: /ui 1/i })).toBeTruthy()
+      expect(within(screen.getByRole('menu')).getByRole('menuitemcheckbox', { name: /bug 1/i })).toBeTruthy()
+      expect(within(screen.getByRole('menu')).getByRole('menuitemcheckbox', { name: /ui 1/i })).toBeTruthy()
     })
   })
 
@@ -284,13 +308,14 @@ describe('FocusBoard filtering and labels', () => {
       onRunAction,
     })
 
-    expect(await screen.findByRole('button', { name: /bug 1/i })).toBeTruthy()
+    const menu = await openBacklogLabelFilterMenu()
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /bug 1/i })).toBeTruthy()
     // The rerender selects the backlog task, so TaskInfoPanel's TaskLabelEditor
     // makes the second project-label request. A duplicate board request would be a third call.
     expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(2)
   })
 
-  it('filters backlog tasks by selected label chips using OR semantics and shows backlog counts', async () => {
+  it('filters backlog tasks by selected labels using OR semantics and shows dropdown counts', async () => {
     const ipc = await import('../../lib/ipc')
     vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
     const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
@@ -304,21 +329,25 @@ describe('FocusBoard filtering and labels', () => {
     })
 
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 3/i }))
+    const menu = await openBacklogLabelFilterMenu()
 
-    expect(await screen.findByRole('button', { name: /bug 1/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /ui 1/i })).toBeTruthy()
+    const bugOption = within(menu).getByRole('menuitemcheckbox', { name: /bug 1/i })
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /ui 1/i })).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('button', { name: /bug 1/i }))
+    await fireEvent.click(bugOption)
     expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
     expect(screen.queryByText('UI task')).toBeNull()
     expect(screen.queryByText('Unlabelled task')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Filter by Task Labels' }).textContent).toContain('1')
 
-    await fireEvent.click(screen.getByRole('button', { name: /ui 1/i }))
+    await fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /ui 1/i }))
     expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
     expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Filter by Task Labels' }).textContent).toContain('2')
+    expect(screen.getByRole('menu')).toBeTruthy()
   })
 
-  it('hides label filter chips with zero backlog tasks', async () => {
+  it('hides dropdown options with zero Backlog Tasks', async () => {
     const ipc = await import('../../lib/ipc')
     vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
     const doingBugTask = makeTask('T-8', 'doing', 'Doing bug', [bugLabel])
@@ -327,9 +356,10 @@ describe('FocusBoard filtering and labels', () => {
     renderBoard({ tasks: [doingBugTask, uiTask], sessions: new Map() })
 
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+    const menu = await openBacklogLabelFilterMenu()
 
-    expect(await screen.findByRole('button', { name: /ui 1/i })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /bug 0/i })).toBeNull()
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /ui 1/i })).toBeTruthy()
+    expect(within(menu).queryByRole('menuitemcheckbox', { name: /bug 0/i })).toBeNull()
   })
 
   it('prunes selected backlog label filters when their backlog count drops to zero', async () => {
@@ -348,7 +378,8 @@ describe('FocusBoard filtering and labels', () => {
     await waitFor(() => {
       expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
     })
-    expect(screen.queryByRole('button', { name: /bug 0/i })).toBeNull()
+    const menu = await openBacklogLabelFilterMenu()
+    expect(within(menu).queryByRole('menuitemcheckbox', { name: /bug 0/i })).toBeNull()
   })
 
   it('keeps selected backlog label filters when the board unmounts and remounts for the same project', async () => {
@@ -359,7 +390,8 @@ describe('FocusBoard filtering and labels', () => {
 
     const view = renderBoard({ tasks: [bugTask, uiTask], sessions: new Map() })
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 2/i }))
-    await fireEvent.click(await screen.findByRole('button', { name: /bug 1/i }))
+    const firstMenu = await openBacklogLabelFilterMenu()
+    await fireEvent.click(within(firstMenu).getByRole('menuitemcheckbox', { name: /bug 1/i }))
 
     expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
     expect(screen.queryByText('UI task')).toBeNull()
@@ -367,8 +399,9 @@ describe('FocusBoard filtering and labels', () => {
     view.unmount()
     renderBoard({ tasks: [bugTask, uiTask], sessions: new Map() })
 
-    const bugFilter = await screen.findByRole('button', { name: /bug 1/i })
-    expect(bugFilter.getAttribute('aria-pressed')).toBe('true')
+    const restoredMenu = await openBacklogLabelFilterMenu()
+    const bugOption = within(restoredMenu).getByRole('menuitemcheckbox', { name: /bug 1/i })
+    expect(bugOption.getAttribute('aria-checked')).toBe('true')
     expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
     expect(screen.queryByText('UI task')).toBeNull()
   })
@@ -380,7 +413,8 @@ describe('FocusBoard filtering and labels', () => {
 
     const view = renderBoard({ tasks: [bugTask], sessions: new Map() })
     await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
-    await fireEvent.click(await screen.findByRole('button', { name: /bug 1/i }))
+    const menu = await openBacklogLabelFilterMenu()
+    await fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /bug 1/i }))
 
     expect(get(backlogLabelFilters).get('proj-1')).toEqual(new Set([bugLabel.id]))
 

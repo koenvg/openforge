@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { focusFirstEnabledMenuItem, isMenuNavigationKey, moveMenuFocus } from './menuNavigation'
 
   interface Props {
     visible: boolean
@@ -14,45 +15,9 @@
   let menuElement: HTMLDivElement | null = $state(null)
   let returnFocusTarget: HTMLElement | null = null
 
-  function getEnabledItems(): HTMLElement[] {
-    if (!menuElement) return []
-
-    return Array.from(
-      menuElement.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])'),
-    )
-  }
-
   function focusFirstEnabledItem() {
     if (!visible) return
-
-    const [firstItem] = getEnabledItems()
-    const focusTarget = firstItem ?? menuElement
-    focusTarget?.focus()
-  }
-
-  function moveFocus(key: 'ArrowDown' | 'ArrowUp' | 'Home' | 'End') {
-    const items = getEnabledItems()
-    if (items.length === 0) {
-      menuElement?.focus()
-      return
-    }
-
-    if (key === 'Home') {
-      items[0].focus()
-      return
-    }
-
-    if (key === 'End') {
-      items[items.length - 1].focus()
-      return
-    }
-
-    const currentIndex = items.indexOf(document.activeElement as HTMLElement)
-    const offset = key === 'ArrowDown' ? 1 : -1
-    const nextIndex = currentIndex === -1
-      ? (offset === 1 ? 0 : items.length - 1)
-      : (currentIndex + offset + items.length) % items.length
-    items[nextIndex].focus()
+    focusFirstEnabledMenuItem(menuElement)
   }
 
   function closeAndRestoreFocus() {
@@ -69,10 +34,10 @@
       return
     }
 
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+    if (isMenuNavigationKey(event.key)) {
       event.preventDefault()
       event.stopPropagation()
-      moveFocus(event.key)
+      moveMenuFocus(menuElement, event.key)
     }
   }
 
