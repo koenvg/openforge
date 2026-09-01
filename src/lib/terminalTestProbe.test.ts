@@ -396,6 +396,80 @@ describe('terminal desktop-test probe', () => {
     expect(delay).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['E2E', 'performance'] as const)('polls the %s drain until all output expectations are met', async (variant) => {
+    const target = {} as TerminalTestProbeWindow
+    const entry = createEntry()
+    let currentTime = 0
+    const delay = vi.fn(async (ms: number) => {
+      currentTime += ms
+      entry.terminalOutputObservation.receivedBytes = 32
+      entry.terminalOutputObservation.lastSequence = 5
+      entry.terminalModelSequence = 5
+    })
+    const diagnostics = createEntryDiagnostics(() => new Map([['T-1-shell-0', entry]]))
+
+    if (variant === 'E2E') {
+      installTerminalTestProbe({
+        isDevelopment: true,
+        environmentEnabled: true,
+        launchToken: 'run-secret',
+        url: 'http://localhost/?openforge-e2e-token=run-secret',
+        target,
+        diagnostics,
+        now: () => currentTime,
+        delay,
+      })
+    } else {
+      installTerminalPerformanceProbe({
+        isDevelopment: true,
+        url: 'http://localhost/?openforge-desktop-test=1',
+        target,
+        diagnostics,
+        performanceTrace: createTerminalPerformanceTrace(),
+        now: () => currentTime,
+        delay,
+      })
+    }
+
+    const terminal = variant === 'E2E'
+      ? target.__openforgeE2e!.terminal
+      : target.__openforgeDesktopTest!.terminal
+    await expect(terminal.drain('T-1-shell-0', {
+      marker: 'TEST_DONE',
+      minimumReceivedBytes: 32,
+      minimumModelSequence: 5,
+      timeoutMs: 100,
+    })).resolves.toMatchObject({
+      markerFound: true,
+      visibleText: 'ready TEST_DONE',
+      observation: {
+        output: { receivedBytes: 32, modelSequence: 5 },
+      },
+    })
+    expect(delay).toHaveBeenCalledOnce()
+    expect(delay).toHaveBeenCalledWith(16)
+  })
+
+  it('keeps performance drains fail-fast on incomplete output sequences', async () => {
+    const target = {} as TerminalTestProbeWindow
+    const entry = createEntry()
+    entry.terminalOutputObservation.sequenceContinuous = false
+    const delay = vi.fn(async () => undefined)
+    installTerminalPerformanceProbe({
+      isDevelopment: true,
+      url: 'http://localhost/?openforge-desktop-test=1',
+      target,
+      diagnostics: createEntryDiagnostics(() => new Map([['T-1-shell-0', entry]])),
+      performanceTrace: createTerminalPerformanceTrace(),
+      delay,
+    })
+
+    await expect(target.__openforgeDesktopTest!.terminal.drain('T-1-shell-0', {
+      marker: 'TEST_DONE',
+      timeoutMs: 100,
+    })).rejects.toThrow('Terminal T-1-shell-0 has an incomplete output sequence')
+    expect(delay).not.toHaveBeenCalled()
+  })
   it('fails drains for incomplete sequences and missing markers', async () => {
     const target = {} as TerminalTestProbeWindow
     const entry = createEntry()
