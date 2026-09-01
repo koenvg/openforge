@@ -247,7 +247,7 @@ pub(super) async fn handle_app_agent_generate_command(
 
             crate::git_worktree::checkout_pr_head(&repo_path, &worktree_path, pr_number, &head_sha)
                 .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{e:?}")))?;
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
             let run = run_headless_generation(
                 &provider,

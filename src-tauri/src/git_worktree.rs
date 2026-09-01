@@ -22,6 +22,11 @@ pub enum GitWorktreeError {
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
     FetchFailed(String),
+    /// The caller's `head_sha` is no longer reachable from the PR's pull ref —
+    /// the PR picked up new commits (or was force-pushed) after the caller
+    /// cached that commit. Kept distinct from `WorktreeAddFailed` so callers
+    /// get an actionable message instead of a raw git error.
+    StaleHeadSha(String),
     IoError(io::Error),
 }
 
@@ -36,6 +41,9 @@ impl fmt::Display for GitWorktreeError {
             }
             GitWorktreeError::FetchFailed(msg) => {
                 write!(f, "git fetch failed: {}", msg)
+            }
+            GitWorktreeError::StaleHeadSha(msg) => {
+                write!(f, "{}", msg)
             }
             GitWorktreeError::IoError(e) => {
                 write!(f, "IO error: {}", e)
@@ -1153,7 +1161,33 @@ pub async fn checkout_pr_head(
         )));
     }
 
+    // The fetch above only ever brings in `pull_ref`'s *current* tip. If the PR
+    // picked up new commits (or was force-pushed) after the caller's `head_sha`
+    // was cached, that commit was never fetched and `git worktree add` would
+    // fail with an opaque "invalid reference" — check for that case up front so
+    // we can tell the caller what actually happened.
+    if !commit_exists(repo_path, head_sha).await? {
+        return Err(GitWorktreeError::StaleHeadSha(format!(
+            "commit {head_sha} is no longer part of {pull_ref} — the PR likely has new \
+             commits since this was last checked. Refresh the PR list and try again."
+        )));
+    }
+
     try_create_detached_worktree_inner(repo_path, worktree_path, head_sha).await
+}
+
+/// Whether `commit` resolves to an existing commit object in `repo_path`'s
+/// object database, without requiring it be reachable from any ref.
+async fn commit_exists(repo_path: &Path, commit: &str) -> Result<bool, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("cat-file")
+        .arg("-e")
+        .arg(format!("{commit}^{{commit}}"))
+        .output()
+        .await?;
+    Ok(output.status.success())
 }
 
 async fn try_create_detached_worktree_inner(
@@ -1672,6 +1706,81 @@ mod tests {
         assert!(
             worktree_path.join("pr_file.txt").exists(),
             "PR file should be present"
+        );
+    }
+
+    #[tokio::test]
+    async fn checkout_pr_head_reports_a_stale_head_sha_actionably() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+
+        let origin_path = temp.path().join("origin");
+        init_committed_repo(&origin_path);
+        std::fs::write(origin_path.join("pr_file.txt"), "first push\n")
+            .expect("pr file should be written");
+        assert_git_success(&origin_path, &["add", "pr_file.txt"]);
+        assert_git_success(&origin_path, &["commit", "-m", "pr head v1"]);
+        let stale_head_sha = git_stdout(&origin_path, &["rev-parse", "HEAD"]);
+        assert_git_success(
+            &origin_path,
+            &["update-ref", "refs/pull/9/head", &stale_head_sha],
+        );
+        // Move origin's main back off the PR commit so a clone right now — before
+        // OpenForge ever fetches the pull ref — does not pick it up on `main`.
+        assert_git_success(&origin_path, &["reset", "--hard", "HEAD~1"]);
+
+        // Local clone = OpenForge's local project repo, taken before the PR force-push below.
+        // `--no-local` forces a real fetch-pack negotiation instead of git's local-path
+        // fast path (which hardlinks/copies the whole object store and would smuggle in
+        // the still-unreachable stale commit, defeating the point of this test).
+        let repo_path = temp.path().join("repo");
+        assert_git_success(
+            temp.path(),
+            &[
+                "clone",
+                "--no-local",
+                &format!("file://{}", origin_path.display()),
+                repo_path.to_str().unwrap(),
+            ],
+        );
+
+        // The PR author force-pushes new commits: refs/pull/9/head now points
+        // elsewhere and the old head is no longer reachable from it.
+        std::fs::write(origin_path.join("pr_file.txt"), "force-pushed\n")
+            .expect("pr file should be rewritten");
+        assert_git_success(&origin_path, &["add", "pr_file.txt"]);
+        assert_git_success(&origin_path, &["commit", "-m", "pr head v2"]);
+        let new_head_sha = git_stdout(&origin_path, &["rev-parse", "HEAD"]);
+        assert_git_success(
+            &origin_path,
+            &[
+                "update-ref",
+                "--no-deref",
+                "refs/pull/9/head",
+                &new_head_sha,
+            ],
+        );
+
+        // OpenForge still has the stale head_sha cached from before the force-push.
+        let worktree_path = temp.path().join("pr-worktree");
+        let result = checkout_pr_head(&repo_path, &worktree_path, 9, &stale_head_sha).await;
+
+        let error = result.expect_err("a moved PR head must not succeed silently");
+        assert!(
+            matches!(error, GitWorktreeError::StaleHeadSha(_)),
+            "expected StaleHeadSha, got: {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains(&stale_head_sha),
+            "message should name the stale commit: {message}"
+        );
+        assert!(
+            message.to_lowercase().contains("refresh"),
+            "message should tell the user how to recover: {message}"
+        );
+        assert!(
+            !worktree_path.exists(),
+            "no worktree should be left behind on a stale-head failure"
         );
     }
 
