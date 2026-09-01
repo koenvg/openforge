@@ -52,13 +52,11 @@ export function createTerminalSessionCoordinator({
   notifyLifecycle,
 }: TerminalSessionCoordinatorOptions): TerminalSessionCoordinator {
   const session = createTerminalSessionHandle(shellSessionKey)
-  const lifecycleListeners = new Set<(state: ShellLifecycleState) => void>()
   const viewSubscriptions: TerminalViewDisposable[] = []
   let disposed = false
 
-  function notify(state: ShellLifecycleState): void {
+  function notify(): void {
     notifyLifecycle(shellSessionKey)
-    for (const listener of lifecycleListeners) listener(state)
   }
 
   const attachment = createTerminalViewAttachmentCoordinator({
@@ -81,7 +79,7 @@ export function createTerminalSessionCoordinator({
     pty,
     attachment,
     isDisposed: () => disposed,
-    notify: () => notify(pty.getLifecycleState()),
+    notify,
   })
 
   function pauseModelOutput(reason: string): void {
@@ -196,7 +194,7 @@ export function createTerminalSessionCoordinator({
   async function recoverAfterReconnect(): Promise<void> {
     if (!pty.needsReconnectRecovery()) return
     await authority.recoverFromAuthority()
-    notify(pty.getLifecycleState())
+    notify()
     attachment.refresh()
   }
 
@@ -227,7 +225,6 @@ export function createTerminalSessionCoordinator({
     attachment.detach()
     authority.dispose()
     for (const subscription of viewSubscriptions.splice(0)) subscription.dispose()
-    lifecycleListeners.clear()
     view.dispose()
   }
 

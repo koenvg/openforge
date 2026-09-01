@@ -15,7 +15,7 @@ interface TerminalPtyCoordinatorOptions {
   view: TerminalView
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
-  notify(state: ShellLifecycleState): void
+  notify(): void
 }
 
 export interface TerminalPtySpawnRequest {
@@ -72,7 +72,7 @@ export function createTerminalPtyCoordinator({
     ptyActive = true
     shellExited = false
     needsClear = false
-    notify(lifecycleState())
+    notify()
   }
 
   function applyReplayState(replay: TerminalReplay, replayHasOutput: boolean): void {
@@ -96,13 +96,13 @@ export function createTerminalPtyCoordinator({
     ptyActive = true
     shellExited = false
     hasOutput = true
-    notify(lifecycleState())
+    notify()
   }
 
   function handleModelDisabled(event: TerminalModelDisabledEvent): void {
     if (currentPtyInstance !== event.ptyInstanceId) return
     ptyActive = false
-    notify(lifecycleState())
+    notify()
   }
 
   function handleExit(ptyInstanceId: number): void {
@@ -110,7 +110,7 @@ export function createTerminalPtyCoordinator({
     ptyActive = false
     shellExited = true
     needsClear = true
-    notify(lifecycleState())
+    notify()
   }
 
   function syncSize(viewActive: boolean, dimensions: TerminalGeometry | null = view.geometry): void {
@@ -129,7 +129,7 @@ export function createTerminalPtyCoordinator({
     const generation = spawnGeneration
     activeSpawnGeneration = generation
     hasOutput = false
-    notify(lifecycleState())
+    notify()
 
     return Object.freeze({
       generation,
@@ -147,7 +147,7 @@ export function createTerminalPtyCoordinator({
   function cancelSpawn(generation: number): void {
     if (activeSpawnGeneration !== generation) return
     activeSpawnGeneration = null
-    notify(lifecycleState())
+    notify()
   }
 
   function restoreInstance(instanceId: number): boolean {
