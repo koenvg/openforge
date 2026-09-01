@@ -1,4 +1,4 @@
-import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PullRequestMergeMethod } from './domain'
+import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PullRequestMergeMethod } from './domain.js'
 
 export type PrChipSurface = 'compact' | 'detail'
 

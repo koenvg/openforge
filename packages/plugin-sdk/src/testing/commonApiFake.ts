@@ -8,7 +8,7 @@ import type {
   JsonValue,
   TaskChangeEvent,
   OpenForgeCommonAPI,
-} from '../types'
+} from '../types.js'
 import type { ActiveTasks, CompletedTaskPage, CompletedTaskQuery, Task, TaskDetail, TaskLabel, TaskRead, TaskReference, TaskSummary } from '../domain.js'
 import {
   assertFunction,
@@ -26,7 +26,7 @@ import type {
   TestingEventListenerContribution,
   TestingExternalTextFile,
   TestingTaskWorkspaceFixture,
-} from './contracts'
+} from './contracts.js'
 
 const UTF8_ENCODER = new TextEncoder()
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })

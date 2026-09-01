@@ -7,6 +7,7 @@ import type {
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
+  PluginViewReplacementRegistration,
   TaskStartPrefixProviderRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import type { Disposable, InjectionPointLocation } from '@openforge-app/plugin-sdk'
@@ -26,15 +27,17 @@ import type {
   RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
+  RuntimeViewReplacementContribution,
 } from './runtimeContributionTypes'
 
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
+  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
 >
 
 export class RuntimeFrontendContributionRegistry {
   private readonly views = new Map<string, RuntimeViewContribution>()
+  private readonly viewReplacements = new Map<string, RuntimeViewReplacementContribution>()
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly reviewRowActions = new Map<string, RuntimeReviewRowActionContribution>()
@@ -62,6 +65,9 @@ export class RuntimeFrontendContributionRegistry {
       },
       views: {
         register: (registration) => this.registerView(registration),
+      },
+      viewReplacements: {
+        register: (registration) => this.registerViewReplacement(registration),
       },
       taskUI: {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
@@ -105,6 +111,7 @@ export class RuntimeFrontendContributionRegistry {
 
   getSnapshot(): {
     views: RuntimeViewContribution[]
+    viewReplacements: RuntimeViewReplacementContribution[]
     taskPaneTabs: RuntimeTaskPaneTabContribution[]
     taskUISections: RuntimeTaskUISectionContribution[]
     reviewRowActions: RuntimeReviewRowActionContribution[]
@@ -114,6 +121,7 @@ export class RuntimeFrontendContributionRegistry {
   } {
     return {
       views: Array.from(this.views.values()),
+      viewReplacements: Array.from(this.viewReplacements.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
       taskUISections: Array.from(this.taskUISections.values()),
       reviewRowActions: Array.from(this.reviewRowActions.values()),
@@ -166,6 +174,39 @@ export class RuntimeFrontendContributionRegistry {
     }))
   }
 
+
+  private registerViewReplacement(registration: PluginViewReplacementRegistration): Disposable {
+    if (!this.services.packageMetadata?.requires?.includes('viewReplacements')) {
+      throw new RuntimeValidationError('viewReplacements', 'requires the viewReplacements capability')
+    }
+    if (registration?.target !== 'project.dashboard') {
+      throw new RuntimeValidationError(
+        'viewReplacements',
+        `has unsupported target "${String(registration?.target)}"`,
+      )
+    }
+    const qualifiedId = this.services.qualifiedId('viewReplacements', registration?.id)
+    assertTitle('viewReplacements', registration?.title)
+    assertComponent('viewReplacements', registration?.component)
+    const icon = sanitizeViewIcon(registration?.icon, 'viewReplacements')
+    this.services.claims.claim('viewReplacements', qualifiedId)
+
+    const contribution: RuntimeViewReplacementContribution = {
+      ...registration,
+      id: registration.id.trim(),
+      title: registration.title.trim(),
+      icon,
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+    }
+    this.viewReplacements.set(qualifiedId, contribution)
+
+    return this.services.trackDisposable(createDisposable(() => {
+      this.viewReplacements.delete(qualifiedId)
+      this.services.claims.release('viewReplacements', qualifiedId)
+    }))
+  }
   private registerTaskPaneTab(registration: PluginTaskPaneTabRegistration): Disposable {
     const qualifiedId = this.services.qualifiedId('taskPane', registration?.id)
     assertTitle('taskPane', registration?.title)

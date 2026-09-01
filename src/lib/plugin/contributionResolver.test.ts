@@ -234,6 +234,7 @@ describe('resolveContributions', () => {
 
     expect(result).toEqual({
       views: [],
+      viewReplacements: [],
       taskPaneTabs: [],
       taskUISections: [],
       reviewRowActions: [],

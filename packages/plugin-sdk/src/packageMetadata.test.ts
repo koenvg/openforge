@@ -243,7 +243,7 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.dependentRequired).toEqual({ frontendStyles: ['frontend'] })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.allOf).toContainEqual({
       if: {
-        properties: { requires: { contains: { const: 'browserSurfaces' } } },
+        properties: { requires: { contains: { enum: ['browserSurfaces', 'viewReplacements'] } } },
         required: ['requires'],
       },
       then: { required: ['frontend'] },

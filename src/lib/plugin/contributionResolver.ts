@@ -9,9 +9,11 @@ import type {
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
+  RuntimeViewReplacementContribution,
 } from './runtimeContributionRegistry'
 
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut' | 'navigationComponent'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
+type RuntimeViewReplacementSource = Pick<RuntimeViewReplacementContribution, 'id' | 'target' | 'title' | 'icon'>
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeReviewRowActionSource = Pick<RuntimeReviewRowActionContribution, 'id' | 'order'>
@@ -32,6 +34,15 @@ export interface ResolvedView {
   railOrder: number
 }
 
+
+export interface ResolvedViewReplacement {
+  pluginId: string
+  contributionId: string
+  qualifiedId: string
+  target: 'project.dashboard'
+  title: string
+  icon: PluginIcon
+}
 export interface ResolvedTab {
   pluginId: string
   contributionId: string
@@ -84,6 +95,7 @@ export interface ResolvedBackgroundService {
 export interface RuntimeContributionSource {
   pluginId: string
   views?: RuntimeViewSource[]
+  viewReplacements?: RuntimeViewReplacementSource[]
   taskPaneTabs?: RuntimeTaskPaneTabSource[]
   taskUISections?: RuntimeTaskUISectionSource[]
   reviewRowActions?: RuntimeReviewRowActionSource[]
@@ -94,6 +106,7 @@ export interface RuntimeContributionSource {
 
 export interface ResolvedContributions {
   views: ResolvedView[]
+  viewReplacements: ResolvedViewReplacement[]
   taskPaneTabs: ResolvedTab[]
   taskUISections: ResolvedTaskUISection[]
   reviewRowActions: ResolvedReviewRowAction[]
@@ -102,7 +115,7 @@ export interface ResolvedContributions {
   backgroundServices: ResolvedBackgroundService[]
 }
 
-type ResolvedSlot = keyof ResolvedContributions
+type ResolvedSlot = Exclude<keyof ResolvedContributions, 'viewReplacements'>
 
 type ResolvedSlotItems = {
   views: ResolvedView[]
@@ -188,6 +201,31 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     showInRail: placement === undefined || placement === 'rail',
     showInSidebar: placement === 'sidebar',
     railOrder: isNumber(order) ? order : 100,
+  }
+}
+
+function resolveViewReplacement(pluginId: string, item: unknown): ResolvedViewReplacement | null {
+  if (!isRecord(item)) return null
+
+  const { id, target, title, icon } = item
+  if (!isNonEmptyString(id) || target !== 'project.dashboard' || !isNonEmptyString(title)) {
+    return null
+  }
+
+  let sanitizedIcon: PluginIcon
+  try {
+    sanitizedIcon = sanitizePluginIcon(icon)
+  } catch {
+    return null
+  }
+
+  return {
+    pluginId,
+    contributionId: id,
+    qualifiedId: `${pluginId}.${id}`,
+    target,
+    title,
+    icon: sanitizedIcon,
   }
 }
 
@@ -335,6 +373,7 @@ function collectResolved<T>(pluginId: string, items: unknown, resolver: (pluginI
 export function resolveContributions(enabledPlugins: RuntimeContributionSource[]): ResolvedContributions {
   const resolved: ResolvedContributions = {
     views: [],
+    viewReplacements: [],
     taskPaneTabs: [],
     taskUISections: [],
     reviewRowActions: [],
@@ -350,6 +389,7 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
 
     resolved.views.push(...collectResolved(plugin.pluginId, plugin.views, resolveView))
     resolved.taskPaneTabs.push(...collectResolved(plugin.pluginId, plugin.taskPaneTabs, resolveTab))
+    resolved.viewReplacements.push(...collectResolved(plugin.pluginId, plugin.viewReplacements, resolveViewReplacement))
     resolved.taskUISections.push(...collectResolved(plugin.pluginId, plugin.taskUISections, resolveTaskUISection))
     resolved.reviewRowActions.push(...collectResolved(plugin.pluginId, plugin.reviewRowActions, resolveReviewRowAction))
     resolved.commands.push(...collectResolved(plugin.pluginId, plugin.commands, resolveCommand))

@@ -1,4 +1,4 @@
-import type { PluginSvgIcon } from './types'
+import type { PluginSvgIcon } from './types.js'
 
 export function isPluginIconName(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0

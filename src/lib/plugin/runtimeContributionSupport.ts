@@ -98,12 +98,12 @@ export function assertComponent(kind: RuntimeKind, component: unknown): void {
   }
 }
 
-export function sanitizeViewIcon(icon: unknown) {
+export function sanitizeViewIcon(icon: unknown, kind: RuntimeKind = 'views') {
   try {
     return sanitizePluginIcon(icon)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new RuntimeValidationError('views', `has invalid icon: ${message}`)
+    throw new RuntimeValidationError(kind, `has invalid icon: ${message}`)
   }
 }
 

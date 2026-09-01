@@ -45,6 +45,7 @@ export type {
   RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
+  RuntimeViewReplacementContribution,
 } from './runtimeContributionTypes'
 export { qualifyLocalContributionId }
 

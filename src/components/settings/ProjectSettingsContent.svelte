@@ -1,5 +1,16 @@
 <script lang="ts">
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
+  import SettingsDashboardProviderCard from './SettingsDashboardProviderCard.svelte'
+  import { resolveContributions } from '../../lib/plugin/contributionResolver'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import {
+    isProjectDashboardProviderAvailable,
+    CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    loadProjectDashboardProviderId,
+    projectDashboardProviderIds,
+    setProjectDashboardProviderId,
+  } from '../../lib/plugin/projectDashboardProviders'
+  import { error } from '../../lib/stores'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
@@ -17,6 +28,36 @@
   }
 
   let { activeSection, controller }: Props = $props()
+
+  let dashboardProviders = $derived(resolveContributions(
+    Array.from($enabledPluginIds)
+      .map(pluginId => $runtimeContributionSources.get(pluginId))
+      .filter(source => source !== undefined),
+  ).viewReplacements.filter(
+    provider => isProjectDashboardProviderAvailable(provider, $installedPlugins),
+  ))
+  let selectedDashboardProviderId = $derived(
+    $projectDashboardProviderIds.get(controller.projectId) ?? CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+  )
+
+  $effect(() => {
+    const projectId = controller.projectId
+    if (projectId && !$projectDashboardProviderIds.has(projectId)) {
+      void loadProjectDashboardProviderId(projectId).catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
+  })
+
+  async function handleDashboardProviderChange(providerId: string): Promise<void> {
+    if (!controller.projectId) return
+    try {
+      await setProjectDashboardProviderId(controller.projectId, providerId)
+    } catch (value) {
+      error.set(value instanceof Error ? value.message : String(value))
+      throw value
+    }
+  }
 </script>
 
 {#if activeSection === 'general'}
@@ -76,6 +117,12 @@
     onInstructionsChange={controller.setAgentInstructions}
   />
 {:else if activeSection === 'plugins'}
+  <SettingsDashboardProviderCard
+    selectedProviderId={selectedDashboardProviderId}
+    providers={dashboardProviders}
+    disabled={!controller.hasProject}
+    onProviderChange={handleDashboardProviderChange}
+  />
   <PluginSettingsPanel projectId={controller.projectId || ''} disabled={!controller.hasProject} />
   {#each controller.pluginSettingsSections as section (section.namespacedId)}
     <SettingsSectionCard title={section.title}>

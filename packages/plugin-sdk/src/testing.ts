@@ -33,4 +33,5 @@ export type {
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,
+  TestingViewReplacementContribution,
 } from './testing/contracts.js'

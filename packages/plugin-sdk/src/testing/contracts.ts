@@ -1,6 +1,6 @@
-import type { BrowserSurfaceVisualFeedback } from '../browserSurfaces'
-import type { CompletedTaskQuery } from '../domain'
-import type { TestingOpenForgeRegistryFake } from './registryFake'
+import type { BrowserSurfaceVisualFeedback } from '../browserSurfaces.js'
+import type { CompletedTaskQuery } from '../domain.js'
+import type { TestingOpenForgeRegistryFake } from './registryFake.js'
 import type {
   BackendMethodRegistration,
   BackendOpenForgeAPI,
@@ -25,6 +25,7 @@ import type {
   PluginReviewRowActionRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
+  PluginViewReplacementRegistration,
   ShellSpawnRequest,
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
@@ -35,11 +36,11 @@ import type {
   UserDataDirectoryRequest,
   UserDataFileRequest,
   UserDataFileWriteRequest,
-} from '../types'
-import type { AgentSession, FileContent, FileEntry, Task, TaskLabel } from '../domain'
+} from '../types.js'
+import type { AgentSession, FileContent, FileEntry, Task, TaskLabel } from '../domain.js'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
-export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
+export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
 export type TestingMaybePromise<T> = T | Promise<T>
 export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
 export type TestingEventHandler = (payload: unknown) => void
@@ -176,6 +177,7 @@ export type TestingEventListenerContribution = TestingContributionBase & {
 }
 
 export type TestingViewContribution = TestingContributionBase & PluginViewRegistration
+export type TestingViewReplacementContribution = TestingContributionBase & PluginViewReplacementRegistration
 export type TestingTaskPaneTabContribution = TestingContributionBase & PluginTaskPaneTabRegistration
 export type TestingTaskUISectionContribution = TestingContributionBase & PluginTaskUISectionRegistration
 export type TestingReviewRowActionContribution = TestingContributionBase & PluginReviewRowActionRegistration
@@ -203,6 +205,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   pluginId: string
   projectId: string | null
   views: TestingViewContribution[]
+  viewReplacements: TestingViewReplacementContribution[]
   taskPaneTabs: TestingTaskPaneTabContribution[]
   taskUISections: TestingTaskUISectionContribution[]
   reviewRowActions: TestingReviewRowActionContribution[]

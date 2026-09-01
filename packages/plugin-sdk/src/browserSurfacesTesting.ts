@@ -11,8 +11,8 @@ import type {
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
-} from './browserSurfaces'
-import type { Disposable } from './types'
+} from './browserSurfaces.js'
+import type { Disposable } from './types.js'
 
 export interface TestingBrowserSurfaceCalls {
   browserSurfaceGetOrCreate: GetOrCreateBrowserSurfaceRequest[]

@@ -1,4 +1,4 @@
-import type { OpenForgePackageMetadata, OpenForgePluginCapability } from './types'
+import type { OpenForgePackageMetadata, OpenForgePluginCapability } from './types.js'
 
 export function getRequiredOpenForgeCapabilities(metadata: OpenForgePackageMetadata): OpenForgePluginCapability[] {
   return metadata.requires ?? []

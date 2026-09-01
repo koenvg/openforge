@@ -82,6 +82,7 @@ describe('pluginRegistry contribution queries', () => {
         placement: 'rail',
         component: viewComponent,
       }],
+      viewReplacements: [],
       taskPaneTabs: [{
         id: 'activity',
         qualifiedId: 'test-plugin.activity',

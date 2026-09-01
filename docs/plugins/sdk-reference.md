@@ -291,6 +291,7 @@ export type OpenForgePluginCapability =
   | 'commands'
   | 'events'
   | 'views'
+  | 'viewReplacements'
   | 'injectionPoints'
   | 'taskPane'
   | 'taskStart'
