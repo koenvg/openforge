@@ -14,6 +14,12 @@ vi.mock('../../lib/domUtils', () => ({
   isInputFocused: () => false,
 }))
 
+// Generation reads the two guidance settings through the host API; the stub api
+// used here has none, so stub the resolver to a fixed pair.
+vi.mock('../../lib/walkthroughGuidance', () => ({
+  resolveWalkthroughGuidance: vi.fn(async () => ({ reviewGuidance: '', walkthroughGuidance: '' })),
+}))
+
 import WalkthroughTab from './WalkthroughTab.svelte'
 
 const basePr: ReviewPullRequest = {
@@ -261,7 +267,7 @@ describe('WalkthroughTab ticket coverage → review', () => {
 
     expect(onSubmitReview).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: 'Ticket coverage gaps:\n- **Partial**: Domains label stays plural — Tooltip dropped.\n\nOtherwise fine.',
+        body: 'Ticket coverage gaps:\n- **Partial**: Jira ticket mentions "Domains label stays plural", but Tooltip dropped.\n\nOtherwise fine.',
       }),
     )
 
@@ -305,5 +311,39 @@ describe('WalkthroughTab step-details collapse', () => {
     await goToStep(2)
     await screen.findByText('Step one')
     expect(screen.queryByText('First concept')).toBeNull()
+  })
+})
+
+describe('WalkthroughTab stop generation', () => {
+  // Load resolves to no walkthrough, so clicking Generate drives the optimistic
+  // "generating" row rather than a cached one — this is the window where Stop
+  // used to be a no-op.
+  function makeGeneratingSync(): GithubSyncPrReviewClient {
+    const sync = makeGithubSync()
+    sync.getPrWalkthrough = vi.fn(async () => null)
+    sync.startAgentWalkthrough = vi.fn(async () => ({ walkthrough_session_key: 'sess-1' }))
+    return sync
+  }
+
+  it('stops with the session key returned by start, before any poll runs', async () => {
+    const githubSync = makeGeneratingSync()
+    renderWalkthrough({ githubSync })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
+
+    expect(githubSync.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+  })
+
+  it('returns to the Generate state after stopping, not an error screen', async () => {
+    const githubSync = makeGeneratingSync()
+    renderWalkthrough({ githubSync })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
+
+    expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
+    expect(await screen.findByRole('button', { name: /generate walkthrough/i })).toBeTruthy()
+    expect(screen.queryByText(/aborted/i)).toBeNull()
   })
 })

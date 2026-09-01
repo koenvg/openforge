@@ -61,6 +61,48 @@ export interface CoverageFinding {
   text: string
 }
 
+/** Status badge text, shared by the ticket panel and the finding builders. */
+export const STATUS_LABELS: Record<CriterionStatus, string> = {
+  covered: 'Covered',
+  partial: 'Partial',
+  missing: 'Missing',
+  unclear: 'Unclear',
+}
+
+// A covered criterion agrees with the PR, so it reads "…, and …". The other
+// statuses contrast with it, so they read "…, but …".
+const CRITERION_CONNECTOR: Record<CriterionStatus, string> = {
+  covered: 'and',
+  partial: 'but',
+  missing: 'but',
+  unclear: 'but',
+}
+
+/**
+ * Shape a coverage criterion into a review finding. The text names the Jira
+ * ticket up front so the comment still reads as ticket-vs-PR once it is lifted
+ * out of the coverage panel and into the review body.
+ */
+export function criterionFinding(criterion: CoverageCriterion): CoverageFinding {
+  const requirement = `Jira ticket mentions "${criterion.text}"`
+  return {
+    id: criterion.id,
+    label: STATUS_LABELS[criterion.status],
+    text: criterion.notes
+      ? `${requirement}, ${CRITERION_CONNECTOR[criterion.status]} ${criterion.notes}`
+      : requirement,
+  }
+}
+
+/** Shape an out-of-scope change into a review finding, attributed to the ticket. */
+export function outOfScopeFinding(change: OutOfScopeChange, index: number): CoverageFinding {
+  return {
+    id: `oos-${index}`,
+    label: 'Not in the ticket',
+    text: `Not in the Jira ticket, but changed by this PR: ${change.description}`,
+  }
+}
+
 /** A Jira work item as returned by the core `fetchJiraWorkItem` host command. */
 export interface JiraWorkItem {
   issue_key: string

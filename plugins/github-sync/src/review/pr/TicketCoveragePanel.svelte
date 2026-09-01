@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Check, Plus } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import { criterionFinding, outOfScopeFinding, STATUS_LABELS } from '../../lib/ticketCoverage'
   import type {
     CoverageFinding,
     CriterionStatus,
@@ -67,30 +68,11 @@
     unassessable: 'badge-ghost',
   }
 
-  const STATUS_LABELS: Record<CriterionStatus, string> = {
-    covered: 'Covered',
-    partial: 'Partial',
-    missing: 'Missing',
-    unclear: 'Unclear',
-  }
-
   const STATUS_CLASSES: Record<CriterionStatus, string> = {
     covered: 'badge-success',
     partial: 'badge-warning',
     missing: 'badge-error',
     unclear: 'badge-ghost',
-  }
-
-  function criterionFinding(criterion: TicketCoverage['criteria'][number]): CoverageFinding {
-    return {
-      id: criterion.id,
-      label: STATUS_LABELS[criterion.status],
-      text: criterion.notes ? `${criterion.text} — ${criterion.notes}` : criterion.text,
-    }
-  }
-
-  function outOfScopeFinding(change: TicketCoverage['out_of_scope'][number], index: number): CoverageFinding {
-    return { id: `oos-${index}`, label: 'Not in the ticket', text: change.description }
   }
 </script>
 

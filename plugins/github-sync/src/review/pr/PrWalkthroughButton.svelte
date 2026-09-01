@@ -4,9 +4,11 @@
   interface Props {
     state: WalkthroughButtonState
     onGenerate: () => void
+    /** Stops an in-flight generation. Omitted where a stop isn't wired up. */
+    onStop?: () => void
   }
 
-  let { state, onGenerate }: Props = $props()
+  let { state, onGenerate, onStop }: Props = $props()
 
   // The label carries the reason to press it, so a stale walkthrough reads as
   // "new commits" rather than an unexplained second Generate.
@@ -23,10 +25,22 @@
     Walkthrough ready
   </span>
 {:else if state === 'generating'}
-  <button type="button" class="btn btn-xs btn-ghost gap-1" disabled aria-label="Generating walkthrough">
-    <span class="loading loading-spinner loading-xs"></span>
-    Generating…
-  </button>
+  <span class="inline-flex items-center gap-1">
+    <span class="inline-flex items-center gap-1 text-xs text-base-content/60" aria-label="Generating walkthrough">
+      <span class="loading loading-spinner loading-xs"></span>
+      Generating…
+    </span>
+    {#if onStop}
+      <button
+        type="button"
+        class="btn btn-xs btn-ghost text-error"
+        aria-label="Stop walkthrough generation"
+        onclick={(e) => { e.stopPropagation(); onStop?.() }}
+      >
+        Stop
+      </button>
+    {/if}
+  </span>
 {:else}
   <button
     type="button"

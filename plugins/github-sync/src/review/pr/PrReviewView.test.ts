@@ -1252,6 +1252,33 @@ describe('PrReviewView walkthrough generation', () => {
     expect(registry.calls.backendInvocations.some((c) => c.method === 'markReviewPrViewed')).toBe(false)
   })
 
+  it('stops an in-flight generation from the card, aborting and clearing it', async () => {
+    const generating: PrWalkthrough = {
+      pr_id: basePr.id,
+      head_sha: basePr.head_sha,
+      walkthrough_session_key: 'session-key',
+      status: 'generating',
+      steps_json: null,
+      error_message: null,
+      created_at: 0,
+      updated_at: 0,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', () => generating)
+
+    renderPrReviewView(registry)
+
+    await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(await screen.findByRole('button', { name: 'Stop walkthrough generation' }))
+
+    await waitFor(() =>
+      expect(registry.calls.backendInvocations.some((c) => c.method === 'abortAgentWalkthrough')).toBe(true),
+    )
+    const abortCall = registry.calls.backendInvocations.find((c) => c.method === 'abortAgentWalkthrough')
+    expect(abortCall?.payload).toMatchObject({ walkthroughSessionKey: 'session-key' })
+    expect(registry.calls.backendInvocations.some((c) => c.method === 'deletePrWalkthrough')).toBe(true)
+  })
+
   it('reveals the Walkthrough tab only for a PR whose walkthrough is ready for the current head sha', async () => {
     const readyWalkthrough: PrWalkthrough = {
       pr_id: basePr.id,

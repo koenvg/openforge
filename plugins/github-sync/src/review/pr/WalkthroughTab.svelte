@@ -333,7 +333,7 @@
       // repo-aware agent). All this side supplies is the two guidance settings,
       // resolved the same way as on the list card so both entry points honour them.
       const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, projectId)
-      await githubSync.startAgentWalkthrough({
+      const { walkthrough_session_key } = await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,
         prNumber: pr.number,
@@ -350,7 +350,9 @@
       walkthrough = {
         pr_id: pr.id,
         head_sha: pr.head_sha,
-        walkthrough_session_key: null,
+        // Keep the key from the start call so Stop works right away, without
+        // waiting for the first poll to read it back from storage.
+        walkthrough_session_key,
         status: 'generating',
         steps_json: null,
         error_message: null,
@@ -365,16 +367,30 @@
     }
   }
 
-  async function handleCancel() {
+  async function handleStop() {
     const sessionKey = walkthrough?.walkthrough_session_key
-    if (!sessionKey) return
-    try {
-      await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
-    } catch (e) {
-      console.error('[WalkthroughTab] Failed to abort walkthrough:', e)
-    } finally {
-      await loadCachedWalkthrough()
+    if (sessionKey) {
+      try {
+        await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
+      } catch (e) {
+        console.error('[WalkthroughTab] Failed to stop walkthrough:', e)
+      }
     }
+    // Drop the stopped run so the tab reverts to the idle "Generate" state,
+    // ready for a rerun with changed instructions, instead of the error screen
+    // the killed run would otherwise persist. The store's session guard keeps
+    // that run from rewriting the row once it is deleted.
+    try {
+      await githubSync.deletePrWalkthrough({
+        reviewPrId: pr.id,
+        headSha: walkthrough?.head_sha ?? pr.head_sha,
+      })
+    } catch (e) {
+      console.error('[WalkthroughTab] Failed to clear the stopped walkthrough:', e)
+    }
+    walkthrough = null
+    activeStepIndex = 0
+    activeStepFilename = null
   }
 
   async function handleRegenerate() {
@@ -455,7 +471,7 @@
       <span>The agent is reading the diff and assembling steps…</span>
       <div class="flex gap-2">
         <button class="btn btn-ghost btn-xs" onclick={loadCachedWalkthrough}>Refresh</button>
-        <button class="btn btn-ghost btn-xs text-error" onclick={handleCancel}>Cancel</button>
+        <button class="btn btn-outline btn-error btn-xs" onclick={handleStop}>Stop</button>
       </div>
     </div>
   {:else if walkthrough.status === 'error'}
