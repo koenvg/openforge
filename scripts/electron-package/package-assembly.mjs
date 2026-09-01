@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { electronPackageIdentityForRepoRoot } from '../data-identity.mjs'
 import { resolveRustSidecarLayout } from '../rust-sidecar-layout.mjs'
@@ -33,6 +33,61 @@ async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier =
   plist = updatePlistStringValue(plist, 'CFBundleIdentifier', bundleIdentifier)
   plist = updatePlistBooleanValue(plist, 'ApplePressAndHoldEnabled', false)
   await writeFile(plistPath, plist)
+}
+
+const ELECTRON_HELPER_APP_PATTERN = /^Electron Helper(?: \(([^)]+)\))?\.app$/
+const ELECTRON_HELPER_ROLES = Object.freeze(['', 'GPU', 'Renderer', 'Plugin'])
+
+function electronHelperPaths(frameworksDir, appName, role) {
+  const roleSuffix = role ? ` (${role})` : ''
+  const electronHelperName = `Electron Helper${roleSuffix}`
+  const appHelperName = `${appName} Helper${roleSuffix}`
+  const electronHelperAppPath = join(frameworksDir, `${electronHelperName}.app`)
+  const macosDir = join(electronHelperAppPath, 'Contents', 'MacOS')
+  return {
+    role,
+    electronHelperName,
+    appHelperName,
+    electronHelperAppPath,
+    appHelperAppPath: join(frameworksDir, `${appHelperName}.app`),
+    electronHelperExecutablePath: join(macosDir, electronHelperName),
+    appHelperExecutablePath: join(macosDir, appHelperName),
+    plistPath: join(electronHelperAppPath, 'Contents', 'Info.plist'),
+  }
+}
+
+async function brandElectronHelperApps(appPath, { appName, bundleIdentifier }) {
+  const frameworksDir = join(appPath, 'Contents', 'Frameworks')
+  await assertExists(frameworksDir, 'Electron Frameworks directory')
+  const helpers = ELECTRON_HELPER_ROLES.map(role => electronHelperPaths(frameworksDir, appName, role))
+
+  for (const helper of helpers) {
+    await assertExists(helper.electronHelperAppPath, `${helper.electronHelperName} app bundle`)
+    await assertExists(helper.electronHelperExecutablePath, `${helper.electronHelperName} executable`)
+    await assertExists(helper.plistPath, `${helper.electronHelperName} Info.plist`)
+  }
+
+  for (const helper of helpers) {
+    await rename(helper.electronHelperExecutablePath, helper.appHelperExecutablePath)
+    await chmod(helper.appHelperExecutablePath, 0o755)
+
+    const helperBundleIdentifier = `${bundleIdentifier}.helper${helper.role ? `.${helper.role}` : ''}`
+    let plist = await readFile(helper.plistPath, 'utf8')
+    plist = updatePlistStringValue(plist, 'CFBundleExecutable', helper.appHelperName)
+    plist = updatePlistStringValue(plist, 'CFBundleName', helper.appHelperName)
+    plist = updatePlistStringValue(plist, 'CFBundleDisplayName', helper.appHelperName)
+    plist = updatePlistStringValue(plist, 'CFBundleIdentifier', helperBundleIdentifier)
+    await writeFile(helper.plistPath, plist)
+
+    await rename(helper.electronHelperAppPath, helper.appHelperAppPath)
+  }
+
+  const unbrandedHelpers = (await readdir(frameworksDir, { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && ELECTRON_HELPER_APP_PATTERN.test(entry.name))
+    .map(entry => entry.name)
+  if (unbrandedHelpers.length > 0) {
+    throw new Error(`Electron helper branding left unrecognized bundles: ${unbrandedHelpers.join(', ')}`)
+  }
 }
 
 export async function packageElectronApp({
@@ -102,6 +157,10 @@ export async function packageElectronApp({
   }), null, 2)}\n`)
 
   await updateInfoPlist(outputAppPath, {
+    appName: packageIdentity.appName,
+    bundleIdentifier: packageIdentity.bundleIdentifier,
+  })
+  await brandElectronHelperApps(outputAppPath, {
     appName: packageIdentity.appName,
     bundleIdentifier: packageIdentity.bundleIdentifier,
   })

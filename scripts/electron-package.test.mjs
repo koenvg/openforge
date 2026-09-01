@@ -33,6 +33,19 @@ async function writeExecutable(path, content = '#!/bin/sh\n') {
   await writeFile(path, content, { mode: 0o755 })
 }
 
+async function writeElectronHelperTemplate(template, suffix = '') {
+  const helperName = `Electron Helper${suffix}`
+  const helperRoot = join(template, 'Contents', 'Frameworks', `${helperName}.app`, 'Contents')
+  await mkdir(join(helperRoot, 'MacOS'), { recursive: true })
+  await writeExecutable(join(helperRoot, 'MacOS', helperName))
+  const bundleIdentifierSuffix = suffix.match(/^ \(([^)]+)\)$/)?.[1] ?? ''
+  const bundleIdentifier = `com.github.Electron.helper${bundleIdentifierSuffix ? `.${bundleIdentifierSuffix}` : ''}`
+  await writeFile(
+    join(helperRoot, 'Info.plist'),
+    `<plist><dict><key>CFBundleName</key><string>${helperName}</string><key>CFBundleIdentifier</key><string>${bundleIdentifier}</string><key>LSEnvironment</key><dict><key>MallocNanoZone</key><string>0</string></dict></dict></plist>`,
+  )
+}
+
 async function writeBackendLayoutConfig(repoRoot, config = currentLayoutConfig) {
   await writeFile(join(repoRoot, BACKEND_LAYOUT_CONFIG_FILE), `${JSON.stringify(config, null, 2)}\n`)
 }
@@ -426,6 +439,9 @@ describe('Electron macOS packaging helpers', () => {
     await writeFile(join(template, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/icudtl.dat'), 'icu')
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+    for (const suffix of ['', ' (GPU)', ' (Renderer)', ' (Plugin)']) {
+      await writeElectronHelperTemplate(template, suffix)
+    }
     await writeElectronBuildOutputs(root)
     await writeElectronRuntimeDependencyArtifacts(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
@@ -487,6 +503,21 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-plugin-dev-skill.md'), 'utf8')).resolves.toContain('openforge plugin dev skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
+    for (const suffix of ['', ' (GPU)', ' (Renderer)', ' (Plugin)']) {
+      const helperName = `Open Forge Helper${suffix}`
+      const helperRoot = join(output, 'Contents', 'Frameworks', `${helperName}.app`, 'Contents')
+      const bundleIdentifierSuffix = suffix.match(/^ \(([^)]+)\)$/)?.[1] ?? ''
+      const bundleIdentifier = `com.openforge.app.electron.helper${bundleIdentifierSuffix ? `.${bundleIdentifierSuffix}` : ''}`
+      await expect(stat(join(helperRoot, 'MacOS', helperName))).resolves.toBeTruthy()
+      await expect(stat(join(output, 'Contents', 'Frameworks', `Electron Helper${suffix}.app`))).rejects.toMatchObject({ code: 'ENOENT' })
+      const helperPlist = await readFile(join(helperRoot, 'Info.plist'), 'utf8')
+      const environmentDictionaryEnd = helperPlist.indexOf('</dict>', helperPlist.indexOf('<key>LSEnvironment</key>'))
+      const topLevelEntriesAfterEnvironment = helperPlist.slice(environmentDictionaryEnd + '</dict>'.length).replace(/>\s+</g, '><')
+      expect(topLevelEntriesAfterEnvironment).toContain(`<key>CFBundleExecutable</key><string>${helperName}</string>`)
+      expect(helperPlist).toContain(`<key>CFBundleName</key><string>${helperName}</string>`)
+      expect(topLevelEntriesAfterEnvironment).toContain(`<key>CFBundleDisplayName</key><string>${helperName}</string>`)
+      expect(helperPlist).toContain(`<key>CFBundleIdentifier</key><string>${bundleIdentifier}</string>`)
+    }
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
       main: 'dist-electron/main.js',
       dependencies: {
