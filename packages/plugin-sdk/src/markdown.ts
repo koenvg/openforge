@@ -1,5 +1,5 @@
 import { marked, Renderer, type Tokens } from 'marked'
-import { sanitizeHtml } from './sanitize'
+import { sanitizeHtml } from './sanitize.js'
 
 
 export interface RenderMarkdownOptions {

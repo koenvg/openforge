@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify'
 
-import { isPluginSvgIcon } from './pluginIconContract'
-import type { PluginIcon } from './types'
+import { isPluginSvgIcon } from './pluginIconContract.js'
+import type { PluginIcon } from './types.js'
 
 export const MAX_PLUGIN_SVG_ICON_CHARACTERS = 10_000
 

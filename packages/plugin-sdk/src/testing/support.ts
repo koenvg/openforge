@@ -12,8 +12,8 @@ import type {
   PluginStorageScope,
   StartPromptContribution,
   SubscriptionSink,
-} from '../types'
-import type { AgentSession, FileContent, Task, TaskLabel } from '../domain'
+} from '../types.js'
+import type { AgentSession, FileContent, Task, TaskLabel } from '../domain.js'
 import type {
   TestingCommandContribution,
   TestingMaybePromise,
@@ -23,7 +23,7 @@ import type {
   TestingOpenForgeApiOptions,
   TestingRuntimeKind,
   TestingRuntimeScope,
-} from './contracts'
+} from './contracts.js'
 
 export function createDisposable(dispose: () => TestingMaybePromise<void>): Disposable {
   let disposed = false

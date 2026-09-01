@@ -1,4 +1,4 @@
-import type { TaskBrowserSurfaceState } from '../browserSurfaces'
+import type { TaskBrowserSurfaceState } from '../browserSurfaces.js'
 import type {
   BackendPlugin,
   BackendPluginContext,
@@ -7,7 +7,7 @@ import type {
   OpenForgePackageMetadata,
   TaskChangeEvent,
   PluginStorage,
-} from '../types'
+} from '../types.js'
 import { TestingBackendServicesFake } from './backendServicesFake.js'
 import { TestingCommonApiFake } from './commonApiFake.js'
 import type {
@@ -16,7 +16,7 @@ import type {
   TestingOpenForgeApiCalls,
   TestingOpenForgeApiOptions,
   TestingOpenForgeRegistrySnapshot,
-} from './contracts'
+} from './contracts.js'
 import { TestingFrontendContributionFake } from './frontendContributionFake.js'
 import {
   TestingRegistryServices,

@@ -29,7 +29,7 @@ import type {
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,
-} from './types'
+} from './types.js'
 
 export function defineBackendPlugin<const TPlugin extends BackendPlugin>(plugin: TPlugin): TPlugin {
   return plugin

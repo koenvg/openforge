@@ -10,6 +10,7 @@ import type {
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
+  RuntimeViewReplacementContribution,
 } from './runtimeContributionRegistry'
 
 const pluginCommandHandlers = new Map<string, RuntimeCommandContribution['handler']>()
@@ -29,6 +30,12 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       placement: view.placement,
       order: view.order,
       navigationComponent: view.navigationComponent,
+    })),
+    viewReplacements: snapshot.viewReplacements.map((replacement) => ({
+      id: replacement.id,
+      target: replacement.target,
+      title: replacement.title,
+      icon: replacement.icon,
     })),
     taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
       id: tab.id,
@@ -101,9 +108,9 @@ export async function stopPluginBackgroundServices(pluginId: string): Promise<vo
   return stopBackgroundServiceEntries(stopEntries)
 }
 
-function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeReviewRowActionContribution | RuntimeSettingsSectionContribution | RuntimeInjectionPointContribution>(
+function registerRenderableContributions<T extends RuntimeViewReplacementContribution | RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeReviewRowActionContribution | RuntimeSettingsSectionContribution | RuntimeInjectionPointContribution>(
   pluginId: string,
-  slotType: 'taskPaneTabs' | 'taskUISections' | 'reviewRowActions' | 'settingsSections' | 'injectionPoints',
+  slotType: 'viewReplacements' | 'taskPaneTabs' | 'taskUISections' | 'reviewRowActions' | 'settingsSections' | 'injectionPoints',
   contributions: T[] | undefined
 ): void {
   for (const contribution of contributions ?? []) {
@@ -172,6 +179,7 @@ export async function applyRuntimeSnapshotContributions(pluginId: string, snapsh
       registerViewComponent(makePluginViewKey(pluginId, view.id), view.component as never)
     }
 
+    registerRenderableContributions(pluginId, 'viewReplacements', snapshot.viewReplacements)
     registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
     registerRenderableContributions(pluginId, 'taskUISections', snapshot.taskUISections)
     registerRenderableContributions(pluginId, 'reviewRowActions', snapshot.reviewRowActions)

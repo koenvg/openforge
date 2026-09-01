@@ -1,5 +1,5 @@
-import type { PluginViewKey } from './types'
-export type { PluginViewKey } from './types'
+import type { PluginViewKey } from './types.js'
+export type { PluginViewKey } from './types.js'
 
 export type BoardStatus = 'backlog' | 'doing' | 'done'
 

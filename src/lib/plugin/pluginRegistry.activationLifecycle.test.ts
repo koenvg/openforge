@@ -157,6 +157,50 @@ describe('pluginRegistry activation lifecycle', () => {
     })
   })
 
+  it('rolls back partial activation when a plugin lacks the replacement capability', async () => {
+    const viewComponent = vi.fn() as never
+    const dashboardComponent = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge) {
+        openforge.views.register({
+          id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: viewComponent,
+        })
+        openforge.viewReplacements.register({
+          id: 'dashboard',
+          target: 'project.dashboard',
+          title: 'Dashboard',
+          icon: 'panels-top-left',
+          component: dashboardComponent,
+        })
+      },
+    })
+    const manifest = makeManifest()
+    installedPlugins.set(new Map([['test-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      packageMetadata: {
+        id: 'test-plugin',
+        apiVersion: 1,
+        displayName: 'Test Plugin',
+        description: 'Tests capability enforcement',
+        frontend: './index.js',
+        requires: ['views'],
+      },
+    }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(false)
+
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+    expect(get(runtimeContributionSources).get('test-plugin')).toBeUndefined()
+    expect(get(installedPlugins).get('test-plugin')).toMatchObject({
+      state: 'error',
+      error: 'viewReplacements registration requires the viewReplacements capability',
+    })
+  })
+
   it('activatePlugin exposes runtime context, storage, and host event subscription APIs', async () => {
     const handler = vi.fn()
     let capturedApi: FrontendOpenForgeAPI | null = null

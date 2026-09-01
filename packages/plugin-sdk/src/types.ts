@@ -1,7 +1,7 @@
 import packageMetadataSchemaData from './openforgePackageMetadataSchema.json' with { type: 'json' }
 
 import type { Component } from 'svelte'
-import type { BrowserSurfacesAPI } from './browserSurfaces'
+import type { BrowserSurfacesAPI } from './browserSurfaces.js'
 import type {
   BoardStatus,
   AgentSession,
@@ -20,7 +20,7 @@ import type {
   TaskWorkspaceInfo,
   WorktreeSource,
   WritableBoardStatus,
-} from './domain'
+} from './domain.js'
 
 export type SupportedOpenForgeApiVersion = 1
 
@@ -57,6 +57,7 @@ const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
   'commands',
   'events',
   'views',
+  'viewReplacements',
   'injectionPoints',
   'taskPane',
   'taskStart',
@@ -288,6 +289,29 @@ export interface PluginViewProps extends Record<string, unknown> {
   context: OpenForgeContextSnapshot
 }
 
+export type ReplaceableViewTarget = 'project.dashboard'
+
+export interface PluginProjectDashboardReplacementProps extends Record<string, unknown> {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  project: Project
+  onOpenTask: (taskId: string) => void | Promise<void>
+  onComposeTask: () => void
+  onOpenCommandSearch: () => void
+}
+
+export interface PluginProjectDashboardReplacementRegistration {
+  id: string
+  target: 'project.dashboard'
+  title: string
+  icon: PluginIcon
+  component:
+    | PluginComponentLoader<PluginProjectDashboardReplacementProps>
+    | PluginComponent<PluginProjectDashboardReplacementProps>
+}
+
+export type PluginViewReplacementRegistration = PluginProjectDashboardReplacementRegistration
+
 export interface PluginSidebarViewIdentity {
   pluginId: string
   id: string
@@ -411,6 +435,10 @@ export interface PluginReviewRowActionRegistration {
 
 export interface FrontendViewRegistry {
   register(registration: PluginViewRegistration): Disposable
+}
+
+export interface FrontendViewReplacementRegistry {
+  register(registration: PluginViewReplacementRegistration): Disposable
 }
 
 export interface FrontendReviewUIRegistry {
@@ -925,6 +953,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   browserSurfaces: BrowserSurfacesAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry
+  viewReplacements: FrontendViewReplacementRegistry
   taskUI: FrontendTaskUIRegistry
   reviewUI: FrontendReviewUIRegistry
   /** @deprecated Use `taskUI.registerTab(...)`. */

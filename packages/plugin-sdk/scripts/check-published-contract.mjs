@@ -48,6 +48,10 @@ const hostCapabilityReleases = [
     version: '0.2.5',
     capabilities: ['reviewUI'],
   },
+  {
+    version: '0.3.0',
+    capabilities: ['viewReplacements'],
+  },
 ]
 
 function fail(message) {
@@ -222,12 +226,21 @@ try {
     compilePackedSvelteTree(join(installedPackageRoot, target.replace(/^\.\//, '')))
   }
 
-  writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')
-const vite = await import('@openforge-app/plugin-sdk/vite')
-if (typeof testing.createMockOpenForgeApi !== 'function') {
+  const executableExportSpecifiers = Object.entries(packedManifest.exports)
+    .flatMap(([exportName, target]) => {
+      const executableTarget = typeof target === 'string' ? target : target?.default
+      if (typeof executableTarget !== 'string' || !executableTarget.endsWith('.js')) return []
+      return [`${sourceManifest.name}${exportName === '.' ? '' : exportName.slice(1)}`]
+    })
+  writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const exportsBySpecifier = new Map(await Promise.all(
+    ${JSON.stringify(executableExportSpecifiers)}.map(async specifier => [specifier, await import(specifier)]),
+))
+const testing = exportsBySpecifier.get('@openforge-app/plugin-sdk/testing')
+const vite = exportsBySpecifier.get('@openforge-app/plugin-sdk/vite')
+if (typeof testing?.createMockOpenForgeApi !== 'function') {
   throw new Error('Installed Plugin SDK testing entry point did not expose createMockOpenForgeApi.')
 }
-if (typeof vite.createOpenForgePluginSdkSourceAliases !== 'function') {
+if (typeof vite?.createOpenForgePluginSdkSourceAliases !== 'function') {
   throw new Error('Installed Plugin SDK Vite entry point did not expose createOpenForgePluginSdkSourceAliases.')
 }
 `)

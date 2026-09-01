@@ -3,12 +3,12 @@ import type {
   BackendOpenForgeAPI,
   BackgroundServiceRegistration,
   Disposable,
-} from '../types'
+} from '../types.js'
 import { assertFunction, createDisposable, type TestingRegistryServices } from './support.js'
 import type {
   TestingBackendMethodContribution,
   TestingBackgroundServiceContribution,
-} from './contracts'
+} from './contracts.js'
 
 export class TestingBackendServicesFake {
   private readonly backendMethods = new Map<string, TestingBackendMethodContribution>()

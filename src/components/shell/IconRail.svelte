@@ -2,7 +2,7 @@
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
   import { getIconRailNavItems } from '../../lib/iconRailNav'
-  import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
+  import type { DashboardNavItem, IconRailPluginNavItem } from '../../lib/iconRailNav'
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import PluginNavigationIcon from './PluginNavigationIcon.svelte'
 
@@ -10,6 +10,7 @@
     currentView: AppView
     onNavigate: (view: AppView) => void
     pluginNavItems?: IconRailPluginNavItem[]
+    dashboardNavItem?: DashboardNavItem | null
     modalsOpen?: boolean
     activeRepoReviewRequestCount?: number
     activeProjectAttentionCount?: number
@@ -19,12 +20,13 @@
     currentView,
     onNavigate,
     pluginNavItems = [],
+    dashboardNavItem = null,
     modalsOpen = false,
     activeRepoReviewRequestCount = 0,
     activeProjectAttentionCount = 0,
   }: Props = $props()
 
-  let navItems = $derived(getIconRailNavItems(pluginNavItems))
+  let navItems = $derived(getIconRailNavItems(pluginNavItems, dashboardNavItem))
 </script>
 
 <nav class="of-icon-rail flex h-full w-[4.5rem] flex-col items-center gap-2 border-r border-base-300 bg-base-100 py-4" aria-label="Project tools">

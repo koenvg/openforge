@@ -21,7 +21,12 @@ import {
   type TasksAPI,
 } from '@openforge-app/plugin-sdk'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
-import { defineFrontendPlugin, type PluginViewRegistration } from '@openforge-app/plugin-sdk/frontend'
+import {
+  defineFrontendPlugin,
+  type PluginProjectDashboardReplacementRegistration,
+  type PluginProjectDashboardReplacementProps,
+  type PluginViewRegistration,
+} from '@openforge-app/plugin-sdk/frontend'
 import {
   createOpenForgeRegistryFake,
   type TestingCommandContribution,
@@ -117,7 +122,7 @@ const appPackageMetadata = {
   description: 'Exercises app-level custom sidebar navigation.',
   enablement: 'app',
   frontend: './frontend.js',
-  requires: ['views', 'appEnablement', 'customSidebarNavigation'],
+  requires: ['views', 'viewReplacements', 'appEnablement', 'customSidebarNavigation'],
 } satisfies OpenForgePackageMetadata
 
 const registry = createOpenForgeRegistryFake({
@@ -142,6 +147,15 @@ void registry.backendApi.fs.userData.writeTextFile({ path: 'events/state.json', 
 
 declare const viewComponent: PluginViewRegistration['component']
 declare const navigationComponent: NonNullable<PluginViewRegistration['navigationComponent']>
+declare const dashboardComponent: PluginProjectDashboardReplacementRegistration['component']
+const dashboardPropsContract = (props: PluginProjectDashboardReplacementProps) => {
+  void props.project.id
+  void props.api.tasks.onDidChange
+  void props.onOpenTask('task-id')
+  void props.api.navigation.navigate({ viewId: 'board' })
+  void props.api.system.openUrl('https://example.com')
+}
+void dashboardPropsContract
 declare const navigationProps: PluginSidebarNavigationProps
 navigationProps.onActivate()
 void navigationProps.view.qualifiedId
@@ -155,6 +169,14 @@ void registry.frontendApi.views.register({
   navigationComponent,
 })
 
+
+void registry.frontendApi.viewReplacements.register({
+  id: 'dashboard',
+  target: 'project.dashboard',
+  title: 'Usage dashboard',
+  icon: 'panels-top-left',
+  component: dashboardComponent,
+})
 void defineBackendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(openforge.commands.register(registration))

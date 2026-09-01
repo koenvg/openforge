@@ -1,6 +1,7 @@
 import { createTestingBrowserSurfaces } from '../browserSurfacesTesting.js'
-import type { TestingBrowserSurfaces } from '../browserSurfacesTesting'
-import type { TaskBrowserSurfaceState } from '../browserSurfaces'
+import type { TestingBrowserSurfaces } from '../browserSurfacesTesting.js'
+import { sanitizePluginIcon } from '../pluginIcons.js'
+import type { TaskBrowserSurfaceState } from '../browserSurfaces.js'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -10,8 +11,9 @@ import type {
   PluginReviewRowActionRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
+  PluginViewReplacementRegistration,
   TaskStartPrefixProviderRegistration,
-} from '../types'
+} from '../types.js'
 import {
   assertFunction,
   assertTitle,
@@ -26,15 +28,17 @@ import type {
   TestingReviewRowActionContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,
-} from './contracts'
+  TestingViewReplacementContribution,
+} from './contracts.js'
 
 type TestingFrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
+  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
 >
 
 export class TestingFrontendContributionFake {
   private readonly views = new Map<string, TestingViewContribution>()
+  private readonly viewReplacements = new Map<string, TestingViewReplacementContribution>()
   private readonly taskPaneTabs = new Map<string, TestingTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, TestingTaskUISectionContribution>()
   private readonly reviewRowActions = new Map<string, TestingReviewRowActionContribution>()
@@ -58,6 +62,9 @@ export class TestingFrontendContributionFake {
       browserSurfaces: this.browserSurfaces.api,
       views: {
         register: (registration) => this.registerView(registration),
+      },
+      viewReplacements: {
+        register: (registration) => this.registerViewReplacement(registration),
       },
       taskUI: {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
@@ -99,6 +106,7 @@ export class TestingFrontendContributionFake {
 
   getSnapshot(): {
     views: TestingViewContribution[]
+    viewReplacements: TestingViewReplacementContribution[]
     taskPaneTabs: TestingTaskPaneTabContribution[]
     taskUISections: TestingTaskUISectionContribution[]
     reviewRowActions: TestingReviewRowActionContribution[]
@@ -108,6 +116,7 @@ export class TestingFrontendContributionFake {
   } {
     return {
       views: Array.from(this.views.values()),
+      viewReplacements: Array.from(this.viewReplacements.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
       taskUISections: Array.from(this.taskUISections.values()),
       reviewRowActions: Array.from(this.reviewRowActions.values()),
@@ -147,6 +156,36 @@ export class TestingFrontendContributionFake {
     return createDisposable(() => {
       this.views.delete(qualifiedId)
       this.services.claims.release('views', qualifiedId)
+    })
+  }
+
+  private registerViewReplacement(registration: PluginViewReplacementRegistration): Disposable {
+    if (!this.services.packageMetadata.requires?.includes('viewReplacements')) {
+      throw new Error('viewReplacements registration requires the viewReplacements capability')
+    }
+    if (registration?.target !== 'project.dashboard') {
+      throw new Error(`viewReplacements registration has unsupported target "${String(registration?.target)}"`)
+    }
+    const qualifiedId = this.services.localQualifiedId('viewReplacements', registration.id)
+    assertTitle('viewReplacements', registration.title)
+    assertFunction('viewReplacements', 'component', registration.component)
+    const icon = sanitizePluginIcon(registration.icon)
+    this.services.claims.claim('viewReplacements', qualifiedId)
+
+    const contribution: TestingViewReplacementContribution = {
+      ...registration,
+      id: registration.id.trim(),
+      title: registration.title.trim(),
+      icon,
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+    }
+    this.viewReplacements.set(qualifiedId, contribution)
+
+    return createDisposable(() => {
+      this.viewReplacements.delete(qualifiedId)
+      this.services.claims.release('viewReplacements', qualifiedId)
     })
   }
 

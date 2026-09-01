@@ -9,6 +9,11 @@ export interface IconRailPluginNavItem {
   shortcut: string | null
 }
 
+
+export interface DashboardNavItem {
+  icon: PluginIcon
+  title: string
+}
 export interface SidebarPluginNavigation {
   component: NonNullable<PluginViewRegistration['navigationComponent']>
   props: Pick<PluginSidebarNavigationProps, 'api' | 'context' | 'view'>
@@ -43,9 +48,14 @@ function normalizeShortcut(shortcut: string | null): string {
   return shortcut ? shortcut.replace(/^[⌘⌃⌥⇧]+/, '').toUpperCase() : ''
 }
 
-export function getIconRailNavItems(pluginNavItems: IconRailPluginNavItem[] = []): IconRailNavItem[] {
+export function getIconRailNavItems(
+  pluginNavItems: IconRailPluginNavItem[] = [],
+  dashboardNavItem?: DashboardNavItem | null,
+): IconRailNavItem[] {
   return [
-    boardNavItem,
+    dashboardNavItem
+      ? { ...boardNavItem, icon: dashboardNavItem.icon, label: dashboardNavItem.title }
+      : boardNavItem,
     ...pluginNavItems.map((item) => ({
       view: item.viewKey,
       icon: item.icon,

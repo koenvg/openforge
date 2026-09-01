@@ -10,7 +10,7 @@ import type {
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
-} from './browserSurfaces'
+} from './browserSurfaces.js'
 import type {
   CommandDescriptor,
   CommandRegistry,
@@ -30,6 +30,7 @@ import type {
   FrontendReviewUIRegistry,
   FrontendTaskUIRegistry,
   FrontendViewRegistry,
+  FrontendViewReplacementRegistry,
   InjectionPointLocation,
   NavigationAPI,
   OpenForgeContextChangeHandler,
@@ -54,12 +55,16 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  PluginProjectDashboardReplacementProps,
+  PluginProjectDashboardReplacementRegistration,
+  PluginViewReplacementRegistration,
+  ReplaceableViewTarget,
   TaskStartPrefixContext,
   TaskStartPrefixProviderRegistration,
   PtyBufferState,
   TerminalImageProtocol,
   TerminalViewSnapshot,
-} from './types'
+} from './types.js'
 
 export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
 
@@ -76,7 +81,7 @@ export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugi
   return plugin as MarkedFrontendPlugin<TPlugin>
 }
 
-export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
+export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces.js'
 
 export type {
   BrowserSurfaceCapture,
@@ -111,6 +116,7 @@ export type {
   FrontendReviewUIRegistry,
   FrontendTaskUIRegistry,
   FrontendViewRegistry,
+  FrontendViewReplacementRegistry,
   InjectionPointLocation,
   NavigationAPI,
   OpenForgeContextChangeHandler,
@@ -135,6 +141,10 @@ export type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  PluginProjectDashboardReplacementProps,
+  PluginProjectDashboardReplacementRegistration,
+  PluginViewReplacementRegistration,
+  ReplaceableViewTarget,
   TaskStartPrefixContext,
   TaskStartPrefixProviderRegistration,
   PtyBufferState,

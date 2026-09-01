@@ -13,7 +13,7 @@
     {
       "if": {
         "properties": {
-          "requires": { "contains": { "const": "browserSurfaces" } }
+          "requires": { "contains": { "enum": ["browserSurfaces", "viewReplacements"] } }
         },
         "required": ["requires"]
       },
@@ -108,6 +108,7 @@
           "commands",
           "events",
           "views",
+          "viewReplacements",
           "injectionPoints",
           "taskPane",
           "taskStart",

@@ -6,6 +6,7 @@ import type {
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
+  PluginViewReplacementRegistration,
   TaskBrowserSurfaceController,
 } from '@openforge-app/plugin-sdk/frontend'
 import type {
@@ -56,7 +57,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 
 export type MaybePromise<T> = T | Promise<T>
-export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
+export type RuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
 export type RuntimeScope = 'global' | 'project' | 'task'
 export type RuntimeHandler = (
   payload?: unknown,
@@ -150,6 +151,7 @@ export type RuntimeEventListenerContribution = RuntimeContributionBase & {
 }
 
 export type RuntimeViewContribution = RuntimeContributionBase & PluginViewRegistration
+export type RuntimeViewReplacementContribution = RuntimeContributionBase & PluginViewReplacementRegistration
 export type RuntimeTaskPaneTabContribution = RuntimeContributionBase & PluginTaskPaneTabRegistration
 export type RuntimeTaskUISectionContribution = RuntimeContributionBase & PluginTaskUISectionRegistration
 export type RuntimeReviewRowActionContribution = RuntimeContributionBase & PluginReviewRowActionRegistration
@@ -177,6 +179,7 @@ export type RuntimeContributionSnapshot = {
   pluginId: string
   projectId: string | null
   views: RuntimeViewContribution[]
+  viewReplacements: RuntimeViewReplacementContribution[]
   taskPaneTabs: RuntimeTaskPaneTabContribution[]
   taskUISections: RuntimeTaskUISectionContribution[]
   reviewRowActions: RuntimeReviewRowActionContribution[]

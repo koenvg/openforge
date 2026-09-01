@@ -1,7 +1,7 @@
-import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
-import { isPluginIconName, isPluginSvgIcon } from './pluginIconContract'
-import type { OpenForgePackageMetadata, OpenForgePluginCapability, ValidationError } from './types'
-import { SUPPORTED_OPENFORGE_API_VERSIONS } from './types'
+import packageMetadataSchemaData from './openforgePackageMetadataSchema.json' with { type: 'json' }
+import { isPluginIconName, isPluginSvgIcon } from './pluginIconContract.js'
+import type { OpenForgePackageMetadata, OpenForgePluginCapability, ValidationError } from './types.js'
+import { SUPPORTED_OPENFORGE_API_VERSIONS } from './types.js'
 
 export const OPENFORGE_PACKAGE_METADATA_SCHEMA = packageMetadataSchemaData
 
@@ -155,6 +155,9 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   }
   if (Array.isArray(data.requires) && data.requires.includes('browserSurfaces') && !isNonEmptyString(data.frontend)) {
     errors.push({ path: 'requires', message: 'browserSurfaces capability requires a frontend entry' })
+  }
+  if (Array.isArray(data.requires) && data.requires.includes('viewReplacements') && !isNonEmptyString(data.frontend)) {
+    errors.push({ path: 'requires', message: 'viewReplacements capability requires a frontend entry' })
   }
 
   if (data.contributes !== undefined) {

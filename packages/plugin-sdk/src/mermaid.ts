@@ -1,4 +1,4 @@
-import { sanitizeMermaidSvg } from './sanitize'
+import { sanitizeMermaidSvg } from './sanitize.js'
 
 export type MermaidTheme = 'default' | 'dark'
 

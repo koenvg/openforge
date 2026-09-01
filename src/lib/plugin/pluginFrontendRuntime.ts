@@ -167,6 +167,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       set: unavailable('projectConfig.set'),
     },
     views: { register: () => ({ dispose: () => undefined }) },
+    viewReplacements: { register: () => ({ dispose: () => undefined }) },
     taskUI: {
       registerTab: () => ({ dispose: () => undefined }),
       registerSection: () => ({ dispose: () => undefined }),

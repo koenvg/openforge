@@ -7,6 +7,7 @@ import { installAppTestLifecycle } from './App.test-harness'
 import type { TaskDetail } from './lib/types'
 import App from './App.svelte'
 import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
+import IconRail from './components/shell/IconRail.svelte'
 import TaskDetailProviderHost from './components/task-detail/TaskDetailProviderHost.svelte'
 
 vi.mock('./components/focus-board/ProjectDashboardProviderHost.svelte', () => ({ default: vi.fn() }))
@@ -41,14 +42,86 @@ describe('App host-view provider routing', () => {
     await vi.waitFor(() => expect(vi.mocked(ProjectDashboardProviderHost)).toHaveBeenCalled())
     expect(vi.mocked(TaskDetailProviderHost)).not.toHaveBeenCalled()
 
-    const props = getLatestComponentProps<{ projectId: string | null; tasks: TaskDetail[] }>(
+    const props = getLatestComponentProps<{ project: typeof project; tasks: TaskDetail[] }>(
       vi.mocked(ProjectDashboardProviderHost),
-      'projectId',
+      'project',
     )
-    expect(props.projectId).toBe(project.id)
+    expect(props.project).toEqual(project)
     expect(props.tasks).toEqual([task])
   })
 
+
+  it('uses the selected dashboard metadata while keeping task opening on the board route', async () => {
+    const stores = await import('./lib/stores')
+    const pluginStore = await import('./lib/plugin/pluginStore')
+    const dashboardProviders = await import('./lib/plugin/projectDashboardProviders')
+    const componentRegistry = await import('./lib/plugin/componentRegistry')
+    const { get } = await import('svelte/store')
+    stores.projects.set([project])
+    stores.activeProjectId.set(project.id)
+    stores.currentView.set('board')
+    stores.taskDetailsById.set(new Map([[task.id, task]]))
+    setMockTasks([task])
+    componentRegistry.registerRenderableContributionComponent(
+      'viewReplacements',
+      'planning-plugin:dashboard',
+      vi.fn() as never,
+    )
+    pluginStore.enabledPluginIds.set(new Set(['planning-plugin']))
+    pluginStore.runtimeContributionSources.set(new Map([['planning-plugin', {
+      pluginId: 'planning-plugin',
+      viewReplacements: [{
+        id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left',
+      }],
+    }]]))
+    dashboardProviders.projectDashboardProviderIds.set(new Map([[project.id, 'planning-plugin.dashboard']]))
+
+    render(App)
+
+    await vi.waitFor(() => expect(vi.mocked(IconRail)).toHaveBeenCalled())
+    const railProps = getLatestComponentProps<{ dashboardNavItem: { title: string; icon: string } }>(
+      vi.mocked(IconRail),
+      'dashboardNavItem',
+      { latestCallOnly: true },
+    )
+    expect(railProps.dashboardNavItem).toEqual({ title: 'Planning', icon: 'panels-top-left' })
+
+    const dashboardProps = getLatestComponentProps<{ onOpenTask: (taskId: string) => Promise<void> }>(
+      vi.mocked(ProjectDashboardProviderHost),
+      'onOpenTask',
+      { latestCallOnly: true },
+    )
+    await dashboardProps.onOpenTask(task.id)
+    expect(get(stores.currentView)).toBe('board')
+    expect(get(stores.selectedTaskId)).toBe(task.id)
+  })
+
+  it('keeps core dashboard navigation metadata when the configured component is unavailable', async () => {
+    const stores = await import('./lib/stores')
+    const pluginStore = await import('./lib/plugin/pluginStore')
+    const dashboardProviders = await import('./lib/plugin/projectDashboardProviders')
+    stores.projects.set([project])
+    stores.activeProjectId.set(project.id)
+    stores.currentView.set('board')
+    pluginStore.enabledPluginIds.set(new Set(['planning-plugin']))
+    pluginStore.runtimeContributionSources.set(new Map([['planning-plugin', {
+      pluginId: 'planning-plugin',
+      viewReplacements: [{
+        id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left',
+      }],
+    }]]))
+    dashboardProviders.projectDashboardProviderIds.set(new Map([[project.id, 'planning-plugin.dashboard']]))
+
+    render(App)
+
+    await vi.waitFor(() => expect(vi.mocked(IconRail)).toHaveBeenCalled())
+    const railProps = getLatestComponentProps<{ dashboardNavItem: null }>(
+      vi.mocked(IconRail),
+      'dashboardNavItem',
+      { latestCallOnly: true },
+    )
+    expect(railProps.dashboardNavItem).toBeNull()
+  })
   it('routes a selected task through the task detail provider host before the dashboard provider', async () => {
     const stores = await import('./lib/stores')
     stores.projects.set([project])

@@ -22,7 +22,13 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import {
+    CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    loadProjectDashboardProviderId,
+    projectDashboardProviderIds,
+    resolveProjectDashboardProviderAvailability,
+  } from './lib/plugin/projectDashboardProviders'
   import { activatePlugin, deactivateAllPlugins, executePluginCommand, loadEnabledForProject } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
@@ -175,6 +181,20 @@
   let sidebarPluginViewKeySet = $derived(pluginPresentation.sidebarPluginViewKeySet)
   let renderedActiveView = $derived(pluginPresentation.renderedActiveView)
   let pluginViewActive = $derived(pluginPresentation.pluginViewActive)
+  let configuredDashboardProviderId = $derived(
+    $activeProjectId
+      ? ($projectDashboardProviderIds.get($activeProjectId) ?? CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+      : CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+  )
+  let dashboardProviderResolution = $derived(resolveProjectDashboardProviderAvailability(
+    configuredDashboardProviderId,
+    resolvedPluginContributions.viewReplacements,
+    $installedPlugins,
+  ))
+  let effectiveDashboardProvider = $derived(dashboardProviderResolution.provider)
+  let dashboardNavItem = $derived(effectiveDashboardProvider
+    ? { title: effectiveDashboardProvider.title, icon: effectiveDashboardProvider.icon }
+    : null)
 
   $effect(() => {
     sidebarPluginViewKeys.set(sidebarPluginViewKeySet)
@@ -197,6 +217,11 @@
     const projectId = $activeProjectId
     projectController.selectProject(projectId)
     pluginController.selectProject(projectId)
+    if (projectId && !$projectDashboardProviderIds.has(projectId)) {
+      void loadProjectDashboardProviderId(projectId).catch((value) => {
+        console.error(`[App] Failed to load dashboard provider preference for ${projectId}:`, value)
+      })
+    }
   })
 
   $effect(() => {
@@ -269,7 +294,7 @@
     reviewRequestCount={$reviewRequestCount}
   />
   {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
-    <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+    <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative">
@@ -291,8 +316,7 @@
           />
         {:else}
           <ProjectDashboardProviderHost
-            projectId={$activeProjectId}
-            projectName={activeProject?.name ?? ''}
+            project={activeProject}
             tasks={$tasks}
             taskDetailsById={$taskDetailsById}
             dependencyReferenceTasks={$dependencyReferenceTasks}

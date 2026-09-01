@@ -6,6 +6,7 @@ import { createAppPluginController } from './appPluginController'
 function contributions(overrides: Partial<ResolvedContributions> = {}): ResolvedContributions {
   return {
     views: [],
+    viewReplacements: [],
     taskPaneTabs: [],
     taskUISections: [],
     reviewRowActions: [],

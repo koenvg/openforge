@@ -124,6 +124,10 @@ export async function activateGithubGlobalView(): Promise<void> {
 
 export async function resetPluginRuntimeFixtures() {
   const pluginStore = await import('../lib/plugin/pluginStore')
+  const { clearComponentRegistry } = await import('../lib/plugin/componentRegistry')
+  clearComponentRegistry()
+  const { clearProjectDashboardProviderIds } = await import('../lib/plugin/projectDashboardProviders')
+  clearProjectDashboardProviderIds()
   pluginStore.installedPlugins.set(new Map())
   pluginStore.appEnabledPluginIds.set(new Set())
   pluginStore.projectEnabledPluginIds.set(new Set())

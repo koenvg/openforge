@@ -1,4 +1,4 @@
-export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
+export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces.js'
 export type {
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
@@ -10,7 +10,7 @@ export type {
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
-} from './browserSurfaces'
+} from './browserSurfaces.js'
 
 export {
   OPENFORGE_PACKAGE_METADATA_SCHEMA,
@@ -20,7 +20,7 @@ export {
   isSupportedOpenForgeApiVersion,
   validateOpenForgePackageMetadata,
   validatePluginPackageMetadata,
-} from './manifest'
+} from './manifest.js'
 
 export {
   createMemoryPluginStorage,
@@ -32,7 +32,7 @@ export {
   createTestingCalls,
   TestingOpenForgeRegistryFake,
   TestingSubscriptionSink,
-} from './testing'
+} from './testing.js'
 
 export {
   MAX_AGENT_SESSION_PAGE_SIZE,
@@ -48,7 +48,7 @@ export {
   resolveExternalTextFileChunkSize,
   makePluginViewKey,
   parsePluginViewKey,
-} from './types'
+} from './types.js'
 
 export type {
   AgentSessionCursor,
@@ -123,6 +123,10 @@ export type {
   PluginTaskPaneProps,
   PluginTaskUISectionProps,
   PluginViewProps,
+  PluginProjectDashboardReplacementProps,
+  PluginProjectDashboardReplacementRegistration,
+  PluginViewReplacementRegistration,
+  ReplaceableViewTarget,
   PluginStorage,
   PluginStorageScope,
   PluginViewKey,
@@ -151,7 +155,7 @@ export type {
   TaskOperationsAPI,
   TasksAPI,
   ValidationError,
-} from './types'
+} from './types.js'
 
 export type {
   MockBackendOpenForgeAPI,
@@ -173,9 +177,10 @@ export type {
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,
-} from './testing'
+  TestingViewReplacementContribution,
+} from './testing.js'
 
-export { parseStrictFiniteNumber } from './numberParsing'
+export { parseStrictFiniteNumber } from './numberParsing.js'
 export {
   buildProjectFileTree,
   flattenVisibleProjectFileTree,
@@ -186,13 +191,13 @@ export {
   getProjectFileTreeParentPath,
   hasProjectFileTreeShortcutModifier,
   projectFileTreePathToId,
-} from './projectFileTree'
+} from './projectFileTree.js'
 export type {
   ProjectFileTreeEntry,
   ProjectFileTreeItemAccessibility,
   ProjectFileTreeKeyboardAction,
   ProjectFileTreeNode,
-} from './projectFileTree'
+} from './projectFileTree.js'
 export {
   canMergePullRequest,
   getMergeReadiness,
@@ -204,5 +209,5 @@ export {
   parseCheckRuns,
   preservePullRequestState,
   splitCheckRuns,
-} from './domain'
-export type * from './domain'
+} from './domain.js'
+export type * from './domain.js'

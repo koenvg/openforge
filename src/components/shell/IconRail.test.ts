@@ -20,6 +20,24 @@ describe('IconRail', () => {
     expect(screen.getByRole('button', { name: 'Project Settings' }).hasAttribute('aria-current')).toBe(false)
   })
 
+  it('projects the selected provider title and icon onto the stable dashboard entry', () => {
+    commandHeld.set(true)
+    render(IconRail, {
+      props: {
+        currentView: 'board' as AppView,
+        onNavigate: vi.fn(),
+        dashboardNavItem: { title: 'Planning', icon: 'panels-top-left' },
+        activeProjectAttentionCount: 2,
+      },
+    })
+
+    const dashboard = screen.getByRole('button', { name: 'Planning' })
+    expect(dashboard.getAttribute('aria-current')).toBe('page')
+    expect(within(dashboard).getByText('2')).toBeTruthy()
+    expect(screen.getByText('H')).toBeTruthy()
+    commandHeld.set(false)
+  })
+
   it('clicking Board calls onNavigate with "board"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate } })
