@@ -1,10 +1,25 @@
 import { writable } from 'svelte/store'
-import type { FileBrowserProjectState } from './fileExplorer'
+import type { FileBrowserWorkspaceState } from './fileExplorer'
+import type { FileBrowserWorkspaceIdentity } from './workspaceSource'
 
-export const activeProjectId = writable<string | null>(null)
-export const pendingFileReveal = writable<string | null>(null)
-export const fileBrowserStates = writable<Map<string, FileBrowserProjectState>>(new Map())
+export interface PendingFileRevealRequest {
+  requestId: number
+  workspaceIdentity: FileBrowserWorkspaceIdentity | null
+  path: string
+}
 
-export function requestFileReveal(path: string): void {
-  pendingFileReveal.set(path)
+export const pendingFileReveal = writable<PendingFileRevealRequest | null>(null)
+export const fileBrowserStates = writable<Map<FileBrowserWorkspaceIdentity, FileBrowserWorkspaceState>>(new Map())
+
+let nextFileRevealRequestId = 0
+
+export function requestFileReveal(
+  path: string,
+  workspaceIdentity: FileBrowserWorkspaceIdentity | null = null,
+): void {
+  pendingFileReveal.set({
+    requestId: ++nextFileRevealRequestId,
+    workspaceIdentity,
+    path,
+  })
 }

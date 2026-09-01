@@ -101,11 +101,14 @@ describe('file-viewer plugin', () => {
     const [registration] = registeredCommands
     await registration.handler({ path: 'src/lib/fileViewerPlugin.ts' }, {
       taskId: null,
-      projectId: null,
+      projectId: 'project-1',
       source: 'plugin',
     })
 
-    expect(get(pendingFileReveal)).toBe('src/lib/fileViewerPlugin.ts')
+    expect(get(pendingFileReveal)).toMatchObject({
+      workspaceIdentity: 'project:project-1',
+      path: 'src/lib/fileViewerPlugin.ts',
+    })
     expect(subscriptions.add).toHaveBeenCalledTimes(2)
   })
 

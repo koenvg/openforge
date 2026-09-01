@@ -1,20 +1,22 @@
 import type { FileBrowserControllerState } from './fileBrowserControllerState'
 import { formatFileBrowserError } from './fileBrowserControllerState'
+import type { FileBrowserWorkspaceIdentity } from './workspaceSource'
 
 export function useFileSelectionController(state: FileBrowserControllerState) {
   let fileError = $state<string | null>(null)
   let previewFocusRequest = $state<number | null>(null)
   let treeFocusRequest = $state<number | null>(null)
-  let activeProjectId: string | null = null
+  let activeWorkspaceIdentity: FileBrowserWorkspaceIdentity | null = null
   let initialized = false
   let fileRequestId = 0
 
   async function selectFile(path: string): Promise<boolean> {
-    const projectId = state.getProjectId()
-    if (!projectId) return false
+    const source = state.getWorkspaceSource()
+    if (!source) return false
 
+    const { identity } = source
     const requestId = ++fileRequestId
-    state.updateProjectState(projectId, (current) => ({
+    state.updateWorkspaceState(identity, (current) => ({
       ...current,
       selectedPath: path,
       fileContent: null,
@@ -24,24 +26,24 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
     fileError = null
 
     try {
-      const fileContent = await state.api.fs.readFile({ projectId, path })
-      const currentState = state.getProjectState(projectId)
+      const fileContent = await source.readFile(path)
+      const currentState = state.getWorkspaceState(identity)
       if (
         requestId !== fileRequestId
-        || state.getProjectId() !== projectId
+        || state.getWorkspaceSource()?.identity !== identity
         || currentState.selectedPath !== path
       ) return false
 
-      state.updateProjectState(projectId, (current) => ({
+      state.updateWorkspaceState(identity, (current) => ({
         ...current,
         fileContent,
       }))
       return true
     } catch (error) {
-      const currentState = state.getProjectState(projectId)
+      const currentState = state.getWorkspaceState(identity)
       if (
         requestId !== fileRequestId
-        || state.getProjectId() !== projectId
+        || state.getWorkspaceSource()?.identity !== identity
         || currentState.selectedPath !== path
       ) return false
 
@@ -51,16 +53,16 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
   }
 
   function retrySelectedFile(): void {
-    const projectId = state.getProjectId()
-    if (!projectId) return
-    const path = state.getProjectState(projectId).selectedPath
+    const source = state.getWorkspaceSource()
+    if (!source) return
+    const path = state.getWorkspaceState(source.identity).selectedPath
     if (path) void selectFile(path)
   }
 
   function updateContentScrollTop(contentScrollTop: number): void {
-    const projectId = state.getProjectId()
-    if (!projectId) return
-    state.updateProjectState(projectId, (current) => ({
+    const source = state.getWorkspaceSource()
+    if (!source) return
+    state.updateWorkspaceState(source.identity, (current) => ({
       ...current,
       contentScrollTop,
     }))
@@ -71,22 +73,23 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
   }
 
   $effect(() => {
-    const projectId = state.getProjectId()
-    if (initialized && projectId === activeProjectId) return
+    const source = state.getWorkspaceSource()
+    const workspaceIdentity = source?.identity ?? null
+    if (initialized && workspaceIdentity === activeWorkspaceIdentity) return
 
     initialized = true
-    activeProjectId = projectId
+    activeWorkspaceIdentity = workspaceIdentity
     fileRequestId++
     fileError = null
 
-    if (!projectId) return
-    const projectState = state.getProjectState(projectId)
+    if (!source) return
+    const workspaceState = state.getWorkspaceState(source.identity)
     if (
-      projectState.rootLoaded
-      && projectState.selectedPath !== null
-      && projectState.fileContent === null
+      workspaceState.rootLoaded
+      && workspaceState.selectedPath !== null
+      && workspaceState.fileContent === null
     ) {
-      void selectFile(projectState.selectedPath)
+      void selectFile(workspaceState.selectedPath)
     }
   })
 

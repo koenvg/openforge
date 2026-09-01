@@ -1,18 +1,27 @@
 <script lang="ts">
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+  import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
 
   interface Props {
     api: FrontendOpenForgeAPI
     content: string
     filePath: string
-    projectId: string | null
+    workspaceSource: FileBrowserWorkspaceSource | null
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
     onOpenRepositoryPath?: (repositoryPath: string) => void | Promise<void>
   }
 
-  let { api, content, filePath, projectId, scrollTop = 0, onScrollTopChange, onOpenRepositoryPath }: Props = $props()
+  let {
+    api,
+    content,
+    filePath,
+    workspaceSource,
+    scrollTop = 0,
+    onScrollTopChange,
+    onOpenRepositoryPath,
+  }: Props = $props()
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
@@ -24,10 +33,10 @@
   }
 
   async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
-    if (!projectId) return null
+    if (!workspaceSource) return null
 
     try {
-      const imageContent = await api.fs.readFile({ projectId, path: repositoryPath })
+      const imageContent = await workspaceSource.readFile(repositoryPath)
       if (imageContent.type !== 'image' || !imageContent.content) return null
       return `data:${imageContent.mimeType ?? 'image/*'};base64,${imageContent.content}`
     } catch {
@@ -43,7 +52,6 @@
       appliedScrollKey = scrollKey
     }
   })
-
 </script>
 
 <div

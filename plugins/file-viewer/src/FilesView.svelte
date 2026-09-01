@@ -5,37 +5,50 @@
   import type { FileBrowserControllerState } from './lib/fileBrowserControllerState'
   import {
     countDefaultHiddenRootEntries,
-    createEmptyFileBrowserProjectState,
+    createEmptyFileBrowserWorkspaceState,
     flattenFileBrowserEntries,
-    getFileBrowserProjectState,
-    updateFileBrowserProjectState,
-    type FileBrowserProjectState,
+    getFileBrowserWorkspaceState,
+    updateFileBrowserWorkspaceState,
+    type FileBrowserWorkspaceState,
   } from './lib/fileExplorer'
   import { useFileSearchController } from './lib/fileSearchController.svelte'
   import { useFileSelectionController } from './lib/fileSelectionController.svelte'
   import { usePendingFileRevealController } from './lib/pendingFileRevealController.svelte'
   import { useRootLoadingController } from './lib/rootLoadingController.svelte'
-  import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
+  import { fileBrowserStates, pendingFileReveal } from './lib/stores'
+  import {
+    createProjectWorkspaceSource,
+    type FileBrowserWorkspaceSource,
+  } from './lib/workspaceSource'
 
   interface Props {
     api: FrontendOpenForgeAPI
     context: OpenForgeContextSnapshot
     projectName: string
     projectId: string | null
+    workspaceSource?: FileBrowserWorkspaceSource | null
   }
 
-  let { api, context: _context, projectId = null }: Props = $props()
+  let {
+    api,
+    context: _context,
+    projectName: _projectName,
+    projectId = null,
+    workspaceSource = undefined,
+  }: Props = $props()
 
-  $effect(() => {
-    $activeProjectId = projectId
-  })
+  const projectWorkspaceSource = $derived(
+    projectId ? createProjectWorkspaceSource(api, projectId) : null
+  )
+  const source = $derived(
+    workspaceSource === undefined ? projectWorkspaceSource : workspaceSource
+  )
 
   const controllerState: FileBrowserControllerState = {
-    get api() { return api },
-    getProjectId: () => $activeProjectId,
-    getProjectState: (currentProjectId) => getFileBrowserProjectState($fileBrowserStates, currentProjectId),
-    updateProjectState: (currentProjectId, updater) => {
-      fileBrowserStates.update((states) => updateFileBrowserProjectState(states, currentProjectId, updater))
+    getWorkspaceSource: () => source,
+    getWorkspaceState: (workspaceIdentity) => getFileBrowserWorkspaceState($fileBrowserStates, workspaceIdentity),
+    updateWorkspaceState: (workspaceIdentity, updater) => {
+      fileBrowserStates.update((states) => updateFileBrowserWorkspaceState(states, workspaceIdentity, updater))
     },
   }
 
@@ -44,26 +57,27 @@
   const fileSearch = useFileSearchController(controllerState)
   const pendingReveal = usePendingFileRevealController({
     state: controllerState,
-    getPendingPath: () => $pendingFileReveal,
-    clearPendingPath: () => pendingFileReveal.set(null),
+    getPendingReveal: () => $pendingFileReveal,
+    clearPendingReveal: (request) => pendingFileReveal.update((current) => (
+      current?.requestId === request.requestId ? null : current
+    )),
     setShowHiddenRootEntries: rootLoading.setShowHiddenRootEntries,
     toggleDir: rootLoading.toggleDir,
     selectFile: fileSelection.selectFile,
   })
 
-  const projectState = $derived.by((): FileBrowserProjectState => {
-    const currentProjectId = $activeProjectId
-    return currentProjectId
-      ? getFileBrowserProjectState($fileBrowserStates, currentProjectId)
-      : createEmptyFileBrowserProjectState()
+  const workspaceState = $derived.by((): FileBrowserWorkspaceState => {
+    return source
+      ? getFileBrowserWorkspaceState($fileBrowserStates, source.identity)
+      : createEmptyFileBrowserWorkspaceState()
   })
-  const rootEntries = $derived(projectState.rootEntries)
-  const expandedPaths = $derived(projectState.expandedPaths)
-  const selectedPath = $derived(projectState.selectedPath)
-  const fileContent = $derived(projectState.fileContent)
-  const showHiddenRootEntries = $derived(projectState.showHiddenRootEntries)
+  const rootEntries = $derived(workspaceState.rootEntries)
+  const expandedPaths = $derived(workspaceState.expandedPaths)
+  const selectedPath = $derived(workspaceState.selectedPath)
+  const fileContent = $derived(workspaceState.fileContent)
+  const showHiddenRootEntries = $derived(workspaceState.showHiddenRootEntries)
   const hiddenRootEntryCount = $derived(countDefaultHiddenRootEntries(rootEntries))
-  const flatEntries = $derived(flattenFileBrowserEntries(projectState))
+  const flatEntries = $derived(flattenFileBrowserEntries(workspaceState))
   const selectedEntry = $derived(
     selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
   )
@@ -72,8 +86,8 @@
   )
 
   const browserView = $derived.by((): FilesBrowserViewModel => ({
-    project: {
-      id: $activeProjectId,
+    workspace: {
+      identity: source?.identity ?? null,
       loading: rootLoading.loading,
       rootError: rootLoading.rootError,
     },
@@ -89,7 +103,7 @@
       flatEntries,
       expandedPaths,
       selectedPath,
-      treeScrollTop: projectState.treeScrollTop,
+      treeScrollTop: workspaceState.treeScrollTop,
       treeFocusRequest: fileSelection.treeFocusRequest,
       search: {
         active: fileSearch.active,
@@ -107,7 +121,7 @@
       selectedFileName,
       fileContent,
       fileError: fileSelection.fileError,
-      contentScrollTop: projectState.contentScrollTop,
+      contentScrollTop: workspaceState.contentScrollTop,
       previewFocusRequest: fileSelection.previewFocusRequest,
     },
   }))
@@ -139,5 +153,5 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <FilesBrowserSection {api} view={browserView} actions={browserActions} />
+  <FilesBrowserSection {api} workspaceSource={source} view={browserView} actions={browserActions} />
 </div>

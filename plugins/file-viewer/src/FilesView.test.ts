@@ -18,7 +18,7 @@ vi.mock('@lucide/svelte', () => ({
 
 import FilesView from './FilesView.svelte'
 import { get } from 'svelte/store'
-import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
+import { fileBrowserStates, pendingFileReveal, requestFileReveal } from './lib/stores'
 
 const fsReadDir = vi.fn()
 const fsReadFile = vi.fn()
@@ -82,7 +82,6 @@ function renderFilesView(props: { projectName?: string; projectId?: string | nul
 describe('plugin FilesView', () => {
   beforeEach(() => {
     cleanup()
-    activeProjectId.set(null)
     fileBrowserStates.set(new Map())
     pendingFileReveal.set(null)
     vi.clearAllMocks()
@@ -100,6 +99,7 @@ describe('plugin FilesView', () => {
       expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: null })
     })
   })
+
 
   it('shows visible copy while the root directory is loading', () => {
     vi.mocked(fsReadDir).mockReturnValue(new Promise(() => {}))
@@ -287,7 +287,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    pendingFileReveal.set('README.md')
+    requestFileReveal('README.md')
 
     await waitFor(() => {
       const previewPane = screen.getByRole('region', { name: 'README.md preview pane' })
@@ -358,7 +358,7 @@ describe('plugin FilesView', () => {
 
     expect(screen.queryByText('.openforge-dev/')).toBeNull()
 
-    pendingFileReveal.set('.openforge-dev/log.txt')
+    requestFileReveal('.openforge-dev/log.txt')
 
     await waitFor(() => {
       expect(screen.getByText('.openforge-dev/')).toBeTruthy()
@@ -564,7 +564,7 @@ describe('plugin FilesView', () => {
       expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: null })
     })
 
-    pendingFileReveal.set('src/components/Button.ts')
+    requestFileReveal('src/components/Button.ts')
 
     await waitFor(() => {
       expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
@@ -592,7 +592,7 @@ describe('plugin FilesView', () => {
     vi.clearAllMocks()
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
 
-    pendingFileReveal.set('src/utils.ts')
+    requestFileReveal('src/utils.ts')
 
     await waitFor(() => {
       expect(fsReadDir).not.toHaveBeenCalled()
@@ -636,7 +636,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('docs/')).toBeTruthy()
     })
 
-    pendingFileReveal.set('docs/guides/README.md')
+    requestFileReveal('docs/guides/README.md')
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'docs/guides/README.md' })
@@ -665,7 +665,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    pendingFileReveal.set('README.md')
+    requestFileReveal('README.md')
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
@@ -700,7 +700,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    pendingFileReveal.set('README.md')
+    requestFileReveal('README.md')
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'project-a', path: 'README.md' })
     })
@@ -729,7 +729,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    pendingFileReveal.set('src/secret.ts')
+    requestFileReveal('src/secret.ts')
 
     await waitFor(() => {
       expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
@@ -737,7 +737,10 @@ describe('plugin FilesView', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(fsReadFile).not.toHaveBeenCalled()
-    expect(get(pendingFileReveal)).toBe('src/secret.ts')
+    expect(get(pendingFileReveal)).toMatchObject({
+      workspaceIdentity: null,
+      path: 'src/secret.ts',
+    })
   })
 
   it('retries a failed reveal with the original reveal path', async () => {
@@ -753,7 +756,7 @@ describe('plugin FilesView', () => {
       expect(screen.getByText('src/')).toBeTruthy()
     })
 
-    pendingFileReveal.set('src/secret.ts')
+    requestFileReveal('src/secret.ts')
 
     await waitFor(() => {
       expect(screen.getByText('Unable to reveal src/secret.ts')).toBeTruthy()
@@ -773,7 +776,7 @@ describe('plugin FilesView', () => {
 
     renderFilesView()
 
-    pendingFileReveal.set('some/file.ts')
+    requestFileReveal('some/file.ts')
 
     await new Promise((resolve) => setTimeout(resolve, 50))
 

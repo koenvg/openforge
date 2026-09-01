@@ -1,13 +1,12 @@
-import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { FileBrowserProjectState } from './fileExplorer'
+import type { FileBrowserWorkspaceState } from './fileExplorer'
+import type { FileBrowserWorkspaceIdentity, FileBrowserWorkspaceSource } from './workspaceSource'
 
 export interface FileBrowserControllerState {
-  api: FrontendOpenForgeAPI
-  getProjectId(): string | null
-  getProjectState(projectId: string): FileBrowserProjectState
-  updateProjectState(
-    projectId: string,
-    updater: (state: FileBrowserProjectState) => FileBrowserProjectState,
+  getWorkspaceSource(): FileBrowserWorkspaceSource | null
+  getWorkspaceState(workspaceIdentity: FileBrowserWorkspaceIdentity): FileBrowserWorkspaceState
+  updateWorkspaceState(
+    workspaceIdentity: FileBrowserWorkspaceIdentity,
+    updater: (state: FileBrowserWorkspaceState) => FileBrowserWorkspaceState,
   ): void
 }
 
