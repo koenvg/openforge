@@ -43,6 +43,7 @@ export interface AppEventForwarder {
 }
 
 const DEFAULT_RECONNECT_DELAY_MS = 1_000
+export const MAX_SSE_FRAME_SIZE = 1024 * 1024
 
 function isEnvelope(value: unknown): value is OpenForgeEventEnvelope {
   return typeof value === 'object'
@@ -82,7 +83,6 @@ export function parseSseMessages(chunk: string): OpenForgeEventEnvelope[] {
 
 export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventForwarder {
   const abortController = new AbortController()
-  const decoder = new TextDecoder()
   let buffer = ''
   let lastEventId: string | null = null
   let readySettled = false
@@ -122,25 +122,19 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
     }
   }
 
-  function lastCompleteFrameBoundaryEnd(text: string): number {
-    let boundaryEnd = -1
-    const boundaryPattern = /\r?\n\r?\n/g
-    let match: RegExpExecArray | null = null
-    while ((match = boundaryPattern.exec(text)) !== null) {
-      boundaryEnd = match.index + match[0].length
-    }
-    return boundaryEnd
-  }
-
   function acceptChunk(chunk: string): void {
-    buffer += chunk
-    const boundaryEnd = lastCompleteFrameBoundaryEnd(buffer)
-    if (boundaryEnd === -1) return
+    const frames = `${buffer}${chunk}`.split(/\r?\n\r?\n/)
+    buffer = frames.pop() ?? ''
 
-    const complete = buffer.slice(0, boundaryEnd)
-    buffer = buffer.slice(boundaryEnd)
-    for (const envelope of parseSseMessages(complete)) {
-      forward(envelope)
+    if (frames.some(frame => frame.length > MAX_SSE_FRAME_SIZE) || buffer.length > MAX_SSE_FRAME_SIZE) {
+      buffer = ''
+      throw new Error(`SSE frame exceeded the ${MAX_SSE_FRAME_SIZE}-character limit`)
+    }
+
+    for (const frame of frames) {
+      for (const envelope of parseSseMessages(frame)) {
+        forward(envelope)
+      }
     }
   }
 
@@ -156,13 +150,27 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
 
   async function readEventStream(body: ReadableStream<Uint8Array>): Promise<void> {
     const reader = body.getReader()
+    const decoder = new TextDecoder()
+    buffer = ''
     try {
       while (!abortController.signal.aborted) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          const trailing = decoder.decode()
+          if (trailing) acceptChunk(trailing)
+          if (buffer.length > 0) {
+            throw new Error(`event stream ended with an unterminated SSE frame of ${buffer.length} characters`)
+          }
+          break
+        }
         if (value) acceptChunk(decoder.decode(value, { stream: true }))
       }
+    } catch (error) {
+      buffer = ''
+      await reader.cancel(error).catch(() => undefined)
+      throw error
     } finally {
+      buffer = ''
       reader.releaseLock()
     }
   }
