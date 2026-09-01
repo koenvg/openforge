@@ -1,4 +1,4 @@
-import { marked } from 'marked'
+import { marked, Renderer, type Tokens } from 'marked'
 import { sanitizeHtml } from './sanitize'
 
 
@@ -18,9 +18,16 @@ export interface ResolvedMarkdownMedia {
 /** Attribute holding the original URL of a `<img>`/`<a>` awaiting resolution. */
 export const MARKDOWN_REMOTE_MEDIA_ATTRIBUTE = 'data-markdown-remote-src'
 
+class MarkdownRenderer extends Renderer {
+  override table(token: Tokens.Table): string {
+    return `<div class="markdown-table-scroll">${super.table(token)}</div>`
+  }
+}
+
 const markedOptions = {
   gfm: true,
   breaks: true,
+  renderer: new MarkdownRenderer(),
 }
 
 const RENDERED_MARKDOWN_CACHE_CAPACITY = 100
