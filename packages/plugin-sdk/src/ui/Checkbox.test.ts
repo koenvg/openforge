@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import Checkbox from './Checkbox.svelte'
+import CheckboxTestWrapper from './CheckboxTestWrapper.svelte'
 
 function getCheckbox(name: string): HTMLInputElement {
   const checkbox = screen.getByRole('checkbox', { name })
@@ -54,5 +55,17 @@ describe('plugin-sdk Checkbox', () => {
     })
 
     expect(getCheckbox('Include generated files').disabled).toBe(true)
+  })
+
+  it('binds checked state and reports semantic state changes', async () => {
+    render(CheckboxTestWrapper)
+
+    const checkbox = getCheckbox('Include generated files')
+    await fireEvent.click(checkbox)
+
+    expect(checkbox.checked).toBe(true)
+    expect(screen.getByRole('status', { name: 'Bound state' }).textContent).toBe('true')
+    expect(screen.getByRole('status', { name: 'Last change' }).textContent).toBe('true')
+    expect(screen.getByRole('status', { name: 'Bound state at callback' }).textContent).toBe('true')
   })
 })

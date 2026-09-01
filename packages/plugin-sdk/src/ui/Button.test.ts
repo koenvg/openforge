@@ -55,4 +55,19 @@ describe('plugin-sdk Button', () => {
     expect(button.title).toBe('Run the review')
     expect(button.getAttribute('aria-describedby')).toBe('review-help')
   })
+
+  it('supports the semantic onClick callback without replacing native attributes', async () => {
+    const onClick = vi.fn()
+    render(Button, {
+      props: {
+        children,
+        onClick,
+        type: 'button',
+      },
+    })
+
+    await fireEvent.click(getButton('Run review'))
+
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
 })

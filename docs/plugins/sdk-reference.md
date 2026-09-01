@@ -25,7 +25,13 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/collapsibleSectionState` | Shared collapse-state helpers, including plugin key namespacing. |
 | `@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts` | Keyboard shortcut classification for task browser DevTools actions. |
 | `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button. |
+| `@openforge-app/plugin-sdk/ui/IconButton.svelte` | Accessible icon-only action. |
+| `@openforge-app/plugin-sdk/ui/TextField.svelte` | Labeled single-line field with linked help and validation. |
+| `@openforge-app/plugin-sdk/ui/Textarea.svelte` | Labeled multiline field with linked help and validation. |
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox. |
+| `@openforge-app/plugin-sdk/ui/Switch.svelte` | Labeled native boolean switch. |
+| `@openforge-app/plugin-sdk/ui/Badge.svelte` | Semantic status badge with caller-owned content. |
+| `@openforge-app/plugin-sdk/ui/Panel.svelte` | Token-driven content panel with optional header and footer. |
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Disclosure section with shared, persisted collapse state. |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Decorative file and folder icon. |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Sanitized Markdown rendering component. |
@@ -413,10 +419,18 @@ It also exports related host-runtime and alias record types.
 
 The SDK publishes the following plugin-safe Svelte components. Import the `.svelte` subpath shown here. Do not import renderer-private components or files under the SDK's `src` or `dist` directories.
 
+Core controls use scoped component CSS and semantic `--of-*` properties supplied by the active OpenForge theme. Plugins do not need Tailwind or daisyUI to use them. Layout and domain-specific presentation remain the caller's responsibility.
+
 | Component | Import path | Use |
 | --- | --- | --- |
 | `Button` | `@openforge-app/plugin-sdk/ui/Button.svelte` | A native button with OpenForge variants and sizes. |
+| `IconButton` | `@openforge-app/plugin-sdk/ui/IconButton.svelte` | A required-name icon-only button with OpenForge variants and sizes. |
+| `TextField` | `@openforge-app/plugin-sdk/ui/TextField.svelte` | A labeled native input with bindable value, help, and validation. |
+| `Textarea` | `@openforge-app/plugin-sdk/ui/Textarea.svelte` | A labeled native textarea with bindable value, help, and validation. |
 | `Checkbox` | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | A native checkbox with bindable checked and indeterminate states. |
+| `Switch` | `@openforge-app/plugin-sdk/ui/Switch.svelte` | A labeled native switch with bindable checked state and validation. |
+| `Badge` | `@openforge-app/plugin-sdk/ui/Badge.svelte` | A presentation-only status badge with semantic variants. |
+| `Panel` | `@openforge-app/plugin-sdk/ui/Panel.svelte` | A presentation-only panel with optional caller-owned header and footer. |
 | `CollapsibleSection` | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | A disclosure section with shared, persisted collapse state. |
 | `FileTypeIcon` | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | A decorative file or folder icon selected from a filename. |
 | `MarkdownContent` | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Sanitized Markdown with host-routed links and optional media handling. |
@@ -458,13 +472,60 @@ Use `Button` for plugin actions that need the standard OpenForge button treatmen
 | Prop | Type and default | Notes |
 | --- | --- | --- |
 | `children` | `Snippet`, required | Button content. |
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'error'`, default `'primary'` | Use `error` for destructive actions. |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'error'`, default `'primary'` | Use `danger` for destructive actions. `error` remains as a compatible alias. |
 | `size` | `'xs' \| 'sm' \| 'md' \| 'lg'`, default `'md'` | Changes the control size. |
+| `onClick` | `(event: MouseEvent) => void` | Semantic activation callback. |
 | Native button attributes | `HTMLButtonAttributes` | Attributes such as `type`, `disabled`, `aria-label`, `title`, `class`, and `onclick` pass through. |
 
-`Button` renders a native `<button>`. Native focus, keyboard activation, and disabled semantics apply. Supply visible text or an `aria-label` for icon-only buttons. A disabled button does not call `onclick`.
+`Button` renders a native `<button>`. Native focus, keyboard activation, and disabled semantics apply. Supply visible text or an `aria-label`. A disabled button calls neither `onclick` nor `onClick`. Scoped CSS reads only `--of-*` theme tokens and removes transitions when reduced motion is requested.
 
 In tests, query by role and accessible name, click the button, and assert the callback or disabled state. Do not assert variant or size class names.
+
+### `IconButton`
+
+Import `IconButton` from `@openforge-app/plugin-sdk/ui/IconButton.svelte` for icon-only actions. The required `label` remains the button's accessible name while the child snippet stays caller-owned.
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `label` | `string`, required | Sets the button's accessible name. |
+| `children` | `Snippet`, required | Icon content. Mark decorative SVG content with `aria-hidden="true"`. |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger'`, default `'ghost'` | Semantic visual treatment. |
+| `size` | `'xs' \| 'sm' \| 'md' \| 'lg'`, default `'md'` | Changes the square control size. |
+| `onClick` | `(event: MouseEvent) => void` | Semantic activation callback. |
+| Native button attributes | `HTMLButtonAttributes` except `aria-label` and `children` | `type`, `disabled`, `title`, `class`, and `onclick` pass through. |
+
+The component renders a native button, keeps a visible token-driven focus ring, and disables motion under `prefers-reduced-motion: reduce`. Test it by role and `label`; do not assert icon paths, variant attributes, or classes.
+
+### `TextField`
+
+Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. It renders a visible label and a native single-line input.
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `label` | `string`, required | Visible input label and accessible name. |
+| `value` | `string`, bindable, default `''` | Native input value. |
+| `helperText` | `string` | Help text linked through `aria-describedby`. |
+| `error` | `string \| null`, default `null` | Linked alert text. A non-empty value marks the field invalid. |
+| `invalid` | `boolean`, default `false` | Marks the field invalid when no error message is needed. |
+| `onValueChange` | `(value: string) => void` | Runs after input and bindable value updates. |
+| Native input attributes | `HTMLInputAttributes` except `children`, `size`, and `value` | `name`, `required`, `disabled`, `autocomplete`, `placeholder`, `class`, and native handlers pass through. |
+
+The component preserves a caller-provided `aria-describedby` value and appends its help and error ids. Its scoped CSS uses only `--of-*` tokens, keeps focus visible, and removes transitions for reduced motion. Test the native textbox by label, value, callback, disabled or required state, and linked validation text.
+
+### `Textarea`
+
+Import `Textarea` from `@openforge-app/plugin-sdk/ui/Textarea.svelte`. It uses the same label, validation, binding, and callback contract as `TextField` on a native `<textarea>`. Native textarea attributes such as `rows`, `maxlength`, `required`, `disabled`, `placeholder`, and `class` pass through.
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `label` | `string`, required | Visible textarea label and accessible name. |
+| `value` | `string`, bindable, default `''` | Native textarea value. |
+| `helperText` | `string` | Help text linked through `aria-describedby`. |
+| `error` | `string \| null`, default `null` | Linked alert text. A non-empty value marks the textarea invalid. |
+| `invalid` | `boolean`, default `false` | Marks the textarea invalid without adding a message. |
+| `onValueChange` | `(value: string) => void` | Runs after input and bindable value updates. |
+
+Test `Textarea` through its textbox role and visible label. Assert value binding, callback delivery, native attributes, and linked validation text rather than element nesting or classes.
 
 ### `Checkbox`
 
@@ -488,11 +549,39 @@ Wrap the checkbox in a visible label, or pass `aria-label` when no visible label
 | `checked` | `boolean`, bindable, default `false` | The native checked state. |
 | `indeterminate` | `boolean`, default `false` | Sets the DOM indeterminate state and exposes `aria-checked="mixed"`. |
 | `size` | `'xs' \| 'sm' \| 'md'`, default `'sm'` | Changes the control size. |
+| `onCheckedChange` | `(checked: boolean) => void` | Runs after native checked state and binding update. |
 | Native input attributes | `HTMLInputAttributes` except `checked`, `size`, and `type` | Attributes such as `disabled`, `required`, `name`, `aria-label`, `class`, and `onchange` pass through. The component always uses `type="checkbox"`. |
 
-`Checkbox` renders a native `<input type="checkbox">`. The caller owns its accessible name through a `<label>` or ARIA attribute. The component preserves native disabled and change behavior and exposes a mixed state for partially selected groups.
+`Checkbox` renders a native `<input type="checkbox">`. The caller owns its accessible name through a `<label>` or ARIA attribute. The component preserves native disabled and change behavior, exposes a mixed state, reads only `--of-*` theme tokens, and removes transitions for reduced motion.
 
 In tests, query `getByRole('checkbox', { name: ... })`, change it as a user would, and assert the bound value or callback. Use a partial-check assertion for `indeterminate`. Avoid class-based size assertions.
+
+### `Switch`
+
+Import `Switch` from `@openforge-app/plugin-sdk/ui/Switch.svelte`. It renders a visible label and a native checkbox with `role="switch"`.
+
+| Prop | Type and default | Notes |
+| --- | --- | --- |
+| `label` | `string`, required | Visible text and accessible name. |
+| `checked` | `boolean`, bindable, default `false` | Native checked state. |
+| `error` | `string \| null`, default `null` | Linked alert text. A non-empty value marks the switch invalid. |
+| `invalid` | `boolean`, default `false` | Marks the switch invalid without adding a message. |
+| `onCheckedChange` | `(checked: boolean) => void` | Runs after native state and binding update. |
+| Native input attributes | `HTMLInputAttributes` except `checked`, `children`, `size`, and `type` | `disabled`, `required`, `name`, `class`, and native handlers pass through. |
+
+The required visible label owns accessible naming. The native input remains keyboard focusable and disabled switches stay inert. Token-driven focus and state transitions respect reduced motion. Test the switch by role and label, then assert checked binding, callback delivery, disabled state, focus, and linked errors.
+
+### `Badge`
+
+Import `Badge` from `@openforge-app/plugin-sdk/ui/Badge.svelte`. `children` is required caller-owned content. `variant` accepts `'neutral'`, `'info'`, `'success'`, `'warning'`, or `'danger'` and defaults to `'neutral'`. Native span attributes such as `role`, `title`, `aria-label`, and `class` pass through.
+
+`Badge` owns only token-driven status presentation. The caller decides whether the content needs `role="status"`, another ARIA role, or no live semantics. Test its caller-visible content and selected semantics. Do not assert classes, data attributes, or nesting.
+
+### `Panel`
+
+Import `Panel` from `@openforge-app/plugin-sdk/ui/Panel.svelte`. `children` is required. Optional `header` and `footer` snippets remain caller-owned. `variant` accepts `'default'`, `'subtle'`, or `'raised'`. Native section attributes such as `aria-label`, `aria-labelledby`, `title`, and `class` pass through.
+
+`Panel` owns its surface, border, padding, and header or footer separators. The caller owns grids, scrolling, split ratios, loading, and domain content. Add an accessible name when the panel should appear as a region. Test the named section and caller content without asserting internal wrappers or classes.
 
 ### `CollapsibleSection`
 

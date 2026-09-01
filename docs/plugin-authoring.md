@@ -91,7 +91,13 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/prStatusPresentation` | Pull request status presentation helpers |
 | `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
 | `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button component |
+| `@openforge-app/plugin-sdk/ui/IconButton.svelte` | Shared accessible icon-only action |
+| `@openforge-app/plugin-sdk/ui/TextField.svelte` | Shared labeled single-line field |
+| `@openforge-app/plugin-sdk/ui/Textarea.svelte` | Shared labeled multiline field |
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox component |
+| `@openforge-app/plugin-sdk/ui/Switch.svelte` | Shared labeled boolean switch |
+| `@openforge-app/plugin-sdk/ui/Badge.svelte` | Shared semantic status badge |
+| `@openforge-app/plugin-sdk/ui/Panel.svelte` | Shared token-driven content panel |
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Shared plugin-safe collapsible section with persisted expanded/collapsed state |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Shared file-type icon component |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |

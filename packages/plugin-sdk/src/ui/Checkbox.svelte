@@ -7,6 +7,7 @@
     checked?: boolean
     indeterminate?: boolean
     size?: CheckboxSize
+    onCheckedChange?: (checked: boolean) => void
   }
 
   let {
@@ -15,6 +16,7 @@
     size = 'sm',
     class: className,
     onchange,
+    onCheckedChange,
     ...attributes
   }: Props = $props()
 
@@ -33,48 +35,54 @@
   class={["of-checkbox", className]}
   data-size={size}
   aria-checked={indeterminate ? 'mixed' : undefined}
-  {onchange}
+  onchange={(event) => {
+    checked = event.currentTarget.checked
+    onchange?.(event)
+    onCheckedChange?.(event.currentTarget.checked)
+  }}
 />
 
 <style>
   .of-checkbox {
-    width: 1.25rem;
-    height: 1.25rem;
+    box-sizing: border-box;
+    width: var(--of-control-height-compact);
+    height: var(--of-control-height-compact);
     flex: none;
     appearance: none;
     display: inline-grid;
     place-content: center;
     margin: 0;
-    border: 2px solid color-mix(in oklab, var(--color-base-content) 55%, transparent);
-    border-radius: 0.25rem;
-    background: var(--color-base-100);
-    color: var(--color-primary-content);
+    border: var(--of-border-width) solid var(--of-border-interactive);
+    border-radius: var(--of-radius-control);
+    background: var(--of-field);
+    color: var(--of-on-accent);
     cursor: pointer;
     transition:
-      background-color 150ms ease,
-      border-color 150ms ease,
-      box-shadow 150ms ease;
+      background-color var(--of-duration-fast) var(--of-ease-standard),
+      border-color var(--of-duration-fast) var(--of-ease-standard),
+      box-shadow var(--of-duration-fast) var(--of-ease-standard);
   }
 
   .of-checkbox::before {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 60%;
+    height: 60%;
     background: currentColor;
     clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 19%, 84% 4%, 39% 73%);
     content: '';
     transform: scale(0);
     transform-origin: center;
-    transition: transform 120ms ease-out;
+    transition: transform var(--of-duration-press) var(--of-ease-enter);
   }
 
   .of-checkbox:hover:not(:disabled) {
-    border-color: var(--color-primary);
+    border-color: var(--of-accent);
+    background: var(--of-field-hover);
   }
 
   .of-checkbox:checked,
   .of-checkbox:indeterminate {
-    border-color: var(--color-primary);
-    background: var(--color-primary);
+    border-color: var(--of-accent);
+    background: var(--of-accent);
   }
 
   .of-checkbox:checked::before {
@@ -82,40 +90,32 @@
   }
 
   .of-checkbox:indeterminate::before {
-    width: 0.625rem;
-    height: 0.125rem;
+    width: 55%;
+    height: var(--of-border-width);
     clip-path: none;
     transform: scale(1);
   }
 
   .of-checkbox:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
   }
 
   .of-checkbox:disabled {
+    border-color: var(--of-control-disabled);
+    background: var(--of-control-disabled);
+    color: var(--of-control-text-disabled);
     cursor: not-allowed;
-    opacity: 0.45;
   }
 
   .of-checkbox[data-size='xs'] {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .of-checkbox[data-size='xs']::before {
-    width: 0.625rem;
-    height: 0.625rem;
+    width: calc(var(--of-control-height-compact) - var(--of-space2));
+    height: calc(var(--of-control-height-compact) - var(--of-space2));
   }
 
   .of-checkbox[data-size='md'] {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .of-checkbox[data-size='md']::before {
-    width: 0.875rem;
-    height: 0.875rem;
+    width: var(--of-control-height);
+    height: var(--of-control-height);
   }
 
   @media (prefers-reduced-motion: reduce) {

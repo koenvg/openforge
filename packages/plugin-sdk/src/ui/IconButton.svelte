@@ -2,19 +2,21 @@
   import type { Snippet } from 'svelte'
   import type { HTMLButtonAttributes } from 'svelte/elements'
 
-  type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'error'
-  type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
+  type IconButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 
-  interface Props extends HTMLButtonAttributes {
+  interface Props extends Omit<HTMLButtonAttributes, 'aria-label' | 'children'> {
+    label: string
     children: Snippet
-    variant?: ButtonVariant
-    size?: ButtonSize
+    variant?: IconButtonVariant
+    size?: IconButtonSize
     onClick?: (event: MouseEvent) => void
   }
 
   let {
+    label,
     children,
-    variant = 'primary',
+    variant = 'ghost',
     size = 'md',
     class: className,
     disabled = false,
@@ -22,14 +24,13 @@
     onClick,
     ...attributes
   }: Props = $props()
-
-  let semanticVariant = $derived(variant === 'error' ? 'danger' : variant)
 </script>
 
 <button
   {...attributes}
   class={className}
-  data-variant={semanticVariant}
+  aria-label={label}
+  data-variant={variant}
   data-size={size}
   {disabled}
   onclick={(event) => {
@@ -45,34 +46,47 @@
 <style>
   button {
     box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: var(--of-control-height);
-    padding: 0 var(--of-space4);
-    border: var(--of-border-width) solid var(--of-accent);
+    display: inline-grid;
+    place-content: center;
+    width: var(--of-control-height);
+    height: var(--of-control-height);
+    padding: var(--of-space2);
+    border: var(--of-border-width) solid transparent;
     border-radius: var(--of-radius-control);
-    background: var(--of-accent);
-    color: var(--of-on-accent);
-    font-family: var(--of-font-sans);
-    font-size: var(--of-text-sm);
-    font-weight: var(--of-weight-medium);
-    line-height: var(--of-line-height-sm);
+    background: transparent;
+    color: var(--of-icon);
     cursor: pointer;
     transition:
       background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
-      box-shadow var(--of-duration-fast) var(--of-ease-standard);
+      color var(--of-duration-fast) var(--of-ease-standard);
   }
 
   button:hover:not(:disabled) {
-    border-color: var(--of-accent-hover);
-    background: var(--of-accent-hover);
+    background: var(--of-control-hover);
+    color: var(--of-text);
   }
 
   button:active:not(:disabled) {
+    background: var(--of-control-pressed);
+  }
+
+  button[data-variant='primary'] {
+    border-color: var(--of-accent);
+    background: var(--of-accent);
+    color: var(--of-on-accent);
+  }
+
+  button[data-variant='primary']:hover:not(:disabled) {
+    border-color: var(--of-accent-hover);
+    background: var(--of-accent-hover);
+    color: var(--of-on-accent);
+  }
+
+  button[data-variant='primary']:active:not(:disabled) {
     border-color: var(--of-accent-pressed);
     background: var(--of-accent-pressed);
+    color: var(--of-on-accent);
   }
 
   button[data-variant='secondary'] {
@@ -81,29 +95,8 @@
     color: var(--of-control-text);
   }
 
-  button[data-variant='secondary']:hover:not(:disabled) {
-    background: var(--of-control-hover);
-  }
-
-  button[data-variant='secondary']:active:not(:disabled) {
-    background: var(--of-control-pressed);
-  }
-
   button[data-variant='outline'] {
     border-color: var(--of-border-interactive);
-    background: transparent;
-    color: var(--of-text);
-  }
-
-  button[data-variant='outline']:hover:not(:disabled),
-  button[data-variant='ghost']:hover:not(:disabled) {
-    background: var(--of-control-hover);
-  }
-
-  button[data-variant='ghost'] {
-    border-color: transparent;
-    background: transparent;
-    color: var(--of-text);
   }
 
   button[data-variant='danger'] {
@@ -116,21 +109,20 @@
   button[data-variant='danger']:active:not(:disabled) {
     border-color: var(--of-status-danger);
     background: var(--of-status-danger);
+    color: var(--of-on-danger);
   }
 
   button[data-size='xs'],
   button[data-size='sm'] {
-    min-height: var(--of-control-height-compact);
-    padding-inline: var(--of-space3);
-    font-size: var(--of-text-xs);
-    line-height: var(--of-line-height-xs);
+    width: var(--of-control-height-compact);
+    height: var(--of-control-height-compact);
+    padding: var(--of-space1);
   }
 
   button[data-size='lg'] {
-    min-height: var(--of-control-height-touch);
-    padding-inline: var(--of-space5);
-    font-size: var(--of-text-md);
-    line-height: var(--of-line-height-md);
+    width: var(--of-control-height-touch);
+    height: var(--of-control-height-touch);
+    padding: var(--of-space3);
   }
 
   button:focus-visible {
