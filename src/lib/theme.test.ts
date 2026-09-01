@@ -1,84 +1,83 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import { getConfig, setConfig } from './ipc'
-import { applyTheme, getDiffTheme, initTheme, themeMode } from './theme'
+import { describe, expect, it, vi } from 'vitest'
+import { BUILTIN_DARK_THEME_ID, BUILTIN_LIGHT_THEME_ID, LIGHT_THEME } from './themeContract'
+import { createThemeRuntime, getDiffTheme } from './theme'
 
-vi.mock('./ipc', () => ({
-  getConfig: vi.fn().mockResolvedValue(null),
-  setConfig: vi.fn().mockResolvedValue(undefined),
-}))
+function createRuntime(storedTheme: string | null) {
+  const root = document.createElement('html')
+  const getStoredThemeId = vi.fn(async () => storedTheme)
+  const persistThemeId = vi.fn(async () => undefined)
+  const reportDiagnostic = vi.fn()
+  const runtime = createThemeRuntime({
+    root,
+    getStoredThemeId,
+    persistThemeId,
+    reportDiagnostic,
+  })
+  return { root, getStoredThemeId, persistThemeId, reportDiagnostic, runtime }
+}
 
-describe('theme', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    document.documentElement.removeAttribute('data-theme')
+describe('theme runtime', () => {
+  it('makes built-in light available and applied before asynchronous initialization', () => {
+    const { root, runtime } = createRuntime(null)
+
+    expect(get(runtime.registry.availableThemes).map((theme) => theme.id)).toContain(BUILTIN_LIGHT_THEME_ID)
+    expect(get(runtime.registry.selectedTheme).id).toBe(BUILTIN_LIGHT_THEME_ID)
+    expect(root.dataset.theme).toBe(BUILTIN_LIGHT_THEME_ID)
+    expect(root.style.getPropertyValue('--of-canvas')).toBe(LIGHT_THEME.tokens.canvas)
   })
 
-  afterEach(() => {
-    document.documentElement.removeAttribute('data-theme')
+  it.each([
+    ['light', BUILTIN_LIGHT_THEME_ID, 'light'],
+    ['dark', BUILTIN_DARK_THEME_ID, 'dark'],
+  ] as const)('migrates stored %s to its stable built-in id', async (stored, expectedId, appearance) => {
+    const { root, persistThemeId, runtime } = createRuntime(stored)
+
+    await runtime.initialize()
+
+    expect(root.dataset.theme).toBe(expectedId)
+    expect(root.dataset.themeAppearance).toBe(appearance)
+    expect(persistThemeId).toHaveBeenCalledWith(expectedId)
   })
 
-  describe('themeMode store', () => {
-    it('defaults to light', () => {
-      expect(get(themeMode)).toBe('light')
+  it('restores a stable contributed theme id after it has been registered', async () => {
+    const { persistThemeId, runtime } = createRuntime('com.example.theme:paper')
+    runtime.registry.registerContributedTheme({
+      ...LIGHT_THEME,
+      id: 'com.example.theme:paper',
+      label: 'Paper',
+    }, {
+      pluginId: 'com.example.theme',
+      generation: 3,
     })
+
+    await runtime.initialize()
+
+    expect(get(runtime.registry.selectedTheme).id).toBe('com.example.theme:paper')
+    expect(persistThemeId).toHaveBeenCalledWith('com.example.theme:paper')
   })
 
-  describe('applyTheme', () => {
-    it('sets data-theme attribute on document element for light', () => {
-      applyTheme('light')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('openforge')
-    })
+  it('persists and diagnoses built-in light fallback for an invalid or unavailable stored id', async () => {
+    const { persistThemeId, reportDiagnostic, runtime } = createRuntime('missing theme')
 
-    it('sets data-theme attribute on document element for dark', () => {
-      applyTheme('dark')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('openforge-dark')
-    })
+    await runtime.initialize()
 
-    it('updates the themeMode store', () => {
-      applyTheme('dark')
-      expect(get(themeMode)).toBe('dark')
-      applyTheme('light')
-      expect(get(themeMode)).toBe('light')
-    })
-
-    it('persists preference via setConfig', () => {
-      applyTheme('dark')
-      expect(setConfig).toHaveBeenCalledWith('theme', 'dark')
-    })
+    expect(get(runtime.registry.selectedTheme).id).toBe(BUILTIN_LIGHT_THEME_ID)
+    expect(persistThemeId).toHaveBeenCalledWith(BUILTIN_LIGHT_THEME_ID)
+    expect(reportDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'theme-unavailable',
+      themeId: 'missing theme',
+      fallbackThemeId: BUILTIN_LIGHT_THEME_ID,
+    }))
   })
 
-  describe('initTheme', () => {
-    it('loads stored theme and applies it', async () => {
-      vi.mocked(getConfig).mockResolvedValue('dark')
-      await initTheme()
-      expect(getConfig).toHaveBeenCalledWith('theme')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('openforge-dark')
-      expect(get(themeMode)).toBe('dark')
-    })
+  it('retains the legacy light/dark adapter for untouched callers', async () => {
+    const { root, runtime } = createRuntime(null)
 
-    it('defaults to light when no stored theme', async () => {
-      vi.mocked(getConfig).mockResolvedValue(null)
-      await initTheme()
-      expect(document.documentElement.getAttribute('data-theme')).toBe('openforge')
-      expect(get(themeMode)).toBe('light')
-    })
+    await runtime.applyTheme('dark')
 
-    it('defaults to light on config error', async () => {
-      vi.mocked(getConfig).mockRejectedValue(new Error('config error'))
-      await initTheme()
-      expect(document.documentElement.getAttribute('data-theme')).toBe('openforge')
-      expect(get(themeMode)).toBe('light')
-    })
-  })
-
-  describe('getDiffTheme', () => {
-    it('returns light for light mode', () => {
-      expect(getDiffTheme('light')).toBe('light')
-    })
-
-    it('returns dark for dark mode', () => {
-      expect(getDiffTheme('dark')).toBe('dark')
-    })
+    expect(root.dataset.theme).toBe(BUILTIN_DARK_THEME_ID)
+    expect(get(runtime.themeMode)).toBe('dark')
+    expect(getDiffTheme('dark')).toBe('dark')
   })
 })

@@ -8,6 +8,7 @@ describe('loadAppStartupData', () => {
 
     await loadAppStartupData({
       initializePluginRuntime: vi.fn(async () => { calls.push('plugins') }),
+      initializeTheme: vi.fn(async () => { calls.push('theme') }),
       loadProjects: vi.fn(async () => { calls.push('projects') }),
       getAppMode: vi.fn(async () => { calls.push('mode'); return 'standard' }),
       setAppMode,
@@ -17,6 +18,7 @@ describe('loadAppStartupData', () => {
 
     expect(calls).toEqual([
       'plugins',
+      'theme',
       'projects',
       'mode',
       'set-app-mode:standard',
@@ -33,6 +35,7 @@ describe('loadAppStartupData', () => {
 
     await loadAppStartupData({
       initializePluginRuntime: vi.fn(async () => { throw new Error('runtime failed') }),
+      initializeTheme: vi.fn(async () => undefined),
       loadProjects,
       getAppMode: vi.fn(async () => { throw new Error('mode failed') }),
       setAppMode: vi.fn(),
@@ -45,5 +48,30 @@ describe('loadAppStartupData', () => {
     expect(loadProjectAttention).toHaveBeenCalledOnce()
     expect(loadTasks).toHaveBeenCalledOnce()
     expect(logError).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for app plugin activation before restoring a saved contributed theme', async () => {
+    let finishPluginActivation: () => void = () => {}
+    const pluginActivation = new Promise<void>((resolve) => {
+      finishPluginActivation = resolve
+    })
+    const initializeTheme = vi.fn(async () => undefined)
+    const startup = loadAppStartupData({
+      initializePluginRuntime: vi.fn(() => pluginActivation),
+      initializeTheme,
+      loadProjects: vi.fn(async () => undefined),
+      getAppMode: vi.fn(async () => null),
+      setAppMode: vi.fn(),
+      loadProjectAttention: vi.fn(),
+      loadTasks: vi.fn(async () => undefined),
+    })
+
+    await Promise.resolve()
+    expect(initializeTheme).not.toHaveBeenCalled()
+
+    finishPluginActivation()
+    await startup
+
+    expect(initializeTheme).toHaveBeenCalledOnce()
   })
 })

@@ -1,5 +1,7 @@
 import { mount } from 'svelte'
 import '../../../../src/app.css'
+import { DARK_THEME, LIGHT_THEME } from '../../../../src/lib/themeContract'
+import { createThemeDocumentAdapter } from '../../../../src/lib/themeDocumentAdapter'
 import mermaidDiagrams from '../visual-fixtures/mermaid-diagrams.md?raw'
 import proseAndLists from '../visual-fixtures/prose-and-lists.md?raw'
 import structuredContent from '../visual-fixtures/structured-content.md?raw'
@@ -15,13 +17,13 @@ const fixtures = {
 
 const params = new URLSearchParams(window.location.search)
 const fixtureName = params.get('fixture') ?? 'prose-and-lists'
-const theme = params.get('theme') === 'dark' ? 'openforge-dark' : 'openforge'
+const theme = params.get('theme') === 'dark' ? DARK_THEME : LIGHT_THEME
 const surface = params.get('surface') === 'preview' ? 'preview' : 'rich-diff'
 const content = fixtures[fixtureName as keyof typeof fixtures]
 
 if (!content) throw new Error(`Unknown Markdown visual fixture: ${fixtureName}`)
 
-document.documentElement.dataset.theme = theme
+createThemeDocumentAdapter(document.documentElement).apply(theme)
 
 mount(RichMarkdownDiffVisualHarness, {
   target: document.getElementById('app')!,

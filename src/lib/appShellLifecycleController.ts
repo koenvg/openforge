@@ -7,6 +7,7 @@ import { registerAppShortcuts } from './appShortcuts'
 import type { AppShortcutHandlers } from './appShortcuts'
 import { loadAppStartupData } from './appStartup'
 import { getAppMode } from './ipc'
+import { initTheme } from './theme'
 import {
   initializePluginRuntime,
   loadEnabledForApp,
@@ -72,6 +73,7 @@ export function createAppShellLifecycleController(options: AppShellLifecycleCont
         await initializePluginRuntime()
         await loadEnabledForApp()
       },
+      initializeTheme: initTheme,
       loadProjects: options.appData.loadProjects,
       getAppMode,
       setAppMode: options.setAppMode,

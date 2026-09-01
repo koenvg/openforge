@@ -12,39 +12,39 @@
 @plugin "daisyui";
 
 @plugin "daisyui/theme" {
-  name: "openforge";
+  name: "openforge-light";
   default: true;
   prefersdark: false;
   color-scheme: light;
 
-  --color-base-100: #FFFFFF;
-  --color-base-200: #F7F7FA;
-  --color-base-300: #E6E7ED;
-  --color-base-content: #101224;
-  --color-primary: #4A2ED4;
-  --color-primary-content: #FFFFFF;
-  --color-secondary: #6F7082;
-  --color-secondary-content: #FFFFFF;
-  --color-accent: #6D61F0;
-  --color-accent-content: #FFFFFF;
-  --color-neutral: #101224;
-  --color-neutral-content: #FFFFFF;
-  --color-info: #4A2ED4;
-  --color-info-content: #FFFFFF;
-  --color-success: #4CAF50;
-  --color-success-content: #052E16;
-  --color-warning: #E8A820;
-  --color-warning-content: #451A03;
-  --color-error: #DC2626;
-  --color-error-content: #FFFFFF;
+  --color-base-100: var(--of-surface);
+  --color-base-200: var(--of-surface-subtle);
+  --color-base-300: var(--of-border);
+  --color-base-content: var(--of-text);
+  --color-primary: var(--of-accent);
+  --color-primary-content: var(--of-on-accent);
+  --color-secondary: var(--of-control);
+  --color-secondary-content: var(--of-control-text);
+  --color-accent: var(--of-accent);
+  --color-accent-content: var(--of-on-accent);
+  --color-neutral: var(--of-text);
+  --color-neutral-content: var(--of-text-inverse);
+  --color-info: var(--of-info);
+  --color-info-content: var(--of-on-info);
+  --color-success: var(--of-success);
+  --color-success-content: var(--of-on-success);
+  --color-warning: var(--of-warning);
+  --color-warning-content: var(--of-on-warning);
+  --color-error: var(--of-danger);
+  --color-error-content: var(--of-on-danger);
 
-  --radius-selector: 0.625rem;
-  --radius-field: 0.625rem;
-  --radius-box: 1.125rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
+  --radius-selector: var(--of-radius-round);
+  --radius-field: var(--of-radius-control);
+  --radius-box: var(--of-radius-container);
+  --size-selector: var(--of-space-2);
+  --size-field: var(--of-space-2);
+  --border: var(--of-border-width);
+  --depth: 0;
   --noise: 0;
 }
 
@@ -54,58 +54,47 @@
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #1C1A1F;
-  --color-base-200: #14121A;
-  --color-base-300: #2E2A34;
-  --color-base-content: #D8D4DE;
-  --color-primary: #8B82E0;
-  --color-primary-content: #FFFFFF;
-  --color-secondary: #9A98AE;
-  --color-secondary-content: #1C1A1F;
-  --color-accent: #8B82E0;
-  --color-accent-content: #FFFFFF;
-  --color-neutral: #14121A;
-  --color-neutral-content: #E8E4EE;
-  --color-info: #8B82E0;
-  --color-info-content: #FFFFFF;
-  --color-success: #4CAF50;
-  --color-success-content: #052E16;
-  --color-warning: #E8A820;
-  --color-warning-content: #451A03;
-  --color-error: #DC2626;
-  --color-error-content: #FFFFFF;
+  --color-base-100: var(--of-surface);
+  --color-base-200: var(--of-surface-subtle);
+  --color-base-300: var(--of-border);
+  --color-base-content: var(--of-text);
+  --color-primary: var(--of-accent);
+  --color-primary-content: var(--of-on-accent);
+  --color-secondary: var(--of-control);
+  --color-secondary-content: var(--of-control-text);
+  --color-accent: var(--of-accent);
+  --color-accent-content: var(--of-on-accent);
+  --color-neutral: var(--of-text);
+  --color-neutral-content: var(--of-text-inverse);
+  --color-info: var(--of-info);
+  --color-info-content: var(--of-on-info);
+  --color-success: var(--of-success);
+  --color-success-content: var(--of-on-success);
+  --color-warning: var(--of-warning);
+  --color-warning-content: var(--of-on-warning);
+  --color-error: var(--of-danger);
+  --color-error-content: var(--of-on-danger);
 
-  --radius-selector: 0.625rem;
-  --radius-field: 0.625rem;
-  --radius-box: 1.125rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
+  --radius-selector: var(--of-radius-round);
+  --radius-field: var(--of-radius-control);
+  --radius-box: var(--of-radius-container);
+  --size-selector: var(--of-space-2);
+  --size-field: var(--of-space-2);
+  --border: var(--of-border-width);
+  --depth: 0;
   --noise: 0;
 }
 
 :root {
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --of-space-1: 0.5rem;
-  --of-space-2: 1rem;
-  --of-space-3: 1.5rem;
-  --of-space-4: 2rem;
-  --of-surface: var(--color-base-100);
-  --of-surface-subtle: var(--color-base-200);
-  --of-text: var(--color-base-content);
-  --of-divider: var(--color-base-300);
-  --of-focus: var(--color-primary);
-  --of-motion-fast: 160ms;
-  --of-shadow-surface: 0 1px 2px color-mix(in srgb, var(--color-base-content) 8%, transparent);
-  --of-review-canvas: #F7F6F2;
-  --of-agent-terminal-bg: var(--term-background);
-  --of-agent-terminal-border: var(--color-base-300);
-  --of-agent-terminal-text: var(--term-foreground);
-  --of-agent-terminal-muted: color-mix(in srgb, var(--term-foreground) 62%, transparent);
-}
-[data-theme="openforge-dark"] {
-  --of-review-canvas: var(--color-base-200);
+  font-family: var(--of-font-sans);
+  --of-divider: var(--of-border);
+  --of-focus: var(--of-focus-ring);
+  --of-motion-fast: var(--of-duration-fast);
+  --of-review-canvas: var(--of-code-canvas);
+  --of-agent-terminal-bg: var(--of-terminal-background);
+  --of-agent-terminal-border: var(--of-code-border);
+  --of-agent-terminal-text: var(--of-terminal-foreground);
+  --of-agent-terminal-muted: var(--of-code-muted);
 }
 
 /* The board uses the shared application palette with a restrained surface shadow. */
@@ -179,7 +168,7 @@
 }
 
 /* Soft chip tokens — for PR/review metadata pills */
-:root, [data-theme="openforge"] {
+:root, [data-theme="openforge-light"] {
   --chip-soft-bg: #F7F7FA;
   --chip-soft-text: #737489;
 }
@@ -189,7 +178,7 @@
 }
 
 /* Chip color tokens — light theme */
-:root, [data-theme="openforge"] {
+:root, [data-theme="openforge-light"] {
   --chip-running-bg: #EFF8F1;
   --chip-running-dot: #22C55E;
   --chip-running-text: #2D8B6F;
@@ -232,54 +221,29 @@
 }
 
 /* Light terminal palette: GitHub Light Default (Ghostty-compatible). */
-:root, [data-theme="openforge"] {
-  --term-background: #FFFFFF;
-  --term-foreground: #1F2328;
-  --term-cursor: #0969DA;
-  --term-cursor-accent: #FFFFFF;
-  --term-selection-background: #0969DA33;
-  --term-selection-foreground: #1F2328;
-  --term-black: #24292F;
-  --term-red: #CF222E;
-  --term-green: #116329;
-  --term-yellow: #4D2D00;
-  --term-blue: #0969DA;
-  --term-magenta: #8250DF;
-  --term-cyan: #1B7C83;
-  --term-white: #6E7781;
-  --term-bright-black: #57606A;
-  --term-bright-red: #A40E26;
-  --term-bright-green: #1A7F37;
-  --term-bright-yellow: #633C01;
-  --term-bright-blue: #218BFF;
-  --term-bright-magenta: #A475F9;
-  --term-bright-cyan: #3192AA;
-  --term-bright-white: #8C959F;
-}
-
-[data-theme="openforge-dark"] {
-  --term-background: #1C1A1F;
-  --term-foreground: #D8D4DE;
-  --term-cursor: #D8D4DE;
-  --term-cursor-accent: #1C1A1F;
-  --term-selection-background: #2E2A34;
-  --term-selection-foreground: #D8D4DE;
-  --term-black: #454250;
-  --term-red: #F87171;
-  --term-green: #66BB6A;
-  --term-yellow: #FACC15;
-  --term-blue: #8B82E0;
-  --term-magenta: #C084FC;
-  --term-cyan: #22D3EE;
-  --term-white: #D8D4DE;
-  --term-bright-black: #9A98AE;
-  --term-bright-red: #FCA5A5;
-  --term-bright-green: #81C784;
-  --term-bright-yellow: #FDE68A;
-  --term-bright-blue: #A9A0F0;
-  --term-bright-magenta: #D8B4FE;
-  --term-bright-cyan: #67E8F9;
-  --term-bright-white: #E8E4EE;
+:root, [data-theme="openforge-light"] {
+  --term-background: var(--of-terminal-background);
+  --term-foreground: var(--of-terminal-foreground);
+  --term-cursor: var(--of-terminal-cursor);
+  --term-cursor-accent: var(--of-terminal-cursor-accent);
+  --term-selection-background: var(--of-terminal-selection-background);
+  --term-selection-foreground: var(--of-terminal-selection-foreground);
+  --term-black: var(--of-terminal-black);
+  --term-red: var(--of-terminal-red);
+  --term-green: var(--of-terminal-green);
+  --term-yellow: var(--of-terminal-yellow);
+  --term-blue: var(--of-terminal-blue);
+  --term-magenta: var(--of-terminal-magenta);
+  --term-cyan: var(--of-terminal-cyan);
+  --term-white: var(--of-terminal-white);
+  --term-bright-black: var(--of-terminal-bright-black);
+  --term-bright-red: var(--of-terminal-bright-red);
+  --term-bright-green: var(--of-terminal-bright-green);
+  --term-bright-yellow: var(--of-terminal-bright-yellow);
+  --term-bright-blue: var(--of-terminal-bright-blue);
+  --term-bright-magenta: var(--of-terminal-bright-magenta);
+  --term-bright-cyan: var(--of-terminal-bright-cyan);
+  --term-bright-white: var(--of-terminal-bright-white);
 }
 
 /* Status border indicators — left-border accent, no gradients */

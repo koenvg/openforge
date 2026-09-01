@@ -2,6 +2,7 @@ type LogError = (message: string, error: unknown) => void
 
 export interface AppStartupDeps {
   initializePluginRuntime(): Promise<void>
+  initializeTheme(): Promise<void>
   loadProjects(): Promise<void>
   getAppMode(): Promise<string | null>
   setAppMode(appMode: string | null): void
@@ -21,6 +22,12 @@ export async function loadAppStartupData(deps: AppStartupDeps): Promise<void> {
     await deps.initializePluginRuntime()
   } catch (e) {
     logError('[App] Failed to initialize plugin runtime:', e)
+  }
+
+  try {
+    await deps.initializeTheme()
+  } catch (e) {
+    logError('[App] Failed to initialize theme:', e)
   }
 
   await deps.loadProjects()

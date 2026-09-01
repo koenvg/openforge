@@ -8,6 +8,7 @@ import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { callOrder, persistInstalledPluginRow } from './App.test-fixtures/ipc'
 import {
   mockActivatePlugin,
+  mockLoadEnabledForApp,
   mockLoadEnabledForProject,
 } from './App.test-fixtures/plugin-runtime'
 import {
@@ -30,6 +31,29 @@ async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockIns
 
 describe('App startup data loading', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
+  it('does not present the normal shell until app plugin activation and theme restoration complete', async () => {
+    let finishPluginActivation: () => void = () => {}
+    mockLoadEnabledForApp.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishPluginActivation = resolve
+    }))
+    const App = (await import('./App.svelte')).default
+
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(mockLoadEnabledForApp).toHaveBeenCalledOnce()
+    })
+    const shell = document.querySelector<HTMLElement>('[data-app-ready]')
+    expect(shell).not.toBeNull()
+    expect(shell?.dataset.appReady).toBe('false')
+    expect(shell?.style.opacity).toBe('0')
+    finishPluginActivation()
+    await vi.waitFor(() => {
+      expect(shell?.dataset.appReady).toBe('true')
+      expect(shell?.style.opacity).toBe('1')
+    })
+  })
+
   it('still loads projects when builtin plugin persistence fails', async () => {
     await withSuppressedExpectedConsoleError(async () => {
       const { registerBuiltinPlugin, getProjects } = await import('./lib/ipc')

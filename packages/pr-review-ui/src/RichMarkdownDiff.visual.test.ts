@@ -31,7 +31,7 @@ beforeAll(async () => {
     plugins: [tailwindcss(), svelte()],
     resolve: {
       alias: [
-        ...createOpenForgePluginSdkSourceAliases(new URL('../../../', import.meta.url)),
+        ...createOpenForgePluginSdkSourceAliases(repoRoot),
         ...createDaisyUiTailwindPluginAliases(),
       ],
     },

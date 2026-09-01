@@ -51,6 +51,7 @@
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
+  let appReady = $state(false)
   let showProjectSwitcher = $state(false)
   let showAttentionOverview = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
@@ -272,7 +273,11 @@
   })
 
   onMount(() => {
-    void lifecycle.start()
+    let mounted = true
+    void lifecycle.start().then(() => {
+      if (mounted) appReady = true
+    })
+    return () => { mounted = false }
   })
 
   onDestroy(() => {
@@ -280,7 +285,12 @@
   })
 </script>
 
-<div class="flex h-screen overflow-hidden bg-base-100">
+<div
+  class="flex h-screen overflow-hidden bg-base-100"
+  style:opacity={appReady ? 1 : 0}
+  inert={!appReady}
+  data-app-ready={appReady}
+>
   <AppSidebar
     collapsed={appSidebarCollapsed}
     currentView={$currentView}
