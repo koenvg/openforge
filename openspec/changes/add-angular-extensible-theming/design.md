@@ -71,11 +71,13 @@ The spike also ran `pnpm build` successfully with the host fixture mounted. Afte
 
 The public boundary is therefore non-negotiable: OpenForge components define their own properties, bindable values, `on`-prefixed callbacks, validation errors, behavior tests, and documentation. They may import Bits UI internally, but they must not extend its prop types, re-export its symbols, expose its event objects, mention its compound parts in errors, or select elements by Bits UI implementation attributes in tests.
 
-#### Angular visual references
+#### Visual direction
 
-The desktop themes adapt the website's angular visual language rather than copy its marketing layout. Both themes use visible one-pixel construction lines, flat layered planes, compact geometry, restrained blue and violet accents, and low-radius corners. Borders establish hierarchy before shadows. Soft shadows are reserved for floating layers. Decorative glow, glass cards, large pills, and rounded dashboard tiles are out of character.
+The built-in themes combine three concept directions. Gallery Grid supplies the pale neutral canvas, hairline grid, generous spacing, and sparse accents. Capsule Rail supplies the rounded app shell, icon rail, and pill-shaped navigation selections. Soft Editorial Workbench supplies the hierarchy: narrow navigation, a dominant Agent and Review work area, and a slim Changes and attention index.
 
-The light reference comes directly from the website palette: warm off-white canvas, white work surfaces, blue focus and action color, violet secondary emphasis, mint success, amber warning, and near-black text. The dark reference preserves those relationships without inverting the light theme. It uses blue-black canvas layers, cool gray text, lighter accents, and independently checked contrast.
+The rule is simple: round the shell and navigation selections; keep work surfaces square. Inner panels use 0-4px corners, shared one-pixel borders, and no independent card shadows. Color marks focus, action, or status instead of decorating whole regions.
+
+The light theme keeps the website-derived warm off-white canvas, white work surfaces, blue focus and action color, restrained violet, mint, amber, and near-black text. The dark theme preserves the same hierarchy with blue-black canvas layers, cool gray text, and lighter accents. Both use independently checked contrast.
 
 | Semantic role | Angular light | Angular dark |
 |---------------|---------------|--------------|
@@ -114,7 +116,7 @@ Primary, secondary, and muted text exceed WCAG AA against their normal surfaces.
 | Status | `statusNeutral`, `statusRunning`, `statusWaiting`, `statusSuccess`, `statusWarning`, `statusDanger`, with matching subtle containers and foregrounds | Task and session state. Status names remain domain-specific even when values share semantic feedback colors. |
 | Code and review | `codeCanvas`, `codeText`, `codeMuted`, `codeBorder`, `diffAdded`, `diffAddedSubtle`, `diffRemoved`, `diffRemovedSubtle`, `diffChanged`, `diffChangedSubtle` | Markdown code, source review, and syntax-host backgrounds. Syntax grammars remain package-owned. |
 | Terminal | `background`, `foreground`, `cursor`, `cursorAccent`, `selectionBackground`, `selectionForeground`, plus the sixteen ANSI colors | One complete terminal palette carried in the selected theme presentation. |
-| Geometry | `borderWidth`, `focusWidth`, `radiusControl`, `radiusContainer`, `radiusOverlay`, `radiusRound`, `controlHeightCompact`, `controlHeight`, `controlHeightTouch` | Shared component proportions and daisyUI compatibility mapping. |
+| Geometry | `borderWidth`, `focusWidth`, `radiusControl`, `radiusContainer`, `radiusOverlay`, `radiusShell`, `radiusRound`, `controlHeightCompact`, `controlHeight`, `controlHeightTouch` | Shared component proportions and daisyUI compatibility mapping. |
 | Spacing | `space1` through `space9` | A fixed `2, 4, 6, 8, 12, 16, 24, 32, 48px` scale. Components do not invent intermediate spacing. |
 | Typography | `fontSans`, `fontMono`, `textXs`, `textSm`, `textMd`, `textLg`, `textXl`, `weightRegular`, `weightMedium`, `weightSemibold`, and matching line heights | Shared control, content, title, and code metrics. |
 | Elevation | `shadowSurface`, `shadowRaised`, `shadowOverlay` | Static surfaces, popovers, and dialogs. Borders remain the primary separation method. |
@@ -126,9 +128,11 @@ The CSS adapter exposes these roles as documented `--of-*` properties. Public co
 
 The angular system uses a 4px base rhythm with 2px and 6px available for optical corrections. Standard controls are 36px high, compact controls are 28px, and touch-oriented controls are 44px. Icon-only controls keep a 36px visual box and at least a 40px hit area in desktop layouts.
 
-Control corners are 3px. Containers and floating layers are 4px. Fully round geometry is reserved for status dots, avatars, and explicit pill badges. Panels sit edge to edge in dense work areas and use shared borders rather than independent card shadows. Nested surfaces may step through canvas, surface, and subtle surface, but must not create more than three simultaneous elevation levels.
+Control corners are 3px. Work containers and floating layers use 0-4px corners. The app shell and primary icon rail use `radiusShell`, with 24px as the built-in reference. Fully round geometry is reserved for status dots, avatars, pill badges, and selected navigation rows. Work panels sit edge to edge and share borders instead of using card shadows.
 
-One-pixel borders define panels and groups. Keyboard focus uses a 2px ring with a 2px offset. Static surfaces use no shadow or a 2px offset construction shadow. Popovers use the raised shadow. Dialogs use the overlay shadow and scrim. Layout grids, split panes, and feature-owned responsive behavior remain caller-owned.
+The icon and task navigation stay narrow, Agent and Review dominate the work area, and Changes and attention remain a slim index. Space separates groups before another surface is added. Nested surfaces may step through canvas, surface, and subtle surface, but must not create more than three simultaneous elevation levels.
+
+One-pixel borders define panels and groups. Keyboard focus uses a 2px ring with a 2px offset. Static work surfaces use no shadow. The app shell may use the surface shadow, popovers use the raised shadow, and dialogs use the overlay shadow and scrim. Layout grids, split panes, and feature-owned responsive behavior remain caller-owned.
 
 #### Typography
 
