@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import MarkdownFilePreview from './MarkdownFilePreview.svelte'
+import { createProjectWorkspaceSource } from './lib/workspaceSource'
 
 const fsReadFile = vi.fn()
 const openUrl = vi.fn()
@@ -30,12 +31,13 @@ describe('MarkdownFilePreview', () => {
       throw new Error(`Unexpected file read: ${request.path}`)
     })
 
+    const api = makeApi()
     render(MarkdownFilePreview, {
       props: {
-        api: makeApi(),
+        api,
         content: ['# Guide', '![Same directory](./diagram.png)', '![Parent directory](../assets/logo.png)'].join('\n'),
         filePath: 'docs/guides/README.md',
-        projectId: 'project-1',
+        workspaceSource: createProjectWorkspaceSource(api, 'project-1'),
       },
     })
 
@@ -59,7 +61,7 @@ describe('MarkdownFilePreview', () => {
         api: makeApi(),
         content: '[Setup](../SETUP.md)',
         filePath: 'docs/guides/README.md',
-        projectId: 'project-1',
+        workspaceSource: null,
         onOpenRepositoryPath,
       },
     })

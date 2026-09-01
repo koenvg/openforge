@@ -59,10 +59,9 @@ export interface FilePreviewActions {
   onOpenRepositoryPath: (repositoryPath: string) => void | Promise<void>
   onReturnFocusToSelectedFile: () => void
 }
-
 export interface FilesBrowserViewModel {
-  project: {
-    id: string | null
+  workspace: {
+    identity: string | null
     loading: boolean
     rootError: string | null
   }

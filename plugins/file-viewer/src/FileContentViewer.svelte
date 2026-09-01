@@ -4,6 +4,7 @@
   import type { FileContent } from '@openforge-app/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
+  import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
   import { onDestroy } from 'svelte'
 
   const RETURN_TO_TREE_BUTTON_CLASS = 'btn btn-outline btn-sm h-9 min-h-9 shrink-0 px-3 text-xs font-medium'
@@ -13,7 +14,7 @@
     content: FileContent | null
     fileName: string
     filePath: string
-    projectId: string | null
+    workspaceSource: FileBrowserWorkspaceSource | null
     error: string | null
     modifiedAt: number | null
     scrollTop?: number
@@ -29,7 +30,7 @@
     content,
     fileName,
     filePath,
-    projectId,
+    workspaceSource,
     error,
     modifiedAt = null,
     scrollTop = 0,
@@ -197,7 +198,7 @@
             {api}
             content={content.content}
             {filePath}
-            {projectId}
+            {workspaceSource}
             {scrollTop}
             onScrollTopChange={onScrollTopChange}
             {onOpenRepositoryPath}

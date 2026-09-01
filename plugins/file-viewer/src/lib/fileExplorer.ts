@@ -1,4 +1,5 @@
 import type { FileContent, FileEntry } from '@openforge-app/plugin-sdk/domain'
+import type { FileBrowserWorkspaceIdentity } from './workspaceSource'
 
 const DEFAULT_HIDDEN_ROOT_ENTRY_NAMES = new Set([
   '.openforge-dev',
@@ -11,7 +12,7 @@ const DEFAULT_HIDDEN_ROOT_ENTRY_NAMES = new Set([
   '.vite',
 ])
 
-export interface FileBrowserProjectState {
+export interface FileBrowserWorkspaceState {
   rootEntries: FileEntry[]
   dirContents: Map<string, FileEntry[]>
   expandedPaths: Set<string>
@@ -21,9 +22,12 @@ export interface FileBrowserProjectState {
   showHiddenRootEntries: boolean
   treeScrollTop: number
   contentScrollTop: number
+  searchQuery: string
+  searchResults: string[]
+  completedSearchQuery: string | null
 }
 
-export function createEmptyFileBrowserProjectState(): FileBrowserProjectState {
+export function createEmptyFileBrowserWorkspaceState(): FileBrowserWorkspaceState {
   return {
     rootEntries: [],
     dirContents: new Map(),
@@ -34,24 +38,27 @@ export function createEmptyFileBrowserProjectState(): FileBrowserProjectState {
     showHiddenRootEntries: false,
     treeScrollTop: 0,
     contentScrollTop: 0,
+    searchQuery: '',
+    searchResults: [],
+    completedSearchQuery: null,
   }
 }
 
-export function getFileBrowserProjectState(
-  states: Map<string, FileBrowserProjectState>,
-  projectId: string,
-): FileBrowserProjectState {
-  return states.get(projectId) ?? createEmptyFileBrowserProjectState()
+export function getFileBrowserWorkspaceState(
+  states: Map<FileBrowserWorkspaceIdentity, FileBrowserWorkspaceState>,
+  workspaceIdentity: FileBrowserWorkspaceIdentity,
+): FileBrowserWorkspaceState {
+  return states.get(workspaceIdentity) ?? createEmptyFileBrowserWorkspaceState()
 }
 
-export function updateFileBrowserProjectState(
-  states: Map<string, FileBrowserProjectState>,
-  projectId: string,
-  updater: (state: FileBrowserProjectState) => FileBrowserProjectState,
-): Map<string, FileBrowserProjectState> {
-  const current = getFileBrowserProjectState(states, projectId)
+export function updateFileBrowserWorkspaceState(
+  states: Map<FileBrowserWorkspaceIdentity, FileBrowserWorkspaceState>,
+  workspaceIdentity: FileBrowserWorkspaceIdentity,
+  updater: (state: FileBrowserWorkspaceState) => FileBrowserWorkspaceState,
+): Map<FileBrowserWorkspaceIdentity, FileBrowserWorkspaceState> {
+  const current = getFileBrowserWorkspaceState(states, workspaceIdentity)
   const nextState = updater(current)
-  return new Map(states).set(projectId, nextState)
+  return new Map(states).set(workspaceIdentity, nextState)
 }
 
 export function isDefaultHiddenRootEntry(entry: FileEntry): boolean {
@@ -72,7 +79,7 @@ export function isDefaultHiddenRootPath(path: string): boolean {
   return rootName !== undefined && DEFAULT_HIDDEN_ROOT_ENTRY_NAMES.has(rootName)
 }
 
-export function flattenFileBrowserEntries(state: FileBrowserProjectState): FileEntry[] {
+export function flattenFileBrowserEntries(state: FileBrowserWorkspaceState): FileEntry[] {
   const result: FileEntry[] = []
 
   function flatten(entries: FileEntry[]) {
