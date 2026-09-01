@@ -17,9 +17,6 @@ export type { SelfReviewDiffViewerHandle } from './selfReviewNavigationControlle
 
 export interface SelfReviewWorkspaceControllerOptions {
   getTaskId: () => string
-  navigateToFileViewer: (viewKey: string) => void
-  revealRepositoryPath?: (repositoryPath: string) => Promise<unknown>
-  openExternalUrl?: (url: string) => void | Promise<void>
 }
 
 export function createSelfReviewWorkspaceController(
@@ -49,10 +46,8 @@ export function createSelfReviewWorkspaceController(
   const navigationController = createSelfReviewNavigationController({
     getTaskId: options.getTaskId,
     getSelectedCommitSha: () => diffController.selectedCommitSha,
+    getDisplayedReviewPaths: () => fileStateController.visibleDiffFiles.map(file => file.filename),
     getLinkedPr: () => diffController.linkedPr,
-    navigateToFileViewer: options.navigateToFileViewer,
-    revealRepositoryPath: options.revealRepositoryPath,
-    openExternalUrl: options.openExternalUrl,
   })
 
   const changedFilesPane = createSelfReviewChangedFilesPane({
@@ -112,6 +107,7 @@ export function createSelfReviewWorkspaceController(
     get uncommittedLocked() { return diffController.uncommittedLocked },
     get lockedScopeTooltip() { return diffController.lockedScopeTooltip },
     get sidebarVisible() { return navigationController.sidebarVisible },
+    get repositoryPreview() { return navigationController.repositoryPreview },
     get reviewedFileShas() { return fileStateController.reviewedFileShas },
     get treeFiles() { return fileStateController.treeFiles },
     get visibleDiffFiles() { return fileStateController.visibleDiffFiles },
@@ -151,8 +147,10 @@ export function createSelfReviewWorkspaceController(
     restoreFile: (file: PrFileDiff) => { fileStateController.restoreFile(file) },
     fetchFileContents: fileStateController.fetchFileContents,
     batchFetchFileContents: fileStateController.batchFetchFileContents,
+    fetchRepositoryFile: fileStateController.fetchRepositoryFile,
     resolveRepositoryImage: fileStateController.resolveRepositoryImage,
     openRepositoryPath: navigationController.openRepositoryPath,
+    closeRepositoryPreview: navigationController.closeRepositoryPreview,
     updateScrollTop: navigationController.updateScrollTop,
   }
 }

@@ -17,16 +17,6 @@ vi.mock("../../lib/stores", async () => {
 	};
 });
 
-const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
-
-vi.mock("../../lib/fileViewerPlugin", () => ({
-  revealFileInFileViewer: vi.fn().mockResolvedValue(true),
-}));
-
-vi.mock("../../lib/router.svelte", () => ({
-	useAppRouter: () => ({ navigate: navigateMock }),
-}));
-
 vi.mock("@openforge-app/pr-review-ui/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
@@ -65,7 +55,6 @@ vi.mock("../../lib/ipc", () => ipcMocks);
 import { pendingManualComments, ticketPrs } from "../../lib/stores";
 import { selfReviewStateByTask } from "../../lib/taskScopedSelfReviewState";
 import { clearTaskReviewPaneState } from "../../lib/taskReviewPaneState";
-export { navigateMock };
 
 export const baseTask: Task = {
 	id: "task-1",

@@ -1,6 +1,8 @@
 import { tick } from 'svelte'
-import { revealFileInFileViewer } from '../../lib/fileViewerPlugin'
-import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
+import {
+  getMarkdownRepositoryLinkFragment,
+  type MarkdownRepositoryLinkTarget,
+} from '@openforge-app/plugin-sdk/markdown'
 import { openUrl } from '../../lib/ipc'
 import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
 import type { PrComment, PullRequestInfo } from '../../lib/types'
@@ -10,15 +12,15 @@ export interface SelfReviewDiffViewerHandle {
   getScrollTop(): number
   scrollToComment?(filename: string, lineNumber: number): Promise<void>
   scrollToFile?(filename: string): void
+  scrollToFragment?(filename: string, fragment: string): Promise<void>
   setScrollTop(scrollTop: number): void
 }
 
 export interface SelfReviewNavigationControllerOptions {
   getTaskId: () => string
   getSelectedCommitSha: () => string | null
+  getDisplayedReviewPaths: () => string[]
   getLinkedPr: () => PullRequestInfo | null
-  navigateToFileViewer: (viewKey: string) => void
-  revealRepositoryPath?: (repositoryPath: string) => Promise<unknown>
   openExternalUrl?: (url: string) => void | Promise<void>
 }
 
@@ -26,6 +28,7 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
   let fileTreeVisible = $state(true)
   let sidebarVisible = $state(true)
   let showAddressed = $state(false)
+  let repositoryPreview = $state<MarkdownRepositoryLinkTarget | null>(null)
   let attachedDiffViewer: SelfReviewDiffViewerHandle | undefined
   let synchronizedTaskId: string | null = null
   let hasRestoredScroll = false
@@ -34,6 +37,7 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
   function synchronizeTask(taskId: string): void {
     if (synchronizedTaskId === taskId) return
     synchronizedTaskId = taskId
+    repositoryPreview = null
     hasRestoredScroll = false
   }
 
@@ -60,12 +64,25 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
     })
   }
 
-  async function openRepositoryPath(repositoryPath: string): Promise<void> {
-    try {
-      await (options.revealRepositoryPath ?? revealFileInFileViewer)(repositoryPath)
-    } finally {
-      options.navigateToFileViewer(FILE_VIEWER_VIEW_KEY)
+  function openRepositoryPath(target: MarkdownRepositoryLinkTarget): void {
+    if (options.getDisplayedReviewPaths().includes(target.repositoryPath)) {
+      repositoryPreview = null
+      const fragment = getMarkdownRepositoryLinkFragment(target)
+      if (fragment && attachedDiffViewer?.scrollToFragment) {
+        void attachedDiffViewer.scrollToFragment(target.repositoryPath, fragment)
+      } else {
+        attachedDiffViewer?.scrollToFile?.(target.repositoryPath)
+      }
+      return
     }
+
+    repositoryPreview = target
+  }
+
+  async function closeRepositoryPreview(): Promise<void> {
+    repositoryPreview = null
+    await tick()
+    attachedDiffViewer?.focusDiff?.()
   }
 
   function openLinkedPr(): void {
@@ -83,6 +100,7 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
     get fileTreeVisible() { return fileTreeVisible },
     get sidebarVisible() { return sidebarVisible },
     get showAddressed() { return showAddressed },
+    get repositoryPreview() { return repositoryPreview },
     get initialScrollTop() { return getTaskReviewPaneState(options.getTaskId()).diffScrollTop },
     synchronizeTask,
     dispose,
@@ -96,6 +114,7 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
     toggleSidebar: () => { sidebarVisible = !sidebarVisible },
     setShowAddressed: (value: boolean) => { showAddressed = value },
     openRepositoryPath,
+    closeRepositoryPreview,
     openLinkedPr,
     scrollToComment,
     updateScrollTop: (diffScrollTop: number) => {

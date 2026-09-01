@@ -4,6 +4,7 @@
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
   import type { OpenReviewImage } from './reviewImages'
   import type { OpenReviewMedia, ReviewImageOpenRequest, ReviewMediaOpenRequest } from './reviewMedia'
@@ -46,7 +47,7 @@
     onOpenImage?: OpenReviewImage
     onOpenMedia?: OpenReviewMedia
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
-    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
+    onOpenRepositoryPath?: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
@@ -180,12 +181,18 @@
     head_sha: headSha,
   }))
 
-  function openRepositoryPath(repositoryPath: string, suffix: string) {
+  function openRepositoryPath(target: MarkdownRepositoryLinkTarget) {
     if (onOpenRepositoryPath) {
-      return onOpenRepositoryPath(repositoryPath, suffix)
+      return onOpenRepositoryPath(target)
     }
 
-    const githubUrl = getGitHubMarkdownLinkUrl(repoOwner, repoName, headSha, repositoryPath, suffix)
+    const githubUrl = getGitHubMarkdownLinkUrl(
+      repoOwner,
+      repoName,
+      headSha,
+      target.repositoryPath,
+      target.suffix,
+    )
     if (githubUrl) {
       return onOpenUrl?.(githubUrl)
     }
@@ -218,6 +225,10 @@
     navigation.scrollToFile(filename)
   }
 
+
+  export function scrollToFragment(filename: string, fragment: string) {
+    return navigation.scrollToFragment(filename, fragment)
+  }
   export function getScrollTop() {
     return navigation.getScrollTop()
   }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import SelfReviewChangedFilesPanel from './SelfReviewChangedFilesPanel.svelte'
   import SelfReviewDiffPanel from './SelfReviewDiffPanel.svelte'
+  import SelfReviewRepositoryPreview from './SelfReviewRepositoryPreview.svelte'
   import SelfReviewFeedbackPanel from './SelfReviewFeedbackPanel.svelte'
   import type { SelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
 
@@ -22,10 +23,22 @@
         pane={controller.changedFilesPane}
       />
     {/if}
-    <SelfReviewDiffPanel
-      {controller}
-      onRequestFocusFileTree={() => changedFilesPanel?.focusTree()}
-    />
+    <div class="relative flex min-w-0 flex-1 overflow-hidden">
+      <SelfReviewDiffPanel
+        {controller}
+        onRequestFocusFileTree={() => changedFilesPanel?.focusTree()}
+      />
+      {#if controller.repositoryPreview}
+        <SelfReviewRepositoryPreview
+          target={controller.repositoryPreview}
+          selectedCommitSha={controller.selectedCommitSha}
+          fetchContent={controller.fetchRepositoryFile}
+          resolveRepositoryImage={controller.resolveRepositoryImage}
+          onOpenRepositoryPath={controller.openRepositoryPath}
+          onClose={controller.closeRepositoryPreview}
+        />
+      {/if}
+    </div>
     {#if controller.sidebarVisible}
       <SelfReviewFeedbackPanel
         pane={controller.feedbackPane}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
 
@@ -10,7 +11,7 @@
     workspaceSource: FileBrowserWorkspaceSource | null
     scrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
-    onOpenRepositoryPath?: (repositoryPath: string) => void | Promise<void>
+    onOpenRepositoryPath?: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
   }
 
   let {

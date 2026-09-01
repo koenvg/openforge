@@ -23,6 +23,7 @@ export interface DiffViewerNavigation {
   focusDiff(): void
   handleScrollAreaKeydown(event: KeyboardEvent): void
   scrollToFile(filename: string): void
+  scrollToFragment(filename: string, fragment: string): Promise<void>
   getScrollTop(): number
   setScrollTop(scrollTop: number): void
   scrollToComment(filename: string, lineNumber: number): Promise<void>
@@ -36,6 +37,7 @@ export function createDiffViewerNavigation(
   let scrollRestoreAttempts = 0
   let hasRestoredInitialScroll = false
   const commentHighlightTimers = new Set<ReturnType<typeof setTimeout>>()
+  let fragmentNavigationId = 0
 
   function clearScrollRestoreTimer() {
     if (scrollRestoreTimer === null) return
@@ -74,6 +76,7 @@ export function createDiffViewerNavigation(
 
   function setScrollTop(scrollTop: number) {
     pendingScrollTop = scrollTop
+    fragmentNavigationId++
     scrollRestoreAttempts = 0
     applyPendingScrollTop()
   }
@@ -95,6 +98,7 @@ export function createDiffViewerNavigation(
 
   $effect(() => {
     return () => {
+      fragmentNavigationId++
       clearScrollRestoreTimer()
       for (const timer of commentHighlightTimers) {
         clearTimeout(timer)
@@ -122,6 +126,7 @@ export function createDiffViewerNavigation(
   }
 
   function scrollToFile(filename: string) {
+    fragmentNavigationId++
     const target = findFile(filename)
     if (!target) return
 
@@ -131,11 +136,50 @@ export function createDiffViewerNavigation(
     deps.scrollToIndex(target.index, { align: 'start', behavior: 'smooth' })
   }
 
+  function findFragmentDestination(fileElement: Element, fragment: string): HTMLElement | null {
+    const lineMatch = /^L(\d+)(?:-L?\d+)?$/i.exec(fragment)
+    if (lineMatch) {
+      const lineNumber = lineMatch[1]
+      const lineElement =
+        fileElement.querySelector(`tr[data-line="${lineNumber}-extend"]`) ??
+        fileElement.querySelector(`tr[data-line="${lineNumber}"]`)
+      return lineElement instanceof HTMLElement ? lineElement : null
+    }
+
+    const destination = fileElement.querySelector(`#${CSS.escape(fragment)}`)
+    return destination instanceof HTMLElement ? destination : null
+  }
+
+  async function scrollToFragment(filename: string, fragment: string): Promise<void> {
+    scrollToFile(filename)
+    const navigationId = fragmentNavigationId
+
+    for (let attempt = 0; attempt <= MAX_SCROLL_RESTORE_ATTEMPTS; attempt++) {
+      await tick()
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      if (navigationId !== fragmentNavigationId) return
+
+      const scrollContainer = deps.getScrollContainer()
+      const fileElement = scrollContainer?.querySelector(
+        `[data-diff-file="${CSS.escape(filename)}"]`,
+      )
+      const destination = fileElement ? findFragmentDestination(fileElement, fragment) : null
+      if (destination && typeof destination.scrollIntoView === 'function') {
+        destination.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      if (attempt === MAX_SCROLL_RESTORE_ATTEMPTS) return
+
+      await new Promise<void>(resolve => setTimeout(resolve, SCROLL_RESTORE_RETRY_MS))
+    }
+  }
+
   function getScrollTop() {
     return deps.getScrollContainer()?.scrollTop ?? 0
   }
 
   async function scrollToComment(filename: string, lineNumber: number) {
+    fragmentNavigationId++
     const target = findFile(filename)
     if (!target) return
 
@@ -174,6 +218,7 @@ export function createDiffViewerNavigation(
     focusDiff,
     handleScrollAreaKeydown,
     scrollToFile,
+    scrollToFragment,
     getScrollTop,
     setScrollTop,
     scrollToComment,

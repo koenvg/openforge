@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import MarkdownContent from './MarkdownContent.svelte'
 
@@ -52,6 +52,23 @@ describe('MarkdownContent', () => {
         .toBe('https://cdn.example.com/shot.gif?jwt=signed')
       expect(container.querySelector('video')?.getAttribute('src'))
         .toBe('https://cdn.example.com/clip.mp4?jwt=signed')
+    })
+  })
+
+  it('passes structured repository link targets to Review callers', async () => {
+    const onOpenRepositoryPath = vi.fn()
+    render(MarkdownContent, {
+      props: {
+        content: '[Setup](../SETUP.md?plain=1#installation)',
+        markdownFilePath: 'docs/guides/README.md',
+        onOpenRepositoryPath,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
     })
   })
 })

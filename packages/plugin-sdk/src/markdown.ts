@@ -1,4 +1,5 @@
-import { marked, Renderer, type Tokens } from 'marked'
+import GithubSlugger from 'github-slugger'
+import { marked, Renderer, TextRenderer, type Tokens } from 'marked'
 import { sanitizeHtml } from './sanitize.js'
 
 
@@ -19,6 +20,14 @@ export interface ResolvedMarkdownMedia {
 export const MARKDOWN_REMOTE_MEDIA_ATTRIBUTE = 'data-markdown-remote-src'
 
 class MarkdownRenderer extends Renderer {
+  private readonly headingSlugger = new GithubSlugger()
+
+  override heading({ tokens, depth }: Tokens.Heading): string {
+    const visibleText = this.parser.parseInline(tokens, new TextRenderer())
+    const id = this.headingSlugger.slug(visibleText)
+    return `<h${depth} id="${id}">${this.parser.parseInline(tokens)}</h${depth}>\n`
+  }
+
   override table(token: Tokens.Table): string {
     return `<div class="markdown-table-scroll">${super.table(token)}</div>`
   }
@@ -27,7 +36,6 @@ class MarkdownRenderer extends Renderer {
 const markedOptions = {
   gfm: true,
   breaks: true,
-  renderer: new MarkdownRenderer(),
 }
 
 const RENDERED_MARKDOWN_CACHE_CAPACITY = 100
@@ -108,6 +116,25 @@ function decodeMarkdownPath(value: string): string {
   }
 }
 
+export interface MarkdownRepositoryLinkTarget {
+  repositoryPath: string
+  suffix: string
+}
+
+export function getMarkdownRepositoryLinkFragment(
+  target: Pick<MarkdownRepositoryLinkTarget, 'suffix'>,
+): string | null {
+  const hashIndex = target.suffix.indexOf('#')
+  if (hashIndex < 0 || hashIndex === target.suffix.length - 1) return null
+
+  const fragment = target.suffix.slice(hashIndex + 1)
+  try {
+    return decodeURIComponent(fragment)
+  } catch {
+    return fragment
+  }
+}
+
 interface MarkdownRepositoryReference {
   pathValue: string
   suffix: string
@@ -149,6 +176,21 @@ export function resolveMarkdownRepositoryPath(value: string | null, markdownFile
   }
 
   return parts.length > 0 ? parts.join('/') : null
+}
+
+export function resolveMarkdownRepositoryLinkTarget(
+  value: string | null,
+  markdownFilePath: string,
+): MarkdownRepositoryLinkTarget | null {
+  if (!value) return null
+
+  const repositoryPath = resolveMarkdownRepositoryPath(value, markdownFilePath)
+  if (!repositoryPath) return null
+
+  return {
+    repositoryPath,
+    suffix: splitMarkdownRepositoryReference(value.trim()).suffix,
+  }
 }
 
 export function getMarkdownRepositoryLinkSuffix(value: string): string {
@@ -267,7 +309,7 @@ export function renderMarkdownHtml(content: string, options: RenderMarkdownOptio
   const cached = readRenderedMarkdownCache(cacheKey)
   if (cached !== undefined) return cached
 
-  const rawHtml = marked.parse(content, markedOptions) as string
+  const rawHtml = marked.parse(content, { ...markedOptions, renderer: new MarkdownRenderer() }) as string
   const html = sanitizeHtml(prepareMarkdownMediaSources(rawHtml, options))
   writeRenderedMarkdownCache(cacheKey, html)
   return html

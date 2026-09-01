@@ -114,6 +114,7 @@
   },
   "dependencies": {
     "dompurify": "catalog:",
+    "github-slugger": "catalog:",
     "marked": "catalog:",
     "mermaid": "catalog:"
   },

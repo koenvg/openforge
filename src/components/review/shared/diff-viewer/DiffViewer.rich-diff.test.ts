@@ -374,7 +374,7 @@ describe('DiffViewer Rich Diff View', () => {
         files: [markdownFile],
         batchFetchFileContents: vi.fn().mockResolvedValue(new Map([[markdownFile.filename, {
           oldContent: '',
-          newContent: '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md)',
+          newContent: '![Diagram](../assets/diagram.png)\n\n[Setup](../SETUP.md?plain=1#installation)',
         }]])),
         resolveRepositoryImage,
         onOpenRepositoryPath,
@@ -389,7 +389,10 @@ describe('DiffViewer Rich Diff View', () => {
     })
 
     await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
-    expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '')
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
+    })
   })
 
   it('reports images opened from a Rich Diff View', async () => {

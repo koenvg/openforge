@@ -105,6 +105,87 @@ describe('createDiffViewerNavigation', () => {
     cleanup()
   })
 
+  it('applies a resolvable fragment after the target file mounts', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    const container = document.createElement('div')
+    const fileElement = document.createElement('div')
+    fileElement.dataset.diffFile = 'docs/README.md'
+    const heading = document.createElement('h2')
+    heading.id = 'installation'
+    heading.scrollIntoView = vi.fn()
+    container.append(fileElement)
+    const scrollToIndex = vi.fn()
+    const { navigation, cleanup } = createNavigation({
+      files: [makeFile('docs/README.md')],
+      scrollContainer: container,
+      scrollToIndex,
+    })
+
+    const navigationPromise = navigation.scrollToFragment('docs/README.md', 'installation')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(heading.scrollIntoView).not.toHaveBeenCalled()
+
+    fileElement.append(heading)
+    await vi.advanceTimersByTimeAsync(25)
+    await navigationPromise
+
+    expect(scrollToIndex).toHaveBeenCalledWith(0, { align: 'start', behavior: 'smooth' })
+    expect(heading.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+    cleanup()
+  })
+
+  it('maps standard line fragments to rendered diff rows', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    const container = document.createElement('div')
+    const fileElement = document.createElement('div')
+    fileElement.dataset.diffFile = 'src/main.ts'
+    const line = document.createElement('tr')
+    line.dataset.line = '10'
+    line.scrollIntoView = vi.fn()
+    fileElement.append(line)
+    container.append(fileElement)
+    const { navigation, cleanup } = createNavigation({ scrollContainer: container })
+
+    await navigation.scrollToFragment('src/main.ts', 'L10')
+
+    expect(line.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+    cleanup()
+  })
+
+  it('cancels a pending fragment when navigation moves to another file', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    const container = document.createElement('div')
+    const targetFile = document.createElement('div')
+    targetFile.dataset.diffFile = 'docs/README.md'
+    container.append(targetFile)
+    const scrollToIndex = vi.fn()
+    const { navigation, cleanup } = createNavigation({
+      files: [makeFile('docs/README.md'), makeFile('src/other.ts')],
+      scrollContainer: container,
+      scrollToIndex,
+    })
+
+    const fragmentPromise = navigation.scrollToFragment('docs/README.md', 'later-heading')
+    await vi.advanceTimersByTimeAsync(0)
+    navigation.scrollToFile('src/other.ts')
+    await vi.advanceTimersByTimeAsync(25)
+    await fragmentPromise
+
+    expect(scrollToIndex).toHaveBeenLastCalledWith(1, { align: 'start', behavior: 'smooth' })
+    cleanup()
+  })
+
   it('keeps reviewed files collapsed when navigating from the file tree', () => {
     const file = makeFile('src/reviewed.ts')
     const onUncollapseFile = vi.fn()

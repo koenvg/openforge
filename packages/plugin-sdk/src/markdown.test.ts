@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   clearRenderedMarkdownCache,
+  getMarkdownRepositoryLinkFragment,
   getRenderedMarkdownCacheStats,
   renderMarkdownHtml,
   resolveMarkdownImageSrc,
+  resolveMarkdownRepositoryLinkTarget,
   resolveMarkdownRepositoryPath,
 } from './markdown'
 
@@ -123,6 +125,19 @@ describe('renderMarkdownHtml', () => {
     expect(template.content.querySelector('.markdown-table-scroll > table')).toBeTruthy()
   })
 
+  it('adds stable unique identifiers to Markdown headings', () => {
+    const html = renderMarkdownHtml([
+      '# Setup',
+      '## Setup',
+      '# Café',
+      '# [Install](https://example.com) *Guide*',
+    ].join('\n\n'))
+    expect(html).toContain('<h1 id="setup">Setup</h1>')
+    expect(html).toContain('<h2 id="setup-1">Setup</h2>')
+    expect(html).toContain('<h1 id="café">Café</h1>')
+    expect(html).toContain('<h1 id="install-guide"><a href="https://example.com">Install</a> <em>Guide</em></h1>')
+  })
+
   it('resolves relative image sources against the supplied image base URL', () => {
     const html = renderMarkdownHtml('![Architecture](docs/architecture.png)', {
       imageBaseUrl: 'https://raw.githubusercontent.com/acme/repo/abc123/',
@@ -146,6 +161,18 @@ describe('renderMarkdownHtml', () => {
     expect(resolveMarkdownRepositoryPath('../../../escape.png', 'docs/guides/README.md')).toBeNull()
     expect(resolveMarkdownRepositoryPath('..%5C..%5Csecret.png', 'docs/guides/README.md')).toBeNull()
     expect(resolveMarkdownRepositoryPath('?raw=true', 'docs/guides/README.md')).toBeNull()
+  })
+
+  it('keeps repository paths separate from query and fragment suffixes', () => {
+    expect(resolveMarkdownRepositoryLinkTarget(
+      '../SETUP.md?plain=1#installation',
+      'docs/guides/README.md',
+    )).toEqual({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
+    })
+    expect(getMarkdownRepositoryLinkFragment({ suffix: '?plain=1#install%20guide' }))
+      .toBe('install guide')
   })
 
   it('resolves nested relative images against a repository-root base URL', () => {
