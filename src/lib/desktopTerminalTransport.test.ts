@@ -83,6 +83,79 @@ describe('desktop terminal authority read seam', () => {
     expect(subscription.snapshot?.()).toMatchObject({ desired: false, registered: false, disposed: true })
   })
 
+  it('delivers model output when the runtime provides native base64 decoding', async () => {
+    const encoded = btoa('native path')
+    const originalFromBase64 = Object.getOwnPropertyDescriptor(Uint8Array, 'fromBase64')
+    const nativeDecoder = vi.fn(() => new TextEncoder().encode('native path'))
+    Object.defineProperty(Uint8Array, 'fromBase64', { configurable: true, value: nativeDecoder })
+    const atobSpy = vi.spyOn(globalThis, 'atob').mockImplementation(() => {
+      throw new Error('legacy base64 decoder should not run')
+    })
+
+    try {
+      const onModelOutput = vi.fn()
+      const port = createPort()
+      const transport = createDesktopTerminalTransport(port)
+      const subscription = await transport.subscribeSession('T-1-shell-0', {
+        onModelOutput,
+        onModelDisabled: vi.fn(),
+        onExit: vi.fn(),
+      })
+      await subscription.setModelOutputEnabled(true)
+
+      const modelListener = vi.mocked(port.listenEvent).mock.calls
+        .find(([eventName]) => eventName === 'pty-model-output-T-1-shell-0')?.[1]
+      modelListener?.({
+        payload: { data: encoded, instance_id: 7, sequence: 12 },
+      })
+
+      expect(nativeDecoder).toHaveBeenCalledWith(encoded)
+      expect(Array.from(onModelOutput.mock.calls[0]?.[0].data ?? [])).toEqual(
+        Array.from(new TextEncoder().encode('native path')),
+      )
+      subscription.dispose()
+    } finally {
+      atobSpy.mockRestore()
+      if (originalFromBase64) {
+        Object.defineProperty(Uint8Array, 'fromBase64', originalFromBase64)
+      } else {
+        delete (Uint8Array as typeof Uint8Array & { fromBase64?: unknown }).fromBase64
+      }
+    }
+  })
+
+  it('delivers binary model output when native base64 decoding is unavailable', async () => {
+    const originalFromBase64 = Object.getOwnPropertyDescriptor(Uint8Array, 'fromBase64')
+    Object.defineProperty(Uint8Array, 'fromBase64', { configurable: true, value: undefined })
+
+    try {
+      const onModelOutput = vi.fn()
+      const port = createPort()
+      const transport = createDesktopTerminalTransport(port)
+      const subscription = await transport.subscribeSession('T-1-shell-0', {
+        onModelOutput,
+        onModelDisabled: vi.fn(),
+        onExit: vi.fn(),
+      })
+      await subscription.setModelOutputEnabled(true)
+
+      const modelListener = vi.mocked(port.listenEvent).mock.calls
+        .find(([eventName]) => eventName === 'pty-model-output-T-1-shell-0')?.[1]
+      modelListener?.({
+        payload: { data: btoa('\x00\x80\xff'), instance_id: 7, sequence: 12 },
+      })
+
+      expect(Array.from(onModelOutput.mock.calls[0]?.[0].data ?? [])).toEqual([0, 128, 255])
+      subscription.dispose()
+    } finally {
+      if (originalFromBase64) {
+        Object.defineProperty(Uint8Array, 'fromBase64', originalFromBase64)
+      } else {
+        delete (Uint8Array as typeof Uint8Array & { fromBase64?: unknown }).fromBase64
+      }
+    }
+  })
+
   it('returns authority immediately when the E2E checkpoint hook is absent', async () => {
     const transport = createDesktopTerminalTransport(createPort())
 
