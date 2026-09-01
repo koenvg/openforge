@@ -54,6 +54,6 @@ impl PluginHost {
     fn task_workspace_root_for_host(&self, task_id: &str) -> Result<PathBuf, String> {
         let db_state = self.database_state_for_host()?;
         let db = crate::db::acquire_db(db_state.as_ref());
-        crate::self_review_runtime::resolve_workspace_path(&db, task_id).map(PathBuf::from)
+        crate::task_workspace_service::resolve_workspace_path(&db, task_id).map(PathBuf::from)
     }
 }
