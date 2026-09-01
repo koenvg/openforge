@@ -25,14 +25,25 @@ function renderLink(overrides: Record<string, unknown> = {}) {
 }
 
 describe('PluginSidebarLink', () => {
-  it('activates with a pointer and the Enter or Space key', async () => {
+  it.each([
+    { key: 'Enter', label: 'Enter' },
+    { key: ' ', label: 'Space' },
+  ])('leaves $label activation to the native button', async ({ key }) => {
     const { link, onActivate } = renderLink()
 
-    await fireEvent.click(link)
-    await fireEvent.keyDown(link, { key: 'Enter' })
-    await fireEvent.keyDown(link, { key: ' ' })
+    link.focus()
+    expect(await fireEvent.keyDown(link, { key })).toBe(true)
+    expect(await fireEvent.keyUp(link, { key })).toBe(true)
 
-    expect(onActivate).toHaveBeenCalledTimes(3)
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  it('activates from the click dispatched by the native button', () => {
+    const { link, onActivate } = renderLink()
+
+    link.click()
+
+    expect(onActivate).toHaveBeenCalledTimes(1)
   })
 
   it('exposes active state and remains focusable', () => {
