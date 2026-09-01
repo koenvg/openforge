@@ -49,6 +49,18 @@ export interface TicketCoverage {
   out_of_scope: OutOfScopeChange[]
 }
 
+/**
+ * A coverage criterion or out-of-scope item the reviewer chose to fold into
+ * the PR review. Structurally matches `IncludedFinding` in
+ * `@openforge-app/pr-review-ui/reviewBody`, kept as a separate local type so
+ * this plugin doesn't need to import across that package boundary.
+ */
+export interface CoverageFinding {
+  id: string
+  label: string
+  text: string
+}
+
 /** A Jira work item as returned by the core `fetchJiraWorkItem` host command. */
 export interface JiraWorkItem {
   issue_key: string

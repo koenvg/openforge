@@ -239,4 +239,43 @@ describe('ReviewSubmitPanel', () => {
       expect(onApprovedAgentCommentsSubmitted).toHaveBeenCalledOnce()
     })
   })
+
+  it('renders a removable chip for each included finding', async () => {
+    const onRemoveIncludedFinding = vi.fn()
+    renderPanel({
+      includedFindings: [{ id: 'crit-1', label: 'Partial', text: 'gap' }],
+      onRemoveIncludedFinding,
+    })
+
+    expect(screen.getByText('Partial')).toBeTruthy()
+
+    await fireEvent.click(screen.getByLabelText('Remove "Partial" from review'))
+    expect(onRemoveIncludedFinding).toHaveBeenCalledWith('crit-1')
+  })
+
+  it('enables submitting when only an included finding exists (no summary, no pending)', () => {
+    renderPanel({ includedFindings: [{ id: 'crit-1', label: 'Partial', text: 'gap' }] })
+
+    expect(screen.getByText('Comment').closest('button')?.disabled).toBe(false)
+    expect(screen.getByText('Request Changes').closest('button')?.disabled).toBe(false)
+  })
+
+  it('folds included findings into the submitted body ahead of the typed summary, then clears them', async () => {
+    const onIncludedFindingsSubmitted = vi.fn()
+    const { container, onSubmitReview } = renderPanel({
+      includedFindings: [{ id: 'crit-1', label: 'Partial', text: 'Tooltip dropped' }],
+      onIncludedFindingsSubmitted,
+    })
+
+    const textarea = requireTextarea(container)
+    await fireEvent.input(textarea, { target: { value: 'Otherwise fine.' } })
+    await fireEvent.click(screen.getByText('Comment'))
+
+    expect(onSubmitReview).toHaveBeenCalledWith(expect.objectContaining({
+      body: 'Ticket coverage gaps:\n- **Partial**: Tooltip dropped\n\nOtherwise fine.',
+    }))
+    await waitFor(() => {
+      expect(onIncludedFindingsSubmitted).toHaveBeenCalledOnce()
+    })
+  })
 })

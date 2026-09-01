@@ -211,6 +211,80 @@ describe('WalkthroughTab review/submit step', () => {
   })
 })
 
+describe('WalkthroughTab ticket coverage → review', () => {
+  function makeWalkthroughWithCoverage(): PrWalkthrough {
+    const walkthrough = makeWalkthrough()
+    return {
+      ...walkthrough,
+      steps_json: JSON.stringify({
+        ...JSON.parse(walkthrough.steps_json!),
+        ticket_coverage: {
+          verdict: 'partial',
+          summary: 'Login lands, but a label went singular.',
+          criteria: [
+            {
+              id: 'ac-1',
+              text: 'Domains label stays plural',
+              status: 'partial',
+              evidence: [],
+              notes: 'Tooltip dropped.',
+            },
+          ],
+          out_of_scope: [],
+        },
+      }),
+    }
+  }
+
+  function renderWithCoverage(overrides: Record<string, unknown> = {}) {
+    const githubSync = makeGithubSync()
+    githubSync.getPrWalkthrough = vi.fn(async () => makeWalkthroughWithCoverage())
+    githubSync.getPrTicket = vi.fn(async () => ({
+      snapshot: { issue_key: 'AVIV-1', item: null, error: null, fetched_at: 0 },
+      jiraConfigured: true,
+    }))
+    return renderWalkthrough({ githubSync, ...overrides })
+  }
+
+  it('folds a flagged ticket-coverage gap into the submitted review body, then clears it', async () => {
+    const { onSubmitReview } = renderWithCoverage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^add to review$/i }))
+
+    await goToStep(4)
+    await screen.findByText('Review & submit')
+    expect(screen.getByText('Partial')).toBeTruthy()
+
+    const textarea = screen.getByRole('textbox', { name: 'Review summary comment' })
+    await fireEvent.input(textarea, { target: { value: 'Otherwise fine.' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+
+    expect(onSubmitReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: 'Ticket coverage gaps:\n- **Partial**: Domains label stays plural — Tooltip dropped.\n\nOtherwise fine.',
+      }),
+    )
+
+    // Submitting clears the flagged finding, so the ticket step reverts to unflagged.
+    await goToStep(1)
+    expect(await screen.findByRole('button', { name: /^add to review$/i })).toBeTruthy()
+  })
+
+  it('lets the reviewer remove a flagged finding before submitting', async () => {
+    renderWithCoverage()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^add to review$/i }))
+    await goToStep(4)
+    await screen.findByText('Review & submit')
+    expect(screen.getByText('Partial')).toBeTruthy()
+
+    await fireEvent.click(screen.getByLabelText('Remove "Partial" from review'))
+
+    expect(screen.queryByText('Partial')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Comment' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe('WalkthroughTab step-details collapse', () => {
   it('hides the step summary so the diff gets the vertical space back, and remembers the choice', async () => {
     globalThis.localStorage?.clear()

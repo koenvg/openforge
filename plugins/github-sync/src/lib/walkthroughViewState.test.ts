@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildSyntheticStepFiles, buildWalkthroughStepList, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint } from './walkthroughViewState'
+import { buildSyntheticStepFiles, buildWalkthroughStepList, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint, toggleCoverageFinding } from './walkthroughViewState'
 import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { CoverageFinding } from './ticketCoverage'
 
 function file(filename: string, hunks: number, extra: Partial<PrFileDiff> = {}): PrFileDiff {
   const parts: string[] = []
@@ -210,6 +211,24 @@ describe('buildWalkthroughStepList', () => {
     const entries = buildWalkthroughStepList(steps)
     expect(entries.at(-1)).toEqual({ kind: 'submit' })
     expect(entries[1]).toEqual({ kind: 'concept', step: steps[0] })
+  })
+})
+
+describe('toggleCoverageFinding', () => {
+  const finding = (id: string): CoverageFinding => ({ id, label: 'Partial', text: `gap ${id}` })
+
+  it('adds a finding that is not yet included', () => {
+    expect(toggleCoverageFinding([], finding('crit-1'))).toEqual([finding('crit-1')])
+  })
+
+  it('appends to existing findings, preserving order', () => {
+    const result = toggleCoverageFinding([finding('crit-1')], finding('oos-0'))
+    expect(result).toEqual([finding('crit-1'), finding('oos-0')])
+  })
+
+  it('removes a finding that is already included, by id', () => {
+    const result = toggleCoverageFinding([finding('crit-1'), finding('oos-0')], finding('crit-1'))
+    expect(result).toEqual([finding('oos-0')])
   })
 })
 

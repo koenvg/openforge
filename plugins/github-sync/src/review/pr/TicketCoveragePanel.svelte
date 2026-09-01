@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { Check, Plus } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type {
+    CoverageFinding,
     CriterionStatus,
     TicketCoverage,
     TicketCoverageVerdict,
@@ -17,13 +19,24 @@
     /** null when the agent produced no usable assessment. */
     coverage: TicketCoverage | null
     jiraConfigured: boolean
+    /** Ids of findings the reviewer has already flagged to include in the review. */
+    includedFindingIds: Set<string>
     onOpenUrl: (url: string) => void | Promise<void>
     onSetIssueKey: (issueKey: string) => void
     onRegenerate: () => void
+    onToggleFinding: (finding: CoverageFinding) => void
   }
 
-  let { snapshot, coverage, jiraConfigured, onOpenUrl, onSetIssueKey, onRegenerate }: Props =
-    $props()
+  let {
+    snapshot,
+    coverage,
+    jiraConfigured,
+    includedFindingIds,
+    onOpenUrl,
+    onSetIssueKey,
+    onRegenerate,
+    onToggleFinding,
+  }: Props = $props()
 
   let ticket = $derived(snapshot?.item ?? null)
   let issueKeyDraft = $state('')
@@ -66,6 +79,18 @@
     partial: 'badge-warning',
     missing: 'badge-error',
     unclear: 'badge-ghost',
+  }
+
+  function criterionFinding(criterion: TicketCoverage['criteria'][number]): CoverageFinding {
+    return {
+      id: criterion.id,
+      label: STATUS_LABELS[criterion.status],
+      text: criterion.notes ? `${criterion.text} — ${criterion.notes}` : criterion.text,
+    }
+  }
+
+  function outOfScopeFinding(change: TicketCoverage['out_of_scope'][number], index: number): CoverageFinding {
+    return { id: `oos-${index}`, label: 'Not in the ticket', text: change.description }
   }
 </script>
 
@@ -130,7 +155,20 @@
               <span class="badge badge-sm {STATUS_CLASSES[criterion.status]} shrink-0 mt-0.5">
                 {STATUS_LABELS[criterion.status]}
               </span>
-              <span class="text-sm text-base-content leading-snug">{criterion.text}</span>
+              <span class="text-sm text-base-content leading-snug flex-1">{criterion.text}</span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs gap-1 shrink-0 {includedFindingIds.has(criterion.id) ? 'text-success' : 'text-base-content/50'}"
+                onclick={() => onToggleFinding(criterionFinding(criterion))}
+                title={includedFindingIds.has(criterion.id) ? 'Remove from review' : 'Add to review'}
+                aria-pressed={includedFindingIds.has(criterion.id)}
+              >
+                {#if includedFindingIds.has(criterion.id)}
+                  <Check size={12} aria-hidden="true" /> Added
+                {:else}
+                  <Plus size={12} aria-hidden="true" /> Add to review
+                {/if}
+              </button>
             </div>
             {#if criterion.notes}
               <p class="text-xs text-base-content/70 m-0 pl-1">{criterion.notes}</p>
@@ -154,9 +192,24 @@
             Not in the ticket
           </h5>
           <ul class="flex flex-col gap-2 list-none p-0 m-0">
-            {#each coverage.out_of_scope as change}
+            {#each coverage.out_of_scope as change, index}
               <li class="flex flex-col gap-1 px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md">
-                <span class="text-sm text-base-content leading-snug">{change.description}</span>
+                <div class="flex items-start gap-2">
+                  <span class="text-sm text-base-content leading-snug flex-1">{change.description}</span>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs gap-1 shrink-0 {includedFindingIds.has(`oos-${index}`) ? 'text-success' : 'text-base-content/50'}"
+                    onclick={() => onToggleFinding(outOfScopeFinding(change, index))}
+                    title={includedFindingIds.has(`oos-${index}`) ? 'Remove from review' : 'Add to review'}
+                    aria-pressed={includedFindingIds.has(`oos-${index}`)}
+                  >
+                    {#if includedFindingIds.has(`oos-${index}`)}
+                      <Check size={12} aria-hidden="true" /> Added
+                    {:else}
+                      <Plus size={12} aria-hidden="true" /> Add to review
+                    {/if}
+                  </button>
+                </div>
                 {#if change.files.length > 0}
                   <div class="flex flex-wrap gap-1.5">
                     {#each change.files as filename}
