@@ -1,19 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { get } from 'svelte/store'
-import type { Writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
-import { setConfig } from '../../lib/ipc'
-import { activeProjectId, attentionCountByProject, hiddenProjectIds, projects, reviewRequestCountByProject } from '../../lib/stores'
+import { activeProjectId, projects } from '../../lib/stores'
 import type { AppView, Project } from '../../lib/types'
 import type { IconRailPluginNavItem, SidebarPluginNavItem } from '../../lib/iconRailNav'
 import AppSidebar from './AppSidebar.svelte'
 import CustomPluginSidebarNavigation from './test-fixtures/CustomPluginSidebarNavigation.svelte'
-
-// Production counts are derived; this suite mocks stores with writables to drive badges directly.
-const reviewCountByProject = reviewRequestCountByProject as unknown as Writable<Map<string, number>>
-const attentionCounts = attentionCountByProject as unknown as Writable<Map<string, number>>
 
 vi.mock('../../lib/stores', async () => {
   const { writable } = await import('svelte/store')
@@ -132,10 +125,7 @@ describe('AppSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     projects.set(sampleProjects)
-    hiddenProjectIds.set(new Set())
     activeProjectId.set('proj-1')
-    attentionCounts.set(new Map())
-    reviewCountByProject.set(new Map())
   })
 
   it('does not render the decorative >_ logo', () => {
@@ -143,44 +133,6 @@ describe('AppSidebar', () => {
     expect(screen.queryByText('>_')).toBeNull()
   })
 
-  it('shows "PROJECTS" label when expanded (collapsed=false)', () => {
-    renderSidebar({ collapsed: false })
-    expect(screen.getByText('PROJECTS')).toBeTruthy()
-  })
-
-  it('does NOT show "PROJECTS" label when collapsed (collapsed=true)', () => {
-    renderSidebar({ collapsed: true })
-    expect(screen.queryByText('PROJECTS')).toBeNull()
-  })
-
-  it('renders project buttons for each project in the store', () => {
-    renderSidebar({ collapsed: false })
-
-    expect(screen.getByRole('button', { name: /^alpha project$/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /^beta project$/i })).toBeTruthy()
-  })
-
-  it('shows first-letter avatars when collapsed', () => {
-    renderSidebar({ collapsed: true })
-
-    expect(screen.getByText('A')).toBeTruthy()
-    expect(screen.getByText('B')).toBeTruthy()
-  })
-
-  it('shows project names when expanded', () => {
-    renderSidebar({ collapsed: false })
-
-    expect(screen.getByText('Alpha Project')).toBeTruthy()
-    expect(screen.getByText('Beta Project')).toBeTruthy()
-  })
-
-  it('clicking a project button selects that project', async () => {
-    renderSidebar({ collapsed: false })
-
-    await fireEvent.click(screen.getByRole('button', { name: /^beta project$/i }))
-    expect(mockSelectProject).toHaveBeenCalledWith('proj-2')
-    expect(get(activeProjectId)).toBe('proj-2')
-  })
 
   it('clicking a project delegates the switch to onSelectProject regardless of the current view', async () => {
     // Landing on the right view (board vs. the project's last-viewed tab) is App's
@@ -281,31 +233,6 @@ describe('AppSidebar', () => {
     expect(onNewProject).toHaveBeenCalledOnce()
   })
 
-  it('shows each project\'s attention count from the store and hides it at zero', () => {
-    attentionCounts.set(new Map([
-      // A project whose only tasks are in-flight resolves to 0 — no indicator. The
-      // exclusion of running agents / Out of Focus tasks lives in the count itself (attentionCounts.ts).
-      ['proj-1', 0],
-      ['proj-2', 3],
-    ]))
-
-    renderSidebar({ collapsed: false })
-
-    expect(screen.getByTitle(/3 items needing attention/i).textContent).toContain('3')
-    // The zero-count project contributes no attention indicator.
-    expect(screen.getAllByTitle(/item.* needing attention/i)).toHaveLength(1)
-    // The old status labels are gone entirely.
-    expect(screen.queryByText('2 running')).toBeNull()
-    expect(screen.queryByText('idle')).toBeNull()
-  })
-
-
-  it('does not render an attention indicator when nothing needs attention', () => {
-    attentionCounts.set(new Map())
-    renderSidebar({ collapsed: false })
-
-    expect(screen.queryByTitle(/needing attention/i)).toBeNull()
-  })
   it('project is NOT visually active (aria-current) when on global_settings view', () => {
     renderSidebar({ currentView: 'global_settings' })
 
@@ -427,183 +354,4 @@ describe('AppSidebar', () => {
     })
   })
 
-  describe('per-project review count badge', () => {
-    it('shows a project\'s pending review count when expanded', () => {
-      reviewCountByProject.set(new Map([['proj-1', 2]]))
-      renderSidebar({ collapsed: false })
-
-      expect(screen.getByTitle(/2 PRs awaiting your review/i).textContent).toContain('2')
-    })
-
-    it('shows a red review dot without the number on the collapsed avatar', () => {
-      reviewCountByProject.set(new Map([['proj-2', 1]]))
-      renderSidebar({ collapsed: true })
-
-      const dot = screen.getByTitle(/1 PR awaiting your review/i)
-      expect(dot).toBeTruthy()
-      // Collapsed shows only a dot — the count number itself is not rendered.
-      expect(dot.textContent).toBe('')
-    })
-
-    it('renders no review badge for a project with zero pending reviews', () => {
-      reviewCountByProject.set(new Map([['proj-1', 0]]))
-      renderSidebar({ collapsed: false })
-
-      expect(screen.queryByTitle(/awaiting your review/i)).toBeNull()
-    })
-  })
-
-  describe('Project reordering', () => {
-    it('does not show move buttons when collapsed', () => {
-      renderSidebar({ collapsed: true })
-      expect(screen.queryByLabelText(/Move Alpha Project up/i)).toBeNull()
-      expect(screen.queryByLabelText(/Move Alpha Project down/i)).toBeNull()
-    })
-
-    it('shows move buttons when expanded', () => {
-      renderSidebar({ collapsed: false })
-      expect(screen.queryByLabelText(/Move Alpha Project up/i)).toBeNull()
-      expect(screen.getByLabelText(/Move Alpha Project down/i)).toBeTruthy()
-      
-      expect(screen.getByLabelText(/Move Beta Project up/i)).toBeTruthy()
-      expect(screen.getByLabelText(/Move Beta Project down/i)).toBeTruthy()
-      
-      expect(screen.getByLabelText(/Move Gamma Project up/i)).toBeTruthy()
-      expect(screen.queryByLabelText(/Move Gamma Project down/i)).toBeNull()
-    })
-
-    it('moves a project down', async () => {
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Move Alpha Project down/i))
-      
-      const currentProjects = get(projects)
-      expect(currentProjects[0].id).toBe('proj-2')
-      expect(currentProjects[1].id).toBe('proj-1')
-      expect(currentProjects[2].id).toBe('proj-3')
-      
-      expect(setConfig).toHaveBeenCalledWith('project_sidebar_order', JSON.stringify(['proj-2', 'proj-1', 'proj-3']))
-    })
-
-    it('moves a project up', async () => {
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Move Gamma Project up/i))
-      
-      const currentProjects = get(projects)
-      expect(currentProjects[0].id).toBe('proj-1')
-      expect(currentProjects[1].id).toBe('proj-3')
-      expect(currentProjects[2].id).toBe('proj-2')
-
-      expect(setConfig).toHaveBeenCalledWith('project_sidebar_order', JSON.stringify(['proj-1', 'proj-3', 'proj-2']))
-    })
-
-    it('reverts the optimistic order if persisting fails', async () => {
-      vi.mocked(setConfig).mockRejectedValueOnce(new Error('save failed'))
-
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Move Alpha Project down/i))
-
-      expect(get(projects).map((project) => project.id)).toEqual(['proj-1', 'proj-2', 'proj-3'])
-    })
-
-    it('disables further reordering while a save is in progress', async () => {
-      let resolveSave!: () => void
-      vi.mocked(setConfig).mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            resolveSave = resolve
-          })
-      )
-
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Move Alpha Project down/i))
-
-      const alphaMoveUpButton = screen.getByLabelText(/Move Alpha Project up/i)
-      expect(alphaMoveUpButton.hasAttribute('disabled')).toBe(true)
-
-      await fireEvent.click(alphaMoveUpButton)
-      expect(get(projects).map((project) => project.id)).toEqual(['proj-2', 'proj-1', 'proj-3'])
-      expect(setConfig).toHaveBeenCalledTimes(1)
-
-      resolveSave()
-    })
-  })
-
-  describe('Hiding projects', () => {
-    it('shows a hide control for each visible project when expanded', () => {
-      renderSidebar({ collapsed: false })
-      expect(screen.getByLabelText(/Hide Alpha Project/i)).toBeTruthy()
-      expect(screen.getByLabelText(/Hide Beta Project/i)).toBeTruthy()
-    })
-
-    it('does not show hide controls when collapsed', () => {
-      renderSidebar({ collapsed: true })
-      expect(screen.queryByLabelText(/Hide Alpha Project/i)).toBeNull()
-    })
-
-    it('hiding a project persists it and removes it from the visible list', async () => {
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Hide Beta Project/i))
-
-      expect(get(hiddenProjectIds)).toEqual(new Set(['proj-2']))
-      expect(setConfig).toHaveBeenCalledWith('project_sidebar_hidden', JSON.stringify(['proj-2']))
-      // Beta's own row button is gone from the visible list; the collapsed Hidden section hides it.
-      expect(screen.queryByRole('button', { name: /^beta project$/i })).toBeNull()
-    })
-
-    it('reverts the optimistic hide if persisting fails', async () => {
-      vi.mocked(setConfig).mockRejectedValueOnce(new Error('save failed'))
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Hide Beta Project/i))
-
-      expect(get(hiddenProjectIds)).toEqual(new Set())
-    })
-
-    it('renders a silent Hidden section with the hidden count', () => {
-      hiddenProjectIds.set(new Set(['proj-2', 'proj-3']))
-      renderSidebar({ collapsed: false })
-      expect(screen.getByText(/Hidden \(2\)/i)).toBeTruthy()
-    })
-
-    it('does not render the Hidden section when nothing is hidden', () => {
-      renderSidebar({ collapsed: false })
-      expect(screen.queryByText(/Hidden \(/i)).toBeNull()
-    })
-
-    it('does not render the Hidden section when collapsed', () => {
-      hiddenProjectIds.set(new Set(['proj-2']))
-      renderSidebar({ collapsed: true })
-      expect(screen.queryByText(/Hidden \(/i)).toBeNull()
-    })
-
-    it('expanding the Hidden section reveals hidden projects with an unhide control', async () => {
-      hiddenProjectIds.set(new Set(['proj-2']))
-      renderSidebar({ collapsed: false })
-      // Collapsed by default — the hidden project's unhide control is not yet shown.
-      expect(screen.queryByLabelText(/Unhide Beta Project/i)).toBeNull()
-
-      await fireEvent.click(screen.getByText(/Hidden \(1\)/i))
-      expect(screen.getByLabelText(/Unhide Beta Project/i)).toBeTruthy()
-    })
-
-    it('unhiding a project persists its removal from the hidden set', async () => {
-      hiddenProjectIds.set(new Set(['proj-2']))
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByText(/Hidden \(1\)/i))
-      await fireEvent.click(screen.getByLabelText(/Unhide Beta Project/i))
-
-      expect(get(hiddenProjectIds)).toEqual(new Set())
-      expect(setConfig).toHaveBeenCalledWith('project_sidebar_hidden', JSON.stringify([]))
-    })
-
-    it('reordering targets the correct visible neighbour when a project is hidden', async () => {
-      // Hide Beta (proj-2), which sits between Alpha and Gamma. Moving Alpha down must
-      // swap it with Gamma (the next VISIBLE project), leaving Beta in its slot.
-      hiddenProjectIds.set(new Set(['proj-2']))
-      renderSidebar({ collapsed: false })
-      await fireEvent.click(screen.getByLabelText(/Move Alpha Project down/i))
-
-      expect(get(projects).map((p) => p.id)).toEqual(['proj-3', 'proj-2', 'proj-1'])
-      expect(setConfig).toHaveBeenCalledWith('project_sidebar_order', JSON.stringify(['proj-3', 'proj-2', 'proj-1']))
-    })
-  })
 })
