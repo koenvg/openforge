@@ -4,6 +4,7 @@ import { createDesktopAppDriver } from './desktop-test/driver.mjs'
 function locator(name) {
   return {
     name,
+    isVisible: vi.fn(async () => false),
     click: vi.fn(async () => undefined),
     first: vi.fn(function first() { return this }),
     waitFor: vi.fn(async () => undefined),
@@ -113,6 +114,22 @@ describe('desktop app driver', () => {
       state: 'visible',
       timeout: 8_000,
     })
+  })
+
+  it('returns to the task board before selecting a task from an existing full view', async () => {
+    const harness = createPage()
+    harness.backToTaskBoard.isVisible.mockResolvedValue(true)
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.selectSeededTask(manifest)
+
+    expect(harness.backToTaskBoard.click).toHaveBeenCalledOnce()
+    expect(harness.backToTaskBoard.waitFor).toHaveBeenCalledWith({
+      state: 'hidden',
+      timeout: 8_000,
+    })
+    expect(harness.backToTaskBoard.click.mock.invocationCallOrder[0])
+      .toBeLessThan(harness.project.click.mock.invocationCallOrder[0])
   })
 
   it('types terminal commands through the focused terminal landmark', async () => {
