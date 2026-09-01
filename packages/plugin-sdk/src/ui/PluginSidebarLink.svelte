@@ -23,11 +23,6 @@
     class: className,
   }: Props = $props()
 
-  function handleKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    onActivate()
-  }
 </script>
 
 <button
@@ -42,7 +37,6 @@
   aria-label={accessibleName}
   aria-current={active ? 'page' : undefined}
   onclick={onActivate}
-  onkeydown={handleKeydown}
 >
   {#if leading}
     <span class="relative shrink-0">{@render leading()}</span>
