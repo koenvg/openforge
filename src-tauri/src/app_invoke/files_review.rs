@@ -5,8 +5,8 @@ fn app_task_workspace_path(
     task_id: &str,
 ) -> Result<String, (StatusCode, String)> {
     let db = crate::db::acquire_db(&state.db);
-    crate::self_review_runtime::resolve_workspace_path(&db, task_id)
-        .map_err(|e| (StatusCode::NOT_FOUND, e))
+    crate::task_workspace_service::resolve_workspace_path(&db, task_id)
+        .map_err(|error| (StatusCode::NOT_FOUND, error))
 }
 
 fn app_project_root(state: &AppState, project_id: &str) -> Result<String, (StatusCode, String)> {

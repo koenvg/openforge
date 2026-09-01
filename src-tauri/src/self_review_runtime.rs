@@ -592,30 +592,6 @@ pub async fn get_commit_batch_file_contents_for_workspace(
     Ok(results)
 }
 
-pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result<String, String> {
-    let worktree = db
-        .get_worktree_for_task(task_id)
-        .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-
-    if let Some(row) = &worktree {
-        if std::path::Path::new(&row.worktree_path).is_dir() {
-            return Ok(row.worktree_path.clone());
-        }
-    }
-
-    let workspace = db
-        .get_task_workspace_for_task(task_id)
-        .map_err(|e| format!("Failed to get task workspace for task: {}", e))?;
-
-    if let Some(workspace) = workspace {
-        if std::path::Path::new(&workspace.workspace_path).is_dir() {
-            return Ok(workspace.workspace_path);
-        }
-    }
-
-    Err(format!("No workspace found for task {}", task_id))
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct GitStatusSummary {
     /// Whether the branch has an upstream (remote tracking) branch to compare to.
@@ -815,7 +791,6 @@ pub async fn get_task_git_status_for_workspace(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::test_helpers::make_test_db;
     use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
@@ -1306,145 +1281,6 @@ mod tests {
             err.contains("Failed to resolve self-review base"),
             "expected explicit base-resolution error, got {err}"
         );
-    }
-
-    #[test]
-    fn test_resolve_workspace_path_from_task_workspaces_only() {
-        let (db, _temp_dir) = make_test_db("resolve_workspace_path_task_workspaces_only");
-        let workspace_dir = tempdir().expect("create temp workspace dir");
-        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let task = db
-            .create_task("No worktree task", "doing", Some(&project.id), None, None)
-            .expect("create task failed");
-
-        db.create_task_workspace_record(
-            &task.id,
-            &project.id,
-            &workspace_path,
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-        )
-        .expect("create task workspace failed");
-
-        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
-        assert_eq!(path, workspace_path);
-
-        drop(db);
-    }
-
-    #[test]
-    fn test_resolve_workspace_path_prefers_worktrees_row() {
-        let (db, _temp_dir) = make_test_db("resolve_workspace_path_prefers_worktrees");
-        let worktree_dir = tempdir().expect("create temp worktree dir");
-        let worktree_path = worktree_dir.path().to_string_lossy().to_string();
-        let workspace_dir = tempdir().expect("create temp workspace dir");
-        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let task = db
-            .create_task("Both sources task", "doing", Some(&project.id), None, None)
-            .expect("create task failed");
-
-        db.create_worktree_record(
-            &task.id,
-            &project.id,
-            "/tmp/test-repo",
-            &worktree_path,
-            "branch-1",
-        )
-        .expect("create worktree record failed");
-
-        db.create_task_workspace_record(
-            &task.id,
-            &project.id,
-            &workspace_path,
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-        )
-        .expect("create task workspace failed");
-
-        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
-        assert_eq!(path, worktree_path);
-
-        drop(db);
-    }
-
-    #[test]
-    fn test_resolve_workspace_path_falls_back_when_worktree_path_is_stale() {
-        let (db, _temp_dir) = make_test_db("resolve_workspace_path_stale_worktree");
-        let workspace_dir = tempdir().expect("create temp workspace dir");
-        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let task = db
-            .create_task(
-                "Stale worktree task",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-            )
-            .expect("create task failed");
-
-        db.create_worktree_record(
-            &task.id,
-            &project.id,
-            "/tmp/test-repo",
-            "/tmp/non-existent-worktree-path",
-            "branch-1",
-        )
-        .expect("create worktree record failed");
-
-        db.create_task_workspace_record(
-            &task.id,
-            &project.id,
-            &workspace_path,
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-        )
-        .expect("create task workspace failed");
-
-        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
-        assert_eq!(path, workspace_path);
-
-        drop(db);
-    }
-
-    #[test]
-    fn test_resolve_workspace_path_returns_err_when_no_row_exists() {
-        let (db, _temp_dir) = make_test_db("resolve_workspace_path_no_row");
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let task = db
-            .create_task(
-                "Task with no workspace",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-            )
-            .expect("create task failed");
-
-        let result = resolve_workspace_path(&db, &task.id);
-        assert!(result.is_err(), "expected Err but got {:?}", result);
-        assert!(
-            result.unwrap_err().contains(&task.id),
-            "error message should contain task id"
-        );
-
-        drop(db);
     }
 
     #[test]

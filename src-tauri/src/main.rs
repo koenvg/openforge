@@ -63,6 +63,7 @@ mod task_metadata_refresh;
 mod task_prompt;
 mod task_start;
 mod task_start_prompt;
+mod task_workspace_service;
 mod terminal_model;
 mod terminal_task_completion;
 #[cfg(test)]
