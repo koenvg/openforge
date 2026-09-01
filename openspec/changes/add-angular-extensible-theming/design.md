@@ -47,6 +47,113 @@ Alternatives considered:
 - Melt's Svelte 5 package is still pre-1.0 and permits minor-release breaking changes, which is too volatile behind a published plugin UI contract.
 - daisyUI remains useful as a temporary styling adapter, but it does not own the complex interaction behavior required for dialogs, tabs, menus, tooltips, and composite fields.
 
+
+#### Gate result and evidence
+
+Decision: accept Bits UI 2.19.0 as the private implementation for OpenForge composite controls. Keep native elements for simple controls. The measured cost is justified for dialogs, selects, tabs, anchored menus, and tooltips, but not for buttons, text fields, checkboxes, or switches.
+
+The disposable spike used Svelte 5.56.10, Bits UI 2.19.0, `@internationalized/date` 3.12.3, Vite 8.2.2, and Electron 43.4.1. It mounted the same dialog and select anatomy directly in the host renderer and from an npm-packed external-plugin fixture installed into a clean consumer. The packed module and its extracted stylesheet were then loaded into the actual Electron renderer.
+
+| Gate | Evidence | Result |
+|------|----------|--------|
+| Svelte 5 compatibility | Bits UI declares `svelte ^5.33.0`; the workspace uses 5.56.10. The host development renderer, packed fixture build, and host production build all completed with the spike mounted. | Pass |
+| One shared Svelte runtime | The packed bundle retained bare imports for `svelte`, `svelte/internal/disclose-version`, `svelte/internal/client`, `svelte/events`, `svelte/reactivity`, and `svelte/attachments`. Every import exists in the host runtime contract. The bundle contained no inlined Svelte error/runtime markers, and the packed component mounted inside the host tree without `effect_orphan`. | Pass |
+| Portals | Dialog content and select listboxes rendered outside `#app` in both the host and packed-plugin cases while retaining working context and callbacks. | Pass |
+| CSS extraction | Vite emitted `plugin.css`, the packed package declared it through `frontendStyles`, and the Electron renderer loaded it before interaction. Component paint required neither Tailwind nor daisyUI in the consumer. | Pass |
+| Bundle impact | Against a native Svelte fixture, the combined dialog and select added 163,390 raw bytes and 37,899 gzip bytes of JavaScript. Extracted CSS added 2,724 raw bytes and 816 gzip bytes. This is material, so Bits UI stays limited to composite interactions. | Pass with constraint |
+| Dialog keyboard and focus | Open moved focus into the dialog, Tab looped from the last action to the first field, Escape dismissed it, and focus returned to the trigger. The same checks passed in both render paths. | Pass |
+| Select keyboard and focus | Arrow keys opened and moved selection, Enter selected `angular-dark`, the trigger retained focus with `aria-activedescendant`, and Escape dismissed the listbox. The same checks passed in both render paths. | Pass |
+| Accessible names and states | Dialogs exposed a computed name, `role=dialog`, and `aria-modal=true`. Select triggers exposed names and expanded state; options exposed selected state. The OpenForge wrapper explicitly forwarded `aria-disabled=true` alongside Bits UI's disabled behavior. | Pass |
+| Controlled callbacks | OpenForge-owned `onDialogOpenChange` and `onValueChange` callbacks fired in both render paths. No callback or error value used a Bits UI type. | Pass |
+| Runtime errors | The final Electron run reported no console errors or page errors. | Pass |
+
+The spike also ran `pnpm build` successfully with the host fixture mounted. After recording these results, all spike source, temporary public assets, generated spike builds, tarballs, and temporary root dependencies were removed. No executable spike code remains in the repository.
+
+The public boundary is therefore non-negotiable: OpenForge components define their own properties, bindable values, `on`-prefixed callbacks, validation errors, behavior tests, and documentation. They may import Bits UI internally, but they must not extend its prop types, re-export its symbols, expose its event objects, mention its compound parts in errors, or select elements by Bits UI implementation attributes in tests.
+
+#### Angular visual references
+
+The desktop themes adapt the website's angular visual language rather than copy its marketing layout. Both themes use visible one-pixel construction lines, flat layered planes, compact geometry, restrained blue and violet accents, and low-radius corners. Borders establish hierarchy before shadows. Soft shadows are reserved for floating layers. Decorative glow, glass cards, large pills, and rounded dashboard tiles are out of character.
+
+The light reference comes directly from the website palette: warm off-white canvas, white work surfaces, blue focus and action color, violet secondary emphasis, mint success, amber warning, and near-black text. The dark reference preserves those relationships without inverting the light theme. It uses blue-black canvas layers, cool gray text, lighter accents, and independently checked contrast.
+
+| Semantic role | Angular light | Angular dark |
+|---------------|---------------|--------------|
+| Canvas | `#FBFBFA` | `#0D0F14` |
+| Surface | `#FFFFFF` | `#14171D` |
+| Subtle surface | `#F4F5F5` | `#1B1F27` |
+| Raised surface | `#FFFFFF` | `#20252E` |
+| Tinted surface | `#F0F3FF` | `#171D32` |
+| Primary text | `#111318` | `#F3F5F7` |
+| Secondary text | `#434954` | `#C5CBD3` |
+| Muted text | `#626872` | `#9AA3AE` |
+| Border | `#E1E3E6` | `#2D333D` |
+| Strong border | `#C9CDD2` | `#434B57` |
+| Accent | `#2947FF` | `#8494FF` |
+| Accent hover | `#1830C9` | `#A3ADFF` |
+| On accent | `#FFFFFF` | `#0D0F14` |
+| Success foreground | `#087F5B` | `#5ED6B2` |
+| Warning foreground | `#A15C00` | `#FFBE5C` |
+| Danger foreground | `#C52632` | `#FF7A86` |
+| Modal scrim | `rgb(13 15 20 / 48%)` | `rgb(0 0 0 / 64%)` |
+
+Primary, secondary, and muted text exceed WCAG AA against their normal surfaces. The measured ratios are 17.95:1, 9.05:1, and 5.61:1 in light mode, and 17.54:1, 10.99:1, and 7.03:1 in dark mode. On-accent text measures 6.11:1 in light mode and 6.99:1 in dark mode. Success, warning, and danger foregrounds also exceed 4.5:1 against their normal surfaces. Functional state still requires text or an icon; color alone never carries meaning.
+
+#### Semantic token taxonomy
+
+`ThemeTokens` is complete and versioned by the SDK contract. Theme authors provide every required role. The registry rejects missing values, unknown values are ignored for forward compatibility only when the contract explicitly permits them, and components never fall back to raw palette values.
+
+| Group | Required roles | Use |
+|-------|----------------|-----|
+| Surfaces | `canvas`, `surface`, `surfaceSubtle`, `surfaceRaised`, `surfaceTint`, `scrim` | Application background, panels, grouped rows, floating layers, selected regions, and modal isolation. |
+| Text and icons | `text`, `textSecondary`, `textMuted`, `textInverse`, `link`, `icon`, `iconMuted` | Content hierarchy and icon paint. Placeholder text uses `textMuted`; disabled text has its own control role. |
+| Borders and focus | `border`, `borderStrong`, `borderInteractive`, `focusRing`, `selection` | Dividers, container outlines, interactive hover outlines, keyboard focus, and text selection. |
+| Accent | `accent`, `accentHover`, `accentPressed`, `onAccent`, `accentSubtle`, `onAccentSubtle` | Primary action, current navigation, and selected controls. |
+| Semantic feedback | `info`, `onInfo`, `infoSubtle`, `success`, `onSuccess`, `successSubtle`, `warning`, `onWarning`, `warningSubtle`, `danger`, `onDanger`, `dangerSubtle` | Messages, badges, destructive actions, and validation. Each state has foreground and container roles. |
+| Controls | `control`, `controlHover`, `controlPressed`, `controlDisabled`, `controlText`, `controlTextDisabled`, `field`, `fieldHover`, `fieldInvalid` | Buttons, fields, switches, checkboxes, select triggers, and interaction states. |
+| Status | `statusNeutral`, `statusRunning`, `statusWaiting`, `statusSuccess`, `statusWarning`, `statusDanger`, with matching subtle containers and foregrounds | Task and session state. Status names remain domain-specific even when values share semantic feedback colors. |
+| Code and review | `codeCanvas`, `codeText`, `codeMuted`, `codeBorder`, `diffAdded`, `diffAddedSubtle`, `diffRemoved`, `diffRemovedSubtle`, `diffChanged`, `diffChangedSubtle` | Markdown code, source review, and syntax-host backgrounds. Syntax grammars remain package-owned. |
+| Terminal | `background`, `foreground`, `cursor`, `cursorAccent`, `selectionBackground`, `selectionForeground`, plus the sixteen ANSI colors | One complete terminal palette carried in the selected theme presentation. |
+| Geometry | `borderWidth`, `focusWidth`, `radiusControl`, `radiusContainer`, `radiusOverlay`, `radiusRound`, `controlHeightCompact`, `controlHeight`, `controlHeightTouch` | Shared component proportions and daisyUI compatibility mapping. |
+| Spacing | `space1` through `space9` | A fixed `2, 4, 6, 8, 12, 16, 24, 32, 48px` scale. Components do not invent intermediate spacing. |
+| Typography | `fontSans`, `fontMono`, `textXs`, `textSm`, `textMd`, `textLg`, `textXl`, `weightRegular`, `weightMedium`, `weightSemibold`, and matching line heights | Shared control, content, title, and code metrics. |
+| Elevation | `shadowSurface`, `shadowRaised`, `shadowOverlay` | Static surfaces, popovers, and dialogs. Borders remain the primary separation method. |
+| Motion | `durationPress`, `durationFast`, `durationStandard`, `durationDeliberate`, `easeStandard`, `easeEnter`, `easeExit` | State feedback, disclosure, floating-layer entry, and exit. |
+
+The CSS adapter exposes these roles as documented `--of-*` properties. Public components consume only those properties. daisyUI variables map inward to the same roles during migration and are never part of the plugin theme contract.
+
+#### Geometry and layout
+
+The angular system uses a 4px base rhythm with 2px and 6px available for optical corrections. Standard controls are 36px high, compact controls are 28px, and touch-oriented controls are 44px. Icon-only controls keep a 36px visual box and at least a 40px hit area in desktop layouts.
+
+Control corners are 3px. Containers and floating layers are 4px. Fully round geometry is reserved for status dots, avatars, and explicit pill badges. Panels sit edge to edge in dense work areas and use shared borders rather than independent card shadows. Nested surfaces may step through canvas, surface, and subtle surface, but must not create more than three simultaneous elevation levels.
+
+One-pixel borders define panels and groups. Keyboard focus uses a 2px ring with a 2px offset. Static surfaces use no shadow or a 2px offset construction shadow. Popovers use the raised shadow. Dialogs use the overlay shadow and scrim. Layout grids, split panes, and feature-owned responsive behavior remain caller-owned.
+
+#### Typography
+
+Inter remains the interface family and JetBrains Mono remains the code, identifier, shortcut, and diagnostic family. The desktop scale is 11px for dense metadata, 12px for labels, 14px for normal content and controls, 16px for emphasized content, 20px for section titles, and 28px for rare top-level headings. Normal content uses 400, labels and controls use 500, and headings use 600. Heavier weights are reserved for code syntax or external content that already requires them.
+
+Body line height is 1.5. Dense metadata uses 1.35. Titles use 1.2. Headings may use slight negative tracking, but controls, body text, and monospaced text keep normal tracking. Uppercase is limited to short monospaced eyebrows and diagnostic labels, never ordinary control text.
+
+#### Motion
+
+Press feedback uses 80ms, hover and focus feedback 140ms, normal disclosure and popover changes 200ms, and deliberate dialog transitions 280ms. Entering layers use `cubic-bezier(0.16, 1, 0.3, 1)`; exits use `cubic-bezier(0.4, 0, 1, 1)` and finish faster than entry. Only opacity and transform animate for floating layers. Width, height, top, and left do not animate.
+
+Theme application is atomic and does not crossfade. Focus is never delayed for animation. Interactions remain available while a transition runs. Under `prefers-reduced-motion: reduce`, component transitions collapse to 0.01ms, transforms are removed, smooth scrolling is disabled, and no information depends on motion.
+
+#### Representative component anatomy
+
+OpenForge owns anatomy at the public component boundary. Bits UI parts are implementation details and do not appear in caller code.
+
+- A button is a native `button` with content, optional leading or trailing icon slots, semantic variant, native disabled state, visible focus, and an `onClick` callback. It does not need Bits UI.
+- A field contains a visible label, native control, optional helper text, and an inline error region linked with `aria-describedby`. Invalid state changes border and message, not layout ownership.
+- A select contains an OpenForge trigger, value, indicator, portalled listbox, viewport, and options. The public value is a string or documented OpenForge option type. The trigger retains focus while keyboard navigation updates `aria-activedescendant`; selected and disabled option states are explicit.
+- A dialog contains an optional OpenForge trigger, scrim, portalled surface, title, optional description, body, close control, and caller-owned actions. It requires exactly one accessible name, traps focus while modal, closes on Escape unless the public contract disables dismissal, and restores focus to the logical opener.
+- A panel contains an optional header, body, and footer separated by shared borders. Panels own surface and padding only. Feature grids, split ratios, scrolling policy, and data loading stay with the caller.
+- Tabs contain a tab list, named tabs, and associated panels. Arrow-key behavior, selected state, and focus movement stay private to the implementation; callers receive values and `onValueChange`.
+
+State precedence is disabled, invalid or danger, pressed or selected, hover, then rest. Focus remains visible over every state. Loading prevents duplicate activation but does not erase the control's accessible name. Public behavior tests assert roles, names, callbacks, values, disabled and selected states, focus, portals, and dismissal. They do not assert Bits UI parts, data attributes, generated ids, or DOM nesting.
 ### 1. Use a typed theme definition and one host-owned registry
 
 Introduce a shared theme contract with a fixed shape similar to:

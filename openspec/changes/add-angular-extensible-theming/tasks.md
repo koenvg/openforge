@@ -1,8 +1,8 @@
 ## 0. Architecture exploration and framework gate
 
-- [ ] 0.1 Run `/opsx-explore add-angular-extensible-theming` before executable implementation, define the light and dark visual references, semantic token taxonomy, geometry, typography, motion, and representative component anatomy, and verify the agreed decisions are recorded in `design.md`.
-- [ ] 0.2 Build disposable Bits UI dialog and select spikes through both the host renderer and a packed external-plugin fixture; verify Svelte 5 compatibility, one shared Svelte runtime, portals, CSS extraction, bundle impact, keyboard behavior, focus management, and accessible names and states, then record the evidence in `design.md`.
-- [ ] 0.3 Confirm or reject Bits UI as the private headless implementation behind OpenForge components; verify `openspec validate add-angular-extensible-theming --strict` passes after recording the decision, and stop for planning revision before task 1.1 if the spike rejects it.
+- [x] 0.1 Run `/opsx-explore add-angular-extensible-theming` before executable implementation, define the light and dark visual references, semantic token taxonomy, geometry, typography, motion, and representative component anatomy, and verify the agreed decisions are recorded in `design.md`.
+- [x] 0.2 Build disposable Bits UI dialog and select spikes through both the host renderer and a packed external-plugin fixture; verify Svelte 5 compatibility, one shared Svelte runtime, portals, CSS extraction, bundle impact, keyboard behavior, focus management, and accessible names and states, then record the evidence in `design.md`.
+- [x] 0.3 Confirm or reject Bits UI as the private headless implementation behind OpenForge components; verify `openspec validate add-angular-extensible-theming --strict` passes after recording the decision, and stop for planning revision before task 1.1 if the spike rejects it.
 
 ## 1. Theme contract and registry
 
