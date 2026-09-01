@@ -492,6 +492,24 @@ pub(crate) fn search_files(project_root: &Path, query: &str, limit: usize) -> Ve
     crate::command_discovery::search_project_files(&project_root.to_string_lossy(), query, limit)
 }
 
+pub(crate) fn search_files_checked(
+    project_root: &Path,
+    query: &str,
+    limit: usize,
+) -> ProjectFsResult<Vec<String>> {
+    let canonical_root = canonical_project_root(project_root)?;
+    crate::command_discovery::try_search_project_files(
+        &canonical_root.to_string_lossy(),
+        query,
+        limit,
+    )
+    .map_err(|error| {
+        ProjectFsError::internal(format!(
+            "Failed to search Task workspace repository: {error}"
+        ))
+    })
+}
+
 pub(crate) async fn write_file(
     project_root: &Path,
     sub_path: &str,

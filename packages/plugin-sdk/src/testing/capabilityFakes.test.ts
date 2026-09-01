@@ -57,6 +57,47 @@ describe('testing capability fakes', () => {
       size: 4,
     })
   })
+
+  it('serves configurable Task workspace fixtures through the filesystem fake', async () => {
+    const api = createMockBackendOpenForgeApi({
+      taskWorkspaces: {
+        'task-1': {
+          directories: {
+            assets: [{ name: 'demo.mp4', path: 'assets/demo.mp4', isDir: false, size: 4, modifiedAt: null }],
+          },
+          files: {
+            'assets/demo.mp4': {
+              type: 'video',
+              content: 'AAECAw==',
+              mimeType: 'video/mp4',
+              size: 4,
+            },
+          },
+          searches: {
+            demo: ['assets/demo.mp4'],
+          },
+        },
+        'task-error': { error: 'workspace unavailable' },
+      },
+    })
+
+    await expect(api.fs.task.readDir({ taskId: 'task-1', path: 'assets' })).resolves.toHaveLength(1)
+    await expect(api.fs.task.readFile({ taskId: 'task-1', path: 'assets/demo.mp4' })).resolves.toEqual({
+      type: 'video',
+      content: 'AAECAw==',
+      mimeType: 'video/mp4',
+      size: 4,
+    })
+    await expect(api.fs.task.searchFiles({ taskId: 'task-1', query: 'demo' })).resolves.toEqual(['assets/demo.mp4'])
+    await expect(api.fs.task.readDir({ taskId: 'task-1', path: 'missing' }))
+      .rejects.toThrow('Task workspace directory not found: task-1:missing')
+    await expect(api.fs.task.readFile({ taskId: 'task-1', path: 'missing.txt' }))
+      .rejects.toThrow('Task workspace file not found: task-1:missing.txt')
+    await expect(api.fs.task.readFile({ taskId: 'missing-task', path: 'README.md' }))
+      .rejects.toThrow('No workspace found for task missing-task')
+    await expect(api.fs.task.searchFiles({ taskId: 'task-error', query: 'demo' }))
+      .rejects.toThrow('workspace unavailable')
+  })
   it('records backend user data and external filesystem calls', async () => {
     const api = createMockBackendOpenForgeApi({
       pluginId: 'skill-usage',

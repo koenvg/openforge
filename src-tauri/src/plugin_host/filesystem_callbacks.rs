@@ -1,5 +1,6 @@
 mod external_read;
 mod project;
+mod task;
 mod user_data_durability;
 
 use super::callbacks::required_param_string;

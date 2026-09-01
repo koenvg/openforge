@@ -518,11 +518,25 @@ export interface ProjectScopedFileRequest {
   path: string
 }
 
+/** Identifies a file inside a Task's resolved live workspace. Paths must be workspace-relative. */
+export interface TaskScopedFileRequest {
+  taskId: string
+  path: string
+}
+
+/** Read-only access to resolved Task workspaces. Missing workspaces reject instead of using the Project checkout. */
+export interface TaskFileSystemAPI {
+  readDir(request: { taskId: string; path?: string | null }): Promise<FileEntry[]>
+  readFile(request: TaskScopedFileRequest): Promise<FileContent>
+  searchFiles(request: { taskId: string; query: string; limit?: number }): Promise<string[]>
+}
+
 export interface FileSystemAPI {
   readDir(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile(request: ProjectScopedFileRequest): Promise<FileContent>
   writeFile(request: ProjectScopedFileRequest & { content: string }): Promise<void>
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
+  task: TaskFileSystemAPI
 }
 
 export interface UserDataDirectoryRequest {

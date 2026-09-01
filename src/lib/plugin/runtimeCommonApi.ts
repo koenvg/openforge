@@ -199,6 +199,11 @@ export class RuntimeCommonApiRegistry {
         readFile: async (request) => this.services.host.readFile ? this.services.host.readFile(request) : unavailableCapability('fs.readFile'),
         writeFile: async (request) => this.services.host.writeFile ? this.services.host.writeFile(request) : unavailableCapability('fs.writeFile'),
         searchFiles: async (request) => this.services.host.searchFiles ? this.services.host.searchFiles(request) : unavailableCapability('fs.searchFiles'),
+        task: {
+          readDir: async (request) => this.services.host.readTaskDir ? this.services.host.readTaskDir(request) : unavailableCapability('fs.task.readDir'),
+          readFile: async (request) => this.services.host.readTaskFile ? this.services.host.readTaskFile(request) : unavailableCapability('fs.task.readFile'),
+          searchFiles: async (request) => this.services.host.searchTaskFiles ? this.services.host.searchTaskFiles(request) : unavailableCapability('fs.task.searchFiles'),
+        },
       },
       shell: {
         spawn: async (request) => this.services.host.spawnShell ? this.services.host.spawnShell(request) : unavailableCapability('shell.spawn'),

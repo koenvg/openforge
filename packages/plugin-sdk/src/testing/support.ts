@@ -18,6 +18,7 @@ import type {
   TestingCommandContribution,
   TestingMaybePromise,
   TestingExternalTextFile,
+  TestingTaskWorkspaceFixture,
   TestingOpenForgeApiCalls,
   TestingOpenForgeApiOptions,
   TestingRuntimeKind,
@@ -251,6 +252,7 @@ export class TestingRegistryServices {
   readonly externalTextFiles: TestingExternalTextFile[]
   readonly userDataTextFiles = new Map<string, string>()
   readonly projectFileContents: Readonly<Record<string, FileContent>>
+  readonly taskWorkspaces: Readonly<Record<string, TestingTaskWorkspaceFixture>>
   readonly claims = new TestingContributionClaims()
 
   constructor(options: TestingOpenForgeApiOptions = {}) {
@@ -274,6 +276,7 @@ export class TestingRegistryServices {
     this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {}
     this.externalTextFiles = options.externalTextFiles ?? []
     this.projectFileContents = options.projectFileContents ?? {}
+    this.taskWorkspaces = options.taskWorkspaces ?? {}
     for (const file of options.userDataTextFiles ?? []) {
       this.userDataTextFiles.set(file.path, file.content)
     }

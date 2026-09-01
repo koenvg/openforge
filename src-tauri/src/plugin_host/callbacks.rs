@@ -41,6 +41,9 @@ impl PluginHost {
             "openforge.fs.readFile" => self.read_project_file_for_host(params).await,
             "openforge.fs.searchFiles" => self.search_project_files_for_host(params),
             "openforge.fs.writeFile" => self.write_project_file_for_host(params).await,
+            "openforge.fs.task.readDir" => self.read_task_dir_for_host(params).await,
+            "openforge.fs.task.readFile" => self.read_task_file_for_host(params).await,
+            "openforge.fs.task.searchFiles" => self.search_task_files_for_host(params),
             "openforge.fs.userData.readDir" => {
                 self.read_plugin_user_data_dir_for_host(params).await
             }

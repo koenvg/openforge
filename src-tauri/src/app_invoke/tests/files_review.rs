@@ -119,6 +119,185 @@ async fn handles_fs_and_agent_review_db_commands() {
 }
 
 #[tokio::test]
+async fn exposes_classified_task_workspace_files_through_app_invoke() {
+    let (state, _temp_dir) = test_state("app_invoke_task_workspace_filesystem");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace dir");
+    std::fs::create_dir(workspace_dir.path().join("src")).expect("create src dir");
+    std::fs::write(workspace_dir.path().join("src/main.rs"), "fn main() {}\n")
+        .expect("write text fixture");
+    std::fs::write(
+        workspace_dir.path().join("image.png"),
+        [0x89, b'P', b'N', b'G'],
+    )
+    .expect("write image fixture");
+    std::fs::write(workspace_dir.path().join("video.mp4"), [0, 1, 2, 3])
+        .expect("write video fixture");
+    std::fs::write(workspace_dir.path().join("document.pdf"), b"%PDF")
+        .expect("write document fixture");
+    std::fs::write(workspace_dir.path().join("binary.bin"), [0, 1, 2, 3])
+        .expect("write binary fixture");
+    std::fs::write(
+        workspace_dir.path().join("large.txt"),
+        vec![b'a'; 1_048_577],
+    )
+    .expect("write large fixture");
+    std::fs::write(project_dir.path().join("fallback-only.txt"), "not visible")
+        .expect("write project-only fixture");
+    let repo = git2::Repository::init(workspace_dir.path()).expect("init workspace repo");
+    let mut index = repo.index().expect("workspace index");
+    index
+        .add_path(std::path::Path::new("src/main.rs"))
+        .expect("add source fixture");
+    index.write().expect("write workspace index");
+
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        let project = db
+            .create_project(
+                "Open Forge",
+                project_dir.path().to_str().expect("project path is UTF-8"),
+            )
+            .expect("create project");
+        let task = db
+            .create_task("Workspace files", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            workspace_dir
+                .path()
+                .to_str()
+                .expect("workspace path is UTF-8"),
+            project_dir.path().to_str().expect("project path is UTF-8"),
+            "git_worktree",
+            Some("task-files"),
+            "pi",
+        )
+        .expect("create task workspace");
+        task.id
+    };
+
+    let dir = invoke_ok(
+        &state,
+        "task_fs_read_dir",
+        json!({ "taskId": task_id, "dirPath": null }),
+    )
+    .await;
+    assert!(dir
+        .as_array()
+        .expect("directory entries")
+        .iter()
+        .any(|entry| entry["name"] == "src" && entry["isDir"] == true));
+
+    for (path, expected_type) in [
+        ("src/main.rs", "text"),
+        ("image.png", "image"),
+        ("video.mp4", "video"),
+        ("document.pdf", "document"),
+        ("binary.bin", "binary"),
+        ("large.txt", "large-file"),
+    ] {
+        let file = invoke_ok(
+            &state,
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": path }),
+        )
+        .await;
+        assert_eq!(file["type"], expected_type, "unexpected type for {path}");
+    }
+
+    let search = invoke_ok(
+        &state,
+        "task_fs_search_files",
+        json!({ "taskId": task_id, "query": "main", "limit": 10 }),
+    )
+    .await;
+    assert!(search
+        .as_array()
+        .expect("search results")
+        .iter()
+        .any(|path| path == "src/main.rs"));
+}
+
+#[tokio::test]
+async fn rejects_unresolved_and_out_of_workspace_task_file_reads() {
+    let (state, _temp_dir) = test_state("app_invoke_task_workspace_filesystem_errors");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    std::fs::write(project_dir.path().join("README.md"), "project checkout")
+        .expect("write project fixture");
+    let container = tempfile::tempdir().expect("workspace container");
+    let workspace_path = container.path().join("workspace");
+    std::fs::create_dir(&workspace_path).expect("create workspace");
+    std::fs::write(workspace_path.join("README.md"), "task workspace")
+        .expect("write workspace fixture");
+    std::fs::write(container.path().join("secret.txt"), "outside")
+        .expect("write traversal fixture");
+
+    let (missing_workspace_task_id, workspace_task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let project = db
+            .create_project(
+                "Open Forge",
+                project_dir.path().to_str().expect("project path is UTF-8"),
+            )
+            .expect("create project");
+        let missing_workspace_task = db
+            .create_task("Missing workspace", "doing", Some(&project.id), None, None)
+            .expect("create missing workspace task");
+        let workspace_task = db
+            .create_task("Workspace", "doing", Some(&project.id), None, None)
+            .expect("create workspace task");
+        db.create_task_workspace_record(
+            &workspace_task.id,
+            &project.id,
+            workspace_path.to_str().expect("workspace path is UTF-8"),
+            project_dir.path().to_str().expect("project path is UTF-8"),
+            "git_worktree",
+            Some("task-files"),
+            "pi",
+        )
+        .expect("create task workspace");
+        (missing_workspace_task.id, workspace_task.id)
+    };
+
+    let (status, message) = invoke(
+        &state,
+        "task_fs_read_file",
+        json!({ "taskId": missing_workspace_task_id, "filePath": "README.md" }),
+    )
+    .await
+    .expect_err("missing workspace must fail instead of reading the project checkout");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(message.contains("No workspace found"));
+
+    let (status, message) = invoke(
+        &state,
+        "task_fs_search_files",
+        json!({ "taskId": workspace_task_id, "query": "readme", "limit": 10 }),
+    )
+    .await
+    .expect_err("invalid Task workspace repository must fail search");
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(message.contains("Failed to search Task workspace repository"));
+
+    for (path, expected_status) in [
+        ("/etc/passwd", StatusCode::BAD_REQUEST),
+        ("../secret.txt", StatusCode::FORBIDDEN),
+        ("missing.txt", StatusCode::BAD_REQUEST),
+    ] {
+        let (status, message) = invoke(
+            &state,
+            "task_fs_read_file",
+            json!({ "taskId": workspace_task_id, "filePath": path }),
+        )
+        .await
+        .expect_err("invalid task file target must fail");
+        assert_eq!(status, expected_status, "unexpected status for {path}");
+        assert!(!message.is_empty(), "missing explicit error for {path}");
+    }
+}
+#[tokio::test]
 async fn writes_project_files_through_the_app_invoke_boundary() {
     let (state, _temp_dir) = test_state("app_invoke_write_project_file");
     let temp_dir = tempfile::tempdir().expect("temp project dir");

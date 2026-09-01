@@ -36,7 +36,7 @@ import type {
   UserDataFileRequest,
   UserDataFileWriteRequest,
 } from '../types'
-import type { AgentSession, FileContent, Task, TaskLabel } from '../domain'
+import type { AgentSession, FileContent, FileEntry, Task, TaskLabel } from '../domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
@@ -49,6 +49,17 @@ export interface TestingExternalTextFile extends ExternalReadFileRequest {
   /** Defaults to a deterministic identity derived from root and path. */
   identity?: string
   modifiedAtMs?: number | null
+}
+
+export interface TestingTaskWorkspaceFixture {
+  /** Rejects every Task filesystem operation with this message. */
+  error?: string
+  /** Directory entries keyed by workspace-relative directory path. Use an empty key for the root. */
+  directories?: Readonly<Record<string, FileEntry[]>>
+  /** Classified file contents keyed by workspace-relative path. */
+  files?: Readonly<Record<string, FileContent>>
+  /** Search results keyed by exact query. */
+  searches?: Readonly<Record<string, string[]>>
 }
 
 export type TestingExternalTextFileChunksCall = Omit<ExternalReadTextFileChunksRequest, 'signal' | 'chunkSizeBytes'> & {
@@ -72,6 +83,8 @@ export interface TestingOpenForgeApiOptions {
   userDataTextFiles?: UserDataFileWriteRequest[]
   /** File contents returned by `fs.readFile`, keyed by project-relative path. */
   projectFileContents?: Readonly<Record<string, FileContent>>
+  /** Task workspaces exposed through `fs.task`, keyed by Task ID. Missing IDs reject. */
+  taskWorkspaces?: Readonly<Record<string, TestingTaskWorkspaceFixture>>
   /**
    * Tasks returned by `tasks.list`. The mock filters them by the requested
    * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,

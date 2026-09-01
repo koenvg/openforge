@@ -296,6 +296,11 @@ export function createBackendApi(
       readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', objectCallbackParams(request)),
       writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', objectCallbackParams(request)) },
       searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', objectCallbackParams(request)),
+      task: {
+        readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.task.readDir', objectCallbackParams(request)),
+        readFile: async request => await hostCallback<FileContent>('openforge.fs.task.readFile', objectCallbackParams(request)),
+        searchFiles: async request => await hostCallback<string[]>('openforge.fs.task.searchFiles', objectCallbackParams(request)),
+      },
       userData: {
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.userData.readDir', pluginFileCallbackParams(state.pluginId, request)),
         readTextFile: async request => await hostCallback<string>('openforge.fs.userData.readTextFile', pluginFileCallbackParams(state.pluginId, request)),

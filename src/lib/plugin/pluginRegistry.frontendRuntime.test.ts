@@ -7,6 +7,9 @@ import {
   enabledPluginIds,
   executePluginCommand,
   fsReadFileMock,
+  taskFsReadDirMock,
+  taskFsReadFileMock,
+  taskFsSearchFilesMock,
   get,
   getPluginRenderProps,
   getPluginStorageMock,
@@ -199,12 +202,21 @@ describe('pluginRegistry frontend runtime', () => {
     const { api } = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
     const readmeContent = { type: 'text' as const, content: 'readme', mimeType: null, size: 6 }
     fsReadFileMock.mockResolvedValueOnce(readmeContent)
+    taskFsReadDirMock.mockResolvedValueOnce([{ name: 'src', path: 'src', isDir: true, size: null, modifiedAt: null }])
+    taskFsReadFileMock.mockResolvedValueOnce(readmeContent)
+    taskFsSearchFilesMock.mockResolvedValueOnce(['src/main.ts'])
 
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual(readmeContent)
+    await expect(api.fs.task.readDir({ taskId: 'T-1', path: 'src' })).resolves.toHaveLength(1)
+    await expect(api.fs.task.readFile({ taskId: 'T-1', path: 'README.md' })).resolves.toEqual(readmeContent)
+    await expect(api.fs.task.searchFiles({ taskId: 'T-1', query: 'main', limit: 10 })).resolves.toEqual(['src/main.ts'])
     await api.system.openUrl('https://example.com/plugin')
     await api.system.writeClipboardText('Reviewer brief')
 
     expect(fsReadFileMock).toHaveBeenCalledWith('P-1', 'README.md')
+    expect(taskFsReadDirMock).toHaveBeenCalledWith('T-1', 'src')
+    expect(taskFsReadFileMock).toHaveBeenCalledWith('T-1', 'README.md')
+    expect(taskFsSearchFilesMock).toHaveBeenCalledWith('T-1', 'main', 10)
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
     expect(writeClipboardTextMock).toHaveBeenCalledWith('Reviewer brief')
   })

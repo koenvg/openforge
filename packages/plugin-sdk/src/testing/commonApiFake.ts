@@ -25,10 +25,21 @@ import type {
   TestingEventHandler,
   TestingEventListenerContribution,
   TestingExternalTextFile,
+  TestingTaskWorkspaceFixture,
 } from './contracts'
 
 const UTF8_ENCODER = new TextEncoder()
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
+
+function testingTaskWorkspace(
+  workspaces: Readonly<Record<string, TestingTaskWorkspaceFixture>>,
+  taskId: string,
+): TestingTaskWorkspaceFixture {
+  const workspace = workspaces[taskId]
+  if (!workspace) throw new Error(`No workspace found for task ${taskId}`)
+  if (workspace.error) throw new Error(workspace.error)
+  return workspace
+}
 
 function readTestingUserDataDir(
   files: ReadonlyMap<string, string>,
@@ -641,6 +652,21 @@ export class TestingCommonApiFake {
           this.services.calls.fsWrites.push(request)
         },
         searchFiles: async () => [],
+        task: {
+          readDir: async ({ taskId, path }) => {
+            const directoryPath = path ?? ''
+            const entries = testingTaskWorkspace(this.services.taskWorkspaces, taskId).directories?.[directoryPath]
+            if (!entries) throw new Error(`Task workspace directory not found: ${taskId}:${directoryPath}`)
+            return entries
+          },
+          readFile: async ({ taskId, path }) => {
+            const file = testingTaskWorkspace(this.services.taskWorkspaces, taskId).files?.[path]
+            if (!file) throw new Error(`Task workspace file not found: ${taskId}:${path}`)
+            return file
+          },
+          searchFiles: async ({ taskId, query }) =>
+            testingTaskWorkspace(this.services.taskWorkspaces, taskId).searches?.[query] ?? [],
+        },
       },
       shell: {
         spawn: async (request) => {

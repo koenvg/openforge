@@ -25,6 +25,9 @@ const {
   fsReadFileMock,
   fsWriteFileMock,
   fsSearchFilesMock,
+  taskFsReadDirMock,
+  taskFsReadFileMock,
+  taskFsSearchFilesMock,
   getConfigMock,
   setConfigMock,
   getProjectConfigMock,
@@ -54,6 +57,9 @@ const {
   fsReadFileMock: vi.fn(),
   fsWriteFileMock: vi.fn(),
   fsSearchFilesMock: vi.fn(),
+  taskFsReadDirMock: vi.fn(),
+  taskFsReadFileMock: vi.fn(),
+  taskFsSearchFilesMock: vi.fn(),
   getConfigMock: vi.fn(),
   setConfigMock: vi.fn(),
   getProjectConfigMock: vi.fn(),
@@ -86,6 +92,9 @@ vi.mock('../ipc', () => ({
   fsReadFile: fsReadFileMock,
   fsWriteFile: fsWriteFileMock,
   fsSearchFiles: fsSearchFilesMock,
+  taskFsReadDir: taskFsReadDirMock,
+  taskFsReadFile: taskFsReadFileMock,
+  taskFsSearchFiles: taskFsSearchFilesMock,
   getConfig: getConfigMock,
   setConfig: setConfigMock,
   getProjectConfig: getProjectConfigMock,
@@ -253,6 +262,9 @@ export function resetPluginRegistryTestState(): void {
   fsReadFileMock.mockReset()
   fsWriteFileMock.mockReset()
   fsSearchFilesMock.mockReset()
+  taskFsReadDirMock.mockReset()
+  taskFsReadFileMock.mockReset()
+  taskFsSearchFilesMock.mockReset()
   getConfigMock.mockReset()
   setConfigMock.mockReset()
   getProjectConfigMock.mockReset()
@@ -303,6 +315,9 @@ export {
   fsReadDirMock,
   fsReadFileMock,
   fsSearchFilesMock,
+  taskFsReadDirMock,
+  taskFsReadFileMock,
+  taskFsSearchFilesMock,
   fsWriteFileMock,
   get,
   getBuiltinPluginModuleMock,

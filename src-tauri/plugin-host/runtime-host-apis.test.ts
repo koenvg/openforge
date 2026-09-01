@@ -520,6 +520,9 @@ describe('plugin-host backend host APIs', () => {
               const file = await openforge.fs.readFile({ projectId: 'P-1', path: 'README.md' })
               const search = await openforge.fs.searchFiles({ projectId: 'P-1', query: 'plugin', limit: 3 })
               await openforge.fs.writeFile({ projectId: 'P-1', path: 'generated.txt', content: 'hello' })
+              const taskDir = await openforge.fs.task.readDir({ taskId: 'T-1', path: 'src' })
+              const taskFile = await openforge.fs.task.readFile({ taskId: 'T-1', path: 'README.md' })
+              const taskSearch = await openforge.fs.task.searchFiles({ taskId: 'T-1', query: 'plugin', limit: 3 })
               const pty = await openforge.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 2 })
               await openforge.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\\n' })
               await openforge.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
@@ -533,7 +536,7 @@ describe('plugin-host backend host APIs', () => {
               await openforge.config.set('theme', 'dark')
               const projectConfigBefore = await openforge.projectConfig.get('github_default_repo', 'P-1')
               await openforge.projectConfig.set('github_default_repo', 'acme/repo', 'P-1')
-              return { catalog, projects, project, dir, file, search, pty, buffer, attention, configBefore, projectConfigBefore }
+              return { catalog, projects, project, dir, file, search, taskDir, taskFile, taskSearch, pty, buffer, attention, configBefore, projectConfigBefore }
             }
           }))
         }
@@ -550,6 +553,9 @@ describe('plugin-host backend host APIs', () => {
         case 'openforge.fs.readFile': return { type: 'text', content: '# Readme', mimeType: 'text/markdown', size: 8 }
         case 'openforge.fs.searchFiles': return ['src/plugin.ts']
         case 'openforge.fs.writeFile': return null
+        case 'openforge.fs.task.readDir': return [{ name: 'main.ts', path: 'src/main.ts', isDir: false, size: 12, modifiedAt: null }]
+        case 'openforge.fs.task.readFile': return { type: 'text', content: '# Task Readme', mimeType: 'text/markdown', size: 13 }
+        case 'openforge.fs.task.searchFiles': return ['src/task-plugin.ts']
         case 'openforge.shell.spawn': return 42
         case 'openforge.shell.write': return null
         case 'openforge.shell.resize': return null
@@ -574,6 +580,9 @@ describe('plugin-host backend host APIs', () => {
       dir: [{ name: 'main.ts', path: 'src/main.ts', isDir: false, size: 12, modifiedAt: null }],
       file: { type: 'text', content: '# Readme', mimeType: 'text/markdown', size: 8 },
       search: ['src/plugin.ts'],
+      taskDir: [{ name: 'main.ts', path: 'src/main.ts', isDir: false, size: 12, modifiedAt: null }],
+      taskFile: { type: 'text', content: '# Task Readme', mimeType: 'text/markdown', size: 13 },
+      taskSearch: ['src/task-plugin.ts'],
       pty: 42,
       buffer: 'hello',
       attention: [{ project_id: 'P-1', needs_input: 1 }],
@@ -593,6 +602,9 @@ describe('plugin-host backend host APIs', () => {
       'openforge.fs.readFile',
       'openforge.fs.searchFiles',
       'openforge.fs.writeFile',
+      'openforge.fs.task.readDir',
+      'openforge.fs.task.readFile',
+      'openforge.fs.task.searchFiles',
       'openforge.shell.spawn',
       'openforge.shell.write',
       'openforge.shell.resize',

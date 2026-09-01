@@ -131,6 +131,11 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       readFile: unavailable('fs.readFile'),
       writeFile: unavailable('fs.writeFile'),
       searchFiles: unavailable('fs.searchFiles'),
+      task: {
+        readDir: unavailable('fs.task.readDir'),
+        readFile: unavailable('fs.task.readFile'),
+        searchFiles: unavailable('fs.task.searchFiles'),
+      },
     },
     shell: {
       spawn: unavailable('shell.spawn'),
