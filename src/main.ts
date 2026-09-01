@@ -1,11 +1,9 @@
 import './app.css'
 import { mount } from 'svelte'
 import App from './App.svelte'
-import { initTheme } from './lib/theme'
 import { configureTerminalPerformanceTrace } from './lib/terminalSessionService'
 import { createTerminalPerformanceTestTrace } from './lib/terminalPerformanceTesting'
 
-initTheme()
 const terminalPerformanceTrace = createTerminalPerformanceTestTrace(
   import.meta.env.DEV,
   window.location.href,
