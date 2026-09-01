@@ -16,9 +16,10 @@
     buildWalkthroughStepList,
     clampStepIndex,
     isWalkthroughStale,
+    toggleCoverageFinding,
   } from '../../lib/walkthroughViewState'
   import { parseAndValidateTicketCoverage } from '../../lib/ticketCoverageParse'
-  import type { TicketSnapshot } from '../../lib/ticketCoverage'
+  import type { CoverageFinding, TicketSnapshot } from '../../lib/ticketCoverage'
   import TicketCoveragePanel from './TicketCoveragePanel.svelte'
   import { isInputFocused } from '../../lib/domUtils'
   import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
@@ -160,6 +161,23 @@
       ? parseAndValidateTicketCoverage(walkthrough.steps_json, files)
       : null,
   )
+
+  // Ticket-coverage findings the reviewer flagged to fold into the review body.
+  // Session-only: not persisted, cleared once they've been submitted.
+  let includedCoverageFindings = $state<CoverageFinding[]>([])
+  let includedFindingIds = $derived(new Set(includedCoverageFindings.map(f => f.id)))
+
+  function handleToggleFinding(finding: CoverageFinding) {
+    includedCoverageFindings = toggleCoverageFinding(includedCoverageFindings, finding)
+  }
+
+  function handleRemoveIncludedFinding(id: string) {
+    includedCoverageFindings = includedCoverageFindings.filter(f => f.id !== id)
+  }
+
+  function handleIncludedFindingsSubmitted() {
+    includedCoverageFindings = []
+  }
 
   let stepEntries = $derived(parsedSteps ? buildWalkthroughStepList(parsedSteps) : [])
 
@@ -613,9 +631,11 @@
           snapshot={ticketSnapshot}
           coverage={ticketCoverage}
           {jiraConfigured}
+          {includedFindingIds}
           {onOpenUrl}
           onSetIssueKey={(issueKey) => { void handleSetIssueKey(issueKey) }}
           onRegenerate={handleRegenerate}
+          onToggleFinding={handleToggleFinding}
         />
       </div>
     {:else}
@@ -660,8 +680,11 @@
                 pendingComments={pendingComments}
                 approvedAgentComments={approvedAgentSubmissionComments}
                 pendingReplyCount={pendingReplies.length}
+                includedFindings={includedCoverageFindings}
                 onPendingCommentsChange={onPendingCommentsChange}
                 onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
+                onRemoveIncludedFinding={handleRemoveIncludedFinding}
+                onIncludedFindingsSubmitted={handleIncludedFindingsSubmitted}
                 onSubmitReview={onSubmitReview}
               />
             {/if}

@@ -46,9 +46,11 @@ function renderPanel(props: Partial<Record<string, unknown>> = {}) {
       snapshot: SNAPSHOT,
       coverage: COVERAGE,
       jiraConfigured: true,
+      includedFindingIds: new Set<string>(),
       onOpenUrl: vi.fn(),
       onSetIssueKey: vi.fn(),
       onRegenerate: vi.fn(),
+      onToggleFinding: vi.fn(),
       ...props,
     },
   })
@@ -170,6 +172,60 @@ describe('TicketCoveragePanel', () => {
     // Setting a key would do nothing without credentials; fix the cause first.
     renderPanel({ snapshot: null, coverage: null, jiraConfigured: false })
     expect(screen.queryByLabelText(/jira ticket key/i)).toBeNull()
+  })
+
+  it('lets the reviewer add a criterion to the review', () => {
+    const onToggleFinding = vi.fn()
+    renderPanel({ onToggleFinding })
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^add to review$/i })[0])
+
+    expect(onToggleFinding).toHaveBeenCalledWith({
+      id: 'ac-1',
+      label: 'Covered',
+      text: 'The user can log in with email and password.',
+    })
+  })
+
+  it('folds a criterion\'s notes into the finding text', () => {
+    const onToggleFinding = vi.fn()
+    renderPanel({ onToggleFinding })
+
+    const buttons = screen.getAllByRole('button', { name: /^add to review$/i })
+    fireEvent.click(buttons[1])
+
+    expect(onToggleFinding).toHaveBeenCalledWith({
+      id: 'ac-2',
+      label: 'Missing',
+      text: 'Sessions expire after 30 minutes. — No expiry logic anywhere in the diff.',
+    })
+  })
+
+  it('shows an already-included criterion as added', () => {
+    renderPanel({ includedFindingIds: new Set(['ac-1']) })
+
+    expect(screen.getByRole('button', { name: /^added$/i })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /^add to review$/i })).toHaveLength(1)
+  })
+
+  it('lets the reviewer add an out-of-scope change to the review', () => {
+    const onToggleFinding = vi.fn()
+    renderPanel({
+      coverage: {
+        ...COVERAGE,
+        out_of_scope: [{ description: 'Adds a password strength meter.', files: ['src/login.ts'] }],
+      },
+      onToggleFinding,
+    })
+
+    const buttons = screen.getAllByRole('button', { name: /^add to review$/i })
+    fireEvent.click(buttons[buttons.length - 1])
+
+    expect(onToggleFinding).toHaveBeenCalledWith({
+      id: 'oos-0',
+      label: 'Not in the ticket',
+      text: 'Adds a password strength meter.',
+    })
   })
 
   it('says to regenerate when the walkthrough predates the Jira connection', () => {

@@ -5,6 +5,7 @@ import type {
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import { buildPatchFromHunks, parseHunks, selectHunksByIndex } from './hunkParser'
+import type { CoverageFinding } from './ticketCoverage'
 
 /** PR-size thresholds at which the Walkthrough tab shows a hint badge. */
 export const WALKTHROUGH_HINT_FILE_THRESHOLD = 10
@@ -106,6 +107,20 @@ export function isWalkthroughStale(
 ): boolean {
   if (!walkthrough) return false
   return walkthrough.head_sha !== pr.head_sha
+}
+
+/**
+ * Toggles a ticket-coverage finding in the reviewer's "include in review"
+ * selection: adds it if absent, removes it (by id) if already present.
+ */
+export function toggleCoverageFinding(
+  findings: CoverageFinding[],
+  finding: CoverageFinding,
+): CoverageFinding[] {
+  if (findings.some(f => f.id === finding.id)) {
+    return findings.filter(f => f.id !== finding.id)
+  }
+  return [...findings, finding]
 }
 
 export function isPrLargeEnoughForWalkthroughHint(
