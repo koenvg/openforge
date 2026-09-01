@@ -364,6 +364,38 @@ describe('terminal desktop-test probe', () => {
     })
   })
 
+  it('waits for bounded output completion before reporting a sequence gap', async () => {
+    const target = {} as TerminalTestProbeWindow
+    const entry = createEntry()
+    let currentTime = 0
+    const delay = vi.fn(async (ms: number) => {
+      currentTime += ms
+      entry.terminalOutputObservation.sequenceContinuous = true
+      entry.terminalOutputObservation.receivedBytes = 32
+      entry.terminalOutputObservation.lastSequence = 5
+      entry.terminalModelSequence = 5
+    })
+    installTerminalTestProbe({
+      isDevelopment: true,
+      environmentEnabled: true,
+      launchToken: 'run-secret',
+      url: 'http://localhost/?openforge-e2e-token=run-secret',
+      target,
+      diagnostics: createEntryDiagnostics(() => new Map([['T-1-shell-0', entry]])),
+      now: () => currentTime,
+      delay,
+    })
+    entry.terminalOutputObservation.sequenceContinuous = false
+
+    await expect(target.__openforgeE2e!.terminal.drain('T-1-shell-0', {
+      marker: 'TEST_DONE',
+      minimumReceivedBytes: 32,
+      minimumModelSequence: 5,
+      timeoutMs: 100,
+    })).rejects.toThrow(/incomplete output sequence; diagnostics=.*"sequenceContinuous":false/)
+    expect(delay).toHaveBeenCalledTimes(1)
+  })
+
   it('fails drains for incomplete sequences and missing markers', async () => {
     const target = {} as TerminalTestProbeWindow
     const entry = createEntry()
@@ -379,7 +411,7 @@ describe('terminal desktop-test probe', () => {
 
     entry.terminalOutputObservation.sequenceContinuous = false
     await expect(terminal.drain('T-1-shell-0', { marker: 'TEST_DONE', timeoutMs: 0 }))
-      .rejects.toThrow('incomplete output sequence')
+      .rejects.toThrow(/incomplete output sequence; diagnostics=.*"currentPtyInstance":7.*"lastSequence":4.*"sequenceContinuous":false/)
 
     entry.terminalOutputObservation.sequenceContinuous = true
     await expect(terminal.drain('T-1-shell-0', { marker: 'MISSING', timeoutMs: 0 }))

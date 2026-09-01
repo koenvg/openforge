@@ -62,7 +62,8 @@ export function recordTerminalOutput(
   if (observation.ptyInstanceId !== output.ptyInstanceId) return
   if (observation.lastSequence !== null && output.sequence <= observation.lastSequence) return
 
-  if (observation.lastSequence !== null && output.startSequence !== observation.lastSequence + 1) {
+  // An authority snapshot can overlap a coalesced live event; only a forward gap loses coverage.
+  if (observation.lastSequence !== null && output.startSequence > observation.lastSequence + 1) {
     observation.sequenceContinuous = false
   }
   observation.receivedBytes += terminalDataByteLength(output.data)
