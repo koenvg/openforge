@@ -148,6 +148,11 @@ impl PluginHost {
             .app_handle
             .try_state::<crate::pty_manager::PtyManager>()
             .map(|state| state.inner().clone());
+        let deferred_completion_watcher = self
+            .app_handle
+            .try_state::<crate::http_server::deferred_completion::DeferredCompletionWatcher>()
+            .map(|state| state.inner().clone())
+            .unwrap_or_default();
         let github_client = self
             .app_handle
             .try_state::<crate::github_client::GitHubClient>()
@@ -159,6 +164,7 @@ impl PluginHost {
             db,
             backend_token: None,
             pty_manager,
+            deferred_completion_watcher,
             github_client,
             frontend_host_requests: self.frontend_host_requests.clone(),
             plugin_host: Some(self.clone()),

@@ -5,7 +5,7 @@ use crate::{
     pty_manager::{PtyManager, TerminalSessionLifecycleState},
 };
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use sysinfo::{ProcessesToUpdate, System};
 
@@ -335,10 +335,7 @@ fn collect_unique_rss(node: &ProcessMemoryNode, seen: &mut HashSet<u32>, total: 
     }
 }
 
-fn build_process_tree(
-    root_pid: u32,
-    processes: &HashMap<u32, ProcessInfo>,
-) -> Option<ProcessMemoryNode> {
+fn child_pids_by_parent(processes: &HashMap<u32, ProcessInfo>) -> HashMap<u32, Vec<u32>> {
     let mut child_pids_by_parent: HashMap<u32, Vec<u32>> = HashMap::new();
     for process in processes.values() {
         if let Some(parent_pid) = process.parent_pid {
@@ -351,9 +348,20 @@ fn build_process_tree(
     for child_pids in child_pids_by_parent.values_mut() {
         child_pids.sort_unstable();
     }
+    child_pids_by_parent
+}
 
+fn build_process_tree(
+    root_pid: u32,
+    processes: &HashMap<u32, ProcessInfo>,
+) -> Option<ProcessMemoryNode> {
     let mut visited = HashSet::new();
-    build_process_tree_from_children(root_pid, processes, &child_pids_by_parent, &mut visited)
+    build_process_tree_from_children(
+        root_pid,
+        processes,
+        &child_pids_by_parent(processes),
+        &mut visited,
+    )
 }
 
 fn build_process_tree_from_children(
@@ -388,6 +396,33 @@ fn build_process_tree_from_children(
         command: process.command.clone(),
         children,
     })
+}
+
+pub(crate) fn descendant_command_lines(root_pid: u32) -> Result<Vec<String>, String> {
+    let processes = read_process_table()?;
+    if !processes.contains_key(&root_pid) {
+        return Err(format!("process {root_pid} was not found in process table"));
+    }
+    Ok(descendant_commands(root_pid, &processes))
+}
+
+fn descendant_commands(root_pid: u32, processes: &HashMap<u32, ProcessInfo>) -> Vec<String> {
+    let child_pids_by_parent = child_pids_by_parent(processes);
+    let mut commands = Vec::new();
+    let mut visited = HashSet::from([root_pid]);
+    let mut pending = VecDeque::from([root_pid]);
+    while let Some(pid) = pending.pop_front() {
+        for child_pid in child_pids_by_parent.get(&pid).into_iter().flatten() {
+            if !visited.insert(*child_pid) {
+                continue;
+            }
+            if let Some(child) = processes.get(child_pid) {
+                commands.push(child.command.clone());
+            }
+            pending.push_back(*child_pid);
+        }
+    }
+    commands
 }
 
 fn flatten_descendants(root: &ProcessMemoryNode) -> Vec<ProcessMemoryNode> {
@@ -537,6 +572,25 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![11, 12, 13]
         );
+    }
+
+    #[test]
+    fn descendant_commands_collects_transitive_children_and_excludes_the_root() {
+        let processes = parse_ps_output(
+            "10 1 100 claude\n11 10 25 pnpm dev\n12 11 5 esbuild\n13 10 30 tail -f log\n",
+        );
+
+        assert_eq!(
+            descendant_commands(10, &processes),
+            vec!["pnpm dev", "tail -f log", "esbuild"]
+        );
+    }
+
+    #[test]
+    fn descendant_commands_survives_a_parent_cycle() {
+        let processes = parse_ps_output("10 11 100 a\n11 10 25 b\n");
+
+        assert_eq!(descendant_commands(10, &processes), vec!["b"]);
     }
 
     #[test]

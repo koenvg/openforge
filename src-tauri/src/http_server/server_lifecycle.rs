@@ -297,11 +297,17 @@ async fn start_http_server_with_app_state(
     let frontend_host_requests = plugin_host.frontend_host_requests();
     let process_memory_history = crate::process_memory_history::ProcessMemoryHistory::default();
     let process_memory_history_enabled = process_memory_history_enabled_preference(&db);
+    let deferred_completion_watcher =
+        crate::http_server::deferred_completion::DeferredCompletionWatcher::new();
+    if let Some(app) = app.as_ref() {
+        app.manage(deferred_completion_watcher.clone());
+    }
     let state = AppState {
         app,
         db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
+        deferred_completion_watcher,
         github_client: github_client.clone(),
         frontend_host_requests,
         plugin_host: Some(plugin_host),

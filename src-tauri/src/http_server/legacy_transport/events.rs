@@ -95,7 +95,7 @@ pub(in crate::http_server) fn record_agent_lifecycle_notification(
     }
 }
 
-pub(super) async fn handle_agent_lifecycle_notification(
+pub(in crate::http_server) async fn handle_agent_lifecycle_notification(
     state: AppState,
     notification: crate::agent_lifecycle::AgentLifecycleNotification,
     transcript_path: Option<String>,

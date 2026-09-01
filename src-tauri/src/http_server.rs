@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod authentication;
+pub(crate) mod deferred_completion;
 mod internal_transport;
 mod legacy_transport;
 mod plugin_management;
@@ -92,6 +93,7 @@ pub struct AppState {
     pub db: std::sync::Arc<Mutex<db::Database>>,
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
+    pub deferred_completion_watcher: deferred_completion::DeferredCompletionWatcher,
     pub github_client: GitHubClient,
     pub frontend_host_requests:
         crate::frontend_host_request_transport::FrontendHostRequestTransport,

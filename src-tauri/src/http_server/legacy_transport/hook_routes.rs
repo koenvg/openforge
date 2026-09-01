@@ -4,7 +4,7 @@ use axum::{
     extract::{Json, Query, State},
     http::StatusCode,
 };
-use log::warn;
+use log::{info, warn};
 
 fn claude_event_kind_from_event(
     event_type: &str,
@@ -39,6 +39,46 @@ pub(in crate::http_server) fn map_hook_to_status(
         return None;
     }
     Some(target_status.to_string())
+}
+
+fn agent_session_is_running(state: &AppState, task_id: &str) -> bool {
+    crate::db::acquire_db(&state.db)
+        .get_latest_session_for_ticket(task_id)
+        .ok()
+        .flatten()
+        .is_some_and(|session| session.status == "running")
+}
+
+/// Claude's `Stop` hook fires at the end of every turn, including turns that leave a
+/// backgrounded shell or an armed `Monitor` running. The session resumes on its own when
+/// that task notifies, so reporting `Ended` there marks the task as needing attention
+/// while nothing is actually waiting on the user.
+async fn deferrable_background_work(
+    state: &AppState,
+    event_type: &str,
+    task_id: &str,
+    pty_instance_id: Option<u64>,
+    transcript_path: Option<&str>,
+) -> Vec<crate::claude_background_work::PendingBackgroundTask> {
+    if event_type != "stop" || !agent_session_is_running(state, task_id) {
+        return Vec::new();
+    }
+
+    let live = crate::claude_background_work::live_pending_background_tasks(
+        state.pty_manager.as_ref(),
+        task_id,
+        pty_instance_id,
+        transcript_path,
+    )
+    .await;
+    if !live.is_empty() {
+        info!(
+            "[http_server] task {} still has background work running, deferring completion: {}",
+            task_id,
+            crate::claude_background_work::describe_tasks(&live)
+        );
+    }
+    live
 }
 
 const CLAUDE_ACTIVITY_SNAPSHOT_BYTES: usize = 8 * 1024;
@@ -129,6 +169,20 @@ async fn handle_hook(
         );
 
         if let Some(kind) = claude_event_kind_from_event(event_type) {
+            let _task_guard = state.deferred_completion_watcher.task_guard(&task_id).await;
+            let deferring = deferrable_background_work(
+                &state,
+                event_type,
+                &task_id,
+                pty_instance_id,
+                payload.transcript_path.as_deref(),
+            )
+            .await;
+            let kind = if deferring.is_empty() {
+                kind
+            } else {
+                crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy
+            };
             let notification = crate::agent_lifecycle::AgentLifecycleNotification {
                 provider: "claude-code".to_string(),
                 task_id: task_id.clone(),
@@ -138,8 +192,8 @@ async fn handle_hook(
                 raw_event_type: Some(event_type.to_string()),
                 raw_status_type: None,
             };
-            return handle_agent_lifecycle_notification(
-                state,
+            let response = handle_agent_lifecycle_notification(
+                state.clone(),
                 notification,
                 payload.transcript_path.clone(),
                 bounded_claude_activity_snapshot(
@@ -149,6 +203,23 @@ async fn handle_hook(
                 ),
             )
             .await;
+            if deferring.is_empty() {
+                state.deferred_completion_watcher.resumed(&task_id).await;
+            } else {
+                state
+                    .deferred_completion_watcher
+                    .deferred(
+                        &state,
+                        crate::http_server::deferred_completion::DeferredCompletion {
+                            task_id,
+                            pty_instance_id,
+                            transcript_path: payload.transcript_path.clone(),
+                        },
+                        &deferring,
+                    )
+                    .await;
+            }
+            return response;
         }
     } else {
         warn!(

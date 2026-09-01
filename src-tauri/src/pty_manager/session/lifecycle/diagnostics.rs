@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use super::super::super::{
     PtyError, PtyManager, PtyProcessDiagnosticSession, TerminalSessionLifecycleState,
 };
+use super::PtySessionKind;
 
 impl PtyManager {
     pub async fn interrupt_claude(&self, task_id: &str) -> Result<(), PtyError> {
@@ -58,6 +59,18 @@ impl PtyManager {
         let now_ms = crate::unix_timestamp::milliseconds(std::time::SystemTime::now()).ok()?;
 
         frozen_seconds(last_output_ms, now_ms)
+    }
+
+    pub async fn agent_pty_pid(&self, task_id: &str, pty_instance_id: Option<u64>) -> Option<u32> {
+        let sessions = self.terminal_sessions.sessions.lock().await;
+        let session = sessions.get(task_id)?;
+        if !matches!(session.kind, PtySessionKind::Agent) {
+            return None;
+        }
+        if pty_instance_id.is_some_and(|instance| session.instance_id != instance) {
+            return None;
+        }
+        session.child.process_id()
     }
 
     /// Returns the keys of all active PTY sessions.
