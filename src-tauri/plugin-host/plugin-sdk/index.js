@@ -594,6 +594,7 @@ var TestingRegistryServices = class {
 	externalTextFiles;
 	userDataTextFiles = /* @__PURE__ */ new Map();
 	projectFileContents;
+	taskWorkspaces;
 	claims = new TestingContributionClaims();
 	constructor(options = {}) {
 		this.pluginId = options.pluginId ?? "test-plugin";
@@ -614,6 +615,7 @@ var TestingRegistryServices = class {
 		this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {};
 		this.externalTextFiles = options.externalTextFiles ?? [];
 		this.projectFileContents = options.projectFileContents ?? {};
+		this.taskWorkspaces = options.taskWorkspaces ?? {};
 		for (const file of options.userDataTextFiles ?? []) this.userDataTextFiles.set(file.path, file.content);
 	}
 	localQualifiedId(kind, id) {
@@ -726,6 +728,12 @@ var TestingBackendServicesFake = class {
 //#region packages/plugin-sdk/src/testing/commonApiFake.ts
 var UTF8_ENCODER = new TextEncoder();
 var UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+function testingTaskWorkspace(workspaces, taskId) {
+	const workspace = workspaces[taskId];
+	if (!workspace) throw new Error(`No workspace found for task ${taskId}`);
+	if (workspace.error) throw new Error(workspace.error);
+	return workspace;
+}
 function readTestingUserDataDir(files, directoryPath) {
 	const prefix = directoryPath ? `${directoryPath}/` : "";
 	const entries = /* @__PURE__ */ new Map();
@@ -1166,7 +1174,21 @@ var TestingCommonApiFake = class {
 				writeFile: async (request) => {
 					this.services.calls.fsWrites.push(request);
 				},
-				searchFiles: async () => []
+				searchFiles: async () => [],
+				task: {
+					readDir: async ({ taskId, path }) => {
+						const directoryPath = path ?? "";
+						const entries = testingTaskWorkspace(this.services.taskWorkspaces, taskId).directories?.[directoryPath];
+						if (!entries) throw new Error(`Task workspace directory not found: ${taskId}:${directoryPath}`);
+						return entries;
+					},
+					readFile: async ({ taskId, path }) => {
+						const file = testingTaskWorkspace(this.services.taskWorkspaces, taskId).files?.[path];
+						if (!file) throw new Error(`Task workspace file not found: ${taskId}:${path}`);
+						return file;
+					},
+					searchFiles: async ({ taskId, query }) => testingTaskWorkspace(this.services.taskWorkspaces, taskId).searches?.[query] ?? []
+				}
 			},
 			shell: {
 				spawn: async (request) => {

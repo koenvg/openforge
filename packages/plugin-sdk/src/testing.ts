@@ -21,6 +21,7 @@ export type {
   TestingContributionBase,
   TestingExternalTextFile,
   TestingExternalTextFileChunksCall,
+  TestingTaskWorkspaceFixture,
   TestingEventListenerContribution,
   TestingInjectionPointContribution,
   TestingOpenForgeApiCalls,

@@ -89,6 +89,9 @@ export type RuntimeHostBridge = {
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
+  readTaskDir?(request: { taskId: string; path?: string | null }): Promise<FileEntry[]>
+  readTaskFile?(request: { taskId: string; path: string }): Promise<FileContent>
+  searchTaskFiles?(request: { taskId: string; query: string; limit?: number }): Promise<string[]>
   spawnShell?(request: ShellSpawnRequest): Promise<number>
   writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
   resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>

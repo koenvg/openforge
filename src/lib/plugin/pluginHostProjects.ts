@@ -4,6 +4,9 @@ import {
   fsReadFile,
   fsWriteFile,
   fsSearchFiles,
+  taskFsReadDir,
+  taskFsReadFile,
+  taskFsSearchFiles,
   getProjectAttention,
   getProjectConfig,
   getProjects,
@@ -22,6 +25,9 @@ type ProjectHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'readFile'
   | 'writeFile'
   | 'searchFiles'
+  | 'readTaskDir'
+  | 'readTaskFile'
+  | 'searchTaskFiles'
   | 'getAttention'
   | 'getProjectConfig'
   | 'setProjectConfig'
@@ -53,6 +59,18 @@ function searchProjectFiles(request: { projectId: string; query: string; limit?:
   return fsSearchFiles(request.projectId, request.query, request.limit)
 }
 
+function readTaskDir(request: { taskId: string; path?: string | null }) {
+  return taskFsReadDir(request.taskId, request.path ?? null)
+}
+
+function readTaskFile(request: { taskId: string; path: string }) {
+  return taskFsReadFile(request.taskId, request.path)
+}
+
+function searchTaskFiles(request: { taskId: string; query: string; limit?: number }) {
+  return taskFsSearchFiles(request.taskId, request.query, request.limit)
+}
+
 function setProjectConfigValue(projectId: string, key: string, value: unknown) {
   return setProjectConfig(projectId, key, typeof value === 'string' ? value : JSON.stringify(value))
 }
@@ -66,6 +84,9 @@ export function createPluginProjectHostCapabilities(): ProjectHostCapabilities {
     readFile: readProjectFile,
     writeFile: writeProjectFile,
     searchFiles: searchProjectFiles,
+    readTaskDir,
+    readTaskFile,
+    searchTaskFiles,
     getAttention: () => getProjectAttention(),
     getProjectConfig: (projectId, key) => getProjectConfig(projectId, key),
     setProjectConfig: setProjectConfigValue,

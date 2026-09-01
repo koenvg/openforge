@@ -59,3 +59,15 @@ export async function fsWriteFile(projectId: string, filePath: string, content: 
 export async function fsSearchFiles(projectId: string, query: string, limit: number = 50): Promise<string[]> {
   return invoke<string[]>("fs_search_files", { projectId, query, limit });
 }
+
+export async function taskFsReadDir(taskId: string, dirPath: string | null): Promise<FileEntry[]> {
+  return invoke<FileEntry[]>('task_fs_read_dir', { taskId, dirPath })
+}
+
+export async function taskFsReadFile(taskId: string, filePath: string): Promise<FileContent> {
+  return invoke<FileContent>('task_fs_read_file', { taskId, filePath })
+}
+
+export async function taskFsSearchFiles(taskId: string, query: string, limit: number = 50): Promise<string[]> {
+  return invoke<string[]>('task_fs_search_files', { taskId, query, limit })
+}

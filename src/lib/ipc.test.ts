@@ -23,6 +23,9 @@ import {
   enqueuePullRequest,
   fsSearchFiles,
   fsWriteFile,
+  taskFsReadDir,
+  taskFsReadFile,
+  taskFsSearchFiles,
   getAllTasks,
   readActiveTasks,
   readCompletedTasks,
@@ -730,6 +733,36 @@ describe("ipc fsSearchFiles", () => {
 		expect(result).toEqual(["src/lib/ipc.ts", "src/lib/types.ts"]);
 	});
 });
+
+describe('ipc Task workspace filesystem', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+  })
+
+  it('passes the Task ID and relative directory path', async () => {
+    invokeMock.mockResolvedValueOnce([])
+
+    await taskFsReadDir('T-1', 'src')
+
+    expect(invokeMock).toHaveBeenCalledWith('task_fs_read_dir', { taskId: 'T-1', dirPath: 'src' })
+  })
+
+  it('passes the Task ID and relative file path', async () => {
+    invokeMock.mockResolvedValueOnce({ type: 'text', content: 'hello', mimeType: 'text/plain', size: 5 })
+
+    await taskFsReadFile('T-1', 'README.md')
+
+    expect(invokeMock).toHaveBeenCalledWith('task_fs_read_file', { taskId: 'T-1', filePath: 'README.md' })
+  })
+
+  it('passes the Task ID, query, and default limit', async () => {
+    invokeMock.mockResolvedValueOnce([])
+
+    await taskFsSearchFiles('T-1', 'main')
+
+    expect(invokeMock).toHaveBeenCalledWith('task_fs_search_files', { taskId: 'T-1', query: 'main', limit: 50 })
+  })
+})
 
 describe('canonical IPC Task reads', () => {
   beforeEach(() => {

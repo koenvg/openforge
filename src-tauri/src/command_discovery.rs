@@ -380,18 +380,23 @@ pub fn scan_commands_directory(dir: &Path) -> Vec<crate::opencode_client::Comman
 /// Returns up to `limit` matching file paths plus matching directories. Directory paths end with `/`
 /// so the UI can distinguish them.
 pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Vec<String> {
+    try_search_project_files(project_path, query, limit).unwrap_or_default()
+}
+
+pub(crate) fn try_search_project_files(
+    project_path: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<String>, String> {
     if limit == 0 {
-        return vec![];
+        return Ok(vec![]);
     }
 
-    let repo = match git2::Repository::open(project_path) {
-        Ok(r) => r,
-        Err(_) => return vec![],
-    };
-    let index = match repo.index() {
-        Ok(i) => i,
-        Err(_) => return vec![],
-    };
+    let repo = git2::Repository::open(project_path)
+        .map_err(|error| format!("Failed to open repository: {error}"))?;
+    let index = repo
+        .index()
+        .map_err(|error| format!("Failed to read repository index: {error}"))?;
     let lower_query = query.to_lowercase();
     let mut results = Vec::new();
     let mut seen = HashSet::new();
@@ -407,7 +412,7 @@ pub fn search_project_files(project_path: &str, query: &str, limit: usize) -> Ve
             matching_file_count += 1;
         }
     }
-    results
+    Ok(results)
 }
 
 fn push_matching_directories(

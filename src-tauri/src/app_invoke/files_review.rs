@@ -102,6 +102,48 @@ pub(super) async fn handle_app_files_review_command(
                 ))?
             }
         }
+        "task_fs_read_dir" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let dir_path = payload_optional_string(&request.payload, "dirPath")?;
+            let workspace_path = app_task_workspace_path(state, &task_id)?;
+            json_value(
+                crate::project_fs::read_dir(
+                    std::path::Path::new(&workspace_path),
+                    dir_path.as_deref(),
+                )
+                .await
+                .map_err(app_project_fs_error)?,
+            )?
+        }
+        "task_fs_read_file" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let file_path = payload_string(&request.payload, "filePath")?;
+            let workspace_path = app_task_workspace_path(state, &task_id)?;
+            let full_path = crate::project_fs::resolve_existing_path(
+                std::path::Path::new(&workspace_path),
+                Some(&file_path),
+            )
+            .map_err(app_project_fs_error)?;
+            json_value(
+                crate::project_fs::read_file_preview(&full_path)
+                    .await
+                    .map_err(app_project_fs_error)?,
+            )?
+        }
+        "task_fs_search_files" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let query = payload_string(&request.payload, "query")?;
+            let limit = payload_optional_usize(&request.payload, "limit")?.unwrap_or(50);
+            let workspace_path = app_task_workspace_path(state, &task_id)?;
+            json_value(
+                crate::project_fs::search_files_checked(
+                    std::path::Path::new(&workspace_path),
+                    &query,
+                    limit,
+                )
+                .map_err(app_project_fs_error)?,
+            )?
+        }
         "get_agent_review_comments" => {
             let review_pr_id = payload_i64(&request.payload, "reviewPrId")?;
             let db = crate::db::acquire_db(&state.db);
