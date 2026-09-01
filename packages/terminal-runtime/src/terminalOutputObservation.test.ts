@@ -38,6 +38,26 @@ describe('terminal output observation', () => {
     })
   })
 
+
+  it('treats a batch overlapping an authoritative watermark as complete coverage', () => {
+    const observation = createTerminalOutputObservation(7)
+    synchronizeTerminalOutputObservation(observation, 7, 3)
+
+    recordTerminalOutput(observation, {
+      data: 'overlapping batch',
+      ptyInstanceId: 7,
+      startSequence: 3,
+      sequence: 8,
+    })
+
+    expect(observation).toEqual({
+      ptyInstanceId: 7,
+      receivedBytes: 17,
+      firstSequence: 3,
+      lastSequence: 8,
+      sequenceContinuous: true,
+    })
+  })
   it('retains incomplete-sequence evidence until the PTY instance changes', () => {
     const observation = createTerminalOutputObservation(7)
     synchronizeTerminalOutputObservation(observation, 7, 4)

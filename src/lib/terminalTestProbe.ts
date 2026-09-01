@@ -174,6 +174,31 @@ function missingExpectationMessage(
   return `Terminal model sequence ${observation.output.modelSequence ?? 'unavailable'} did not reach ${expectation.minimumModelSequence}`
 }
 
+function incompleteSequenceMessage(
+  key: string,
+  detected: TerminalProbeObservation,
+  latest: TerminalProbeObservation,
+): string {
+  return `Terminal ${key} has an incomplete output sequence; diagnostics=${JSON.stringify({
+    detected: {
+      lifecycle: {
+        authorityReadPending: detected.lifecycle.authorityReadPending,
+        currentPtyInstance: detected.lifecycle.currentPtyInstance,
+        stateSource: detected.lifecycle.stateSource,
+      },
+      output: detected.output,
+    },
+    latest: {
+      lifecycle: {
+        authorityReadPending: latest.lifecycle.authorityReadPending,
+        currentPtyInstance: latest.lifecycle.currentPtyInstance,
+        stateSource: latest.lifecycle.stateSource,
+      },
+      output: latest.output,
+    },
+  })}`
+}
+
 export function installTerminalTestProbe(options: InstallTerminalTestProbeOptions): TerminalTestProbeApi | null {
   const target: TerminalTestProbeWindow = options.target ?? (window as TerminalTestProbeWindow)
   if (!shouldEnableTerminalTestProbe(
@@ -240,23 +265,30 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
       const timeoutMs = expectation.timeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
       const deadline = now() + timeoutMs
 
+      let incompleteObservation: TerminalProbeObservation | null = null
       do {
         const observation = requireObservation(key)
-        if (!observation.output.sequenceContinuous) {
-          throw new Error(`Terminal ${key} has an incomplete output sequence`)
+        if (!observation.output.sequenceContinuous && !incompleteObservation) {
+          incompleteObservation = observation
         }
-
         const presentation = await diagnostics.drainPresentation(key)
         const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
         const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
         const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
         const reachedModelSequence = expectation.minimumModelSequence === undefined
           || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence
+        const outputComplete = markerFound && receivedEnoughBytes && reachedModelSequence
 
-        if (markerFound && receivedEnoughBytes && reachedModelSequence) {
+        if (outputComplete) {
+          if (incompleteObservation) {
+            throw new Error(incompleteSequenceMessage(key, incompleteObservation, observation))
+          }
           return { observation, markerFound, presentation, visibleText }
         }
         if (now() >= deadline) {
+          if (incompleteObservation) {
+            throw new Error(incompleteSequenceMessage(key, incompleteObservation, observation))
+          }
           throw new Error(missingExpectationMessage(expectation, observation, markerFound))
         }
         await wait(DRAIN_POLL_INTERVAL_MS)
