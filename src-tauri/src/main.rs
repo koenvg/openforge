@@ -9,6 +9,7 @@ mod authored_pr_sync;
 mod backend_runtime;
 mod builtin_plugins;
 mod claude_authoritative;
+mod claude_background_work;
 mod claude_hooks;
 mod cli_installer;
 mod codex_hooks;

@@ -24,6 +24,8 @@ pub(crate) fn test_state(
             db: Arc::clone(&db),
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(pty_manager),
+            deferred_completion_watcher:
+                crate::http_server::deferred_completion::DeferredCompletionWatcher::new(),
             github_client: GitHubClient::new(),
             frontend_host_requests:
                 crate::frontend_host_request_transport::FrontendHostRequestTransport::production(

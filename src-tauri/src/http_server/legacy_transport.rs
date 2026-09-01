@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 
+pub(in crate::http_server) use events::handle_agent_lifecycle_notification;
 pub use hook_routes::{
     agent_lifecycle_handler, grok_hook_notification_permission_handler,
     grok_hook_post_tool_use_handler, grok_hook_pre_tool_use_handler, grok_hook_session_end_handler,
