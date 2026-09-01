@@ -99,10 +99,11 @@
   }
 </script>
 
-{#snippet commentButton(lineNumber: number, placement: 'gutter' | 'before' | 'cell')}
+{#snippet commentButton(lineNumber: number, placement: 'gutter' | 'before' | 'cell', listDepth = 0)}
   <button
     type="button"
-    class="rich-markdown-comment-button btn btn-ghost absolute top-0 z-10 h-11 min-h-11 w-11 p-0 text-base-content/60 opacity-0 transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/10 hover:text-primary focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary group-hover:opacity-100 {placement === 'before' ? 'right-full mr-1' : placement === 'cell' ? 'left-0' : 'right-0'}"
+    style:right={placement === 'before' ? `calc(100% + ${(listDepth + 1) * 1.75}rem)` : undefined}
+    class="rich-markdown-comment-button btn btn-ghost absolute z-10 p-0 text-base-content/60 opacity-0 transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/10 hover:text-primary focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary group-hover:opacity-100 {placement === 'before' ? '-top-1 h-9 min-h-9 w-9' : 'top-0 h-11 min-h-11 w-11'} {placement === 'cell' ? 'left-0' : placement === 'gutter' ? 'right-0' : ''}"
     aria-label="Add comment to {file.filename} line {lineNumber}"
     title="Add comment on line {lineNumber}"
     onclick={() => { openCommentLine = openCommentLine === lineNumber ? null : lineNumber }}
@@ -161,11 +162,11 @@
   />
 {/snippet}
 
-{#snippet listContent(list: RichMarkdownListBlock)}
+{#snippet listContent(list: RichMarkdownListBlock, depth = 0)}
   <svelte:element this={list.ordered ? 'ol' : 'ul'} start={list.ordered ? list.start || undefined : undefined}>
     {#each list.items as item (`list-item:${item.startLine}:${item.endLine}`)}
       <li class="group relative" data-markdown-source-start={item.startLine} data-markdown-source-end={item.endLine}>
-        {#if item.anchorLine !== null}{@render commentButton(item.anchorLine, 'before')}{/if}
+        {#if item.anchorLine !== null}{@render commentButton(item.anchorLine, 'before', depth)}{/if}
         {#if item.checked !== null}
           <input type="checkbox" checked={item.checked} disabled aria-label={item.checked ? 'Completed task' : 'Incomplete task'} class="float-left mt-1" />
         {/if}
@@ -173,7 +174,7 @@
         {@render commentThread(item.startLine, item.endLine)}
         {#if item.anchorLine !== null}{@render commentForm(item.anchorLine)}{/if}
         {#each item.childLists as childList (`nested-list:${childList.startLine}:${childList.endLine}`)}
-          {@render listContent(childList)}
+          {@render listContent(childList, depth + 1)}
         {/each}
       </li>
     {/each}

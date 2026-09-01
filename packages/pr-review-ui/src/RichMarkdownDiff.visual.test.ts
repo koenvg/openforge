@@ -55,6 +55,80 @@ describe.skipIf(!runsMarkdownVisuals)('Rich Markdown diff visuals', () => {
     await expectVisualFixture('prose-and-lists', 'light')
   }, 30_000)
 
+  it('keeps list comment controls inside the document comment gutter', async () => {
+    const page = await browser.newPage({
+      deviceScaleFactor: 1,
+      viewport: { width: 1024, height: 900 },
+      colorScheme: 'light',
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      await page.goto(`${origin}${harnessPath}?fixture=prose-and-lists&theme=light&surface=rich-diff`)
+      const listBlock = page.locator('.rich-markdown-block-list').first()
+      const list = listBlock.locator(':scope > ul, :scope > ol').first()
+      const listItem = list.locator(':scope > li').first()
+      const commentButton = listBlock.getByRole('button', { name: /Add comment/ }).first()
+
+      const [blockBox, listBox, listItemBox, buttonBox] = await Promise.all([
+        listBlock.boundingBox(),
+        list.boundingBox(),
+        listItem.boundingBox(),
+        commentButton.boundingBox(),
+      ])
+
+      expect(blockBox).not.toBeNull()
+      expect(listBox).not.toBeNull()
+      expect(listItemBox).not.toBeNull()
+      expect(buttonBox).not.toBeNull()
+      expect(buttonBox!.width).toBe(36)
+      expect(buttonBox!.x).toBeGreaterThanOrEqual(blockBox!.x)
+      expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(listBox!.x)
+      const buttonCenterY = buttonBox!.y + buttonBox!.height / 2
+      const listItemCenterY = listItemBox!.y + listItemBox!.height / 2
+      expect(Math.abs(buttonCenterY - listItemCenterY)).toBeLessThanOrEqual(4)
+
+      await commentButton.hover()
+      const screenshot = await page.getByTestId('markdown-visual').screenshot({
+        animations: 'disabled',
+        caret: 'hide',
+      })
+      compareScreenshot('prose-and-lists-comment-gutter-light', screenshot)
+    } finally {
+      await page.close()
+    }
+  }, 30_000)
+
+  it('keeps nested list comment controls in the same document gutter', async () => {
+    const page = await browser.newPage({
+      deviceScaleFactor: 1,
+      viewport: { width: 1024, height: 900 },
+      colorScheme: 'dark',
+      reducedMotion: 'reduce',
+    })
+
+    try {
+      await page.goto(`${origin}${harnessPath}?fixture=structured-content&theme=dark&surface=rich-diff`)
+      const listBlock = page.locator('.rich-markdown-block-list').first()
+      const list = listBlock.locator(':scope > ul, :scope > ol').first()
+      const commentButtons = listBlock.getByRole('button', { name: /Add comment/ })
+      const [blockBox, listBox] = await Promise.all([listBlock.boundingBox(), list.boundingBox()])
+
+      expect(blockBox).not.toBeNull()
+      expect(listBox).not.toBeNull()
+      expect(await commentButtons.count()).toBe(5)
+
+      for (const commentButton of await commentButtons.all()) {
+        const buttonBox = await commentButton.boundingBox()
+        expect(buttonBox).not.toBeNull()
+        expect(buttonBox!.x).toBeGreaterThanOrEqual(blockBox!.x)
+        expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(listBox!.x)
+      }
+    } finally {
+      await page.close()
+    }
+  }, 30_000)
+
   it('preserves structured Markdown in the dark theme', async () => {
     await expectVisualFixture('structured-content', 'dark')
   }, 30_000)
