@@ -67,19 +67,26 @@ describe.skipIf(!runsMarkdownVisuals)('Rich Markdown diff visuals', () => {
       await page.goto(`${origin}${harnessPath}?fixture=prose-and-lists&theme=light&surface=rich-diff`)
       const listBlock = page.locator('.rich-markdown-block-list').first()
       const list = listBlock.locator(':scope > ul, :scope > ol').first()
+      const listItem = list.locator(':scope > li').first()
       const commentButton = listBlock.getByRole('button', { name: /Add comment/ }).first()
 
-      const [blockBox, listBox, buttonBox] = await Promise.all([
+      const [blockBox, listBox, listItemBox, buttonBox] = await Promise.all([
         listBlock.boundingBox(),
         list.boundingBox(),
+        listItem.boundingBox(),
         commentButton.boundingBox(),
       ])
 
       expect(blockBox).not.toBeNull()
       expect(listBox).not.toBeNull()
+      expect(listItemBox).not.toBeNull()
       expect(buttonBox).not.toBeNull()
+      expect(buttonBox!.width).toBe(36)
       expect(buttonBox!.x).toBeGreaterThanOrEqual(blockBox!.x)
       expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(listBox!.x)
+      const buttonCenterY = buttonBox!.y + buttonBox!.height / 2
+      const listItemCenterY = listItemBox!.y + listItemBox!.height / 2
+      expect(Math.abs(buttonCenterY - listItemCenterY)).toBeLessThanOrEqual(4)
 
       await commentButton.hover()
       const screenshot = await page.getByTestId('markdown-visual').screenshot({

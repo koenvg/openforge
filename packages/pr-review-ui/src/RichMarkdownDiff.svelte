@@ -103,7 +103,7 @@
   <button
     type="button"
     style:right={placement === 'before' ? `calc(100% + ${(listDepth + 1) * 1.75}rem)` : undefined}
-    class="rich-markdown-comment-button btn btn-ghost absolute top-0 z-10 h-11 min-h-11 w-11 p-0 text-base-content/60 opacity-0 transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/10 hover:text-primary focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary group-hover:opacity-100 {placement === 'cell' ? 'left-0' : placement === 'gutter' ? 'right-0' : ''}"
+    class="rich-markdown-comment-button btn btn-ghost absolute z-10 p-0 text-base-content/60 opacity-0 transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/10 hover:text-primary focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary group-hover:opacity-100 {placement === 'before' ? '-top-1 h-9 min-h-9 w-9' : 'top-0 h-11 min-h-11 w-11'} {placement === 'cell' ? 'left-0' : placement === 'gutter' ? 'right-0' : ''}"
     aria-label="Add comment to {file.filename} line {lineNumber}"
     title="Add comment on line {lineNumber}"
     onclick={() => { openCommentLine = openCommentLine === lineNumber ? null : lineNumber }}
