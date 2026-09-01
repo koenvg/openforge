@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_APP_EVENTS_RECONNECTED_EVENT, OPENFORGE_EVENT_CHANNEL } from './preloadApi'
-import { createAppEventForwarder, parseSseMessages } from './eventForwarder'
+import { createAppEventForwarder, MAX_SSE_FRAME_SIZE, parseSseMessages } from './eventForwarder'
 import { RecordingFailureReporterAdapter } from './failureReporting'
 import type { SidecarLaunchConfig } from './sidecar'
 
@@ -19,13 +19,23 @@ function sidecarConfig(): SidecarLaunchConfig {
   }
 }
 
-function eventStream(chunks: string[]): ReadableStream<Uint8Array> {
+function eventStream(chunks: Array<string | Uint8Array>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk)
+      controller.close()
+    },
+  })
+}
+
+function cancellableEventStream(chunks: string[], cancel: (reason?: unknown) => void): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
   return new ReadableStream<Uint8Array>({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
-      controller.close()
     },
+    cancel,
   })
 }
 
@@ -153,6 +163,121 @@ describe('Electron app event forwarding', () => {
     expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
       eventName: 'pty-output-T-1',
       payload: { data: 'hi', instance_id: 7 },
+    })
+  })
+
+  it('forwards valid SSE frames fragmented across chunks', () => {
+    const send = vi.fn()
+    const forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch: vi.fn(),
+      windows: () => [{ webContents: { send } }],
+    })
+
+    forwarder.acceptChunk('event: openforge-event\r\nda')
+    forwarder.acceptChunk('ta: {"eventName":"pty-output-T-1","payload":{"data":"fragmented",')
+    forwarder.acceptChunk('"instance_id":7}}\r\n\r\n')
+
+    expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
+      eventName: 'pty-output-T-1',
+      payload: { data: 'fragmented', instance_id: 7 },
+    })
+  })
+
+  it.each([
+    ['oversized', [`data: ${'x'.repeat(MAX_SSE_FRAME_SIZE + 1)}\n\n`]],
+    ['unterminated across chunks', ['data: ', 'x'.repeat(MAX_SSE_FRAME_SIZE)]],
+  ])('reports and reconnects when SSE input is %s', async (_case, invalidChunks) => {
+    const send = vi.fn()
+    const failureReporter = new RecordingFailureReporterAdapter()
+    const cancel = vi.fn()
+    let forwarder: ReturnType<typeof createAppEventForwarder>
+    const sleep = vi.fn(async () => {
+      if (sleep.mock.calls.length >= 2) forwarder.stop()
+    })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        body: cancellableEventStream(invalidChunks, cancel),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([
+          'event: openforge-event\ndata: {"eventName":"pty-output-T-2","payload":{"data":"recovered","instance_id":9}}\n\n',
+        ]),
+        text: async () => '',
+      })
+
+    forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch,
+      windows: () => [{ webContents: { send } }],
+      sleep,
+      reconnectDelayMs: 0,
+      failureReporter,
+    })
+
+    await forwarder.start()
+    expect(cancel).toHaveBeenCalledOnce()
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'runtime:event-stream',
+      severity: 'warning',
+      cause: expect.objectContaining({ message: expect.stringContaining('SSE frame exceeded') }),
+      decision: 'retry',
+    }))
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
+      eventName: 'pty-output-T-2',
+      payload: { data: 'recovered', instance_id: 9 },
+    })
+  })
+
+  it('reports an unterminated frame at EOF and reconnects with clean parser state', async () => {
+    const send = vi.fn()
+    const failureReporter = new RecordingFailureReporterAdapter()
+    let forwarder: ReturnType<typeof createAppEventForwarder>
+    const sleep = vi.fn(async () => {
+      if (sleep.mock.calls.length >= 2) forwarder.stop()
+    })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream(['data: {', Uint8Array.of(0xc3)]),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([
+          'data: {"eventName":"pty-output-T-3","payload":{"data":"after truncated frame","instance_id":10}}\n\n',
+        ]),
+        text: async () => '',
+      })
+
+    forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch,
+      windows: () => [{ webContents: { send } }],
+      sleep,
+      reconnectDelayMs: 0,
+      failureReporter,
+    })
+
+    await forwarder.start()
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'runtime:event-stream',
+      severity: 'warning',
+      cause: expect.objectContaining({ message: expect.stringContaining('unterminated SSE frame') }),
+      decision: 'retry',
+    }))
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
+      eventName: 'pty-output-T-3',
+      payload: { data: 'after truncated frame', instance_id: 10 },
     })
   })
 
