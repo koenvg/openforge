@@ -805,8 +805,19 @@ export interface AgentSessionsAPI {
   list(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
 }
 
+export type TaskChangeReason = 'created' | 'updated' | 'completed' | 'attention' | 'execution'
 
-export interface TasksAPI {
+/**
+ * A coalescible signal that one or more bounded Task reads may now be stale.
+ * It never contains a Task snapshot.
+ */
+export interface TaskChangeEvent {
+  projectId: string
+  taskId: string | null
+  reason: TaskChangeReason
+}
+
+export interface TaskOperationsAPI {
   /**
    * Lists legacy Task rows. Project-scoped reads exclude Completed Tasks unless
    * `includeDone` is true; unscoped reads preserve the complete legacy array.
@@ -837,6 +848,14 @@ export interface TasksAPI {
   getLatestSession(taskId: string): Promise<AgentSession | null>
   /** Returns matching Agent Sessions newest first. */
   listSessions(request: ListTaskSessionsRequest): Promise<AgentSession[]>
+}
+
+export interface TasksAPI extends TaskOperationsAPI {
+  /**
+   * Subscribes to coalescible Task invalidations for one Project.
+   * Repeat the relevant bounded read instead of treating events as snapshots.
+   */
+  onDidChange(projectId: string, handler: (event: TaskChangeEvent) => void): Disposable
 }
 
 export interface ProjectsAPI {
@@ -876,7 +895,7 @@ export interface OpenForgeCommonAPI {
     getSnapshot(): OpenForgeContextSnapshot
   }
   agentSessions: AgentSessionsAPI
-  tasks: TasksAPI
+  tasks: TaskOperationsAPI
   projects: ProjectsAPI
   fs: FileSystemAPI
   shell: ShellAPI
@@ -888,6 +907,7 @@ export interface OpenForgeCommonAPI {
 }
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
+  tasks: TasksAPI
   browserSurfaces: BrowserSurfacesAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry

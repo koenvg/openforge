@@ -6,6 +6,7 @@ import type {
   Disposable,
   FrontendOpenForgeAPI,
   JsonValue,
+  TaskChangeEvent,
   OpenForgeCommonAPI,
 } from '../types'
 import type { ActiveTasks, CompletedTaskPage, CompletedTaskQuery, Task, TaskDetail, TaskLabel, TaskRead, TaskReference, TaskSummary } from '../domain.js'
@@ -351,16 +352,23 @@ function listTestingCompletedTasks(
 }
 
 
-export type TestingCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, 'navigation'>
+export type TestingCommonApi = Omit<OpenForgeCommonAPI, 'tasks'>
+  & Pick<FrontendOpenForgeAPI, 'tasks' | 'navigation'>
 
 export class TestingCommonApiFake {
   private readonly commands = new Map<string, TestingCommandContribution>()
   private readonly eventListeners = new Map<string, TestingEventListenerContribution>()
   private readonly eventHandlers = new Map<string, Set<TestingEventHandler>>()
+  private readonly taskChangeHandlers = new Map<string, Set<(event: TaskChangeEvent) => void>>()
   private eventListenerSequence = 0
 
   constructor(private readonly services: TestingRegistryServices) {}
 
+  emitTaskChange(event: TaskChangeEvent): void {
+    for (const handler of this.taskChangeHandlers.get(event.projectId) ?? []) {
+      handler(event)
+    }
+  }
   createApi(): TestingCommonApi {
     const api: TestingCommonApi = {
       commands: {
@@ -476,6 +484,15 @@ export class TestingCommonApiFake {
         },
       },
       tasks: {
+        onDidChange: (projectId, handler) => {
+          const handlers = this.taskChangeHandlers.get(projectId) ?? new Set<(event: TaskChangeEvent) => void>()
+          handlers.add(handler)
+          this.taskChangeHandlers.set(projectId, handlers)
+          return createDisposable(() => {
+            handlers.delete(handler)
+            if (handlers.size === 0) this.taskChangeHandlers.delete(projectId)
+          })
+        },
         list: async (request) => {
           const projectId = request?.projectId ?? null
           const includeDone = request?.includeDone ?? false

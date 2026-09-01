@@ -36,12 +36,14 @@ import {
 import { activeProjectId, selectedTaskId } from '../stores'
 import { requestTaskCompose } from '../taskCompose'
 import type { PluginHostCommandEntries } from './pluginHostCommandRegistry'
+import { subscribeToTaskInvalidations } from './pluginTaskInvalidations'
 import type { RuntimeHostBridge } from './runtimeContributionTypes'
 
 const MAX_START_PROMPT_CONTRIBUTION_LENGTH = 16_000
 const START_PROMPT_CONTRIBUTIONS_KEY = 'start_prompt_contributions'
 
 type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
+  | 'subscribeTaskChanges'
   | 'listTasks'
   | 'listAgentSessions'
   | 'getTask'
@@ -246,6 +248,7 @@ async function startTaskImplementationFromPluginRequest(request: StartTaskImplem
 
 export function createPluginTaskHostCapabilities(pluginId: string): TaskHostCapabilities {
   return {
+    subscribeTaskChanges: (projectId, handler) => subscribeToTaskInvalidations(pluginId, projectId, handler),
     listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     listAgentSessions: (request: ListAgentSessionsRequest) => listAgentSessionSummaries(request),
     getTask: (taskId) => getTaskDetail(taskId),

@@ -937,9 +937,13 @@ var TestingCommonApiFake = class {
 	commands = /* @__PURE__ */ new Map();
 	eventListeners = /* @__PURE__ */ new Map();
 	eventHandlers = /* @__PURE__ */ new Map();
+	taskChangeHandlers = /* @__PURE__ */ new Map();
 	eventListenerSequence = 0;
 	constructor(services) {
 		this.services = services;
+	}
+	emitTaskChange(event) {
+		for (const handler of this.taskChangeHandlers.get(event.projectId) ?? []) handler(event);
 	}
 	createApi() {
 		const api = {
@@ -1017,6 +1021,15 @@ var TestingCommonApiFake = class {
 				};
 			} },
 			tasks: {
+				onDidChange: (projectId, handler) => {
+					const handlers = this.taskChangeHandlers.get(projectId) ?? /* @__PURE__ */ new Set();
+					handlers.add(handler);
+					this.taskChangeHandlers.set(projectId, handlers);
+					return createDisposable(() => {
+						handlers.delete(handler);
+						if (handlers.size === 0) this.taskChangeHandlers.delete(projectId);
+					});
+				},
 				list: async (request) => {
 					const projectId = request?.projectId ?? null;
 					const includeDone = request?.includeDone ?? false;
@@ -1958,6 +1971,9 @@ var TestingOpenForgeRegistryFake = class {
 		const existingServices = this.backendServices.captureBackgroundServiceIds();
 		await plugin.activate(this.backendApi, this.createBackendContext());
 		await this.backendServices.startNewBackgroundServices(existingServices);
+	}
+	emitTaskChange(event) {
+		this.commonApi.emitTaskChange(event);
 	}
 	setBrowserSurfaceState(taskId, id, patch) {
 		this.frontendContributions.setBrowserSurfaceState(taskId, id, patch);

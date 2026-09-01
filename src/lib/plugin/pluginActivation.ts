@@ -26,6 +26,7 @@ import {
   destroyPluginBrowserSurfaces,
 } from './pluginHostCommands'
 import { clearPluginHostSubscriptions } from './pluginHostEvents'
+import { clearPluginTaskInvalidationSubscriptions } from './pluginTaskInvalidations'
 import {
   applyRuntimeSnapshotContributions,
   clearPluginRuntimeContributions,
@@ -367,6 +368,7 @@ export async function deactivatePluginById(pluginId: string): Promise<void> {
   clearPluginRuntimeContributions(pluginId)
   await attempt(() => stopPluginBackgroundServices(pluginId))
   clearPluginHostSubscriptions(pluginId)
+  clearPluginTaskInvalidationSubscriptions(pluginId)
   clearPluginRuntimeHostState(pluginId)
   setPluginRuntimeState(pluginId, 'installed', null)
 

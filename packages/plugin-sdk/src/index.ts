@@ -144,6 +144,9 @@ export type {
   SubscriptionSink,
   SupportedOpenForgeApiVersion,
   SystemAPI,
+  TaskChangeEvent,
+  TaskChangeReason,
+  TaskOperationsAPI,
   TasksAPI,
   ValidationError,
 } from './types'

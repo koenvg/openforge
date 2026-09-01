@@ -185,6 +185,7 @@ const {
   getPluginCommandHandler,
 } = await import('./pluginRuntimeContributions')
 
+const { _resetPluginTaskInvalidationsForTests } = await import('./pluginTaskInvalidations')
 function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
     id: 'test-plugin',
@@ -269,6 +270,7 @@ export function resetPluginRegistryTestState(): void {
   isPluginLoadedMock.mockReset()
   getBuiltinPluginModuleMock.mockReset()
   _resetPluginActivationLifecycleForTests()
+  _resetPluginTaskInvalidationsForTests()
   _resetProjectPluginReconciliationForTests()
   installedPlugins.set(new Map())
   appEnabledPluginIds.set(new Set())

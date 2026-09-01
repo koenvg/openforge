@@ -16,6 +16,7 @@ import {
   uninstallPlugin,
   uninstallPluginIpcMock,
 } from './pluginRegistryTestSupport'
+import { publishTaskInvalidation } from './pluginTaskInvalidations'
 
 describe('pluginRegistry uninstall teardown', () => {
   beforeEach(resetPluginRegistryTestState)
@@ -51,6 +52,29 @@ describe('pluginRegistry uninstall teardown', () => {
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
 
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('uninstallPlugin stops Task invalidation delivery for active runtime plugins', async () => {
+    const manifest = makeManifest()
+    const handler = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.tasks.onDidChange('P-1', handler))
+      },
+    })
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+    uninstallPluginIpcMock.mockResolvedValue(undefined)
+
+    await activatePlugin('test-plugin')
+    publishTaskInvalidation({ projectId: 'P-1', taskId: 'T-1', reason: 'created' })
+    expect(handler).toHaveBeenCalledOnce()
+
+    await uninstallPlugin('test-plugin')
+    publishTaskInvalidation({ projectId: 'P-1', taskId: 'T-1', reason: 'updated' })
+
+    expect(handler).toHaveBeenCalledOnce()
   })
 
   it('uninstallPlugin tears down runtime contributions', async () => {

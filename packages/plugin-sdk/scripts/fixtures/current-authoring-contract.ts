@@ -15,6 +15,8 @@ import {
   type TaskRead,
   type TaskReference,
   type TaskSummary,
+  type TaskChangeEvent,
+  type TaskChangeReason,
   type Task,
   type TasksAPI,
 } from '@openforge-app/plugin-sdk'
@@ -74,6 +76,13 @@ void tasks.active('P-4')
 void tasks.completed('P-4', { search: 'completed task' })
 void tasks.detail('P-4', 'KVG-3423')
 
+const taskChangeReasons = ['created', 'updated', 'completed', 'attention', 'execution'] satisfies TaskChangeReason[]
+const taskChangeSubscription = tasks.onDidChange('P-4', (event: TaskChangeEvent) => {
+  void event.projectId
+  void event.taskId
+  void taskChangeReasons.includes(event.reason)
+})
+void taskChangeSubscription.dispose()
 const listAgentSessionsRequest = {
   provider: 'pi',
   overlaps: { startInclusive: 1_775_174_400, endExclusive: 1_777_852_800 },
@@ -149,12 +158,15 @@ void registry.frontendApi.views.register({
 void defineBackendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(openforge.commands.register(registration))
+    // @ts-expect-error Task invalidations are exposed only by the frontend host.
+    openforge.tasks.onDidChange('P-4', () => {})
   },
 })
 
 void defineFrontendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(openforge.commands.register(registration))
+    context.subscriptions.add(openforge.tasks.onDidChange('P-4', () => {}))
   },
 })
 

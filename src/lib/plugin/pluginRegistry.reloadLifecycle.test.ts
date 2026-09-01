@@ -22,6 +22,7 @@ import {
   reloadPluginForProject,
   resetPluginRegistryTestState,
 } from './pluginRegistryTestSupport'
+import { publishTaskInvalidation } from './pluginTaskInvalidations'
 
 describe('pluginRegistry reload lifecycle', () => {
   beforeEach(resetPluginRegistryTestState)
@@ -171,6 +172,32 @@ describe('pluginRegistry reload lifecycle', () => {
     expect(secondActivate).toHaveBeenCalledOnce()
   })
 
+
+  it('reloadPluginForProject replaces Task invalidation subscriptions', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const staleHandler = vi.fn()
+    const refreshedHandler = vi.fn()
+    const pluginWithHandler = (handler: (event: unknown) => void) => defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.tasks.onDidChange('project-1', handler))
+      },
+    })
+    installedPlugins.set(new Map([['reload-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    getPluginIpcMock.mockResolvedValue(makeNormalized('reload-plugin'))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('reload-plugin')])
+    loadPluginFrontendMock
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: pluginWithHandler(staleHandler) })
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: pluginWithHandler(refreshedHandler) })
+
+    await activatePlugin('reload-plugin', 'project-1')
+    publishTaskInvalidation({ projectId: 'project-1', taskId: 'T-1', reason: 'created' })
+    await reloadPluginForProject('project-1', 'reload-plugin')
+    publishTaskInvalidation({ projectId: 'project-1', taskId: 'T-1', reason: 'updated' })
+
+    expect(staleHandler).toHaveBeenCalledOnce()
+    expect(refreshedHandler).toHaveBeenCalledOnce()
+  })
   it('reloadPluginForProject deactivates the backend before refreshing installed artifacts', async () => {
     const manifest = makeManifest({ id: 'reload-plugin', frontend: null, backend: './dist/backend.cjs' })
     enabledPluginIds.set(new Set(['reload-plugin']))

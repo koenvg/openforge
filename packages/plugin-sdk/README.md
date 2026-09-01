@@ -80,6 +80,28 @@ export default defineFrontendPlugin({
 
 Add every registration and cleanup handle to `context.subscriptions`. OpenForge disposes them when it deactivates or reloads the plugin.
 
+Task reads support project-filtered invalidation subscriptions. Notifications may be coalesced and contain identity plus a reason, not a Task snapshot. Repeat only the bounded read your view needs:
+
+```ts
+export default defineFrontendPlugin({
+  activate(openforge, context) {
+    const projectId = openforge.context.getSnapshot().projectId
+    if (!projectId) return
+
+    context.subscriptions.add(openforge.tasks.onDidChange(projectId, (event) => {
+      const refresh = event.taskId
+        ? openforge.tasks.detail(event.projectId, event.taskId)
+        : openforge.tasks.active(event.projectId)
+      void refresh.then((result) => {
+        // Update plugin-owned state from the bounded result.
+      }).catch(console.error)
+    }))
+  },
+})
+```
+
+The reason is one of `created`, `updated`, `completed`, `attention`, or `execution`. Add the returned disposable to `context.subscriptions`; explicit disposal, deactivation, reload, and uninstall then stop delivery.
+
 Frontend bundles must share Svelte with the host. Use the SDK's Vite external helper:
 
 ```ts
@@ -150,6 +172,16 @@ describe('frontend plugin', () => {
       { id: 'notes', qualifiedId: 'acme.notes.notes', title: 'Notes' },
     ])
   })
+})
+```
+
+Use `registry.emitTaskChange(...)` to drive invalidation behavior without importing host events or renderer stores:
+
+```ts
+registry.emitTaskChange({
+  projectId: 'P-1',
+  taskId: 'T-42',
+  reason: 'updated',
 })
 ```
 

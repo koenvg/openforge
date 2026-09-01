@@ -216,7 +216,7 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `events` | `EventRegistry` | Register local/global event listeners and emit local/global events. |
 | `storage` | `PluginStorage` | Read/write JSON values in global, project, or task storage scopes. |
 | `context` | `{ getSnapshot(): OpenForgeContextSnapshot }` | Read the current plugin/project/task context snapshot. |
-| `tasks` | `TasksAPI` | List, read, create, update summaries/statuses, configure start-prompt contributions, start implementation runs, and inspect task workspace/session state. |
+| `tasks` | `TaskOperationsAPI` | Read bounded Task projections, create Tasks, update status, configure start-prompt contributions, start Implementation Runs, and inspect Task workspace/session state. |
 | `projects` | `ProjectsAPI` | List projects or get one project by id. |
 | `fs` | `FileSystemAPI` | Read directories/files, write files, and search project files. |
 | `shell` | `ShellAPI` | Spawn, write, resize, kill, and read task shell buffers. |
@@ -225,6 +225,8 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `system` | `SystemAPI` | Open external URLs and write text to the operating-system clipboard through host-owned adapters. |
 | `config` | `KeyValueConfigAPI` | Read/write global JSON configuration values. |
 | `projectConfig` | `KeyValueConfigAPI` | Read/write project-scoped JSON configuration values. |
+
+`FrontendOpenForgeAPI.tasks` is the narrower `TasksAPI`, which also exposes `onDidChange(projectId, handler)` for project-filtered invalidations. Backend plugins receive operation-only `TaskOperationsAPI`.
 
 `SystemAPI` exposes `openUrl(url)` and `writeClipboardText(text)`. Clipboard writes are available to frontend and backend Trusted Plugin runtimes through host-owned bridges. Call `writeClipboardText` only in response to an explicit user copy action; plugin code must not import browser, Electron, preload, or IPC clipboard internals.
 
