@@ -35,6 +35,9 @@ const pluginSdkAliases = createOpenForgePluginSdkSourceAliasRecord(new URL('./',
 
 export default defineConfig({
   test: {
+    // Fork workers overlap with thread and build-heavy projects in the full suite.
+    // Leave CPU headroom so otherwise-fast jsdom timers are not starved past 5 seconds.
+    maxWorkers: '60%',
     projects: [
       {
         plugins: [svelte(), svelteTesting()],

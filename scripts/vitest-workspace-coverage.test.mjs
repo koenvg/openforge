@@ -83,4 +83,8 @@ describe('root Vitest workspace coverage', () => {
 
     expect(coveredGeneratedSuites).toEqual([])
   })
+
+  it('reserves worker headroom for async test timers during full-suite runs', () => {
+    expect(vitestConfig.test?.maxWorkers).toBe('60%')
+  })
 })
