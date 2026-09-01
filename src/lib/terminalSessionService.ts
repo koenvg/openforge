@@ -17,6 +17,8 @@ import {
   resizePty,
   writePty,
 } from './ipc'
+import { terminalFontFamily } from './terminalFont'
+import { terminalFontSize } from './terminalFontSize'
 import { themeMode } from './theme'
 
 const transport = createDesktopTerminalTransport({
@@ -33,6 +35,8 @@ const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
   sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
   openLink: url => openUrl(url),
   themeMode,
+  fontFamily: terminalFontFamily,
+  fontSize: terminalFontSize,
   loggerName: 'terminalSessionService',
 }
 

@@ -128,6 +128,8 @@ export interface TerminalView {
   setKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void
   getSelectionText(): string
   setTheme(theme: TerminalViewTheme): void
+  setFontFamily(fontFamily: string): void
+  setFontSize(fontSize: number): void
   onRendererFailure(listener: (failure: TerminalViewRendererFailure) => void): TerminalViewDisposable
   dispose(): void
 }
@@ -135,6 +137,8 @@ export interface TerminalView {
 export interface TerminalViewFactoryOptions {
   terminalKey: string
   themeMode: ThemeMode
+  fontFamily?: string
+  fontSize?: number
   openLink(url: string): Promise<void>
   enableImages?: boolean
   loggerName?: string

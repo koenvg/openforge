@@ -40,6 +40,8 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     setKeyEventHandler: vi.fn(),
     getSelectionText: vi.fn(() => ''),
     setTheme: vi.fn(),
+    setFontFamily: vi.fn(),
+    setFontSize: vi.fn(),
     onRendererFailure: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
     ...overrides,

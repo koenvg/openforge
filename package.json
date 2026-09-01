@@ -49,8 +49,15 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/cascadia-code": "^5.3.0",
+    "@fontsource/courier-prime": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/martian-mono": "^5.3.0",
+    "@fontsource/overpass-mono": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
     "@git-diff-view/core": "catalog:",
     "@git-diff-view/svelte": "catalog:",
     "@lucide/svelte": "catalog:",

@@ -3,6 +3,11 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import { configureTerminalPerformanceTrace } from './lib/terminalSessionService'
 import { createTerminalPerformanceTestTrace } from './lib/terminalPerformanceTesting'
+import { initTerminalFontChoice } from './lib/terminalFont'
+import { initTerminalFontSizeChoice } from './lib/terminalFontSize'
+
+initTerminalFontChoice()
+initTerminalFontSizeChoice()
 
 const terminalPerformanceTrace = createTerminalPerformanceTestTrace(
   import.meta.env.DEV,

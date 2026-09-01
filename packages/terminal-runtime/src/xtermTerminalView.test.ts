@@ -70,7 +70,10 @@ vi.mock('@xterm/addon-web-links', () => ({
 
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: vi.fn(function WebglAddon() {
-    return { onContextLoss: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn() }
+    return {
+      onContextLoss: vi.fn(() => ({ dispose: vi.fn() })),
+      dispose: vi.fn(),
+    }
   }),
 }))
 
@@ -180,6 +183,26 @@ describe('xterm TerminalView adapter', () => {
     expect(onInput).toHaveBeenCalledOnce()
     expect(onInput).toHaveBeenCalledWith('typed input')
     view.dispose()
+  })
+
+  it('applies a font size change to the live xterm instance', () => {
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'T-1-shell-0',
+      themeMode: 'dark',
+      openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+
+    view.mount(container)
+    Object.defineProperties(container.firstElementChild, {
+      clientWidth: { configurable: true, value: 640 },
+      clientHeight: { configurable: true, value: 480 },
+    })
+    view.setFontSize(20)
+
+    expect(mocks.terminal.options.fontSize).toBe(20)
+    expect(mocks.fit).toHaveBeenCalledOnce()
   })
 
   it.each([

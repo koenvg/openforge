@@ -1,5 +1,6 @@
 import { onDestroy, onMount } from 'svelte'
 import { computeEffectiveProjectSettings } from '../../lib/hierarchicalSettings'
+import type { TerminalFontId } from '../../lib/terminalFont'
 import { error } from '../../lib/stores'
 import type { TaskState } from '../../lib/taskState'
 import {
@@ -12,6 +13,8 @@ import { createSettingsInstallationController } from './settingsInstallationCont
 import { createSettingsPersistenceController } from './settingsPersistenceController.svelte'
 import { createSettingsPluginController } from './settingsPluginController.svelte'
 import { createSettingsProjectController } from './settingsProjectController.svelte'
+import { createSettingsTerminalFontController } from './settingsTerminalFontController.svelte'
+import { createSettingsTerminalFontSizeController } from './settingsTerminalFontSizeController.svelte'
 import { createSettingsThemeController } from './settingsThemeController.svelte'
 import { createSettingsWhisperController } from './settingsWhisperController.svelte'
 
@@ -35,6 +38,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   const installationController = createSettingsInstallationController()
   const whisperController = createSettingsWhisperController()
   const themeController = createSettingsThemeController()
+  const terminalFontController = createSettingsTerminalFontController()
+  const terminalFontSizeController = createSettingsTerminalFontSizeController()
   const persistenceController = createSettingsPersistenceController({
     delayMs: SAVE_DEBOUNCE_MS,
     onProjectSaved: projectController.handleSaved,
@@ -83,6 +88,15 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     scheduleSave()
   }
 
+  function handleTerminalFontChange(font: TerminalFontId): void {
+    terminalFontController.select(font)
+    scheduleSave()
+  }
+
+  function handleTerminalFontSizeChange(size: number): void {
+    terminalFontSizeController.select(size)
+    scheduleSave()
+  }
 
   function handleGlobalSettingChange(key: string, value: string): void {
     scheduleSave(globalController.applySettingChange(key, value))
@@ -116,6 +130,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get modelStatuses() { return whisperController.modelStatuses },
     get downloadingModel() { return whisperController.downloadingModel },
     get isDarkMode() { return themeController.isDarkMode },
+    get terminalFont() { return terminalFontController.selected },
+    get terminalFontSize() { return terminalFontSizeController.selected },
     get settingsLoading() { return settingsLoading },
     get projectSettingsLoadError() { return projectController.settingsLoadError },
     get globalSettingsLoadError() { return globalController.loadError },
@@ -153,6 +169,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     beginDeleteConfirmation: projectController.beginDeleteConfirmation,
     cancelDeleteConfirmation: projectController.cancelDeleteConfirmation,
     handleThemeToggle,
+    handleTerminalFontChange,
+    handleTerminalFontSizeChange,
     handleGlobalSettingChange,
     handleGlobalPluginToggle: pluginController.toggleGlobalDefault,
     handleProjectSettingChange: projectController.changeSetting,
