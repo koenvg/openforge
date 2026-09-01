@@ -10,7 +10,7 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
   let initialized = false
   let fileRequestId = 0
 
-  async function selectFile(path: string): Promise<boolean> {
+  async function selectFile(path: string, suffix = ''): Promise<boolean> {
     const source = state.getWorkspaceSource()
     if (!source) return false
 
@@ -19,6 +19,7 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
     state.updateWorkspaceState(identity, (current) => ({
       ...current,
       selectedPath: path,
+      selectedSuffix: suffix,
       fileContent: null,
       contentScrollTop: 0,
     }))
@@ -55,8 +56,10 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
   function retrySelectedFile(): void {
     const source = state.getWorkspaceSource()
     if (!source) return
-    const path = state.getWorkspaceState(source.identity).selectedPath
-    if (path) void selectFile(path)
+    const workspaceState = state.getWorkspaceState(source.identity)
+    if (workspaceState.selectedPath) {
+      void selectFile(workspaceState.selectedPath, workspaceState.selectedSuffix)
+    }
   }
 
   function updateContentScrollTop(contentScrollTop: number): void {
@@ -89,7 +92,7 @@ export function useFileSelectionController(state: FileBrowserControllerState) {
       && workspaceState.selectedPath !== null
       && workspaceState.fileContent === null
     ) {
-      void selectFile(workspaceState.selectedPath)
+      void selectFile(workspaceState.selectedPath, workspaceState.selectedSuffix)
     }
   })
 

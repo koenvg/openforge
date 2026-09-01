@@ -10,6 +10,7 @@ const activityTab: ResolvedTab = {
   title: 'Activity',
   icon: null,
   order: 5,
+  requiresWorkspace: true,
 }
 
 describe('TaskPaneNavigation', () => {

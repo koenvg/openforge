@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { FileContent, FileEntry } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import { createProjectWorkspaceSource, projectWorkspaceIdentity } from './workspaceSource'
+import {
+  createProjectWorkspaceSource,
+  createTaskWorkspaceSource,
+  projectWorkspaceIdentity,
+  taskWorkspaceIdentity,
+} from './workspaceSource'
 
 const entries: FileEntry[] = [{
   name: 'src',
@@ -39,5 +44,27 @@ describe('project workspace source', () => {
     expect(readDir).toHaveBeenNthCalledWith(2, { projectId: 'project-a', path: 'src' })
     expect(readFile).toHaveBeenCalledWith({ projectId: 'project-a', path: 'src/main.ts' })
     expect(searchFiles).toHaveBeenCalledWith({ projectId: 'project-a', query: 'main', limit: 50 })
+  })
+
+  it('owns the task identity and translates workspace operations to task-scoped fs requests', async () => {
+    const readDir = vi.fn().mockResolvedValue(entries)
+    const readFile = vi.fn().mockResolvedValue(content)
+    const searchFiles = vi.fn().mockResolvedValue(['src/main.ts'])
+    const api = {
+      fs: { task: { readDir, readFile, searchFiles } },
+    } as unknown as FrontendOpenForgeAPI
+
+    const source = createTaskWorkspaceSource(api, 'task-a')
+
+    expect(source.identity).toBe(taskWorkspaceIdentity('task-a'))
+    await expect(source.readDirectory(null)).resolves.toEqual(entries)
+    await expect(source.readDirectory('src')).resolves.toEqual(entries)
+    await expect(source.readFile('src/main.ts')).resolves.toEqual(content)
+    await expect(source.searchFiles('main', 50)).resolves.toEqual(['src/main.ts'])
+
+    expect(readDir).toHaveBeenNthCalledWith(1, { taskId: 'task-a', path: null })
+    expect(readDir).toHaveBeenNthCalledWith(2, { taskId: 'task-a', path: 'src' })
+    expect(readFile).toHaveBeenCalledWith({ taskId: 'task-a', path: 'src/main.ts' })
+    expect(searchFiles).toHaveBeenCalledWith({ taskId: 'task-a', query: 'main', limit: 50 })
   })
 })

@@ -37,6 +37,26 @@ describe('plugin runtime task UI contributions', () => {
     expect(getRegisteredRenderableComponent('taskUISections', 'plugin.sections:lazy')).toBeUndefined()
   })
 
+
+  it('preserves workspace availability metadata for task pane tabs', async () => {
+    const registry = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
+    registry.getFrontendApi().taskUI.registerTab({
+      id: 'files',
+      title: 'Files',
+      requiresWorkspace: false,
+      component: DirectSection,
+    })
+
+    await applyRuntimeSnapshotContributions('plugin.sections', registry.getSnapshot())
+
+    expect(get(runtimeContributionSources).get('plugin.sections')?.taskPaneTabs).toEqual([{
+      id: 'files',
+      title: 'Files',
+      icon: undefined,
+      order: undefined,
+      requiresWorkspace: false,
+    }])
+  })
   it('re-applies a snapshot in a single store update without clearing the source first', async () => {
     const seed = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
     seed.getFrontendApi().taskUI.registerSection({ id: 'direct', order: 20, component: DirectSection })

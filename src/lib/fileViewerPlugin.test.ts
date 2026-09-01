@@ -22,6 +22,19 @@ describe('fileViewerPlugin host bridge', () => {
     })
   })
 
+
+  it('sends an explicit task target through the plugin command bridge', async () => {
+    executePluginCommandMock.mockResolvedValueOnce(true)
+    const { revealFileInTaskFiles } = await import('./fileViewerPlugin')
+
+    await expect(revealFileInTaskFiles('T-42', 'src/App.svelte', '#setup')).resolves.toBe(true)
+
+    expect(executePluginCommandMock).toHaveBeenCalledWith(FILE_VIEWER_PLUGIN_ID, 'revealFile', {
+      path: 'src/App.svelte',
+      taskId: 'T-42',
+      suffix: '#setup',
+    })
+  })
   it('does not import file-viewer plugin internals into the host bridge', () => {
     const source = readFileSync(join(process.cwd(), 'src/lib/fileViewerPlugin.ts'), 'utf8')
 

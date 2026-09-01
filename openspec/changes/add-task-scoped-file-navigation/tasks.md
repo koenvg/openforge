@@ -7,10 +7,10 @@
 
 ## 2. Task Files tab and isolated browser state
 
-- [ ] 2.1 Add tests that describe project and task file sources, then refactor the file-viewer controllers to consume a workspace file-source interface without changing project Files behavior; verify `pnpm --filter @openforge-app/plugin-file-viewer test` passes.
-- [ ] 2.2 Add scope-isolation tests for selected paths, expanded directories, searches, scroll positions, and pending reveals keyed by project or task identity; implement scoped state storage and verify rapid project/task switching does not leak state in the file-viewer test suite.
-- [ ] 2.3 Add a failing registration and component test for a task workbench Files tab; register the tab, connect it to the task filesystem source, show live-worktree identity and workspace errors, and verify the file-viewer registration and task-tab tests pass.
-- [ ] 2.4 Add tests for an explicit task-targeted reveal request carrying task ID, path, and suffix; implement plugin-owned task-tab activation while keeping existing project quick-open behavior compatible, and verify command-routing tests pass.
+- [x] 2.1 Add tests that describe project and task file sources, then refactor the file-viewer controllers to consume a workspace file-source interface without changing project Files behavior; verify `pnpm --filter @openforge-app/plugin-file-viewer test` passes.
+- [x] 2.2 Add scope-isolation tests for selected paths, expanded directories, searches, scroll positions, and pending reveals keyed by project or task identity; implement scoped state storage and verify rapid project/task switching does not leak state in the file-viewer test suite.
+- [x] 2.3 Add a failing registration and component test for a task workbench Files tab; register the tab, connect it to the task filesystem source, show live-worktree identity and workspace errors, and verify the file-viewer registration and task-tab tests pass.
+- [x] 2.4 Add tests for an explicit task-targeted reveal request carrying task ID, path, and suffix; implement plugin-owned task-tab activation while keeping existing project quick-open behavior compatible, and verify command-routing tests pass.
 
 ## 3. Review-local repository link navigation
 

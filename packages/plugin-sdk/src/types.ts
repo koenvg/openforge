@@ -388,6 +388,8 @@ export interface PluginTaskPaneTabRegistration {
   title: string
   icon?: string
   order?: number
+  /** Whether the host should hide this tab when the Task has no resolved workspace. Defaults to true. */
+  requiresWorkspace?: boolean
   component: PluginComponentLoader<PluginTaskPaneProps> | PluginComponent<PluginTaskPaneProps>
 }
 

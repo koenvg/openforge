@@ -114,7 +114,7 @@ describe('resolveContributions', () => {
   it('resolves task-pane tabs', () => {
     const source = makeSource({
       pluginId: 'plugin.tabs',
-      taskPaneTabs: [makeTab({ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 })],
+      taskPaneTabs: [makeTab({ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5, requiresWorkspace: false })],
     })
 
     const result = resolveContributions([source])
@@ -127,6 +127,7 @@ describe('resolveContributions', () => {
         title: 'Activity',
         icon: 'sparkles',
         order: 5,
+        requiresWorkspace: false,
       },
     ])
   })

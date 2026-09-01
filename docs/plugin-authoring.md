@@ -245,6 +245,8 @@ Frontend-only registries and helpers:
 
 Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. The host automatically assigns visible task UI tabs the remaining positional shortcuts after Agent (`⌘1`) and Review (`⌘2`): tabs receive `⌘3` through `⌘9`, then `⌘0`, in their current `order`/title sort order. Assignments update when enabled plugins or tab ordering changes; additional tabs remain clickable without a numeric shortcut. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
 
+Task tabs require a resolved task workspace by default. Set `requiresWorkspace: false` when the tab can render its own unavailable-workspace state. The host keeps those tabs visible and assigns their shortcuts even when workspace resolution fails.
+
 ### Svelte build and CSS contract
 
 Frontend plugins share the host's Svelte runtime. Declare `svelte` as both a peer dependency and an author-time dev dependency, and use `openforgePluginViteExternals` from `@openforge-app/plugin-sdk/vite` in the frontend Vite build so Svelte is not bundled into the plugin.
