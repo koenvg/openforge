@@ -44,7 +44,9 @@ function escapeRegExp(value) {
 export function updatePlistStringValue(plist, key, value) {
   const pattern = new RegExp(`(<key>${escapeRegExp(key)}</key>\\s*<string>)([^<]*)(</string>)`)
   if (!pattern.test(plist)) {
-    return plist.replace('</dict>', `\n\t<key>${key}</key>\n\t<string>${value}</string>\n</dict>`)
+    const rootDictionaryEnd = plist.lastIndexOf('</dict>')
+    if (rootDictionaryEnd === -1) return plist
+    return `${plist.slice(0, rootDictionaryEnd)}\n\t<key>${key}</key>\n\t<string>${value}</string>\n${plist.slice(rootDictionaryEnd)}`
   }
   return plist.replace(pattern, `$1${value}$3`)
 }
