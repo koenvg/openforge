@@ -33,6 +33,102 @@ describe('createSelfReviewFileContentLoader', () => {
     }>()
   })
 
+
+  it('loads a linked repository file from the live task review scope', async () => {
+    const getTaskFileContents = vi.fn().mockResolvedValue({
+      oldContent: '',
+      newContent: '# Live setup',
+      oldAvailability: { status: 'missing' },
+      newAvailability: { status: 'available', size: 12 },
+    })
+    const getCommitFileContents = vi.fn()
+    const loader = createSelfReviewFileContentLoader({
+      getContext: () => ({
+        taskId: 'task-1',
+        selectedCommitSha: null,
+        includeCommitted: false,
+        includeUncommitted: true,
+      }),
+      getComparisonContents: () => undefined,
+      getTaskFileContents,
+      getTaskBatchFileContents: vi.fn(),
+      getCommitFileContents,
+      getCommitBatchFileContents: vi.fn(),
+    })
+
+    await expect(loader.fetchRepositoryFile('docs/SETUP.md')).resolves.toBe('# Live setup')
+    expect(getTaskFileContents).toHaveBeenCalledWith(
+      'task-1',
+      'docs/SETUP.md',
+      null,
+      'modified',
+      false,
+      true,
+    )
+    expect(getCommitFileContents).not.toHaveBeenCalled()
+  })
+
+  it('loads a linked repository file from the selected historical commit', async () => {
+    const getTaskFileContents = vi.fn()
+    const getCommitFileContents = vi.fn().mockResolvedValue({
+      oldContent: '',
+      newContent: '# Historical setup',
+      newAvailability: { status: 'available', size: 18 },
+    })
+    const loader = createSelfReviewFileContentLoader({
+      getContext: () => ({
+        taskId: 'task-1',
+        selectedCommitSha: 'commit-sha',
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
+      getComparisonContents: () => undefined,
+      getTaskFileContents,
+      getTaskBatchFileContents: vi.fn(),
+      getCommitFileContents,
+      getCommitBatchFileContents: vi.fn(),
+    })
+
+    await expect(loader.fetchRepositoryFile('docs/SETUP.md')).resolves.toBe('# Historical setup')
+    expect(getCommitFileContents).toHaveBeenCalledWith(
+      'task-1',
+      'commit-sha',
+      'docs/SETUP.md',
+      null,
+      'modified',
+    )
+    expect(getTaskFileContents).not.toHaveBeenCalled()
+  })
+
+  it('reports a missing historical file without falling back to task content', async () => {
+    const getTaskFileContents = vi.fn().mockResolvedValue({
+      oldContent: '',
+      newContent: '# Live fallback must not be used',
+    })
+    const getCommitFileContents = vi.fn().mockResolvedValue({
+      oldContent: '',
+      newContent: '',
+      newAvailability: { status: 'missing' },
+    })
+    const loader = createSelfReviewFileContentLoader({
+      getContext: () => ({
+        taskId: 'task-1',
+        selectedCommitSha: 'commit-sha',
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
+      getComparisonContents: () => undefined,
+      getTaskFileContents,
+      getTaskBatchFileContents: vi.fn(),
+      getCommitFileContents,
+      getCommitBatchFileContents: vi.fn(),
+    })
+
+    await expect(loader.fetchRepositoryFile('docs/missing.md')).rejects.toThrow(
+      'Unable to read docs/missing.md in the selected review revision.',
+    )
+    expect(getTaskFileContents).not.toHaveBeenCalled()
+  })
   it('uses task-scoped content for single files, batches, and repository images', async () => {
     const getTaskFileContents = vi.fn()
       .mockResolvedValueOnce({

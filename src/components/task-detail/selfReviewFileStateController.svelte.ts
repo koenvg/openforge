@@ -116,6 +116,7 @@ export function createSelfReviewFileStateController(options: SelfReviewFileState
     restoreFile: (file: PrFileDiff) => { reviewedBaseline.restoreFile(file.filename) },
     fetchFileContents: fileContentLoader.fetch,
     batchFetchFileContents: fileContentLoader.fetchBatch,
+    fetchRepositoryFile: fileContentLoader.fetchRepositoryFile,
     resolveRepositoryImage: fileContentLoader.resolveRepositoryImage,
   }
 }

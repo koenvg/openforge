@@ -56,16 +56,11 @@ const documentationFile: PrFileDiff = {
 
 const rootCleanups: Array<() => void> = []
 
-function createController(
-  navigateToFileViewer = vi.fn(),
-  revealRepositoryPath?: (repositoryPath: string) => Promise<unknown>,
-) {
+function createController() {
   let controller!: ReturnType<typeof createSelfReviewWorkspaceController>
   const cleanup = $effect.root(() => {
     controller = createSelfReviewWorkspaceController({
       getTaskId: () => taskId,
-      navigateToFileViewer,
-      revealRepositoryPath,
     })
   })
   rootCleanups.push(() => {
@@ -181,15 +176,15 @@ describe('createSelfReviewWorkspaceController', () => {
     expect(replacementViewer.setScrollTop).toHaveBeenCalledWith(184)
   })
 
-  it('navigates to the file viewer even when revealing a repository path fails', async () => {
-    const navigateToFileViewer = vi.fn()
-    const controller = createController(
-      navigateToFileViewer,
-      vi.fn().mockRejectedValue(new Error('missing file')),
-    )
+  it('keeps linked repository files in workspace preview state', () => {
+    const controller = createController()
+    const target = { repositoryPath: 'docs/SETUP.md', suffix: '#installation' }
 
-    await expect(controller.openRepositoryPath('docs/SETUP.md')).rejects.toThrow('missing file')
-    expect(navigateToFileViewer).toHaveBeenCalledOnce()
+    controller.openRepositoryPath(target)
+
+    expect(controller.repositoryPreview).toEqual(target)
+    controller.closeRepositoryPreview()
+    expect(controller.repositoryPreview).toBeNull()
   })
 })
 

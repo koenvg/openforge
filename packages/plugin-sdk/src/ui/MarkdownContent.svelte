@@ -3,10 +3,10 @@
   import { getRenderedMermaidDiagram, getRenderedMermaidSvg, observeMermaidTheme, renderMermaidDiagrams, type RenderedMermaidDiagram } from '../mermaid'
   import MermaidDiagramPreview from './MermaidDiagramPreview.svelte'
   import {
-    getMarkdownRepositoryLinkSuffix,
     MARKDOWN_REMOTE_MEDIA_ATTRIBUTE,
     renderMarkdownHtml,
-    resolveMarkdownRepositoryPath,
+    resolveMarkdownRepositoryLinkTarget,
+    type MarkdownRepositoryLinkTarget,
     type ResolvedMarkdownMedia,
   } from '../markdown'
 
@@ -22,7 +22,7 @@
     markdownFilePath?: string | null
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
-    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
+    onOpenRepositoryPath?: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenImage?: (request: MarkdownImageOpenRequest) => void
   }
@@ -187,9 +187,9 @@
 
   function openMarkdownLink(href: string, absoluteHref: string) {
     if (markdownFilePath) {
-      const repositoryPath = resolveMarkdownRepositoryPath(href, markdownFilePath)
-      if (repositoryPath) {
-        void onOpenRepositoryPath?.(repositoryPath, getMarkdownRepositoryLinkSuffix(href))
+      const target = resolveMarkdownRepositoryLinkTarget(href, markdownFilePath)
+      if (target) {
+        void onOpenRepositoryPath?.(target)
         return
       }
     }

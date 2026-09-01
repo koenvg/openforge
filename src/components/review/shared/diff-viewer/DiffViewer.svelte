@@ -1,6 +1,7 @@
 <script lang="ts">
   import SharedDiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
   import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
@@ -21,7 +22,7 @@
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
-    onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
+    onOpenRepositoryPath?: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     toolbarExtra?: Snippet
     fileHeaderExtra?: Snippet<[PrFileDiff]>
     includeCommitted?: boolean
@@ -75,6 +76,7 @@
 
   type SharedDiffViewerHandle = {
     scrollToFile: (filename: string) => void
+    scrollToFragment: (filename: string, fragment: string) => Promise<void>
     scrollToComment: (filename: string, lineNumber: number) => Promise<void>
     getScrollTop: () => number
     setScrollTop: (scrollTop: number) => void
@@ -102,6 +104,10 @@
 
   export function scrollToFile(filename: string) {
     sharedViewer?.scrollToFile(filename)
+  }
+
+  export function scrollToFragment(filename: string, fragment: string) {
+    return sharedViewer?.scrollToFragment(filename, fragment) ?? Promise.resolve()
   }
 
   export function scrollToComment(filename: string, lineNumber: number) {

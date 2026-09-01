@@ -67,6 +67,9 @@ describe('MarkdownFilePreview', () => {
     })
 
     await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
-    expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '')
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '',
+    })
   })
 })

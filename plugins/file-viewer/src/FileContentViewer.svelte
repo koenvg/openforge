@@ -201,7 +201,9 @@
             {workspaceSource}
             {scrollTop}
             onScrollTopChange={onScrollTopChange}
-            {onOpenRepositoryPath}
+            onOpenRepositoryPath={onOpenRepositoryPath
+              ? (target) => onOpenRepositoryPath?.(target.repositoryPath)
+              : undefined}
           />
         {:else}
           <div

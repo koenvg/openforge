@@ -2,6 +2,7 @@
   import { MessageSquarePlus } from '@lucide/svelte'
   import { SplitSide } from '@git-diff-view/svelte'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
@@ -19,7 +20,7 @@
     content: string
     imageBaseUrl: string | null
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
-    onOpenRepositoryPath: (repositoryPath: string, suffix: string) => void | Promise<void>
+    onOpenRepositoryPath: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenImage?: (request: MarkdownImageOpenRequest) => void
     existingComments: ReviewComment[]

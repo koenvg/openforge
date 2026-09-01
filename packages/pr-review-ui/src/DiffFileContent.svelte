@@ -2,6 +2,7 @@
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
   import { getMediaPreviewDataUrl, getVideoMimeType, isMediaFileDiff, isVideoFileDiff, type FileContents, type FileRevisionAvailability } from './diffAdapter'
@@ -29,7 +30,7 @@
     pendingComments: ReviewSubmissionComment[]
     agentComments: AgentReviewComment[]
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
-    onOpenRepositoryPath: (repositoryPath: string, suffix: string) => void | Promise<void>
+    onOpenRepositoryPath: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenMedia?: OpenReviewMedia
     onOpenInlineCommentWidget: (lineNumber: number, side: SplitSide) => void

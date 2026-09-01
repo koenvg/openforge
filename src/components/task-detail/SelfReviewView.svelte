@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
-  import { useAppRouter } from '../../lib/router.svelte'
   import type { TaskDetail } from '../../lib/types'
   import SelfReviewWorkspace from './SelfReviewWorkspace.svelte'
   import { createSelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
@@ -12,10 +11,8 @@
   }
 
   let { task, agentStatus, onSendToAgent }: Props = $props()
-  const router = useAppRouter()
   const controller = createSelfReviewWorkspaceController({
     getTaskId: () => task.id,
-    navigateToFileViewer: (viewKey) => router.navigate(viewKey),
   })
 
   $effect(() => {

@@ -597,7 +597,7 @@ Use `MarkdownContent` instead of rendering plugin Markdown as raw HTML. Route ex
 | `markdownFilePath` | `string \| null`, default `null` | Repository-relative path of the Markdown file. It provides context for relative links and images. |
 | `resolveRepositoryImage` | `(repositoryPath: string) => Promise<string \| null>` | Resolves a repository image to a displayable URL. Missing or failed resolutions leave the image inert. |
 | `resolveRemoteMedia` | `(url: string) => Promise<{ url: string; kind: 'image' \| 'video' } \| null>` | Rewrites deferred remote media. A resolved video link becomes a video player. |
-| `onOpenRepositoryPath` | `(repositoryPath: string, suffix: string) => void \| Promise<void>` | Opens a relative repository link. `suffix` preserves a query string or fragment. |
+| `onOpenRepositoryPath` | `(target: { repositoryPath: string; suffix: string }) => void \| Promise<void>` | Opens a relative repository link. `target.repositoryPath` excludes the preserved query string or fragment in `target.suffix`. |
 | `onOpenUrl` | `(url: string) => void \| Promise<void>` | Opens a non-fragment URL. Plugins should delegate to `api.system.openUrl`. |
 | `onOpenImage` | `(request: { src: string; alt: string; openLink?: () => void }) => void` | Opens an image preview. `openLink` is present when the image is wrapped in a link. |
 

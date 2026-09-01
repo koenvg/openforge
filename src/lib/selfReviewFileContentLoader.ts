@@ -93,6 +93,7 @@ export interface SelfReviewFileContentLoader {
   fetchCurrentBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>>
   fetchBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>>
   resolveRepositoryImage(repositoryPath: string): Promise<string | null>
+  fetchRepositoryFile(repositoryPath: string): Promise<string>
 }
 
 export function createSelfReviewFileContentLoader(
@@ -152,6 +153,27 @@ export function createSelfReviewFileContentLoader(
     return contents
   }
 
+  async function fetchRepositoryFile(repositoryPath: string): Promise<string> {
+    const source = createFileContentSource(options, options.getContext())
+    const contents = await source.fetch({
+      path: repositoryPath,
+      oldPath: null,
+      status: 'modified',
+    })
+
+    if (contents.newAvailability?.status === 'missing') {
+      throw new Error(`Unable to read ${repositoryPath} in the selected review revision.`)
+    }
+    if (contents.newAvailability?.status === 'too-large') {
+      throw new Error(`${repositoryPath} is too large to preview in Review.`)
+    }
+    if (contents.newAvailability?.status === 'load-failed') {
+      throw new Error(`Unable to read ${repositoryPath}: ${contents.newAvailability.message}`)
+    }
+
+    return contents.newContent
+  }
+
   async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
     const source = createFileContentSource(options, options.getContext())
     const { newContent } = await source.fetch({
@@ -162,5 +184,12 @@ export function createSelfReviewFileContentLoader(
     return getImagePreviewDataUrl(repositoryPath, newContent)
   }
 
-  return { fetch, fetchCurrent, fetchCurrentBatch, fetchBatch, resolveRepositoryImage }
+  return {
+    fetch,
+    fetchCurrent,
+    fetchCurrentBatch,
+    fetchBatch,
+    fetchRepositoryFile,
+    resolveRepositoryImage,
+  }
 }

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearTaskReviewPaneState,
-  getTaskReviewPaneState,
   updateTaskReviewPaneState,
 } from '../../lib/taskReviewPaneState'
 import { createSelfReviewNavigationController } from './selfReviewNavigationController.svelte'
@@ -10,17 +9,15 @@ const taskId = 'task-1'
 const rootCleanups: Array<() => void> = []
 
 function createController(
-  navigateToFileViewer = vi.fn(),
-  revealRepositoryPath: (repositoryPath: string) => Promise<unknown> = vi.fn().mockResolvedValue(true),
+  getDisplayedReviewPaths: () => string[] = () => [],
 ) {
   let controller!: ReturnType<typeof createSelfReviewNavigationController>
   const cleanup = $effect.root(() => {
     controller = createSelfReviewNavigationController({
       getTaskId: () => taskId,
       getSelectedCommitSha: () => null,
+      getDisplayedReviewPaths,
       getLinkedPr: () => null,
-      navigateToFileViewer,
-      revealRepositoryPath,
     })
   })
   rootCleanups.push(cleanup)
@@ -53,19 +50,43 @@ describe('createSelfReviewNavigationController', () => {
     expect(replacementViewer.setScrollTop).toHaveBeenCalledWith(184)
   })
 
-  it('saves scroll and navigates to the file viewer even when reveal fails', async () => {
-    const navigateToFileViewer = vi.fn()
-    const controller = createController(
-      navigateToFileViewer,
-      vi.fn().mockRejectedValue(new Error('missing file')),
-    )
-    const diffViewer = { getScrollTop: vi.fn(() => 240), setScrollTop: vi.fn() }
+  it('scrolls to a displayed diff file without leaving Review', async () => {
+    const controller = createController(() => ['src/main.rs'])
+    const diffViewer = {
+      getScrollTop: vi.fn(() => 240),
+      setScrollTop: vi.fn(),
+      scrollToFile: vi.fn(),
+      scrollToFragment: vi.fn().mockResolvedValue(undefined),
+    }
     controller.attachDiffViewer(diffViewer)
 
-    await expect(controller.openRepositoryPath('docs/SETUP.md')).rejects.toThrow('missing file')
-    controller.dispose(diffViewer)
+    await controller.openRepositoryPath({
+      repositoryPath: 'src/main.rs',
+      suffix: '#usage',
+    })
 
-    expect(navigateToFileViewer).toHaveBeenCalledOnce()
-    expect(getTaskReviewPaneState(taskId).diffScrollTop).toBe(240)
+    expect(diffViewer.scrollToFragment).toHaveBeenCalledWith('src/main.rs', 'usage')
+    expect(diffViewer.scrollToFile).not.toHaveBeenCalled()
+    expect(controller.repositoryPreview).toBeNull()
+  })
+
+  it('opens other repository files in a Review-local preview', async () => {
+    const controller = createController()
+    const diffViewer = { getScrollTop: vi.fn(() => 0), setScrollTop: vi.fn(), focusDiff: vi.fn() }
+    controller.attachDiffViewer(diffViewer)
+
+    await controller.openRepositoryPath({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
+    })
+
+    expect(controller.repositoryPreview).toEqual({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
+    })
+
+    await controller.closeRepositoryPreview()
+    expect(controller.repositoryPreview).toBeNull()
+    expect(diffViewer.focusDiff).toHaveBeenCalledOnce()
   })
 })

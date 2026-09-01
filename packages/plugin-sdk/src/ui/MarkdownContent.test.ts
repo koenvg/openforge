@@ -384,7 +384,10 @@ describe('MarkdownContent', () => {
     })
 
     await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
-    expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '#installation')
+    expect(onOpenRepositoryPath).toHaveBeenCalledWith({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '#installation',
+    })
     expect(onOpenUrl).not.toHaveBeenCalled()
 
     await fireEvent.click(screen.getByRole('link', { name: 'Website' }))
