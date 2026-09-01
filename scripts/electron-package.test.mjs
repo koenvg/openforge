@@ -46,6 +46,12 @@ async function writeElectronHelperTemplate(template, suffix = '') {
   )
 }
 
+async function writeElectronHelperTemplates(template) {
+  for (const suffix of ['', ' (GPU)', ' (Renderer)', ' (Plugin)']) {
+    await writeElectronHelperTemplate(template, suffix)
+  }
+}
+
 async function writeBackendLayoutConfig(repoRoot, config = currentLayoutConfig) {
   await writeFile(join(repoRoot, BACKEND_LAYOUT_CONFIG_FILE), `${JSON.stringify(config, null, 2)}\n`)
 }
@@ -183,6 +189,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(template, 'Contents/Resources'), { recursive: true })
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+    await writeElectronHelperTemplates(template)
     await writeElectronBuildOutputs(root)
     await writeElectronRuntimeDependencyArtifacts(root)
     await writeBuiltinPluginCatalog(root, [])
@@ -370,6 +377,7 @@ describe('Electron macOS packaging helpers', () => {
         await mkdir(join(template, 'Contents/Resources'), { recursive: true })
         await writeExecutable(join(template, 'Contents/MacOS/Electron'))
         await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+        await writeElectronHelperTemplates(template)
       },
     })
 
@@ -397,6 +405,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(template, 'Contents/Resources'), { recursive: true })
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+    await writeElectronHelperTemplates(template)
     await writeElectronBuildOutputs(root)
     await writeElectronRuntimeDependencyArtifacts(root)
     await writeBuiltinPluginCatalog(root, [])
@@ -439,9 +448,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeFile(join(template, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/icudtl.dat'), 'icu')
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
-    for (const suffix of ['', ' (GPU)', ' (Renderer)', ' (Plugin)']) {
-      await writeElectronHelperTemplate(template, suffix)
-    }
+    await writeElectronHelperTemplates(template)
     await writeElectronBuildOutputs(root)
     await writeElectronRuntimeDependencyArtifacts(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
