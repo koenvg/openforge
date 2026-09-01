@@ -43,6 +43,39 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(listTaskSessions).toHaveBeenCalledWith(request)
   })
 
+  it('forwards typed project Task subscriptions through the runtime host', async () => {
+    const dispose = vi.fn()
+    let hostHandler: ((event: {
+      projectId: string
+      taskId: string | null
+      reason: 'created' | 'updated' | 'completed' | 'attention' | 'execution'
+    }) => void) | null = null
+    const subscribeTaskChanges = vi.fn((_projectId, handler) => {
+      hostHandler = handler
+      return { dispose }
+    })
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'dashboard',
+      projectId: 'P-1',
+      host: { subscribeTaskChanges },
+    }))
+    const handler = vi.fn()
+
+    const subscription = registry.createApi().tasks.onDidChange('P-1', handler)
+    const observedHostHandler = hostHandler as ((event: {
+      projectId: string
+      taskId: string | null
+      reason: 'created' | 'updated' | 'completed' | 'attention' | 'execution'
+    }) => void) | null
+    observedHostHandler?.({ projectId: 'P-1', taskId: 'T-1', reason: 'execution' })
+
+    expect(subscribeTaskChanges).toHaveBeenCalledWith('P-1', expect.any(Function))
+    expect(handler).toHaveBeenCalledWith({ projectId: 'P-1', taskId: 'T-1', reason: 'execution' })
+
+    await subscription.dispose()
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
   it('forwards Agent Session page requests through the frontend runtime host', async () => {
     const page = {
       items: [{

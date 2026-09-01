@@ -12,6 +12,7 @@ import {
   loadEnabledForApp,
   loadEnabledForProject,
 } from './plugin/pluginRegistry'
+import { publishObservedTaskInvalidation } from './plugin/pluginTaskInvalidations'
 import { activeProjectId } from './stores'
 import { useShortcutRegistry } from './shortcuts.svelte'
 import type { ShortcutRegistry } from './shortcuts.svelte'
@@ -61,6 +62,7 @@ export function createAppShellLifecycleController(options: AppShellLifecycleCont
       loadSessions: options.appData.loadSessions,
       loadPullRequests: options.appData.loadPullRequests,
       loadProjectAttention: options.appData.loadProjectAttention,
+      publishTaskInvalidation: publishObservedTaskInvalidation,
       refreshPrCounts: options.appData.refreshPrCounts,
       getActiveProjectId: () => get(activeProjectId),
       loadEnabledPluginsForProject: loadEnabledForProject,

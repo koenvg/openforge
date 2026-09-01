@@ -21,7 +21,7 @@ import type { AppDesktopEventDeps } from './types'
 
 type TaskSessionEventDeps = Pick<
   AppDesktopEventDeps,
-  'loadTasks' | 'loadSessions' | 'loadPullRequests' | 'loadProjectAttention'
+  'loadTasks' | 'loadSessions' | 'loadPullRequests' | 'loadProjectAttention' | 'publishTaskInvalidation'
 >
 
 function setActiveSession(taskId: string, session: AgentSession): void {
@@ -104,20 +104,21 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       clearCheckpointForTask(taskId)
       void deps.loadTasks()
       void deps.loadProjectAttention()
+      await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
     }),
 
     implementationFailed: defineDesktopEventListener(
       'implementation-failed',
-      (event) => {
+      async (event) => {
         const taskId = event.payload.task_id
         const session = get(activeSessions).get(taskId)
-        if (session) {
-          if (session.status === 'failed') return
+        if (session && session.status !== 'failed') {
           setActiveSession(taskId, { ...session, status: 'failed', error_message: event.payload.error })
         }
         clearCheckpointForTask(taskId)
         void deps.loadTasks()
         void deps.loadProjectAttention()
+        await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
       },
     ),
 
@@ -142,6 +143,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         } catch (e) {
           console.error('[startup] Failed to load session after resume for task:', taskId, e)
         }
+        await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
       },
     ),
 
@@ -152,16 +154,23 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
     agentEvent: defineDesktopEventListener('agent-event', async (event) => {
       const { task_id: taskId, event_type: eventType } = event.payload
       const session = await getOrLoadActiveSession(taskId)
-      if (!session) return
+      if (!session) {
+        await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
+        return
+      }
 
       const sessionUpdate = getOpenCodeSessionUpdate(eventType, event.payload.data)
       if (!sessionUpdate) {
         void deps.loadProjectAttention()
+        await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
         return
       }
 
       if (sessionUpdate.status === 'paused') {
-        if (session.status === 'paused' && session.checkpoint_data === sessionUpdate.checkpoint_data) return
+        if (session.status === 'paused' && session.checkpoint_data === sessionUpdate.checkpoint_data) {
+          await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
+          return
+        }
 
         setActiveSession(taskId, { ...session, ...sessionUpdate })
 
@@ -181,6 +190,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
           session.error_message === sessionUpdate.error_message
         ) {
           void deps.loadProjectAttention()
+          await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
           return
         }
 
@@ -189,15 +199,18 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       }
 
       void deps.loadProjectAttention()
+      await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
     }),
 
     sessionAborted: defineDesktopEventListener(
       'session-aborted',
-      (event) => {
-        deleteActiveSession(event.payload.ticket_id)
-        agentTerminalSessions.release(event.payload.ticket_id)
-        clearCheckpointForTask(event.payload.ticket_id)
+      async (event) => {
+        const taskId = event.payload.ticket_id
+        deleteActiveSession(taskId)
+        agentTerminalSessions.release(taskId)
+        clearCheckpointForTask(taskId)
         void deps.loadProjectAttention()
+        await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
       },
     ),
 
@@ -254,6 +267,12 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         }
       }
       void deps.loadProjectAttention()
+      await deps.publishTaskInvalidation?.({
+        taskId,
+        reason: status === 'paused' || event.payload.kind === 'requested_permission'
+          ? 'attention'
+          : 'execution',
+      })
     }),
 
     agentPtyExited: defineDesktopEventListener('agent-pty-exited', (event) => {
@@ -273,6 +292,9 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       'task-changed',
       async (event) => {
         const taskId = event.payload.task_id
+        const observedProjectId = event.payload.project_id
+          ?? get(taskDetailsById).get(taskId)?.projectId
+          ?? get(tasks).find((task) => task.id === taskId)?.projectId
         if (event.payload.action === 'deleted') {
           evictTask(taskId)
           deleteActiveSession(taskId)
@@ -318,6 +340,13 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         await deps.loadTasks()
         await deps.loadPullRequests()
         await deps.loadProjectAttention()
+        await deps.publishTaskInvalidation?.({
+          projectId: observedProjectId,
+          taskId,
+          reason: event.payload.action === 'created'
+            ? 'created'
+            : event.payload.action === 'deleted' ? 'completed' : 'updated',
+        })
       },
     ),
   }

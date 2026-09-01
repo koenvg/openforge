@@ -27,7 +27,8 @@ import type {
   RuntimeHandler,
 } from './runtimeContributionTypes'
 
-export type RuntimeCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, 'navigation'>
+export type RuntimeCommonApi = Omit<OpenForgeCommonAPI, 'tasks'>
+  & Pick<FrontendOpenForgeAPI, 'tasks' | 'navigation'>
 export type RuntimeBackendCommonApi = RuntimeCommonApi & Pick<BackendOpenForgeAPI, 'fs'>
 
 const globalCommands = new Map<string, RuntimeCommandContribution>()
@@ -145,6 +146,16 @@ export class RuntimeCommonApiRegistry {
           : unavailableCapability('agentSessions.list'),
       },
       tasks: {
+        onDidChange: (projectId, handler) => {
+          if (!isNonEmptyString(projectId)) {
+            throw new RuntimeValidationError('events', 'tasks.onDidChange requires a non-empty projectId')
+          }
+          assertHandler('events', handler)
+          const subscription = this.services.host.subscribeTaskChanges
+            ? this.services.host.subscribeTaskChanges(projectId, handler)
+            : unavailableCapability('tasks.onDidChange')
+          return this.services.trackDisposable(subscription)
+        },
         list: async (request) => {
           this.warnLegacyTaskReads()
           return this.services.host.listTasks

@@ -283,6 +283,7 @@ it('records task creation, status updates, and implementation starts', async () 
 ```
 
 By default, `tasks.active(projectId)` returns empty `tasks` and `related` arrays, `tasks.completed(projectId)` returns an empty fixed page, and `tasks.detail(projectId, taskId)` resolves to `null`. The deprecated version 1 `tasks.list()` and `tasks.get()` fakes preserve their old empty-array and null behavior until version 2. Workspace and session lookups also return `null`. Seed the registry or wrap the API behind a plugin-owned test double when a test needs richer fixtures.
+Use `registry.emitTaskChange({ projectId, taskId, reason })` to test `tasks.onDidChange` handlers. The fake applies the same Project filter as the host. Call `subscription.dispose()` or `registry.disposeAll()` to test explicit and lifecycle cleanup.
 
 ## Backend RPC
 

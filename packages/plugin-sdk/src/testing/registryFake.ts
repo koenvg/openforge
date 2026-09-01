@@ -5,6 +5,7 @@ import type {
   FrontendPlugin,
   FrontendPluginContext,
   OpenForgePackageMetadata,
+  TaskChangeEvent,
   PluginStorage,
 } from '../types'
 import { TestingBackendServicesFake } from './backendServicesFake.js'
@@ -117,6 +118,10 @@ export class TestingOpenForgeRegistryFake {
     const existingServices = this.backendServices.captureBackgroundServiceIds()
     await plugin.activate(this.backendApi, this.createBackendContext())
     await this.backendServices.startNewBackgroundServices(existingServices)
+  }
+
+  emitTaskChange(event: TaskChangeEvent): void {
+    this.commonApi.emitTaskChange(event)
   }
 
   setBrowserSurfaceState(taskId: string, id: string, patch: Partial<TaskBrowserSurfaceState>): void {

@@ -1,3 +1,4 @@
+import type { ObservedTaskInvalidation } from '../plugin/pluginTaskInvalidations'
 import type { AppDesktopEventName, AppDesktopEventPayloads } from '../desktopIpcContract'
 import type { DesktopEvent, DesktopUnlistenFn } from '../desktopIpc'
 
@@ -17,6 +18,7 @@ export interface AppDesktopEventDeps {
   loadSessions(): Promise<void> | void
   loadPullRequests(): Promise<void> | void
   loadProjectAttention(): Promise<void> | void
+  publishTaskInvalidation?(event: ObservedTaskInvalidation): Promise<void> | void
   refreshPrCounts(): Promise<void> | void
   getActiveProjectId?(): string | null
   reloadInstalledPluginMetadata?(pluginId: string): Promise<boolean> | boolean

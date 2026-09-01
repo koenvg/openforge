@@ -1,9 +1,10 @@
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finalizeAgentSession, getLatestSession } from '../ipc'
-import { activeProjectId, activeSessions, checkpointNotification, selectedTaskId, taskRuntimeInfo } from '../stores'
+import { activeProjectId, activeSessions, checkpointNotification, selectedTaskId, taskDetailsById, taskRuntimeInfo } from '../stores'
 import { evictTask, getVisibleRelationshipOwner, loadTaskDetail } from '../tasksState'
 import { agentTerminalSessions } from '../terminalSessionService'
+import type { TaskDetail } from '../types'
 import { createTaskSessionEventListeners } from './taskSessionEventListeners'
 import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
 
@@ -41,6 +42,7 @@ describe('createTaskSessionEventListeners', () => {
     activeSessions.set(new Map())
     checkpointNotification.set(null)
     taskRuntimeInfo.set(new Map())
+    taskDetailsById.set(new Map())
     activeProjectId.set(null)
     selectedTaskId.set(null)
     vi.clearAllMocks()
@@ -245,6 +247,65 @@ describe('createTaskSessionEventListeners', () => {
     expect(deps.loadTasks).toHaveBeenCalledOnce()
     expect(deps.loadPullRequests).toHaveBeenCalledOnce()
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('publishes typed invalidations for observed Task creation, updates, and completion', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    const publishTaskInvalidation = vi.fn()
+    const eventDeps = { ...deps, publishTaskInvalidation }
+    await registerEventListenerGroup(createTaskSessionEventListeners(eventDeps), deps.listen!)
+
+    await handlers.get('task-changed')?.({
+      payload: { action: 'created', task_id: 'task-created', project_id: 'project-1' },
+    })
+    await handlers.get('task-changed')?.({
+      payload: { action: 'updated', task_id: 'task-updated', project_id: 'project-1' },
+    })
+    taskDetailsById.set(new Map([
+      ['task-completed', { projectId: 'project-1' } as TaskDetail],
+    ]))
+    await handlers.get('task-changed')?.({
+      payload: { action: 'deleted', task_id: 'task-completed' },
+    })
+
+    expect(publishTaskInvalidation).toHaveBeenNthCalledWith(1, {
+      projectId: 'project-1',
+      taskId: 'task-created',
+      reason: 'created',
+    })
+    expect(publishTaskInvalidation).toHaveBeenNthCalledWith(2, {
+      projectId: 'project-1',
+      taskId: 'task-updated',
+      reason: 'updated',
+    })
+    expect(publishTaskInvalidation).toHaveBeenNthCalledWith(3, {
+      projectId: 'project-1',
+      taskId: 'task-completed',
+      reason: 'completed',
+    })
+  })
+
+  it('publishes execution and attention invalidations after session changes are observed', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    const publishTaskInvalidation = vi.fn()
+    const eventDeps = { ...deps, publishTaskInvalidation }
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(eventDeps), deps.listen!)
+
+    await handlers.get('action-complete')?.({ payload: { task_id: 'task-1' } })
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(publishTaskInvalidation).toHaveBeenNthCalledWith(1, {
+      taskId: 'task-1',
+      reason: 'execution',
+    })
+    expect(publishTaskInvalidation).toHaveBeenNthCalledWith(2, {
+      taskId: 'task-1',
+      reason: 'attention',
+    })
   })
 
   it('refreshes the visible detail through the project-scoped state owner', async () => {

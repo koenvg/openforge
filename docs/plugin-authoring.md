@@ -473,6 +473,19 @@ console.log(read?.related) // Immediate TaskReference records.
 
 `TaskReference` is for links, `TaskSummary` is for fixed 50-item Completed pages, and `TaskDetail` is for an active or selected Task. Completed pages never include full prompts, and cursors are opaque and bound to the project and normalized filters. `tasks.list()` and `tasks.get()` remain available only to API version 1 plugins. They are deprecated, emit at most one warning per plugin activation, and will be removed in version 2. The host preserves their complete-array behavior; migrate rather than relying on that unbounded read.
 
+Frontend plugins can subscribe to invalidations when plugin-owned state must stay current after the initial bounded read:
+
+```ts
+context.subscriptions.add(openforge.tasks.onDidChange(projectId, (event) => {
+  const refresh = event.taskId
+    ? openforge.tasks.detail(event.projectId, event.taskId)
+    : openforge.tasks.active(event.projectId)
+  void refresh.then(updateTaskState).catch(reportTaskRefreshError)
+}))
+```
+
+The host filters before calling the handler. Each event contains `projectId`, `taskId: string | null`, and a reason: `created`, `updated`, `completed`, `attention`, or `execution`. It is an invalidation, not a Task snapshot. OpenForge may coalesce a burst, so repeat a bounded read and never count events as mutations. Add the disposable to `context.subscriptions`; explicit disposal, plugin deactivation, reload, and uninstall stop later delivery.
+
 Task pane tabs and Task UI sections receive the selected `TaskDetail` as their `task` prop. Use that prop for ordinary rendering instead of calling `tasks.detail()` during mount.
 
 ```ts

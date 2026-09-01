@@ -44,6 +44,7 @@ import type {
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
   TaskFollowUpReceipt,
+  TaskChangeEvent,
   Task,
   CompletedTaskPage,
   CompletedTaskQuery,
@@ -68,6 +69,7 @@ export type RuntimeHostBridge = {
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
+  subscribeTaskChanges?(projectId: string, handler: (event: TaskChangeEvent) => void): Disposable
   getTask?(taskId: string): Promise<Task | null>
   activeTasks?(projectId: string): Promise<ActiveTasks>
   completedTasks?(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>

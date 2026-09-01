@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   activatePlugin,
+  deactivatePluginById,
   activatePluginLoaderMock,
   defineFrontendPlugin,
   enabledPluginIds,
@@ -26,6 +27,7 @@ import {
   setProjectConfigMock,
   writeClipboardTextMock,
 } from './pluginRegistryTestSupport'
+import { publishTaskInvalidation } from './pluginTaskInvalidations'
 import { activeProjectId } from '../stores'
 
 const RUNTIME_PLUGIN_ID = 'runtime-plugin'
@@ -72,6 +74,20 @@ describe('pluginRegistry frontend runtime', () => {
     expect(activateFrontend).toHaveBeenCalledOnce()
   })
 
+
+  it('stops Task invalidation delivery when the plugin deactivates', async () => {
+    const handler = vi.fn()
+    installRuntimePlugin((openforge, context) => {
+      context.subscriptions.add(openforge.tasks.onDidChange('P-1', handler))
+    })
+
+    await activatePlugin(RUNTIME_PLUGIN_ID, 'P-1')
+    publishTaskInvalidation({ projectId: 'P-1', taskId: 'T-1', reason: 'created' })
+    await deactivatePluginById(RUNTIME_PLUGIN_ID)
+    publishTaskInvalidation({ projectId: 'P-1', taskId: 'T-1', reason: 'updated' })
+
+    expect(handler).toHaveBeenCalledOnce()
+  })
   it('registers frontend runtime contributions', async () => {
     const LazyView = vi.fn() as never
     const commandHandler = vi.fn(async () => ({ ok: true }))

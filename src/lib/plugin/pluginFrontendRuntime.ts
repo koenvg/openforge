@@ -105,6 +105,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       list: unavailable('agentSessions.list'),
     },
     tasks: {
+      onDidChange: () => ({ dispose: () => undefined }),
       list: unavailable('tasks.list'),
       get: unavailable('tasks.get'),
       active: unavailable('tasks.active'),
