@@ -220,6 +220,32 @@ describe('Electron macOS packaging helpers', () => {
     expect(updated).toContain('<false/>')
   })
 
+  it('adds a missing plist boolean to the top-level dictionary when nested dictionaries are present', () => {
+    const plist = [
+      '<plist>',
+      '<dict>',
+      '\t<key>CFBundleName</key>',
+      '\t<string>Electron</string>',
+      '\t<key>ElectronAsarIntegrity</key>',
+      '\t<dict>',
+      '\t\t<key>Resources/app.asar</key>',
+      '\t\t<dict>',
+      '\t\t\t<key>algorithm</key>',
+      '\t\t\t<string>SHA256</string>',
+      '\t\t\t<key>hash</key>',
+      '\t\t\t<string>example-hash</string>',
+      '\t\t</dict>',
+      '\t</dict>',
+      '</dict>',
+      '</plist>',
+    ].join('\n')
+
+    const updated = updatePlistBooleanValue(plist, 'ApplePressAndHoldEnabled', false)
+
+    expect(updated).toMatch(/<\/dict>\s*<key>ApplePressAndHoldEnabled<\/key>\s*<false\/>\s*<\/dict>\s*<\/plist>$/)
+    expect(updated.match(/<key>ApplePressAndHoldEnabled<\/key>/g)).toHaveLength(1)
+  })
+
   it('builds plugin frontend artifacts before renderer and Electron packaging builds', async () => {
     const commands = []
 
