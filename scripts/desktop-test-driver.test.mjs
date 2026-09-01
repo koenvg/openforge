@@ -187,6 +187,18 @@ describe('desktop app driver', () => {
     expect(harness.terminal.waitFor).toHaveBeenLastCalledWith({ state: 'hidden', timeout: 2_000 })
   })
 
+  it('starts a recovery attachment without waiting for terminal presentation', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    const attachment = await driver.attachTerminalView('T-1', { focus: false, observe: false })
+
+    expect(harness.terminalTab.click).toHaveBeenCalledOnce()
+    expect(harness.terminal.waitFor).not.toHaveBeenCalled()
+    expect(harness.shellTab.click).not.toHaveBeenCalled()
+    expect(attachment).toEqual({ region: harness.terminal, terminalKey: null })
+  })
+
   it('falls back to project navigation when back navigation does not detach the view', async () => {
     const harness = createPage()
     harness.terminal.waitFor
