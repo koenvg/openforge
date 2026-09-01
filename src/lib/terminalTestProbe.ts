@@ -199,6 +199,66 @@ function incompleteSequenceMessage(
   })}`
 }
 
+interface TerminalDrainIncompleteSequencePolicy {
+  deferUntilSettled: boolean
+  message(
+    key: string,
+    detected: TerminalProbeObservation,
+    latest: TerminalProbeObservation,
+  ): string
+}
+
+interface CreateTerminalDrainOptions {
+  diagnostics: TerminalRuntimeDiagnostics
+  requireObservation: (key: string) => TerminalProbeObservation
+  now: () => number
+  wait: (ms: number) => Promise<void>
+  incompleteSequence: TerminalDrainIncompleteSequencePolicy
+}
+
+function createTerminalDrain(options: CreateTerminalDrainOptions) {
+  return async (
+    key: string,
+    expectation: TerminalProbeDrainExpectation = {},
+  ): Promise<TerminalProbeDrainResult> => {
+    const timeoutMs = expectation.timeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
+    const deadline = options.now() + timeoutMs
+    let incompleteObservation: TerminalProbeObservation | null = null
+
+    do {
+      const observation = options.requireObservation(key)
+      if (!observation.output.sequenceContinuous && !incompleteObservation) {
+        incompleteObservation = observation
+        if (!options.incompleteSequence.deferUntilSettled) {
+          throw new Error(options.incompleteSequence.message(key, observation, observation))
+        }
+      }
+
+      const presentation = await options.diagnostics.drainPresentation(key)
+      const visibleText = options.diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
+      const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
+      const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
+      const reachedModelSequence = expectation.minimumModelSequence === undefined
+        || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence
+      const outputComplete = markerFound && receivedEnoughBytes && reachedModelSequence
+
+      if (outputComplete) {
+        if (incompleteObservation) {
+          throw new Error(options.incompleteSequence.message(key, incompleteObservation, observation))
+        }
+        return { observation, markerFound, presentation, visibleText }
+      }
+      if (options.now() >= deadline) {
+        if (incompleteObservation) {
+          throw new Error(options.incompleteSequence.message(key, incompleteObservation, observation))
+        }
+        throw new Error(missingExpectationMessage(expectation, observation, markerFound))
+      }
+      await options.wait(DRAIN_POLL_INTERVAL_MS)
+    } while (true)
+  }
+}
+
 export function installTerminalTestProbe(options: InstallTerminalTestProbeOptions): TerminalTestProbeApi | null {
   const target: TerminalTestProbeWindow = options.target ?? (window as TerminalTestProbeWindow)
   if (!shouldEnableTerminalTestProbe(
@@ -231,6 +291,16 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
     return toDiagnosticsObservation(observation)
   }
 
+  const drain = createTerminalDrain({
+    diagnostics,
+    requireObservation,
+    now,
+    wait,
+    incompleteSequence: {
+      deferUntilSettled: true,
+      message: incompleteSequenceMessage,
+    },
+  })
   const terminal = Object.freeze({
     list(): string[] {
       const keys = diagnostics.list()
@@ -258,42 +328,7 @@ export function installTerminalTestProbe(options: InstallTerminalTestProbeOption
         sequenceBaseline,
       })
     },
-    async drain(
-      key: string,
-      expectation: TerminalProbeDrainExpectation = {},
-    ): Promise<TerminalProbeDrainResult> {
-      const timeoutMs = expectation.timeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
-      const deadline = now() + timeoutMs
-
-      let incompleteObservation: TerminalProbeObservation | null = null
-      do {
-        const observation = requireObservation(key)
-        if (!observation.output.sequenceContinuous && !incompleteObservation) {
-          incompleteObservation = observation
-        }
-        const presentation = await diagnostics.drainPresentation(key)
-        const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
-        const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
-        const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
-        const reachedModelSequence = expectation.minimumModelSequence === undefined
-          || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence
-        const outputComplete = markerFound && receivedEnoughBytes && reachedModelSequence
-
-        if (outputComplete) {
-          if (incompleteObservation) {
-            throw new Error(incompleteSequenceMessage(key, incompleteObservation, observation))
-          }
-          return { observation, markerFound, presentation, visibleText }
-        }
-        if (now() >= deadline) {
-          if (incompleteObservation) {
-            throw new Error(incompleteSequenceMessage(key, incompleteObservation, observation))
-          }
-          throw new Error(missingExpectationMessage(expectation, observation, markerFound))
-        }
-        await wait(DRAIN_POLL_INTERVAL_MS)
-      } while (true)
-    },
+    drain,
   })
 
   const gates = Object.freeze({
@@ -331,6 +366,16 @@ export function installTerminalPerformanceProbe(
     finish: () => performanceTrace.finish(),
     snapshot: () => performanceTrace.snapshot(),
   })
+  const drain = createTerminalDrain({
+    diagnostics,
+    requireObservation,
+    now,
+    wait,
+    incompleteSequence: {
+      deferUntilSettled: false,
+      message: key => `Terminal ${key} has an incomplete output sequence`,
+    },
+  })
   const terminal = Object.freeze({
     performance,
     list(): string[] {
@@ -339,35 +384,7 @@ export function installTerminalPerformanceProbe(
     observe(key: string): TerminalProbeObservation {
       return requireObservation(key)
     },
-    async drain(
-      key: string,
-      expectation: TerminalProbeDrainExpectation = {},
-    ): Promise<TerminalProbeDrainResult> {
-      const timeoutMs = expectation.timeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
-      const deadline = now() + timeoutMs
-
-      do {
-        const observation = requireObservation(key)
-        if (!observation.output.sequenceContinuous) {
-          throw new Error(`Terminal ${key} has an incomplete output sequence`)
-        }
-
-        const presentation = await diagnostics.drainPresentation(key)
-        const visibleText = diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
-        const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
-        const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
-        const reachedModelSequence = expectation.minimumModelSequence === undefined
-          || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence
-
-        if (markerFound && receivedEnoughBytes && reachedModelSequence) {
-          return { observation, markerFound, presentation, visibleText }
-        }
-        if (now() >= deadline) {
-          throw new Error(missingExpectationMessage(expectation, observation, markerFound))
-        }
-        await wait(DRAIN_POLL_INTERVAL_MS)
-      } while (true)
-    },
+    drain,
   })
 
   const probe = Object.freeze({ terminal })
