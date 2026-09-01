@@ -42,12 +42,18 @@ export async function resetSettingsViewPluginTest() {
   resetSettingsViewRenderIpc()
   resetSettingsViewProjectStores()
 
-  const [{ clearComponentRegistry }, { enabledPluginIds, installedPlugins, runtimeContributionSources }] = await Promise.all([
+  const [
+    { clearComponentRegistry },
+    { enabledPluginIds, installedPlugins, runtimeContributionSources },
+    { clearProjectDashboardProviderIds },
+  ] = await Promise.all([
     import('../../lib/plugin/componentRegistry'),
     import('../../lib/plugin/pluginStore'),
+    import('../../lib/plugin/projectDashboardProviders'),
   ])
   installedPlugins.set(new Map())
   enabledPluginIds.set(new Set())
   runtimeContributionSources.set(new Map())
   clearComponentRegistry()
+  clearProjectDashboardProviderIds()
 }

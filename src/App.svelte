@@ -25,6 +25,10 @@
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from './lib/plugin/pluginStore'
   import {
     CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+    globalProjectDashboardProviderId,
+    globalProjectDashboardProviderLoaded,
+    loadGlobalProjectDashboardProviderId,
     loadProjectDashboardProviderId,
     projectDashboardProviderIds,
     resolveProjectDashboardProviderAvailability,
@@ -181,13 +185,17 @@
   let sidebarPluginViewKeySet = $derived(pluginPresentation.sidebarPluginViewKeySet)
   let renderedActiveView = $derived(pluginPresentation.renderedActiveView)
   let pluginViewActive = $derived(pluginPresentation.pluginViewActive)
-  let configuredDashboardProviderId = $derived(
-    $activeProjectId
-      ? ($projectDashboardProviderIds.get($activeProjectId) ?? CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+  let projectDashboardProviderPreferenceLoaded = $derived(
+    !$activeProjectId || $projectDashboardProviderIds.has($activeProjectId),
+  )
+  let projectDashboardProviderPreferenceId = $derived(
+    $activeProjectId && projectDashboardProviderPreferenceLoaded
+      ? ($projectDashboardProviderIds.get($activeProjectId) ?? INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
       : CORE_PROJECT_DASHBOARD_PROVIDER_ID,
   )
   let dashboardProviderResolution = $derived(resolveProjectDashboardProviderAvailability(
-    configuredDashboardProviderId,
+    projectDashboardProviderPreferenceId,
+    $globalProjectDashboardProviderId,
     resolvedPluginContributions.viewReplacements,
     $installedPlugins,
   ))
@@ -214,6 +222,11 @@
   })
 
   $effect(() => {
+    if (!$globalProjectDashboardProviderLoaded) {
+      void loadGlobalProjectDashboardProviderId().catch((value) => {
+        console.error('[App] Failed to load global dashboard provider default:', value)
+      })
+    }
     const projectId = $activeProjectId
     projectController.selectProject(projectId)
     pluginController.selectProject(projectId)

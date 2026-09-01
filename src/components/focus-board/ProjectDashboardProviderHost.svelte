@@ -6,6 +6,10 @@
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import {
     CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+    globalProjectDashboardProviderId,
+    globalProjectDashboardProviderLoaded,
+    loadGlobalProjectDashboardProviderId,
     loadProjectDashboardProviderId,
     projectDashboardProviderIds,
     resolveProjectDashboardProviderAvailability,
@@ -63,13 +67,17 @@
       .filter(source => source !== undefined),
   )
   let dashboardProviders = $derived(resolveContributions(contributionSources).viewReplacements)
-  let configuredProviderId = $derived(
-    project
-      ? ($projectDashboardProviderIds.get(project.id) ?? CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+  let projectProviderPreferenceLoaded = $derived(
+    !project || $projectDashboardProviderIds.has(project.id),
+  )
+  let projectProviderPreferenceId = $derived(
+    project && projectProviderPreferenceLoaded
+      ? ($projectDashboardProviderIds.get(project.id) ?? INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
       : CORE_PROJECT_DASHBOARD_PROVIDER_ID,
   )
   let providerResolution = $derived(resolveProjectDashboardProviderAvailability(
-    configuredProviderId,
+    projectProviderPreferenceId,
+    $globalProjectDashboardProviderId,
     dashboardProviders,
     $installedPlugins,
   ))
@@ -89,6 +97,11 @@
   )
 
   $effect(() => {
+    if (!$globalProjectDashboardProviderLoaded) {
+      void loadGlobalProjectDashboardProviderId().catch((error) => {
+        console.error('[ProjectDashboardProviderHost] Failed to load global provider default:', error)
+      })
+    }
     const projectId = project?.id
     if (projectId && !$projectDashboardProviderIds.has(projectId)) {
       void loadProjectDashboardProviderId(projectId).catch((error) => {
@@ -100,35 +113,12 @@
   $effect(() => {
     void providerSignature
     const provider = selectedProvider
-    const configuredProvider = providerResolution.configuredProvider
     const componentSource = selectedComponentSource
     const runId = ++loadRunId
     resolvedComponent = null
     failedProviderId = null
 
-    if (!project) return
-    if (!provider) {
-      if (configuredProvider && providerResolution.unavailableReason === 'missing-component') {
-        reportProviderFailure(
-          configuredProvider.pluginId,
-          configuredProvider.qualifiedId,
-          'load',
-          new Error('Registered dashboard component is missing'),
-        )
-        failedProviderId = configuredProvider.qualifiedId
-      }
-      return
-    }
-    if (!componentSource) {
-      reportProviderFailure(
-        provider.pluginId,
-        provider.qualifiedId,
-        'load',
-        new Error('Registered dashboard component became unavailable'),
-      )
-      failedProviderId = provider.qualifiedId
-      return
-    }
+    if (!project || !provider || !componentSource) return
 
     void (async () => {
       try {

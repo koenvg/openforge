@@ -8,7 +8,12 @@ import {
   clearComponentRegistry,
   registerRenderableContributionComponent,
 } from '../../lib/plugin/componentRegistry'
-import { clearProjectDashboardProviderIds, projectDashboardProviderIds } from '../../lib/plugin/projectDashboardProviders'
+import {
+  clearProjectDashboardProviderIds,
+  globalProjectDashboardProviderId,
+  globalProjectDashboardProviderLoaded,
+  projectDashboardProviderIds,
+} from '../../lib/plugin/projectDashboardProviders'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import ProjectDashboardPluginTestView from './ProjectDashboardPluginTestView.svelte'
 import PluginSlotCrashingView from '../plugin/PluginSlotCrashingView.svelte'
@@ -50,6 +55,11 @@ function createProps(overrides: Record<string, unknown> = {}) {
 
 function selectPluginDashboard(component: unknown = ProjectDashboardPluginTestView): void {
   enabledPluginIds.set(new Set(['planning-plugin']))
+  installedPlugins.set(new Map([['planning-plugin', {
+    state: 'active',
+    error: null,
+    manifest: {},
+  } as never]]))
   runtimeContributionSources.set(new Map([['planning-plugin', {
     pluginId: 'planning-plugin',
     viewReplacements: [{
@@ -72,6 +82,7 @@ describe('ProjectDashboardProviderHost', () => {
     vi.clearAllMocks()
     clearComponentRegistry()
     clearProjectDashboardProviderIds()
+    globalProjectDashboardProviderLoaded.set(true)
     enabledPluginIds.set(new Set())
     installedPlugins.set(new Map())
     runtimeContributionSources.set(new Map())
@@ -143,6 +154,40 @@ describe('ProjectDashboardProviderHost', () => {
     expect(onOpenCommandSearch).toHaveBeenCalledOnce()
   })
 
+
+  it('renders OpenForge during activation and restores an inherited provider when it becomes ready', async () => {
+    globalProjectDashboardProviderId.set('planning-plugin.dashboard')
+    projectDashboardProviderIds.set(new Map([[project.id, 'inherit']]))
+    render(ProjectDashboardProviderHost, { props: createProps() })
+
+    await vi.waitFor(() => expect(vi.mocked(FocusBoard)).toHaveBeenCalled())
+    expect(screen.queryByTestId('plugin-project-dashboard')).toBeNull()
+
+    installedPlugins.set(new Map([['planning-plugin', {
+      state: 'active',
+      error: null,
+      manifest: {},
+    } as never]]))
+    enabledPluginIds.set(new Set(['planning-plugin']))
+    registerRenderableContributionComponent(
+      'viewReplacements',
+      'planning-plugin:dashboard',
+      ProjectDashboardPluginTestView,
+    )
+    runtimeContributionSources.set(new Map([['planning-plugin', {
+      pluginId: 'planning-plugin',
+      viewReplacements: [{
+        id: 'dashboard',
+        target: 'project.dashboard',
+        title: 'Planning',
+        icon: 'panels-top-left',
+      }],
+    }]]))
+
+    expect(await screen.findByTestId('plugin-project-dashboard')).toBeTruthy()
+    expect(get(globalProjectDashboardProviderId)).toBe('planning-plugin.dashboard')
+    expect(get(projectDashboardProviderIds).get(project.id)).toBe('inherit')
+  })
   it.each([
     ['missing', null],
     ['loading failed', () => Promise.reject(new Error('dashboard load failed'))],
@@ -177,8 +222,8 @@ describe('ProjectDashboardProviderHost', () => {
     expect(get(projectDashboardProviderIds).get(project.id)).toBe('planning-plugin.dashboard')
     if (_case === 'missing') {
       expect(get(installedPlugins).get('planning-plugin')).toMatchObject({
-        state: 'error',
-        error: 'Dashboard provider planning-plugin.dashboard failed to load',
+        state: 'active',
+        error: null,
       })
     }
   })

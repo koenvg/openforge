@@ -1,25 +1,45 @@
+import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getProjectConfig, setProjectConfig } = vi.hoisted(() => ({
+const {
+  clearProjectConfig,
+  getConfig,
+  getProjectConfig,
+  setConfig,
+  setProjectConfig,
+} = vi.hoisted(() => ({
+  clearProjectConfig: vi.fn(),
+  getConfig: vi.fn(),
   getProjectConfig: vi.fn(),
+  setConfig: vi.fn(),
   setProjectConfig: vi.fn(),
 }))
 
-vi.mock('../ipc', () => ({ getProjectConfig, setProjectConfig }))
+vi.mock('../ipc', () => ({
+  clearProjectConfig,
+  getConfig,
+  getProjectConfig,
+  setConfig,
+  setProjectConfig,
+}))
+
+import { clearComponentRegistry, registerRenderableContributionComponent } from './componentRegistry'
+import type { ResolvedViewReplacement } from './contributionResolver'
 import {
   CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+  INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
   PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY,
   clearProjectDashboardProviderIds,
+  globalProjectDashboardProviderId,
+  loadGlobalProjectDashboardProviderId,
   loadProjectDashboardProviderId,
-  projectDashboardProviderIds,
-  setProjectDashboardProviderId,
+  parseGlobalProjectDashboardProviderId,
   parseProjectDashboardProviderId,
-  resolveProjectDashboardProvider,
+  projectDashboardProviderIds,
   resolveProjectDashboardProviderAvailability,
+  setGlobalProjectDashboardProviderId,
+  setProjectDashboardProviderId,
 } from './projectDashboardProviders'
-import type { ResolvedViewReplacement } from './contributionResolver'
-import { clearComponentRegistry, registerRenderableContributionComponent } from './componentRegistry'
-import { get } from 'svelte/store'
 
 const planningProvider: ResolvedViewReplacement = {
   pluginId: 'planning-plugin',
@@ -30,91 +50,149 @@ const planningProvider: ResolvedViewReplacement = {
   icon: 'panels-top-left',
 }
 
+function registerPlanningDashboard(): void {
+  registerRenderableContributionComponent(
+    'viewReplacements',
+    'planning-plugin:dashboard',
+    vi.fn() as never,
+  )
+}
+
 describe('project dashboard provider preferences', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearProjectDashboardProviderIds()
     clearComponentRegistry()
+    getConfig.mockResolvedValue(null)
     getProjectConfig.mockResolvedValue(null)
+    setConfig.mockResolvedValue(undefined)
     setProjectConfig.mockResolvedValue(undefined)
+    clearProjectConfig.mockResolvedValue(undefined)
   })
 
-  it('defaults missing and invalid values to the core OpenForge provider', () => {
+  it('defaults the app to OpenForge and projects to inheritance', () => {
     expect(PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY).toBe('project_dashboard_provider')
-    expect(parseProjectDashboardProviderId(null)).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
-    expect(parseProjectDashboardProviderId('')).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
-    expect(parseProjectDashboardProviderId('bad provider')).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(parseGlobalProjectDashboardProviderId(null)).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(parseProjectDashboardProviderId(null)).toBe(INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(parseGlobalProjectDashboardProviderId('bad provider')).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(parseProjectDashboardProviderId('bad provider')).toBe(INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
   })
 
-  it('resolves a selected compatible provider without selecting one merely because it exists', () => {
-    expect(resolveProjectDashboardProvider(CORE_PROJECT_DASHBOARD_PROVIDER_ID, [planningProvider])).toEqual({
-      configuredId: CORE_PROJECT_DASHBOARD_PROVIDER_ID,
-      provider: null,
-    })
-    expect(resolveProjectDashboardProvider(planningProvider.qualifiedId, [planningProvider])).toEqual({
-      configuredId: planningProvider.qualifiedId,
-      provider: planningProvider,
-    })
-  })
-
-  it('uses component and plugin runtime availability in the effective provider result', () => {
+  it('applies the project override before the global default', () => {
+    registerPlanningDashboard()
     const pluginEntries = new Map([['planning-plugin', { state: 'active' }]])
 
     expect(resolveProjectDashboardProviderAvailability(
+      CORE_PROJECT_DASHBOARD_PROVIDER_ID,
       planningProvider.qualifiedId,
       [planningProvider],
       pluginEntries,
-    )).toEqual({
+    )).toMatchObject({
+      projectPreferenceId: CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+      configuredId: CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+      provider: null,
+      unavailableReason: null,
+    })
+
+    expect(resolveProjectDashboardProviderAvailability(
+      INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+      planningProvider.qualifiedId,
+      [planningProvider],
+      pluginEntries,
+    )).toMatchObject({
+      projectPreferenceId: INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
       configuredId: planningProvider.qualifiedId,
+      provider: planningProvider,
+      unavailableReason: null,
+    })
+  })
+
+  it('falls back to OpenForge until the configured contribution is active and renderable', () => {
+    const pluginEntries = new Map<string, { state: string }>()
+
+    expect(resolveProjectDashboardProviderAvailability(
+      INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+      planningProvider.qualifiedId,
+      [],
+      pluginEntries,
+    )).toMatchObject({
+      configuredId: planningProvider.qualifiedId,
+      provider: null,
+      unavailableReason: 'missing-contribution',
+    })
+
+    expect(resolveProjectDashboardProviderAvailability(
+      INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+      planningProvider.qualifiedId,
+      [planningProvider],
+      pluginEntries,
+    )).toMatchObject({
       configuredProvider: planningProvider,
       provider: null,
-      unavailableReason: 'missing-component',
+      unavailableReason: 'inactive-plugin',
     })
 
-    registerRenderableContributionComponent(
-      'viewReplacements',
-      'planning-plugin:dashboard',
-      vi.fn() as never,
-    )
+    pluginEntries.set('planning-plugin', { state: 'active' })
     expect(resolveProjectDashboardProviderAvailability(
+      INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
       planningProvider.qualifiedId,
       [planningProvider],
       pluginEntries,
-    ).provider).toBe(planningProvider)
+    )).toMatchObject({ provider: null, unavailableReason: 'missing-component' })
 
-    pluginEntries.set('planning-plugin', { state: 'error' })
+    registerPlanningDashboard()
     expect(resolveProjectDashboardProviderAvailability(
+      INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
       planningProvider.qualifiedId,
       [planningProvider],
       pluginEntries,
-    ).unavailableReason).toBe('plugin-error')
+    )).toMatchObject({ provider: planningProvider, unavailableReason: null })
   })
 
-  it('falls back to core while retaining a missing or target-mismatched provider id', () => {
-    expect(resolveProjectDashboardProvider('missing.dashboard', [planningProvider])).toEqual({
-      configuredId: 'missing.dashboard',
-      provider: null,
-    })
-    expect(resolveProjectDashboardProvider(planningProvider.qualifiedId, [
-      { ...planningProvider, target: 'task.detail' as never },
-    ])).toEqual({
-      configuredId: planningProvider.qualifiedId,
-      provider: null,
-    })
-  })
+  it('loads and saves the global default through typed config wrappers', async () => {
+    getConfig.mockResolvedValue(planningProvider.qualifiedId)
 
-  it('loads and saves the project-owned selection through typed config wrappers', async () => {
-    getProjectConfig.mockResolvedValue('planning-plugin.dashboard')
-    await expect(loadProjectDashboardProviderId('project-1')).resolves.toBe('planning-plugin.dashboard')
-    expect(getProjectConfig).toHaveBeenCalledWith('project-1', PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY)
-    expect(get(projectDashboardProviderIds).get('project-1')).toBe('planning-plugin.dashboard')
+    await expect(loadGlobalProjectDashboardProviderId()).resolves.toBe(planningProvider.qualifiedId)
+    expect(getConfig).toHaveBeenCalledWith(PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY)
+    expect(get(globalProjectDashboardProviderId)).toBe(planningProvider.qualifiedId)
 
-    await setProjectDashboardProviderId('project-1', CORE_PROJECT_DASHBOARD_PROVIDER_ID)
-    expect(setProjectConfig).toHaveBeenCalledWith(
-      'project-1',
+    await setGlobalProjectDashboardProviderId(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(setConfig).toHaveBeenCalledWith(
       PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY,
       CORE_PROJECT_DASHBOARD_PROVIDER_ID,
     )
-    expect(get(projectDashboardProviderIds).get('project-1')).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(get(globalProjectDashboardProviderId)).toBe(CORE_PROJECT_DASHBOARD_PROVIDER_ID)
+  })
+
+  it('persists qualified project overrides and clears only the inheriting project override', async () => {
+    projectDashboardProviderIds.set(new Map([['project-2', planningProvider.qualifiedId]]))
+
+    await setProjectDashboardProviderId('project-1', planningProvider.qualifiedId)
+    expect(setProjectConfig).toHaveBeenCalledWith(
+      'project-1',
+      PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY,
+      planningProvider.qualifiedId,
+    )
+
+    await setProjectDashboardProviderId('project-1', INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
+    expect(clearProjectConfig).toHaveBeenCalledWith('project-1', PROJECT_DASHBOARD_PROVIDER_CONFIG_KEY)
+    expect(get(projectDashboardProviderIds)).toEqual(new Map([
+      ['project-2', planningProvider.qualifiedId],
+      ['project-1', INHERIT_PROJECT_DASHBOARD_PROVIDER_ID],
+    ]))
+  })
+
+  it('retains unavailable stored identities without rewriting them', async () => {
+    getConfig.mockResolvedValue('missing-plugin.dashboard')
+    getProjectConfig.mockResolvedValue('missing-project-plugin.dashboard')
+
+    await expect(loadGlobalProjectDashboardProviderId()).resolves.toBe('missing-plugin.dashboard')
+    await expect(loadProjectDashboardProviderId('project-1')).resolves.toBe('missing-project-plugin.dashboard')
+
+    expect(get(globalProjectDashboardProviderId)).toBe('missing-plugin.dashboard')
+    expect(get(projectDashboardProviderIds).get('project-1')).toBe('missing-project-plugin.dashboard')
+    expect(setConfig).not.toHaveBeenCalled()
+    expect(setProjectConfig).not.toHaveBeenCalled()
+    expect(clearProjectConfig).not.toHaveBeenCalled()
   })
 })
