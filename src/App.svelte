@@ -4,8 +4,8 @@
   import { tasks, taskDetailsById, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
-  import FocusBoard from './components/focus-board/FocusBoard.svelte'
-  import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
+  import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
+  import TaskDetailProviderHost from './components/task-detail/TaskDetailProviderHost.svelte'
   import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
   import AppCloseConfirmationDialog from './components/shell/AppCloseConfirmationDialog.svelte'
@@ -280,7 +280,7 @@
         {:else if pluginViewActive}
           <PluginSlot slotType="views" slotId={$currentView} />
         {:else if selectedTaskForView}
-          <TaskDetailView
+          <TaskDetailProviderHost
             task={selectedTaskForView}
             onRunAction={handleRunAction}
             onEdit={taskCreation.openEditTask}
@@ -290,33 +290,25 @@
             onRunAppRegistrationChange={handleRunAppRegistrationChange}
           />
         {:else}
-          <div class="flex-1 overflow-hidden">
-            {#if $isLoading && $tasks.length === 0}
-              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-                <span class="loading loading-spinner loading-md text-primary"></span>
-                <span>Loading tasks...</span>
-              </div>
-            {:else}
-              <FocusBoard
-                projectId={$activeProjectId}
-                projectName={activeProject?.name ?? ''}
-                tasks={$tasks}
-                taskDetailsById={$taskDetailsById}
-                dependencyReferenceTasks={$dependencyReferenceTasks}
-                activeSessions={$activeSessions}
-                ticketPrs={$ticketPrs}
-                attentionRows={$taskAttentionRows}
-                attentionRowsLoaded={$taskAttentionLoaded}
-                onOpenTask={navigation.openTaskInProject}
-                onEditTask={taskCreation.openEditTask}
-                onTaskUpdated={async () => { await appData.loadTasks() }}
-                onProjectAttentionChanged={appData.loadProjectAttention}
-                onOpenCommandSearch={() => { showCommandPalette = true }}
-                onNewTask={taskCreation.openNewTask}
-                onRunAction={handleRunAction}
-              />
-            {/if}
-          </div>
+          <ProjectDashboardProviderHost
+            projectId={$activeProjectId}
+            projectName={activeProject?.name ?? ''}
+            tasks={$tasks}
+            taskDetailsById={$taskDetailsById}
+            dependencyReferenceTasks={$dependencyReferenceTasks}
+            activeSessions={$activeSessions}
+            ticketPrs={$ticketPrs}
+            attentionRows={$taskAttentionRows}
+            attentionRowsLoaded={$taskAttentionLoaded}
+            isLoading={$isLoading}
+            onOpenTask={navigation.openTaskInProject}
+            onEditTask={taskCreation.openEditTask}
+            onTaskUpdated={async () => { await appData.loadTasks() }}
+            onProjectAttentionChanged={appData.loadProjectAttention}
+            onOpenCommandSearch={() => { showCommandPalette = true }}
+            onNewTask={taskCreation.openNewTask}
+            onRunAction={handleRunAction}
+          />
         {/if}
 
         <AppTaskCreationDialogs
