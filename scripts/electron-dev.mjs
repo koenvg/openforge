@@ -24,6 +24,7 @@ export const OPENFORGE_E2E_ENV = 'OPENFORGE_E2E'
 export const VITE_OPENFORGE_E2E_ENV = 'VITE_OPENFORGE_E2E'
 export const VITE_OPENFORGE_E2E_TOKEN_ENV = 'VITE_OPENFORGE_E2E_TOKEN'
 export const E2E_TOKEN_QUERY_PARAMETER = 'openforge-e2e-token'
+export const DESKTOP_TEST_QUERY_PARAMETER = 'openforge-desktop-test'
 export const ELECTRON_DEV_WORKTREE_STATE_DIR = '.openforge-dev'
 export const ELECTRON_DEV_WORKTREE_STATE_FILE = 'electron-dev-runtime.json'
 const VITE_READY_TIMEOUT_MS = 30_000
@@ -607,6 +608,7 @@ export function createElectronDevLauncher(options = {}, deps = {}) {
       if (e2eToken === null) return configuredRuntimeOptions.rendererUrl
       const rendererUrl = new URL(configuredRuntimeOptions.rendererUrl)
       rendererUrl.searchParams.set(E2E_TOKEN_QUERY_PARAMETER, e2eToken)
+      if (options.desktopTest) rendererUrl.searchParams.set(DESKTOP_TEST_QUERY_PARAMETER, '1')
       return rendererUrl.toString()
     })(),
   }

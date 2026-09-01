@@ -56,9 +56,20 @@ export interface DesktopTerminalTransportOptions {
   ): Promise<void> | undefined
 }
 
+type Uint8ArrayBase64Constructor = typeof Uint8Array & {
+  fromBase64?(value: string): Uint8Array
+}
+
 function decodeBase64(value: string): Uint8Array {
+  const constructor = Uint8Array as Uint8ArrayBase64Constructor
+  if (constructor.fromBase64) return constructor.fromBase64(value)
+
   const binary = atob(value)
-  return Uint8Array.from(binary, character => character.charCodeAt(0))
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
 }
 
 export function createDesktopTerminalTransport(

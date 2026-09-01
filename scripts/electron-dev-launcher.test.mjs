@@ -151,7 +151,7 @@ describe('importable Electron development launcher', () => {
     await launcher.start()
 
     expect(launcher.runtimeOptions.rendererUrl).toBe(
-      'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token',
+      'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token&openforge-desktop-test=1',
     )
     expect(spawned[0].options.env).toMatchObject({
       VITE_OPENFORGE_E2E: '1',
@@ -159,12 +159,23 @@ describe('importable Electron development launcher', () => {
     })
     expect(spawned[3].options.env).toMatchObject({
       OPENFORGE_E2E: '1',
-      ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token',
+      ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token&openforge-desktop-test=1',
     })
 
     await launcher.shutdown()
   })
 
+  it('keeps non-desktop E2E launches token-only', () => {
+    const launcher = createElectronDevLauncher({
+      env: { OPENFORGE_E2E: '1' },
+      e2eToken: 'fixed-run-token',
+      runtimeOptions: runtimeOptions(),
+    })
+
+    expect(launcher.runtimeOptions.rendererUrl).toBe(
+      'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token',
+    )
+  })
 
   it('cleans the runtime when readiness fails before Electron launch', async () => {
     const cleanup = vi.fn(async () => ({ processes: ['terminated'], runtimeDirs: ['removed'] }))

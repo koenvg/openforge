@@ -77,6 +77,11 @@ export function createDesktopAppDriver(page, options = {}) {
   }
 
   async function selectSeededTask(manifest) {
+    const backToTaskBoard = page.getByRole('button', { name: 'Back to task board' })
+    if (await backToTaskBoard.isVisible()) {
+      await backToTaskBoard.click()
+      await backToTaskBoard.waitFor({ state: 'hidden', timeout: timeoutMs })
+    }
     const project = page.getByText(manifest.projectName, { exact: true }).first()
     await project.click()
     await page.getByRole('button', { name: /^Backlog\b/i }).click()
