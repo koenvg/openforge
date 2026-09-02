@@ -27,6 +27,9 @@
     projectName: string
     projectId: string | null
     workspaceSource?: FileBrowserWorkspaceSource | null
+    rootErrorTitle?: string
+    workspaceLoadingLabel?: string
+    rootRetryLabel?: string
   }
 
   let {
@@ -35,6 +38,9 @@
     projectName: _projectName,
     projectId = null,
     workspaceSource = undefined,
+    rootErrorTitle = 'Failed to load files',
+    workspaceLoadingLabel = 'Loading project files…',
+    rootRetryLabel = 'Retry loading project files',
   }: Props = $props()
 
   const projectWorkspaceSource = $derived(
@@ -153,5 +159,13 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <FilesBrowserSection {api} workspaceSource={source} view={browserView} actions={browserActions} />
+  <FilesBrowserSection
+    {api}
+    workspaceSource={source}
+    {rootErrorTitle}
+    {workspaceLoadingLabel}
+    {rootRetryLabel}
+    view={browserView}
+    actions={browserActions}
+  />
 </div>

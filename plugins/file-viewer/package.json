@@ -26,13 +26,15 @@
     "id": "com.openforge.file-viewer",
     "apiVersion": 1,
     "displayName": "File Viewer",
-    "description": "Browse and preview project files",
+    "description": "Browse and preview project and task worktree files",
     "icon": "folder-open",
     "frontend": "./dist/frontend.js",
     "requires": [
       "views",
+      "taskPane",
       "commands",
       "fs",
+      "navigation",
       "system.openUrl",
       "context"
     ]

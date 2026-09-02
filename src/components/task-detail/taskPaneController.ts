@@ -40,12 +40,19 @@ export function createTaskPaneController({
   let activeView = 'agent'
   let currentTaskId = ''
   let currentTabs: ResolvedTab[] = []
+  let currentWorkspacePath: string | null = null
   let shortcutConfiguration: string | null = null
   let registeredShortcuts: string[] = []
   let destroyed = false
 
   function findTab(viewId: string): ResolvedTab | null {
     return currentTabs.find((tab) => tab.namespacedId === viewId) ?? null
+  }
+
+  function availableTabs(): ResolvedTab[] {
+    return currentWorkspacePath === null
+      ? currentTabs.filter((tab) => !tab.requiresWorkspace)
+      : currentTabs
   }
 
   function normalizeStoredView(viewId: string): string {
@@ -82,25 +89,28 @@ export function createTaskPaneController({
     registeredShortcuts.push(key)
   }
 
-  function configureShortcuts(workspacePath: string | null): void {
-    const nextConfiguration = workspacePath === null
-      ? 'unavailable'
-      : currentTabs.map((tab) => tab.namespacedId).join('\n')
+  function configureShortcuts(): void {
+    const tabs = availableTabs()
+    const navigationAvailable = currentWorkspacePath !== null || tabs.length > 0
+    const nextConfiguration = [
+      currentWorkspacePath === null ? 'unavailable' : 'available',
+      ...tabs.map((tab) => tab.namespacedId),
+    ].join('\n')
     if (nextConfiguration === shortcutConfiguration) return
 
     unregisterShortcuts()
     shortcutConfiguration = nextConfiguration
-    if (workspacePath === null) return
+    if (!navigationAvailable) return
 
     registerShortcut('⌘1', () => select('agent'))
     registerShortcut('⌘2', () => select('review'))
-    currentTabs.forEach((tab, index) => {
+    tabs.forEach((tab, index) => {
       const shortcut = getTaskPaneShortcut(index)
       if (shortcut !== null) {
         registerShortcut(shortcut, () => select(tab.namespacedId))
       }
     })
-    registerShortcut('⌘/', onTogglePanel)
+    if (currentWorkspacePath !== null) registerShortcut('⌘/', onTogglePanel)
   }
 
   function sync(context: TaskPaneContext): void {
@@ -108,8 +118,9 @@ export function createTaskPaneController({
 
     currentTaskId = context.taskId
     currentTabs = sortTabs(context.tabs)
+    currentWorkspacePath = context.workspacePath
     syncActiveView(get(activeViews))
-    configureShortcuts(context.workspacePath)
+    configureShortcuts()
   }
 
   function selectForTask(taskId: string, viewId: string): void {
@@ -126,11 +137,13 @@ export function createTaskPaneController({
   }
 
   function handleWorkspaceResolved(taskId: string, workspacePath: string | null): void {
+    const activePluginTab = findTab(activeView)
     if (
       taskId === currentTaskId
       && workspacePath === null
       && activeView !== 'agent'
       && activeView !== 'review'
+      && activePluginTab?.requiresWorkspace !== false
     ) {
       selectForTask(taskId, 'agent')
     }
@@ -149,7 +162,7 @@ export function createTaskPaneController({
 
   return {
     get activeView() { return activeView },
-    get tabs() { return currentTabs },
+    get tabs() { return availableTabs() },
     sync,
     select,
     selectForTask,

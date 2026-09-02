@@ -14,6 +14,10 @@ export function projectWorkspaceIdentity(projectId: string): FileBrowserWorkspac
   return `project:${projectId}`
 }
 
+export function taskWorkspaceIdentity(taskId: string): FileBrowserWorkspaceIdentity {
+  return `task:${taskId}`
+}
+
 export function createProjectWorkspaceSource(
   api: FrontendOpenForgeAPI,
   projectId: string,
@@ -23,5 +27,17 @@ export function createProjectWorkspaceSource(
     readDirectory: (path) => api.fs.readDir({ projectId, path }),
     readFile: (path) => api.fs.readFile({ projectId, path }),
     searchFiles: (query, limit) => api.fs.searchFiles({ projectId, query, limit }),
+  }
+}
+
+export function createTaskWorkspaceSource(
+  api: FrontendOpenForgeAPI,
+  taskId: string,
+): FileBrowserWorkspaceSource {
+  return {
+    identity: taskWorkspaceIdentity(taskId),
+    readDirectory: (path) => api.fs.task.readDir({ taskId, path }),
+    readFile: (path) => api.fs.task.readFile({ taskId, path }),
+    searchFiles: (query, limit) => api.fs.task.searchFiles({ taskId, query, limit }),
   }
 }

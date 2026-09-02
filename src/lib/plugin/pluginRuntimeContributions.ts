@@ -42,6 +42,7 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       title: tab.title,
       icon: tab.icon,
       order: tab.order,
+      requiresWorkspace: tab.requiresWorkspace,
     })),
     taskUISections: snapshot.taskUISections.map((section) => ({
       id: section.id,

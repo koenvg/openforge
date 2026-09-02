@@ -11,38 +11,52 @@
   interface Props {
     api: FrontendOpenForgeAPI
     workspaceSource: FileBrowserWorkspaceSource | null
+    rootErrorTitle: string
+    workspaceLoadingLabel: string
+    rootRetryLabel: string
     view: FilesBrowserViewModel
     actions: FilesBrowserActions
   }
 
-  let { api, workspaceSource, view, actions }: Props = $props()
+  let {
+    api,
+    workspaceSource,
+    rootErrorTitle,
+    workspaceLoadingLabel,
+    rootRetryLabel,
+    view,
+    actions,
+  }: Props = $props()
 </script>
 
-<div class="flex flex-1 min-h-0 overflow-hidden bg-base-100">
-  {#if !view.workspace.identity}
-    <PluginViewState empty emptyTitle="Select a project to browse files" />
-  {:else if view.workspace.loading}
-    <PluginViewState loading loadingLabel="Loading project files…" />
-  {:else if view.workspace.rootError !== null && view.tree.rootEntries.length === 0}
-    <PluginViewState
-      error={view.workspace.rootError}
-      errorTitle="Failed to load files"
-      retryLabel="Retry loading project files"
-      onRetry={actions.onRetryRootLoad}
-    />
-  {:else}
-    <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
-      <div class="flex h-full min-h-0 flex-col">
-        <FileTreeToolbar model={view.toolbar} actions={actions.toolbar} />
-        <FileTreeStates model={view.tree} actions={actions.tree} />
-      </div>
-    </ResizablePanel>
+<div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-base-100">
 
-    <FilePreviewPane
-      {api}
-      {workspaceSource}
-      model={view.preview}
-      actions={actions.preview}
-    />
-  {/if}
+  <div class="flex flex-1 min-h-0 overflow-hidden">
+    {#if !view.workspace.identity}
+      <PluginViewState empty emptyTitle="Select a project to browse files" />
+    {:else if view.workspace.loading}
+      <PluginViewState loading loadingLabel={workspaceLoadingLabel} />
+    {:else if view.workspace.rootError !== null && view.tree.rootEntries.length === 0}
+      <PluginViewState
+        error={view.workspace.rootError}
+        errorTitle={rootErrorTitle}
+        retryLabel={rootRetryLabel}
+        onRetry={actions.onRetryRootLoad}
+      />
+    {:else}
+      <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
+        <div class="flex h-full min-h-0 flex-col">
+          <FileTreeToolbar model={view.toolbar} actions={actions.toolbar} />
+          <FileTreeStates model={view.tree} actions={actions.tree} />
+        </div>
+      </ResizablePanel>
+
+      <FilePreviewPane
+        {api}
+        {workspaceSource}
+        model={view.preview}
+        actions={actions.preview}
+      />
+    {/if}
+  </div>
 </div>

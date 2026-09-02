@@ -6,6 +6,7 @@ export interface PendingFileRevealRequest {
   requestId: number
   workspaceIdentity: FileBrowserWorkspaceIdentity | null
   path: string
+  suffix: string
 }
 
 export const pendingFileReveal = writable<PendingFileRevealRequest | null>(null)
@@ -16,10 +17,12 @@ let nextFileRevealRequestId = 0
 export function requestFileReveal(
   path: string,
   workspaceIdentity: FileBrowserWorkspaceIdentity | null = null,
+  suffix = '',
 ): void {
   pendingFileReveal.set({
     requestId: ++nextFileRevealRequestId,
     workspaceIdentity,
     path,
+    suffix,
   })
 }

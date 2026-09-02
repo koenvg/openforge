@@ -10,7 +10,15 @@ import {
   terminalAttachmentDetach,
 } from './TaskDetailView.testUtils'
 
-const { TaskDetailView, taskActiveView } = getTaskDetailViewTestDependencies()
+const {
+  PluginSlotTestView,
+  TaskDetailView,
+  enabledPluginIds,
+  installedPlugins,
+  registerRenderableContributionComponent,
+  runtimeContributionSources,
+  taskActiveView,
+} = getTaskDetailViewTestDependencies()
 
 describe('TaskDetailView mounted-pane behavior', () => {
   beforeEach(resetTaskDetailViewTestState)
@@ -102,5 +110,47 @@ describe('TaskDetailView mounted-pane behavior', () => {
 
     expect(pluginWorkbench.getAttribute('aria-hidden')).toBe('true')
     expect(pluginWorkbench.isConnected).toBe(true)
+  })
+
+  it('shows a workspace-optional Files tab and pane when the task workspace is unavailable', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    const pluginId = 'com.openforge.file-viewer'
+    const filesViewId = `${pluginId}:files`
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+    enabledPluginIds.update((ids) => new Set(ids).add(pluginId))
+    installedPlugins.update((plugins) => new Map(plugins).set(pluginId, {
+      manifest: {
+        id: pluginId,
+        name: 'File Viewer',
+        version: '1.0.0',
+        apiVersion: 1,
+        description: 'Browse Task files',
+        permissions: [],
+        frontend: 'index.js',
+        backend: null,
+      },
+      state: 'installed',
+      error: null,
+    }))
+    runtimeContributionSources.update((sources) => new Map(sources).set(pluginId, {
+      pluginId,
+      taskPaneTabs: [{
+        id: 'files',
+        title: 'Files',
+        icon: 'folder-open',
+        order: 20,
+        requiresWorkspace: false,
+      }],
+    }))
+    registerRenderableContributionComponent('taskPaneTabs', filesViewId, PluginSlotTestView)
+    taskActiveView.set(new Map([[baseTask.id, filesViewId]]))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    const filesTab = await screen.findByRole('button', { name: /^files/i })
+    await waitFor(() => expect(filesTab.getAttribute('aria-pressed')).toBe('true'))
+    const filesWorkbench = await screen.findByTestId(`plugin-workbench-${filesViewId}`)
+    expect(filesWorkbench.getAttribute('aria-hidden')).toBe('false')
+    expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
   })
 })

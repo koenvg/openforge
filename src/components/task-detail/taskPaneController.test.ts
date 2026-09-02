@@ -9,6 +9,7 @@ function tab(
   contributionId: string,
   title: string,
   order: number,
+  requiresWorkspace = true,
 ): ResolvedTab {
   return {
     pluginId,
@@ -17,6 +18,7 @@ function tab(
     title,
     icon: null,
     order,
+    requiresWorkspace,
   }
 }
 
@@ -131,6 +133,20 @@ describe('taskPaneController', () => {
     controller.handleWorkspaceResolved('T-1', null)
     expect(controller.activeView).toBe('agent')
     expect(get(activeViews).get('T-1')).toBe('agent')
+  })
+
+  it('keeps a workspace-optional plugin view active when workspace resolution is unavailable', () => {
+    const filesTab = tab('plugin.files', 'files', 'Files', 10, false)
+    const requiredTab = tab('plugin.shell', 'terminal', 'Terminal', 20)
+    const { activeViews, controller, handlers } = setup(new Map([['T-1', filesTab.namespacedId]]))
+    controller.sync({ taskId: 'T-1', workspacePath: null, tabs: [requiredTab, filesTab] })
+
+    expect(controller.tabs).toEqual([filesTab])
+    expect([...handlers.keys()]).toEqual(['⌘1', '⌘2', '⌘3'])
+    controller.handleWorkspaceResolved('T-1', null)
+
+    expect(controller.activeView).toBe(filesTab.namespacedId)
+    expect(get(activeViews).get('T-1')).toBe(filesTab.namespacedId)
   })
 
   it('registers built-in shortcuts when an available workspace has no plugin tabs', () => {

@@ -7,12 +7,17 @@ import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/fron
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { CommandRegistration, FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
-const { mockFilesView } = vi.hoisted(() => ({
+const { mockFilesView, mockTaskFilesView } = vi.hoisted(() => ({
   mockFilesView: { name: 'FilesViewComponent' },
+  mockTaskFilesView: { name: 'TaskFilesViewComponent' },
 }))
 
 vi.mock('./FilesView.svelte', () => ({
   default: mockFilesView,
+}))
+
+vi.mock('./TaskFilesView.svelte', () => ({
+  default: mockTaskFilesView,
 }))
 
 import packageJson from '../package.json'
@@ -31,7 +36,9 @@ function makeRuntimeHarness() {
   })
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    taskPane: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: registerCommand, invokeGlobal },
+    navigation: { navigate: vi.fn() },
     system: { openUrl: vi.fn() },
   } as unknown as FrontendOpenForgeAPI
   const context = {
@@ -60,8 +67,8 @@ describe('file-viewer plugin', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
   })
 
-  it('registers the Files view at runtime through defineFrontendPlugin', async () => {
-    const { default: plugin, FilesViewComponent } = await import('./index')
+  it('registers the Files project view and task pane at runtime through defineFrontendPlugin', async () => {
+    const { default: plugin, FilesViewComponent, TaskFilesViewComponent } = await import('./index')
     const { api, context, subscriptions } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
@@ -75,7 +82,16 @@ describe('file-viewer plugin', () => {
       order: 10,
       component: FilesViewComponent,
     }))
+    expect(api.taskPane.registerTab).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'files',
+      title: 'Files',
+      icon: 'folder-open',
+      order: 20,
+      requiresWorkspace: false,
+      component: TaskFilesViewComponent,
+    }))
     expect(FilesViewComponent).toBe(mockFilesView)
+    expect(TaskFilesViewComponent).toBe(mockTaskFilesView)
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
@@ -94,6 +110,9 @@ describe('file-viewer plugin', () => {
       input: expect.objectContaining({
         type: 'object',
         required: ['path'],
+        properties: expect.objectContaining({
+          suffix: { type: 'string' },
+        }),
       }),
       handler: expect.any(Function),
     }))
@@ -109,7 +128,36 @@ describe('file-viewer plugin', () => {
       workspaceIdentity: 'project:project-1',
       path: 'src/lib/fileViewerPlugin.ts',
     })
-    expect(subscriptions.add).toHaveBeenCalledTimes(2)
+    expect(subscriptions.add).toHaveBeenCalledTimes(3)
+  })
+
+  it('targets a reveal to the requested task and activates that task Files tab', async () => {
+    pendingFileReveal.set(null)
+    const { default: plugin } = await import('./index')
+    const { api, context, registeredCommands } = makeRuntimeHarness()
+    vi.mocked(api.navigation.navigate).mockResolvedValue({
+      activeProjectId: 'project-1',
+      currentView: 'board',
+      selectedTaskId: 'task-2',
+    })
+
+    await plugin.activate(api, context)
+    const [registration] = registeredCommands
+    await registration.handler({ path: 'src/task.ts', taskId: 'task-2', suffix: '#setup' }, {
+      taskId: 'task-1',
+      projectId: 'project-1',
+      source: 'plugin',
+    })
+
+    expect(get(pendingFileReveal)).toMatchObject({
+      workspaceIdentity: 'task:task-2',
+      path: 'src/task.ts',
+      suffix: '#setup',
+    })
+    expect(api.navigation.navigate).toHaveBeenCalledWith({
+      taskId: 'task-2',
+      taskViewId: 'files',
+    })
   })
 
   it('does not keep plugin-local runtime adapter modules or imports', () => {

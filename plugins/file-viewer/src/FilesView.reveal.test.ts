@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/svelte'
 import type { FileContent } from '@openforge-app/plugin-sdk/domain'
 import { get } from 'svelte/store'
-import { pendingFileReveal, requestFileReveal } from './lib/stores'
+import { fileBrowserStates, pendingFileReveal, requestFileReveal } from './lib/stores'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fsReadDir,
@@ -103,7 +103,7 @@ describe('FilesView reveal behavior', () => {
     })
   })
 
-  it('clears pendingFileReveal after processing', async () => {
+  it('retains a structured suffix in workspace state after processing a pending reveal', async () => {
     vi.mocked(fsReadDir).mockResolvedValue([makeFileEntry({ name: 'README.md', path: 'README.md' })])
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
 
@@ -113,7 +113,7 @@ describe('FilesView reveal behavior', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    requestFileReveal('README.md')
+    requestFileReveal('README.md', null, '#setup')
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
@@ -121,6 +121,10 @@ describe('FilesView reveal behavior', () => {
 
     await waitFor(() => {
       expect(get(pendingFileReveal)).toBeNull()
+    })
+    expect(get(fileBrowserStates).get('project:test-project-id')).toMatchObject({
+      selectedPath: 'README.md',
+      selectedSuffix: '#setup',
     })
   })
 

@@ -14,7 +14,7 @@ import type {
 
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut' | 'navigationComponent'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
 type RuntimeViewReplacementSource = Pick<RuntimeViewReplacementContribution, 'id' | 'target' | 'title' | 'icon'>
-type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
+type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order' | 'requiresWorkspace'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeReviewRowActionSource = Pick<RuntimeReviewRowActionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
@@ -50,6 +50,7 @@ export interface ResolvedTab {
   title: string
   icon: string | null
   order: number
+  requiresWorkspace: boolean
 }
 
 export interface ResolvedTaskUISection {
@@ -234,7 +235,7 @@ function resolveTab(pluginId: string, item: unknown): ResolvedTab | null {
     return null
   }
 
-  const { id, title, icon, order } = item
+  const { id, title, icon, order, requiresWorkspace } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -246,6 +247,7 @@ function resolveTab(pluginId: string, item: unknown): ResolvedTab | null {
     title,
     icon: isNonEmptyString(icon) ? icon : null,
     order: isNumber(order) ? order : 0,
+    requiresWorkspace: requiresWorkspace !== false,
   }
 }
 

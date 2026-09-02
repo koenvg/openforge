@@ -223,7 +223,7 @@
     {/if}
 
     {#each sortedTaskPaneTabs as tab (tab.namespacedId)}
-      {#if mountedViews.has(tab.namespacedId) && workspacePath !== null}
+      {#if mountedViews.has(tab.namespacedId)}
         <div
           data-testid={`plugin-workbench-${tab.namespacedId}`}
           aria-hidden={activeView !== tab.namespacedId}

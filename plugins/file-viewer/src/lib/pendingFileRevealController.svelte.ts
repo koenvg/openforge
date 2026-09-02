@@ -9,7 +9,7 @@ interface PendingFileRevealControllerOptions {
   clearPendingReveal(request: PendingFileRevealRequest): void
   setShowHiddenRootEntries(showHidden: boolean): void
   toggleDir(path: string): Promise<boolean>
-  selectFile(path: string): Promise<boolean>
+  selectFile(path: string, suffix?: string): Promise<boolean>
 }
 
 export function usePendingFileRevealController(options: PendingFileRevealControllerOptions) {
@@ -35,7 +35,7 @@ export function usePendingFileRevealController(options: PendingFileRevealControl
     if (!source) return
 
     const { identity } = source
-    const { path: targetPath, requestId } = pendingRequest
+    const { path: targetPath, suffix, requestId } = pendingRequest
     const controllerRequestId = ++revealControllerRequestId
     processingRequestId = requestId
     failedPath = null
@@ -67,7 +67,7 @@ export function usePendingFileRevealController(options: PendingFileRevealControl
         }
       }
 
-      const selected = await options.selectFile(targetPath)
+      const selected = await options.selectFile(targetPath, suffix)
       if (!isCurrent(identity, controllerRequestId, pendingRequest)) return
       if (selected) {
         options.clearPendingReveal(pendingRequest)

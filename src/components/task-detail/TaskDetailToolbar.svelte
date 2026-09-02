@@ -177,9 +177,11 @@
       </div>
     {/if}
 
-    {#if workspacePath !== null}
+    {#if workspacePath !== null || tabs.length > 0}
       <TaskPaneNavigation {activeView} {tabs} commandHeld={$commandHeld} onSelect={onSelectView} />
+    {/if}
 
+    {#if workspacePath !== null}
       <div class="ml-auto flex shrink-0 items-center gap-2">
         <AgentStatusPill taskId={task.id} />
         <button

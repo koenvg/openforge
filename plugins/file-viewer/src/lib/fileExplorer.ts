@@ -17,6 +17,7 @@ export interface FileBrowserWorkspaceState {
   dirContents: Map<string, FileEntry[]>
   expandedPaths: Set<string>
   selectedPath: string | null
+  selectedSuffix: string
   fileContent: FileContent | null
   rootLoaded: boolean
   showHiddenRootEntries: boolean
@@ -33,6 +34,7 @@ export function createEmptyFileBrowserWorkspaceState(): FileBrowserWorkspaceStat
     dirContents: new Map(),
     expandedPaths: new Set(),
     selectedPath: null,
+    selectedSuffix: '',
     fileContent: null,
     rootLoaded: false,
     showHiddenRootEntries: false,
