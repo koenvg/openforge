@@ -177,7 +177,7 @@
   </header>
 
   <div class="flex min-h-0 flex-1">
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 py-6 pr-6">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 pb-6 pr-6 {activeFilter === 'backlog' && visibleFilterLabels.length > 0 ? 'pt-4' : 'pt-6'}">
       {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
         <div class="flex items-center border-b border-base-300 py-2">
           <BacklogLabelFilterDropdown
