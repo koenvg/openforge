@@ -235,6 +235,37 @@ describe('FocusBoard filtering and labels', () => {
     expect(within(taskList).getByText('Bug task')).toBeTruthy()
   })
 
+  it('orders Backlog Task Label options by count, then name, without promoting selections', async () => {
+    const ipc = await import('../../lib/ipc')
+    const docsLabel: TaskLabel = { id: 3, projectId: 'proj-1', name: 'docs' }
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([uiLabel, docsLabel, bugLabel])
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+    backlogLabelFilters.set(new Map([['proj-1', new Set([uiLabel.id])]]))
+
+    renderBoard({
+      tasks: [
+        makeTask('T-5', 'backlog', 'Docs one', [docsLabel]),
+        makeTask('T-6', 'backlog', 'Docs two', [docsLabel]),
+        makeTask('T-7', 'backlog', 'Docs three', [docsLabel]),
+        makeTask('T-8', 'backlog', 'Bug one', [bugLabel]),
+        makeTask('T-9', 'backlog', 'Bug two', [bugLabel]),
+        makeTask('T-10', 'backlog', 'UI one', [uiLabel]),
+        makeTask('T-11', 'backlog', 'UI two', [uiLabel]),
+      ],
+      sessions: new Map(),
+    })
+
+    const menu = await openBacklogLabelFilterMenu()
+    const options = within(menu).getAllByRole('menuitemcheckbox')
+
+    expect(options).toEqual([
+      within(menu).getByRole('menuitemcheckbox', { name: /docs 3/i }),
+      within(menu).getByRole('menuitemcheckbox', { name: /bug 2/i }),
+      within(menu).getByRole('menuitemcheckbox', { name: /ui 2/i }),
+    ])
+    expect(options[2]?.getAttribute('aria-checked')).toBe('true')
+  })
+
   it('hides the Backlog Task Label dropdown when no Backlog labels are available', async () => {
     renderBoard()
 

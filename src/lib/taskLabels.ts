@@ -63,7 +63,12 @@ export function getBacklogLabelCounts(tasks: TaskDetail[], labels: TaskLabel[]):
 }
 
 export function getLabelsWithBacklogItems(labels: TaskLabel[], counts: Map<number, number>): TaskLabel[] {
-  return labels.filter((label) => (counts.get(label.id) ?? 0) > 0)
+  return labels
+    .filter((label) => (counts.get(label.id) ?? 0) > 0)
+    .sort((left, right) =>
+      (counts.get(right.id) ?? 0) - (counts.get(left.id) ?? 0)
+        || left.name.localeCompare(right.name),
+    )
 }
 
 export function pruneSelectedBacklogLabelIds(selectedLabelIds: Set<number>, visibleLabels: TaskLabel[]): Set<number> {

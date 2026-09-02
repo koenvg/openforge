@@ -56,6 +56,28 @@ describe('taskLabels', () => {
     expect(getLabelsWithBacklogItems([bug, ui], counts)).toEqual([ui])
   })
 
+  it('orders backlog labels by descending task count and alphabetical name without mutating the input', () => {
+    const docs: TaskLabel = { id: 3, projectId: 'proj-1', name: 'Docs' }
+    const ci: TaskLabel = { id: 4, projectId: 'proj-1', name: 'CI' }
+    const labels = [ui, ci, bug, docs]
+    const counts = new Map([
+      [ui.id, 2],
+      [ci.id, 0],
+      [bug.id, 2],
+      [docs.id, 3],
+    ])
+
+    expect(getLabelsWithBacklogItems(labels, counts)).toEqual([docs, bug, ui])
+    expect(labels).toEqual([ui, ci, bug, docs])
+  })
+
+  it('recalculates backlog label order from current task counts', () => {
+    const labels = [bug, ui]
+
+    expect(getLabelsWithBacklogItems(labels, new Map([[bug.id, 2], [ui.id, 1]]))).toEqual([bug, ui])
+    expect(getLabelsWithBacklogItems(labels, new Map([[bug.id, 1], [ui.id, 3]]))).toEqual([ui, bug])
+  })
+
   it('prunes selected backlog label filters that no longer have visible chips', () => {
     expect(pruneSelectedBacklogLabelIds(new Set([bug.id, ui.id]), [ui])).toEqual(new Set([ui.id]))
   })
