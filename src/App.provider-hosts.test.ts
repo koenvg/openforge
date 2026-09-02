@@ -5,6 +5,7 @@ import { setMockTasks } from './App.test-fixtures/stores'
 import { createTask } from './App.test-fixtures/tasks'
 import { installAppTestLifecycle } from './App.test-harness'
 import type { TaskDetail } from './lib/types'
+import { getProjectConfig } from './lib/ipc'
 import App from './App.svelte'
 import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
 import IconRail from './components/shell/IconRail.svelte'
@@ -51,7 +52,54 @@ describe('App host-view provider routing', () => {
   })
 
 
-  it('uses the selected dashboard metadata while keeping task opening on the board route', async () => {
+  it('keeps core dashboard metadata until the project override has loaded', async () => {
+    let resolvePreference!: (value: string | null) => void
+    vi.mocked(getProjectConfig).mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePreference = resolve
+    }))
+    const stores = await import('./lib/stores')
+    const pluginStore = await import('./lib/plugin/pluginStore')
+    const dashboardProviders = await import('./lib/plugin/projectDashboardProviders')
+    const componentRegistry = await import('./lib/plugin/componentRegistry')
+    stores.projects.set([project])
+    stores.activeProjectId.set(project.id)
+    stores.currentView.set('board')
+    componentRegistry.registerRenderableContributionComponent(
+      'viewReplacements',
+      'planning-plugin:dashboard',
+      vi.fn() as never,
+    )
+    pluginStore.installedPlugins.set(new Map([['planning-plugin', {
+      state: 'active', error: null, manifest: {},
+    } as never]]))
+    pluginStore.enabledPluginIds.set(new Set(['planning-plugin']))
+    pluginStore.runtimeContributionSources.set(new Map([['planning-plugin', {
+      pluginId: 'planning-plugin',
+      viewReplacements: [{
+        id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left',
+      }],
+    }]]))
+    dashboardProviders.globalProjectDashboardProviderId.set('planning-plugin.dashboard')
+    dashboardProviders.globalProjectDashboardProviderLoaded.set(true)
+
+    render(App)
+
+    await vi.waitFor(() => expect(vi.mocked(IconRail)).toHaveBeenCalled())
+    const railProps = getLatestComponentProps<{ dashboardNavItem: null }>(
+      vi.mocked(IconRail),
+      'dashboardNavItem',
+      { latestCallOnly: true },
+    )
+    expect(railProps.dashboardNavItem).toBeNull()
+
+    resolvePreference('core')
+    const { get } = await import('svelte/store')
+    await vi.waitFor(() => {
+      expect(get(dashboardProviders.projectDashboardProviderIds).get(project.id)).toBe('core')
+    })
+  })
+
+  it('uses inherited dashboard metadata while keeping task opening on the board route', async () => {
     const stores = await import('./lib/stores')
     const pluginStore = await import('./lib/plugin/pluginStore')
     const dashboardProviders = await import('./lib/plugin/projectDashboardProviders')
@@ -68,13 +116,20 @@ describe('App host-view provider routing', () => {
       vi.fn() as never,
     )
     pluginStore.enabledPluginIds.set(new Set(['planning-plugin']))
+    pluginStore.installedPlugins.set(new Map([['planning-plugin', {
+      state: 'active',
+      error: null,
+      manifest: {},
+    } as never]]))
     pluginStore.runtimeContributionSources.set(new Map([['planning-plugin', {
       pluginId: 'planning-plugin',
       viewReplacements: [{
         id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left',
       }],
     }]]))
-    dashboardProviders.projectDashboardProviderIds.set(new Map([[project.id, 'planning-plugin.dashboard']]))
+    dashboardProviders.globalProjectDashboardProviderId.set('planning-plugin.dashboard')
+    dashboardProviders.globalProjectDashboardProviderLoaded.set(true)
+    dashboardProviders.projectDashboardProviderIds.set(new Map([[project.id, 'inherit']]))
 
     render(App)
 

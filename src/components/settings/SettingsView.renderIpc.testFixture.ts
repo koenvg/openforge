@@ -3,6 +3,9 @@ import { vi } from 'vitest'
 export const settingsViewRenderIpc = {
   getProjectConfig: vi.fn(),
   getConfig: vi.fn(),
+  setConfig: vi.fn(),
+  setProjectConfig: vi.fn(),
+  clearProjectConfig: vi.fn(),
   checkOpenCodeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   checkClaudeInstalled: vi.fn(),
   checkPiInstalled: vi.fn(),
@@ -15,6 +18,9 @@ export const settingsViewRenderIpc = {
 export function resetSettingsViewRenderIpc() {
   settingsViewRenderIpc.getProjectConfig.mockResolvedValue(null)
   settingsViewRenderIpc.getConfig.mockResolvedValue(null)
+  settingsViewRenderIpc.setConfig.mockResolvedValue(undefined)
+  settingsViewRenderIpc.setProjectConfig.mockResolvedValue(undefined)
+  settingsViewRenderIpc.clearProjectConfig.mockResolvedValue(undefined)
   settingsViewRenderIpc.checkClaudeInstalled.mockResolvedValue({ installed: false, path: null, version: null, authenticated: false })
   settingsViewRenderIpc.checkPiInstalled.mockResolvedValue({ installed: false, path: null, version: null })
   settingsViewRenderIpc.getAllWhisperModelStatuses.mockResolvedValue([])

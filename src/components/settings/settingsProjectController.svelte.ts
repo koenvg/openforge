@@ -2,6 +2,7 @@ import { fromStore } from 'svelte/store'
 import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
 import { deleteProject, setProjectConfig } from '../../lib/ipc'
 import { loadEnabledForProject } from '../../lib/plugin/pluginRegistry'
+import { reloadProjectDashboardProviderId } from '../../lib/plugin/projectDashboardProviders'
 import { loadProjectHierarchyOverrides, loadProjectSettings } from '../../lib/settingsConfig'
 import type { ProjectSettingsConfig } from '../../lib/settingsConfig'
 import { getProjectIdentity, mergeUpdatedProject, resetProjectAndReload, resetProjectSettingAndReload } from '../../lib/settingsProjectSync'
@@ -145,7 +146,11 @@ export function createSettingsProjectController(options: SettingsProjectControll
     if (!projectId) return
     try {
       await resetProjectAndReload(projectId, async () => {
-        await Promise.all([reloadSettings(projectId), loadEnabledForProject(projectId)])
+        await Promise.all([
+          reloadSettings(projectId),
+          loadEnabledForProject(projectId),
+          reloadProjectDashboardProviderId(projectId),
+        ])
       })
     } catch (value) {
       error.set(getErrorMessage(value))

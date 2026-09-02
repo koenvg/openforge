@@ -1,5 +1,16 @@
 <script lang="ts">
   import GlobalPluginSettingsPanel from '../plugin/GlobalPluginSettingsPanel.svelte'
+  import SettingsDashboardProviderCard from './SettingsDashboardProviderCard.svelte'
+  import { resolveContributions } from '../../lib/plugin/contributionResolver'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import {
+    globalProjectDashboardProviderId,
+    globalProjectDashboardProviderLoaded,
+    isProjectDashboardProviderAvailable,
+    loadGlobalProjectDashboardProviderId,
+    setGlobalProjectDashboardProviderId,
+  } from '../../lib/plugin/projectDashboardProviders'
+  import { error } from '../../lib/stores'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
   import SettingsCompanionCard from './SettingsCompanionCard.svelte'
@@ -17,6 +28,31 @@
   }
 
   let { activeSection, controller }: Props = $props()
+
+  let dashboardProviders = $derived(resolveContributions(
+    Array.from($enabledPluginIds)
+      .map(pluginId => $runtimeContributionSources.get(pluginId))
+      .filter(source => source !== undefined),
+  ).viewReplacements.filter(
+    provider => isProjectDashboardProviderAvailable(provider, $installedPlugins),
+  ))
+
+  $effect(() => {
+    if (!$globalProjectDashboardProviderLoaded) {
+      void loadGlobalProjectDashboardProviderId().catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
+  })
+
+  async function handleDashboardProviderChange(providerId: string): Promise<void> {
+    try {
+      await setGlobalProjectDashboardProviderId(providerId)
+    } catch (value) {
+      error.set(value instanceof Error ? value.message : String(value))
+      throw value
+    }
+  }
 </script>
 
 {#if activeSection === 'general'}
@@ -85,6 +121,13 @@
     onDownloadError={controller.clearDownloadError}
   />
 {:else if activeSection === 'plugins'}
+  <SettingsDashboardProviderCard
+    scope="global"
+    selectedProviderId={$globalProjectDashboardProviderId}
+    providers={dashboardProviders}
+    disabled={!$globalProjectDashboardProviderLoaded}
+    onProviderChange={handleDashboardProviderChange}
+  />
   <GlobalPluginSettingsPanel
     activeProjectId={controller.projectId}
     pluginDefaults={controller.globalPluginDefaultsById}

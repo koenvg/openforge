@@ -4,8 +4,11 @@
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import {
+    INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
+    globalProjectDashboardProviderId,
+    globalProjectDashboardProviderLoaded,
     isProjectDashboardProviderAvailable,
-    CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    loadGlobalProjectDashboardProviderId,
     loadProjectDashboardProviderId,
     projectDashboardProviderIds,
     setProjectDashboardProviderId,
@@ -36,11 +39,19 @@
   ).viewReplacements.filter(
     provider => isProjectDashboardProviderAvailable(provider, $installedPlugins),
   ))
+  let dashboardProviderPreferenceLoaded = $derived(
+    !controller.projectId || $projectDashboardProviderIds.has(controller.projectId),
+  )
   let selectedDashboardProviderId = $derived(
-    $projectDashboardProviderIds.get(controller.projectId) ?? CORE_PROJECT_DASHBOARD_PROVIDER_ID,
+    $projectDashboardProviderIds.get(controller.projectId) ?? INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
   )
 
   $effect(() => {
+    if (!$globalProjectDashboardProviderLoaded) {
+      void loadGlobalProjectDashboardProviderId().catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
     const projectId = controller.projectId
     if (projectId && !$projectDashboardProviderIds.has(projectId)) {
       void loadProjectDashboardProviderId(projectId).catch((value) => {
@@ -118,9 +129,11 @@
   />
 {:else if activeSection === 'plugins'}
   <SettingsDashboardProviderCard
+    scope="project"
     selectedProviderId={selectedDashboardProviderId}
+    inheritedProviderId={$globalProjectDashboardProviderId}
     providers={dashboardProviders}
-    disabled={!controller.hasProject}
+    disabled={!controller.hasProject || !$globalProjectDashboardProviderLoaded || !dashboardProviderPreferenceLoaded}
     onProviderChange={handleDashboardProviderChange}
   />
   <PluginSettingsPanel projectId={controller.projectId || ''} disabled={!controller.hasProject} />

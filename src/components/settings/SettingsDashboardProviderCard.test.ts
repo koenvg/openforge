@@ -14,16 +14,17 @@ const providers = [
 ]
 
 describe('SettingsDashboardProviderCard', () => {
-  it('lists OpenForge and compatible dashboard providers without selecting a plugin by default', () => {
+  it('offers an app-wide default for the project dashboard replacement target', () => {
     render(SettingsDashboardProviderCard, {
       props: {
+        scope: 'global',
         selectedProviderId: 'core',
         providers,
         onProviderChange: vi.fn(),
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
+    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
     expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
       ['core', 'OpenForge'],
       ['planning-plugin.dashboard', 'Planning'],
@@ -31,19 +32,74 @@ describe('SettingsDashboardProviderCard', () => {
     expect(select.value).toBe('core')
   })
 
-  it('lets the user select a plugin provider or return to OpenForge', async () => {
+  it('offers project inheritance, OpenForge, and compatible plugin providers', () => {
+    render(SettingsDashboardProviderCard, {
+      props: {
+        scope: 'project',
+        selectedProviderId: 'inherit',
+        inheritedProviderId: 'planning-plugin.dashboard',
+        providers,
+        onProviderChange: vi.fn(),
+      },
+    })
+
+    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
+    expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
+      ['inherit', 'Use global default (Planning)'],
+      ['core', 'OpenForge'],
+      ['planning-plugin.dashboard', 'Planning'],
+    ])
+    expect(select.value).toBe('inherit')
+  })
+
+  it('keeps an unavailable stored provider visible without changing the selection', () => {
+    render(SettingsDashboardProviderCard, {
+      props: {
+        scope: 'project',
+        selectedProviderId: 'missing-plugin.dashboard',
+        inheritedProviderId: 'core',
+        providers,
+        onProviderChange: vi.fn(),
+      },
+    })
+
+    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
+    expect(select.value).toBe('missing-plugin.dashboard')
+    expect(screen.getByRole('option', { name: 'missing-plugin.dashboard (unavailable)' })).toBeTruthy()
+  })
+
+  it('shows an unavailable inherited choice in the project inheritance option', () => {
+    render(SettingsDashboardProviderCard, {
+      props: {
+        scope: 'project',
+        selectedProviderId: 'inherit',
+        inheritedProviderId: 'missing-plugin.dashboard',
+        providers,
+        onProviderChange: vi.fn(),
+      },
+    })
+
+    expect(screen.getByRole('option', {
+      name: 'Use global default (missing-plugin.dashboard unavailable)',
+    })).toBeTruthy()
+  })
+
+  it('lets the user change the configured provider', async () => {
     const onProviderChange = vi.fn()
     render(SettingsDashboardProviderCard, {
       props: {
+        scope: 'project',
         selectedProviderId: 'planning-plugin.dashboard',
+        inheritedProviderId: 'core',
         providers,
         onProviderChange,
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Project dashboard' })
-    await fireEvent.change(select, { target: { value: 'core' } })
-    expect(onProviderChange).toHaveBeenCalledWith('core')
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Project dashboard' }), {
+      target: { value: 'inherit' },
+    })
+    expect(onProviderChange).toHaveBeenCalledWith('inherit')
   })
 
   it('restores the committed provider when persistence fails', async () => {
@@ -53,13 +109,14 @@ describe('SettingsDashboardProviderCard', () => {
     }))
     render(SettingsDashboardProviderCard, {
       props: {
+        scope: 'global',
         selectedProviderId: 'core',
         providers,
         onProviderChange,
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
+    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
     await fireEvent.change(select, { target: { value: 'planning-plugin.dashboard' } })
     expect(select.disabled).toBe(true)
 
