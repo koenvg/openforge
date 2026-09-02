@@ -91,6 +91,10 @@
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
+    "./ui/Select.svelte": "./dist/ui/Select.svelte",
+    "./ui/Tabs.svelte": "./dist/ui/Tabs.svelte",
+    "./ui/AnchoredMenu.svelte": "./dist/ui/AnchoredMenu.svelte",
+    "./ui/Tooltip.svelte": "./dist/ui/Tooltip.svelte",
     "./ui/PluginPageHeader.svelte": "./dist/ui/PluginPageHeader.svelte",
     "./ui/PluginPageShell.svelte": "./dist/ui/PluginPageShell.svelte",
     "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte",
@@ -119,6 +123,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@internationalized/date": "^3.12.3",
+    "bits-ui": "^2.19.0",
     "dompurify": "catalog:",
     "github-slugger": "catalog:",
     "marked": "catalog:",
@@ -128,9 +134,10 @@
     "svelte": "^5.0.0"
   },
   "devDependencies": {
+    "@babel/parser": "catalog:",
     "@types/node": "catalog:pinned",
-    "svelte": "catalog:pinned",
     "semver": "catalog:",
+    "svelte": "catalog:pinned",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "vscode-material-icons": "^0.1.1"

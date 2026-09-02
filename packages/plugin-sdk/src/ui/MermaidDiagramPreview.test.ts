@@ -46,7 +46,7 @@ afterEach(() => {
 
 describe('MermaidDiagramPreview', () => {
   it('opens fitted and sizes the vector diagram to the available viewport', async () => {
-    const { container } = render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
+    render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
 
     expect(screen.getByRole('dialog', { name: 'Mermaid diagram preview' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Zoom out' })).toBeTruthy()
@@ -57,20 +57,20 @@ describe('MermaidDiagramPreview', () => {
     resizePreview(400, 300)
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Fit (200%)'))
-    const svg = container.querySelector('[data-testid="mermaid-preview-canvas"] svg') as SVGSVGElement
+    const svg = screen.getByTestId('mermaid-preview-canvas').querySelector('svg') as SVGSVGElement
     expect(svg.style.width).toBe('400px')
     expect(svg.style.height).toBe('200px')
     expect(svg.style.maxWidth).toBe('none')
   })
 
   it('zooms, resets, and fits with visible state and bounded controls', async () => {
-    const { container } = render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
+    render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
     resizePreview(200, 100)
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Fit (100%)'))
 
     await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     expect(screen.getByRole('status').textContent).toBe('125%')
-    expect((container.querySelector('[data-testid="mermaid-preview-canvas"] svg') as SVGSVGElement).style.width).toBe('250px')
+    expect((screen.getByTestId('mermaid-preview-canvas').querySelector('svg') as SVGSVGElement).style.width).toBe('250px')
 
     await fireEvent.click(screen.getByRole('button', { name: 'Reset zoom to 100%' }))
     expect(screen.getByRole('status').textContent).toBe('100%')

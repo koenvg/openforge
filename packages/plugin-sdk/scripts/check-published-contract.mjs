@@ -2,10 +2,14 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { validRange } from 'semver'
 import { compile } from 'svelte/compiler'
+import { svelte as sveltePlugin } from '@sveltejs/vite-plugin-svelte'
+import { build as viteBuild } from 'vite'
+import { assertPublicUiDeclarationsHideBitsUi } from './public-ui-declaration-contract.mjs'
+import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../src/publicUiExports.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -100,6 +104,76 @@ function compilePackedSvelteTree(entryPath, visited = new Set()) {
   for (const match of source.matchAll(importPattern)) {
     const dependencyPath = resolvePackedLocalImport(entryPath, match[1])
     if (dependencyPath.endsWith('.svelte')) compilePackedSvelteTree(dependencyPath, visited)
+  }
+}
+
+async function buildPackedExternalPluginFixture(consumerRoot, installedPackageRoot) {
+  const fixtureRoot = join(consumerRoot, 'packed-external-plugin')
+  const outputRoot = join(fixtureRoot, 'dist')
+  mkdirSync(fixtureRoot)
+  writeFileSync(join(fixtureRoot, 'entry.js'), `import { mount } from 'svelte'
+import App from './App.svelte'
+
+mount(App, { target: document.body })
+`)
+  writeFileSync(join(fixtureRoot, 'App.svelte'), `<script lang="ts">
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import Tabs from '@openforge-app/plugin-sdk/ui/Tabs.svelte'
+  import AnchoredMenu from '@openforge-app/plugin-sdk/ui/AnchoredMenu.svelte'
+  import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
+
+  let showModal = $state(true)
+  let selected = $state('open')
+  let tab = $state('details')
+  const options = [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }]
+  const tabs = [{ value: 'details', label: 'Details' }, { value: 'activity', label: 'Activity' }]
+  const menuItems = [{ value: 'edit', label: 'Edit' }, { value: 'delete', label: 'Delete' }]
+</script>
+
+{#if showModal}
+  <Modal ariaLabel="Packed plugin modal" onClose={() => showModal = false}>Packed modal content</Modal>
+{/if}
+<Select label="Status" {options} bind:value={selected} />
+<Tabs label="Plugin sections" {tabs} bind:value={tab} />
+<AnchoredMenu label="Plugin actions" items={menuItems}>
+  {#snippet trigger()}Actions{/snippet}
+</AnchoredMenu>
+<Tooltip label="Plugin help" content="Shared host runtime tooltip">
+  {#snippet trigger()}Help{/snippet}
+</Tooltip>
+`)
+
+  const packedViteEntry = join(installedPackageRoot, 'dist', 'vite.js')
+  const { openforgePluginViteExternals } = await import(pathToFileURL(packedViteEntry).href)
+  await viteBuild({
+    root: fixtureRoot,
+    configFile: false,
+    logLevel: 'silent',
+    plugins: [sveltePlugin()],
+    build: {
+      emptyOutDir: true,
+      outDir: outputRoot,
+      lib: { entry: join(fixtureRoot, 'entry.js'), formats: ['es'], fileName: 'external-plugin' },
+      rolldownOptions: { external: openforgePluginViteExternals },
+    },
+  })
+
+  const bundle = readFileSync(join(outputRoot, 'external-plugin.js'), 'utf8')
+  const imports = [...bundle.matchAll(/(?:from\s*|import\s*)['"]([^'"]+)['"]/g)].map(match => match[1])
+  const svelteImports = imports.filter(specifier => specifier === 'svelte' || specifier.startsWith('svelte/'))
+  if (svelteImports.length === 0) {
+    fail('Packed external plugin bundle did not preserve host-shared Svelte imports.')
+  }
+  const unexpectedSvelteImports = svelteImports.filter(specifier => !openforgePluginViteExternals(specifier))
+  if (unexpectedSvelteImports.length > 0) {
+    fail(`Packed external plugin emitted unshared Svelte imports: ${unexpectedSvelteImports.join(', ')}`)
+  }
+  if (imports.includes('bits-ui') || imports.some(specifier => specifier.startsWith('bits-ui/'))) {
+    fail('Packed external plugin exposed the private Bits UI implementation dependency.')
+  }
+  if (/effect_orphan|HYDRATION_ERROR/.test(bundle)) {
+    fail('Packed external plugin bundled Svelte runtime internals instead of sharing the host runtime.')
   }
 }
 
@@ -206,6 +280,14 @@ try {
   const sourceReadme = readFileSync(join(packageRoot, 'README.md'), 'utf8')
   const packedReadme = readFileSync(packedReadmePath, 'utf8')
   if (packedReadme !== sourceReadme) fail('Packed Plugin SDK README.md does not match the package README.')
+
+  assertPublicUiDeclarationsHideBitsUi(
+    OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ componentName, distPath }) => ({
+      componentName,
+      source: readFileSync(join(installedPackageRoot, distPath.replace(/^\.\//, '')), 'utf8'),
+    })),
+  )
+  await buildPackedExternalPluginFixture(consumerRoot, installedPackageRoot)
 
   for (const [dependencyName, range] of Object.entries(packedManifest.dependencies ?? {})) {
     if (typeof range !== 'string' || validRange(range) === null) {

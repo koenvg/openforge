@@ -16,6 +16,12 @@ describe('plugin-sdk Modal', () => {
     expect(document.activeElement).toBe(dialog)
   })
 
+  it('portals the dialog outside the caller render container', () => {
+    const view = render(ModalTestWrapper, { props: { onClose: vi.fn() } })
+
+    expect(view.container.contains(screen.getByRole('dialog', { name: 'Plugin dialog' }))).toBe(false)
+  })
+
   it('can take its accessible name from labelled content', () => {
     render(ModalTestWrapper, { props: { onClose: vi.fn(), accessibleName: 'aria-labelledby' } })
 
@@ -106,6 +112,9 @@ describe('plugin-sdk Modal', () => {
     const closeButton = screen.getByRole('button', { name: 'Close plugin dialog' })
     const last = screen.getByRole('button', { name: 'Last action' })
 
+    const visibleRects = [{}] as unknown as DOMRectList
+    vi.spyOn(closeButton, 'getClientRects').mockReturnValue(visibleRects)
+    vi.spyOn(last, 'getClientRects').mockReturnValue(visibleRects)
     last.focus()
     await fireEvent.keyDown(dialog, { key: 'Tab' })
     expect(document.activeElement).toBe(closeButton)
@@ -131,7 +140,7 @@ describe('plugin-sdk Modal', () => {
     opener.remove()
   })
 
-  it('does not override focus deliberately moved outside before unmounting', async () => {
+  it('contains programmatic focus while mounted and restores focus when unmounted', async () => {
     const opener = document.createElement('button')
     const destination = document.createElement('button')
     document.body.append(opener, destination)
@@ -139,10 +148,13 @@ describe('plugin-sdk Modal', () => {
 
     const view = render(ModalTestWrapper, { props: { onClose: vi.fn() } })
     await tick()
-    destination.focus()
-    view.unmount()
+    const dialog = screen.getByRole('dialog')
 
-    expect(document.activeElement).toBe(destination)
+    destination.focus()
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    view.unmount()
+    expect(document.activeElement).toBe(opener)
     opener.remove()
     destination.remove()
   })
