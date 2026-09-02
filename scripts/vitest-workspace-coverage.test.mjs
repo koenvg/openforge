@@ -105,4 +105,17 @@ describe('root Vitest workspace coverage', () => {
       expect(coveringProjects).toEqual(['renderer'])
     }
   })
+
+  it('isolates the timezone-mutating cron suite in a forked Node project', () => {
+    const projects = vitestConfig.test?.projects ?? []
+    const cronSuitePath = 'plugins/task-schedules/src/lib/cron.test.ts'
+    const cronProject = projects.find((project) => project.test?.name === 'task-schedules-cron')
+    const coveringProjects = projects
+      .filter((project) => projectIncludes(project, cronSuitePath))
+      .map((project) => project.test?.name)
+
+    expect(cronProject?.test?.environment).toBe('node')
+    expect(cronProject?.test?.pool).toBe('forks')
+    expect(coveringProjects).toEqual(['task-schedules-cron'])
+  })
 })

@@ -9,7 +9,7 @@ import {
 } from './scripts/vitest-workspace-policy.ts'
 
 
-const { pluginSdk, pluginRuntime } = SPECIALIZED_WORKSPACE_TEST_PROJECTS
+const { pluginSdk, pluginRuntime, taskSchedulesCron } = SPECIALIZED_WORKSPACE_TEST_PROJECTS
 
 const pluginRuntimeAliases = {
   '@openforge-app/plugin-runtime/commandValidation': new URL('./packages/plugin-runtime/src/commandValidation.ts', import.meta.url).pathname,
@@ -54,6 +54,7 @@ export default defineConfig({
             'src/lib/terminalSessionService.*.test.ts',
             pluginSdk.suiteGlob,
             pluginRuntime.suiteGlob,
+            taskSchedulesCron.suiteGlob,
             ...WORKSPACE_TEST_SUITE_EXCLUDES,
           ],
           alias: {
@@ -105,6 +106,17 @@ export default defineConfig({
             ...pluginRuntimeAliases,
             ...pluginSdkAliases,
           },
+        },
+      },
+      {
+        test: {
+          name: taskSchedulesCron.name,
+          environment: 'node',
+          // The suite changes process.env.TZ, so keep Date timezone state in its own process.
+          pool: 'forks',
+          globals: true,
+          include: [taskSchedulesCron.suiteGlob],
+          exclude: WORKSPACE_TEST_SUITE_EXCLUDES,
         },
       },
       {

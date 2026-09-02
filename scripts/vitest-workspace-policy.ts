@@ -18,6 +18,10 @@ export const SPECIALIZED_WORKSPACE_TEST_PROJECTS = {
     name: 'plugin-runtime',
     suiteGlob: `packages/plugin-runtime/**/*.{test,spec}.${testExtensionGlob}`,
   },
+  taskSchedulesCron: {
+    name: 'task-schedules-cron',
+    suiteGlob: 'plugins/task-schedules/src/lib/cron.test.ts',
+  },
 } as const
 
 export function isWorkspaceTestSuiteFile(fileName: string): boolean {
