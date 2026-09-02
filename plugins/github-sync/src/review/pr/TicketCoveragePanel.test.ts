@@ -183,7 +183,7 @@ describe('TicketCoveragePanel', () => {
     expect(onToggleFinding).toHaveBeenCalledWith({
       id: 'ac-1',
       label: 'Covered',
-      text: 'The user can log in with email and password.',
+      text: 'Jira ticket mentions "The user can log in with email and password."',
     })
   })
 
@@ -197,7 +197,7 @@ describe('TicketCoveragePanel', () => {
     expect(onToggleFinding).toHaveBeenCalledWith({
       id: 'ac-2',
       label: 'Missing',
-      text: 'Sessions expire after 30 minutes. — No expiry logic anywhere in the diff.',
+      text: 'Jira ticket mentions "Sessions expire after 30 minutes.", but No expiry logic anywhere in the diff.',
     })
   })
 
@@ -224,7 +224,7 @@ describe('TicketCoveragePanel', () => {
     expect(onToggleFinding).toHaveBeenCalledWith({
       id: 'oos-0',
       label: 'Not in the ticket',
-      text: 'Adds a password strength meter.',
+      text: 'Not in the Jira ticket, but changed by this PR: Adds a password strength meter.',
     })
   })
 

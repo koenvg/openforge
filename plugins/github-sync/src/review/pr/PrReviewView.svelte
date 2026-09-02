@@ -842,6 +842,32 @@
     startWalkthroughPolling(pr)
   }
 
+  // Stop an in-flight generation started from the card. Kills the agent, drops the
+  // row so the card reverts to "Generate" (not an error), and stops polling it.
+  async function stopWalkthrough(pr: ReviewPullRequest) {
+    const sessionKey = walkthroughByPr.get(pr.id)?.walkthrough_session_key
+    if (sessionKey) {
+      try {
+        await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
+      } catch (e) {
+        console.error('Failed to stop walkthrough generation:', e)
+      }
+    }
+    try {
+      await githubSync.deletePrWalkthrough({ reviewPrId: pr.id, headSha: pr.head_sha })
+    } catch (e) {
+      console.error('Failed to clear the stopped walkthrough:', e)
+    }
+    const timer = walkthroughPollTimers.get(pr.id)
+    if (timer) {
+      clearInterval(timer)
+      walkthroughPollTimers.delete(pr.id)
+    }
+    const next = new Map(walkthroughByPr)
+    next.set(pr.id, null)
+    walkthroughByPr = next
+  }
+
   function startWalkthroughPolling(pr: ReviewPullRequest) {
     if (walkthroughPollTimers.has(pr.id)) return
     const timer = setInterval(async () => {
@@ -1151,6 +1177,7 @@
       {pluralize}
       {walkthroughByPr}
       onGenerateWalkthrough={(pr) => { void generateWalkthrough(pr) }}
+      onStopWalkthrough={(pr) => { void stopWalkthrough(pr) }}
     />
   {/if}
 </div>

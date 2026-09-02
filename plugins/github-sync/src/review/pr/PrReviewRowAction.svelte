@@ -89,6 +89,27 @@
     startPolling(subject)
   }
 
+  async function stop(): Promise<void> {
+    const subject = pr
+    const sessionKey = walkthrough?.walkthrough_session_key
+    if (sessionKey) {
+      try {
+        await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
+      } catch (e) {
+        console.error('Failed to stop walkthrough generation:', e)
+      }
+    }
+    // Drop the stopped run so the row falls back to "Generate", not an error.
+    // The store's session guard stops the killed run from rewriting the row.
+    try {
+      await githubSync.deletePrWalkthrough({ reviewPrId: subject.id, headSha: subject.head_sha })
+    } catch (e) {
+      console.error('Failed to clear the stopped walkthrough:', e)
+    }
+    stopPolling()
+    if (subjectKey(subject) === subjectKey(pr)) walkthrough = null
+  }
+
   $effect(() => {
     const key = subjectKey(pr)
     if (key === loadedKey) return
@@ -109,4 +130,4 @@
   onDestroy(stopPolling)
 </script>
 
-<PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} />
+<PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} onStop={() => void stop()} />

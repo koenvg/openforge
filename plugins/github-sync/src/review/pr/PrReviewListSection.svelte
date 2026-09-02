@@ -53,6 +53,8 @@
     // list renders (all cards 'idle') before the parent wires generation.
     walkthroughByPr?: Map<number, PrWalkthrough | null>
     onGenerateWalkthrough?: (pr: ReviewPullRequest) => void
+    /** Stops an in-flight generation for this PR. Optional; a no-op until wired. */
+    onStopWalkthrough?: (pr: ReviewPullRequest) => void
   }
 
   let {
@@ -96,6 +98,7 @@
     pluralize,
     walkthroughByPr = new Map(),
     onGenerateWalkthrough = () => {},
+    onStopWalkthrough = () => {},
   }: Props = $props()
 </script>
 
@@ -200,7 +203,7 @@
                       >
                         {#snippet footer()}
                           <div class="pt-1">
-                            <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} />
+                            <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
                           </div>
                         {/snippet}
                       </ReviewPrCard>
