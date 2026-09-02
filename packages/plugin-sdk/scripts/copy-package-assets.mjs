@@ -17,6 +17,7 @@ const rootModuleAssetPaths = (await readdir(join(packageRoot, 'src'), { withFile
 
 
 const privateUiRuntimeAssetPaths = [
+  'src/ui/ButtonControl.svelte',
   'src/ui/MermaidDiagramPreview.svelte',
 ]
 const assetPaths = [

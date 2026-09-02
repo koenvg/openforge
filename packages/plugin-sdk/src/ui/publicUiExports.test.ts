@@ -192,6 +192,16 @@ describe('plugin-sdk public UI exports', () => {
     expect(copyScript).not.toContain("'src/ui/FileTypeIcon.svelte'")
   })
 
+  it('ships the private ButtonControl dependency without exporting it', () => {
+    const copyScript = readFileSync(resolve(packageRoot, 'scripts/copy-package-assets.mjs'), 'utf8')
+    const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
+      exports: Record<string, unknown>
+    }
+
+    expect(copyScript).toContain("'src/ui/ButtonControl.svelte'")
+    expect(packageJson.exports).not.toHaveProperty('./ui/ButtonControl.svelte')
+  })
+
   it('derives source aliases from every canonical public UI registration', () => {
     const aliases = createOpenForgePluginSdkSourceAliasRecord(`${workspaceRoot}/`)
 
