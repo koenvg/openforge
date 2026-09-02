@@ -18,16 +18,16 @@
 - [x] 2.1 Add failing tests for migrating stored `light` and `dark` values, restoring a stable theme id, waiting for app-level plugin activation before resolving contributed themes, and persisting a diagnosed built-in-light fallback; verify the focused initialization tests fail first.
 - [x] 2.2 Replace binary theme persistence with stable theme-id persistence and add compatibility migration plus unavailable-theme diagnostics through the existing typed configuration wrapper; verify the initialization and existing `src/lib/theme.test.ts` coverage passes.
 - [x] 2.3 Wire theme initialization into the application readiness sequence after app-level plugin activation while retaining immediate built-in-light document defaults; verify application lifecycle tests prove that the normal shell does not present a stale or partially applied theme.
-- [ ] 2.4 Add failing settings tests for listing built-in and contributed themes, identifying plugin ownership, selecting a theme, reflecting external registry changes, and falling back when the selected contribution disappears; verify the focused settings tests fail first.
-- [ ] 2.5 Replace the light/dark toggle with a registry-backed theme selector and accessible ownership labels; verify the settings tests and keyboard interaction assertions pass.
+- [x] 2.4 Add failing settings tests for listing built-in and contributed themes, identifying plugin ownership, selecting a theme, reflecting external registry changes, and falling back when the selected contribution disappears; verify the focused settings tests fail first.
+- [x] 2.5 Replace the light/dark toggle with a registry-backed theme selector and accessible ownership labels; verify the settings tests and keyboard interaction assertions pass.
 
 ## 3. Angular built-in presentation
 
 - [x] 3.1 Move theme values out of the daisyUI theme declarations, define the documented semantic `--of-*` variables for both built-ins, and map daisyUI color and geometry variables to them; verify a focused CSS contract test finds every required mapping with no token cycles.
-- [ ] 3.2 Apply the website-derived neutral canvas, blue accent, crisp borders, compact geometry, technical metadata typography, restrained elevation, status colors, code colors, and independent dark palette; verify automated contrast checks cover primary text, secondary text, controls, focus, and semantic states in both themes.
-- [ ] 3.3 Separate theme definitions and adapters from unrelated Markdown, terminal, status, and animation rules currently collected in `src/app.css`; verify the renderer build resolves every stylesheet and the CSS contract tests still pass.
+- [x] 3.2 Apply the website-derived neutral canvas, blue accent, crisp borders, compact geometry, technical metadata typography, restrained elevation, status colors, code colors, and independent dark palette; verify automated contrast checks cover primary text, secondary text, controls, focus, and semantic states in both themes.
+- [x] 3.3 Separate theme definitions and adapters from unrelated Markdown, terminal, status, and animation rules currently collected in `src/app.css`; verify the renderer build resolves every stylesheet and the CSS contract tests still pass.
 - [ ] 3.4 Add representative light and dark visual fixtures for the shell, settings, modal, task view, and a built-in plugin view; verify the approved screenshots show the angular geometry at normal and reduced desktop widths.
-- [ ] 3.5 Verify reduced-motion theme transitions and keyboard focus visibility in both built-in themes through focused browser or Electron checks and record the validation output.
+- [x] 3.5 Verify reduced-motion theme transitions and keyboard focus visibility in both built-in themes through focused browser or Electron checks and record the validation output.
 
 ## 4. Theme-sensitive package integration
 

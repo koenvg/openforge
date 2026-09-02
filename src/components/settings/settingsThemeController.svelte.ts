@@ -1,23 +1,27 @@
 import { fromStore } from 'svelte/store'
-import { applyTheme, themeMode } from '../../lib/theme'
-import type { ThemeMode } from '../../lib/theme'
+import { error } from '../../lib/stores'
+import { availableThemes, selectedTheme, themeRegistry } from '../../lib/theme'
+
+function getErrorMessage(value: unknown): string {
+  return value instanceof Error ? value.message : String(value)
+}
 
 export function createSettingsThemeController() {
-  const themeModeState = fromStore(themeMode)
-  let isDarkMode = $state(themeModeState.current === 'dark')
+  const availableThemesState = fromStore(availableThemes)
+  const selectedThemeState = fromStore(selectedTheme)
 
-  $effect(() => {
-    isDarkMode = themeModeState.current === 'dark'
-  })
-
-  function toggle(): void {
-    const next: ThemeMode = isDarkMode ? 'light' : 'dark'
-    applyTheme(next)
+  async function select(themeId: string): Promise<void> {
+    try {
+      await themeRegistry.selectTheme(themeId)
+    } catch (value) {
+      error.set(`Failed to save theme: ${getErrorMessage(value)}`)
+    }
   }
 
   return {
-    get isDarkMode() { return isDarkMode },
-    toggle,
+    get availableThemes() { return availableThemesState.current },
+    get selectedThemeId() { return selectedThemeState.current.id },
+    select,
   }
 }
 

@@ -83,11 +83,9 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     }
   }
 
-  function handleThemeToggle(): void {
-    themeController.toggle()
-    scheduleSave()
+  function handleThemeChange(themeId: string): void {
+    void themeController.select(themeId)
   }
-
   function handleTerminalFontChange(font: TerminalFontId): void {
     terminalFontController.select(font)
     scheduleSave()
@@ -129,7 +127,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get pluginSettingsSections() { return pluginController.settingsSections },
     get modelStatuses() { return whisperController.modelStatuses },
     get downloadingModel() { return whisperController.downloadingModel },
-    get isDarkMode() { return themeController.isDarkMode },
+    get availableThemes() { return themeController.availableThemes },
+    get selectedThemeId() { return themeController.selectedThemeId },
     get terminalFont() { return terminalFontController.selected },
     get terminalFontSize() { return terminalFontSizeController.selected },
     get settingsLoading() { return settingsLoading },
@@ -168,7 +167,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     clearDownloadError: whisperController.clearDownloadError,
     beginDeleteConfirmation: projectController.beginDeleteConfirmation,
     cancelDeleteConfirmation: projectController.cancelDeleteConfirmation,
-    handleThemeToggle,
+    handleThemeChange,
     handleTerminalFontChange,
     handleTerminalFontSizeChange,
     handleGlobalSettingChange,

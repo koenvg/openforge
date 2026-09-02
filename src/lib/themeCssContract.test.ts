@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { BUILTIN_DARK_THEME_ID, BUILTIN_LIGHT_THEME_ID } from './themeContract'
 
 const appCss = readFileSync(resolve(process.cwd(), 'src/app.css'), 'utf8')
+const themeAdapterCss = readFileSync(resolve(process.cwd(), 'src/styles/theme-adapter.css'), 'utf8')
 
 const DAISY_TOKEN_ADAPTER = {
   '--color-base-100': '--of-surface',
@@ -34,14 +35,41 @@ const DAISY_TOKEN_ADAPTER = {
 
 function daisyThemeBlock(id: string): string {
   const marker = `name: "${id}";`
-  const markerIndex = appCss.indexOf(marker)
+  const markerIndex = themeAdapterCss.indexOf(marker)
   expect(markerIndex).toBeGreaterThan(-1)
-  const start = appCss.lastIndexOf('@plugin "daisyui/theme"', markerIndex)
-  const end = appCss.indexOf('\n}', markerIndex)
-  return appCss.slice(start, end)
+  const start = themeAdapterCss.lastIndexOf('@plugin "daisyui/theme"', markerIndex)
+  const end = themeAdapterCss.indexOf('\n}', markerIndex)
+  return themeAdapterCss.slice(start, end)
 }
 
 describe('daisyUI theme compatibility contract', () => {
+  it('keeps theme adapters separate from unrelated global presentation rules', () => {
+    expect(appCss).toContain('@import "./styles/theme-adapter.css";')
+    expect(appCss).not.toContain('@plugin "daisyui/theme"')
+  })
+
+  it('keeps token-driven focus and reduced-motion rules canonical in the imported adapter', () => {
+    expect(themeAdapterCss).toContain('--font-sans: var(--of-font-sans);')
+    expect(themeAdapterCss).toContain('--font-mono: var(--of-font-mono);')
+    expect(themeAdapterCss).toContain('outline: var(--of-focus-width) solid var(--of-focus-ring);')
+    expect(themeAdapterCss).toContain('outline-offset: var(--of-space1);')
+    expect(themeAdapterCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(themeAdapterCss).toContain('transition-duration: 0.01ms !important;')
+    expect(themeAdapterCss).toContain('animation-duration: 0.01ms !important;')
+    expect(appCss).not.toMatch(/:where\([^)]*(?:button|input|select|textarea)[^)]*\):focus-visible/)
+    expect(appCss).not.toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it.each([BUILTIN_LIGHT_THEME_ID, BUILTIN_DARK_THEME_ID])(
+    'maps %s daisyUI geometry to the documented control heights',
+    (themeId) => {
+      const block = daisyThemeBlock(themeId)
+      expect(block).toContain('--size-field: calc(var(--of-control-height) / 10);')
+      expect(block).toContain('--size-selector: calc(var(--of-control-height-compact) / 8);')
+      expect(themeAdapterCss).toContain('--size: var(--of-control-height-compact);')
+    },
+  )
+
   it.each([BUILTIN_LIGHT_THEME_ID, BUILTIN_DARK_THEME_ID])(
     'maps %s daisyUI values to OpenForge semantic tokens without independent colors',
     (themeId) => {

@@ -21,82 +21,9 @@
 @import "@fontsource/space-mono/400.css";
 @import "@fontsource/space-mono/700.css";
 @import "tailwindcss";
+@import "./styles/theme-adapter.css";
 
 @plugin "daisyui";
-
-@plugin "daisyui/theme" {
-  name: "openforge-light";
-  default: true;
-  prefersdark: false;
-  color-scheme: light;
-
-  --color-base-100: var(--of-surface);
-  --color-base-200: var(--of-surface-subtle);
-  --color-base-300: var(--of-border);
-  --color-base-content: var(--of-text);
-  --color-primary: var(--of-accent);
-  --color-primary-content: var(--of-on-accent);
-  --color-secondary: var(--of-control);
-  --color-secondary-content: var(--of-control-text);
-  --color-accent: var(--of-accent);
-  --color-accent-content: var(--of-on-accent);
-  --color-neutral: var(--of-text);
-  --color-neutral-content: var(--of-text-inverse);
-  --color-info: var(--of-info);
-  --color-info-content: var(--of-on-info);
-  --color-success: var(--of-success);
-  --color-success-content: var(--of-on-success);
-  --color-warning: var(--of-warning);
-  --color-warning-content: var(--of-on-warning);
-  --color-error: var(--of-danger);
-  --color-error-content: var(--of-on-danger);
-
-  --radius-selector: var(--of-radius-round);
-  --radius-field: var(--of-radius-control);
-  --radius-box: var(--of-radius-container);
-  --size-selector: var(--of-space-2);
-  --size-field: var(--of-space-2);
-  --border: var(--of-border-width);
-  --depth: 0;
-  --noise: 0;
-}
-
-@plugin "daisyui/theme" {
-  name: "openforge-dark";
-  default: false;
-  prefersdark: true;
-  color-scheme: dark;
-
-  --color-base-100: var(--of-surface);
-  --color-base-200: var(--of-surface-subtle);
-  --color-base-300: var(--of-border);
-  --color-base-content: var(--of-text);
-  --color-primary: var(--of-accent);
-  --color-primary-content: var(--of-on-accent);
-  --color-secondary: var(--of-control);
-  --color-secondary-content: var(--of-control-text);
-  --color-accent: var(--of-accent);
-  --color-accent-content: var(--of-on-accent);
-  --color-neutral: var(--of-text);
-  --color-neutral-content: var(--of-text-inverse);
-  --color-info: var(--of-info);
-  --color-info-content: var(--of-on-info);
-  --color-success: var(--of-success);
-  --color-success-content: var(--of-on-success);
-  --color-warning: var(--of-warning);
-  --color-warning-content: var(--of-on-warning);
-  --color-error: var(--of-danger);
-  --color-error-content: var(--of-on-danger);
-
-  --radius-selector: var(--of-radius-round);
-  --radius-field: var(--of-radius-control);
-  --radius-box: var(--of-radius-container);
-  --size-selector: var(--of-space-2);
-  --size-field: var(--of-space-2);
-  --border: var(--of-border-width);
-  --depth: 0;
-  --noise: 0;
-}
 
 :root {
   font-family: var(--of-font-sans);
@@ -161,24 +88,6 @@
   opacity: 1;
 }
 
-.of-field:focus-visible,
-:where(button, input, textarea, select, summary):focus-visible {
-  outline: 2px solid var(--of-focus);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0ms !important;
-  }
-}
 
 /* Soft chip tokens — for PR/review metadata pills */
 :root, [data-theme="openforge-light"] {

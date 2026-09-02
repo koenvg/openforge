@@ -64,8 +64,9 @@
     disabled={!controller.globalSettingsLoaded}
   />
   <SettingsPreferencesCard
-    isDarkMode={controller.isDarkMode}
-    onThemeToggle={controller.handleThemeToggle}
+    availableThemes={controller.availableThemes}
+    selectedThemeId={controller.selectedThemeId}
+    onThemeChange={controller.handleThemeChange}
     terminalFont={controller.terminalFont}
     onTerminalFontChange={controller.handleTerminalFontChange}
     terminalFontSize={controller.terminalFontSize}
