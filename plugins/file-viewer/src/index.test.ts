@@ -143,7 +143,7 @@ describe('file-viewer plugin', () => {
 
     await plugin.activate(api, context)
     const [registration] = registeredCommands
-    await registration.handler({ path: 'src/task.ts', taskId: 'task-2', suffix: '#setup' }, {
+    await registration.handler({ path: 'src/task.ts', taskId: 'task-2', suffix: '?plain=1#setup' }, {
       taskId: 'task-1',
       projectId: 'project-1',
       source: 'plugin',
@@ -152,7 +152,7 @@ describe('file-viewer plugin', () => {
     expect(get(pendingFileReveal)).toMatchObject({
       workspaceIdentity: 'task:task-2',
       path: 'src/task.ts',
-      suffix: '#setup',
+      suffix: '?plain=1#setup',
     })
     expect(api.navigation.navigate).toHaveBeenCalledWith({
       taskId: 'task-2',

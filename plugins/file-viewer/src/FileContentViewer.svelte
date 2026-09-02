@@ -2,10 +2,11 @@
   import { Archive, CircleAlert, FileQuestion, TriangleAlert } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileContent } from '@openforge-app/plugin-sdk/domain'
+  import { getMarkdownRepositoryLinkFragment } from '@openforge-app/plugin-sdk/markdown'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
   import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
-  import { onDestroy } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
 
   const RETURN_TO_TREE_BUTTON_CLASS = 'btn btn-outline btn-sm h-9 min-h-9 shrink-0 px-3 text-xs font-medium'
 
@@ -14,6 +15,7 @@
     content: FileContent | null
     fileName: string
     filePath: string
+    suffix?: string
     workspaceSource: FileBrowserWorkspaceSource | null
     error: string | null
     modifiedAt: number | null
@@ -30,6 +32,7 @@
     content,
     fileName,
     filePath,
+    suffix = '',
     workspaceSource,
     error,
     modifiedAt = null,
@@ -48,6 +51,7 @@
   let activeVideoElement: HTMLVideoElement | null = null
   let activeVideoKey: string | null = null
   let videoPlaybackError = $state(false)
+  let fragmentApplicationId = 0
 
   const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
   const language = $derived(getLanguageForFile(fileName))
@@ -65,6 +69,18 @@
     return `Loaded ${fileName}`
   })
 
+  async function applyFragment(applicationId: number): Promise<void> {
+    await tick()
+    if (applicationId !== fragmentApplicationId || !previewPane) return
+
+    const fragment = getMarkdownRepositoryLinkFragment({ suffix })
+    if (!fragment) return
+
+    const destination = previewPane.querySelector(`#${CSS.escape(fragment)}`)
+    if (destination instanceof HTMLElement && typeof destination.scrollIntoView === 'function') {
+      destination.scrollIntoView({ block: 'start' })
+    }
+  }
   function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -98,6 +114,15 @@
   })
 
   $effect(() => {
+    void filePath
+    void suffix
+    void content
+    const applicationId = ++fragmentApplicationId
+    if (!previewPane || content === null) return
+    void applyFragment(applicationId)
+  })
+
+  $effect(() => {
     if (focusRequestKey === null || appliedFocusRequestKey === focusRequestKey) return
     appliedFocusRequestKey = focusRequestKey
     previewPane?.focus({ preventScroll: true })
@@ -116,6 +141,7 @@
 
   onDestroy(() => {
     activeVideoElement?.pause()
+    fragmentApplicationId++
   })
 </script>
 
@@ -220,7 +246,7 @@
                   aria-hidden="true"
                 >
                   {#each textLines as _, index}
-                    <span>{index + 1}</span>
+                    <span id="L{index + 1}">{index + 1}</span>
                   {/each}
                 </div>
                 <code class="file-preview-code block flex-1 whitespace-pre {language ? `language-${language}` : ''}">{@html highlightedCode || ' '}</code>

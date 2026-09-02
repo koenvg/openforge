@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
+import { get } from 'svelte/store'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 
 vi.mock('@lucide/svelte', () => ({
@@ -17,7 +18,7 @@ vi.mock('@lucide/svelte', () => ({
 }))
 
 import TaskFilesView from './TaskFilesView.svelte'
-import { fileBrowserStates, pendingFileReveal } from './lib/stores'
+import { fileBrowserStates, pendingFileReveal, requestFileReveal } from './lib/stores'
 
 const taskReadDir = vi.fn()
 const taskReadFile = vi.fn()
@@ -88,6 +89,7 @@ describe('TaskFilesView', () => {
 
     expect(screen.getByText('Loading live worktree files…')).toBeTruthy()
     await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy())
+    expect(screen.getByText('Live worktree')).toBeTruthy()
     expect(taskReadDir).toHaveBeenCalledWith({ taskId: 'task-a', path: null })
     expect(projectReadDir).not.toHaveBeenCalled()
   })
@@ -109,5 +111,84 @@ describe('TaskFilesView', () => {
     expect(screen.getByRole('button', { name: 'Retry loading live worktree' })).toBeTruthy()
     expect(screen.queryByText('PROJECT_ONLY.md')).toBeNull()
     expect(projectReadDir).not.toHaveBeenCalled()
+  })
+
+  it('selects a missing live-worktree target without treating its suffix as a path', async () => {
+    taskReadDir
+      .mockResolvedValueOnce([{
+        name: 'docs',
+        path: 'docs',
+        isDir: true,
+        size: null,
+        modifiedAt: null,
+      }])
+      .mockResolvedValueOnce([])
+    taskReadFile.mockRejectedValue(new Error('Live file does not exist'))
+
+    renderTaskFilesView()
+    await waitFor(() => expect(screen.getByText('docs/')).toBeTruthy())
+
+    requestFileReveal('docs/MISSING.md', 'task:task-a', '?plain=1#expected-section')
+
+    expect(await screen.findByText('Live file does not exist')).toBeTruthy()
+    expect(taskReadFile).toHaveBeenCalledWith({ taskId: 'task-a', path: 'docs/MISSING.md' })
+    expect(get(pendingFileReveal)).toBeNull()
+    expect(get(fileBrowserStates).get('task:task-a')).toMatchObject({
+      selectedPath: 'docs/MISSING.md',
+      selectedSuffix: '?plain=1#expected-section',
+    })
+  })
+
+  it('isolates pending reveals and stale file reads across task worktrees', async () => {
+    const readme: FileEntry = {
+      name: 'README.md',
+      path: 'README.md',
+      isDir: false,
+      size: 20,
+      modifiedAt: null,
+    }
+    let resolveTaskA!: (content: { type: 'text'; content: string; mimeType: null; size: number }) => void
+    const taskARead = new Promise<{ type: 'text'; content: string; mimeType: null; size: number }>((resolve) => {
+      resolveTaskA = resolve
+    })
+    taskReadDir.mockResolvedValue([readme])
+    taskReadFile.mockImplementation(({ taskId }: { taskId: string; path: string }) => (
+      taskId === 'task-a'
+        ? taskARead
+        : Promise.resolve({ type: 'text', content: 'Task B live content', mimeType: null, size: 19 })
+    ))
+    const api = makeApi()
+    const view = render(TaskFilesView, {
+      props: { api, context, taskId: 'task-a' },
+    })
+
+    await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy())
+    requestFileReveal('README.md', 'task:task-a', '?plain=1#task-a')
+    await waitFor(() => expect(taskReadFile).toHaveBeenCalledWith({ taskId: 'task-a', path: 'README.md' }))
+
+    const taskBContext = { ...context, taskId: 'task-b' }
+    await view.rerender({ api, context: taskBContext, taskId: 'task-b' })
+    await waitFor(() => expect(taskReadDir).toHaveBeenCalledWith({ taskId: 'task-b', path: null }))
+    requestFileReveal('README.md', 'task:task-b', '?plain=1#task-b')
+
+    expect(await screen.findByText('Task B live content')).toBeTruthy()
+    expect(taskReadFile).toHaveBeenCalledWith({ taskId: 'task-b', path: 'README.md' })
+    expect(get(pendingFileReveal)).toBeNull()
+    expect(get(fileBrowserStates).get('task:task-b')).toMatchObject({
+      selectedPath: 'README.md',
+      selectedSuffix: '?plain=1#task-b',
+      fileContent: { content: 'Task B live content' },
+    })
+
+    resolveTaskA({ type: 'text', content: 'Stale Task A content', mimeType: null, size: 20 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(screen.queryByText('Stale Task A content')).toBeNull()
+    expect(screen.getByText('Task B live content')).toBeTruthy()
+    expect(get(fileBrowserStates).get('task:task-a')).toMatchObject({
+      selectedPath: 'README.md',
+      selectedSuffix: '?plain=1#task-a',
+      fileContent: null,
+    })
   })
 })

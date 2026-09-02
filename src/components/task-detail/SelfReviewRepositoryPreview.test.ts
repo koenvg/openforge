@@ -32,6 +32,7 @@ describe('SelfReviewRepositoryPreview', () => {
   })
 
   it('loads only the repository path and applies the fragment after Markdown mounts', async () => {
+    const onOpenInFiles = vi.fn().mockResolvedValue(true)
     const fetchContent = vi.fn().mockResolvedValue('# Installation\n\nHistorical instructions')
 
     render(SelfReviewRepositoryPreview, {
@@ -43,6 +44,7 @@ describe('SelfReviewRepositoryPreview', () => {
         selectedCommitSha: 'commit-sha',
         fetchContent,
         onOpenRepositoryPath: vi.fn(),
+        onOpenInFiles,
         onClose: vi.fn(),
       },
     })
@@ -51,6 +53,13 @@ describe('SelfReviewRepositoryPreview', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close repository preview' }))
     expect(fetchContent).toHaveBeenCalledWith('docs/SETUP.md')
     expect(screen.getByText(/Previewing commit commit-s/)).toBeTruthy()
+    expect(screen.getByText('Live worktree')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Open docs/SETUP.md in Files' }))
+    expect(onOpenInFiles).toHaveBeenCalledWith({
+      repositoryPath: 'docs/SETUP.md',
+      suffix: '?plain=1#installation',
+    })
+    expect(screen.getByRole('heading', { name: 'Installation' })).toBeTruthy()
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
   })
 

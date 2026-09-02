@@ -4,14 +4,16 @@
   import SelfReviewRepositoryPreview from './SelfReviewRepositoryPreview.svelte'
   import SelfReviewFeedbackPanel from './SelfReviewFeedbackPanel.svelte'
   import type { SelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
 
   interface Props {
     controller: SelfReviewWorkspaceController
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
+    onOpenInFiles: (target: MarkdownRepositoryLinkTarget) => boolean | Promise<boolean>
   }
 
-  let { controller, agentStatus, onSendToAgent }: Props = $props()
+  let { controller, agentStatus, onSendToAgent, onOpenInFiles }: Props = $props()
   let changedFilesPanel = $state<SelfReviewChangedFilesPanel>()
 </script>
 
@@ -35,6 +37,7 @@
           fetchContent={controller.fetchRepositoryFile}
           resolveRepositoryImage={controller.resolveRepositoryImage}
           onOpenRepositoryPath={controller.openRepositoryPath}
+          {onOpenInFiles}
           onClose={controller.closeRepositoryPreview}
         />
       {/if}

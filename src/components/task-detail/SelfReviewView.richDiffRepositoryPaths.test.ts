@@ -3,6 +3,7 @@ import {
 	baseTask,
 	InlineDiffWorker,
 	renderSelfReviewView,
+	revealFileInTaskFiles,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
 import { fireEvent, screen, waitFor } from "@testing-library/svelte";
@@ -24,6 +25,27 @@ describe('SelfReviewView Rich Diff repository paths', () => {
 	beforeEach(() => {
 		globalThis.Worker = InlineDiffWorker as unknown as typeof Worker;
 	});
+
+  it('keeps changed repository link targets in the Review diff', async () => {
+    const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'docs-sha' };
+    const changedTarget: PrFileDiff = { ...baseDiff, filename: 'docs/SETUP.md', sha: 'setup-sha' };
+    vi.mocked(getTaskDiff).mockResolvedValue([markdownFile, changedTarget]);
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([
+      { oldContent: '', newContent: '[Setup](../SETUP.md?plain=1#installation)' },
+      { oldContent: '', newContent: '# Installation\n\nChanged setup content' },
+    ]);
+
+    renderSelfReviewView();
+
+    await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }));
+    await fireEvent.click(await screen.findByRole('link', { name: 'Setup' }));
+
+    expect(screen.queryByRole('region', { name: 'docs/SETUP.md repository preview' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open docs/SETUP.md in Files' })).toBeNull();
+    expect(screen.getAllByTitle('docs/SETUP.md').length).toBeGreaterThan(0);
+    expect(revealFileInTaskFiles).not.toHaveBeenCalled();
+  });
+
   it('opens and closes revision-bound repository previews without replacing Review state', async () => {
     const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/guides/README.md', sha: 'docs-sha' };
     vi.mocked(getTaskDiff).mockResolvedValue([markdownFile]);
@@ -75,6 +97,14 @@ describe('SelfReviewView Rich Diff repository paths', () => {
       true,
     );
 
+    await fireEvent.click(screen.getByRole('button', { name: 'Open docs/SETUP.md in Files' }));
+    expect(revealFileInTaskFiles).toHaveBeenCalledWith(
+      baseTask.id,
+      'docs/SETUP.md',
+      '?plain=1#installation',
+    );
+    expect(screen.getByRole('heading', { name: 'Installation' })).toBeTruthy();
+
     await fireEvent.click(screen.getByRole('button', { name: 'Close repository preview' }));
 
     await waitFor(() => {
@@ -85,6 +115,29 @@ describe('SelfReviewView Rich Diff repository paths', () => {
     expect(screen.getByRole('tree', { name: 'Changed files' })).toBe(changedFilesTree);
     expect(screen.getByLabelText('Include committed changes')).toBe(committedScope);
     expect(screen.getByRole('region', { name: 'Feedback panel' })).toBe(feedbackPanel);
+  });
+
+  it('can open a missing Review link target in live Files for recovery', async () => {
+    const markdownFile: PrFileDiff = { ...baseDiff, filename: 'docs/README.md', sha: 'docs-sha' };
+    vi.mocked(getTaskDiff).mockResolvedValue([markdownFile]);
+    vi.mocked(getTaskBatchFileContents).mockResolvedValue([{
+      oldContent: '',
+      newContent: '[Missing guide](./MISSING.md?plain=1#expected-section)',
+    }]);
+    vi.mocked(getTaskFileContents).mockRejectedValue(new Error('Path does not exist in this revision'));
+
+    renderSelfReviewView();
+
+    await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }));
+    await fireEvent.click(await screen.findByRole('link', { name: 'Missing guide' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Path does not exist in this revision');
+    await fireEvent.click(screen.getByRole('button', { name: 'Open docs/MISSING.md in Files' }));
+    expect(revealFileInTaskFiles).toHaveBeenCalledWith(
+      baseTask.id,
+      'docs/MISSING.md',
+      '?plain=1#expected-section',
+    );
   });
 
   it('loads linked preview content from the selected commit instead of live task content', async () => {
@@ -131,6 +184,11 @@ describe('SelfReviewView Rich Diff repository paths', () => {
       expect.any(Boolean),
       expect.any(Boolean),
     );
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open docs/GUIDE.md in Files' }));
+    expect(revealFileInTaskFiles).toHaveBeenCalledWith(baseTask.id, 'docs/GUIDE.md', '');
+    expect(screen.getByRole('heading', { name: 'Historical guide' })).toBeTruthy();
+    expect(screen.getByText(/Previewing commit commit-s/)).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Close repository preview' }));
     expect(screen.getByText('Show all changes')).toBeTruthy();

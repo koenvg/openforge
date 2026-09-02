@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@lucide/svelte', () => ({
   FolderCog: vi.fn(() => ({})),
+  FolderOpen: vi.fn(() => ({})),
   Search: vi.fn(() => ({})),
   X: vi.fn(() => ({})),
 }))
@@ -20,6 +21,7 @@ describe('FileTreeToolbar', () => {
     render(FileTreeToolbar, {
       props: {
         model: {
+          sourceLabel: null,
           searchQuery: 'readme',
           hiddenRootEntryCount: 3,
           showHiddenRootEntries: false,

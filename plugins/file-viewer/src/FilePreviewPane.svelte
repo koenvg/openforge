@@ -25,6 +25,7 @@
       content={model.fileContent}
       fileName={model.selectedFileName}
       filePath={model.selectedPath}
+      suffix={model.selectedSuffix}
       {workspaceSource}
       error={model.fileError}
       modifiedAt={model.selectedEntry?.modifiedAt ?? null}

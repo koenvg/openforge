@@ -1,6 +1,7 @@
 import type { FileContent, FileEntry } from '@openforge-app/plugin-sdk/domain'
 
 export interface FileTreeToolbarModel {
+  sourceLabel: string | null
   searchQuery: string
   hiddenRootEntryCount: number
   showHiddenRootEntries: boolean
@@ -45,6 +46,7 @@ export interface FileTreeStatesActions {
 
 export interface FilePreviewModel {
   selectedPath: string | null
+  selectedSuffix: string
   selectedEntry: FileEntry | null
   selectedFileName: string
   fileContent: FileContent | null

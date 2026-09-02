@@ -27,6 +27,7 @@
     projectName: string
     projectId: string | null
     workspaceSource?: FileBrowserWorkspaceSource | null
+    sourceLabel?: string | null
     rootErrorTitle?: string
     workspaceLoadingLabel?: string
     rootRetryLabel?: string
@@ -38,6 +39,7 @@
     projectName: _projectName,
     projectId = null,
     workspaceSource = undefined,
+    sourceLabel = null,
     rootErrorTitle = 'Failed to load files',
     workspaceLoadingLabel = 'Loading project files…',
     rootRetryLabel = 'Retry loading project files',
@@ -80,6 +82,7 @@
   const rootEntries = $derived(workspaceState.rootEntries)
   const expandedPaths = $derived(workspaceState.expandedPaths)
   const selectedPath = $derived(workspaceState.selectedPath)
+  const selectedSuffix = $derived(workspaceState.selectedSuffix)
   const fileContent = $derived(workspaceState.fileContent)
   const showHiddenRootEntries = $derived(workspaceState.showHiddenRootEntries)
   const hiddenRootEntryCount = $derived(countDefaultHiddenRootEntries(rootEntries))
@@ -98,6 +101,7 @@
       rootError: rootLoading.rootError,
     },
     toolbar: {
+      sourceLabel,
       searchQuery: fileSearch.query,
       hiddenRootEntryCount,
       showHiddenRootEntries,
@@ -123,6 +127,7 @@
     },
     preview: {
       selectedPath,
+      selectedSuffix,
       selectedEntry,
       selectedFileName,
       fileContent,
