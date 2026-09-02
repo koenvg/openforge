@@ -232,9 +232,21 @@ try {
       if (typeof executableTarget !== 'string' || !executableTarget.endsWith('.js')) return []
       return [`${sourceManifest.name}${exportName === '.' ? '' : exportName.slice(1)}`]
     })
+  const packedSvelteExportSpecifiers = Object.entries(packedManifest.exports)
+    .flatMap(([exportName, target]) => {
+      const svelteTarget = typeof target === 'string' ? target : target?.default
+      if (typeof svelteTarget !== 'string' || !svelteTarget.endsWith('.svelte')) return []
+      return [`${sourceManifest.name}${exportName.slice(1)}`]
+    })
   writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const exportsBySpecifier = new Map(await Promise.all(
     ${JSON.stringify(executableExportSpecifiers)}.map(async specifier => [specifier, await import(specifier)]),
 ))
+for (const specifier of ${JSON.stringify(packedSvelteExportSpecifiers)}) {
+  const resolved = import.meta.resolve(specifier)
+  if (!resolved.startsWith('file:')) {
+    throw new Error(\`Installed Plugin SDK Svelte export did not resolve to a file: \${specifier}\`)
+  }
+}
 const testing = exportsBySpecifier.get('@openforge-app/plugin-sdk/testing')
 const vite = exportsBySpecifier.get('@openforge-app/plugin-sdk/vite')
 if (typeof testing?.createMockOpenForgeApi !== 'function') {

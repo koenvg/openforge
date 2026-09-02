@@ -81,7 +81,13 @@
       "default": "./dist/taskBrowserDevToolsShortcuts.js"
     },
     "./ui/Button.svelte": "./dist/ui/Button.svelte",
+    "./ui/IconButton.svelte": "./dist/ui/IconButton.svelte",
+    "./ui/TextField.svelte": "./dist/ui/TextField.svelte",
+    "./ui/Textarea.svelte": "./dist/ui/Textarea.svelte",
     "./ui/Checkbox.svelte": "./dist/ui/Checkbox.svelte",
+    "./ui/Switch.svelte": "./dist/ui/Switch.svelte",
+    "./ui/Badge.svelte": "./dist/ui/Badge.svelte",
+    "./ui/Panel.svelte": "./dist/ui/Panel.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
