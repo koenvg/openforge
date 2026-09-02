@@ -1,17 +1,17 @@
 import { writePty } from './ipc'
 
 /**
- * `\r` is Enter to the agent CLI; `\n` and `\t` are prompt content.
- * `terminal_follow_up_input` in `src-tauri/src/agent_follow_up.rs` sanitizes the same way.
+ * `\n` and `\t` are prompt content; `\r` would submit the prompt early.
  */
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g
 
+const pasteAndSubmit = (prompt: string): string => `\x1b[200~${prompt}\x1b[201~\r`
+
 /**
- * Enter is a separate write, 50ms later, so the CLI reads the text as a paste
- * and the keystroke as a submit rather than as part of the pasted body.
+ * Pasting rather than typing is what stops the CLI from reading `@`, `/` or Tab inside a
+ * comment body as keystrokes.
  */
 export async function writePtyWithSubmit(taskId: string, text: string): Promise<void> {
-  await writePty(taskId, text.replace(CONTROL_CHARACTERS, ''))
-  await new Promise(resolve => setTimeout(resolve, 50))
-  await writePty(taskId, '\r')
+  const prompt = text.replace(CONTROL_CHARACTERS, '')
+  await writePty(taskId, prompt === '' ? '\r' : pasteAndSubmit(prompt))
 }
