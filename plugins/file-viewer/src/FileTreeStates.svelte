@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import ProjectFileTree from '@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte'
   import type { FileTreeStatesActions, FileTreeStatesModel } from './lib/fileBrowserView'
 
@@ -17,13 +18,14 @@
         <p class="font-medium text-base-content break-all">Unable to load directory {model.directoryError.path}</p>
         <p class="mt-1 text-error break-words">{model.directoryError.message}</p>
       </div>
-      <button
-        class="btn btn-xs btn-outline"
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onclick={() => actions.onRetryDirectoryLoad(model.directoryError?.path ?? '')}
       >
         Retry loading {model.directoryError.path} directory
-      </button>
+      </Button>
     </div>
   </div>
 {/if}
@@ -31,13 +33,14 @@
   <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
     <div class="space-y-2">
       <p class="font-medium text-base-content break-all">Unable to reveal {model.failedRevealPath}</p>
-      <button
-        class="btn btn-xs btn-outline"
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onclick={() => actions.onRetryRevealPath(model.failedRevealPath ?? '')}
       >
         Retry revealing {model.failedRevealPath}
-      </button>
+      </Button>
     </div>
   </div>
 {/if}
@@ -50,9 +53,9 @@
             <p class="font-medium text-base-content">File search failed</p>
             <p class="mt-1 text-error break-words">{model.search.error}</p>
           </div>
-          <button class="btn btn-xs btn-outline" type="button" onclick={actions.onRetrySearch}>
+          <Button variant="outline" size="xs" type="button" onclick={actions.onRetrySearch}>
             Retry file search
-          </button>
+          </Button>
         </div>
       </div>
     {:else if model.search.entries.length > 0}

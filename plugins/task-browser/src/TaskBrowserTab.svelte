@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, ArrowRight, PanelRightOpen, RefreshCw, X } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'
   import type {
     PluginTaskPaneProps,
@@ -232,30 +234,30 @@
     onsubmit={submitAddress}
   >
     <div class="flex shrink-0 items-center gap-0.5">
-      <button
-        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
+      <IconButton
+        label="Go back"
+        size="xs"
         type="button"
-        aria-label="Go back"
         title="Go back"
         disabled={opening || !surfaceState.canGoBack}
         onclick={() => void runSurfaceAction(activeSession => activeSession.goBack())}
       >
         <ArrowLeft size={15} aria-hidden="true" />
-      </button>
-      <button
-        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
+      </IconButton>
+      <IconButton
+        label="Go forward"
+        size="xs"
         type="button"
-        aria-label="Go forward"
         title="Go forward"
         disabled={opening || !surfaceState.canGoForward}
         onclick={() => void runSurfaceAction(activeSession => activeSession.goForward())}
       >
         <ArrowRight size={15} aria-hidden="true" />
-      </button>
-      <button
-        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
+      </IconButton>
+      <IconButton
+        label={surfaceState.loading ? 'Stop loading' : 'Reload page'}
+        size="xs"
         type="button"
-        aria-label={surfaceState.loading ? 'Stop loading' : 'Reload page'}
         title={surfaceState.loading ? 'Stop loading' : 'Reload page'}
         disabled={opening || session === null}
         onclick={() => void runSurfaceAction(activeSession => surfaceState.loading
@@ -267,13 +269,13 @@
         {:else}
           <RefreshCw size={15} aria-hidden="true" />
         {/if}
-      </button>
+      </IconButton>
     </div>
 
     <label class="sr-only" for="task-browser-address">Web address</label>
     <input
       id="task-browser-address"
-      class="input input-bordered h-8 min-h-8 min-w-0 flex-1 rounded-md px-3 font-mono text-xs"
+      class="browser-address-input min-w-0 flex-1"
       type="text"
       inputmode="url"
       autocomplete="off"
@@ -284,22 +286,22 @@
       onfocus={() => { editingAddress = true }}
       onblur={() => { editingAddress = false }}
     />
-    <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="submit" disabled={opening || address.trim().length === 0}>
+    <Button variant="ghost" size="sm" type="submit" disabled={opening || address.trim().length === 0}>
       Go
-    </button>
+    </Button>
 
-    <button
-      class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
-      class:btn-active={surfaceState.devToolsOpen}
+    <IconButton
+      label={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
+      variant={surfaceState.devToolsOpen ? 'primary' : 'ghost'}
+      size="xs"
       type="button"
-      aria-label={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
       aria-pressed={surfaceState.devToolsOpen}
       title={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
       disabled={opening || session === null}
       onclick={() => void runSurfaceAction(setDevToolsOpen)}
     >
-      <PanelRightOpen size={15} aria-hidden="true" /></button>
-
+      <PanelRightOpen size={15} aria-hidden="true" />
+    </IconButton>
     <VisualFeedbackEditor
       available={!opening && session !== null}
       editor={feedbackEditor}
@@ -319,7 +321,7 @@
 
   <div bind:this={browserRegion} class="relative min-h-0 flex-1 overflow-hidden">
     {#if actionError !== null && session !== null}
-      <div class="alert alert-error absolute right-3 top-3 z-20 w-auto max-w-lg py-2 text-sm shadow-sm" aria-live="polite">
+      <div class="absolute right-3 top-3 z-20 w-auto max-w-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error shadow-sm" aria-live="polite">
         <span>{actionError}</span>
       </div>
     {/if}
@@ -333,9 +335,52 @@
         <div class="max-w-md space-y-2">
           <p class="font-medium">Browser unavailable</p>
           <p class="text-sm text-base-content/70">{actionError ?? 'OpenForge could not create the browser surface.'}</p>
-          <button class="btn btn-primary btn-sm" type="button" onclick={retrySurface}>Retry</button>
+          <Button size="sm" type="button" onclick={retrySurface}>Retry</Button>
         </div>
       </div>
     {/if}
   </div>
 </div>
+
+<style>
+  .browser-address-input {
+    box-sizing: border-box;
+    min-height: var(--of-control-height);
+    padding: 0 var(--of-space3);
+    border: var(--of-border-width) solid var(--of-border-interactive);
+    border-radius: var(--of-radius-control);
+    background: var(--of-field);
+    color: var(--of-text);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+    line-height: var(--of-line-height-xs);
+    transition:
+      background-color var(--of-duration-fast) var(--of-ease-standard),
+      border-color var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  .browser-address-input:hover:not(:disabled) {
+    background: var(--of-field-hover);
+  }
+
+  .browser-address-input:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
+  }
+
+  .browser-address-input:disabled {
+    background: var(--of-control-disabled);
+    color: var(--of-control-text-disabled);
+    cursor: not-allowed;
+  }
+
+  .browser-address-input::placeholder {
+    color: var(--of-text-muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .browser-address-input {
+      transition: none;
+    }
+  }
+</style>

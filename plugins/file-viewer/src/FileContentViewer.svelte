@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Archive, CircleAlert, FileQuestion, TriangleAlert } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileContent } from '@openforge-app/plugin-sdk/domain'
   import { getMarkdownRepositoryLinkFragment } from '@openforge-app/plugin-sdk/markdown'
@@ -8,7 +9,6 @@
   import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
   import { onDestroy, tick } from 'svelte'
 
-  const RETURN_TO_TREE_BUTTON_CLASS = 'btn btn-outline btn-sm h-9 min-h-9 shrink-0 px-3 text-xs font-medium'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -162,9 +162,9 @@
         <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
         <p class="text-sm text-base-content/70">Loading {fileName}…</p>
         {#if onReturnFocusToTree}
-          <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
+          <Button class="shrink-0" variant="outline" size="sm" type="button" onclick={() => onReturnFocusToTree?.()}>
             Return focus to selected file in tree
-          </button>
+          </Button>
         {/if}
       </div>
     </div>
@@ -179,14 +179,14 @@
         </div>
         <div class="flex flex-wrap justify-center gap-2">
           {#if onRetryFile}
-            <button class="btn btn-sm btn-outline" type="button" onclick={onRetryFile}>
+            <Button variant="outline" size="sm" type="button" onclick={onRetryFile}>
               Retry loading {fileName}
-            </button>
+            </Button>
           {/if}
           {#if onReturnFocusToTree}
-            <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
+            <Button class="shrink-0" variant="outline" size="sm" type="button" onclick={() => onReturnFocusToTree?.()}>
               Return focus to selected file in tree
-            </button>
+            </Button>
           {/if}
         </div>
       </div>
@@ -211,9 +211,9 @@
             </div>
           </div>
           {#if onReturnFocusToTree}
-            <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
+            <Button class="shrink-0" variant="outline" size="sm" type="button" onclick={() => onReturnFocusToTree?.()}>
               Return focus to selected file in tree
-            </button>
+            </Button>
           {/if}
         </div>
       </div>
