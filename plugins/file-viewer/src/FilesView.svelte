@@ -27,7 +27,6 @@
     projectName: string
     projectId: string | null
     workspaceSource?: FileBrowserWorkspaceSource | null
-    workspaceLabel?: string | null
     rootErrorTitle?: string
     workspaceLoadingLabel?: string
     rootRetryLabel?: string
@@ -39,7 +38,6 @@
     projectName: _projectName,
     projectId = null,
     workspaceSource = undefined,
-    workspaceLabel = null,
     rootErrorTitle = 'Failed to load files',
     workspaceLoadingLabel = 'Loading project files…',
     rootRetryLabel = 'Retry loading project files',
@@ -164,7 +162,6 @@
   <FilesBrowserSection
     {api}
     workspaceSource={source}
-    {workspaceLabel}
     {rootErrorTitle}
     {workspaceLoadingLabel}
     {rootRetryLabel}

@@ -74,7 +74,7 @@ describe('TaskFilesView', () => {
     projectSearchFiles.mockResolvedValue([])
   })
 
-  it('identifies and browses the task live worktree without reading project files', async () => {
+  it('browses the task live worktree without reading project files', async () => {
     const entries: FileEntry[] = [{
       name: 'README.md',
       path: 'README.md',
@@ -86,7 +86,6 @@ describe('TaskFilesView', () => {
 
     renderTaskFilesView()
 
-    expect(screen.getByText('Live worktree')).toBeTruthy()
     expect(screen.getByText('Loading live worktree files…')).toBeTruthy()
     await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy())
     expect(taskReadDir).toHaveBeenCalledWith({ taskId: 'task-a', path: null })

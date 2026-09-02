@@ -11,7 +11,6 @@
   interface Props {
     api: FrontendOpenForgeAPI
     workspaceSource: FileBrowserWorkspaceSource | null
-    workspaceLabel: string | null
     rootErrorTitle: string
     workspaceLoadingLabel: string
     rootRetryLabel: string
@@ -22,7 +21,6 @@
   let {
     api,
     workspaceSource,
-    workspaceLabel,
     rootErrorTitle,
     workspaceLoadingLabel,
     rootRetryLabel,
@@ -32,12 +30,6 @@
 </script>
 
 <div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-base-100">
-  {#if workspaceLabel}
-    <div class="flex h-9 shrink-0 items-center gap-2 border-b border-base-300 bg-base-200/40 px-3 text-xs" aria-label="File source">
-      <span class="text-base-content/50">Source</span>
-      <strong class="font-medium text-base-content/75">{workspaceLabel}</strong>
-    </div>
-  {/if}
 
   <div class="flex flex-1 min-h-0 overflow-hidden">
     {#if !view.workspace.identity}
