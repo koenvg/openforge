@@ -39,8 +39,11 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', MockResizeObserver)
 })
 
-afterEach(() => {
+afterEach(async () => {
   cleanup()
+  // Bits UI restores body scroll in a delayed cleanup. Let that finish while
+  // jsdom's document is still available so the timer cannot leak across files.
+  await new Promise(resolve => setTimeout(resolve, 30))
   vi.unstubAllGlobals()
 })
 
