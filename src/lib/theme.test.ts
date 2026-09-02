@@ -1,7 +1,7 @@
 import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
 import { BUILTIN_DARK_THEME_ID, BUILTIN_LIGHT_THEME_ID, LIGHT_THEME } from './themeContract'
-import { createThemeRuntime, getDiffTheme } from './theme'
+import { createThemeRuntime } from './theme'
 
 function createRuntime(storedTheme: string | null) {
   const root = document.createElement('html')
@@ -78,6 +78,5 @@ describe('theme runtime', () => {
 
     expect(root.dataset.theme).toBe(BUILTIN_DARK_THEME_ID)
     expect(get(runtime.themeMode)).toBe('dark')
-    expect(getDiffTheme('dark')).toBe('dark')
   })
 })

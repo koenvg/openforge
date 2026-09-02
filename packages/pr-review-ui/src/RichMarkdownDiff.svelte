@@ -17,6 +17,7 @@
 
   interface Props {
     file: PrFileDiff
+    appearance?: 'light' | 'dark'
     content: string
     imageBaseUrl: string | null
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
@@ -46,6 +47,7 @@
 
   let {
     file,
+    appearance,
     content,
     imageBaseUrl,
     resolveRepositoryImage,
@@ -154,6 +156,7 @@
   {@const contentWithReferences = document.references ? `${markdownContent}\n\n${document.references}` : markdownContent}
   <MarkdownContent
     content={contentWithReferences}
+    {appearance}
     {imageBaseUrl}
     markdownFilePath={file.filename}
     {resolveRepositoryImage}

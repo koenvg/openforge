@@ -113,7 +113,3 @@ export function applyTheme(mode: ThemeMode): void {
 export function initTheme(): Promise<void> {
   return globalThemeRuntime.initialize()
 }
-
-export function getDiffTheme(mode: ThemeMode): 'light' | 'dark' {
-  return mode
-}

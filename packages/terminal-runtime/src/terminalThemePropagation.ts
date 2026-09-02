@@ -1,10 +1,9 @@
-import { getTerminalTheme, type ThemeMode } from './theme'
 import type { TerminalSessionCoordinator } from './terminalSessionCoordinator'
+import type { TerminalThemeSnapshot } from './theme'
 
 export function applyTerminalTheme(
   coordinators: Iterable<TerminalSessionCoordinator>,
-  mode: ThemeMode,
+  snapshot: TerminalThemeSnapshot,
 ): void {
-  const theme = getTerminalTheme(mode)
-  for (const coordinator of coordinators) coordinator.setTheme(theme)
+  for (const coordinator of coordinators) coordinator.setTheme(snapshot.terminalTheme)
 }

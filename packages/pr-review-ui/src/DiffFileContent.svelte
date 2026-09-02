@@ -168,6 +168,7 @@
     {#if fileContents}
       <RichMarkdownDiff
         {file}
+        appearance={diffViewTheme}
         content={fileContents.newContent}
         imageBaseUrl={githubMarkdownImageBaseUrl}
         {resolveRepositoryImage}

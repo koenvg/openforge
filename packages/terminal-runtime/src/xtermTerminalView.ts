@@ -33,7 +33,11 @@ function createHostDiv(): HTMLDivElement {
 export function createXtermTerminalView(options: XtermTerminalViewOptions): TerminalView {
   const linkOptions = { openLink: options.openLink, loggerName: options.loggerName }
   const terminal = new Terminal({
-    ...getTerminalOptions(options.themeMode, options.fontFamily, options.fontSize),
+    ...getTerminalOptions(
+      options.theme ?? options.appearance ?? options.themeMode ?? 'light',
+      options.fontFamily,
+      options.fontSize,
+    ),
     linkHandler: createTerminalLinkHandler(linkOptions),
   })
   const fitAddon = new FitAddon()

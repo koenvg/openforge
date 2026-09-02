@@ -21,7 +21,7 @@
   import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
   import { getGitHubMarkdownImageBaseUrl, getGitHubMarkdownLinkUrl } from './githubMarkdown'
   import DiffFileSection from './DiffFileSection.svelte'
-  import type { Snippet } from 'svelte'
+  import { onDestroy, type Snippet } from 'svelte'
   interface BaseProps {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
@@ -54,6 +54,7 @@
     getInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side']) => string
     setInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side'], text: string) => void
     clearInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side']) => void
+    appearance?: 'light' | 'dark'
     diffTheme?: 'light' | 'dark'
     reviewedFileShas?: Map<string, string>
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
@@ -72,13 +73,15 @@
     onRemovePendingReply?: (commentId: number) => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
   let mediaRequest = $state<ReviewImageOpenRequest | null>(null)
   let mediaContextKey = $state<string | null>(null)
+  let rootAppearanceRevision = $state(0)
+  let rootAppearanceObserver: MutationObserver | undefined
   const inlineCommentDrafts = createInlineCommentDrafts({
     getPendingComments: () => pendingComments,
     getOnPendingCommentsChange: () => onPendingCommentsChange,
@@ -155,11 +158,30 @@
     getFileReviewIdentity: file => getFileReviewIdentity(file),
     getOnToggleFileReviewed: () => onToggleFileReviewed,
   })
+  $effect(() => {
+    if (rootAppearanceObserver || typeof document === 'undefined' || typeof MutationObserver === 'undefined') return
+    rootAppearanceObserver = new MutationObserver((mutations) => {
+      if (mutations.some(mutation => mutation.attributeName === 'data-theme-appearance')) {
+        rootAppearanceRevision++
+      }
+    })
+    rootAppearanceObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme-appearance'],
+    })
+  })
+
+  onDestroy(() => {
+    rootAppearanceObserver?.disconnect()
+  })
+
   function resolveDiffTheme(): 'light' | 'dark' {
+    void rootAppearanceRevision
+    if (appearance) return appearance
     if (diffTheme) return diffTheme
     if (typeof document !== 'undefined') {
-      const themeName = document.documentElement.getAttribute('data-theme') ?? ''
-      if (themeName.includes('dark')) return 'dark'
+      const rootAppearance = document.documentElement.getAttribute('data-theme-appearance')
+      if (rootAppearance === 'light' || rootAppearance === 'dark') return rootAppearance
     }
     if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
     return 'light'

@@ -4,6 +4,7 @@ import {
   TERMINAL_WEB_FONT_FACES,
   preloadTerminalFonts,
 } from './terminalOptions'
+import { getTerminalThemeSnapshot } from './theme'
 
 describe('terminal font preloading', () => {
   afterEach(() => {
@@ -51,5 +52,20 @@ describe('terminal font preloading', () => {
 
     resolveLoad([{} as FontFace])
     await expect(result.completion).resolves.toEqual({ status: 'ready' })
+  })
+})
+
+describe('terminal theme fallback', () => {
+  it('returns a complete dark presentation without browser theme context', () => {
+    vi.stubGlobal('document', undefined)
+
+    const snapshot = getTerminalThemeSnapshot('dark')
+
+    expect(snapshot.appearance).toBe('dark')
+    expect(snapshot.terminalTheme.background).toBeTruthy()
+    expect(snapshot.terminalTheme.foreground).toBeTruthy()
+    expect(snapshot.terminalTheme.red).toBeTruthy()
+    expect(snapshot.terminalTheme.brightWhite).toBeTruthy()
+    expect(Object.keys(snapshot.terminalTheme)).toHaveLength(22)
   })
 })

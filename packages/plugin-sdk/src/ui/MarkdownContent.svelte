@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { getRenderedMermaidDiagram, getRenderedMermaidSvg, observeMermaidTheme, renderMermaidDiagrams, type RenderedMermaidDiagram } from '../mermaid'
+  import { getRenderedMermaidDiagram, getRenderedMermaidSvg, observeMermaidTheme, renderMermaidDiagrams, type RenderedMermaidDiagram, type ThemeAppearance } from '../mermaid'
   import MermaidDiagramPreview from './MermaidDiagramPreview.svelte'
   import {
     MARKDOWN_REMOTE_MEDIA_ATTRIBUTE,
@@ -18,6 +18,7 @@
 
   interface Props {
     content: string
+    appearance?: ThemeAppearance
     imageBaseUrl?: string | null
     markdownFilePath?: string | null
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
@@ -29,6 +30,7 @@
 
   let {
     content,
+    appearance,
     imageBaseUrl = null,
     markdownFilePath = null,
     resolveRepositoryImage,
@@ -161,9 +163,10 @@
     const runId = ++mermaidRenderId
     void html
     void mermaidThemeRevision
+    void appearance
     if (!root) return
 
-    void renderMermaidDiagrams(root, () => runId === mermaidRenderId).then(() => {
+    void renderMermaidDiagrams(root, () => runId === mermaidRenderId, appearance).then(() => {
       if (runId === mermaidRenderId) synchronizeActiveMermaidDiagram()
     })
   })

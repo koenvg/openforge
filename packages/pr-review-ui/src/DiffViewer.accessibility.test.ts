@@ -21,10 +21,14 @@ vi.mock('./useVirtualizer.svelte', () => ({
   })),
 }))
 
-vi.mock('./useDiffWorker.svelte', () => ({
-  createDiffWorker: vi.fn(() => ({
+const { createDiffWorkerMock } = vi.hoisted(() => ({
+  createDiffWorkerMock: vi.fn((_deps: { getDiffTheme: () => 'light' | 'dark' }) => ({
     getDiffFile: () => null,
   })),
+}))
+
+vi.mock('./useDiffWorker.svelte', () => ({
+  createDiffWorker: createDiffWorkerMock,
 }))
 
 const files: PrFileDiff[] = [
@@ -47,6 +51,7 @@ describe('DiffViewer accessibility', () => {
     // Line wrapping now defaults to on and persists to localStorage; clear it so the
     // toolbar starts from the default in each test.
     localStorage.clear()
+    createDiffWorkerMock.mockClear()
   })
 
   it('names toolbar icon controls and exposes pressed/expanded state', async () => {
@@ -76,6 +81,22 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Previous search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Next search match' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close diff search' })).toBeTruthy()
+  })
+
+  it('uses explicit appearance instead of theme identifier text without recreating its worker', async () => {
+    document.documentElement.dataset.theme = 'vendor:dark-on-paper'
+    document.documentElement.dataset.themeAppearance = 'light'
+    const { rerender } = render(DiffViewer, { props: { files, appearance: 'light' } })
+    const workerDependencies = createDiffWorkerMock.mock.calls[0][0]
+
+    expect(workerDependencies.getDiffTheme()).toBe('light')
+    expect(createDiffWorkerMock).toHaveBeenCalledTimes(1)
+
+    document.documentElement.dataset.theme = 'vendor:midnight'
+    await rerender({ files, appearance: 'dark' })
+
+    expect(workerDependencies.getDiffTheme()).toBe('dark')
+    expect(createDiffWorkerMock).toHaveBeenCalledTimes(1)
   })
 
   it('Shift+Tab in the diff scroll area requests focus back on the file tree', async () => {

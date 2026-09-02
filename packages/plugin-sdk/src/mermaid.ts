@@ -27,9 +27,15 @@ function loadMermaid(): Promise<MermaidApi> {
   return import('mermaid').then(module => module.default)
 }
 
-export function resolveMermaidTheme(doc: Document = document): MermaidTheme {
-  const themeName = doc.documentElement.getAttribute('data-theme')
-  if (themeName) return themeName.includes('dark') ? 'dark' : 'default'
+export type ThemeAppearance = 'light' | 'dark'
+
+export function resolveMermaidTheme(
+  doc: Document = document,
+  appearance?: ThemeAppearance,
+): MermaidTheme {
+  const explicitAppearance = appearance ?? doc.documentElement.getAttribute('data-theme-appearance')
+  if (explicitAppearance === 'dark') return 'dark'
+  if (explicitAppearance === 'light') return 'default'
 
   if (doc.defaultView?.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
   return 'default'
@@ -201,11 +207,12 @@ function showRenderedDiagram(wrapper: HTMLDivElement, fallback: HTMLPreElement, 
 export async function renderMermaidDiagrams(
   root: HTMLElement,
   isCurrent: () => boolean = () => true,
+  appearance?: ThemeAppearance,
 ): Promise<void> {
   const diagrams = Array.from(root.querySelectorAll<HTMLElement>(MERMAID_CODE_SELECTOR))
     .map(prepareDiagram)
     .filter((diagram): diagram is NonNullable<typeof diagram> => diagram !== null)
-  const theme = resolveMermaidTheme(root.ownerDocument)
+  const theme = resolveMermaidTheme(root.ownerDocument, appearance)
 
   await Promise.all(diagrams.map(async ({ wrapper, source, fallback }) => {
     clearRenderedDiagram(wrapper, fallback)
@@ -230,9 +237,9 @@ export function observeMermaidTheme(doc: Document, onChange: () => void): () => 
     const listeners = new Set<() => void>()
     const notify = () => listeners.forEach(listener => listener())
     const observer = new MutationObserver((mutations) => {
-      if (mutations.some(mutation => mutation.attributeName === 'data-theme')) notify()
+      if (mutations.some(mutation => mutation.attributeName === 'data-theme-appearance')) notify()
     })
-    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme-appearance'] })
 
     const media = doc.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')
     media?.addEventListener?.('change', notify)

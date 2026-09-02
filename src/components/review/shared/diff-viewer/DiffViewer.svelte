@@ -5,7 +5,7 @@
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
   import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
-  import { getDiffTheme, themeMode } from '../../../../lib/theme'
+  import { selectedTheme } from '../../../../lib/theme'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import type { OpenReviewImage } from '@openforge-app/pr-review-ui/reviewImages'
   import type { Snippet } from 'svelte'
@@ -162,5 +162,5 @@
   getInlineDraft={getSelfReviewInlineCommentDraft}
   setInlineDraft={setSelfReviewInlineCommentDraft}
   clearInlineDraft={clearSelfReviewInlineCommentDraft}
-  diffTheme={getDiffTheme($themeMode)}
+  appearance={$selectedTheme.appearance}
 />

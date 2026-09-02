@@ -2,6 +2,7 @@
   import SdkMarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { openUrl } from '../../../lib/ipc'
+  import { selectedTheme } from '../../../lib/theme'
   import type { ResolvedMarkdownMedia } from '../../../lib/markdown'
 
   interface Props {
@@ -26,6 +27,7 @@
 
 <SdkMarkdownContent
   {content}
+  appearance={$selectedTheme.appearance}
   {imageBaseUrl}
   {markdownFilePath}
   {resolveRepositoryImage}
