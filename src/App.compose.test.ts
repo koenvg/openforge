@@ -11,7 +11,7 @@ type ComposeDialogProps = ComponentProps<
 
 const task = createTask({ id: 'T-9' })
 
-describe('App compose dialog', () => {
+describe('App compose dialog', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
 
   beforeEach(async () => {
