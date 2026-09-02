@@ -46,14 +46,17 @@ export async function resetSettingsViewPluginTest() {
     { clearComponentRegistry },
     { enabledPluginIds, installedPlugins, runtimeContributionSources },
     { clearProjectDashboardProviderIds },
+    { clearTaskDetailProviderIds },
   ] = await Promise.all([
     import('../../lib/plugin/componentRegistry'),
     import('../../lib/plugin/pluginStore'),
     import('../../lib/plugin/projectDashboardProviders'),
+    import('../../lib/plugin/taskDetailProviders'),
   ])
   installedPlugins.set(new Map())
   enabledPluginIds.set(new Set())
   runtimeContributionSources.set(new Map())
   clearComponentRegistry()
   clearProjectDashboardProviderIds()
+  clearTaskDetailProviderIds()
 }

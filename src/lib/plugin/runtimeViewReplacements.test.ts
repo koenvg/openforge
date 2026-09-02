@@ -6,6 +6,7 @@ import { getRegisteredRenderableComponent } from './componentRegistry'
 import { applyRuntimeSnapshotContributions, clearPluginRuntimeContributions } from './pluginRuntimeContributions'
 
 const Dashboard = vi.fn() as never
+const TaskWorkspace = vi.fn() as never
 const AdditiveView = vi.fn() as never
 
 function metadata(requires: OpenForgePackageMetadata['requires'] = ['viewReplacements']): OpenForgePackageMetadata {
@@ -58,6 +59,25 @@ describe('runtime project dashboard replacements', () => {
     ])
   })
 
+  it('registers task detail as the second typed replacement target', () => {
+    const registry = makeRegistry()
+    registry.getFrontendApi().viewReplacements.register({
+      id: 'task-workspace',
+      target: 'task.detail',
+      title: 'Task workspace',
+      component: TaskWorkspace,
+    })
+
+    expect(registry.getSnapshot().views).toEqual([])
+    expect(registry.getSnapshot().viewReplacements).toMatchObject([{
+      id: 'task-workspace',
+      qualifiedId: 'dashboard-plugin.task-workspace',
+      target: 'task.detail',
+      title: 'Task workspace',
+    }])
+  })
+
+
   it('rejects missing capability, duplicate claims, invalid metadata, and unsupported targets', () => {
     expect(() => makeRegistry([]).getFrontendApi().viewReplacements.register({
       id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left', component: Dashboard,
@@ -76,8 +96,8 @@ describe('runtime project dashboard replacements', () => {
       ...registration, id: 'invalid-icon', icon: '',
     })).toThrow(/icon/i)
     expect(() => makeRegistry().getFrontendApi().viewReplacements.register({
-      ...registration, id: 'unsupported', target: 'task.detail' as never,
-    })).toThrow(/unsupported target.*task\.detail/i)
+      ...registration, id: 'unsupported', target: 'settings.main' as never,
+    })).toThrow(/unsupported target.*settings\.main/i)
   })
 
   it('rolls back earlier frontend contributions when replacement activation fails', async () => {

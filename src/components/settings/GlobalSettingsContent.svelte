@@ -10,6 +10,13 @@
     loadGlobalProjectDashboardProviderId,
     setGlobalProjectDashboardProviderId,
   } from '../../lib/plugin/projectDashboardProviders'
+  import {
+    globalTaskDetailProviderId,
+    globalTaskDetailProviderLoaded,
+    isTaskDetailProviderAvailable,
+    loadGlobalTaskDetailProviderId,
+    setGlobalTaskDetailProviderId,
+  } from '../../lib/plugin/taskDetailProviders'
   import { error } from '../../lib/stores'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
@@ -29,12 +36,16 @@
 
   let { activeSection, controller }: Props = $props()
 
-  let dashboardProviders = $derived(resolveContributions(
+  let replacementProviders = $derived(resolveContributions(
     Array.from($enabledPluginIds)
       .map(pluginId => $runtimeContributionSources.get(pluginId))
       .filter(source => source !== undefined),
-  ).viewReplacements.filter(
+  ).viewReplacements)
+  let dashboardProviders = $derived(replacementProviders.filter(
     provider => isProjectDashboardProviderAvailable(provider, $installedPlugins),
+  ))
+  let taskDetailProviders = $derived(replacementProviders.filter(
+    provider => isTaskDetailProviderAvailable(provider, $installedPlugins),
   ))
 
   $effect(() => {
@@ -43,11 +54,25 @@
         error.set(value instanceof Error ? value.message : String(value))
       })
     }
+    if (!$globalTaskDetailProviderLoaded) {
+      void loadGlobalTaskDetailProviderId().catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
   })
 
   async function handleDashboardProviderChange(providerId: string): Promise<void> {
     try {
       await setGlobalProjectDashboardProviderId(providerId)
+    } catch (value) {
+      error.set(value instanceof Error ? value.message : String(value))
+      throw value
+    }
+  }
+
+  async function handleTaskDetailProviderChange(providerId: string): Promise<void> {
+    try {
+      await setGlobalTaskDetailProviderId(providerId)
     } catch (value) {
       error.set(value instanceof Error ? value.message : String(value))
       throw value
@@ -128,6 +153,14 @@
     providers={dashboardProviders}
     disabled={!$globalProjectDashboardProviderLoaded}
     onProviderChange={handleDashboardProviderChange}
+  />
+  <SettingsDashboardProviderCard
+    scope="global"
+    target="task.detail"
+    selectedProviderId={$globalTaskDetailProviderId}
+    providers={taskDetailProviders}
+    disabled={!$globalTaskDetailProviderLoaded}
+    onProviderChange={handleTaskDetailProviderChange}
   />
   <GlobalPluginSettingsPanel
     activeProjectId={controller.projectId}

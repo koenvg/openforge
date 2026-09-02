@@ -35,7 +35,7 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       id: replacement.id,
       target: replacement.target,
       title: replacement.title,
-      icon: replacement.icon,
+      ...(replacement.target === 'project.dashboard' ? { icon: replacement.icon } : {}),
     })),
     taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
       id: tab.id,

@@ -3,6 +3,7 @@ import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
 import { deleteProject, setProjectConfig } from '../../lib/ipc'
 import { loadEnabledForProject } from '../../lib/plugin/pluginRegistry'
 import { reloadProjectDashboardProviderId } from '../../lib/plugin/projectDashboardProviders'
+import { reloadProjectTaskDetailProviderId } from '../../lib/plugin/taskDetailProviders'
 import { loadProjectHierarchyOverrides, loadProjectSettings } from '../../lib/settingsConfig'
 import type { ProjectSettingsConfig } from '../../lib/settingsConfig'
 import { getProjectIdentity, mergeUpdatedProject, resetProjectAndReload, resetProjectSettingAndReload } from '../../lib/settingsProjectSync'
@@ -150,6 +151,7 @@ export function createSettingsProjectController(options: SettingsProjectControll
           reloadSettings(projectId),
           loadEnabledForProject(projectId),
           reloadProjectDashboardProviderId(projectId),
+          reloadProjectTaskDetailProviderId(projectId),
         ])
       })
     } catch (value) {

@@ -163,24 +163,25 @@ export class TestingFrontendContributionFake {
     if (!this.services.packageMetadata.requires?.includes('viewReplacements')) {
       throw new Error('viewReplacements registration requires the viewReplacements capability')
     }
-    if (registration?.target !== 'project.dashboard') {
-      throw new Error(`viewReplacements registration has unsupported target "${String(registration?.target)}"`)
+    const target = (registration as { target?: unknown } | null)?.target
+    if (target !== 'project.dashboard' && target !== 'task.detail') {
+      throw new Error(`viewReplacements registration has unsupported target "${String(target)}"`)
     }
     const qualifiedId = this.services.localQualifiedId('viewReplacements', registration.id)
     assertTitle('viewReplacements', registration.title)
     assertFunction('viewReplacements', 'component', registration.component)
-    const icon = sanitizePluginIcon(registration.icon)
     this.services.claims.claim('viewReplacements', qualifiedId)
 
-    const contribution: TestingViewReplacementContribution = {
-      ...registration,
+    const identity = {
       id: registration.id.trim(),
       title: registration.title.trim(),
-      icon,
       qualifiedId,
       pluginId: this.services.pluginId,
       projectId: this.services.projectId,
     }
+    const contribution: TestingViewReplacementContribution = registration.target === 'project.dashboard'
+      ? { ...registration, ...identity, icon: sanitizePluginIcon(registration.icon) }
+      : { ...registration, ...identity }
     this.viewReplacements.set(qualifiedId, contribution)
 
     return createDisposable(() => {
