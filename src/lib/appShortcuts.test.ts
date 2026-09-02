@@ -39,6 +39,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      toggleZenMode: vi.fn(),
     })
 
     const definitionKeys = APP_SHORTCUT_DEFINITIONS.flatMap((definition) =>
@@ -95,6 +96,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard,
       navigateToGlobalSettings,
       cycleActiveProject,
+      toggleZenMode: vi.fn(),
     })
 
     handlers.get('?')?.()
@@ -151,6 +153,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      toggleZenMode: vi.fn(),
     })
 
     handlers.get('⌃tab')?.()
@@ -183,6 +186,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      toggleZenMode: vi.fn(),
     })
 
     handlers.get('⌘e')?.()
@@ -210,6 +214,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      toggleZenMode: vi.fn(),
     })
 
     expect(handlers.has('⌘⇧a')).toBe(false)
@@ -217,6 +222,37 @@ describe('registerAppShortcuts', () => {
 
   it('advertises the left-hand chord as the primary attention overview shortcut', () => {
     expect(getPrimaryAppShortcutKey('attention-overview')).toBe('⌘E')
+  })
+
+  it('routes every zen mode chord (⌘./⌃. and the left-hand ⌘G/⌃G) to the toggle', () => {
+    const { registry, handlers } = createRegistry()
+    const toggleZenMode = vi.fn()
+
+    registerAppShortcuts(registry, {
+      showShortcuts: vi.fn(),
+      openActionPalette: vi.fn(),
+      toggleAttentionOverview: vi.fn(),
+      toggleProjectSwitcher: vi.fn(),
+      toggleSidebar: vi.fn(),
+      openNewTaskDialog: vi.fn(),
+      goBack: vi.fn(),
+      navigateForward: vi.fn(),
+      toggleVoiceRecording: vi.fn(),
+      toggleCommandPalette: vi.fn(),
+      toggleFileQuickOpen: vi.fn(),
+      canToggleFileQuickOpen: () => true,
+      resetToBoard: vi.fn(),
+      navigateToGlobalSettings: vi.fn(),
+      cycleActiveProject: vi.fn(),
+      toggleZenMode,
+    })
+
+    handlers.get('⌘.')?.()
+    handlers.get('⌃.')?.()
+    handlers.get('⌘g')?.()
+    handlers.get('⌃g')?.()
+
+    expect(toggleZenMode).toHaveBeenCalledTimes(4)
   })
 
   it('does not toggle file quick open while modal state blocks it', () => {
@@ -239,6 +275,7 @@ describe('registerAppShortcuts', () => {
       resetToBoard: vi.fn(),
       navigateToGlobalSettings: vi.fn(),
       cycleActiveProject: vi.fn(),
+      toggleZenMode: vi.fn(),
     })
 
     handlers.get('⌘p')?.()

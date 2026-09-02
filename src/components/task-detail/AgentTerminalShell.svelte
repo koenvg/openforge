@@ -137,7 +137,7 @@
     </div>
   {/if}
 
-  <div class="relative min-h-0 flex-1 overflow-hidden rounded-md border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
+  <div class="agent-terminal-surface relative min-h-0 flex-1 overflow-hidden rounded-md border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
     <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
     {#if !session && !terminalActive}
       <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4 p-16 pointer-events-none" style="background: var(--of-agent-terminal-bg); color: var(--of-agent-terminal-text)">

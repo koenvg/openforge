@@ -18,6 +18,7 @@ export interface AppShortcutHandlers {
   resetToBoard(): void
   navigateToGlobalSettings(): void
   cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }): void
+  toggleZenMode(): void
 }
 
 function runAppShortcutAction(action: AppShortcutAction, handlers: AppShortcutHandlers): void {
@@ -74,6 +75,9 @@ function runAppShortcutAction(action: AppShortcutAction, handlers: AppShortcutHa
       break
     case 'cycleNextProject':
       handlers.cycleActiveProject('next')
+      break
+    case 'toggleZenMode':
+      handlers.toggleZenMode()
       break
   }
 }

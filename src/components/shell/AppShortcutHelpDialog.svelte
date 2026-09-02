@@ -80,6 +80,10 @@
               <span class="text-sm text-base-content">Agent / Review / Terminal (if available)</span>
               <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
             </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-base-content">Zen mode</span>
+              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘.</kbd><kbd class="kbd kbd-sm">⌘G</kbd></div>
+            </div>
           </div>
         </div>
       {/if}

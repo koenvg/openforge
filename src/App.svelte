@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { tasks, taskDetailsById, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { tasks, taskDetailsById, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys, taskActiveView } from './lib/stores'
+  import { zenMode, isZenActive, canToggleZenMode } from './lib/zenMode'
   import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
@@ -78,6 +79,14 @@
     selectedTaskRecord
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+  // Chrome is stripped only while the open task's agent tab is showing; switching
+  // tabs (⌘2/⌘3) drops the effect without clearing the flag. See lib/zenMode.ts.
+  let zenActive = $derived(isZenActive({
+    zenMode: $zenMode,
+    currentView: $currentView,
+    selectedTaskId: $selectedTaskId,
+    activeView: ($selectedTaskId ? ($taskActiveView.get($selectedTaskId) ?? 'agent') : 'agent'),
+  }))
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
       .map((id) => $runtimeContributionSources.get(id))
@@ -282,6 +291,11 @@
       resetToBoard: () => { router.resetToBoard() },
       navigateToGlobalSettings: () => { navigation.navigate('global_settings') },
       cycleActiveProject: (direction, options) => { void navigation.cycleActiveProject(direction, options) },
+      toggleZenMode: () => {
+        if (canToggleZenMode({ currentView: $currentView, selectedTaskId: $selectedTaskId })) {
+          zenMode.update((on) => !on)
+        }
+      },
     },
   })
 
@@ -304,19 +318,21 @@
   inert={!appReady}
   data-app-ready={appReady}
 >
-  <AppSidebar
-    collapsed={appSidebarCollapsed}
-    currentView={$currentView}
-    {appMode}
-    onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
-    onNewProject={() => showProjectSetup = true}
-    onNavigate={navigation.navigate}
-    onSelectProject={navigation.switchToProject}
-    onOpenAttentionOverview={() => { showAttentionOverview = true }}
-    pluginNavItems={sidebarPluginNavItems}
-    reviewRequestCount={$reviewRequestCount}
-  />
-  {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
+  {#if !zenActive}
+    <AppSidebar
+      collapsed={appSidebarCollapsed}
+      currentView={$currentView}
+      {appMode}
+      onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
+      onNewProject={() => showProjectSetup = true}
+      onNavigate={navigation.navigate}
+      onSelectProject={navigation.switchToProject}
+      onOpenAttentionOverview={() => { showAttentionOverview = true }}
+      pluginNavItems={sidebarPluginNavItems}
+      reviewRequestCount={$reviewRequestCount}
+    />
+  {/if}
+  {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet) && !zenActive}
     <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 

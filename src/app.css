@@ -692,6 +692,41 @@
   animation: gradient-shift 4s ease infinite;
 }
 
+/* Zen mode backdrop: pale, slowly drifting cloud of soft radial blobs. The blur is
+   painted once and only the transform animates (compositor-cheap); the global
+   prefers-reduced-motion block above freezes it. */
+@keyframes zen-cloud-drift {
+  0%   { transform: translate3d(-9%, -6%, 0) scale(1.05) rotate(-5deg); }
+  50%  { transform: translate3d(9%, 7%, 0) scale(1.28) rotate(7deg); }
+  100% { transform: translate3d(-5%, 9%, 0) scale(1.12) rotate(-3deg); }
+}
+.zen-cloud-backdrop {
+  position: relative;
+  background-color: #eef4fc;
+}
+.zen-cloud-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(32% 42% at 28% 30%, rgba(176, 206, 255, 0.55), transparent 70%),
+    radial-gradient(30% 38% at 72% 24%, rgba(208, 198, 255, 0.42), transparent 70%),
+    radial-gradient(38% 44% at 66% 76%, rgba(194, 229, 255, 0.5), transparent 72%),
+    radial-gradient(34% 40% at 24% 80%, rgba(255, 226, 214, 0.3), transparent 70%);
+  filter: blur(24px);
+  animation: zen-cloud-drift 17s ease-in-out infinite alternate;
+  will-change: transform;
+}
+/* Lift the terminal card off the cloud so it reads as floating. */
+.zen-cloud-backdrop .agent-terminal-surface {
+  box-shadow:
+    0 22px 55px -22px rgba(37, 62, 120, 0.42),
+    0 8px 22px -14px rgba(37, 62, 120, 0.28);
+  transition: box-shadow 0.5s ease;
+}
+
 .shell-terminal-wrapper .xterm,
 .shell-terminal-wrapper .xterm-viewport,
 .shell-terminal-wrapper .xterm-screen {
