@@ -2,7 +2,8 @@ import { fromStore } from 'svelte/store'
 import { filterTasks, getFilterCounts, taskMatchesTextFilter } from '../../lib/boardFilters'
 import type { BoardFilter } from '../../lib/boardFilters'
 import { getProjectTaskLabels } from '../../lib/ipc'
-import { backlogLabelFilters, focusBoardFilters } from '../../lib/stores'
+import { backlogLabelFilters, backlogReadyFilters, focusBoardFilters } from '../../lib/stores'
+import { getReadyToStartTaskIds } from '../../lib/taskDependencies'
 import { sortBySessionActivity } from '../../lib/taskSort'
 import {
   getBacklogLabelCounts,
@@ -11,12 +12,13 @@ import {
   pruneSelectedBacklogLabelIds,
   taskMatchesAnySelectedLabel,
 } from '../../lib/taskLabels'
-import type { AgentSession, TaskDetail, TaskLabel } from '../../lib/types'
+import type { AgentSession, TaskDetail, TaskLabel, TaskReference } from '../../lib/types'
 
 export interface FocusBoardFilterControllerOptions {
   getProjectId: () => string | null
   getTasks: () => TaskDetail[]
   getTasksWithReadyAttentionMetadata: () => TaskDetail[]
+  getDependencyResolutionTasks: () => Array<TaskDetail | TaskReference>
   getActiveSessions: () => Map<string, AgentSession>
   getAttentionTaskIds: () => ReadonlySet<string>
   getAttentionOrder: () => ReadonlyMap<string, number>
@@ -26,6 +28,7 @@ export interface FocusBoardFilterControllerOptions {
 export function createFocusBoardFilterController(options: FocusBoardFilterControllerOptions) {
   const focusFiltersState = fromStore(focusBoardFilters)
   const backlogLabelFiltersState = fromStore(backlogLabelFilters)
+  const backlogReadyFiltersState = fromStore(backlogReadyFilters)
 
   let projectLabels = $state<TaskLabel[]>([])
   let fallbackFilter = $state<BoardFilter>('focus')
@@ -46,6 +49,16 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     return backlogLabelFiltersState.current.get(projectId) ?? new Set<number>()
   })
 
+  const readyOnly = $derived.by(() => {
+    const projectId = options.getProjectId()
+    return projectId ? backlogReadyFiltersState.current.get(projectId) ?? false : false
+  })
+
+  const backlogTasks = $derived.by(() => options.getTasks().filter((task) => task.status === 'backlog'))
+  const readyTaskIds = $derived.by(() =>
+    getReadyToStartTaskIds(backlogTasks, options.getDependencyResolutionTasks()),
+  )
+
   const visibleTasks = $derived.by(() => {
     const tasks = options.getTasks()
     const tasksToFilter = activeFilter === 'backlog'
@@ -57,9 +70,12 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
       options.getAttentionTaskIds(),
       options.getOutOfFocusTaskIds(),
     )
-    const labelFiltered = activeFilter === 'backlog'
-      ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
+    const readinessFiltered = activeFilter === 'backlog' && readyOnly
+      ? filtered.filter((task) => readyTaskIds.has(task.id))
       : filtered
+    const labelFiltered = activeFilter === 'backlog'
+      ? readinessFiltered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
+      : readinessFiltered
     const textFiltered = labelFiltered.filter((task) => taskMatchesTextFilter(task, textFilterQuery))
 
     if (activeFilter === 'focus') {
@@ -77,6 +93,8 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     options.getAttentionTaskIds(),
     options.getOutOfFocusTaskIds(),
   ))
+
+  const readyCount = $derived(readyTaskIds.size)
 
   const displayProjectLabels = $derived.by(() => {
     const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
@@ -100,6 +118,16 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     focusBoardFilters.set(nextFilters)
   }
 
+  function toggleReadyFilter(): void {
+    const projectId = options.getProjectId()
+    if (!projectId) return
+
+    const nextFilters = new Map(backlogReadyFiltersState.current)
+    if (readyOnly) nextFilters.delete(projectId)
+    else nextFilters.set(projectId, true)
+    backlogReadyFilters.set(nextFilters)
+  }
+
   function toggleLabelFilter(labelId: number): void {
     const projectId = options.getProjectId()
     if (!projectId) return
@@ -119,6 +147,7 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     const isInitialProject = previousProjectId === undefined
     if (!isInitialProject && currentProjectId !== previousProjectId) {
       backlogLabelFilters.set(new Map())
+      backlogReadyFilters.set(new Map())
       textFilterQuery = ''
     }
     previousProjectId = currentProjectId
@@ -157,6 +186,8 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
 
   return {
     get activeFilter() { return activeFilter },
+    get readyOnly() { return readyOnly },
+    get readyCount() { return readyCount },
     get selectedLabelIds() { return selectedLabelIds },
     get visibleTasks() { return visibleTasks },
     get filterCounts() { return filterCounts },
@@ -165,6 +196,7 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     get textFilterQuery() { return textFilterQuery },
     set textFilterQuery(value: string) { textFilterQuery = value },
     setActiveFilter,
+    toggleReadyFilter,
     toggleLabelFilter,
   }
 }

@@ -14,6 +14,7 @@ import { computeTaskState } from '../../lib/taskState'
 import { getTaskReasonText } from '../../lib/taskStatePresentation'
 import {
   backlogLabelFilters,
+  backlogReadyFilters,
   commandHeld,
   focusBoardFilters,
   lastViewedTaskId,
@@ -219,6 +220,7 @@ export async function resetFocusBoardTestState() {
   focusBoardFilters.set(new Map())
   outOfFocusTaskIdsByProject.set(new Map())
   backlogLabelFilters.set(new Map())
+  backlogReadyFilters.set(new Map())
   lastViewedTaskId.set(null)
   taskStore.set([])
 }

@@ -70,8 +70,27 @@ export function getTaskDependentSummaries(
     })
 }
 
+function hasNoUnfinishedDependencies(
+  task: TaskDetail,
+  tasksById: ReadonlyMap<string, TaskRelationshipTask>,
+): boolean {
+  return task.dependsOn.every((dependencyId) => tasksById.get(dependencyId)?.status === 'done')
+}
+
 export function getWaitingDependencyCount(task: TaskDetail, allTasks: TaskRelationshipTask[]): number {
   return getTaskDependencySummaries(task, allTasks).filter((dependency) => dependency.status !== 'done').length
+}
+
+export function isTaskReadyToStart(task: TaskDetail, allTasks: TaskRelationshipTask[]): boolean {
+  return hasNoUnfinishedDependencies(task, new Map(allTasks.map((knownTask) => [knownTask.id, knownTask])))
+}
+
+export function getReadyToStartTaskIds(
+  tasks: TaskDetail[],
+  dependencyResolutionTasks: TaskRelationshipTask[],
+): Set<string> {
+  const tasksById = new Map(dependencyResolutionTasks.map((task) => [task.id, task]))
+  return new Set(tasks.filter((task) => hasNoUnfinishedDependencies(task, tasksById)).map((task) => task.id))
 }
 
 export function getDependentReadinessLabel(dependent: TaskDependentSummary, longForm = false): string {
