@@ -73,6 +73,7 @@ function launcherDependencies(overrides = {}) {
     prepareElectronDevCargoEnv: vi.fn(async env => env),
     waitForVite: vi.fn(async () => undefined),
     waitForExit: vi.fn(async () => undefined),
+    cleanupDevProcesses: vi.fn(async () => ({ processes: [], runtimeDirs: [] })),
     resolveRustSidecarLayout: () => testLayout,
     repoRoot: () => '/repo/openforge',
     logger: vi.fn(),
