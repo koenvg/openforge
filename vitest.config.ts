@@ -44,11 +44,9 @@ export default defineConfig({
         test: {
           name: 'renderer',
           environment: 'jsdom',
-          // The task-detail/SelfReviewView Svelte/jsdom suites can leave the default
-          // worker pool waiting on teardown in some local runs. Forked workers finish
-          // these suites reliably and keep `pnpm test` aligned with the known-good
-          // `pnpm exec vitest --pool=forks` path.
-          pool: 'forks',
+          // Threads avoid paying process startup and module import costs for each renderer suite.
+          // The global worker cap leaves enough CPU for async jsdom timers.
+          pool: 'threads',
           globals: true,
           setupFiles: ['src/test-setup.ts'],
           include: ['src/**/*.test.ts', WORKSPACE_TEST_SUITE_GLOB],

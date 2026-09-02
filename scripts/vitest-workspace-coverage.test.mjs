@@ -87,4 +87,22 @@ describe('root Vitest workspace coverage', () => {
   it('reserves worker headroom for async test timers during full-suite runs', () => {
     expect(vitestConfig.test?.maxWorkers).toBe('60%')
   })
+
+  it('runs every renderer suite in the thread pool', async () => {
+    const projects = vitestConfig.test?.projects ?? []
+    const rendererProject = projects.find((project) => project.test?.name === 'renderer')
+    const selfReviewSuites = (await findTestSuites(resolve(REPOSITORY_ROOT, 'src/components/task-detail')))
+      .filter((suitePath) => suitePath.includes('/SelfReviewView'))
+
+    expect(rendererProject?.test?.pool).toBe('threads')
+    expect(selfReviewSuites).not.toEqual([])
+
+    for (const suitePath of selfReviewSuites) {
+      const coveringProjects = projects
+        .filter((project) => projectIncludes(project, suitePath))
+        .map((project) => project.test?.name)
+
+      expect(coveringProjects).toEqual(['renderer'])
+    }
+  })
 })
