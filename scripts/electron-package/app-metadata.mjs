@@ -55,7 +55,9 @@ export function updatePlistBooleanValue(plist, key, value) {
   const boolTag = value ? 'true' : 'false'
   const pattern = new RegExp(`(<key>${escapeRegExp(key)}</key>\\s*)<(true|false)\\s*/>`)
   if (!pattern.test(plist)) {
-    return plist.replace('</dict>', `\n\t<key>${key}</key>\n\t<${boolTag}/>\n</dict>`)
+    const rootDictionaryEnd = plist.lastIndexOf('</dict>')
+    if (rootDictionaryEnd === -1) return plist
+    return `${plist.slice(0, rootDictionaryEnd)}\n\t<key>${key}</key>\n\t<${boolTag}/>\n${plist.slice(rootDictionaryEnd)}`
   }
   return plist.replace(pattern, `$1<${boolTag}/>`)
 }
