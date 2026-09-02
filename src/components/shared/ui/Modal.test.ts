@@ -146,7 +146,7 @@ describe('Modal', () => {
     opener.remove()
   })
 
-  it('does not override focus deliberately moved outside before unmounting', async () => {
+  it('contains programmatic focus while mounted and restores focus when unmounted', async () => {
     const opener = document.createElement('button')
     const destination = document.createElement('button')
     document.body.append(opener, destination)
@@ -154,10 +154,13 @@ describe('Modal', () => {
 
     const view = render(ModalTestWrapper, { props: { onClose: vi.fn() } })
     await tick()
-    destination.focus()
-    view.unmount()
+    const dialog = screen.getByRole('dialog')
 
-    expect(document.activeElement).toBe(destination)
+    destination.focus()
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    view.unmount()
+    expect(document.activeElement).toBe(opener)
     opener.remove()
     destination.remove()
   })
