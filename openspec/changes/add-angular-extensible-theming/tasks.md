@@ -31,11 +31,11 @@
 
 ## 4. Theme-sensitive package integration
 
-- [ ] 4.1 Add failing Mermaid theme tests where appearance disagrees with the identifier text, then replace identifier substring inspection with explicit appearance input or the root appearance attribute; verify `packages/plugin-sdk` Mermaid tests pass.
-- [ ] 4.2 Add failing PR diff tests for explicit appearance updates, then pass selected appearance into diff workers and mounted viewers without relying on `data-theme` naming; verify `packages/pr-review-ui` and renderer diff tests pass.
-- [ ] 4.3 Add failing terminal-runtime tests for a selected presentation snapshot, custom terminal tokens, reactive theme changes, and non-browser fallbacks; verify the focused terminal suites fail first.
-- [ ] 4.4 Replace the terminal runtime's duplicate theme mode and palette selection with the host-provided appearance and terminal token snapshot while retaining isolated package fallbacks; verify terminal unit and integration tests pass.
-- [ ] 4.5 Wire Markdown previews, Mermaid previews, diffs, and terminal sessions to the selected-theme snapshot and test that a custom dark id without `dark` updates every mounted consumer correctly.
+- [x] 4.1 Add failing Mermaid theme tests where appearance disagrees with the identifier text, then replace identifier substring inspection with explicit appearance input or the root appearance attribute; verify `packages/plugin-sdk` Mermaid tests pass.
+- [x] 4.2 Add failing PR diff tests for explicit appearance updates, then pass selected appearance into diff workers and mounted viewers without relying on `data-theme` naming; verify `packages/pr-review-ui` and renderer diff tests pass.
+- [x] 4.3 Add failing terminal-runtime tests for a selected presentation snapshot, custom terminal tokens, reactive theme changes, and non-browser fallbacks; verify the focused terminal suites fail first.
+- [x] 4.4 Replace the terminal runtime's duplicate theme mode and palette selection with the host-provided appearance and terminal token snapshot while retaining isolated package fallbacks; verify terminal unit and integration tests pass.
+- [x] 4.5 Wire Markdown previews, Mermaid previews, diffs, and terminal sessions to the selected-theme snapshot and test that a custom dark id without `dark` updates every mounted consumer correctly.
 
 ## 5. Trusted Plugin theme contributions
 

@@ -178,4 +178,34 @@ describe('createDiffWorker', () => {
     expect(workerState.getDiffFile('src/example.ts')).toBe(latestDiffFile)
     cleanup()
   })
+
+  it('reprocesses mounted diff files for appearance changes without recreating the worker', async () => {
+    globalThis.Worker = QueuedWorker as unknown as typeof Worker
+    let appearance = $state<'light' | 'dark'>('light')
+    let workerState!: DiffWorkerState
+
+    const cleanup = $effect.root(() => {
+      workerState = createDiffWorker({
+        getFiles: () => [fileWithPatch],
+        getFileContentsMap: () => new Map(),
+        getDiffTheme: () => appearance,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const worker = QueuedWorker.instances[0]
+    expect(QueuedWorker.instances).toHaveLength(1)
+    expect(worker.messages).toHaveLength(1)
+    expect(worker.messages[0].theme).toBe('light')
+
+    appearance = 'dark'
+    flushSync()
+
+    expect(QueuedWorker.instances).toHaveLength(1)
+    expect(worker.messages).toHaveLength(2)
+    expect(worker.messages[1].theme).toBe('dark')
+    expect(workerState.getDiffFile(fileWithPatch.filename)).toBeUndefined()
+    cleanup()
+  })
+
 })

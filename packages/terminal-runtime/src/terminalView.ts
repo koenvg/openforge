@@ -136,6 +136,8 @@ export interface TerminalView {
 
 export interface TerminalViewFactoryOptions {
   terminalKey: string
+  appearance?: ThemeMode
+  theme?: TerminalViewTheme
   themeMode: ThemeMode
   fontFamily?: string
   fontSize?: number

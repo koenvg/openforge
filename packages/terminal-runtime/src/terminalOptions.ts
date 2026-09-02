@@ -1,4 +1,5 @@
 import type { ITerminalOptions } from '@xterm/xterm'
+import type { TerminalViewTheme } from './terminalView'
 import type { ThemeMode } from './theme'
 import { getTerminalTheme } from './theme'
 
@@ -73,13 +74,13 @@ export async function preloadTerminalFonts(): Promise<TerminalFontReadiness> {
  * These options are shared across all terminal instances in the application
  * to ensure consistent font, sizing, behavior, and theming.
  *
- * @param themeMode The current theme mode ('light' or 'dark')
+ * @param themeOrAppearance An explicit terminal palette or standalone light/dark fallback
  * @param fontFamily Font family stack to use; defaults to TERMINAL_FONT_FAMILY
  * @param fontSize Font size in pixels; defaults to TERMINAL_FONT_SIZE
  * @returns Terminal options compatible with xterm's ITerminalOptions interface
  */
 export function getTerminalOptions(
-  themeMode: ThemeMode,
+  themeOrAppearance: TerminalViewTheme | ThemeMode,
   fontFamily: string = TERMINAL_FONT_FAMILY,
   fontSize: number = TERMINAL_FONT_SIZE,
 ): ITerminalOptions {
@@ -94,7 +95,9 @@ export function getTerminalOptions(
     cursorStyle: 'block',
     scrollback: 10000,
     minimumContrastRatio: 4.5,
-    theme: getTerminalTheme(themeMode),
+    theme: typeof themeOrAppearance === 'string'
+      ? getTerminalTheme(themeOrAppearance)
+      : themeOrAppearance,
     allowProposedApi: true,
   }
 }

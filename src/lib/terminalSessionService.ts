@@ -1,3 +1,4 @@
+import { derived } from 'svelte/store'
 import {
   createTerminalRuntime,
   createTerminalSessionService,
@@ -19,7 +20,8 @@ import {
 } from './ipc'
 import { terminalFontFamily } from './terminalFont'
 import { terminalFontSize } from './terminalFontSize'
-import { themeMode } from './theme'
+import { selectedTheme } from './theme'
+import { createTerminalThemeSnapshot } from './terminalThemePresentation'
 
 const transport = createDesktopTerminalTransport({
   listenEvent: (eventName, handler) => listenDesktopEvent(
@@ -31,10 +33,12 @@ const transport = createDesktopTerminalTransport({
   resizePty,
 }, { afterReadReplay: checkpointTerminalAuthorityRead })
 
+const terminalThemePresentation = derived(selectedTheme, createTerminalThemeSnapshot)
+
 const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
   sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
   openLink: url => openUrl(url),
-  themeMode,
+  themePresentation: terminalThemePresentation,
   fontFamily: terminalFontFamily,
   fontSize: terminalFontSize,
   loggerName: 'terminalSessionService',

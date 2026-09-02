@@ -77,7 +77,11 @@ export {
 } from './terminalOptions'
 export {
   getTerminalTheme,
+  getTerminalThemeSnapshot,
   themeMode,
+  themePresentation,
+  type TerminalThemePalette,
+  type TerminalThemeSnapshot,
   type ThemeMode,
 } from './theme'
 export {

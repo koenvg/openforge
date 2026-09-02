@@ -13,6 +13,7 @@ describe('MarkdownContent', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     document.documentElement.dataset.theme = 'openforge'
+    document.documentElement.dataset.themeAppearance = 'light'
     mermaid.render.mockResolvedValue({
       svg: '<svg role="img" aria-label="Rendered diagram" style="fill:rgb(1, 2, 3);background-image:url(https://attacker.invalid/pixel)" onload="alert(1)"><style>.node{fill:url(https://attacker.invalid/pixel);stroke:#123}.label{fill:#456}</style><script>alert(1)</script><text>Safe diagram</text></svg>',
     })
@@ -167,13 +168,34 @@ describe('MarkdownContent', () => {
     }
   })
 
+  it('uses explicit appearance instead of theme identifier text and updates while mounted', async () => {
+    document.documentElement.dataset.theme = 'vendor:dark-on-paper'
+    const content = '```mermaid\ngraph TD\n  Explicit --> Appearance\n```'
+    const { rerender } = render(MarkdownContent, {
+      props: { content, appearance: 'dark' },
+    })
+
+    await waitFor(() => {
+      expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }))
+      expect(mermaid.render).toHaveBeenCalledTimes(1)
+    })
+
+    await rerender({ content, appearance: 'light' })
+
+    await waitFor(() => {
+      expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'default' }))
+      expect(mermaid.render).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('rerenders Mermaid diagrams when the application theme changes', async () => {
+    document.documentElement.dataset.theme = 'vendor:midnight'
     render(MarkdownContent, {
       props: { content: '```mermaid\nsequenceDiagram\n  A->>B: Hello\n```' },
     })
 
     await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(1))
-    document.documentElement.dataset.theme = 'openforge-dark'
+    document.documentElement.dataset.themeAppearance = 'dark'
 
     await waitFor(() => {
       expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' }))
@@ -211,7 +233,7 @@ describe('MarkdownContent', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
     expect(screen.getByRole('dialog', { name: 'Mermaid diagram preview' }).textContent).toContain('Light preview')
 
-    document.documentElement.dataset.theme = 'openforge-dark'
+    document.documentElement.dataset.themeAppearance = 'dark'
 
     await waitFor(() => {
       const dialog = screen.getByRole('dialog', { name: 'Mermaid diagram preview' })
@@ -249,7 +271,7 @@ describe('MarkdownContent', () => {
     })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Expand Mermaid diagram' }))
-    document.documentElement.dataset.theme = 'openforge-dark'
+    document.documentElement.dataset.themeAppearance = 'dark'
     await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(2))
 
     try {

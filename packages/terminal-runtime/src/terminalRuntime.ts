@@ -1,4 +1,4 @@
-import { get, readable } from 'svelte/store'
+import { derived, get, readable } from 'svelte/store'
 import { createTerminalAcquisition } from './terminalAcquisition'
 import { isValidTerminalDimensions } from './terminalGeometry'
 import { preloadTerminalFonts, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, type TerminalFontReadiness } from './terminalOptions'
@@ -21,7 +21,7 @@ import { applyTerminalFontSize } from './terminalFontSizePropagation'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import type { TerminalViewFactory } from './terminalView'
 import { createXtermTerminalView } from './xtermTerminalView'
-import { themeMode as defaultThemeMode } from './theme'
+import { getTerminalThemeSnapshot, themePresentation as defaultThemePresentation } from './theme'
 
 export type { TerminalOutputObservation } from './terminalOutputObservation'
 export type { TerminalImageProtocol } from './terminalImages'
@@ -83,7 +83,8 @@ export function createTerminalRuntime({
   createTerminalView = createXtermTerminalView,
   beforeSessionStart,
 }: TerminalRuntimeOptions) {
-  const activeThemeMode = environment.themeMode ?? defaultThemeMode
+  const activeThemePresentation = environment.themePresentation
+    ?? (environment.themeMode ? derived(environment.themeMode, getTerminalThemeSnapshot) : defaultThemePresentation)
   const activeFontFamily = environment.fontFamily ?? readable(TERMINAL_FONT_FAMILY)
   const activeFontSize = environment.fontSize ?? readable(TERMINAL_FONT_SIZE)
   const coordinators = new Map<string, TerminalSessionCoordinator>()
@@ -98,11 +99,14 @@ export function createTerminalRuntime({
       renderer: 'xterm' as const,
       enableImages: environment.enableImages,
     }
+    const themeSnapshot = get(activeThemePresentation)
     const coordinator = createTerminalSessionCoordinator({
       shellSessionKey,
       view: createTerminalView({
         terminalKey: shellSessionKey,
-        themeMode: get(activeThemeMode),
+        appearance: themeSnapshot.appearance,
+        themeMode: themeSnapshot.appearance,
+        theme: themeSnapshot.terminalTheme,
         fontFamily: get(activeFontFamily),
         fontSize: get(activeFontSize),
         openLink: url => environment.openLink(url),
@@ -148,8 +152,8 @@ export function createTerminalRuntime({
     reconnectReplay,
   })
 
-  const unsubscribeThemeMode = activeThemeMode.subscribe(mode => {
-    applyTerminalTheme(coordinators.values(), mode)
+  const unsubscribeThemePresentation = activeThemePresentation.subscribe(snapshot => {
+    applyTerminalTheme(coordinators.values(), snapshot)
   })
   const unsubscribeFontFamily = activeFontFamily.subscribe(fontFamily => {
     applyTerminalFont(coordinators.values(), fontFamily)
@@ -194,7 +198,7 @@ export function createTerminalRuntime({
       disposalError ??= error
     }
     try {
-      unsubscribeThemeMode()
+      unsubscribeThemePresentation()
     } catch (error) {
       disposalError ??= error
     }

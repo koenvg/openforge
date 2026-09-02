@@ -3,7 +3,7 @@ import type { LiveModelOutputSubscriptionSnapshot } from './liveModelOutputSubsc
 import type { TerminalImageProtocol } from './terminalImages'
 import type { TerminalOutputObservation } from './terminalOutputObservation'
 import type { TerminalPerformanceTrace } from './terminalPerformanceTrace'
-import type { ThemeMode } from './theme'
+import type { TerminalThemeSnapshot, ThemeMode } from './theme'
 import type { TerminalGeometry } from './terminalTransport'
 import type {
   TerminalViewPresentationEvidence,
@@ -22,6 +22,7 @@ export interface TerminalSessionConfiguration {
 export interface TerminalRuntimeEnvironment {
   openLink(url: string): Promise<void>
   sampleSessionConfiguration?(shellSessionKey: string): TerminalSessionConfiguration
+  themePresentation?: Readable<TerminalThemeSnapshot>
   themeMode?: Readable<ThemeMode>
   fontFamily?: Readable<string>
   fontSize?: Readable<number>

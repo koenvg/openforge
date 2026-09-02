@@ -1,66 +1,15 @@
+import { derived, writable, type Readable } from 'svelte/store'
 import type { TerminalViewTheme } from './terminalView'
-import { writable } from 'svelte/store'
 
 export type ThemeMode = 'light' | 'dark'
+export type TerminalThemePalette = Readonly<Required<TerminalViewTheme>>
 
-export const themeMode = writable<ThemeMode>('light')
-
-const THEME_NAMES: Record<ThemeMode, string> = {
-  light: 'openforge',
-  dark: 'openforge-dark',
+export interface TerminalThemeSnapshot {
+  readonly appearance: ThemeMode
+  readonly terminalTheme: TerminalThemePalette
 }
 
-type TerminalThemeKey =
-  | 'background'
-  | 'foreground'
-  | 'cursor'
-  | 'cursorAccent'
-  | 'selectionBackground'
-  | 'selectionForeground'
-  | 'black'
-  | 'red'
-  | 'green'
-  | 'yellow'
-  | 'blue'
-  | 'magenta'
-  | 'cyan'
-  | 'white'
-  | 'brightBlack'
-  | 'brightRed'
-  | 'brightGreen'
-  | 'brightYellow'
-  | 'brightBlue'
-  | 'brightMagenta'
-  | 'brightCyan'
-  | 'brightWhite'
-
-const TERMINAL_THEME_VARIABLES = {
-  background: '--term-background',
-  foreground: '--term-foreground',
-  cursor: '--term-cursor',
-  cursorAccent: '--term-cursor-accent',
-  selectionBackground: '--term-selection-background',
-  selectionForeground: '--term-selection-foreground',
-  black: '--term-black',
-  red: '--term-red',
-  green: '--term-green',
-  yellow: '--term-yellow',
-  blue: '--term-blue',
-  magenta: '--term-magenta',
-  cyan: '--term-cyan',
-  white: '--term-white',
-  brightBlack: '--term-bright-black',
-  brightRed: '--term-bright-red',
-  brightGreen: '--term-bright-green',
-  brightYellow: '--term-bright-yellow',
-  brightBlue: '--term-bright-blue',
-  brightMagenta: '--term-bright-magenta',
-  brightCyan: '--term-bright-cyan',
-  brightWhite: '--term-bright-white',
-} as const satisfies Record<TerminalThemeKey, string>
-
-// Light terminal palette follows GitHub Light Default's Ghostty-compatible colors.
-const TERMINAL_THEME_FALLBACKS: Record<ThemeMode, Record<TerminalThemeKey, string>> = {
+const TERMINAL_THEME_FALLBACKS = {
   light: {
     background: '#FFFFFF',
     foreground: '#1F2328',
@@ -109,38 +58,30 @@ const TERMINAL_THEME_FALLBACKS: Record<ThemeMode, Record<TerminalThemeKey, strin
     brightCyan: '#67E8F9',
     brightWhite: '#E8E4EE',
   },
+} as const satisfies Record<ThemeMode, TerminalThemePalette>
+
+const TERMINAL_THEME_SNAPSHOTS: Readonly<Record<ThemeMode, TerminalThemeSnapshot>> = Object.freeze({
+  light: Object.freeze({
+    appearance: 'light',
+    terminalTheme: Object.freeze({ ...TERMINAL_THEME_FALLBACKS.light }),
+  }),
+  dark: Object.freeze({
+    appearance: 'dark',
+    terminalTheme: Object.freeze({ ...TERMINAL_THEME_FALLBACKS.dark }),
+  }),
+})
+
+export function getTerminalThemeSnapshot(appearance: ThemeMode): TerminalThemeSnapshot {
+  return TERMINAL_THEME_SNAPSHOTS[appearance]
 }
 
-function buildTerminalTheme(values: Record<TerminalThemeKey, string>): TerminalViewTheme {
-  return { ...values }
+/** Compatibility helper for standalone consumers that only select light or dark. */
+export function getTerminalTheme(appearance: ThemeMode): TerminalViewTheme {
+  return getTerminalThemeSnapshot(appearance).terminalTheme
 }
 
-function resolveTerminalTheme(mode: ThemeMode): Record<TerminalThemeKey, string> {
-  const fallback = TERMINAL_THEME_FALLBACKS[mode]
-
-  if (typeof document === 'undefined' || !document.body) {
-    return fallback
-  }
-
-  const temp = document.createElement('div')
-  temp.setAttribute('data-theme', THEME_NAMES[mode])
-  temp.style.display = 'none'
-  document.body.appendChild(temp)
-
-  try {
-    const styles = getComputedStyle(temp)
-
-    return Object.fromEntries(
-      Object.entries(TERMINAL_THEME_VARIABLES).map(([key, variableName]) => [
-        key,
-        styles.getPropertyValue(variableName).trim() || fallback[key as TerminalThemeKey],
-      ])
-    ) as Record<TerminalThemeKey, string>
-  } finally {
-    document.body.removeChild(temp)
-  }
-}
-
-export function getTerminalTheme(mode: ThemeMode): TerminalViewTheme {
-  return buildTerminalTheme(resolveTerminalTheme(mode))
-}
+export const themeMode = writable<ThemeMode>('light')
+export const themePresentation: Readable<TerminalThemeSnapshot> = derived(
+  themeMode,
+  getTerminalThemeSnapshot,
+)
