@@ -263,6 +263,9 @@ describe('pluginRegistry frontend runtime', () => {
     await expect(props.api.system.writeClipboardText('Reviewer brief')).rejects.toThrow(
       'OpenForge frontend runtime API is unavailable for plugin missing-plugin: system.writeClipboardText'
     )
+    expect(() => props.api.themes.register({} as never)).toThrow(
+      'OpenForge frontend runtime API is unavailable for plugin missing-plugin: themes.register',
+    )
     await props.api.system.openUrl('https://example.com/plugin')
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
   })

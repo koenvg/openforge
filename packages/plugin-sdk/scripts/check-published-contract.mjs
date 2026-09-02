@@ -54,7 +54,7 @@ const hostCapabilityReleases = [
   },
   {
     version: '0.3.0',
-    capabilities: ['viewReplacements'],
+    capabilities: ['viewReplacements', 'themes'],
   },
 ]
 

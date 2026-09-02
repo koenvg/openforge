@@ -59,6 +59,11 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: ${capability}`,
     )
   }
+  const unavailableSync = (capability: string) => () => {
+    throw new Error(
+      `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: ${capability}`,
+    )
+  }
   const unavailableStorageScope = (scope: string) => ({
     get: unavailable(`${scope}.get`),
     set: unavailable(`${scope}.set`),
@@ -175,6 +180,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     reviewUI: { registerRowAction: () => ({ dispose: () => undefined }) },
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
+    themes: { register: unavailableSync('themes.register') },
     injectionPoints: { register: () => ({ dispose: () => undefined }) },
     taskStart: { registerPrefixProvider: () => ({ dispose: () => undefined }) },
     backend: {

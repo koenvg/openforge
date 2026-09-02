@@ -60,6 +60,30 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('appEnablement')
   })
 
+  it('accepts themes only for app-enabled frontend plugins', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      enablement: 'app',
+      requires: ['appEnablement', 'themes'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('themes')
+
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      requires: ['themes'],
+    }))).toContainEqual({
+      path: 'enablement',
+      message: 'themes capability requires app enablement',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      enablement: 'app',
+      frontend: undefined,
+      frontendStyles: undefined,
+      requires: ['appEnablement', 'themes'],
+    }))).toContainEqual({
+      path: 'requires',
+      message: 'themes capability requires a frontend entry',
+    })
+  })
+
   it('rejects invalid enablement values and app enablement without capability gating', () => {
     expect(validateOpenForgePackageMetadata(validMetadata({ enablement: 'workspace' }))).toContainEqual({
       path: 'enablement',
@@ -243,7 +267,7 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.dependentRequired).toEqual({ frontendStyles: ['frontend'] })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.allOf).toContainEqual({
       if: {
-        properties: { requires: { contains: { enum: ['browserSurfaces', 'viewReplacements'] } } },
+        properties: { requires: { contains: { enum: ['browserSurfaces', 'viewReplacements', 'themes'] } } },
         required: ['requires'],
       },
       then: { required: ['frontend'] },

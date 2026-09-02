@@ -4,6 +4,7 @@ import {
   type AgentSessionsAPI,
   type ListAgentSessionsRequest,
   OPENFORGE_PLUGIN_API_VERSION,
+  THEME_TOKEN_NAMES,
   type AgentCommandMetadata,
   type CommandRegistration,
   type OpenForgePackageMetadata,
@@ -27,6 +28,7 @@ import {
   type PluginProjectDashboardReplacementProps,
   type PluginTaskDetailReplacementRegistration,
   type PluginTaskDetailReplacementProps,
+  type PluginThemeDefinition,
   type PluginViewRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import {
@@ -124,7 +126,7 @@ const appPackageMetadata = {
   description: 'Exercises app-level custom sidebar navigation.',
   enablement: 'app',
   frontend: './frontend.js',
-  requires: ['views', 'viewReplacements', 'appEnablement', 'customSidebarNavigation'],
+  requires: ['views', 'viewReplacements', 'appEnablement', 'customSidebarNavigation', 'themes'],
 } satisfies OpenForgePackageMetadata
 
 const registry = createOpenForgeRegistryFake({
@@ -133,6 +135,14 @@ const registry = createOpenForgeRegistryFake({
   taskId: invocation.taskId,
   packageMetadata: appPackageMetadata,
 })
+const themeDefinition = {
+  id: 'paper',
+  label: 'Paper',
+  appearance: 'light',
+  tokens: Object.fromEntries(THEME_TOKEN_NAMES.map(token => [token, `var(--contract-${token})`])),
+} as PluginThemeDefinition
+const themeRegistration = registry.frontendApi.themes.register(themeDefinition)
+void themeRegistration.dispose()
 void registry.frontendApi.agentSessions.list(listAgentSessionsRequest)
 void registry.backendApi.agentSessions.list(listAgentSessionsRequest)
 void registry.backendApi.commands.register(registration)

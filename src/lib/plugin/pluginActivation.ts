@@ -135,6 +135,7 @@ async function activateFrontendRuntimePlugin(
       setPluginRuntimeState(pluginId, 'installed', null)
       return false
     }
+    runtimeRegistry.commitFrontendThemes(activationGeneration)
     activeRuntimeRegistries.set(pluginId, runtimeRegistry)
     setPluginRuntimeState(pluginId, 'active', null)
     return true

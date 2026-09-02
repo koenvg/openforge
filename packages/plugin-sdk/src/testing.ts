@@ -30,6 +30,7 @@ export type {
   TestingRuntimeKind,
   TestingRuntimeScope,
   TestingSettingsSectionContribution,
+  TestingThemeContribution,
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,

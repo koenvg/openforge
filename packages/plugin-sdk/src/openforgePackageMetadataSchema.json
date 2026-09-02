@@ -13,7 +13,7 @@
     {
       "if": {
         "properties": {
-          "requires": { "contains": { "enum": ["browserSurfaces", "viewReplacements"] } }
+          "requires": { "contains": { "enum": ["browserSurfaces", "viewReplacements", "themes"] } }
         },
         "required": ["requires"]
       },
@@ -29,6 +29,20 @@
           "requires": { "contains": { "const": "appEnablement" } }
         },
         "required": ["requires"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "requires": { "contains": { "const": "themes" } }
+        },
+        "required": ["requires"]
+      },
+      "then": {
+        "properties": {
+          "enablement": { "const": "app" }
+        },
+        "required": ["enablement"]
       }
     }
   ],
@@ -131,7 +145,8 @@
           "browserSurfaces",
           "appEnablement",
           "customSidebarNavigation",
-          "reviewUI"
+          "reviewUI",
+          "themes"
         ]
       }
     }

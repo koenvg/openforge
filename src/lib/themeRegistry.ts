@@ -35,6 +35,10 @@ export interface ThemeRegistration {
   dispose(): Promise<void>
 }
 
+
+export interface ThemeBatchRegistration extends ThemeRegistration {
+  disposeTheme(themeId: string): Promise<void>
+}
 interface ThemeRegistryOptions {
   applyTheme?: (theme: RegisteredTheme) => void | Promise<void>
   persistSelection?: (themeId: string) => void | Promise<void>
@@ -107,47 +111,67 @@ export function createThemeRegistry(options: ThemeRegistryOptions = {}) {
     })
   }
 
+  function registerContributedThemes(
+    definitions: readonly ThemeDefinition[],
+    owner: PluginThemeOwner,
+  ): ThemeBatchRegistration {
+    const registeredById = new Map<string, RegisteredTheme>()
+    for (const definition of definitions) {
+      if (!definition.id.startsWith(`${owner.pluginId}:`)) {
+        throw new Error(`Contributed theme id must be qualified by ${owner.pluginId}`)
+      }
+      if (registeredById.has(definition.id) || themesById.has(definition.id)) {
+        throw new Error(`Theme id already registered: ${definition.id}`)
+      }
+      registeredById.set(definition.id, asRegisteredTheme(definition, {
+        kind: 'plugin',
+        pluginId: owner.pluginId,
+        generation: owner.generation,
+      }))
+    }
+
+    for (const registered of registeredById.values()) {
+      themesById.set(registered.id, registered)
+    }
+    if (registeredById.size > 0) publish(get(snapshotStore).selectedTheme)
+
+    function disposeIds(themeIds: readonly string[]): Promise<void> {
+      return enqueue(async () => {
+        const current = get(snapshotStore)
+        const registrations = themeIds
+          .map(themeId => registeredById.get(themeId))
+          .filter((theme): theme is RegisteredTheme => theme !== undefined)
+        const selectedRemoved = registrations.some(theme => current.selectedTheme === theme)
+
+        if (selectedRemoved) await options.applyTheme?.(fallbackTheme)
+        let changed = false
+        for (const registered of registrations) {
+          if (themesById.get(registered.id) !== registered) continue
+          themesById.delete(registered.id)
+          changed = true
+        }
+        if (!changed) return
+
+        const selected = selectedRemoved ? fallbackTheme : current.selectedTheme
+        publish(selected)
+        if (selectedRemoved) {
+          reportUnavailable(current.selectedTheme.id, 'unregistered')
+          await options.persistSelection?.(fallbackTheme.id)
+        }
+      })
+    }
+
+    return Object.freeze({
+      dispose: () => disposeIds(Array.from(registeredById.keys())),
+      disposeTheme: (themeId: string) => disposeIds([themeId]),
+    })
+  }
+
   function registerContributedTheme(
     definition: ThemeDefinition,
     owner: PluginThemeOwner,
   ): ThemeRegistration {
-    if (!definition.id.startsWith(`${owner.pluginId}:`)) {
-      throw new Error(`Contributed theme id must be qualified by ${owner.pluginId}`)
-    }
-    if (themesById.has(definition.id)) {
-      throw new Error(`Theme id already registered: ${definition.id}`)
-    }
-
-    const registered = asRegisteredTheme(definition, {
-      kind: 'plugin',
-      pluginId: owner.pluginId,
-      generation: owner.generation,
-    })
-    themesById.set(registered.id, registered)
-    publish(get(snapshotStore).selectedTheme)
-    let disposed = false
-
-    return Object.freeze({
-      dispose(): Promise<void> {
-        if (disposed) return Promise.resolve()
-        disposed = true
-        return enqueue(async () => {
-          if (themesById.get(registered.id) !== registered) return
-          const current = get(snapshotStore)
-          if (current.selectedTheme !== registered) {
-            themesById.delete(registered.id)
-            publish(current.selectedTheme)
-            return
-          }
-
-          await options.applyTheme?.(fallbackTheme)
-          themesById.delete(registered.id)
-          publish(fallbackTheme)
-          reportUnavailable(registered.id, 'unregistered')
-          await options.persistSelection?.(fallbackTheme.id)
-        })
-      },
-    })
+    return registerContributedThemes([definition], owner)
   }
 
   const snapshot: Readable<ThemeRegistrySnapshot> = { subscribe: snapshotStore.subscribe }
@@ -160,6 +184,7 @@ export function createThemeRegistry(options: ThemeRegistryOptions = {}) {
     selectedTheme,
     selectTheme,
     registerContributedTheme,
+    registerContributedThemes,
   })
 }
 

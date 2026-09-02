@@ -27,6 +27,7 @@ import type {
   FrontendPlugin,
   FrontendPluginContext,
   FrontendSettingsRegistry,
+  FrontendThemeRegistry,
   FrontendTaskPaneRegistry,
   FrontendInjectionPointRegistry,
   FrontendTaskStartRegistry,
@@ -70,6 +71,8 @@ import type {
   TerminalImageProtocol,
   TerminalViewSnapshot,
 } from './types.js'
+
+import type { PluginThemeDefinition, ThemeAppearance, ThemeTokenName, ThemeTokens } from './themes.js'
 
 export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
 
@@ -118,6 +121,7 @@ export type {
   FrontendPlugin,
   FrontendPluginContext,
   FrontendSettingsRegistry,
+  FrontendThemeRegistry,
   FrontendTaskPaneRegistry,
   FrontendInjectionPointRegistry,
   FrontendTaskStartRegistry,
@@ -160,4 +164,8 @@ export type {
   PtyBufferState,
   TerminalImageProtocol,
   TerminalViewSnapshot,
+  PluginThemeDefinition,
+  ThemeAppearance,
+  ThemeTokenName,
+  ThemeTokens,
 }
