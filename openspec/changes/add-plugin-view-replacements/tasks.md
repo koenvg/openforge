@@ -26,10 +26,10 @@
 
 ## 5. Task detail replacement
 
-- [ ] 5.1 Add failing SDK and component tests for typed task detail props, related-task data, `on`-prefixed edit, actions, refresh, and task-navigation callbacks; verify the tests fail before implementation.
-- [ ] 5.2 Implement the host-owned task detail wrapper, target-specific render props, and local core fallback for load and render failures; verify focused task replacement tests pass.
-- [ ] 5.3 Integrate task provider resolution into the selected-task branch without changing selected-task or route ownership; verify existing `TaskDetailView` navigation, edit, action, and refresh tests remain green.
-- [ ] 5.4 Add lifecycle tests that switch task, project, provider, plugin enablement, and route while a replacement is mounted; verify teardown follows logical identity and does not release or duplicate host-owned terminal, agent-session, or browser resources.
+- [x] 5.1 Add failing SDK and component tests for typed task detail props, related-task data, `on`-prefixed edit, actions, refresh, and task-navigation callbacks; verify the tests fail before implementation.
+- [x] 5.2 Implement the host-owned task detail wrapper, target-specific render props, and local core fallback for load and render failures; verify focused task replacement tests pass.
+- [x] 5.3 Integrate task provider resolution into the selected-task branch without changing selected-task or route ownership; verify existing `TaskDetailView` navigation, edit, action, and refresh tests remain green.
+- [x] 5.4 Add lifecycle tests that switch task, project, provider, plugin enablement, and route while a replacement is mounted; verify teardown follows logical identity and does not release or duplicate host-owned terminal, agent-session, or browser resources.
 
 ## 6. Typed task invalidation
 

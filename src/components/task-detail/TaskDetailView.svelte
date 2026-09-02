@@ -14,6 +14,7 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { createTaskPaneController } from './taskPaneController'
+  import type { TaskDetailHostLifecycleState } from './taskDetailHostLifecycle'
   import type { TaskDetail } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInspectorPanel from './TaskInspectorPanel.svelte'
@@ -25,6 +26,7 @@
   interface Props {
     task: TaskDetail
     onRunAction: (data: { taskId: string; actionPrompt: string }) => void
+    hostLifecycle?: TaskDetailHostLifecycleState
     onEdit?: (taskId: string) => void
     onOpenTask?: (taskId: string, projectId?: string | null) => void | Promise<void>
     onTaskUpdated?: () => void | Promise<void>
@@ -32,7 +34,7 @@
     onRunAppRegistrationChange?: (registration: TaskRunAppRegistration | null) => void
   }
 
-  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated, onProjectAttentionChanged, onRunAppRegistrationChange }: Props = $props()
+  let { task, onRunAction, hostLifecycle, onEdit, onOpenTask, onTaskUpdated, onProjectAttentionChanged, onRunAppRegistrationChange }: Props = $props()
 
   const router = useAppRouter()
   const taskShortcuts = useShortcutRegistry()
@@ -97,6 +99,12 @@
   })
 
   $effect(() => {
+    if (!hostLifecycle) return
+    workspacePath = hostLifecycle.workspacePath
+    runAppState = hostLifecycle.runAppState
+  })
+
+  $effect(() => {
     const viewId = activeView
     if (!mountedViews.has(viewId)) mountedViews = new Set(mountedViews).add(viewId)
   })
@@ -133,6 +141,10 @@
   }
 
   async function handleRunApp(): Promise<void> {
+    if (hostLifecycle) {
+      await hostLifecycle.runApp()
+      return
+    }
     await runAppRegistration?.run()
   }
 
@@ -172,6 +184,7 @@
 
 <svelte:window onkeydown={handleTaskDetailKeydown} />
 
+{#if !hostLifecycle}
 <TaskDetailLifecycle
   taskId={task.id}
   projectId={$activeProjectId}
@@ -183,6 +196,7 @@
   onRunAppRegistrationChange={handleRunAppRegistrationChange}
   onOpenTerminalView={openTerminalViewForTask}
 />
+{/if}
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   {#if !zenActive}

@@ -6,6 +6,12 @@ import { setMockTasks } from './App.test-fixtures/stores'
 import { createTask } from './App.test-fixtures/tasks'
 import { installAppTestLifecycle } from './App.test-harness'
 import type { TaskAttentionRow, TaskDetail } from './lib/types'
+import App from './App.svelte'
+import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
+import TaskDetailProviderHost from './components/task-detail/TaskDetailProviderHost.svelte'
+
+vi.mock('./components/focus-board/ProjectDashboardProviderHost.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/task-detail/TaskDetailProviderHost.svelte', () => ({ default: vi.fn() }))
 
 const project = {
   id: 'proj-1',
@@ -24,9 +30,7 @@ const task = createTask({
 describe('App core host-view characterization', () => {
   installAppTestLifecycle()
 
-  it('renders the Focus Board at the stable board destination with host attention metadata', async () => {
-    const App = (await import('./App.svelte')).default
-    const FocusBoard = (await import('./components/focus-board/FocusBoard.svelte')).default
+  it('renders the project dashboard host at the stable board destination with host attention metadata', async () => {
     const stores = await import('./lib/stores')
     const attentionRow = {
       project_id: project.id,
@@ -42,25 +46,22 @@ describe('App core host-view characterization', () => {
 
     render(App)
 
-    await vi.waitFor(() => expect(vi.mocked(FocusBoard)).toHaveBeenCalled())
+    await vi.waitFor(() => expect(vi.mocked(ProjectDashboardProviderHost)).toHaveBeenCalled())
     const props = getLatestComponentProps<{
-      projectId: string | null
+      project: typeof project
       tasks: TaskDetail[]
       attentionRows: TaskAttentionRow[]
       attentionRowsLoaded: boolean
-    }>(vi.mocked(FocusBoard), 'projectId')
+    }>(vi.mocked(ProjectDashboardProviderHost), 'project')
 
-    expect(props.projectId).toBe(project.id)
+    expect(props.project).toEqual(project)
     expect(props.tasks).toEqual([task])
     expect(props.attentionRows).toEqual([attentionRow])
     expect(props.attentionRowsLoaded).toBe(true)
     expect(get(stores.currentView)).toBe('board')
   })
 
-  it('gives selected task detail precedence over the Focus Board without changing the board destination', async () => {
-    const App = (await import('./App.svelte')).default
-    const FocusBoard = (await import('./components/focus-board/FocusBoard.svelte')).default
-    const TaskDetailView = (await import('./components/task-detail/TaskDetailView.svelte')).default
+  it('gives the selected task provider host precedence without changing the board destination', async () => {
     const stores = await import('./lib/stores')
 
     stores.projects.set([project])
@@ -71,11 +72,11 @@ describe('App core host-view characterization', () => {
 
     render(App)
 
-    await vi.waitFor(() => expect(vi.mocked(TaskDetailView)).toHaveBeenCalled())
-    const props = getLatestComponentProps<{ task: TaskDetail }>(vi.mocked(TaskDetailView), 'task')
+    await vi.waitFor(() => expect(vi.mocked(TaskDetailProviderHost)).toHaveBeenCalled())
+    const props = getLatestComponentProps<{ task: TaskDetail }>(vi.mocked(TaskDetailProviderHost), 'task')
 
     expect(props.task).toEqual(task)
-    expect(vi.mocked(FocusBoard)).not.toHaveBeenCalled()
+    expect(vi.mocked(ProjectDashboardProviderHost)).not.toHaveBeenCalled()
     expect(get(stores.currentView)).toBe('board')
   })
 })

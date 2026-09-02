@@ -9,6 +9,7 @@ import { getProjectConfig } from './lib/ipc'
 import App from './App.svelte'
 import ProjectDashboardProviderHost from './components/focus-board/ProjectDashboardProviderHost.svelte'
 import IconRail from './components/shell/IconRail.svelte'
+import ActionPalette from './components/shell/ActionPalette.svelte'
 import TaskDetailProviderHost from './components/task-detail/TaskDetailProviderHost.svelte'
 
 vi.mock('./components/focus-board/ProjectDashboardProviderHost.svelte', () => ({ default: vi.fn() }))
@@ -190,10 +191,22 @@ describe('App host-view provider routing', () => {
     await vi.waitFor(() => expect(vi.mocked(TaskDetailProviderHost)).toHaveBeenCalled())
     expect(vi.mocked(ProjectDashboardProviderHost)).not.toHaveBeenCalled()
 
-    const props = getLatestComponentProps<{ task: TaskDetail }>(
+    const props = getLatestComponentProps<{
+      task: TaskDetail
+      project: typeof project
+      relatedTasks: unknown[]
+      onOpenTaskActions: () => void
+      onRefreshTask: () => Promise<void>
+    }>(
       vi.mocked(TaskDetailProviderHost),
       'task',
     )
     expect(props.task).toEqual(task)
+    expect(props.project).toEqual(project)
+    expect(props.relatedTasks).toEqual([])
+
+    props.onOpenTaskActions()
+    await vi.waitFor(() => expect(vi.mocked(ActionPalette)).toHaveBeenCalled())
+    expect(getLatestComponentProps<{ task: TaskDetail }>(vi.mocked(ActionPalette), 'task').task).toEqual(task)
   })
 })

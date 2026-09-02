@@ -1,6 +1,6 @@
 import { isPluginViewKey, parsePluginViewKey } from './types'
 import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
-import type { CommandShortcutMetadata, PluginIcon } from '@openforge-app/plugin-sdk'
+import type { CommandShortcutMetadata, PluginIcon, ReplaceableViewTarget } from '@openforge-app/plugin-sdk'
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
@@ -9,11 +9,15 @@ import type {
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
-  RuntimeViewReplacementContribution,
 } from './runtimeContributionRegistry'
 
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut' | 'navigationComponent'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
-type RuntimeViewReplacementSource = Pick<RuntimeViewReplacementContribution, 'id' | 'target' | 'title' | 'icon'>
+type RuntimeViewReplacementSource = {
+  id: string
+  target: ReplaceableViewTarget
+  title: string
+  icon?: PluginIcon
+}
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order' | 'requiresWorkspace'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeReviewRowActionSource = Pick<RuntimeReviewRowActionContribution, 'id' | 'order'>
@@ -39,9 +43,9 @@ export interface ResolvedViewReplacement {
   pluginId: string
   contributionId: string
   qualifiedId: string
-  target: 'project.dashboard'
+  target: ReplaceableViewTarget
   title: string
-  icon: PluginIcon
+  icon: PluginIcon | null
 }
 export interface ResolvedTab {
   pluginId: string
@@ -209,15 +213,19 @@ function resolveViewReplacement(pluginId: string, item: unknown): ResolvedViewRe
   if (!isRecord(item)) return null
 
   const { id, target, title, icon } = item
-  if (!isNonEmptyString(id) || target !== 'project.dashboard' || !isNonEmptyString(title)) {
-    return null
-  }
+  if (
+    !isNonEmptyString(id)
+    || (target !== 'project.dashboard' && target !== 'task.detail')
+    || !isNonEmptyString(title)
+  ) return null
 
-  let sanitizedIcon: PluginIcon
-  try {
-    sanitizedIcon = sanitizePluginIcon(icon)
-  } catch {
-    return null
+  let sanitizedIcon: PluginIcon | null = null
+  if (target === 'project.dashboard') {
+    try {
+      sanitizedIcon = sanitizePluginIcon(icon)
+    } catch {
+      return null
+    }
   }
 
   return {

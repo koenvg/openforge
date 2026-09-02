@@ -146,6 +146,21 @@ describe('SettingsView plugin integration', () => {
     expect(settingsViewRenderIpc.setConfig).not.toHaveBeenCalled()
   })
 
+  it('shows and preserves an unavailable app-wide task workspace default', async () => {
+    settingsViewRenderIpc.getConfig.mockImplementation(async (key: string) =>
+      key === 'task_detail_provider' ? 'missing-plugin.task-workspace' : null,
+    )
+
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    await openPluginsCategory()
+
+    const select = await screen.findByRole('combobox', { name: 'Default task workspace' }) as HTMLSelectElement
+    expect(select.value).toBe('missing-plugin.task-workspace')
+    expect(screen.getByRole('option', { name: 'missing-plugin.task-workspace (unavailable)' })).toBeTruthy()
+    expect(settingsViewRenderIpc.setConfig).not.toHaveBeenCalled()
+  })
+
+
   it('disables project provider selection until its stored preference has loaded', async () => {
     let resolvePreference!: (value: string | null) => void
     settingsViewRenderIpc.getProjectConfig.mockImplementation(async (_projectId: string, key: string) => {

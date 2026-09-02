@@ -179,27 +179,28 @@ export class RuntimeFrontendContributionRegistry {
     if (!this.services.packageMetadata?.requires?.includes('viewReplacements')) {
       throw new RuntimeValidationError('viewReplacements', 'requires the viewReplacements capability')
     }
-    if (registration?.target !== 'project.dashboard') {
+    const target = (registration as { target?: unknown } | null)?.target
+    if (target !== 'project.dashboard' && target !== 'task.detail') {
       throw new RuntimeValidationError(
         'viewReplacements',
-        `has unsupported target "${String(registration?.target)}"`,
+        `has unsupported target "${String(target)}"`,
       )
     }
     const qualifiedId = this.services.qualifiedId('viewReplacements', registration?.id)
     assertTitle('viewReplacements', registration?.title)
     assertComponent('viewReplacements', registration?.component)
-    const icon = sanitizeViewIcon(registration?.icon, 'viewReplacements')
     this.services.claims.claim('viewReplacements', qualifiedId)
 
-    const contribution: RuntimeViewReplacementContribution = {
-      ...registration,
+    const identity = {
       id: registration.id.trim(),
       title: registration.title.trim(),
-      icon,
       qualifiedId,
       pluginId: this.services.pluginId,
       projectId: this.services.projectId,
     }
+    const contribution: RuntimeViewReplacementContribution = registration.target === 'project.dashboard'
+      ? { ...registration, ...identity, icon: sanitizeViewIcon(registration.icon, 'viewReplacements') }
+      : { ...registration, ...identity }
     this.viewReplacements.set(qualifiedId, contribution)
 
     return this.services.trackDisposable(createDisposable(() => {

@@ -346,9 +346,13 @@
         {:else if selectedTaskForView}
           <TaskDetailProviderHost
             task={selectedTaskForView}
+            project={activeProject}
+            relatedTasks={$dependencyReferenceTasks}
             onRunAction={handleRunAction}
             onEdit={taskCreation.openEditTask}
             onOpenTask={navigation.openTaskInProject}
+            onOpenTaskActions={actionPalette.openActionPalette}
+            onRefreshTask={async () => { await appData.loadTasks() }}
             onTaskUpdated={async () => { await appData.loadTasks() }}
             onProjectAttentionChanged={appData.loadProjectAttention}
             onRunAppRegistrationChange={handleRunAppRegistrationChange}

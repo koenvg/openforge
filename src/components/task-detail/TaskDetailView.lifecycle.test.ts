@@ -110,6 +110,31 @@ describe('TaskDetailView — lifecycle', () => {
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
 
+      it('does not own shell lifecycle when the provider host supplies it', async () => {
+        const { regularTerminalSessions } = await import('../../lib/terminalSessionService')
+        const { INITIAL_TASK_RUN_APP_STATE } = await import('./taskRunAppController')
+        const { releaseAllForTask } = regularTerminalSessions
+        vi.mocked(releaseAllForTask).mockClear()
+
+        const { unmount } = render(TaskDetailView, {
+          props: {
+            task: baseTask,
+            onRunAction: mockOnRunAction,
+            hostLifecycle: {
+              workspacePath: null,
+              runAppState: { ...INITIAL_TASK_RUN_APP_STATE },
+              runApp: vi.fn(async () => undefined),
+            },
+          },
+        })
+        await waitFor(() => expect(screen.getByText('Initial Prompt')).toBeTruthy())
+
+        unmount()
+
+        expect(releaseAllForTask).not.toHaveBeenCalled()
+      })
+
+
       it('cleanup only releases shell entries, not agent terminal', async () => {
         const { getTaskWorkspace } = await import('../../lib/ipc')
         const { regularTerminalSessions } = await import('../../lib/terminalSessionService')

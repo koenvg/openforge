@@ -13,6 +13,16 @@
     projectDashboardProviderIds,
     setProjectDashboardProviderId,
   } from '../../lib/plugin/projectDashboardProviders'
+  import {
+    INHERIT_TASK_DETAIL_PROVIDER_ID,
+    globalTaskDetailProviderId,
+    globalTaskDetailProviderLoaded,
+    isTaskDetailProviderAvailable,
+    loadGlobalTaskDetailProviderId,
+    loadProjectTaskDetailProviderId,
+    projectTaskDetailProviderIds,
+    setProjectTaskDetailProviderId,
+  } from '../../lib/plugin/taskDetailProviders'
   import { error } from '../../lib/stores'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
@@ -32,12 +42,16 @@
 
   let { activeSection, controller }: Props = $props()
 
-  let dashboardProviders = $derived(resolveContributions(
+  let replacementProviders = $derived(resolveContributions(
     Array.from($enabledPluginIds)
       .map(pluginId => $runtimeContributionSources.get(pluginId))
       .filter(source => source !== undefined),
-  ).viewReplacements.filter(
+  ).viewReplacements)
+  let dashboardProviders = $derived(replacementProviders.filter(
     provider => isProjectDashboardProviderAvailable(provider, $installedPlugins),
+  ))
+  let taskDetailProviders = $derived(replacementProviders.filter(
+    provider => isTaskDetailProviderAvailable(provider, $installedPlugins),
   ))
   let dashboardProviderPreferenceLoaded = $derived(
     !controller.projectId || $projectDashboardProviderIds.has(controller.projectId),
@@ -45,10 +59,21 @@
   let selectedDashboardProviderId = $derived(
     $projectDashboardProviderIds.get(controller.projectId) ?? INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
   )
+  let taskDetailProviderPreferenceLoaded = $derived(
+    !controller.projectId || $projectTaskDetailProviderIds.has(controller.projectId),
+  )
+  let selectedTaskDetailProviderId = $derived(
+    $projectTaskDetailProviderIds.get(controller.projectId) ?? INHERIT_TASK_DETAIL_PROVIDER_ID,
+  )
 
   $effect(() => {
     if (!$globalProjectDashboardProviderLoaded) {
       void loadGlobalProjectDashboardProviderId().catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
+    if (!$globalTaskDetailProviderLoaded) {
+      void loadGlobalTaskDetailProviderId().catch((value) => {
         error.set(value instanceof Error ? value.message : String(value))
       })
     }
@@ -58,12 +83,27 @@
         error.set(value instanceof Error ? value.message : String(value))
       })
     }
+    if (projectId && !$projectTaskDetailProviderIds.has(projectId)) {
+      void loadProjectTaskDetailProviderId(projectId).catch((value) => {
+        error.set(value instanceof Error ? value.message : String(value))
+      })
+    }
   })
 
   async function handleDashboardProviderChange(providerId: string): Promise<void> {
     if (!controller.projectId) return
     try {
       await setProjectDashboardProviderId(controller.projectId, providerId)
+    } catch (value) {
+      error.set(value instanceof Error ? value.message : String(value))
+      throw value
+    }
+  }
+
+  async function handleTaskDetailProviderChange(providerId: string): Promise<void> {
+    if (!controller.projectId) return
+    try {
+      await setProjectTaskDetailProviderId(controller.projectId, providerId)
     } catch (value) {
       error.set(value instanceof Error ? value.message : String(value))
       throw value
@@ -135,6 +175,15 @@
     providers={dashboardProviders}
     disabled={!controller.hasProject || !$globalProjectDashboardProviderLoaded || !dashboardProviderPreferenceLoaded}
     onProviderChange={handleDashboardProviderChange}
+  />
+  <SettingsDashboardProviderCard
+    scope="project"
+    target="task.detail"
+    selectedProviderId={selectedTaskDetailProviderId}
+    inheritedProviderId={$globalTaskDetailProviderId}
+    providers={taskDetailProviders}
+    disabled={!controller.hasProject || !$globalTaskDetailProviderLoaded || !taskDetailProviderPreferenceLoaded}
+    onProviderChange={handleTaskDetailProviderChange}
   />
   <PluginSettingsPanel projectId={controller.projectId || ''} disabled={!controller.hasProject} />
   {#each controller.pluginSettingsSections as section (section.namespacedId)}

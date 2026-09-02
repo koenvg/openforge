@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { LayoutDashboard } from '@lucide/svelte'
+  import { FileText, LayoutDashboard } from '@lucide/svelte'
+  import type { ReplaceableViewTarget } from '@openforge-app/plugin-sdk'
   import type { ResolvedViewReplacement } from '../../lib/plugin/contributionResolver'
   import {
     CORE_PROJECT_DASHBOARD_PROVIDER_ID,
@@ -9,6 +10,7 @@
 
   interface Props {
     scope: 'global' | 'project'
+    target?: ReplaceableViewTarget
     selectedProviderId: string
     inheritedProviderId?: string
     providers: ResolvedViewReplacement[]
@@ -18,6 +20,7 @@
 
   let {
     scope,
+    target = 'project.dashboard',
     selectedProviderId,
     inheritedProviderId = CORE_PROJECT_DASHBOARD_PROVIDER_ID,
     providers,
@@ -30,11 +33,17 @@
   let changeRunId = 0
 
   let displayedProviderId = $derived(pendingProviderId ?? selectedProviderId)
-  let title = $derived(scope === 'global' ? 'Default project dashboard' : 'Project dashboard')
+  let isTaskDetail = $derived(target === 'task.detail')
+  let targetLabel = $derived(isTaskDetail ? 'task workspace' : 'project dashboard')
+  let title = $derived(scope === 'global'
+    ? `Default ${targetLabel}`
+    : isTaskDetail ? 'Task workspace' : 'Project dashboard')
   let description = $derived(scope === 'global'
-    ? 'Choose the app-wide dashboard for projects that use the global default.'
-    : "Choose what opens at this project's dashboard destination.")
-  let fieldId = $derived(scope === 'global' ? 'default-project-dashboard-provider' : 'project-dashboard-provider')
+    ? `Choose the app-wide ${targetLabel} for projects that use the global default.`
+    : isTaskDetail
+      ? "Choose what opens when this project's tasks are selected."
+      : "Choose what opens at this project's dashboard destination.")
+  let fieldId = $derived(`${scope === 'global' ? 'default-' : 'project-'}${isTaskDetail ? 'task-detail' : 'dashboard'}-provider`)
   let unavailableSelectedProviderId = $derived(
     selectedProviderId !== CORE_PROJECT_DASHBOARD_PROVIDER_ID
     && selectedProviderId !== INHERIT_PROJECT_DASHBOARD_PROVIDER_ID
@@ -68,12 +77,14 @@
 </script>
 
 <SettingsSectionCard
-  id="section-dashboard-provider"
+  id={isTaskDetail ? 'section-task-detail-provider' : 'section-dashboard-provider'}
   {title}
   {description}
   {disabled}
 >
-  {#snippet icon()}<LayoutDashboard size={18} />{/snippet}
+  {#snippet icon()}
+    {#if isTaskDetail}<FileText size={18} />{:else}<LayoutDashboard size={18} />{/if}
+  {/snippet}
   <div class="form-control w-full max-w-md">
     <label for={fieldId} class="label-text mb-2 text-sm font-medium">{title}</label>
     <select
@@ -96,7 +107,7 @@
     </select>
     <span class="mt-2 text-xs leading-5 text-base-content/60">
       {scope === 'global'
-        ? 'Projects can inherit this default or choose their own dashboard.'
+        ? `Projects can inherit this default or choose their own ${isTaskDetail ? 'task workspace' : 'dashboard'}.`
         : 'Unavailable choices stay selected and return automatically when the plugin is ready.'}
     </span>
   </div>

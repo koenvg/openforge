@@ -25,6 +25,8 @@ import {
   defineFrontendPlugin,
   type PluginProjectDashboardReplacementRegistration,
   type PluginProjectDashboardReplacementProps,
+  type PluginTaskDetailReplacementRegistration,
+  type PluginTaskDetailReplacementProps,
   type PluginViewRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import {
@@ -155,6 +157,18 @@ const dashboardPropsContract = (props: PluginProjectDashboardReplacementProps) =
   void props.api.navigation.navigate({ viewId: 'board' })
   void props.api.system.openUrl('https://example.com')
 }
+declare const taskDetailComponent: PluginTaskDetailReplacementRegistration['component']
+const taskDetailPropsContract = (props: PluginTaskDetailReplacementProps) => {
+  void props.project.id
+  void props.task.prompt
+  void props.relatedTasks[0]?.id
+  void props.context.taskId
+  void props.onOpenTask('related-task', props.project.id)
+  void props.onEditTask()
+  void props.onOpenTaskActions()
+  void props.onRefreshTask()
+}
+void taskDetailPropsContract
 void dashboardPropsContract
 declare const navigationProps: PluginSidebarNavigationProps
 navigationProps.onActivate()
@@ -176,6 +190,12 @@ void registry.frontendApi.viewReplacements.register({
   title: 'Usage dashboard',
   icon: 'panels-top-left',
   component: dashboardComponent,
+})
+void registry.frontendApi.viewReplacements.register({
+  id: 'task-workspace',
+  target: 'task.detail',
+  title: 'Task workspace',
+  component: taskDetailComponent,
 })
 void defineBackendPlugin({
   activate(openforge, context) {

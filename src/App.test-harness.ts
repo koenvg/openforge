@@ -36,6 +36,9 @@ vi.mock('./lib/terminalSessionService', () => {
     focusTerminal: vi.fn(),
     isPtyActive: vi.fn(() => false),
     release: vi.fn(),
+    getTaskTerminalTabsSession: vi.fn(() => undefined),
+    getShellLifecycleState: vi.fn(() => undefined),
+    releaseAllForTask: vi.fn(),
   }
   return {
     agentTerminalSessions: { ...operations },

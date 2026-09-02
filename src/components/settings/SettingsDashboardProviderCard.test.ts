@@ -12,6 +12,16 @@ const providers = [
     icon: 'panels-top-left',
   },
 ]
+const taskProviders = [
+  {
+    pluginId: 'planning-plugin',
+    contributionId: 'task-workspace',
+    qualifiedId: 'planning-plugin.task-workspace',
+    target: 'task.detail' as const,
+    title: 'Task workspace',
+    icon: null,
+  },
+]
 
 describe('SettingsDashboardProviderCard', () => {
   it('offers an app-wide default for the project dashboard replacement target', () => {
@@ -149,5 +159,23 @@ describe('SettingsDashboardProviderCard', () => {
       expect(select.value).toBe('core')
       expect(select.disabled).toBe(false)
     })
+  })
+
+  it('offers the task detail target through the same global preference control', () => {
+    render(SettingsDashboardProviderCard, {
+      props: {
+        scope: 'global',
+        target: 'task.detail',
+        selectedProviderId: 'core',
+        providers: taskProviders,
+        onProviderChange: vi.fn(),
+      },
+    })
+
+    const select = screen.getByRole('combobox', { name: 'Default task workspace' }) as HTMLSelectElement
+    expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
+      ['core', 'OpenForge'],
+      ['planning-plugin.task-workspace', 'Task workspace'],
+    ])
   })
 })

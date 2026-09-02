@@ -128,6 +128,8 @@ export async function resetPluginRuntimeFixtures() {
   clearComponentRegistry()
   const { clearProjectDashboardProviderIds } = await import('../lib/plugin/projectDashboardProviders')
   clearProjectDashboardProviderIds()
+  const { clearTaskDetailProviderIds } = await import('../lib/plugin/taskDetailProviders')
+  clearTaskDetailProviderIds()
   pluginStore.installedPlugins.set(new Map())
   pluginStore.appEnabledPluginIds.set(new Set())
   pluginStore.projectEnabledPluginIds.set(new Set())
