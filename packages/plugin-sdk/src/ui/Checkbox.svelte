@@ -27,43 +27,64 @@
   })
 </script>
 
-<input
-  {...attributes}
-  bind:this={input}
-  bind:checked
-  type="checkbox"
-  class={["of-checkbox", className]}
-  data-size={size}
-  aria-checked={indeterminate ? 'mixed' : undefined}
-  onchange={(event) => {
-    checked = event.currentTarget.checked
-    onchange?.(event)
-    onCheckedChange?.(event.currentTarget.checked)
-  }}
-/>
+<span class={["of-checkbox", className]} data-size={size}>
+  <input
+    {...attributes}
+    class={className}
+    bind:this={input}
+    bind:checked
+    type="checkbox"
+    aria-checked={indeterminate ? 'mixed' : undefined}
+    onchange={(event) => {
+      checked = event.currentTarget.checked
+      onchange?.(event)
+      onCheckedChange?.(event.currentTarget.checked)
+    }}
+  />
+  <span class="of-checkbox-indicator" aria-hidden="true"></span>
+</span>
 
 <style>
   .of-checkbox {
+    position: relative;
     box-sizing: border-box;
+    display: inline-grid;
     width: var(--of-control-height-compact);
     height: var(--of-control-height-compact);
     flex: none;
-    appearance: none;
-    display: inline-grid;
-    place-content: center;
+    color: var(--of-on-accent);
+    vertical-align: middle;
+  }
+
+  .of-checkbox > input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .of-checkbox-indicator {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 100%;
     border: var(--of-border-width) solid var(--of-border-interactive);
     border-radius: var(--of-radius-control);
     background: var(--of-field);
-    color: var(--of-on-accent);
-    cursor: pointer;
+    pointer-events: none;
     transition:
       background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
       box-shadow var(--of-duration-fast) var(--of-ease-standard);
   }
 
-  .of-checkbox::before {
+  .of-checkbox-indicator::before {
+    position: absolute;
+    top: 20%;
+    left: 20%;
     width: 60%;
     height: 60%;
     background: currentColor;
@@ -74,38 +95,43 @@
     transition: transform var(--of-duration-press) var(--of-ease-enter);
   }
 
-  .of-checkbox:hover:not(:disabled) {
+  input:hover:not(:disabled) + .of-checkbox-indicator {
     border-color: var(--of-accent);
     background: var(--of-field-hover);
   }
 
-  .of-checkbox:checked,
-  .of-checkbox:indeterminate {
+  input:checked + .of-checkbox-indicator,
+  input:indeterminate + .of-checkbox-indicator {
     border-color: var(--of-accent);
     background: var(--of-accent);
   }
 
-  .of-checkbox:checked::before {
+  input:checked + .of-checkbox-indicator::before {
     transform: scale(1);
   }
 
-  .of-checkbox:indeterminate::before {
+  input:indeterminate + .of-checkbox-indicator::before {
+    top: 50%;
+    left: 22.5%;
     width: 55%;
     height: var(--of-border-width);
     clip-path: none;
-    transform: scale(1);
+    transform: translateY(-50%) scale(1);
   }
 
-  .of-checkbox:focus-visible {
+  input:focus-visible + .of-checkbox-indicator {
     outline: var(--of-focus-width) solid var(--of-focus-ring);
     outline-offset: var(--of-space1);
   }
 
-  .of-checkbox:disabled {
+  input:disabled {
+    cursor: not-allowed;
+  }
+
+  input:disabled + .of-checkbox-indicator {
     border-color: var(--of-control-disabled);
     background: var(--of-control-disabled);
     color: var(--of-control-text-disabled);
-    cursor: not-allowed;
   }
 
   .of-checkbox[data-size='xs'] {
@@ -119,18 +145,19 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .of-checkbox,
-    .of-checkbox::before {
+    .of-checkbox-indicator,
+    .of-checkbox-indicator::before {
       transition: none;
     }
   }
 
   @media (forced-colors: active) {
-    .of-checkbox {
+    .of-checkbox > input {
       appearance: auto;
+      opacity: 1;
     }
 
-    .of-checkbox::before {
+    .of-checkbox-indicator {
       display: none;
     }
   }

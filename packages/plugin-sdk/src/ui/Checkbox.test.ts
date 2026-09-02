@@ -18,6 +18,7 @@ describe('plugin-sdk Checkbox', () => {
       props: {
         'aria-label': 'Include generated files',
         'aria-describedby': 'generated-files-help',
+        class: 'custom-checkbox',
         checked: false,
         name: 'generated-files',
         onchange,
@@ -30,7 +31,22 @@ describe('plugin-sdk Checkbox', () => {
     expect(checkbox.checked).toBe(true)
     expect(checkbox.name).toBe('generated-files')
     expect(checkbox.getAttribute('aria-describedby')).toBe('generated-files-help')
+    expect(checkbox.classList.contains('custom-checkbox')).toBe(true)
     expect(onchange).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders checked state through a dedicated visual indicator', () => {
+    render(Checkbox, {
+      props: {
+        'aria-label': 'Include generated files',
+        checked: true,
+      },
+    })
+
+    const checkbox = getCheckbox('Include generated files')
+    const visualControl = checkbox.parentElement
+    expect(visualControl?.getAttribute('data-size')).toBe('sm')
+    expect(visualControl?.querySelector('[aria-hidden="true"]')).toBeTruthy()
   })
 
   it('exposes a mixed state for partially selected groups', () => {
