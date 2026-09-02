@@ -1,0 +1,144 @@
+/* Soft chip tokens — for PR/review metadata pills */
+:root, [data-theme="openforge-light"] {
+  --chip-soft-bg: #F7F7FA;
+  --chip-soft-text: #737489;
+}
+[data-theme="openforge-dark"] {
+  --chip-soft-bg: #2A2720;
+  --chip-soft-text: #B8B0A0;
+}
+
+/* Chip color tokens — light theme */
+:root, [data-theme="openforge-light"] {
+  --chip-running-bg: #EFF8F1;
+  --chip-running-dot: #22C55E;
+  --chip-running-text: #2D8B6F;
+  --chip-done-bg: #F1EFFF;
+  --chip-done-dot: #6D61F0;
+  --chip-done-text: #4A2ED4;
+  --chip-paused-bg: #FEF3E2;
+  --chip-paused-dot: #F59E0B;
+  --chip-paused-text: #B45309;
+  --chip-error-bg: #FEE2E2;
+  --chip-error-dot: #DC2626;
+  --chip-error-text: #B91C1C;
+  --chip-stopped-bg: #F4F4F6;
+  --chip-stopped-dot: #B8BAC5;
+  --chip-stopped-text: #737489;
+  --chip-starting-bg: #F1EFFF;
+  --chip-starting-dot: #6D61F0;
+  --chip-starting-text: #4A2ED4;
+}
+/* Chip color tokens — dark theme */
+[data-theme="openforge-dark"] {
+  --chip-running-bg: #1A2E1A;
+  --chip-running-dot: #22C55E;
+  --chip-running-text: #4ADE80;
+  --chip-done-bg: #1E1B2E;
+  --chip-done-dot: #8B82E0;
+  --chip-done-text: #A5A0ED;
+  --chip-paused-bg: #2E2510;
+  --chip-paused-dot: #F59E0B;
+  --chip-paused-text: #FCD34D;
+  --chip-error-bg: #2E1010;
+  --chip-error-dot: #DC2626;
+  --chip-error-text: #FCA5A5;
+  --chip-stopped-bg: #2A2720;
+  --chip-stopped-dot: #8A8275;
+  --chip-stopped-text: #B8B0A0;
+  --chip-starting-bg: #1E1B2E;
+  --chip-starting-dot: #8B82E0;
+  --chip-starting-text: #A5A0ED;
+}
+
+/* Status border indicators — left-border accent, no gradients */
+/* Running: animated rotating border glow using conic-gradient pseudo-elements */
+.running {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  border-color: transparent !important;
+  border-left: 3px solid var(--color-success) !important;
+}
+.running::before {
+  content: '';
+  position: absolute;
+  inset: -200%;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-success),
+    color-mix(in oklch, var(--color-success) 50%, transparent) 10%,
+    transparent 25%,
+    transparent 75%,
+    color-mix(in oklch, var(--color-success) 50%, transparent) 90%,
+    var(--color-success)
+  );
+  animation: border-glow-spin 4s linear infinite;
+  z-index: -1;
+  will-change: transform;
+}
+.running::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--color-base-100);
+  z-index: -1;
+}
+.completed {
+  border-left: 3px solid var(--color-info);
+}
+.paused {
+  border-left: 3px solid var(--color-warning);
+}
+.failed {
+  border-left: 3px solid var(--color-error);
+}
+.interrupted {
+  border-left: 3px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+}
+.needs-input {
+  border: 2px solid var(--color-warning);
+}
+.ci-failed {
+  border: 2px solid var(--color-error);
+}
+.unaddressed-comments {
+  border: 2px solid var(--color-warning);
+}
+.ci-running {
+  border-left: 3px solid var(--color-info);
+}
+.review-pending {
+  border-left: 3px solid var(--color-info);
+}
+.ready-to-merge {
+  border-left: 3px solid var(--color-info);
+}
+/* Vim navigation focus highlight */
+.vim-focus {
+  position: relative;
+}
+
+.vim-focus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 2px solid var(--color-primary);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* CI/Review text animations */
+.ci-failure-text {
+  animation: ci-pulse 1.5s ease-in-out infinite;
+}
+.ci-pending-text {
+  animation: ci-pulse 2s ease-in-out infinite;
+}
+.review-pending-text {
+  animation: ci-pulse 2s ease-in-out infinite;
+}

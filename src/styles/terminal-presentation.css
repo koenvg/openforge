@@ -1,0 +1,76 @@
+/* Light terminal palette: GitHub Light Default (Ghostty-compatible). */
+:root, [data-theme="openforge-light"] {
+  --term-background: var(--of-terminal-background);
+  --term-foreground: var(--of-terminal-foreground);
+  --term-cursor: var(--of-terminal-cursor);
+  --term-cursor-accent: var(--of-terminal-cursor-accent);
+  --term-selection-background: var(--of-terminal-selection-background);
+  --term-selection-foreground: var(--of-terminal-selection-foreground);
+  --term-black: var(--of-terminal-black);
+  --term-red: var(--of-terminal-red);
+  --term-green: var(--of-terminal-green);
+  --term-yellow: var(--of-terminal-yellow);
+  --term-blue: var(--of-terminal-blue);
+  --term-magenta: var(--of-terminal-magenta);
+  --term-cyan: var(--of-terminal-cyan);
+  --term-white: var(--of-terminal-white);
+  --term-bright-black: var(--of-terminal-bright-black);
+  --term-bright-red: var(--of-terminal-bright-red);
+  --term-bright-green: var(--of-terminal-bright-green);
+  --term-bright-yellow: var(--of-terminal-bright-yellow);
+  --term-bright-blue: var(--of-terminal-bright-blue);
+  --term-bright-magenta: var(--of-terminal-bright-magenta);
+  --term-bright-cyan: var(--of-terminal-bright-cyan);
+  --term-bright-white: var(--of-terminal-bright-white);
+}
+
+.zen-cloud-backdrop {
+  position: relative;
+  background-color: #eef4fc;
+}
+.zen-cloud-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(32% 42% at 28% 30%, rgba(176, 206, 255, 0.55), transparent 70%),
+    radial-gradient(30% 38% at 72% 24%, rgba(208, 198, 255, 0.42), transparent 70%),
+    radial-gradient(38% 44% at 66% 76%, rgba(194, 229, 255, 0.5), transparent 72%),
+    radial-gradient(34% 40% at 24% 80%, rgba(255, 226, 214, 0.3), transparent 70%);
+  filter: blur(24px);
+  animation: zen-cloud-drift 17s ease-in-out infinite alternate;
+  will-change: transform;
+}
+/* Lift the terminal card off the cloud so it reads as floating. */
+.zen-cloud-backdrop .agent-terminal-surface {
+  box-shadow:
+    0 22px 55px -22px rgba(37, 62, 120, 0.42),
+    0 8px 22px -14px rgba(37, 62, 120, 0.28);
+  transition: box-shadow 0.5s ease;
+}
+
+.shell-terminal-wrapper .xterm,
+.shell-terminal-wrapper .xterm-viewport,
+.shell-terminal-wrapper .xterm-screen {
+  background-color: var(--term-background) !important;
+  color: var(--term-foreground);
+}
+
+.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-track {
+  background: var(--color-base-200);
+}
+
+.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--color-base-300);
+  border-radius: 3px;
+}
+
+.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+}
