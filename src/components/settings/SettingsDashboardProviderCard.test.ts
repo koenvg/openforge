@@ -32,6 +32,30 @@ describe('SettingsDashboardProviderCard', () => {
     expect(select.value).toBe('core')
   })
 
+  it('updates the displayed provider when the selected provider changes', async () => {
+    const onProviderChange = vi.fn()
+    const view = render(SettingsDashboardProviderCard, {
+      props: {
+        scope: 'global',
+        selectedProviderId: 'core',
+        providers,
+        onProviderChange,
+      },
+    })
+
+    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
+    expect(select.value).toBe('core')
+
+    await view.rerender({
+      scope: 'global',
+      selectedProviderId: 'planning-plugin.dashboard',
+      providers,
+      onProviderChange,
+    })
+
+    expect(select.value).toBe('planning-plugin.dashboard')
+  })
+
   it('offers project inheritance, OpenForge, and compatible plugin providers', () => {
     render(SettingsDashboardProviderCard, {
       props: {
