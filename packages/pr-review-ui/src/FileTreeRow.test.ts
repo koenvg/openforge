@@ -80,9 +80,12 @@ describe('FileTreeRow', () => {
     expect(screen.getByLabelText('Modified').textContent).toBe('M')
     expect(screen.getByLabelText('2 additions and 1 deletions')).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('checkbox', {
+    const reviewCheckbox = screen.getByRole('checkbox', {
       name: 'Toggle reviewed for src/lib/a.ts',
-    }))
+    })
+    expect(reviewCheckbox.parentElement?.getAttribute('data-size')).toBe('xs')
+
+    await fireEvent.click(reviewCheckbox)
     expect(onToggleFileReviewed).toHaveBeenCalledWith(file, false)
   })
 })

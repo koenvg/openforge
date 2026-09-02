@@ -92,6 +92,7 @@
     {#if canToggleReviewed}
       <label class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center">
         <Checkbox
+          size="xs"
           tabindex={-1}
           aria-label="Toggle reviewed for {node.file.filename}"
           checked={reviewed}

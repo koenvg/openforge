@@ -18,6 +18,7 @@
   title="Non-application files are tests, fixtures, snapshots, docs, and generated files. Deselect this to hide them and focus on the source changes."
 >
   <Checkbox
+    size="xs"
     {checked}
     onchange={(e) => {
       onToggle(e.currentTarget.checked)

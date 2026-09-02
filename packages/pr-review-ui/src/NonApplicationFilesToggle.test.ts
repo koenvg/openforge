@@ -9,6 +9,12 @@ describe('NonApplicationFilesToggle', () => {
     expect(screen.getByText('Also include non-application files')).toBeTruthy()
   })
 
+  it('uses the compact checkbox size', () => {
+    render(NonApplicationFilesToggle, { props: { checked: false, hiddenCount: 3, onToggle: vi.fn() } })
+
+    expect(screen.getByRole('checkbox').parentElement?.getAttribute('data-size')).toBe('xs')
+  })
+
   it('shows the hidden count only while non-application files are hidden', () => {
     const { rerender } = render(NonApplicationFilesToggle, {
       props: { checked: false, hiddenCount: 3, onToggle: vi.fn() },
