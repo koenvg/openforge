@@ -142,8 +142,8 @@ export const taskDraftNotes = writable<Map<string, string>>(new Map());
 export const focusBoardFilters = writable<Map<string, BoardFilter>>(new Map())
 export const outOfFocusTaskIdsByProject = writable<Map<string, Set<string>>>(new Map())
 
-function createBacklogLabelFilters() {
-  const store = writable<Map<string, Set<number>>>(new Map())
+function createProjectSessionMapStore<T>() {
+  const store = writable<Map<string, T>>(new Map())
   let previousProjectId: string | null | undefined = undefined
 
   activeProjectId.subscribe((projectId) => {
@@ -156,7 +156,8 @@ function createBacklogLabelFilters() {
   return store
 }
 
-export const backlogLabelFilters = createBacklogLabelFilters()
+export const backlogLabelFilters = createProjectSessionMapStore<Set<number>>()
+export const backlogReadyFilters = createProjectSessionMapStore<boolean>()
 
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const commandHeld = writable<boolean>(false);

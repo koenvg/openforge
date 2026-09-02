@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TaskDetail } from './types'
-import { getDependencyWaitLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from './taskDependencies'
+import { getDependencyWaitLabel, getReadyToStartTaskIds, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount, isTaskReadyToStart } from './taskDependencies'
 
 function makeTask(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {
@@ -26,6 +26,32 @@ function makeTask(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
 }
 
 describe('task dependency summaries', () => {
+  it('classifies tasks as ready only when every dependency is complete', () => {
+    const completedDependency = makeTask('T-done', { status: 'done' })
+    const unfinishedDependency = makeTask('T-doing', { status: 'doing' })
+    const knownTasks = [completedDependency, unfinishedDependency]
+
+    expect(isTaskReadyToStart(makeTask('T-none'), knownTasks)).toBe(true)
+    expect(isTaskReadyToStart(makeTask('T-complete', { dependsOn: ['T-done'] }), knownTasks)).toBe(true)
+    expect(isTaskReadyToStart(makeTask('T-waiting', { dependsOn: ['T-doing'] }), knownTasks)).toBe(false)
+    expect(isTaskReadyToStart(makeTask('T-unknown', { dependsOn: ['T-missing'] }), knownTasks)).toBe(false)
+  })
+
+  it('returns ready Task IDs for a group using the same dependency rules', () => {
+    const completedDependency = makeTask('T-done', { status: 'done' })
+    const unfinishedDependency = makeTask('T-doing', { status: 'doing' })
+    const candidates = [
+      makeTask('T-none'),
+      makeTask('T-complete', { dependsOn: ['T-done'] }),
+      makeTask('T-waiting', { dependsOn: ['T-doing'] }),
+      makeTask('T-unknown', { dependsOn: ['T-missing'] }),
+    ]
+
+    expect(getReadyToStartTaskIds(candidates, [completedDependency, unfinishedDependency])).toEqual(
+      new Set(['T-none', 'T-complete']),
+    )
+  })
+
   it('counts unfinished and unknown dependencies as waiting', () => {
     const task = makeTask('T-1', { dependsOn: ['T-done', 'T-doing', 'T-missing'] })
     const knownTasks = [

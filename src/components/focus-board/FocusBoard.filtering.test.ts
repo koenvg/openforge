@@ -7,6 +7,7 @@ import { requireElement } from '../../test-utils/dom'
 import {
   bugLabel,
   deferred,
+  getCurrentVimItem,
   makeSession,
   makeTask,
   onOpenTask,
@@ -208,6 +209,86 @@ describe('FocusBoard filtering and labels', () => {
     expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Doing task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
+  })
+
+  it('filters Backlog Tasks to those with no unfinished dependencies', async () => {
+    const readyTask = makeTask('T-ready', 'backlog', 'Ready without dependencies')
+    const completedDependency = makeTask('T-done-dependency', 'done', 'Completed dependency')
+    const completedReadyTask = {
+      ...makeTask('T-completed-ready', 'backlog', 'Ready after completed dependency'),
+      dependsOn: [completedDependency.id],
+    }
+    const unfinishedDependency = makeTask('T-active-dependency', 'doing', 'Active dependency')
+    const blockedTask = {
+      ...makeTask('T-blocked', 'backlog', 'Blocked by active dependency'),
+      dependsOn: [unfinishedDependency.id],
+    }
+    const unresolvedTask = {
+      ...makeTask('T-unresolved', 'backlog', 'Blocked by unresolved dependency'),
+      dependsOn: ['T-missing'],
+    }
+
+    renderBoard({
+      tasks: [readyTask, completedReadyTask, blockedTask, unresolvedTask, unfinishedDependency],
+      dependencyReferenceTasks: [completedDependency],
+      sessions: new Map(),
+    })
+
+    expect(screen.queryByRole('button', { name: /Ready to start/i })).toBeNull()
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 4/i }))
+
+    const toggle = screen.getByRole('button', { name: /^Ready to start 2$/i })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+
+    await fireEvent.keyDown(window, { key: 'j' })
+    await fireEvent.keyDown(window, { key: 'j' })
+    expect(within(getCurrentVimItem()).getByText('Blocked by active dependency')).toBeTruthy()
+
+    await fireEvent.click(toggle)
+
+    const taskList = screen.getByRole('region', { name: 'Task list' })
+    expect(within(taskList).getByText('Ready without dependencies')).toBeTruthy()
+    expect(within(taskList).getByText('Ready after completed dependency')).toBeTruthy()
+    expect(within(taskList).queryByText('Blocked by active dependency')).toBeNull()
+    expect(within(taskList).queryByText('Blocked by unresolved dependency')).toBeNull()
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() => {
+      expect(within(getCurrentVimItem()).getByText('Ready without dependencies')).toBeTruthy()
+    })
+
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(filterInput, { target: { value: 'completed' } })
+
+    expect(within(taskList).queryByText('Ready without dependencies')).toBeNull()
+    expect(within(taskList).getByText('Ready after completed dependency')).toBeTruthy()
+  })
+
+  it('combines readiness with Task Label filters and keeps recovery controls for no matches', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    const unfinishedDependency = makeTask('T-dependency', 'doing', 'Unfinished dependency')
+    const blockedBugTask = {
+      ...makeTask('T-blocked-bug', 'backlog', 'Blocked bug task', [bugLabel]),
+      dependsOn: [unfinishedDependency.id],
+    }
+    const readyUiTask = makeTask('T-ready-ui', 'backlog', 'Ready UI task', [uiLabel])
+
+    renderBoard({
+      tasks: [blockedBugTask, readyUiTask, unfinishedDependency],
+      sessions: new Map(),
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 2/i }))
+    const menu = await openBacklogLabelFilterMenu()
+    await fireEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /bug 1/i }))
+
+    const readyToggle = screen.getByRole('button', { name: /^Ready to start 1$/i })
+    await fireEvent.click(readyToggle)
+
+    expect(screen.getByText('No tasks match the active Backlog filters.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Ready to start 1$/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Filter by Task Labels' })).toBeTruthy()
   })
 
   it('renders a Backlog Task Label dropdown outside the task list without changing board filters', async () => {
@@ -431,6 +512,60 @@ describe('FocusBoard filtering and labels', () => {
     await waitFor(() => {
       expect(get(backlogLabelFilters).size).toBe(0)
     })
+  })
+
+  it('keeps readiness filtering when the board remounts for the same project', async () => {
+    const unfinishedDependency = makeTask('T-dependency', 'doing', 'Unfinished dependency')
+    const readyTask = makeTask('T-ready', 'backlog', 'Ready task')
+    const blockedTask = {
+      ...makeTask('T-blocked', 'backlog', 'Blocked task'),
+      dependsOn: [unfinishedDependency.id],
+    }
+    const tasks = [readyTask, blockedTask, unfinishedDependency]
+
+    const view = renderBoard({ tasks, sessions: new Map() })
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 2/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /^Ready to start 1$/i }))
+    expect(screen.queryByText('Blocked task')).toBeNull()
+
+    view.unmount()
+    renderBoard({ tasks, sessions: new Map() })
+
+    const restoredToggle = await screen.findByRole('button', { name: /^Ready to start 1$/i })
+    expect(restoredToggle.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('Blocked task')).toBeNull()
+  })
+
+  it('clears readiness filtering when switching projects', async () => {
+    const firstReadyTask = makeTask('T-ready-1', 'backlog', 'First ready task')
+    const view = renderBoard({ tasks: [firstReadyTask], sessions: new Map() })
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /^Ready to start 1$/i }))
+
+    const secondDependency = { ...makeTask('T-dependency-2', 'doing', 'Second dependency'), projectId: 'proj-2' }
+    const secondReadyTask = { ...makeTask('T-ready-2', 'backlog', 'Second ready task'), projectId: 'proj-2' }
+    const secondBlockedTask = {
+      ...makeTask('T-blocked-2', 'backlog', 'Second blocked task'),
+      projectId: 'proj-2',
+      dependsOn: [secondDependency.id],
+    }
+
+    await view.rerender({
+      projectId: 'proj-2',
+      projectName: 'Second Project',
+      tasks: [secondReadyTask, secondBlockedTask, secondDependency],
+      dependencyReferenceTasks: [],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 2/i }))
+    const secondToggle = screen.getByRole('button', { name: /^Ready to start 1$/i })
+    expect(secondToggle.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getAllByText('Second ready task').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Second blocked task').length).toBeGreaterThan(0)
   })
 
   it('renders task label chips on backlog cards while preserving accessible label names', async () => {

@@ -11,6 +11,7 @@
   import FocusEmptyState from './FocusEmptyState.svelte'
   import BoardTextFilter from './BoardTextFilter.svelte'
   import BacklogLabelFilterDropdown from './BacklogLabelFilterDropdown.svelte'
+  import BacklogReadyFilterToggle from './BacklogReadyFilterToggle.svelte'
   import { createOutOfFocusController } from './outOfFocusController.svelte'
   import { createFocusBoardFilterController } from './focusBoardFilterController.svelte'
   import { createFocusBoardInteractionController } from './focusBoardInteractionController.svelte'
@@ -92,6 +93,7 @@
     getProjectId: () => projectId,
     getTasks: () => tasks,
     getTasksWithReadyAttentionMetadata: () => tasksWithReadyAttentionMetadata,
+    getDependencyResolutionTasks: () => dependencyResolutionTasks,
     getActiveSessions: () => activeSessions,
     getAttentionTaskIds: () => attentionTaskIds,
     getAttentionOrder: () => attentionOrder,
@@ -99,6 +101,8 @@
   })
 
   let activeFilter = $derived(filterController.activeFilter)
+  let readyOnly = $derived(filterController.readyOnly)
+  let readyCount = $derived(filterController.readyCount)
   let selectedLabelIds = $derived(filterController.selectedLabelIds)
   let visibleTasks = $derived(filterController.visibleTasks)
   let filterCounts = $derived(filterController.filterCounts)
@@ -177,18 +181,28 @@
   </header>
 
   <div class="flex min-h-0 flex-1">
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 pb-6 pr-6 {activeFilter === 'backlog' && visibleFilterLabels.length > 0 ? 'pt-4' : 'pt-6'}">
-      {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
-        <div class="flex items-center border-b border-base-300 py-2">
-          <BacklogLabelFilterDropdown
-            labels={visibleFilterLabels}
-            {labelCounts}
-            {selectedLabelIds}
-            onToggle={(labelId) => {
-              filterController.toggleLabelFilter(labelId)
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 pb-6 pr-6 {activeFilter === 'backlog' && filterCounts.backlog > 0 ? 'pt-4' : 'pt-6'}">
+      {#if activeFilter === 'backlog' && filterCounts.backlog > 0}
+        <div class="flex flex-wrap items-center gap-2 border-b border-base-300 py-2">
+          <BacklogReadyFilterToggle
+            active={readyOnly}
+            {readyCount}
+            onToggle={() => {
+              filterController.toggleReadyFilter()
               interactionController.resetToFirstTask()
             }}
           />
+          {#if visibleFilterLabels.length > 0}
+            <BacklogLabelFilterDropdown
+              labels={visibleFilterLabels}
+              {labelCounts}
+              {selectedLabelIds}
+              onToggle={(labelId) => {
+                filterController.toggleLabelFilter(labelId)
+                interactionController.resetToFirstTask()
+              }}
+            />
+          {/if}
         </div>
       {/if}
 
@@ -206,6 +220,12 @@
             <Search size={24} class="text-base-content/35" aria-hidden="true" />
             <p class="text-sm font-medium text-base-content/70">No tasks match ‘{filterController.textFilterQuery.trim()}’.</p>
             <p class="text-xs text-base-content/45">Try a different filter or press Escape to clear it.</p>
+          </div>
+        {:else if visibleTasks.length === 0 && activeFilter === 'backlog' && (readyOnly || selectedLabelIds.size > 0)}
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center" role="status">
+            <Search size={24} class="text-base-content/35" aria-hidden="true" />
+            <p class="text-sm font-medium text-base-content/70">No tasks match the active Backlog filters.</p>
+            <p class="text-xs text-base-content/45">Change or clear a filter to see more tasks.</p>
           </div>
         {:else if visibleTasks.length === 0}
           <FocusEmptyState filter={activeFilter} />
