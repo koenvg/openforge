@@ -82,7 +82,7 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-sm text-base-content">Zen mode</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘.</kbd><kbd class="kbd kbd-sm">⌘G</kbd></div>
+              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘.</kbd><kbd class="kbd kbd-sm">⌘Z</kbd></div>
             </div>
           </div>
         </div>

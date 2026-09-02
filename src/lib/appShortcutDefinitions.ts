@@ -156,13 +156,12 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
     // Task-scoped, so it renders in the dialog's "Task view" section rather than
     // via getGlobalShortcutHelpEntries (hence help: null here).
     id: 'zen-mode',
-    // ⌘. for the right hand, ⌘G for the left, mirroring the attention overview's
-    // two-handed chords.
+    // ⌘. for the right hand, ⌘Z (Z for Zen) for the left. No ⌃ variant for Z: Ctrl+Z
+    // is terminal suspend and undo on Windows/Linux, so binding it would hijack the shell.
     registrations: [
       { key: '⌘.', action: 'toggleZenMode' },
       { key: '⌃.', action: 'toggleZenMode' },
-      { key: '⌘G', action: 'toggleZenMode' },
-      { key: '⌃G', action: 'toggleZenMode' },
+      { key: '⌘Z', action: 'toggleZenMode' },
     ],
     help: null,
   },

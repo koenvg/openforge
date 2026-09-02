@@ -224,7 +224,7 @@ describe('registerAppShortcuts', () => {
     expect(getPrimaryAppShortcutKey('attention-overview')).toBe('⌘E')
   })
 
-  it('routes every zen mode chord (⌘./⌃. and the left-hand ⌘G/⌃G) to the toggle', () => {
+  it('routes every zen mode chord (⌘./⌃. and the left-hand ⌘Z) to the toggle', () => {
     const { registry, handlers } = createRegistry()
     const toggleZenMode = vi.fn()
 
@@ -249,10 +249,9 @@ describe('registerAppShortcuts', () => {
 
     handlers.get('⌘.')?.()
     handlers.get('⌃.')?.()
-    handlers.get('⌘g')?.()
-    handlers.get('⌃g')?.()
+    handlers.get('⌘z')?.()
 
-    expect(toggleZenMode).toHaveBeenCalledTimes(4)
+    expect(toggleZenMode).toHaveBeenCalledTimes(3)
   })
 
   it('does not toggle file quick open while modal state blocks it', () => {
