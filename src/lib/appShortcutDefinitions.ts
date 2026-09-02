@@ -16,6 +16,7 @@ export type AppShortcutAction =
   | 'cyclePreviousProjectOnBoard'
   | 'cyclePreviousProject'
   | 'cycleNextProject'
+  | 'toggleZenMode'
 
 export interface AppShortcutRegistration {
   key: string
@@ -149,6 +150,19 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   {
     id: 'next-project',
     registrations: [{ key: '2', action: 'cycleNextProject' }],
+    help: null,
+  },
+  {
+    // Task-scoped, so it renders in the dialog's "Task view" section rather than
+    // via getGlobalShortcutHelpEntries (hence help: null here).
+    id: 'zen-mode',
+    // ⌘. for the right hand, ⌘Z (Z for Zen) for the left. No ⌃ variant for Z: Ctrl+Z
+    // is terminal suspend and undo on Windows/Linux, so binding it would hijack the shell.
+    registrations: [
+      { key: '⌘.', action: 'toggleZenMode' },
+      { key: '⌃.', action: 'toggleZenMode' },
+      { key: '⌘Z', action: 'toggleZenMode' },
+    ],
     help: null,
   },
 ] as const

@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { activeProjectId, activeSessions, commandHeld, currentView, selectedTaskId, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
+  import { zenMode, isZenActive } from '../../lib/zenMode'
   import type { TaskRunAppRegistration } from './taskRunAppController'
   import { INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
   import { useAppRouter } from '../../lib/router.svelte'
@@ -63,6 +64,31 @@
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
+  // True only on the agent tab: hides the toolbar + info panel and centers the
+  // terminal at a fixed max width. This view only mounts while its task is open
+  // on the board, so those two inputs are fixed here. See lib/zenMode.ts.
+  let zenActive = $derived(isZenActive({
+    zenMode: $zenMode,
+    currentView: 'board',
+    selectedTaskId: task.id,
+    activeView,
+  }))
+  // In zen the workbench is the full-screen cloud backdrop and centers the terminal
+  // card on it; otherwise it just fills the row as before.
+  let agentWorkbenchClass = $derived(
+    activeView === 'agent'
+      ? `relative z-[1] flex flex-1${zenActive ? ' justify-center zen-cloud-backdrop' : ''}`
+      : 'pointer-events-none invisible absolute inset-0 flex',
+  )
+  // In zen drop the base-200 frame so the card's own rounded border is the only one,
+  // and cap the width; otherwise keep the original padded panel. Horizontal padding
+  // only, so the card fills 100% of the height; no overflow-hidden so the side drop
+  // shadow can spill onto the cloud.
+  let agentMainClass = $derived(
+    zenActive
+      ? 'relative flex min-w-0 px-8 w-full max-w-[1400px]'
+      : 'relative flex min-w-0 flex-1 overflow-hidden bg-base-200/50 p-3',
+  )
 
   $effect(() => {
     if (task.id === lastTaskId) return
@@ -159,28 +185,30 @@
 />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
-  <TaskDetailToolbar
-    {task}
-    {workspacePath}
-    {activeView}
-    tabs={sortedTaskPaneTabs}
-    bind:panelHidden
-    {runAppState}
-    {onRunAction}
-    onBack={handleBack}
-    onSelectView={(viewId) => taskPaneController.select(viewId)}
-    onRunApp={handleRunApp}
-    {onTaskUpdated}
-    {onProjectAttentionChanged}
-  />
+  {#if !zenActive}
+    <TaskDetailToolbar
+      {task}
+      {workspacePath}
+      {activeView}
+      tabs={sortedTaskPaneTabs}
+      bind:panelHidden
+      {runAppState}
+      {onRunAction}
+      onBack={handleBack}
+      onSelectView={(viewId) => taskPaneController.select(viewId)}
+      onRunApp={handleRunApp}
+      {onTaskUpdated}
+      {onProjectAttentionChanged}
+    />
+  {/if}
 
   <div data-testid="upper-area" class="relative flex flex-1 min-h-0 overflow-hidden">
     <div
       data-testid="agent-workbench"
       aria-hidden={activeView !== 'agent'}
-      class="min-h-0 overflow-hidden {activeView === 'agent' ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}"
+      class="min-h-0 overflow-hidden {agentWorkbenchClass}"
     >
-      <main class="relative flex min-w-0 flex-1 overflow-hidden bg-base-200/50 p-3" aria-label="Agent terminal workbench">
+      <main class={agentMainClass} aria-label="Agent terminal workbench">
         <div class="min-h-0 min-w-0 flex-1">
           {#key task.id}
             <AgentPanel taskId={task.id} {isStarting} isActive={activeView === 'agent'} />
@@ -190,7 +218,7 @@
           <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
         {/if}
       </main>
-      {#if !panelHidden}
+      {#if !panelHidden && !zenActive}
         <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={280} maxWidth={520} side="right">
           <div
             data-testid="task-info-scroll-container"
