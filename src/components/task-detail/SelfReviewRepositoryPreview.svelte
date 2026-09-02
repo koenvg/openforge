@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, ArrowLeft, FileText } from '@lucide/svelte'
+  import { AlertTriangle, ArrowLeft, FileText, FolderOpen } from '@lucide/svelte'
   import {
     getMarkdownRepositoryLinkFragment,
     type MarkdownRepositoryLinkTarget,
@@ -14,6 +14,7 @@
     fetchContent: (repositoryPath: string) => Promise<string>
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
+    onOpenInFiles?: (target: MarkdownRepositoryLinkTarget) => boolean | Promise<boolean>
     onClose: () => void | Promise<void>
   }
 
@@ -23,6 +24,7 @@
     fetchContent,
     resolveRepositoryImage,
     onOpenRepositoryPath,
+    onOpenInFiles,
     onClose,
   }: Props = $props()
 
@@ -31,6 +33,8 @@
   let focusedTargetPath: string | null = null
   let content = $state<string | null>(null)
   let error = $state<string | null>(null)
+  let openingInFiles = $state(false)
+  let openInFilesError = $state<string | null>(null)
   let loadId = 0
   let fragmentApplicationId = 0
 
@@ -49,11 +53,27 @@
     return reason instanceof Error ? reason.message : String(reason)
   }
 
+  async function handleOpenInFiles(): Promise<void> {
+    if (!onOpenInFiles || openingInFiles) return
+
+    openingInFiles = true
+    openInFilesError = null
+    try {
+      const opened = await onOpenInFiles(target)
+      if (!opened) openInFilesError = 'The task Files view is unavailable.'
+    } catch (reason) {
+      openInFilesError = `Unable to open the live worktree: ${errorMessage(reason)}`
+    } finally {
+      openingInFiles = false
+    }
+  }
+
   function load(): void {
     const currentLoadId = ++loadId
     const repositoryPath = target.repositoryPath
     content = null
     error = null
+    openInFilesError = null
 
     void fetchContent(repositoryPath).then(
       (loadedContent) => {
@@ -131,7 +151,33 @@
         {target.repositoryPath} · {revisionLabel}
       </p>
     </div>
+    {#if onOpenInFiles}
+      <div class="flex shrink-0 flex-col items-end gap-0.5">
+        <span class="text-xs font-medium text-base-content/60">Live worktree</span>
+        <button
+          type="button"
+          class="btn btn-outline btn-sm h-10 min-h-10 px-3"
+          aria-label="Open {target.repositoryPath} in Files"
+          title="Open this path from the task's live worktree"
+          disabled={openingInFiles}
+          onclick={() => void handleOpenInFiles()}
+        >
+          {#if openingInFiles}
+            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+          {:else}
+            <FolderOpen size={16} aria-hidden="true" />
+          {/if}
+          Open in Files
+        </button>
+      </div>
+    {/if}
   </header>
+  {#if openInFilesError}
+    <div class="alert alert-error shrink-0 rounded-none border-x-0 border-t-0 py-2 text-sm" role="alert">
+      <AlertTriangle size={16} aria-hidden="true" />
+      <span>{openInFilesError}</span>
+    </div>
+  {/if}
 
   {#if content === null && error === null}
     <div class="flex flex-1 flex-col items-center justify-center gap-3" role="status" aria-live="polite">

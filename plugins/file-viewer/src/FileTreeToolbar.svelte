@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FolderCog, Search, X } from '@lucide/svelte'
+  import { FolderCog, FolderOpen, Search, X } from '@lucide/svelte'
   import type { FileTreeToolbarActions, FileTreeToolbarModel } from './lib/fileBrowserView'
 
   interface Props {
@@ -17,6 +17,12 @@
 </script>
 
 <div class="border-b border-base-300 bg-base-100 p-3">
+  {#if model.sourceLabel}
+    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-base-content/65" aria-label="File source: {model.sourceLabel}">
+      <FolderOpen size={14} aria-hidden="true" />
+      <span>{model.sourceLabel}</span>
+    </div>
+  {/if}
   <div class="flex items-center gap-2">
     <label class="input input-bordered input-sm flex h-9 min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-base-100 transition-shadow focus-within:border-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/15">
       <Search size={16} class="shrink-0 text-base-content/50" />

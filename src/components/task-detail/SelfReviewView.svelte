@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import type { TaskDetail } from '../../lib/types'
+  import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
+  import { revealFileInTaskFiles } from '../../lib/fileViewerPlugin'
   import SelfReviewWorkspace from './SelfReviewWorkspace.svelte'
   import { createSelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
 
@@ -15,6 +17,9 @@
     getTaskId: () => task.id,
   })
 
+  function openInTaskFiles(target: MarkdownRepositoryLinkTarget): Promise<boolean> {
+    return revealFileInTaskFiles(task.id, target.repositoryPath, target.suffix)
+  }
   $effect(() => {
     controller.synchronizeWorkspaceState()
   })
@@ -28,4 +33,4 @@
   })
 </script>
 
-<SelfReviewWorkspace {controller} {agentStatus} {onSendToAgent} />
+<SelfReviewWorkspace {controller} {agentStatus} {onSendToAgent} onOpenInFiles={openInTaskFiles} />

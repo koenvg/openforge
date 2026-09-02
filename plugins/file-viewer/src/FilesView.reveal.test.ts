@@ -113,7 +113,7 @@ describe('FilesView reveal behavior', () => {
       expect(screen.getByText('README.md')).toBeTruthy()
     })
 
-    requestFileReveal('README.md', null, '#setup')
+    requestFileReveal('README.md', null, '?plain=1#setup')
 
     await waitFor(() => {
       expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
@@ -124,8 +124,39 @@ describe('FilesView reveal behavior', () => {
     })
     expect(get(fileBrowserStates).get('project:test-project-id')).toMatchObject({
       selectedPath: 'README.md',
-      selectedSuffix: '#setup',
+      selectedSuffix: '?plain=1#setup',
     })
+  })
+
+  it('applies a revealed fragment without adding its query or hash to the file read', async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+
+    try {
+      vi.mocked(fsReadDir).mockResolvedValue([makeFileEntry({ name: 'README.md', path: 'README.md' })])
+      vi.mocked(fsReadFile).mockResolvedValue({
+        type: 'text',
+        content: '# Intro\n\n## Setup\n\nLive instructions',
+        mimeType: 'text/markdown',
+        size: 37,
+      })
+
+      renderFilesView()
+      await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy())
+
+      requestFileReveal('README.md', null, '?plain=1#setup')
+
+      expect(await screen.findByRole('heading', { name: 'Setup' })).toBeTruthy()
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
+    } finally {
+      if (originalScrollIntoView) {
+        Element.prototype.scrollIntoView = originalScrollIntoView
+      } else {
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+      }
+    }
   })
 
   it('continues a pending reveal in the new project when the previous file read becomes stale', async () => {

@@ -27,12 +27,12 @@ describe('fileViewerPlugin host bridge', () => {
     executePluginCommandMock.mockResolvedValueOnce(true)
     const { revealFileInTaskFiles } = await import('./fileViewerPlugin')
 
-    await expect(revealFileInTaskFiles('T-42', 'src/App.svelte', '#setup')).resolves.toBe(true)
+    await expect(revealFileInTaskFiles('T-42', 'src/App.svelte', '?plain=1#setup')).resolves.toBe(true)
 
     expect(executePluginCommandMock).toHaveBeenCalledWith(FILE_VIEWER_PLUGIN_ID, 'revealFile', {
       path: 'src/App.svelte',
       taskId: 'T-42',
-      suffix: '#setup',
+      suffix: '?plain=1#setup',
     })
   })
   it('does not import file-viewer plugin internals into the host bridge', () => {

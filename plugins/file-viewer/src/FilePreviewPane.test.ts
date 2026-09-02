@@ -34,6 +34,7 @@ describe('FilePreviewPane', () => {
         projectId: 'project-id',
         model: {
           selectedPath: 'src/main.ts',
+          selectedSuffix: '',
           selectedEntry: {
             name: 'main.ts',
             path: 'src/main.ts',

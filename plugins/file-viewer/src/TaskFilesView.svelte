@@ -20,6 +20,7 @@
   projectId={null}
   {workspaceSource}
   rootErrorTitle="Failed to load live worktree"
+  sourceLabel="Live worktree"
   workspaceLoadingLabel="Loading live worktree files…"
   rootRetryLabel="Retry loading live worktree"
 />

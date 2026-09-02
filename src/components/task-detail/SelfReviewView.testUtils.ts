@@ -50,12 +50,18 @@ const ipcMocks = vi.hoisted(() => ({
 	resolveGithubAsset: vi.fn().mockResolvedValue(null),
 }));
 
+const fileViewerMocks = vi.hoisted(() => ({
+  revealFileInTaskFiles: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("../../lib/ipc", () => ipcMocks);
+vi.mock("../../lib/fileViewerPlugin", () => fileViewerMocks);
 
 import { pendingManualComments, ticketPrs } from "../../lib/stores";
 import { selfReviewStateByTask } from "../../lib/taskScopedSelfReviewState";
 import { clearTaskReviewPaneState } from "../../lib/taskReviewPaneState";
 
+export const revealFileInTaskFiles = fileViewerMocks.revealFileInTaskFiles;
 export const baseTask: Task = {
 	id: "task-1",
 	initial_prompt: "Test Task",
