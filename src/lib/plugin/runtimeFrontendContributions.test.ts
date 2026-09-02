@@ -1,9 +1,35 @@
+import { get } from 'svelte/store'
 import { describe, expect, it } from 'vitest'
 import { RuntimeContributionClaims, RuntimeRegistryServices } from './runtimeContributionSupport'
 import { RuntimeFrontendContributionRegistry } from './runtimeFrontendContributions'
 import { LIGHT_THEME } from '../themeContract'
+import { createThemeRegistry, type ThemeRegistry } from '../themeRegistry'
 
 const PluginView = (() => undefined) as never
+
+function createThemeServices(): RuntimeRegistryServices {
+  return new RuntimeRegistryServices({
+    pluginId: 'theme-pack',
+    projectId: null,
+    packageMetadata: {
+      id: 'theme-pack',
+      apiVersion: 1,
+      displayName: 'Theme Pack',
+      description: 'Theme pack',
+      enablement: 'app',
+      frontend: './frontend.js',
+      requires: ['appEnablement', 'themes'],
+    },
+  })
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void
+  return {
+    promise: new Promise<T>(complete => { resolve = complete }),
+    resolve,
+  }
+}
 
 describe('RuntimeFrontendContributionRegistry', () => {
   it('owns visual contribution registration and disposal independently', async () => {
@@ -94,5 +120,45 @@ describe('RuntimeFrontendContributionRegistry', () => {
     }])
     await disposable.dispose()
     expect(appEnabled.getSnapshot().themes).toEqual([])
+  })
+
+  it('includes registrations made while the browser theme host is resolving', async () => {
+    const host = createThemeRegistry()
+    const hostResolution = deferred<ThemeRegistry | null>()
+    const registry = new RuntimeFrontendContributionRegistry(
+      createThemeServices(),
+      async () => undefined,
+      () => hostResolution.promise,
+    )
+    const preparing = registry.prepareThemes()
+
+    registry.createApi().themes.register({ ...LIGHT_THEME, id: 'paper', label: 'Paper' })
+    hostResolution.resolve(host)
+    await preparing
+
+    expect(registry.commitThemes(4, () => true)).toBe(true)
+    expect(get(host.availableThemes).find(theme => theme.id === 'theme-pack:paper')).toMatchObject({
+      owner: { kind: 'plugin', pluginId: 'theme-pack', generation: 4 },
+    })
+  })
+
+  it('does not publish themes when the activation generation goes stale while the host resolves', async () => {
+    const host = createThemeRegistry()
+    const hostResolution = deferred<ThemeRegistry | null>()
+    const registry = new RuntimeFrontendContributionRegistry(
+      createThemeServices(),
+      async () => undefined,
+      () => hostResolution.promise,
+    )
+    registry.createApi().themes.register({ ...LIGHT_THEME, id: 'paper', label: 'Paper' })
+    const preparing = registry.prepareThemes()
+    let generationCurrent = true
+
+    generationCurrent = false
+    hostResolution.resolve(host)
+    await preparing
+
+    expect(registry.commitThemes(4, () => generationCurrent)).toBe(false)
+    expect(get(host.availableThemes).some(theme => theme.id === 'theme-pack:paper')).toBe(false)
   })
 })

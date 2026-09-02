@@ -99,8 +99,12 @@ class RuntimeContributionRegistry {
     })
   }
 
-  commitFrontendThemes(generation: number): void {
-    this.frontendContributions.commitThemes(generation)
+  prepareFrontendThemes(): Promise<void> {
+    return this.frontendContributions.prepareThemes()
+  }
+
+  commitFrontendThemes(generation: number, isGenerationCurrent: () => boolean): boolean {
+    return this.frontendContributions.commitThemes(generation, isGenerationCurrent)
   }
 
   async activateBackend(plugin: BackendPlugin): Promise<void> {

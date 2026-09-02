@@ -1,7 +1,6 @@
 import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import { freezeThemeDefinition, validateThemeDefinition } from '@openforge-app/plugin-sdk'
-import { themeRegistry } from '../theme'
-import type { ThemeBatchRegistration, ThemeRegistration } from '../themeRegistry'
+import type { ThemeBatchRegistration, ThemeRegistration, ThemeRegistry } from '../themeRegistry'
 import type {
   FrontendOpenForgeAPI,
   PluginInjectionPointRegistration,
@@ -35,6 +34,13 @@ import type {
   RuntimeViewReplacementContribution,
 } from './runtimeContributionTypes'
 
+type ThemeRegistryResolver = () => Promise<ThemeRegistry | null>
+
+async function resolveBrowserThemeRegistry(): Promise<ThemeRegistry | null> {
+  if (typeof document === 'undefined') return null
+  return (await import('../theme')).themeRegistry
+}
+
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
   'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'themes' | 'injectionPoints' | 'taskStart' | 'backend'
@@ -51,6 +57,7 @@ export class RuntimeFrontendContributionRegistry {
   private committedThemes: ThemeBatchRegistration | null = null
   private readonly lateThemeRegistrations = new Map<string, ThemeRegistration>()
   private committedThemeGeneration: number | null = null
+  private themeRegistry: ThemeRegistry | null = null
   private readonly injectionPoints = new Map<string, RuntimeInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, RuntimeTaskStartPrefixProviderContribution>()
   private api: FrontendContributionApi | null = null
@@ -58,6 +65,7 @@ export class RuntimeFrontendContributionRegistry {
   constructor(
     private readonly services: RuntimeRegistryServices,
     private readonly invokeBackendMethod: (method: string, payload?: unknown) => Promise<unknown>,
+    private readonly resolveThemeRegistry: ThemeRegistryResolver = resolveBrowserThemeRegistry,
   ) {}
 
   createApi(): FrontendContributionApi {
@@ -155,10 +163,20 @@ export class RuntimeFrontendContributionRegistry {
     )
   }
 
-  commitThemes(generation: number): void {
+  async prepareThemes(): Promise<void> {
+    if (this.themeRegistry) return
+    this.themeRegistry = await this.resolveThemeRegistry()
+    if (!this.themeRegistry && this.themes.size > 0) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
+  }
+
+  commitThemes(generation: number, isGenerationCurrent: () => boolean = () => true): boolean {
     if (this.committedThemeGeneration !== null) {
       throw new Error(`Theme contributions for ${this.services.pluginId} are already committed`)
     }
+    if (!isGenerationCurrent()) return false
+
     const definitions = Array.from(this.themes.values(), contribution => freezeThemeDefinition({
       id: contribution.qualifiedId,
       label: contribution.label,
@@ -166,11 +184,18 @@ export class RuntimeFrontendContributionRegistry {
       tokens: contribution.tokens,
       ...(contribution.stylesheets ? { stylesheets: contribution.stylesheets } : {}),
     }))
-    this.committedThemes = themeRegistry.registerContributedThemes(definitions, {
-      pluginId: this.services.pluginId,
-      generation,
-    })
+    if (!this.themeRegistry && definitions.length > 0) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
+
+    if (this.themeRegistry) {
+      this.committedThemes = this.themeRegistry.registerContributedThemes(definitions, {
+        pluginId: this.services.pluginId,
+        generation,
+      })
+    }
     this.committedThemeGeneration = generation
+    return true
   }
 
   private registerTheme(definition: PluginThemeDefinition): Disposable {
@@ -197,6 +222,9 @@ export class RuntimeFrontendContributionRegistry {
     if (!validation.valid) {
       throw new RuntimeValidationError('themes', validation.errors.join('; '))
     }
+    if (this.committedThemeGeneration !== null && !this.themeRegistry) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
 
     const qualifiedId = `${this.services.pluginId}:${localId}`
     this.services.claims.claim('themes', qualifiedId)
@@ -211,6 +239,10 @@ export class RuntimeFrontendContributionRegistry {
     this.themes.set(qualifiedId, contribution)
 
     if (this.committedThemeGeneration !== null) {
+      const themeRegistry = this.themeRegistry
+      if (!themeRegistry) {
+        throw new RuntimeValidationError('themes', 'requires a browser theme host')
+      }
       const registration = themeRegistry.registerContributedTheme({
         ...frozen,
         id: qualifiedId,
