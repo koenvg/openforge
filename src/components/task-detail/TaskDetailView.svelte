@@ -81,12 +81,12 @@
       : 'pointer-events-none invisible absolute inset-0 flex',
   )
   // In zen drop the base-200 frame so the card's own rounded border is the only one,
-  // and cap the width; otherwise keep the original padded panel.
-  // No overflow-hidden in zen: the card's drop shadow needs to spill past main so it
-  // reads as floating. Extra padding gives the shadow room before the screen edge.
+  // and cap the width; otherwise keep the original padded panel. Horizontal padding
+  // only, so the card fills 100% of the height; no overflow-hidden so the side drop
+  // shadow can spill onto the cloud.
   let agentMainClass = $derived(
     zenActive
-      ? 'relative flex min-w-0 p-8 w-full max-w-[1400px]'
+      ? 'relative flex min-w-0 px-8 w-full max-w-[1400px]'
       : 'relative flex min-w-0 flex-1 overflow-hidden bg-base-200/50 p-3',
   )
 
