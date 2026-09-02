@@ -1,0 +1,101 @@
+@plugin "daisyui/theme" {
+  name: "openforge-light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: var(--of-surface);
+  --color-base-200: var(--of-surface-subtle);
+  --color-base-300: var(--of-border);
+  --color-base-content: var(--of-text);
+  --color-primary: var(--of-accent);
+  --color-primary-content: var(--of-on-accent);
+  --color-secondary: var(--of-control);
+  --color-secondary-content: var(--of-control-text);
+  --color-accent: var(--of-accent);
+  --color-accent-content: var(--of-on-accent);
+  --color-neutral: var(--of-text);
+  --color-neutral-content: var(--of-text-inverse);
+  --color-info: var(--of-info);
+  --color-info-content: var(--of-on-info);
+  --color-success: var(--of-success);
+  --color-success-content: var(--of-on-success);
+  --color-warning: var(--of-warning);
+  --color-warning-content: var(--of-on-warning);
+  --color-error: var(--of-danger);
+  --color-error-content: var(--of-on-danger);
+
+  --radius-selector: var(--of-radius-round);
+  --radius-field: var(--of-radius-control);
+  --radius-box: var(--of-radius-container);
+  --size-selector: calc(var(--of-control-height-compact) / 8);
+  --size-field: calc(var(--of-control-height) / 10);
+  --border: var(--of-border-width);
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "openforge-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: var(--of-surface);
+  --color-base-200: var(--of-surface-subtle);
+  --color-base-300: var(--of-border);
+  --color-base-content: var(--of-text);
+  --color-primary: var(--of-accent);
+  --color-primary-content: var(--of-on-accent);
+  --color-secondary: var(--of-control);
+  --color-secondary-content: var(--of-control-text);
+  --color-accent: var(--of-accent);
+  --color-accent-content: var(--of-on-accent);
+  --color-neutral: var(--of-text);
+  --color-neutral-content: var(--of-text-inverse);
+  --color-info: var(--of-info);
+  --color-info-content: var(--of-on-info);
+  --color-success: var(--of-success);
+  --color-success-content: var(--of-on-success);
+  --color-warning: var(--of-warning);
+  --color-warning-content: var(--of-on-warning);
+  --color-error: var(--of-danger);
+  --color-error-content: var(--of-on-danger);
+
+  --radius-selector: var(--of-radius-round);
+  --radius-field: var(--of-radius-control);
+  --radius-box: var(--of-radius-container);
+  --size-selector: calc(var(--of-control-height-compact) / 8);
+  --size-field: calc(var(--of-control-height) / 10);
+  --border: var(--of-border-width);
+  --depth: 0;
+  --noise: 0;
+}
+
+:root {
+  --font-sans: var(--of-font-sans);
+  --font-mono: var(--of-font-mono);
+}
+
+:where(.btn-sm, .input-sm, .select-sm, .textarea-sm) {
+  --size: var(--of-control-height-compact);
+}
+
+.of-field:focus-visible,
+  :where(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--of-focus-width) solid var(--of-focus-ring);
+  outline-offset: var(--of-space1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+}

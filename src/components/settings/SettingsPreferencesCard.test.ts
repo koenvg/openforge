@@ -1,13 +1,21 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { DARK_THEME, LIGHT_THEME } from '../../lib/themeContract'
+import type { RegisteredTheme } from '../../lib/themeRegistry'
 import { requireElement } from '../../test-utils/dom'
 import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../../lib/terminalFontSize'
 import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
 
+const builtinThemes: readonly RegisteredTheme[] = [
+	{ ...LIGHT_THEME, owner: { kind: 'builtin' } },
+	{ ...DARK_THEME, owner: { kind: 'builtin' } },
+]
+
 function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
-		isDarkMode: false,
-		onThemeToggle: vi.fn(),
+		availableThemes: builtinThemes,
+		selectedThemeId: LIGHT_THEME.id,
+		onThemeChange: vi.fn(),
 		terminalFont: 'jetbrains-mono',
 		onTerminalFontChange: vi.fn(),
 		terminalFontSize: 13,
@@ -23,47 +31,62 @@ describe('SettingsPreferencesCard', () => {
 		expect(screen.getByText('Preferences')).toBeTruthy()
 	})
 
-	describe('dark mode toggle', () => {
-		it('renders Dark Mode label', () => {
-			render(SettingsPreferencesCard, { props: defaultProps() })
+	describe('theme selector', () => {
+		const themes: readonly RegisteredTheme[] = [
+			{ ...LIGHT_THEME, owner: { kind: 'builtin' } },
+			{ ...DARK_THEME, owner: { kind: 'builtin' } },
+			{
+				...LIGHT_THEME,
+				id: 'com.example.paper:paper',
+				label: 'Paper',
+				owner: { kind: 'plugin', pluginId: 'com.example.paper', generation: 2 },
+			},
+		]
 
-			expect(screen.getByText('Dark Mode')).toBeTruthy()
-		})
-
-		it('renders toggle unchecked when isDarkMode is false', () => {
+		it('lists registry themes with provider attribution', () => {
 			render(SettingsPreferencesCard, {
-				props: defaultProps({ isDarkMode: false }),
+				props: defaultProps({ availableThemes: themes, selectedThemeId: 'openforge-light' }),
 			})
 
-			const toggle = requireElement(screen.getByTestId('theme-toggle'), HTMLInputElement)
-			expect(toggle.checked).toBe(false)
+			const select = requireElement(screen.getByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
+			expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+				'OpenForge Light — Built in',
+				'OpenForge Dark — Built in',
+				'Paper — Provided by com.example.paper',
+			])
 		})
 
-		it('renders toggle checked when isDarkMode is true', () => {
+		it('selects a registry theme by stable id', async () => {
+			const onThemeChange = vi.fn()
 			render(SettingsPreferencesCard, {
-				props: defaultProps({ isDarkMode: true }),
+				props: defaultProps({
+					availableThemes: themes,
+					selectedThemeId: 'openforge-light',
+					onThemeChange,
+				}),
 			})
 
-			const toggle = requireElement(screen.getByTestId('theme-toggle'), HTMLInputElement)
-			expect(toggle.checked).toBe(true)
-		})
-
-		it('calls onThemeToggle when toggle is clicked', async () => {
-			const onThemeToggle = vi.fn()
-			render(SettingsPreferencesCard, {
-				props: defaultProps({ onThemeToggle }),
+			await fireEvent.change(screen.getByRole('combobox', { name: 'Theme' }), {
+				target: { value: 'com.example.paper:paper' },
 			})
 
-			const toggle = screen.getByTestId('theme-toggle')
-			await fireEvent.click(toggle)
-
-			expect(onThemeToggle).toHaveBeenCalledOnce()
+			expect(onThemeChange).toHaveBeenCalledWith('com.example.paper:paper')
 		})
 
-		it('renders description text', () => {
-			render(SettingsPreferencesCard, { props: defaultProps() })
+		it('reflects a changed registry snapshot without remounting', async () => {
+			const view = render(SettingsPreferencesCard, {
+				props: defaultProps({ availableThemes: themes, selectedThemeId: 'com.example.paper:paper' }),
+			})
+			const select = requireElement(screen.getByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
+			expect(select.value).toBe('com.example.paper:paper')
 
-			expect(screen.getByText('Switch between light and dark theme')).toBeTruthy()
+			await view.rerender(defaultProps({
+				availableThemes: themes.slice(0, 2),
+				selectedThemeId: 'openforge-light',
+			}))
+
+			expect(select.value).toBe('openforge-light')
+			expect(screen.queryByRole('option', { name: /Paper/ })).toBeNull()
 		})
 	})
 

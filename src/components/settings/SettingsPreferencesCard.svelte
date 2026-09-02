@@ -2,12 +2,14 @@
 	import { Settings2 } from '@lucide/svelte'
 	import { TERMINAL_FONT_OPTIONS } from '../../lib/terminalFont'
 	import type { TerminalFontId } from '../../lib/terminalFont'
+	import type { RegisteredTheme } from '../../lib/themeRegistry'
 	import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../../lib/terminalFontSize'
 	import SettingsSectionCard from './SettingsSectionCard.svelte'
 
 	interface Props {
-		isDarkMode: boolean
-		onThemeToggle: () => void
+		availableThemes: readonly RegisteredTheme[]
+		selectedThemeId: string
+		onThemeChange: (themeId: string) => void
 		terminalFont: TerminalFontId
 		onTerminalFontChange: (font: TerminalFontId) => void
 		terminalFontSize: number
@@ -15,8 +17,9 @@
 	}
 
 	const {
-		isDarkMode,
-		onThemeToggle,
+		availableThemes,
+		selectedThemeId,
+		onThemeChange,
 		terminalFont,
 		onTerminalFontChange,
 		terminalFontSize,
@@ -28,6 +31,10 @@
   the night wasn't going to get any better.
 ✻ Worked for 20s`
 
+	function handleThemeChange(event: Event & { currentTarget: HTMLSelectElement }): void {
+		onThemeChange(event.currentTarget.value)
+	}
+
 	function handleTerminalFontChange(event: Event & { currentTarget: HTMLSelectElement }): void {
 		onTerminalFontChange(event.currentTarget.value as TerminalFontId)
 	}
@@ -36,18 +43,25 @@
 <SettingsSectionCard id="section-preferences" title="Preferences">
 	{#snippet icon()}<Settings2 size={16} />{/snippet}
 	<div class="flex flex-col gap-4">
-		<label class="flex items-center justify-between cursor-pointer">
+		<label class="flex items-center justify-between gap-4 cursor-pointer">
 			<div class="flex flex-col gap-0.5">
-				<span class="text-sm text-base-content">Dark Mode</span>
-				<span class="text-[0.7rem] text-base-content/50">Switch between light and dark theme</span>
+				<span id="theme-label" class="text-sm text-base-content">Theme</span>
+				<span id="theme-description" class="text-[0.7rem] text-base-content/50">Choose an application theme</span>
 			</div>
-			<input
-				type="checkbox"
-				class="toggle toggle-primary toggle-sm"
-				checked={isDarkMode}
-				onchange={onThemeToggle}
-				data-testid="theme-toggle"
-			/>
+			<select
+				aria-labelledby="theme-label"
+				aria-describedby="theme-description"
+				class="select select-bordered select-sm min-w-56"
+				value={selectedThemeId}
+				onchange={handleThemeChange}
+				data-testid="theme-select"
+			>
+				{#each availableThemes as theme (theme.id)}
+					<option value={theme.id}>
+						{theme.label} — {theme.owner.kind === 'builtin' ? 'Built in' : `Provided by ${theme.owner.pluginId}`}
+					</option>
+				{/each}
+			</select>
 		</label>
 
 		<div class="flex flex-col gap-2">

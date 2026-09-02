@@ -49,4 +49,24 @@ describe('theme document adapter', () => {
     expect(() => adapter.apply(invalid)).toThrow('Invalid theme definition: tokens.text is required')
     expect(root.outerHTML).toBe(before)
   })
+
+  it('applies a complete custom definition by its declared identity and appearance', () => {
+    const root = document.createElement('html')
+    const adapter = createThemeDocumentAdapter(root)
+    const customTheme: ThemeDefinition = {
+      ...DARK_THEME,
+      id: 'midnight-paper',
+      label: 'Midnight Paper',
+      appearance: 'light',
+      tokens: { ...DARK_THEME.tokens, canvas: '#FAF7F0', accent: '#8B3DFF' },
+    }
+
+    adapter.apply(customTheme)
+
+    expect(root.dataset.theme).toBe('midnight-paper')
+    expect(root.dataset.themeAppearance).toBe('light')
+    expect(root.style.colorScheme).toBe('light')
+    expect(root.style.getPropertyValue('--of-canvas')).toBe('#FAF7F0')
+    expect(root.style.getPropertyValue('--of-accent')).toBe('#8B3DFF')
+  })
 })
