@@ -93,6 +93,17 @@ async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | nu
   }
 }
 
+async function hydratePersistedStoppedSession(taskId: string, status: string | undefined): Promise<void> {
+  if (!status || !['completed', 'paused', 'failed', 'interrupted'].includes(status)) return
+
+  try {
+    const persistedSession = await getLatestSession(taskId)
+    if (persistedSession?.status === status) setActiveSession(taskId, persistedSession)
+  } catch {
+    // Keep the event-applied status; the next lifecycle or attention refresh can retry.
+  }
+}
+
 export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
   return {
     actionComplete: defineDesktopEventListener('action-complete', async (event) => {
@@ -103,6 +114,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       }
       clearCheckpointForTask(taskId)
       void deps.loadTasks()
+      await hydratePersistedStoppedSession(taskId, 'completed')
       void deps.loadProjectAttention()
       await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
     }),
@@ -117,6 +129,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         }
         clearCheckpointForTask(taskId)
         void deps.loadTasks()
+        await hydratePersistedStoppedSession(taskId, 'failed')
         void deps.loadProjectAttention()
         await deps.publishTaskInvalidation?.({ taskId, reason: 'execution' })
       },
@@ -168,6 +181,8 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
 
       if (sessionUpdate.status === 'paused') {
         if (session.status === 'paused' && session.checkpoint_data === sessionUpdate.checkpoint_data) {
+          await hydratePersistedStoppedSession(taskId, sessionUpdate.status)
+          void deps.loadProjectAttention()
           await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
           return
         }
@@ -189,6 +204,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
           session.checkpoint_data === sessionUpdate.checkpoint_data &&
           session.error_message === sessionUpdate.error_message
         ) {
+          await hydratePersistedStoppedSession(taskId, sessionUpdate.status)
           void deps.loadProjectAttention()
           await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
           return
@@ -198,6 +214,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
         clearCheckpointForTask(taskId)
       }
 
+      await hydratePersistedStoppedSession(taskId, sessionUpdate.status)
       void deps.loadProjectAttention()
       await deps.publishTaskInvalidation?.({ taskId, reason: 'attention' })
     }),
@@ -266,6 +283,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
           void deps.loadTasks()
         }
       }
+      await hydratePersistedStoppedSession(taskId, status)
       void deps.loadProjectAttention()
       await deps.publishTaskInvalidation?.({
         taskId,

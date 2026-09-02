@@ -135,6 +135,28 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(sessions)
         }
+        "mark_agent_output_viewed" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let session_id = payload_string(&request.payload, "sessionId")?;
+            let output_revision = payload_i64(&request.payload, "outputRevision")?;
+            if output_revision < 0 {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "outputRevision must be non-negative".to_string(),
+                ));
+            }
+            let changed = {
+                let db = crate::db::acquire_db(&state.db);
+                db.mark_agent_output_viewed(&task_id, &session_id, output_revision)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to mark Agent output viewed: {error}"),
+                        )
+                    })?
+            };
+            json_value(changed)
+        }
         "finalize_agent_session" => finalize_agent_session(state, request),
         _ => unreachable!("agent session handler only receives agent session commands"),
     }

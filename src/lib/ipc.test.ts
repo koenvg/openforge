@@ -32,6 +32,7 @@ import {
   readTaskDetail,
   getTaskAttention,
   getTaskLanes,
+  markAgentOutputViewed,
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
   getProcessMemoryHistory,
@@ -142,6 +143,19 @@ describe("ipc resolved provider", () => {
     expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
   });
 });
+
+describe('ipc Agent output acknowledgement', () => {
+  it('sends the exact output revision with a camelCase payload', async () => {
+    invokeMock.mockResolvedValue(true)
+
+    await expect(markAgentOutputViewed('T-42', 'ses-9', 3)).resolves.toBe(true)
+    expect(invokeMock).toHaveBeenCalledWith('mark_agent_output_viewed', {
+      taskId: 'T-42',
+      sessionId: 'ses-9',
+      outputRevision: 3,
+    })
+  })
+})
 
 describe("ipc task attention projection", () => {
   it("requests the backend-owned Task-only attention rows", async () => {

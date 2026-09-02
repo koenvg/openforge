@@ -14,6 +14,14 @@ export async function getLatestSession(taskId: string): Promise<AgentSession | n
   return invoke<AgentSession | null>("get_latest_session", { taskId });
 }
 
+export async function markAgentOutputViewed(
+  taskId: string,
+  sessionId: string,
+  outputRevision: number,
+): Promise<boolean> {
+  return invoke<boolean>('mark_agent_output_viewed', { taskId, sessionId, outputRevision })
+}
+
 export async function listAgentSessions(request: ListTaskSessionsRequest): Promise<AgentSession[]> {
   return invoke<AgentSession[]>('get_agent_sessions', {
     taskId: request.taskId,

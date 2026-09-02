@@ -20,6 +20,7 @@ vi.mock('../../lib/ipc', () => ({
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
   getLatestSession: vi.fn().mockResolvedValue(null),
+  markAgentOutputViewed: vi.fn().mockResolvedValue(true),
   spawnShellPty: vi.fn().mockResolvedValue(1),
   getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false, instanceId: null }),
   writePty: vi.fn().mockResolvedValue(undefined),

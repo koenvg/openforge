@@ -537,6 +537,8 @@ mod tests {
             claude_session_id: None,
             pi_session_id: None,
             grok_session_id: None,
+            output_revision: 0,
+            viewed_output_revision: 0,
         }
     }
 

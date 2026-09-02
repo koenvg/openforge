@@ -200,6 +200,8 @@ impl super::Database {
                     status: session.status,
                     checkpoint_data: session.checkpoint_data,
                     updated_at: session.updated_at,
+                    output_revision: session.output_revision,
+                    viewed_output_revision: session.viewed_output_revision,
                 })
                 .collect(),
             pull_requests: pull_requests
@@ -310,5 +312,69 @@ mod tests {
         assert!(board.focus.is_empty());
         assert!(board.in_flight.is_empty());
         assert!(board.out_of_focus.is_empty());
+    }
+
+    #[test]
+    fn persisted_unread_output_moves_review_task_to_focus_until_acknowledged() {
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("task_attention_unread_output");
+        let project = db
+            .create_project("Project", "/tmp/task-attention-unread-output")
+            .expect("create project");
+        let task = db
+            .create_task("Review task", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-unread",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create Agent Session");
+        db.update_agent_session("ses-unread", "implement", "completed", None, None)
+            .expect("complete Agent Session");
+        db.insert_pull_request(
+            1,
+            &task.id,
+            "owner",
+            "repo",
+            "Review",
+            "https://example.com/pr/1",
+            "open",
+            1,
+            1,
+            false,
+        )
+        .expect("insert pull request");
+        db.connection()
+            .lock()
+            .expect("lock database")
+            .execute(
+                "UPDATE pull_requests SET review_status = 'review_required' WHERE id = 1",
+                [],
+            )
+            .expect("set review status");
+
+        let unread = db.get_task_lane_rows().expect("project unread lanes");
+        let focused = unread
+            .focus
+            .iter()
+            .find(|row| row.task_id == task.id)
+            .expect("unread review Task is in Focus");
+        assert_eq!(focused.state, "review-pending");
+        assert!(focused.has_unread_agent_output);
+
+        assert!(db
+            .mark_agent_output_viewed(&task.id, "ses-unread", 1)
+            .expect("acknowledge output"));
+        let read = db.get_task_lane_rows().expect("project read lanes");
+        let in_flight = read
+            .in_flight
+            .iter()
+            .find(|row| row.task_id == task.id)
+            .expect("read review Task returns to In Flight");
+        assert_eq!(in_flight.state, "review-pending");
+        assert!(!in_flight.has_unread_agent_output);
     }
 }

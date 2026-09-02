@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
-  import { Bot, GitPullRequest } from '@lucide/svelte'
+  import { Bot, CircleDot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
@@ -643,7 +643,18 @@
                         <Bot size={15} />
                       </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
-                        <span class="text-sm text-base-content truncate">{it.row.item.title}</span>
+                        <span class="flex min-w-0 items-center gap-2">
+                          <span class="min-w-0 flex-1 truncate text-sm text-base-content">{it.row.item.title}</span>
+                          {#if it.row.item.hasUnreadAgentOutput}
+                            <span
+                              class="inline-flex shrink-0 items-center gap-1 rounded-full border border-info/25 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info"
+                              aria-label="Unread agent output"
+                            >
+                              <CircleDot size={11} aria-hidden="true" />
+                              <span>Unread agent output</span>
+                            </span>
+                          {/if}
+                        </span>
                         <span class="text-[11px] text-base-content/45 truncate">
                           {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>

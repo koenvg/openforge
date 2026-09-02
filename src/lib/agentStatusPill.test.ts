@@ -18,6 +18,8 @@ function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
     claude_session_id: 'claude-sess-abc',
     pi_session_id: null,
     grok_session_id: null,
+    output_revision: 0,
+    viewed_output_revision: 0,
     ...overrides,
   }
 }

@@ -7,6 +7,12 @@
   import { INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
   import { useAppRouter } from '../../lib/router.svelte'
   import { isInputFocused } from '../../lib/domUtils'
+  import { markAgentOutputViewed } from '../../lib/ipc'
+  import {
+    createAgentOutputAcknowledgementController,
+    isAgentOutputUnread,
+    type AcknowledgedAgentOutput,
+  } from '../../lib/agentOutputAcknowledgement'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
@@ -32,9 +38,20 @@
     onTaskUpdated?: () => void | Promise<void>
     onProjectAttentionChanged?: () => void | Promise<void>
     onRunAppRegistrationChange?: (registration: TaskRunAppRegistration | null) => void
+    windowFocused?: boolean
   }
 
-  let { task, onRunAction, hostLifecycle, onEdit, onOpenTask, onTaskUpdated, onProjectAttentionChanged, onRunAppRegistrationChange }: Props = $props()
+  let {
+    task,
+    onRunAction,
+    hostLifecycle,
+    onEdit,
+    onOpenTask,
+    onTaskUpdated,
+    onProjectAttentionChanged,
+    onRunAppRegistrationChange,
+    windowFocused = true,
+  }: Props = $props()
 
   const router = useAppRouter()
   const taskShortcuts = useShortcutRegistry()
@@ -45,6 +62,15 @@
   let panelHidden = $state(false)
   let runAppState = $state({ ...INITIAL_TASK_RUN_APP_STATE })
   let runAppRegistration = $state<TaskRunAppRegistration | null>(null)
+  let agentTerminalReady = $state(false)
+
+  const agentOutputAcknowledgement = createAgentOutputAcknowledgementController({
+    markViewed: markAgentOutputViewed,
+    onViewed: handleAgentOutputViewed,
+    onError: (error) => {
+      console.error('[TaskDetailView] Failed to mark Agent output viewed:', error)
+    },
+  })
 
   const taskPaneController = createTaskPaneController({
     activeViews: taskActiveView,
@@ -64,6 +90,13 @@
     sortedTaskPaneTabs.find((tab) => tab.pluginId === TERMINAL_PLUGIN_ID && tab.contributionId === 'terminal') ?? null,
   )
   let currentSession = $derived($activeSessions.get(task.id))
+  let hasUnreadAgentOutput = $derived(currentSession
+    ? isAgentOutputUnread(
+        currentSession.status,
+        currentSession.output_revision,
+        currentSession.viewed_output_revision,
+      )
+    : false)
   let agentStatus = $derived(currentSession?.status ?? null)
   let isStarting = $derived($startingTasks.has(task.id))
   // True only on the agent tab: hides the toolbar + info panel and centers the
@@ -95,6 +128,7 @@
   $effect(() => {
     if (task.id === lastTaskId) return
     lastTaskId = task.id
+    agentTerminalReady = false
     mountedViews = new Set(['agent'])
   })
 
@@ -102,6 +136,25 @@
     if (!hostLifecycle) return
     workspacePath = hostLifecycle.workspacePath
     runAppState = hostLifecycle.runAppState
+  })
+
+  $effect(() => {
+    const session = currentSession
+    void agentOutputAcknowledgement.update({
+      visibleTaskId: $selectedTaskId ?? task.id,
+      agentPaneActive: activeView === 'agent',
+      terminalReady: agentTerminalReady,
+      windowFocusedAndDocumentVisible: windowFocused,
+      session: session
+        ? {
+            id: session.id,
+            taskId: session.ticket_id,
+            status: session.status,
+            outputRevision: session.output_revision,
+            viewedOutputRevision: session.viewed_output_revision,
+          }
+        : null,
+    })
   })
 
   $effect(() => {
@@ -120,7 +173,33 @@
 
   onDestroy(() => {
     taskPaneController.destroy()
+    agentOutputAcknowledgement.dispose()
   })
+
+  function handleAgentOutputViewed(output: AcknowledgedAgentOutput): void {
+    activeSessions.update((sessions) => {
+      const session = sessions.get(output.taskId)
+      if (
+        !session
+        || session.id !== output.sessionId
+        || session.output_revision !== output.outputRevision
+        || session.viewed_output_revision >= output.outputRevision
+      ) {
+        return sessions
+      }
+
+      const updated = new Map(sessions)
+      updated.set(output.taskId, {
+        ...session,
+        viewed_output_revision: output.outputRevision,
+      })
+      return updated
+    })
+
+    void Promise.resolve(onProjectAttentionChanged?.()).catch((error) => {
+      console.error('[TaskDetailView] Failed to refresh Task Attention:', error)
+    })
+  }
 
   function handleBack(): void {
     router.resetToBoard()
@@ -205,6 +284,7 @@
       {workspacePath}
       {activeView}
       tabs={sortedTaskPaneTabs}
+      {hasUnreadAgentOutput}
       bind:panelHidden
       {runAppState}
       {onRunAction}
@@ -225,7 +305,12 @@
       <main class={agentMainClass} aria-label="Agent terminal workbench">
         <div class="min-h-0 min-w-0 flex-1">
           {#key task.id}
-            <AgentPanel taskId={task.id} {isStarting} isActive={activeView === 'agent'} />
+            <AgentPanel
+              taskId={task.id}
+              {isStarting}
+              isActive={activeView === 'agent'}
+              onTerminalReadyChange={(ready) => { agentTerminalReady = ready }}
+            />
           {/key}
         </div>
         {#if $commandHeld}

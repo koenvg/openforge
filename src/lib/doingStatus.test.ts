@@ -26,6 +26,8 @@ const makeSession = (ticketId: string, status: string, checkpointData: string | 
   claude_session_id: null,
     pi_session_id: null,
     grok_session_id: null,
+  output_revision: 0,
+  viewed_output_revision: 0,
 })
 
 describe('computeDoingStatus', () => {

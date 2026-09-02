@@ -194,6 +194,34 @@ describe('createTaskSessionEventListeners', () => {
     expect(get(checkpointNotification)?.timestamp).toBe(123)
   })
 
+  it('hydrates stopped output revisions before refreshing Task Attention', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({
+      status: 'running',
+      output_revision: 0,
+      viewed_output_revision: 0,
+    })]]))
+    vi.mocked(getLatestSession).mockResolvedValue(createSession({
+      status: 'completed',
+      output_revision: 1,
+      viewed_output_revision: 0,
+    }))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'completed', kind: 'ended' },
+    })
+
+    expect(getLatestSession).toHaveBeenCalledWith('task-1')
+    expect(get(activeSessions).get('task-1')).toMatchObject({
+      status: 'completed',
+      output_revision: 1,
+      viewed_output_revision: 0,
+    })
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+
   it('marks active sessions failed from provider-neutral failed status events', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
     activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: '{"pending":true}' })]]))

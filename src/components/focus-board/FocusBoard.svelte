@@ -5,6 +5,7 @@
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
+  import { isAgentOutputUnread } from '../../lib/agentOutputAcknowledgement'
   import TaskListItem from './TaskListItem.svelte'
   import TaskInspectorPanel from '../task-detail/TaskInspectorPanel.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
@@ -243,6 +244,8 @@
                 {session}
                 {pullRequests}
                 reasonText={attentionRow?.reason ?? getTaskReasonText(state, pullRequests)}
+                hasUnreadAgentOutput={attentionRow?.has_unread_agent_output
+                  ?? (session ? isAgentOutputUnread(session.status, session.output_revision, session.viewed_output_revision) : false)}
                 dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
                 showLabels={activeFilter === 'backlog'}
                 isSelected={selectedTaskIdLocal === task.id}

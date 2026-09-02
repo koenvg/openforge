@@ -355,6 +355,7 @@
             onRefreshTask={async () => { await appData.loadTasks() }}
             onTaskUpdated={async () => { await appData.loadTasks() }}
             onProjectAttentionChanged={appData.loadProjectAttention}
+            {windowFocused}
             onRunAppRegistrationChange={handleRunAppRegistrationChange}
           />
         {:else}

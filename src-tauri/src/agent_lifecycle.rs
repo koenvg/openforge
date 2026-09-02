@@ -518,6 +518,29 @@ mod tests {
             .expect("session exists");
         assert_eq!(session.status, "running");
         assert_eq!(session.opencode_session_id, Some("ses-5".to_string()));
+
+        let stopped = AgentLifecycleNotification {
+            provider: "opencode".to_string(),
+            task_id: task.id.clone(),
+            pty_instance_id: Some(5),
+            provider_session_id: Some("ses-5".to_string()),
+            kind: AgentLifecycleEventKind::BecameIdle,
+            raw_event_type: Some("session.idle".to_string()),
+            raw_status_type: None,
+        };
+        apply_agent_lifecycle_notification(&db, &stopped)
+            .expect("apply stopped lifecycle")
+            .expect("stopped status should be reported");
+        apply_agent_lifecycle_notification(&db, &stopped)
+            .expect("apply duplicate stopped lifecycle")
+            .expect("duplicate stopped status should be reported");
+
+        let session = db
+            .get_agent_session("ses-normalized")
+            .expect("get stopped session")
+            .expect("stopped session exists");
+        assert_eq!(session.status, "completed");
+        assert_eq!(session.output_revision, 1);
     }
 
     #[test]
