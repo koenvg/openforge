@@ -290,7 +290,6 @@ fn disposition_for_status(status: &str) -> Option<AgentFollowUpDisposition> {
     }
 }
 
-/// `writePtyWithSubmit` in `src/lib/ptySubmit.ts` sanitizes the same way.
 fn terminal_follow_up_input(message: &str) -> Vec<u8> {
     let sanitized: String = message
         .chars()
@@ -413,5 +412,15 @@ mod tests {
             .expect("Agent Session exists");
         assert_eq!(session.status, "running");
         assert_eq!(session.pty_instance_id, Some(99));
+    }
+
+    #[test]
+    fn wraps_a_follow_up_in_a_paste_envelope_and_drops_control_characters() {
+        let input = terminal_follow_up_input("first line\r\n\tsecond\u{1b}[201~line");
+
+        assert_eq!(
+            String::from_utf8(input).expect("utf-8 follow-up input"),
+            "\u{1b}[200~first line\n\tsecond[201~line\u{1b}[201~\r"
+        );
     }
 }
