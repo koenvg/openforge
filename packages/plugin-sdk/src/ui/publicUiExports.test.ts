@@ -107,6 +107,10 @@ describe('plugin-sdk public UI exports', () => {
       'MarkdownContent',
       'ResizablePanel',
       'Modal',
+      'Select',
+      'Tabs',
+      'AnchoredMenu',
+      'Tooltip',
       'PluginPageHeader',
       'PluginPageShell',
       'PluginViewState',
@@ -119,6 +123,25 @@ describe('plugin-sdk public UI exports', () => {
     for (const registration of OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS) {
       expect(existsSync(resolve(packageRoot, registration.sourcePath)), registration.sourcePath).toBe(true)
     }
+  })
+
+  it('owns the private headless dependencies needed by packed UI components', () => {
+    const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+      peerDependencies?: Record<string, string>
+    }
+
+    expect(packageJson.dependencies?.['bits-ui']).toBe('^2.19.0')
+    expect(packageJson.dependencies?.['@internationalized/date']).toBe('^3.12.3')
+    expect(packageJson.peerDependencies?.svelte).toBe('^5.0.0')
+  })
+
+  it('checks emitted public declarations for private Bits UI types', () => {
+    const contractScript = readFileSync(resolve(packageRoot, 'scripts/check-published-contract.mjs'), 'utf8')
+    const declarationContract = readFileSync(resolve(packageRoot, 'scripts/public-ui-declaration-contract.mjs'), 'utf8')
+
+    expect(contractScript).toContain('assertPublicUiDeclarationsHideBitsUi')
+    expect(declarationContract).toContain('Public OpenForge UI declarations expose private Bits UI types')
   })
 
   it.each([

@@ -73,6 +73,23 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     }
   })
 
+  it('builds a packed external plugin against the shared host Svelte runtime', async () => {
+    const contractScript = await readFile(
+      join(process.cwd(), 'packages/plugin-sdk/scripts/check-published-contract.mjs'),
+      'utf8',
+    )
+
+    expect(contractScript).toContain('buildPackedExternalPluginFixture')
+    expect(contractScript).toContain('openforgePluginViteExternals')
+    for (const componentName of ['Modal', 'Select', 'Tabs', 'AnchoredMenu', 'Tooltip']) {
+      const registration = OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.find(
+        candidate => candidate.componentName === componentName,
+      )
+      expect(registration, componentName).toBeTruthy()
+      expect(contractScript, componentName).toContain(registration.importSpecifier)
+    }
+  })
+
   it('keeps the renderer import map complete for every SDK-externalized Svelte runtime import', async () => {
     const imports = readRendererImportMap(rendererImportMapHtml())
 
