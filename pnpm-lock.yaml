@@ -99,10 +99,31 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/cascadia-code':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/courier-prime':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/inter':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/jetbrains-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/martian-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/overpass-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/space-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/vt323':
         specifier: ^5.3.0
         version: 5.3.0
       '@git-diff-view/core':
@@ -967,11 +988,32 @@ packages:
       '@noble/hashes':
         optional: true
 
+  '@fontsource/cascadia-code@5.3.0':
+    resolution: {integrity: sha512-XEGnkay3kCOAJXcrZqokezGlw1sATtpqOMOrBOuvYt6Bj6EaejU2BvO1q8AdWdNfDQ4AoYP/Zs30QRY5m9UEZw==}
+
+  '@fontsource/courier-prime@5.3.0':
+    resolution: {integrity: sha512-KIi1k4VG1Wv+/CGpb1AUpLkUuOAQA6zmvthqxOZGN0AV8BEgQgbK7qAtquv14zsBJAY1bb5BHIEbWVFLgENh0w==}
+
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
   '@fontsource/inter@5.3.0':
     resolution: {integrity: sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g==}
 
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
+
+  '@fontsource/martian-mono@5.3.0':
+    resolution: {integrity: sha512-0iTnU6SZi6j5z4ymwlZGep6akvp/xWm+r+WyZO9hMfDJWX+dsFLipQp9zO02S0lkUQ+zAahcZNy3XLiNP+gVqQ==}
+
+  '@fontsource/overpass-mono@5.3.0':
+    resolution: {integrity: sha512-ORe1cIq1DZmEQ2/Y4N09YIKgzAfzn1ZlPfOQUEAIZTJiNaOQJonxCWbp9fsUQrp0h6j7+ebd9wIzkRv7YMaESQ==}
+
+  '@fontsource/space-mono@5.3.0':
+    resolution: {integrity: sha512-FrpBMOVWn3PRdRHlrZWC55X3kZG/2BTH7SM5ZyS/bky3iKya2BturI5lk+t0RoDQL2JyHzURsVq/EisCsxpI5A==}
+
+  '@fontsource/vt323@5.3.0':
+    resolution: {integrity: sha512-3w33Rg/0+R1587HQfz4t7Q7e0GGeCqr3wmzIwqdGInUnrGEwMA5eX39GP4Z9wpTQnwfhVOhYuxuRwRUeIcicbw==}
 
   '@git-diff-view/core@0.1.7':
     resolution: {integrity: sha512-ZW/kumNoUQ8+DgawYhcrABa7TOALYzn3pe723uTHSy6/r35qAwgswJxF1bkdV9Zr+KHuhlFeRLiVhjij59qdIA==}
@@ -4007,9 +4049,23 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
+  '@fontsource/cascadia-code@5.3.0': {}
+
+  '@fontsource/courier-prime@5.3.0': {}
+
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
   '@fontsource/inter@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
+
+  '@fontsource/martian-mono@5.3.0': {}
+
+  '@fontsource/overpass-mono@5.3.0': {}
+
+  '@fontsource/space-mono@5.3.0': {}
+
+  '@fontsource/vt323@5.3.0': {}
 
   '@git-diff-view/core@0.1.7':
     dependencies:

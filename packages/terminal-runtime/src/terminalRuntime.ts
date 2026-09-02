@@ -1,7 +1,7 @@
-import { get } from 'svelte/store'
+import { get, readable } from 'svelte/store'
 import { createTerminalAcquisition } from './terminalAcquisition'
 import { isValidTerminalDimensions } from './terminalGeometry'
-import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
+import { preloadTerminalFonts, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, type TerminalFontReadiness } from './terminalOptions'
 import type { TerminalPerformanceMarkContext, TerminalPerformancePhase } from './terminalPerformanceTrace'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
 import {
@@ -16,6 +16,8 @@ import type {
   TerminalSession,
   TerminalSessionDiagnostics,
 } from './terminalRuntimeTypes'
+import { applyTerminalFont } from './terminalFontPropagation'
+import { applyTerminalFontSize } from './terminalFontSizePropagation'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import type { TerminalViewFactory } from './terminalView'
 import { createXtermTerminalView } from './xtermTerminalView'
@@ -82,6 +84,8 @@ export function createTerminalRuntime({
   beforeSessionStart,
 }: TerminalRuntimeOptions) {
   const activeThemeMode = environment.themeMode ?? defaultThemeMode
+  const activeFontFamily = environment.fontFamily ?? readable(TERMINAL_FONT_FAMILY)
+  const activeFontSize = environment.fontSize ?? readable(TERMINAL_FONT_SIZE)
   const coordinators = new Map<string, TerminalSessionCoordinator>()
   const coordinatorsBySession = new WeakMap<TerminalSession, TerminalSessionCoordinator>()
   const sessionLifecycle = createTerminalSessionLifecycle(key => coordinators.get(key))
@@ -99,6 +103,8 @@ export function createTerminalRuntime({
       view: createTerminalView({
         terminalKey: shellSessionKey,
         themeMode: get(activeThemeMode),
+        fontFamily: get(activeFontFamily),
+        fontSize: get(activeFontSize),
         openLink: url => environment.openLink(url),
         enableImages: configuration.enableImages,
         loggerName: environment.loggerName,
@@ -145,6 +151,12 @@ export function createTerminalRuntime({
   const unsubscribeThemeMode = activeThemeMode.subscribe(mode => {
     applyTerminalTheme(coordinators.values(), mode)
   })
+  const unsubscribeFontFamily = activeFontFamily.subscribe(fontFamily => {
+    applyTerminalFont(coordinators.values(), fontFamily)
+  })
+  const unsubscribeFontSize = activeFontSize.subscribe(fontSize => {
+    applyTerminalFontSize(coordinators.values(), fontSize)
+  })
   let disposed = false
 
   function releaseAll(): void {
@@ -183,6 +195,16 @@ export function createTerminalRuntime({
     }
     try {
       unsubscribeThemeMode()
+    } catch (error) {
+      disposalError ??= error
+    }
+    try {
+      unsubscribeFontFamily()
+    } catch (error) {
+      disposalError ??= error
+    }
+    try {
+      unsubscribeFontSize()
     } catch (error) {
       disposalError ??= error
     }

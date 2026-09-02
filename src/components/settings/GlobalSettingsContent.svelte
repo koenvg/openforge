@@ -30,6 +30,10 @@
   <SettingsPreferencesCard
     isDarkMode={controller.isDarkMode}
     onThemeToggle={controller.handleThemeToggle}
+    terminalFont={controller.terminalFont}
+    onTerminalFontChange={controller.handleTerminalFontChange}
+    terminalFontSize={controller.terminalFontSize}
+    onTerminalFontSizeChange={controller.handleTerminalFontSizeChange}
   />
 {:else if activeSection === 'agents'}
   <HierarchicalSettingsCard

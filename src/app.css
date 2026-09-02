@@ -7,6 +7,19 @@
 @import "@fontsource/jetbrains-mono/600.css";
 @import "@fontsource/jetbrains-mono/700.css";
 @import "@fontsource/jetbrains-mono/700-italic.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+@import "@fontsource/cascadia-code/400.css";
+@import "@fontsource/cascadia-code/700.css";
+@import "@fontsource/vt323/400.css";
+@import "@fontsource/martian-mono/400.css";
+@import "@fontsource/martian-mono/700.css";
+@import "@fontsource/overpass-mono/400.css";
+@import "@fontsource/overpass-mono/700.css";
+@import "@fontsource/courier-prime/400.css";
+@import "@fontsource/courier-prime/700.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
 @import "tailwindcss";
 
 @plugin "daisyui";

@@ -23,6 +23,8 @@ export interface TerminalRuntimeEnvironment {
   openLink(url: string): Promise<void>
   sampleSessionConfiguration?(shellSessionKey: string): TerminalSessionConfiguration
   themeMode?: Readable<ThemeMode>
+  fontFamily?: Readable<string>
+  fontSize?: Readable<number>
   loggerName?: string
   enableImages?: boolean
   performanceTrace?: TerminalPerformanceTrace

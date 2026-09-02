@@ -33,7 +33,7 @@ function createHostDiv(): HTMLDivElement {
 export function createXtermTerminalView(options: XtermTerminalViewOptions): TerminalView {
   const linkOptions = { openLink: options.openLink, loggerName: options.loggerName }
   const terminal = new Terminal({
-    ...getTerminalOptions(options.themeMode),
+    ...getTerminalOptions(options.themeMode, options.fontFamily, options.fontSize),
     linkHandler: createTerminalLinkHandler(linkOptions),
   })
   const fitAddon = new FitAddon()
@@ -238,6 +238,14 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     },
     setTheme(theme) {
       terminal.options.theme = theme
+    },
+    setFontFamily(fontFamily) {
+      terminal.options.fontFamily = fontFamily
+      fitAndRefreshWhenVisible()
+    },
+    setFontSize(fontSize) {
+      terminal.options.fontSize = fontSize
+      fitAndRefreshWhenVisible()
     },
     onRendererFailure(listener) {
       rendererFailureListeners.add(listener)

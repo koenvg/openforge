@@ -38,6 +38,8 @@ export interface TerminalSessionCoordinator {
   focus(): void
   refresh(): void
   setTheme(theme: TerminalViewTheme): void
+  setFontFamily(fontFamily: string): void
+  setFontSize(fontSize: number): void
   diagnostics(): TerminalSessionDiagnostics
   capturePresentation(): ReturnType<TerminalView['capturePresentation']>
   drainPresentation(): ReturnType<TerminalView['drainPresentation']>
@@ -246,6 +248,8 @@ export function createTerminalSessionCoordinator({
     focus: () => attachment.focus(),
     refresh: () => attachment.refresh(),
     setTheme: theme => view.setTheme(theme),
+    setFontFamily: fontFamily => view.setFontFamily(fontFamily),
+    setFontSize: fontSize => view.setFontSize(fontSize),
     diagnostics,
     capturePresentation: () => view.capturePresentation(),
     drainPresentation: () => view.drainPresentation(),

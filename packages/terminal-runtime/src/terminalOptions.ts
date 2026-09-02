@@ -74,12 +74,18 @@ export async function preloadTerminalFonts(): Promise<TerminalFontReadiness> {
  * to ensure consistent font, sizing, behavior, and theming.
  *
  * @param themeMode The current theme mode ('light' or 'dark')
+ * @param fontFamily Font family stack to use; defaults to TERMINAL_FONT_FAMILY
+ * @param fontSize Font size in pixels; defaults to TERMINAL_FONT_SIZE
  * @returns Terminal options compatible with xterm's ITerminalOptions interface
  */
-export function getTerminalOptions(themeMode: ThemeMode): ITerminalOptions {
+export function getTerminalOptions(
+  themeMode: ThemeMode,
+  fontFamily: string = TERMINAL_FONT_FAMILY,
+  fontSize: number = TERMINAL_FONT_SIZE,
+): ITerminalOptions {
   return {
-    fontFamily: TERMINAL_FONT_FAMILY,
-    fontSize: TERMINAL_FONT_SIZE,
+    fontFamily,
+    fontSize,
     fontWeight: 400,
     fontWeightBold: 700,
     letterSpacing: 0,
