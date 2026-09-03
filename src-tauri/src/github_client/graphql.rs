@@ -94,10 +94,7 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
 const ENQUEUE_PULL_REQUEST_MUTATION: &str = r#"
 mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!, $expectedHeadOid: GitObjectID!) {
   enqueuePullRequest(input: { pullRequestId: $pullRequestId, expectedHeadOid: $expectedHeadOid }) {
-    pullRequest {
-      id
-      mergeQueueEntry { state }
-    }
+    mergeQueueEntry { state }
   }
 }
 "#;
@@ -244,17 +241,19 @@ fn enqueue_pull_request_payload(pull_request_id: &str, expected_head_oid: &str) 
     })
 }
 
-fn graphql_error_messages(body: &Value) -> Vec<String> {
+fn graphql_errors(body: &Value) -> &[Value] {
     body.get("errors")
         .and_then(Value::as_array)
-        .map(|errors| {
-            errors
-                .iter()
-                .filter_map(|error| error.get("message").and_then(Value::as_str))
-                .map(str::to_string)
-                .collect()
-        })
+        .map(Vec::as_slice)
         .unwrap_or_default()
+}
+
+fn graphql_error_messages(body: &Value) -> Vec<String> {
+    graphql_errors(body)
+        .iter()
+        .filter_map(|error| error.get("message").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 fn parse_pr_readiness_fallback(
@@ -276,15 +275,59 @@ fn parse_pr_readiness_fallback(
     Ok(snapshot)
 }
 
-fn is_unsupported_enqueue_error(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    lower.contains("enqueuepullrequest")
-        && (lower.contains("doesn't exist")
-            || lower.contains("does not exist")
-            || lower.contains("undefinedfield")
-            || lower.contains("unknown field")
-            || lower.contains("doesn't accept argument")
-            || lower.contains("does not accept argument"))
+fn is_unsupported_enqueue_error(error: &Value) -> bool {
+    names_an_enqueue_schema_symbol(error) && rejects_the_named_schema_symbol(error)
+}
+
+fn is_enqueue_schema_symbol(name: &str) -> bool {
+    name.eq_ignore_ascii_case("enqueuePullRequest")
+        || name.eq_ignore_ascii_case("EnqueuePullRequestInput")
+}
+
+fn names_an_enqueue_schema_symbol(error: &Value) -> bool {
+    let extensions = error.get("extensions");
+    let extension_name = |key: &str| {
+        extensions
+            .and_then(|extensions| extensions.get(key))
+            .and_then(Value::as_str)
+    };
+
+    [extension_name("fieldName"), extension_name("name")]
+        .into_iter()
+        .flatten()
+        .any(is_enqueue_schema_symbol)
+        || quoted_names(error).any(is_enqueue_schema_symbol)
+}
+
+fn quoted_names(error: &Value) -> impl Iterator<Item = &str> {
+    error
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .split('\'')
+}
+
+fn rejects_the_named_schema_symbol(error: &Value) -> bool {
+    if let Some(code) = error.pointer("/extensions/code").and_then(Value::as_str) {
+        if matches!(code, "undefinedField" | "argumentNotAccepted") {
+            return true;
+        }
+    }
+
+    let lower = error
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_lowercase();
+    [
+        "doesn't exist",
+        "does not exist",
+        "unknown field",
+        "doesn't accept argument",
+        "does not accept argument",
+    ]
+    .iter()
+    .any(|phrase| lower.contains(phrase))
 }
 
 fn is_enqueue_permission_error(message: &str) -> bool {
@@ -319,18 +362,20 @@ fn classify_enqueue_graphql_errors(
     repo: &str,
     pr_number: i64,
 ) -> Result<(), String> {
-    let messages = graphql_error_messages(body);
-    if messages.is_empty() {
+    let errors = graphql_errors(body);
+    if errors.is_empty() {
         return Ok(());
     }
-
-    let joined = messages.join("; ");
-    if messages
-        .iter()
-        .any(|message| is_unsupported_enqueue_error(message))
-    {
+    if errors.iter().any(is_unsupported_enqueue_error) {
         return Err(unsupported_enqueue_message());
     }
+
+    let messages = graphql_error_messages(body);
+    let joined = if messages.is_empty() {
+        Value::from(errors).to_string()
+    } else {
+        messages.join("; ")
+    };
     if messages
         .iter()
         .any(|message| is_enqueue_permission_error(message))
@@ -353,13 +398,12 @@ fn extract_enqueue_pull_request_result(body: &Value) -> Result<(), String> {
     classify_enqueue_graphql_errors(body, "the authenticated actor", "unknown", "unknown", 0)?;
 
     if body
-        .pointer("/data/enqueuePullRequest/pullRequest/id")
-        .and_then(Value::as_str)
-        .is_some()
+        .pointer("/data/enqueuePullRequest")
+        .is_some_and(Value::is_object)
     {
         Ok(())
     } else {
-        Err("GitHub enqueue response did not include the pull request payload.".to_string())
+        Err("GitHub enqueue response did not include the enqueue payload.".to_string())
     }
 }
 
@@ -397,44 +441,192 @@ mod tests {
     }
 
     #[test]
-    fn enqueue_treats_a_rejected_expected_head_oid_argument_as_an_unsupported_merge_queue() {
-        let body = json!({
-            "errors": [{
-                "message": "InputObject 'EnqueuePullRequestInput' doesn't accept argument 'expectedHeadOid'"
-            }]
-        });
-
-        let err = extract_enqueue_pull_request_result(&body)
-            .expect_err("unsupported argument should error");
-        assert!(err.contains("GitHub merge queue enqueue is not supported"));
+    fn enqueue_mutation_does_not_select_pull_request_on_the_enqueue_payload() {
+        assert!(ENQUEUE_PULL_REQUEST_MUTATION.contains("mergeQueueEntry { state }"));
+        assert!(!ENQUEUE_PULL_REQUEST_MUTATION.contains("pullRequest {"));
     }
 
     #[test]
-    fn enqueue_response_success_requires_pull_request_payload() {
+    fn enqueue_response_success_only_requires_the_mutation_payload() {
         let body = json!({
-            "data": {
-                "enqueuePullRequest": {
-                    "pullRequest": {
-                        "id": "PR_node",
-                        "mergeQueueEntry": { "state": "QUEUED" }
-                    }
-                }
-            }
+            "data": { "enqueuePullRequest": { "mergeQueueEntry": { "state": "QUEUED" } } }
         });
 
         extract_enqueue_pull_request_result(&body).expect("valid enqueue response");
     }
 
     #[test]
-    fn enqueue_response_reports_unsupported_merge_queue_api() {
+    fn enqueue_response_succeeds_when_the_merge_queue_entry_is_null() {
+        let body = json!({ "data": { "enqueuePullRequest": { "mergeQueueEntry": null } } });
+
+        extract_enqueue_pull_request_result(&body).expect("null entry is a successful enqueue");
+    }
+
+    #[test]
+    fn enqueue_response_rejects_a_null_mutation_payload() {
+        let body = json!({ "data": { "enqueuePullRequest": null } });
+
+        let err =
+            extract_enqueue_pull_request_result(&body).expect_err("null payload should error");
+        assert!(err.contains("did not include the enqueue payload"));
+    }
+
+    #[test]
+    fn enqueue_surfaces_the_raw_error_when_our_own_selection_is_invalid() {
         let body = json!({
-            "errors": [{ "message": "Field 'enqueuePullRequest' doesn't exist on type 'Mutation'" }]
+            "errors": [{
+                "message": "Field 'pullRequest' doesn't exist on type 'EnqueuePullRequestPayload'",
+                "extensions": {
+                    "code": "undefinedField",
+                    "typeName": "EnqueuePullRequestPayload",
+                    "fieldName": "pullRequest"
+                }
+            }]
         });
 
-        let err = extract_enqueue_pull_request_result(&body)
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("selection error should surface");
+        assert_ne!(err, unsupported_enqueue_message());
+        assert!(err.contains("EnqueuePullRequestPayload"));
+    }
+
+    #[test]
+    fn enqueue_reports_unsupported_when_extensions_name_the_mutation_field() {
+        let body = json!({
+            "errors": [{
+                "message": "Field 'enqueuePullRequest' doesn't exist on type 'Mutation'",
+                "extensions": {
+                    "code": "undefinedField",
+                    "typeName": "Mutation",
+                    "fieldName": "enqueuePullRequest"
+                }
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
             .expect_err("unsupported mutation should error");
-        assert!(err.contains("GitHub merge queue enqueue is not supported"));
-        assert!(err.contains("update GitHub Enterprise"));
+        assert_eq!(err, unsupported_enqueue_message());
+    }
+
+    #[test]
+    fn enqueue_reports_unsupported_when_extensions_reject_the_input_object() {
+        let body = json!({
+            "errors": [{
+                "message": "InputObject 'EnqueuePullRequestInput' doesn't accept argument 'expectedHeadOid'",
+                "extensions": {
+                    "code": "argumentNotAccepted",
+                    "typeName": "InputObject",
+                    "name": "EnqueuePullRequestInput",
+                    "argumentName": "expectedHeadOid"
+                }
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("rejected input argument should error");
+        assert_eq!(err, unsupported_enqueue_message());
+    }
+
+    #[test]
+    fn enqueue_reports_unsupported_when_the_mutation_field_rejects_its_input_argument() {
+        let body = json!({
+            "errors": [{
+                "message": "Field 'enqueuePullRequest' doesn't accept argument 'input'",
+                "extensions": {
+                    "code": "argumentNotAccepted",
+                    "typeName": "Field",
+                    "name": "enqueuePullRequest",
+                    "argumentName": "input"
+                }
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("rejected input argument should error");
+        assert_eq!(err, unsupported_enqueue_message());
+    }
+
+    #[test]
+    fn enqueue_reports_unsupported_when_only_the_message_names_the_mutation_field() {
+        for extensions in [json!(null), json!({}), json!({ "code": "someOtherCode" })] {
+            let body = json!({
+                "errors": [{
+                    "message": "Field 'enqueuePullRequest' doesn't exist on type 'Mutation'",
+                    "extensions": extensions
+                }]
+            });
+
+            let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+                .expect_err("unsupported mutation should error");
+            assert_eq!(err, unsupported_enqueue_message());
+        }
+    }
+
+    #[test]
+    fn enqueue_reports_unsupported_when_no_extensions_are_present_at_all() {
+        for message in [
+            "Field 'enqueuePullRequest' doesn't exist on type 'Mutation'",
+            "InputObject 'EnqueuePullRequestInput' doesn't accept argument 'expectedHeadOid'",
+        ] {
+            let body = json!({ "errors": [{ "message": message }] });
+
+            let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+                .expect_err("unsupported mutation should error");
+            assert_eq!(err, unsupported_enqueue_message());
+        }
+    }
+
+    #[test]
+    fn enqueue_surfaces_a_missing_node_verbatim_instead_of_claiming_an_unsupported_api() {
+        let body = json!({
+            "errors": [{
+                "type": "NOT_FOUND",
+                "path": ["enqueuePullRequest"],
+                "message": "Could not resolve to a node with the global id of 'PR_node'"
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("missing node should error");
+        assert_ne!(err, unsupported_enqueue_message());
+        assert!(err.contains("Could not resolve to a node"));
+    }
+
+    #[test]
+    fn enqueue_surfaces_a_non_schema_complaint_about_the_mutation_field_verbatim() {
+        let body = json!({
+            "errors": [{
+                "message": "Field must have selections (field 'enqueuePullRequest' returns EnqueuePullRequestPayload)"
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("selection error should surface");
+        assert_ne!(err, unsupported_enqueue_message());
+        assert!(err.contains("Field must have selections"));
+    }
+
+    #[test]
+    fn enqueue_classifies_permission_failures_that_carry_extensions() {
+        let body = json!({
+            "errors": [{
+                "message": "Resource not accessible by integration",
+                "extensions": { "code": "insufficientScopes" }
+            }]
+        });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("permission failure should be classified");
+        assert!(err.contains("permission to enqueue owner/repo#42"));
+    }
+
+    #[test]
+    fn enqueue_reports_message_less_errors_instead_of_treating_them_as_success() {
+        let body = json!({ "errors": [{ "extensions": { "code": "someOtherCode" } }] });
+
+        let err = classify_enqueue_graphql_errors(&body, "octocat", "owner", "repo", 42)
+            .expect_err("a message-less error is still a failure");
+        assert!(err.contains("someOtherCode"));
     }
 
     #[test]
