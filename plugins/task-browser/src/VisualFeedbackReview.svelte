@@ -1,5 +1,10 @@
 <script lang="ts">
   import { Trash2, X } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import type {
     CaptureAnnotation,
     VisualFeedbackEditorState,
@@ -39,18 +44,20 @@
       <h2 class="text-sm font-semibold">Visual feedback review</h2>
       <p class="text-xs text-base-content/60">Correct ordered feedback while keeping the live page available below.</p>
     </div>
-    <button class="btn btn-ghost btn-square btn-sm" type="button" aria-label="Close visual feedback review" onclick={onClose}>
+    <IconButton label="Close visual feedback review" size="sm" type="button" onclick={onClose}>
       <X size={16} aria-hidden="true" />
-    </button>
+    </IconButton>
   </div>
 
   <div class="grid gap-3 lg:grid-cols-2">
     {#each editor.captures as capture (capture.number)}
-      <article class="rounded-box border border-base-300 bg-base-100 p-3">
+      <Panel>
         <div class="flex items-center justify-between gap-2">
           <h3 class="text-sm font-semibold">Capture {capture.number}</h3>
-          <button
-            class="btn btn-ghost btn-xs text-error"
+          <Button
+            variant="ghost"
+            size="xs"
+            style="color: var(--of-danger);"
             type="button"
             aria-label={`Remove capture ${capture.number}`}
             disabled={editor.busy}
@@ -58,7 +65,7 @@
           >
             <Trash2 size={14} aria-hidden="true" />
             Remove capture
-          </button>
+          </Button>
         </div>
         <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
           <dt class="text-base-content/60">Page</dt>
@@ -77,42 +84,41 @@
           {#each captureAnnotations(capture.number) as annotation (annotation.number)}
             <li class="rounded-box bg-base-200/60 p-2 text-xs">
               <form onsubmit={(event) => saveAnnotation(event, annotation)}>
-                <label class="font-semibold" for={`annotation-${annotation.number}-comment`}>
-                  Annotation {annotation.number}
-                </label>
                 {#if capture.artifactState !== 'available'}
-                  <p class="alert alert-warning mt-2 py-2 text-xs" role="alert">
+                  <p class="mt-2 border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert">
                     Annotation {annotation.number} background unavailable: {capture.artifactError ?? 'Capture availability is unknown'}
                   </p>
                 {/if}
-                <textarea
+                <Textarea
                   id={`annotation-${annotation.number}-comment`}
-                  class="textarea textarea-bordered textarea-sm mt-2 w-full"
+                  label={`Annotation ${annotation.number}`}
+                  class="mt-2 w-full"
                   name="comment"
                   aria-label={`Comment for annotation ${annotation.number}`}
-                  rows="2"
-                >{annotation.comment}</textarea>
+                  rows={2}
+                  value={annotation.comment}
+                />
                 <fieldset class="mt-2 grid grid-cols-4 gap-2">
                   <legend class="sr-only">Normalized marker geometry for annotation {annotation.number}</legend>
                   {#each ['x', 'y', 'width', 'height'] as field}
-                    <label class="form-control gap-1">
-                      <span class="text-base-content/60">{field}</span>
-                      <input
-                        class="input input-bordered input-xs min-w-0"
-                        type="number"
-                        name={field}
-                        aria-label={`Annotation ${annotation.number} ${field}`}
-                        min="0"
-                        max="1"
-                        step="any"
-                        value={annotation.rect[field as keyof typeof annotation.rect]}
-                      />
-                    </label>
+                    <TextField
+                      label={field}
+                      class="min-w-0"
+                      type="number"
+                      name={field}
+                      aria-label={`Annotation ${annotation.number} ${field}`}
+                      min="0"
+                      max="1"
+                      step="any"
+                      value={String(annotation.rect[field as keyof typeof annotation.rect])}
+                    />
                   {/each}
                 </fieldset>
                 <div class="mt-2 flex items-center justify-between gap-2">
-                  <button
-                    class="btn btn-ghost btn-xs text-error"
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    style="color: var(--of-danger);"
                     type="button"
                     aria-label={`Delete annotation ${annotation.number}`}
                     disabled={editor.busy}
@@ -120,16 +126,16 @@
                   >
                     <Trash2 size={14} aria-hidden="true" />
                     Delete
-                  </button>
-                  <button class="btn btn-primary btn-xs" type="submit" disabled={editor.busy}>
+                  </Button>
+                  <Button size="xs" type="submit" disabled={editor.busy}>
                     Save annotation {annotation.number}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </li>
           {/each}
         </ol>
-      </article>
+      </Panel>
     {/each}
   </div>
 </section>

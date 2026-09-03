@@ -20,7 +20,13 @@ function makeRuntimeHarness() {
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     settings: { registerSection: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
-  const context = { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as FrontendPluginContext
+  const context = {
+    pluginId: packageJson.openforge.id,
+    apiVersion: 1,
+    packageMetadata: packageJson.openforge,
+    subscriptions,
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+  } as FrontendPluginContext
   return { api, context, subscriptions }
 }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import { onMount } from 'svelte'
   import TerminalTabs from './TerminalTabs.svelte'
   import { getProjectTerminalTaskId } from './lib/projectTerminal'
@@ -37,7 +38,7 @@
   <div class="flex items-center justify-between px-4 py-2 border-b border-base-300 shrink-0 bg-base-200">
     <h2 class="text-sm font-semibold text-base-content">{projectName || 'Project'} — Terminal</h2>
     {#if projectPath}
-      <span class="badge badge-neutral badge-sm max-w-[50%] truncate" title={projectPath}>{projectPath}</span>
+      <Badge class="max-w-[50%] truncate" title={projectPath}>{projectPath}</Badge>
     {/if}
   </div>
 
