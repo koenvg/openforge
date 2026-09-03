@@ -177,13 +177,14 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     })
     ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [unread] }))
     taskAttentionRows.set([unread])
-    const dialog = renderDialog().container.querySelector('[role="dialog"]') as HTMLElement
+    renderDialog()
 
     await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: /^T Focus 1$/i })).toBeTruthy()
       expect(screen.getByText('Unread agent output')).toBeTruthy()
     })
+    const dialog = screen.getByRole('dialog')
 
     ipc.getTaskLanes.mockResolvedValue(laneRows({
       in_flight: [attentionRow('t1', 'p1', 'Unread reply', {
