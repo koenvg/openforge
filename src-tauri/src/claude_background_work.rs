@@ -1,10 +1,11 @@
-//! Claude Code exposes no hook, statusline or terminal-escape field telling a host that
-//! a turn ended while a backgrounded shell or an armed `Monitor` is still outstanding,
-//! so the session transcript is the only host-visible source for it.
+//! Claude reports its own in-flight background work on the `Stop` hook payload, but only on
+//! builds that carry that field; older ones need the same answer reconstructed by replaying
+//! the session transcript.
 //!
-//! A task that cannot be confirmed as still running is treated as not pending, so an
-//! unreadable transcript, a missing process or a failed clock read all keep the plain
-//! completion behaviour rather than pinning the session open.
+//! The two sources fail in opposite directions. A reported entry counts as outstanding unless
+//! it says otherwise, because the inventory is complete by construction. Replayed work has to
+//! be confirmed, so an unreadable transcript, a missing process or a failed clock read all
+//! keep the plain completion behaviour rather than pinning the session open.
 
 use crate::pty_manager::PtyManager;
 use log::warn;
@@ -14,11 +15,12 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 const MAX_STORED_COMMAND_BYTES: usize = 1024;
+const UNIDENTIFIED_TASK: &str = "unidentified";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PendingBackgroundTask {
     task_id: String,
-    tool_name: String,
+    kind: String,
     liveness: Liveness,
 }
 
@@ -114,10 +116,10 @@ where
         let Some((tool_name, command)) = tool_uses_by_id.remove(tool_use_id) else {
             continue;
         };
-        let task_id_field = if tool_name == "Monitor" {
-            "taskId"
-        } else {
-            "backgroundTaskId"
+        let task_id_field = match tool_name.as_str() {
+            "Monitor" => "taskId",
+            "Agent" => "agentId",
+            _ => "backgroundTaskId",
         };
         let Some(task_id) = result
             .get(task_id_field)
@@ -127,19 +129,24 @@ where
             continue;
         };
 
-        let liveness = if tool_name == "Monitor" {
-            Liveness::ExpiresAt(declared_expiry(&entry, result))
-        } else {
-            match command {
+        let liveness = match tool_name.as_str() {
+            "Monitor" => Liveness::ExpiresAt(declared_expiry(&entry, result)),
+            "Agent" => {
+                if result.get("isAsync").and_then(serde_json::Value::as_bool) != Some(true) {
+                    continue;
+                }
+                Liveness::ExpiresAt(None)
+            }
+            _ => match command {
                 Some(command) => Liveness::RunsCommand(command),
                 None => continue,
-            }
+            },
         };
 
         if started_ids.insert(task_id.to_string()) {
             started.push(PendingBackgroundTask {
                 task_id: task_id.to_string(),
-                tool_name,
+                kind: tool_name,
                 liveness,
             });
         }
@@ -290,6 +297,100 @@ fn collapse_whitespace(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Claude reports its own in-flight work on the `Stop` payload. Builds that predate that
+/// field need the same answer reconstructed from the transcript, which can go stale, so the
+/// two are not interchangeable once a deferral is running.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OutstandingWork {
+    Reported(Vec<PendingBackgroundTask>),
+    Replayed(Vec<PendingBackgroundTask>),
+}
+
+impl OutstandingWork {
+    pub(crate) fn tasks(&self) -> &[PendingBackgroundTask] {
+        match self {
+            Self::Reported(tasks) | Self::Replayed(tasks) => tasks,
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.tasks().is_empty()
+    }
+
+    pub(crate) fn source(&self) -> &'static str {
+        match self {
+            Self::Reported(_) => "the reported inventory",
+            Self::Replayed(_) => "the transcript",
+        }
+    }
+}
+
+pub(crate) async fn outstanding_background_work(
+    pty_manager: Option<&PtyManager>,
+    task_id: &str,
+    pty_instance_id: Option<u64>,
+    transcript_path: Option<&str>,
+    background_tasks: Option<&serde_json::Value>,
+) -> OutstandingWork {
+    match reported_background_tasks(background_tasks) {
+        Some(reported) => OutstandingWork::Reported(reported),
+        None => OutstandingWork::Replayed(
+            live_pending_background_tasks(pty_manager, task_id, pty_instance_id, transcript_path)
+                .await,
+        ),
+    }
+}
+
+/// `None` means the running build reported no inventory. An empty list is a reported
+/// inventory, not a missing one, and the caller must not collapse the two.
+fn reported_background_tasks(
+    background_tasks: Option<&serde_json::Value>,
+) -> Option<Vec<PendingBackgroundTask>> {
+    let entries = background_tasks?.as_array()?;
+    Some(entries.iter().filter_map(reported_pending_task).collect())
+}
+
+/// An entry counts as outstanding unless it names itself as work that is not in flight.
+/// Nothing else disqualifies it: an entry whose fields cannot be read is still evidence that
+/// Claude registered something, and dropping it would complete a live session.
+fn reported_pending_task(entry: &serde_json::Value) -> Option<PendingBackgroundTask> {
+    /// A teammate stays registered as running while parked between turns, so its entry says
+    /// nothing about whether work is in flight.
+    const TEAMMATE: &str = "teammate";
+    /// Claude filters the inventory to these before emitting it. Re-checking is what stops a
+    /// build that drops that filter from silently completing live sessions.
+    const IN_FLIGHT: [&str; 2] = ["running", "pending"];
+
+    let kind = reported_field(entry, "type").unwrap_or_default();
+    if kind.eq_ignore_ascii_case(TEAMMATE) {
+        return None;
+    }
+    let status = reported_field(entry, "status").unwrap_or_default();
+    if !status.is_empty()
+        && !IN_FLIGHT
+            .iter()
+            .any(|in_flight| status.eq_ignore_ascii_case(in_flight))
+    {
+        return None;
+    }
+
+    Some(PendingBackgroundTask {
+        task_id: reported_field(entry, "id")
+            .unwrap_or(UNIDENTIFIED_TASK)
+            .to_string(),
+        kind: kind.to_string(),
+        liveness: Liveness::ExpiresAt(None),
+    })
+}
+
+fn reported_field<'a>(entry: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+    entry
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
 pub(crate) async fn live_pending_background_tasks(
     pty_manager: Option<&PtyManager>,
     task_id: &str,
@@ -368,7 +469,10 @@ fn read_pending_background_tasks(path: &Path) -> std::io::Result<Vec<PendingBack
 pub(crate) fn describe_tasks(tasks: &[PendingBackgroundTask]) -> String {
     tasks
         .iter()
-        .map(|task| format!("{} ({})", task.task_id, task.tool_name))
+        .map(|task| match task.kind.as_str() {
+            "" => task.task_id.clone(),
+            kind => format!("{} ({kind})", task.task_id),
+        })
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -434,7 +538,7 @@ mod tests {
     fn backgrounded_shell(task_id: &str, command: &str) -> PendingBackgroundTask {
         PendingBackgroundTask {
             task_id: task_id.to_string(),
-            tool_name: "Bash".to_string(),
+            kind: "Bash".to_string(),
             liveness: Liveness::RunsCommand(stored_command(command).expect("stored command")),
         }
     }
@@ -442,7 +546,7 @@ mod tests {
     fn armed_monitor(task_id: &str, expires_at_ms: Option<u64>) -> PendingBackgroundTask {
         PendingBackgroundTask {
             task_id: task_id.to_string(),
-            tool_name: "Monitor".to_string(),
+            kind: "Monitor".to_string(),
             liveness: Liveness::ExpiresAt(expires_at_ms),
         }
     }
@@ -523,6 +627,58 @@ mod tests {
             pending_background_tasks(transcript)[0].liveness,
             Liveness::ExpiresAt(None)
         );
+    }
+
+    #[test]
+    fn async_subagent_is_pending() {
+        let transcript = [
+            assistant_tool_use(
+                "toolu_1",
+                "Agent",
+                serde_json::json!({"description": "Correctness review", "subagent_type": "general-purpose"}),
+            ),
+            tool_result(
+                "toolu_1",
+                serde_json::json!({"agentId": "a939d27", "isAsync": true, "status": "async_launched"}),
+            ),
+        ];
+
+        assert_eq!(task_ids(&pending_background_tasks(transcript)), ["a939d27"]);
+    }
+
+    #[test]
+    fn synchronous_subagent_is_not_pending() {
+        let transcript = [
+            assistant_tool_use(
+                "toolu_1",
+                "Agent",
+                serde_json::json!({"description": "Correctness review", "subagent_type": "general-purpose"}),
+            ),
+            tool_result(
+                "toolu_1",
+                serde_json::json!({"agentId": "a939d27", "agentType": "general-purpose", "status": "completed"}),
+            ),
+        ];
+
+        assert!(pending_background_tasks(transcript).is_empty());
+    }
+
+    #[test]
+    fn subagent_that_announced_its_stop_is_no_longer_pending() {
+        let transcript = [
+            assistant_tool_use(
+                "toolu_1",
+                "Agent",
+                serde_json::json!({"description": "Correctness review", "subagent_type": "general-purpose"}),
+            ),
+            tool_result(
+                "toolu_1",
+                serde_json::json!({"agentId": "a939d27", "isAsync": true, "status": "async_launched"}),
+            ),
+            completion_notification("a939d27"),
+        ];
+
+        assert!(pending_background_tasks(transcript).is_empty());
     }
 
     #[test]
@@ -811,5 +967,129 @@ mod tests {
         ]);
 
         assert_eq!(described, "b1 (Bash), m1 (Monitor)");
+    }
+
+    fn reported(entries: serde_json::Value) -> Vec<PendingBackgroundTask> {
+        reported_background_tasks(Some(&entries)).expect("an array is a reported inventory")
+    }
+
+    #[test]
+    fn an_entry_reported_as_running_counts_as_outstanding() {
+        let inventory = serde_json::json!([
+            {"id": "a939d27", "type": "subagent", "status": "running", "description": "Correctness review"}
+        ]);
+
+        assert_eq!(task_ids(&reported(inventory)), ["a939d27"]);
+    }
+
+    #[test]
+    fn an_entry_reported_as_pending_counts_as_outstanding() {
+        let inventory = serde_json::json!([
+            {"id": "b1", "type": "shell", "status": "pending", "description": "Run the suite"}
+        ]);
+
+        assert_eq!(task_ids(&reported(inventory)), ["b1"]);
+    }
+
+    #[test]
+    fn an_entry_of_an_unrecognised_kind_counts_as_outstanding() {
+        let inventory = serde_json::json!([
+            {"id": "d1", "type": "dream", "status": "running", "description": "Dreaming"}
+        ]);
+
+        assert_eq!(task_ids(&reported(inventory)), ["d1"]);
+    }
+
+    #[test]
+    fn an_entry_that_omits_its_kind_or_status_counts_as_outstanding() {
+        assert_eq!(
+            task_ids(&reported(serde_json::json!([{"id": "x1"}]))),
+            ["x1"]
+        );
+        assert_eq!(
+            task_ids(&reported(
+                serde_json::json!([{"id": "x2", "type": "subagent"}])
+            )),
+            ["x2"]
+        );
+        assert_eq!(
+            task_ids(&reported(
+                serde_json::json!([{"id": "x3", "status": "running"}])
+            )),
+            ["x3"]
+        );
+    }
+
+    #[test]
+    fn an_entry_reported_as_finished_does_not_count_as_outstanding() {
+        let inventory = serde_json::json!([
+            {"id": "a939d27", "type": "subagent", "status": "completed", "description": "Correctness review"}
+        ]);
+
+        assert!(reported(inventory).is_empty());
+    }
+
+    #[test]
+    fn a_reported_teammate_does_not_count_as_outstanding() {
+        let inventory = serde_json::json!([
+            {"id": "arev-4f2a", "type": "teammate", "status": "running", "description": "rev"}
+        ]);
+
+        assert!(reported(inventory).is_empty());
+    }
+
+    #[test]
+    fn a_reported_teammate_does_not_hide_other_running_work() {
+        let inventory = serde_json::json!([
+            {"id": "arev-4f2a", "type": "teammate", "status": "running"},
+            {"id": "a939d27", "type": "subagent", "status": "running"}
+        ]);
+
+        assert_eq!(task_ids(&reported(inventory)), ["a939d27"]);
+    }
+
+    #[test]
+    fn concurrent_subagents_are_outstanding_until_the_last_one_stops() {
+        let inventory = serde_json::json!([
+            {"id": "a1", "type": "subagent", "status": "completed"},
+            {"id": "a2", "type": "subagent", "status": "running"}
+        ]);
+
+        assert_eq!(task_ids(&reported(inventory)), ["a2"]);
+    }
+
+    #[test]
+    fn an_unreadable_entry_still_counts_as_outstanding() {
+        let inventory = serde_json::json!([
+            "not an object",
+            {"type": "subagent", "status": "running"},
+            {"taskId": "renamed", "kind": "subagent", "state": "running"}
+        ]);
+
+        assert_eq!(
+            describe_tasks(&reported(inventory)),
+            "unidentified, unidentified (subagent), unidentified"
+        );
+    }
+
+    #[test]
+    fn an_empty_reported_inventory_is_still_an_inventory() {
+        assert_eq!(
+            reported_background_tasks(Some(&serde_json::json!([]))),
+            Some(Vec::new())
+        );
+    }
+
+    #[test]
+    fn an_absent_inventory_is_not_an_empty_one() {
+        assert_eq!(reported_background_tasks(None), None);
+    }
+
+    #[test]
+    fn an_inventory_that_is_not_a_list_reads_as_absent() {
+        assert_eq!(
+            reported_background_tasks(Some(&serde_json::json!("all done"))),
+            None
+        );
     }
 }

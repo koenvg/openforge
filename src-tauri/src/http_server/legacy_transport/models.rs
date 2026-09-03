@@ -140,6 +140,10 @@ pub struct ClaudeHookPayload {
     pub tool_name: Option<String>,
     pub tool_input: Option<serde_json::Value>,
     pub transcript_path: Option<String>,
+    /// Untyped: a typed model would reject the whole hook on a shape change, and a rejected
+    /// hook never records its lifecycle event.
+    #[serde(default)]
+    pub background_tasks: Option<serde_json::Value>,
     #[serde(alias = "CLAUDE_TASK_ID")]
     pub claude_task_id: Option<String>,
     #[serde(default, alias = "OPENFORGE_PTY_INSTANCE_ID")]

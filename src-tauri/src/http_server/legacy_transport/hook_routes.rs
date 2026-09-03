@@ -50,35 +50,39 @@ fn agent_session_is_running(state: &AppState, task_id: &str) -> bool {
 }
 
 /// Claude's `Stop` hook fires at the end of every turn, including turns that leave a
-/// backgrounded shell or an armed `Monitor` running. The session resumes on its own when
-/// that task notifies, so reporting `Ended` there marks the task as needing attention
-/// while nothing is actually waiting on the user.
+/// backgrounded shell, an armed `Monitor` or a subagent running. The session resumes on its
+/// own when that work notifies, so reporting `Ended` there marks the task as needing
+/// attention while nothing is actually waiting on the user.
+///
 async fn deferrable_background_work(
     state: &AppState,
     event_type: &str,
     task_id: &str,
     pty_instance_id: Option<u64>,
     transcript_path: Option<&str>,
-) -> Vec<crate::claude_background_work::PendingBackgroundTask> {
+    background_tasks: Option<&serde_json::Value>,
+) -> crate::claude_background_work::OutstandingWork {
     if event_type != "stop" || !agent_session_is_running(state, task_id) {
-        return Vec::new();
+        return crate::claude_background_work::OutstandingWork::Replayed(Vec::new());
     }
 
-    let live = crate::claude_background_work::live_pending_background_tasks(
+    let outstanding = crate::claude_background_work::outstanding_background_work(
         state.pty_manager.as_ref(),
         task_id,
         pty_instance_id,
         transcript_path,
+        background_tasks,
     )
     .await;
-    if !live.is_empty() {
+    if !outstanding.is_empty() {
         info!(
-            "[http_server] task {} still has background work running, deferring completion: {}",
+            "[http_server] task {} still has background work running per {}, deferring completion: {}",
             task_id,
-            crate::claude_background_work::describe_tasks(&live)
+            outstanding.source(),
+            crate::claude_background_work::describe_tasks(outstanding.tasks())
         );
     }
-    live
+    outstanding
 }
 
 const CLAUDE_ACTIVITY_SNAPSHOT_BYTES: usize = 8 * 1024;
@@ -170,15 +174,16 @@ async fn handle_hook(
 
         if let Some(kind) = claude_event_kind_from_event(event_type) {
             let _task_guard = state.deferred_completion_watcher.task_guard(&task_id).await;
-            let deferring = deferrable_background_work(
+            let outstanding = deferrable_background_work(
                 &state,
                 event_type,
                 &task_id,
                 pty_instance_id,
                 payload.transcript_path.as_deref(),
+                payload.background_tasks.as_ref(),
             )
             .await;
-            let kind = if deferring.is_empty() {
+            let kind = if outstanding.is_empty() {
                 kind
             } else {
                 crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy
@@ -203,7 +208,7 @@ async fn handle_hook(
                 ),
             )
             .await;
-            if deferring.is_empty() {
+            if outstanding.is_empty() {
                 state.deferred_completion_watcher.resumed(&task_id).await;
             } else {
                 state
@@ -215,7 +220,7 @@ async fn handle_hook(
                             pty_instance_id,
                             transcript_path: payload.transcript_path.clone(),
                         },
-                        &deferring,
+                        &outstanding,
                     )
                     .await;
             }

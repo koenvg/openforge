@@ -185,6 +185,7 @@ fn test_claude_hook_payload_creation() {
         transcript_path: Some("/path".to_string()),
         claude_task_id: Some("task-456".to_string()),
         pty_instance_id: Some(456),
+        background_tasks: None,
     };
     assert_eq!(payload.session_id, Some("sess-123".to_string()));
     assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
@@ -258,6 +259,7 @@ fn claude_activity_snapshot_is_bounded_and_excludes_transcript_path() {
         transcript_path: Some("/private/transcript.jsonl".to_string()),
         claude_task_id: Some("task-claude".to_string()),
         pty_instance_id: Some(9),
+        background_tasks: None,
     };
 
     let snapshot = bounded_claude_activity_snapshot(
@@ -350,6 +352,31 @@ fn backgrounded_shell_transcript() -> Vec<String> {
     ]
 }
 
+fn backgrounded_subagent_transcript() -> Vec<String> {
+    vec![
+        serde_json::json!({
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "Agent",
+                "input": {"description": "Correctness review", "subagent_type": "general-purpose"},
+            }]},
+        })
+        .to_string(),
+        serde_json::json!({
+            "type": "user",
+            "message": {"role": "user", "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_1",
+                "content": "Async agent launched successfully.",
+            }]},
+            "toolUseResult": {"agentId": "a939d27", "isAsync": true, "status": "async_launched"},
+        })
+        .to_string(),
+    ]
+}
+
 fn armed_monitor_transcript(timeout_ms: u64) -> Vec<String> {
     vec![
         serde_json::json!({
@@ -383,7 +410,33 @@ async fn post_claude_hook(
     pty_instance_id: u64,
     transcript_path: &std::path::Path,
 ) {
+    post_claude_hook_reporting(
+        state,
+        endpoint,
+        task_id,
+        pty_instance_id,
+        transcript_path,
+        None,
+    )
+    .await;
+}
+
+async fn post_claude_hook_reporting(
+    state: &AppState,
+    endpoint: &str,
+    task_id: &str,
+    pty_instance_id: u64,
+    transcript_path: &std::path::Path,
+    background_tasks: Option<serde_json::Value>,
+) {
     let session_id = format!("claude-stop-{pty_instance_id}");
+    let mut body = serde_json::json!({
+        "session_id": session_id,
+        "transcript_path": transcript_path.to_string_lossy(),
+    });
+    if let Some(background_tasks) = background_tasks {
+        body["background_tasks"] = background_tasks;
+    }
     let response = create_router(state.clone())
         .oneshot(
             Request::builder()
@@ -392,13 +445,7 @@ async fn post_claude_hook(
                 ))
                 .method("POST")
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "session_id": session_id,
-                        "transcript_path": transcript_path.to_string_lossy(),
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(body.to_string()))
                 .expect("build request"),
         )
         .await
@@ -429,6 +476,145 @@ fn running_claude_session(state: &AppState, name: &str, pty_instance_id: u64) ->
             pty_instance_id,
         },
     )
+}
+
+#[tokio::test]
+async fn test_stop_keeps_the_session_running_while_a_reported_subagent_is_working() {
+    let (state, _temp_dir) = test_state("claude_stop_reported_subagent");
+    let task_id = running_claude_session(&state, "ses-claude-reported-subagent", 120);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path = write_transcript(transcript_dir.path(), &[]);
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        120,
+        &transcript_path,
+        Some(serde_json::json!([
+            {"id": "a939d27", "type": "subagent", "status": "running", "description": "Correctness review"}
+        ])),
+    )
+    .await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-reported-subagent"),
+        "running"
+    );
+}
+
+#[tokio::test]
+async fn test_stop_falls_back_to_the_transcript_when_no_inventory_is_reported() {
+    let (state, _temp_dir) = test_state("claude_stop_unreported_subagent");
+    let task_id = running_claude_session(&state, "ses-claude-unreported-subagent", 121);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path =
+        write_transcript(transcript_dir.path(), &backgrounded_subagent_transcript());
+
+    post_claude_hook(&state, "stop", &task_id, 121, &transcript_path).await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-unreported-subagent"),
+        "running"
+    );
+}
+
+#[tokio::test]
+async fn test_stop_trusts_an_empty_inventory_over_a_stale_transcript() {
+    let (state, _temp_dir) = test_state("claude_stop_empty_inventory");
+    let task_id = running_claude_session(&state, "ses-claude-empty-inventory", 122);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path = write_transcript(
+        transcript_dir.path(),
+        &armed_monitor_transcript(60 * 60 * 1000),
+    );
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        122,
+        &transcript_path,
+        Some(serde_json::json!([])),
+    )
+    .await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-empty-inventory"),
+        "completed"
+    );
+}
+
+#[tokio::test]
+async fn test_a_malformed_inventory_falls_back_to_the_transcript() {
+    let (state, _temp_dir) = test_state("claude_stop_malformed_inventory");
+    let task_id = running_claude_session(&state, "ses-claude-malformed-inventory", 123);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path =
+        write_transcript(transcript_dir.path(), &backgrounded_subagent_transcript());
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        123,
+        &transcript_path,
+        Some(serde_json::json!("all done")),
+    )
+    .await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-malformed-inventory"),
+        "running"
+    );
+}
+
+#[tokio::test]
+async fn test_stop_completes_the_session_when_only_a_teammate_is_reported() {
+    let (state, _temp_dir) = test_state("claude_stop_reported_teammate");
+    let task_id = running_claude_session(&state, "ses-claude-reported-teammate", 124);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path = write_transcript(transcript_dir.path(), &[]);
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        124,
+        &transcript_path,
+        Some(serde_json::json!([
+            {"id": "arev-4f2a", "type": "teammate", "status": "running", "description": "reviewer"}
+        ])),
+    )
+    .await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-reported-teammate"),
+        "completed"
+    );
+}
+
+#[tokio::test]
+async fn test_stop_keeps_the_session_running_while_a_reported_entry_is_unreadable() {
+    let (state, _temp_dir) = test_state("claude_stop_unreadable_entry");
+    let task_id = running_claude_session(&state, "ses-claude-unreadable-entry", 125);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path = write_transcript(transcript_dir.path(), &[]);
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        125,
+        &transcript_path,
+        Some(serde_json::json!([{"taskId": "renamed", "state": "running"}])),
+    )
+    .await;
+
+    assert_eq!(
+        session_status(&state, "ses-claude-unreadable-entry"),
+        "running"
+    );
 }
 
 #[tokio::test]
@@ -571,6 +757,36 @@ async fn test_a_deferred_session_completes_once_its_monitor_timeout_passes() {
     );
 
     wait_for_session_status(&state, "ses-claude-deferred-monitor", "completed").await;
+}
+
+#[tokio::test]
+async fn test_a_reported_deferral_is_not_extended_by_the_transcript() {
+    let (state, _temp_dir) = test_state("claude_deferred_reported_subagent");
+    set_background_work_grace(&state, 1);
+    let task_id = running_claude_session(&state, "ses-claude-deferred-reported", 126);
+    let transcript_dir = tempfile::tempdir().expect("transcript dir");
+    let transcript_path = write_transcript(
+        transcript_dir.path(),
+        &armed_monitor_transcript(60 * 60 * 1000),
+    );
+
+    post_claude_hook_reporting(
+        &state,
+        "stop",
+        &task_id,
+        126,
+        &transcript_path,
+        Some(serde_json::json!([
+            {"id": "a939d27", "type": "subagent", "status": "running"}
+        ])),
+    )
+    .await;
+    assert_eq!(
+        session_status(&state, "ses-claude-deferred-reported"),
+        "running"
+    );
+
+    wait_for_session_status(&state, "ses-claude-deferred-reported", "completed").await;
 }
 
 #[tokio::test]
