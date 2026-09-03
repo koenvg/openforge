@@ -212,7 +212,7 @@ describe('browser surfaces SDK contract', () => {
       url: 'https://example.com/',
       region: { x: 0.2, y: 0.1, width: 0.4, height: 0.4 },
       comment: 'Corrected example feedback',
-    }])
+    }], { appearance: 'dark' })
     await expect(surface.captureExists(capture.artifactId)).resolves.toBe(true)
 
     expect(capture).toEqual({
@@ -244,6 +244,7 @@ describe('browser surfaces SDK contract', () => {
         region: { x: 0.2, y: 0.1, width: 0.4, height: 0.4 },
         comment: 'Corrected example feedback',
       }],
+      presentation: { appearance: 'dark' },
     }])
     expect(api.__testing.calls.browserSurfaceCaptureChecks).toEqual([{
       taskId: 'T-capture', id: 'main', artifactId: capture.artifactId,

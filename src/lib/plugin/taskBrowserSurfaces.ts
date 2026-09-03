@@ -3,7 +3,9 @@ import type {
   BrowserSurfaceCapture,
   BrowserDevToolsPanel,
   BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceVisualFeedbackAction,
   BrowserSurfaceVisualFeedback,
+  BrowserSurfaceVisualFeedbackPresentation,
   BrowserSurfaceErrorCode,
   BrowserSurfacesAPI,
   Disposable,
@@ -16,6 +18,7 @@ import { taskBrowserAttachments } from './taskBrowserAttachments'
 import type { TaskBrowserAttachmentHost } from './taskBrowserAttachments'
 
 const STATE_EVENT = 'task-browser-surface-state'
+const VISUAL_FEEDBACK_ACTION_EVENT = 'task-browser-visual-feedback-action'
 
 interface BrowserSurfaceReference {
   surfaceId: string
@@ -24,6 +27,12 @@ interface BrowserSurfaceReference {
 }
 
 interface BrowserSurfaceStateEvent extends BrowserSurfaceReference {}
+interface BrowserSurfaceVisualFeedbackActionEvent {
+  surfaceId: string
+  generation: number
+  action: BrowserSurfaceVisualFeedbackAction
+}
+
 
 type HostResponse<T> =
   | { ok: true; value: T }
@@ -143,6 +152,15 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
     return { dispose: unlisten }
   }
 
+  onVisualFeedbackAction(handler: (action: BrowserSurfaceVisualFeedbackAction) => void): Disposable {
+    this.assertLive()
+    const unlisten = this.bridge.onEvent(VISUAL_FEEDBACK_ACTION_EVENT, payload => {
+      if (this.destroyed || !this.isCurrentActionEvent(payload)) return
+      handler({ ...payload.action })
+    })
+    return { dispose: unlisten }
+  }
+
   navigate(url: string): Promise<TaskBrowserSurfaceState> {
     return this.control('task_browser_surface_navigate', { surfaceId: this.reference.surfaceId, url })
   }
@@ -189,9 +207,16 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
     await invokeHost<void>('task_browser_surface_clear_visual_feedback', this.captureOwner())
   }
 
-  async replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void> {
+  async replaceVisualFeedback(
+    feedback: readonly BrowserSurfaceVisualFeedback[],
+    presentation?: BrowserSurfaceVisualFeedbackPresentation,
+  ): Promise<void> {
     this.assertLive()
-    await invokeHost<void>('task_browser_surface_replace_visual_feedback', { ...this.captureOwner(), feedback })
+    await invokeHost<void>('task_browser_surface_replace_visual_feedback', {
+      ...this.captureOwner(),
+      feedback,
+      ...(presentation ? { presentation } : {}),
+    })
   }
 
   async captureExists(artifactId: string): Promise<boolean> {
@@ -232,6 +257,18 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
       && event.generation === this.reference.generation
       && typeof event.state === 'object'
       && event.state !== null
+  }
+
+  private isCurrentActionEvent(payload: unknown): payload is BrowserSurfaceVisualFeedbackActionEvent {
+    if (typeof payload !== 'object' || payload === null) return false
+    const event = payload as Partial<BrowserSurfaceVisualFeedbackActionEvent>
+    const action = event.action as Partial<BrowserSurfaceVisualFeedbackAction> | undefined
+    return event.surfaceId === this.reference.surfaceId
+      && event.generation === this.reference.generation
+      && action?.type === 'delete-annotation'
+      && typeof action.annotationNumber === 'number'
+      && Number.isSafeInteger(action.annotationNumber)
+      && action.annotationNumber > 0
   }
 
   private assertLive(): void {

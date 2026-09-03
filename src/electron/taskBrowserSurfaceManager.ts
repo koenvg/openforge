@@ -13,6 +13,7 @@ import type {
   TaskBrowserSurfaceCapture,
   TaskBrowserSurfaceCaptureRequest,
   TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackPresentation,
   TaskBrowserSurfaceReference,
 } from './taskBrowserSurfaceContract.js'
 import { TaskBrowserSurfaceLifecycle } from './taskBrowserSurfaceLifecycle.js'
@@ -45,6 +46,9 @@ export type {
   TaskBrowserSurfaceManagerOptions,
   TaskBrowserSurfaceReference,
   TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackAction,
+  TaskBrowserSurfaceVisualFeedbackActionEvent,
+  TaskBrowserVisualFeedbackPresentation,
   TaskBrowserSurfaceStateEvent,
   TaskBrowserWebPreferences,
 } from './taskBrowserSurfaceContract.js'
@@ -72,6 +76,7 @@ type SurfaceRecord = {
   lastDetachedAt: number
   native: NativeTaskBrowserSurface
   unsubscribe: () => void
+  unsubscribeAction: () => void
 }
 
 type PendingSurfaceCreation = {
@@ -322,11 +327,12 @@ export class TaskBrowserSurfaceManager {
   async replaceVisualFeedback(
     request: TaskBrowserSurfaceCaptureRequest,
     feedback: readonly TaskBrowserSurfaceVisualFeedback[],
+    presentation?: TaskBrowserVisualFeedbackPresentation,
   ): Promise<void> {
     const surface = this.requireCaptureSurface(request)
     await this.options.authorize(request.pluginId, request.taskId)
     this.assertCaptureSurfaceCurrent(surface, request.generation)
-    await surface.native.replaceVisualFeedback(feedback)
+    await surface.native.replaceVisualFeedback(feedback, presentation)
     this.assertCaptureSurfaceCurrent(surface, request.generation)
   }
 
@@ -479,11 +485,21 @@ export class TaskBrowserSurfaceManager {
       lastDetachedAt: ++this.lruSequence,
       native,
       unsubscribe: () => undefined,
+      unsubscribeAction: () => undefined,
     }
 
     record.unsubscribe = native.onStateChanged(state => {
       if (this.surfacesById.get(surfaceId)?.generation !== generation) return
       this.options.onStateChanged?.({ windowId: request.windowId, surfaceId, generation, state: copyState(state) })
+    })
+    record.unsubscribeAction = native.onVisualFeedbackAction(action => {
+      if (this.surfacesById.get(surfaceId)?.generation !== generation) return
+      this.options.onVisualFeedbackAction?.({
+        windowId: request.windowId,
+        surfaceId,
+        generation,
+        action: { ...action },
+      })
     })
     this.surfacesByKey.set(key, record)
     this.surfacesById.set(surfaceId, record)
@@ -581,6 +597,7 @@ export class TaskBrowserSurfaceManager {
     this.surfacesById.delete(surface.surfaceId)
     this.surfacesByKey.delete(surface.key)
     surface.unsubscribe()
+    surface.unsubscribeAction()
     surface.native.detach()
     surface.native.destroy()
   }

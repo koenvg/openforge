@@ -43,6 +43,7 @@ function createSurface(
     destroy: vi.fn(async () => undefined),
     getState: vi.fn(async () => state),
     onStateChanged: vi.fn(() => ({ dispose: vi.fn() })),
+    onVisualFeedbackAction: vi.fn(() => ({ dispose: vi.fn() })),
     navigate: vi.fn(options.navigate ?? (async nextUrl => browserState(nextUrl))),
     goBack: vi.fn(async () => state),
     goForward: vi.fn(async () => state),
@@ -117,6 +118,153 @@ describe('TaskBrowserTab lifecycle', () => {
     expect(screen.queryByTestId('browser-status-strip')).toBeNull()
   })
 
+
+  it('synchronizes configured light and dark appearance changes to live visual feedback', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://example.com/')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    document.documentElement.setAttribute('data-theme', 'openforge')
+
+    const view = render(TaskBrowserTab, { props: props(api, 'T-A') })
+    try {
+      await screen.findByDisplayValue('https://example.com/')
+      await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+        [],
+        { appearance: 'light' },
+      ))
+
+      document.documentElement.setAttribute('data-theme', 'openforge-dark')
+      await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+        [],
+        { appearance: 'dark' },
+      ))
+    } finally {
+      view.unmount()
+      document.documentElement.removeAttribute('data-theme')
+    }
+  })
+
+  it('routes in-card deletion through draft persistence, capture cleanup, synchronization, and undo', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    let requestDelete: ((action: { type: 'delete-annotation'; annotationNumber: number }) => void) | null = null
+    vi.mocked(surface.onVisualFeedbackAction).mockImplementation(handler => {
+      requestDelete = handler
+      return { dispose: vi.fn() }
+    })
+    const attemptedDrafts: JsonValue[] = []
+    let saveAttempt = 0
+    const storage: PluginStorageScope = {
+      get: async <T extends JsonValue>() => null as T | null,
+      set: async (key, value) => {
+        if (key !== 'visualFeedbackDraftV1') return
+        attemptedDrafts.push(value)
+        saveAttempt += 1
+        if (saveAttempt === 2) throw new Error('disk full')
+      },
+      delete: async () => undefined,
+    }
+    vi.spyOn(api.storage, 'task').mockReturnValue(storage)
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 screenshot · 1 annotation')
+    await waitFor(() => expect(requestDelete).not.toBeNull())
+    expect(saveAttempt).toBe(1)
+
+    const synchronizationCallsBeforeDelete = vi.mocked(surface.replaceVisualFeedback).mock.calls.length
+    ;(requestDelete as ((action: { type: 'delete-annotation'; annotationNumber: number }) => void) | null)?.({
+      type: 'delete-annotation',
+      annotationNumber: 1,
+    })
+
+    const retry = await screen.findByRole('button', { name: 'Retry saving visual feedback' })
+    await waitFor(() => expect((retry as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.getByText('1 screenshot · 1 annotation')).toBeTruthy()
+    expect(surface.replaceVisualFeedback).toHaveBeenCalledTimes(synchronizationCallsBeforeDelete)
+    expect(attemptedDrafts.at(-1)).toEqual(expect.objectContaining({
+      annotations: [],
+      captures: [],
+      pendingArtifactDiscards: [expect.objectContaining({
+        evidence: expect.objectContaining({ artifactId: 'capture-1' }),
+      })],
+    }))
+    expect(surface.discardCapture).not.toHaveBeenCalled()
+
+    await fireEvent.click(retry)
+    await waitFor(() => expect(saveAttempt).toBe(3))
+    expect(screen.queryByRole('button', { name: 'Retry saving visual feedback' })).toBeNull()
+    expect(screen.getByText('1 screenshot · 1 annotation')).toBeTruthy()
+
+    ;(requestDelete as ((action: { type: 'delete-annotation'; annotationNumber: number }) => void) | null)?.({
+      type: 'delete-annotation',
+      annotationNumber: 1,
+    })
+    await waitFor(() => expect(screen.queryByText('1 screenshot · 1 annotation')).toBeNull())
+    expect(saveAttempt).toBe(4)
+    await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+      [],
+      { appearance: 'light' },
+    ))
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Undo last visual feedback change' }))
+    expect(await screen.findByText('1 screenshot · 1 annotation')).toBeTruthy()
+    await waitFor(() => expect(saveAttempt).toBe(5))
+    expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ annotationNumber: 1 })],
+      { appearance: 'light' },
+    )
+  })
+
+  it('rolls an in-card deletion back when live marker synchronization fails', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    let requestDelete: ((action: { type: 'delete-annotation'; annotationNumber: number }) => void) | null = null
+    vi.mocked(surface.onVisualFeedbackAction).mockImplementation(handler => {
+      requestDelete = handler
+      return { dispose: vi.fn() }
+    })
+    const savedDrafts: JsonValue[] = []
+    const storage: PluginStorageScope = {
+      get: async <T extends JsonValue>() => null as T | null,
+      set: async (key, value) => {
+        if (key === 'visualFeedbackDraftV1') savedDrafts.push(value)
+      },
+      delete: async () => undefined,
+    }
+    vi.spyOn(api.storage, 'task').mockReturnValue(storage)
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 screenshot · 1 annotation')
+    await waitFor(() => expect(requestDelete).not.toBeNull())
+    vi.mocked(surface.replaceVisualFeedback).mockRejectedValueOnce(new Error('surface unavailable'))
+
+    ;(requestDelete as ((action: { type: 'delete-annotation'; annotationNumber: number }) => void) | null)?.({
+      type: 'delete-annotation',
+      annotationNumber: 1,
+    })
+
+    await screen.findByRole('button', { name: 'Retry saving visual feedback' })
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Retry saving visual feedback' }) as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.getByText('1 screenshot · 1 annotation')).toBeTruthy()
+    await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ annotationNumber: 1 })],
+      { appearance: 'light' },
+    ))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(savedDrafts.at(-1)).toEqual(expect.objectContaining({
+      annotations: [expect.objectContaining({ number: 1 })],
+      pendingArtifactDiscards: [],
+    }))
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry saving visual feedback' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry saving visual feedback' })).toBeNull())
+  })
   it('toggles Task Browser DevTools from the navigation toolbar', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
     const surface = createSurface('https://example.com/')
@@ -690,6 +838,7 @@ describe('TaskBrowserTab lifecycle', () => {
 
     await waitFor(() => expect(screen.queryByText('1 screenshot · 1 annotation')).toBeNull())
     expect(surface.discardCapture).not.toHaveBeenCalled()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Undo last visual feedback change' }) as HTMLButtonElement).disabled).toBe(false))
     await fireEvent.click(screen.getByRole('button', { name: 'Undo last visual feedback change' }))
     expect(await screen.findByText('1 screenshot · 1 annotation')).toBeTruthy()
 
@@ -735,15 +884,19 @@ describe('TaskBrowserTab lifecycle', () => {
     await fireEvent.click(retry)
     await waitFor(() => expect(saveAttempt).toBe(3))
     expect(screen.queryByRole('button', { name: 'Retry saving visual feedback' })).toBeNull()
-    expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith([expect.objectContaining({
-      comment: 'Saved in memory first',
-    })])
+    expect(surface.replaceVisualFeedback).toHaveBeenLastCalledWith(
+      [expect.objectContaining({
+        comment: 'Saved in memory first',
+      })],
+      { appearance: 'light' },
+    )
   })
 
   it('offers a retry when live marker synchronization fails', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
     const surface = createSurface('https://capture.example/')
     vi.mocked(surface.replaceVisualFeedback)
+      .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('surface unavailable'))
       .mockResolvedValue(undefined)
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
@@ -761,7 +914,7 @@ describe('TaskBrowserTab lifecycle', () => {
     const retry = await screen.findByRole('button', { name: 'Retry saving visual feedback' })
     expect(screen.getAllByText((content) => content.includes('Could not save live marker changes: surface unavailable')).length).toBeGreaterThan(0)
     await fireEvent.click(retry)
-    await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(surface.replaceVisualFeedback).toHaveBeenCalledTimes(3))
     expect(screen.queryByRole('button', { name: 'Retry saving visual feedback' })).toBeNull()
   })
 
@@ -864,9 +1017,12 @@ describe('TaskBrowserTab lifecycle', () => {
     expect(screen.getByRole('alert').textContent).toContain('Annotation 1 background unavailable')
     expect(screen.getByRole('alert').textContent).toContain('/tmp/openforge/missing-capture.png')
     expect(screen.getByText('1 screenshot · 1 annotation')).toBeTruthy()
-    expect(surface.replaceVisualFeedback).toHaveBeenCalledWith([expect.objectContaining({
-      annotationNumber: 1,
-      comment: 'Restored finding',
-    })])
+    expect(surface.replaceVisualFeedback).toHaveBeenCalledWith(
+      [expect.objectContaining({
+        annotationNumber: 1,
+        comment: 'Restored finding',
+      })],
+      { appearance: 'light' },
+    )
   })
 })

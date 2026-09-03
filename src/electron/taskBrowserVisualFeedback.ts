@@ -1,19 +1,41 @@
 import type { WebContents } from 'electron'
 import { TaskBrowserSurfaceError } from './taskBrowserSurfaceManager.js'
-import type { TaskBrowserSurfaceVisualFeedback } from './taskBrowserSurfaceManager.js'
+import type {
+  TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackPresentation,
+  TaskBrowserVisualFeedbackAction,
+} from './taskBrowserSurfaceManager.js'
 import {
   buildTaskBrowserVisualFeedbackAnnotationsScript,
+  buildTaskBrowserVisualFeedbackActionWaitScript,
+  buildTaskBrowserVisualFeedbackActionCancelScript,
+  buildTaskBrowserVisualFeedbackClearScript,
   buildTaskBrowserVisualFeedbackDismissScript,
   runTaskBrowserVisualFeedbackOverlay,
 } from './taskBrowserVisualFeedbackOverlay.js'
 import type { TaskBrowserVisualFeedbackAnnotation } from './taskBrowserVisualFeedbackOverlay.js'
 
+const TASK_BROWSER_VISUAL_FEEDBACK_ISOLATED_WORLD_ID = 1_001
+
 type StoredVisualFeedback = TaskBrowserVisualFeedbackAnnotation & {
   region: TaskBrowserSurfaceVisualFeedback['region']
 }
 
+
+function visualFeedbackAction(value: unknown): TaskBrowserVisualFeedbackAction | null {
+  if (typeof value !== 'object' || value === null) return null
+  const action = value as Partial<TaskBrowserVisualFeedbackAction>
+  if (action.type !== 'delete-annotation'
+    || typeof action.annotationNumber !== 'number'
+    || !Number.isSafeInteger(action.annotationNumber)
+    || action.annotationNumber <= 0) return null
+  return { type: 'delete-annotation', annotationNumber: action.annotationNumber }
+}
 export class TaskBrowserVisualFeedbackController {
   private readonly feedbackAnnotationsByUrl = new Map<string, StoredVisualFeedback[]>()
+  private readonly actionListeners = new Set<(action: TaskBrowserVisualFeedbackAction) => void>()
+  private actionWaitGeneration = 0
+  private presentation: TaskBrowserVisualFeedbackPresentation | undefined
   private cancelSelection: (() => void) | null = null
 
   constructor(
@@ -22,6 +44,11 @@ export class TaskBrowserVisualFeedbackController {
     private readonly isAttached: () => boolean,
   ) {}
 
+
+  onVisualFeedbackAction(listener: (action: TaskBrowserVisualFeedbackAction) => void): () => void {
+    this.actionListeners.add(listener)
+    return () => this.actionListeners.delete(listener)
+  }
   async selectVisibleRegion() {
     await this.cancelVisibleRegionSelection()
     if (this.isDestroyed()) {
@@ -43,7 +70,11 @@ export class TaskBrowserVisualFeedbackController {
       this.cancelSelection = requestCancel
       const selection = runTaskBrowserVisualFeedbackOverlay(
         (script, userGesture) => this.contents.executeJavaScript(script, userGesture),
-        { savedAnnotations, nextAnnotationNumber },
+        {
+          savedAnnotations,
+          nextAnnotationNumber,
+          appearance: this.presentation?.appearance,
+        },
       )
       const result = await Promise.race([selection, cancelled])
       if (result === null) return null
@@ -81,19 +112,24 @@ export class TaskBrowserVisualFeedbackController {
 
   async clearVisualFeedback(): Promise<void> {
     await this.cancelVisibleRegionSelection()
+    this.cancelVisualFeedbackActionWait()
     this.feedbackAnnotationsByUrl.clear()
     if (this.isDestroyed() || this.contents.isDestroyed()) return
-    await this.contents.executeJavaScript(`(() => {
-      document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
-    })()`, true).catch(() => undefined)
+    await this.contents
+      .executeJavaScript(buildTaskBrowserVisualFeedbackClearScript(), true)
+      .catch(() => undefined)
   }
 
-  async replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void> {
+  async replaceVisualFeedback(
+    feedback: readonly TaskBrowserSurfaceVisualFeedback[],
+    presentation?: TaskBrowserVisualFeedbackPresentation,
+  ): Promise<void> {
     await this.cancelVisibleRegionSelection()
     if (this.isDestroyed() || this.contents.isDestroyed()) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface has been destroyed')
     }
 
+    this.presentation = presentation ? { ...presentation } : undefined
     const current = await this.contents.executeJavaScript(`({
       url: location.href,
       width: window.innerWidth,
@@ -134,19 +170,56 @@ export class TaskBrowserVisualFeedbackController {
     if (this.isDestroyed() || this.contents.isDestroyed()) return
     await this.contents.executeJavaScript(`(() => {
       const annotations = document.getElementById('__openforge_visual_feedback_annotations__');
-      if (annotations) annotations.style.visibility = ${JSON.stringify(visibility)};
+      if (annotations) {
+        annotations.style.display = ${JSON.stringify(visibility === 'hidden' ? 'none' : '')};
+        if (${visibility === 'hidden'}) annotations.setAttribute('aria-hidden', 'true');
+        else annotations.removeAttribute('aria-hidden');
+      }
       if (${visibility === 'hidden'}) return new Promise(resolve => requestAnimationFrame(() => resolve()));
     })()`, true).catch(() => undefined)
+  }
+
+  private cancelVisualFeedbackActionWait(): void {
+    this.actionWaitGeneration += 1
+    if (this.isDestroyed() || this.contents.isDestroyed()) return
+    void this.contents.executeJavaScriptInIsolatedWorld(
+      TASK_BROWSER_VISUAL_FEEDBACK_ISOLATED_WORLD_ID,
+      [{ code: buildTaskBrowserVisualFeedbackActionCancelScript() }],
+      true,
+    ).catch(() => undefined)
+  }
+
+  private waitForVisualFeedbackAction(pageUrl: string): void {
+    if (this.isDestroyed() || this.contents.isDestroyed()) return
+    const waitGeneration = ++this.actionWaitGeneration
+    void this.contents
+      .executeJavaScriptInIsolatedWorld(
+        TASK_BROWSER_VISUAL_FEEDBACK_ISOLATED_WORLD_ID,
+        [{ code: buildTaskBrowserVisualFeedbackActionWaitScript() }],
+        true,
+      )
+      .then(value => {
+        if (waitGeneration !== this.actionWaitGeneration
+          || this.isDestroyed()
+          || this.contents.isDestroyed()
+          || this.contents.getURL() !== pageUrl) return
+        const action = visualFeedbackAction(value)
+        const annotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
+        if (action === null
+          || !annotations.some(annotation => annotation.number === action.annotationNumber)) return
+        for (const listener of this.actionListeners) listener({ ...action })
+        this.waitForVisualFeedbackAction(pageUrl)
+      })
+      .catch(() => undefined)
   }
 
   hideForNavigation(): void {
     this.cancelSelection?.()
     this.cancelSelection = null
+    this.cancelVisualFeedbackActionWait()
     if (this.isDestroyed() || this.contents.isDestroyed()) return
     void this.contents.executeJavaScript(`${buildTaskBrowserVisualFeedbackDismissScript()};
-    (() => {
-      document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
-    })()`, true).catch(() => undefined)
+    ${buildTaskBrowserVisualFeedbackClearScript()}`, true).catch(() => undefined)
   }
 
   async refreshForCurrentUrl(): Promise<void> {
@@ -157,7 +230,9 @@ export class TaskBrowserVisualFeedbackController {
       ${buildTaskBrowserVisualFeedbackAnnotationsScript({
         savedAnnotations,
         expectedUrl: pageUrl,
+        appearance: this.presentation?.appearance,
       })}
     })()`, true)
+    this.waitForVisualFeedbackAction(pageUrl)
   }
 }

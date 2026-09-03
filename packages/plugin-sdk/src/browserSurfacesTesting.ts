@@ -8,6 +8,8 @@ import type {
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
   BrowserSurfaceVisualFeedback,
+  BrowserSurfaceVisualFeedbackPresentation,
+  BrowserSurfaceVisualFeedbackAction,
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
@@ -28,7 +30,12 @@ export interface TestingBrowserSurfaceCalls {
   }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
   browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
-  browserSurfaceFeedbackReplacements: Array<{ taskId: string; id: string; feedback: BrowserSurfaceVisualFeedback[] }>
+  browserSurfaceFeedbackReplacements: Array<{
+    taskId: string
+    id: string
+    feedback: BrowserSurfaceVisualFeedback[]
+    presentation?: BrowserSurfaceVisualFeedbackPresentation
+  }>
   browserSurfaceCaptureChecks: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceCaptures: Array<{ taskId: string; id: string }>
   browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
@@ -71,6 +78,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
   private readonly history: string[]
   private historyIndex = 0
   private readonly listeners = new Set<(state: TaskBrowserSurfaceState) => void>()
+  private readonly visualFeedbackActionListeners = new Set<(action: BrowserSurfaceVisualFeedbackAction) => void>()
   private currentAttachment = 0
   private destroyed = false
   private nextAnnotationNumber = 1
@@ -117,6 +125,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.destroyed = true
     this.listeners.clear()
     this.calls.browserSurfaceDestroys.push({ taskId: this.taskId, id: this.id })
+    this.visualFeedbackActionListeners.clear()
     this.onDestroyed()
   }
 
@@ -129,6 +138,12 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.assertLive()
     this.listeners.add(handler)
     return disposable(() => { this.listeners.delete(handler) })
+  }
+
+  onVisualFeedbackAction(handler: (action: BrowserSurfaceVisualFeedbackAction) => void): Disposable {
+    this.assertLive()
+    this.visualFeedbackActionListeners.add(handler)
+    return disposable(() => { this.visualFeedbackActionListeners.delete(handler) })
   }
 
   async navigate(url: string): Promise<TaskBrowserSurfaceState> {
@@ -213,12 +228,16 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.nextAnnotationNumber = 1
   }
 
-  async replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void> {
+  async replaceVisualFeedback(
+    feedback: readonly BrowserSurfaceVisualFeedback[],
+    presentation?: BrowserSurfaceVisualFeedbackPresentation,
+  ): Promise<void> {
     this.assertLive()
     this.calls.browserSurfaceFeedbackReplacements.push({
       taskId: this.taskId,
       id: this.id,
       feedback: feedback.map(marker => ({ ...marker, region: { ...marker.region } })),
+      ...(presentation ? { presentation: { ...presentation } } : {}),
     })
     this.nextAnnotationNumber = feedback.reduce(
       (maximum, marker) => Math.max(maximum, marker.annotationNumber),

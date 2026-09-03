@@ -43,6 +43,10 @@ import { asChildProcessLike, createSidecarLaunchConfig, resolveSidecarPort, star
 import type { OpenDialogOptions } from 'electron'
 import type { ElectronInvokeDeps } from './backendBridge.js'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
+import type {
+  TaskBrowserSurfaceStateEvent,
+  TaskBrowserSurfaceVisualFeedbackActionEvent,
+} from './taskBrowserSurfaceManager.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 import type { TaskBrowserSessionPurgeIntent } from './taskBrowserSessionPurgeCoordinator.js'
@@ -54,6 +58,19 @@ export interface ElectronBootAdapterOptions {
   failureReporter?: ElectronFailureReporter | null
 }
 
+
+type TaskBrowserSurfaceRendererEvent =
+  | TaskBrowserSurfaceStateEvent
+  | TaskBrowserSurfaceVisualFeedbackActionEvent
+
+export function forwardTaskBrowserSurfaceRendererEvent(
+  eventName: 'task-browser-surface-state' | 'task-browser-visual-feedback-action',
+  event: TaskBrowserSurfaceRendererEvent,
+): void {
+  const window = BrowserWindow.fromId(event.windowId)
+  if (!window || window.isDestroyed()) return
+  window.webContents.send('openforge:event', { eventName, payload: event })
+}
 function taskBrowserSessionPurgeIntents(value: unknown): TaskBrowserSessionPurgeIntent[] {
   if (!Array.isArray(value)) throw new Error('Rust sidecar returned an invalid Plugin Browser Session purge intent list')
   return value.map(candidate => {
@@ -160,12 +177,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     authorizePlugin: createPluginBrowserSessionAuthorizer(invokeForTaskBrowserAuthorization),
     rendererZoomFactor: electronRendererZoomFactor,
     onStateChanged: event => {
-      const window = BrowserWindow.fromId(event.windowId)
-      if (!window || window.isDestroyed()) return
-      window.webContents.send('openforge:event', {
-        eventName: 'task-browser-surface-state',
-        payload: event,
-      })
+      forwardTaskBrowserSurfaceRendererEvent('task-browser-surface-state', event)
+    },
+    onVisualFeedbackAction: event => {
+      forwardTaskBrowserSurfaceRendererEvent('task-browser-visual-feedback-action', event)
     },
   })
   const taskBrowserSurfaceIpc = new TaskBrowserSurfaceIpcRouter(taskBrowserSurfaceManager)

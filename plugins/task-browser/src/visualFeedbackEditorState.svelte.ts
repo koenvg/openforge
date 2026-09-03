@@ -1,5 +1,6 @@
 import type {
   BrowserSurfaceCapture,
+  BrowserSurfaceVisualFeedbackAppearance,
   BrowserSurfaceRegion,
   TaskBrowserSurfaceController,
 } from '@openforge-app/plugin-sdk/frontend'
@@ -36,6 +37,7 @@ export interface VisualFeedbackEditorState {
   readonly captures: readonly VisualFeedbackCapture[]
   readonly annotations: readonly CaptureAnnotation[]
   setErrorHandler(handler: (error: string | null) => void): void
+  setAppearance(appearance: BrowserSurfaceVisualFeedbackAppearance): Promise<void>
   setSurface(surface: TaskBrowserSurfaceController | null): Promise<void>
   toggle(): Promise<void>
   updateAnnotation(annotationNumber: number, comment: string, rect: BrowserSurfaceRegion): Promise<void>
@@ -94,6 +96,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
   }
 
   let surface: TaskBrowserSurfaceController | null = null
+  let appearance: BrowserSurfaceVisualFeedbackAppearance = 'light'
   let generation = 0
   let pendingSend: Promise<void> | null = null
   let destroyed = false
@@ -117,13 +120,15 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     }
   }
 
-  async function persistDraft(): Promise<void> {
+  async function persistDraft(): Promise<boolean> {
     try {
       await draftStore.persist(draftData())
       if (saveError?.startsWith('Could not save visual feedback:')) saveError = null
+      return true
     } catch (error) {
       saveError = `Could not save visual feedback: ${errorMessage(error)}`
       reportError(`${saveError}. Your in-memory feedback is still available; retry saving when ready.`)
+      return false
     }
   }
 
@@ -154,16 +159,24 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     if (result.firstError !== null) reportError(result.firstError)
   }
 
-  async function syncVisualFeedback(): Promise<void> {
+  async function syncVisualFeedback(): Promise<boolean> {
     const targetSurface = surface
-    if (targetSurface === null) return
+    if (targetSurface === null) return false
     try {
-      await synchronizeVisualFeedbackMarkers(targetSurface, captures, annotations)
+      await synchronizeVisualFeedbackMarkers(targetSurface, captures, annotations, appearance)
       if (saveError?.startsWith('Could not save live marker changes:')) saveError = null
+      return true
     } catch (error) {
       saveError = `Could not save live marker changes: ${errorMessage(error)}`
       reportError(`${saveError}. Retry when the Browser Surface is available.`)
+      return false
     }
+  }
+
+  async function setAppearance(nextAppearance: BrowserSurfaceVisualFeedbackAppearance): Promise<void> {
+    if (appearance === nextAppearance) return
+    appearance = nextAppearance
+    await syncVisualFeedback()
   }
 
   async function finalizePendingArtifactDiscards(): Promise<void> {
@@ -183,6 +196,13 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     undoSnapshot = snapshot()
   }
 
+
+  function restoreMutation(previous: EditorSnapshot, previousUndo: EditorSnapshot | null): void {
+    artifacts.reconcileUndo(previous.captures, captures)
+    captures = previous.captures
+    annotations = previous.annotations
+    undoSnapshot = previousUndo
+  }
   function resetState(clearPendingDiscards = true): void {
     active = false
     busy = false
@@ -209,8 +229,8 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     if (previousSurface !== null) {
       await previousSurface.cancelVisibleRegionSelection().catch(() => undefined)
     }
-    if (nextSurface !== null && annotations.length > 0) {
-      await validateCaptureArtifacts()
+    if (nextSurface !== null) {
+      if (annotations.length > 0) await validateCaptureArtifacts()
       await syncVisualFeedback()
     }
   }
@@ -332,16 +352,36 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
   async function removeAnnotation(annotationNumber: number): Promise<void> {
     const existing = annotations.find(annotation => annotation.number === annotationNumber)
     if (existing === undefined || busy) return
-    await beginMutation()
-    annotations = annotations.filter(annotation => annotation.number !== annotationNumber)
-    const stillReferenced = annotations.some(annotation => annotation.captureNumber === existing.captureNumber)
-    if (!stillReferenced) {
-      const removedCapture = captures.find(capture => capture.number === existing.captureNumber)
-      if (removedCapture !== undefined) artifacts.scheduleDiscard(removedCapture)
-      captures = captures.filter(capture => capture.number !== existing.captureNumber)
+    const previous = snapshot()
+    const previousUndo = undoSnapshot
+    busy = true
+    try {
+      await beginMutation()
+      annotations = annotations.filter(annotation => annotation.number !== annotationNumber)
+      const stillReferenced = annotations.some(annotation => annotation.captureNumber === existing.captureNumber)
+      if (!stillReferenced) {
+        const removedCapture = captures.find(capture => capture.number === existing.captureNumber)
+        if (removedCapture !== undefined) artifacts.scheduleDiscard(removedCapture)
+        captures = captures.filter(capture => capture.number !== existing.captureNumber)
+      }
+
+      if (!await persistDraft()) {
+        restoreMutation(previous, previousUndo)
+        return
+      }
+      if (await syncVisualFeedback()) return
+
+      const synchronizationError = saveError
+      restoreMutation(previous, previousUndo)
+      const rollbackPersisted = await persistDraft()
+      const rollbackSynchronized = await syncVisualFeedback()
+      if (rollbackPersisted && rollbackSynchronized && synchronizationError !== null) {
+        saveError = synchronizationError
+        reportError(`${synchronizationError}. Retry when the Browser Surface is available.`)
+      }
+    } finally {
+      busy = false
     }
-    await syncVisualFeedback()
-    await persistDraft()
   }
 
   async function removeCapture(captureNumber: number): Promise<void> {
@@ -479,6 +519,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     get captures() { return captures },
     get annotations() { return annotations },
     setErrorHandler,
+    setAppearance,
     setSurface,
     toggle,
     updateAnnotation,

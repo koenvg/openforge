@@ -54,13 +54,32 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     })
     surface.attach(10, { x: 0, y: 0, width: 640, height: 480 })
 
+    const contents = electronFakes.views[0].webContents
+    contents.executeJavaScriptResult = {
+      url: 'about:blank',
+      width: 640,
+      height: 480,
+      scrollX: 0,
+      scrollY: 0,
+    }
+    await surface.replaceVisualFeedback([{
+      annotationNumber: 1,
+      url: 'about:blank',
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.2 },
+      comment: 'Keep comments out of captured evidence',
+    }])
+    expect(contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')))
+      .toContain('Visual feedback comments')
+    contents.executeJavaScriptCalls.length = 0
+
     const capture = await surface.captureVisibleViewport()
 
-    const contents = electronFakes.views[0].webContents
     expect(contents.capturePageCalls).toEqual([undefined])
     expect(contents.executeJavaScriptCalls).toHaveLength(2)
-    expect(contents.executeJavaScriptCalls[0]).toContain("annotations.style.visibility = \"hidden\"")
-    expect(contents.executeJavaScriptCalls[1]).toContain("annotations.style.visibility = \"\"")
+    expect(contents.executeJavaScriptCalls[0]).toContain("annotations.style.display = \"none\"")
+    expect(contents.executeJavaScriptCalls[0]).toContain("annotations.setAttribute('aria-hidden', 'true')")
+    expect(contents.executeJavaScriptCalls[1]).toContain("annotations.style.display = \"\"")
+    expect(contents.executeJavaScriptCalls[1]).toContain("annotations.removeAttribute('aria-hidden')")
     expect(capture).toEqual({
       png: Buffer.from('visible-viewport-png'),
       width: 640,
