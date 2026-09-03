@@ -22,6 +22,8 @@ import type {
   TaskBrowserNavigationError,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackAction,
+  TaskBrowserVisualFeedbackPresentation,
 } from './taskBrowserSurfaceManager.js'
 
 export { sanitizeTaskBrowserDownloadFilename } from './taskBrowserDownloads.js'
@@ -117,6 +119,10 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   onStateChanged(listener: (state: TaskBrowserNativeState) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  onVisualFeedbackAction(listener: (action: TaskBrowserVisualFeedbackAction) => void): () => void {
+    return this.visualFeedback.onVisualFeedbackAction(listener)
   }
 
   async loadURL(url: string): Promise<void> {
@@ -220,8 +226,11 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     return this.visualFeedback.clearVisualFeedback()
   }
 
-  replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void> {
-    return this.visualFeedback.replaceVisualFeedback(feedback)
+  replaceVisualFeedback(
+    feedback: readonly TaskBrowserSurfaceVisualFeedback[],
+    presentation?: TaskBrowserVisualFeedbackPresentation,
+  ): Promise<void> {
+    return this.visualFeedback.replaceVisualFeedback(feedback, presentation)
   }
 
   async captureVisibleViewport() {

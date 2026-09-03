@@ -106,8 +106,16 @@ describe('Task Browser Surface IPC router', () => {
       region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
       comment: 'Corrected feedback',
     }]
-    await expect(router.handle('task_browser_surface_replace_visual_feedback', { ...owner, feedback }, 10)).resolves.toMatchObject({ ok: true })
-    expect(manager.replaceVisualFeedback).toHaveBeenCalledWith({ windowId: 10, ...owner }, feedback)
+    await expect(router.handle('task_browser_surface_replace_visual_feedback', {
+      ...owner,
+      feedback,
+      presentation: { appearance: 'light' },
+    }, 10)).resolves.toMatchObject({ ok: true })
+    expect(manager.replaceVisualFeedback).toHaveBeenCalledWith(
+      { windowId: 10, ...owner },
+      feedback,
+      { appearance: 'light' },
+    )
     await expect(router.handle('task_browser_surface_capture_exists', { ...owner, artifactId: 'capture-1' }, 10))
       .resolves.toEqual({ ok: true, value: true })
     expect(manager.captureExists).toHaveBeenCalledWith({ windowId: 10, ...owner, artifactId: 'capture-1' })

@@ -450,6 +450,7 @@ describe('runtime contribution registry', () => {
       destroy: vi.fn(async () => undefined),
       getState: vi.fn(async () => state),
       onStateChanged: vi.fn(() => ({ dispose: () => undefined })),
+      onVisualFeedbackAction: vi.fn(() => ({ dispose: () => undefined })),
       navigate: vi.fn(async () => state),
       goBack: vi.fn(async () => state),
       goForward: vi.fn(async () => state),

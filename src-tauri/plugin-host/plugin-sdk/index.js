@@ -1457,6 +1457,7 @@ var TestingTaskBrowserSurface = class {
 	history;
 	historyIndex = 0;
 	listeners = /* @__PURE__ */ new Set();
+	visualFeedbackActionListeners = /* @__PURE__ */ new Set();
 	currentAttachment = 0;
 	destroyed = false;
 	nextAnnotationNumber = 1;
@@ -1507,6 +1508,7 @@ var TestingTaskBrowserSurface = class {
 			taskId: this.taskId,
 			id: this.id
 		});
+		this.visualFeedbackActionListeners.clear();
 		this.onDestroyed();
 	}
 	async getState() {
@@ -1518,6 +1520,13 @@ var TestingTaskBrowserSurface = class {
 		this.listeners.add(handler);
 		return disposable(() => {
 			this.listeners.delete(handler);
+		});
+	}
+	onVisualFeedbackAction(handler) {
+		this.assertLive();
+		this.visualFeedbackActionListeners.add(handler);
+		return disposable(() => {
+			this.visualFeedbackActionListeners.delete(handler);
 		});
 	}
 	async navigate(url) {
@@ -1635,7 +1644,7 @@ var TestingTaskBrowserSurface = class {
 		});
 		this.nextAnnotationNumber = 1;
 	}
-	async replaceVisualFeedback(feedback) {
+	async replaceVisualFeedback(feedback, presentation) {
 		this.assertLive();
 		this.calls.browserSurfaceFeedbackReplacements.push({
 			taskId: this.taskId,
@@ -1643,7 +1652,8 @@ var TestingTaskBrowserSurface = class {
 			feedback: feedback.map((marker) => ({
 				...marker,
 				region: { ...marker.region }
-			}))
+			})),
+			...presentation ? { presentation: { ...presentation } } : {}
 		});
 		this.nextAnnotationNumber = feedback.reduce((maximum, marker) => Math.max(maximum, marker.annotationNumber), 0) + 1;
 	}

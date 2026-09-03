@@ -109,9 +109,13 @@ export const electronFakes = (() => {
     captureSize = { width: 640, height: 480 }
     capturePng = Buffer.from('visible-viewport-png')
     executeJavaScriptCalls: string[] = []
+    executeJavaScriptInIsolatedWorldCalls: Array<{ worldId: number; scripts: Array<{ code: string }> }> = []
+    executeJavaScriptInIsolatedWorldResult: unknown = null
+    executeJavaScriptInIsolatedWorldResults: unknown[] = []
     executeJavaScriptResult: unknown = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }
     executeJavaScriptResults: unknown[] = []
     backgroundThrottling: boolean[] = []
+    sentMessages: unknown[][] = []
     windowOpenHandler: ((details: unknown) => unknown) | null = null
     loadError: Error | null = null
 
@@ -161,6 +165,23 @@ export const electronFakes = (() => {
       return this.executeJavaScriptResults.length > 0
         ? this.executeJavaScriptResults.shift()
         : this.executeJavaScriptResult
+    }
+
+    async executeJavaScriptInIsolatedWorld(
+      worldId: number,
+      scripts: Array<{ code: string }>,
+    ): Promise<unknown> {
+      this.executeJavaScriptInIsolatedWorldCalls.push({
+        worldId,
+        scripts: scripts.map(script => ({ ...script })),
+      })
+      return this.executeJavaScriptInIsolatedWorldResults.length > 0
+        ? this.executeJavaScriptInIsolatedWorldResults.shift()
+        : this.executeJavaScriptInIsolatedWorldResult
+    }
+
+    send(...args: unknown[]): void {
+      this.sentMessages.push(args)
     }
 
     reload(): void { this.reloadCalls += 1 }

@@ -4,7 +4,9 @@
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'
   import type {
+    Disposable,
     PluginTaskPaneProps,
+    BrowserSurfaceVisualFeedbackAppearance,
     BrowserDevToolsPanel,
     TaskBrowserSurfaceState,
   } from '@openforge-app/plugin-sdk/frontend'
@@ -35,6 +37,7 @@
 
   let browserRegion = $state<HTMLDivElement | null>(null)
   let session = $state<BrowserTabSession | null>(null)
+  let visualFeedbackActionSubscription: Disposable | null = null
   let surfaceState = $state<TaskBrowserSurfaceState>(blankState)
   let address = $state('')
   let editingAddress = $state(false)
@@ -53,6 +56,20 @@
   const initialFeedback = initialFeedbackEditor()
   let feedbackEditorTaskId = initialFeedback.taskId
   let feedbackEditor = $state.raw(initialFeedback.editor)
+  function configuredVisualFeedbackAppearance(): BrowserSurfaceVisualFeedbackAppearance {
+    return document.documentElement.getAttribute('data-theme') === 'openforge-dark' ? 'dark' : 'light'
+  }
+  let visualFeedbackAppearance = configuredVisualFeedbackAppearance()
+  const themeObserver = new MutationObserver(() => {
+    const nextAppearance = configuredVisualFeedbackAppearance()
+    if (nextAppearance === visualFeedbackAppearance) return
+    visualFeedbackAppearance = nextAppearance
+    void feedbackEditor.setAppearance(nextAppearance)
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
   let activeTaskId: string | null = null
   let lifecycleGeneration = 0
   let actionGeneration = 0
@@ -75,8 +92,10 @@
     actionGeneration += 1
     activeTaskId = nextTaskId
     const previousSession = session
+    const previousActionSubscription = visualFeedbackActionSubscription
     const previousFeedbackEditor = feedbackEditor
     session = null
+    visualFeedbackActionSubscription = null
     surfaceState = blankState
     address = ''
     opening = true
@@ -85,6 +104,7 @@
 
     await Promise.allSettled([
       previousFeedbackEditor.setSurface(null),
+      previousActionSubscription?.dispose(),
       previousSession?.dispose(),
     ])
     if (destroyed || generation !== lifecycleGeneration) return
@@ -95,6 +115,7 @@
     } else {
       feedbackEditor.setErrorHandler(handleFeedbackError)
     }
+    await feedbackEditor.setAppearance(visualFeedbackAppearance)
     try {
       const nextSession = await createBrowserTabSession({
         api,
@@ -109,6 +130,11 @@
         return
       }
       session = nextSession
+      const actionEditor = feedbackEditor
+      visualFeedbackActionSubscription = nextSession.surface.onVisualFeedbackAction(action => {
+        if (destroyed || generation !== lifecycleGeneration) return
+        void actionEditor.removeAnnotation(action.annotationNumber)
+      })
       void feedbackEditor.setSurface(nextSession.surface)
     } catch (error) {
       if (generation === lifecycleGeneration) {
@@ -211,15 +237,19 @@
   })
 
   onDestroy(() => {
+    themeObserver.disconnect()
     destroyed = true
     lifecycleGeneration += 1
     actionGeneration += 1
     const currentSession = session
+    const currentActionSubscription = visualFeedbackActionSubscription
     const currentFeedbackEditor = feedbackEditor
     currentFeedbackEditor.setErrorHandler(() => undefined)
     session = null
+    visualFeedbackActionSubscription = null
     void Promise.allSettled([
       currentFeedbackEditor.setSurface(null),
+      currentActionSubscription?.dispose(),
       currentSession?.dispose(),
     ])
   })

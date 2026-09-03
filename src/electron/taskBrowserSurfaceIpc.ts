@@ -7,6 +7,7 @@ import type {
   TaskBrowserSurfaceErrorCode,
   TaskBrowserSurfaceManager,
   TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackPresentation,
 } from './taskBrowserSurfaceManager.js'
 
 const COMMANDS = new Set([
@@ -155,6 +156,20 @@ function visualFeedbackField(payload: Record<string, unknown>): TaskBrowserSurfa
     }
   })
 }
+
+function optionalVisualFeedbackPresentationField(
+  payload: Record<string, unknown>,
+): TaskBrowserVisualFeedbackPresentation | undefined {
+  if (payload.presentation === undefined) return undefined
+  const presentation = record(payload.presentation)
+  if (presentation.appearance !== 'light' && presentation.appearance !== 'dark') {
+    throw new TaskBrowserSurfaceError(
+      'INVALID_ID',
+      'Task Browser visual feedback appearance must be light or dark',
+    )
+  }
+  return { appearance: presentation.appearance }
+}
 function errorResponse(error: unknown): TaskBrowserSurfaceHostResponse<never> {
   if (error instanceof TaskBrowserSurfaceError) {
     return { ok: false, error: { code: error.code, message: error.message } }
@@ -228,7 +243,11 @@ export class TaskBrowserSurfaceIpcRouter {
           return { ok: true, value: undefined }
         }
         if (command === 'task_browser_surface_replace_visual_feedback') {
-          await this.manager.replaceVisualFeedback(owner, visualFeedbackField(payload))
+          await this.manager.replaceVisualFeedback(
+            owner,
+            visualFeedbackField(payload),
+            optionalVisualFeedbackPresentationField(payload),
+          )
           return { ok: true, value: undefined }
         }
         if (command === 'task_browser_surface_capture_exists') {

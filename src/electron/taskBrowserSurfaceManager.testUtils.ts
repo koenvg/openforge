@@ -9,6 +9,8 @@ import type {
   TaskBrowserNativeState,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceVisualFeedback,
+  TaskBrowserVisualFeedbackAction,
+  TaskBrowserSurfaceVisualFeedbackActionEvent,
   TaskBrowserSurfaceStateEvent,
 } from './taskBrowserSurfaceManager.js'
 import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
@@ -25,6 +27,7 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly feedbackReplacements: TaskBrowserSurfaceVisualFeedback[][] = []
   readonly bounds: TaskBrowserBounds[] = []
   readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
+  readonly actionListeners = new Set<(action: TaskBrowserVisualFeedbackAction) => void>()
   private readonly history = ['about:blank']
   private historyIndex = 0
   state: TaskBrowserNativeState = {
@@ -49,6 +52,11 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
     return () => this.listeners.delete(listener)
   }
 
+  onVisualFeedbackAction(listener: (action: TaskBrowserVisualFeedbackAction) => void): () => void {
+    this.actionListeners.add(listener)
+    return () => this.actionListeners.delete(listener)
+  }
+
   async loadURL(url: string): Promise<void> {
     if (this.loadGate) await this.loadGate
     this.loadCalls.push(url)
@@ -70,6 +78,7 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   destroy(): void {
     this.destroyed = true
     this.listeners.clear()
+    this.actionListeners.clear()
   }
 
   async goBack(): Promise<void> {
@@ -131,6 +140,10 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   emit(patch: Partial<TaskBrowserNativeState> = {}): void {
     this.state = { ...this.state, ...patch }
     for (const listener of this.listeners) listener(this.getState())
+  }
+
+  emitAction(action: TaskBrowserVisualFeedbackAction): void {
+    for (const listener of this.actionListeners) listener({ ...action })
   }
 
   private emitHistoryState(patch: Partial<TaskBrowserNativeState>): void {
@@ -232,6 +245,7 @@ export function createTaskBrowserSurfaceManagerFixture(
     cleanupTask: vi.fn(async () => undefined),
   }
   const stateEvents: TaskBrowserSurfaceStateEvent[] = []
+  const actionEvents: TaskBrowserSurfaceVisualFeedbackActionEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
     factory,
     registry,
@@ -240,6 +254,7 @@ export function createTaskBrowserSurfaceManagerFixture(
     authorize,
     authorizePlugin,
     onStateChanged: event => stateEvents.push(event),
+    onVisualFeedbackAction: event => actionEvents.push(event),
     ...(overrides.rendererZoomFactor ? { rendererZoomFactor: overrides.rendererZoomFactor } : {}),
   })
   manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
@@ -254,5 +269,6 @@ export function createTaskBrowserSurfaceManagerFixture(
     authorize,
     authorizePlugin,
     stateEvents,
+    actionEvents,
   }
 }

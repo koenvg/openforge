@@ -394,6 +394,12 @@ const stateSubscription = surface.onStateChanged(async state => {
   }
 })
 
+const visualFeedbackActionSubscription = surface.onVisualFeedbackAction(action => {
+  if (action.type === 'delete-annotation') {
+    void removeAnnotationFromPluginDraft(action.annotationNumber)
+  }
+})
+
 const attachment = await surface.attach(browserRegionElement)
 
 // OpenForge highlights sensible live-page targets and also allows manual drag selection.
@@ -406,12 +412,18 @@ if (feedback === null) return // Escape cancels selection
 const capture = await surface.captureVisibleViewport()
 console.log(feedback.region, feedback.comment, capture.artifactId, capture.width, capture.height)
 
+// Synchronize the plugin-owned draft after add, edit, delete, undo, restore, or theme changes.
+await surface.replaceVisualFeedback(pluginDraftAnnotations, {
+  appearance: configuredAppearance, // 'light' or 'dark'
+})
+
 // Delete the Task/plugin-owned runtime artifact when the user discards it.
 await surface.discardCapture(capture.artifactId)
 
 // On component teardown:
 await attachment.dispose() // detaches but keeps the live page when capacity permits
 await stateSubscription.dispose()
+await visualFeedbackActionSubscription.dispose()
 
 // To release the live page while retaining its durable Plugin Browser Session:
 await surface.destroy()
@@ -422,6 +434,10 @@ await surface.destroy()
 Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds, scrolling, resizing, visibility, and disconnection. A newer attachment atomically replaces an older one, and disposing stale attachment cleanup cannot detach the newer attachment. Detaching may preserve the background-throttled live page; each OpenForge window retains at most four detached surfaces before least-recently-used eviction. Attached surfaces are protected. After destruction or eviction, reacquire with `getOrCreate` and the URL saved in task-scoped plugin storage.
 
 `selectVisibleRegion()` is available only while the exact surface generation is visibly attached. Electron main installs a temporary host-owned interaction layer inside the live page. Hovering highlights sensible page areas, dragging selects an arbitrary viewport rectangle, clicking accepts the highlighted target, and Escape cancels. A compact host-owned comment composer remains over the live page; Enter saves and Shift+Enter adds a newline. A plugin can call `selectVisibleRegion()` repeatedly for a continuous feedback mode and use `cancelVisibleRegionSelection()` to stop the currently pending selection. After save, OpenForge removes the interactive selector and composer but leaves a globally numbered, pointer-transparent outline over the commented page area, so normal page clicks and scrolling continue to work. Saved outlines are retained by exact page URL within the live surface: navigating elsewhere hides them, and returning to that URL restores them. Call `clearVisualFeedback()` only when the complete review is discarded or its Agent follow-up is acknowledged; it removes every saved outline for that surface without changing page or login state. The public plugin receives only `{ region: { x, y, width, height }, comment, annotationNumber? }`—never DOM nodes, selectors, page content, or a general script-injection facility. `annotationNumber` is assigned by current hosts and optional for compatibility with older hosts.
+
+`replaceVisualFeedback(feedback, presentation?)` replaces the synchronized marker set with plugin-owned annotation numbers, exact HTTP(S) URLs, normalized regions, and comments. Pass `{ appearance: 'light' | 'dark' }` from the configured host theme when the live card should follow OpenForge appearance changes; omitting presentation remains supported and uses the host's dark fallback. Synchronizing the same URL preserves the card's expanded or collapsed state. The host renders only rows for the exact visible URL and removes the complete card from rendering, hit testing, accessibility, and viewport-capture pixels while selection or capture is active.
+
+`onVisualFeedbackAction(...)` reports typed requests from host-owned visual-feedback controls. The current action is `{ type: 'delete-annotation', annotationNumber }`. Treat it as a request against plugin-owned state: update and persist the plugin draft, reconcile capture cleanup and undo state, then call `replaceVisualFeedback` with the authoritative result. Electron ignores programmatic page activation, validates the current surface generation, exact URL, and synchronized annotation number, and never deletes durable plugin data or optimistically removes a row or marker. Dispose the subscription when releasing the owning component or surface.
 
 `captureVisibleViewport()` uses Electron's visible-page capture rather than a full scrolling-page capture, temporarily hides host-owned annotation outlines from the evidence pixels, writes an immutable PNG to host-managed Task/plugin runtime storage under `userData`, and returns a JSON-serializable `{ artifactId, absolutePath, mediaType, width, height, url, title, capturedAt, dataUrl }`. `absolutePath` is the Agent-readable local PNG path; `url`, `title`, and ISO `capturedAt` describe the immutable viewport capture. Call it immediately after successful live-page feedback to preserve the selected state in the background; do not replace the live Browser Surface merely to display the returned data URL. A review workflow may compare the returned pixels and capture context to reuse existing evidence for multiple annotations, discarding a newly created duplicate through `discardCapture(artifactId)`. Selecting, capturing, clearing outlines, and discarding do not detach, destroy, or reset the Plugin Browser Session. Retain acknowledged artifacts when an Agent follow-up references their paths; Task runtime cleanup removes them with the Task.
 

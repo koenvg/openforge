@@ -316,4 +316,33 @@ describe('Task Browser Surface Manager', () => {
       expect.objectContaining({ state: expect.objectContaining({ title: 'Stale' }) }),
     ]))
   })
+
+  it('routes visual-feedback actions only from the current surface generation', async () => {
+    const { manager, factory, actionEvents } = createManager()
+    const first = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-actions',
+      id: 'main',
+    })
+    const staleListener = Array.from(factory.surfaces[0].actionListeners)[0]
+    expect(staleListener).toBeDefined()
+
+    await manager.destroy(first.surfaceId)
+    const replacement = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-actions',
+      id: 'main',
+    })
+    staleListener?.({ type: 'delete-annotation', annotationNumber: 1 })
+    factory.surfaces[1].emitAction({ type: 'delete-annotation', annotationNumber: 2 })
+
+    expect(actionEvents).toEqual([{
+      windowId: 10,
+      surfaceId: replacement.surfaceId,
+      generation: replacement.generation,
+      action: { type: 'delete-annotation', annotationNumber: 2 },
+    }])
+  })
 })

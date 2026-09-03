@@ -93,6 +93,7 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'destroy'
       | 'getState'
       | 'onStateChanged'
+      | 'onVisualFeedbackAction'
       | 'navigate'
       | 'goBack'
       | 'goForward'
@@ -149,7 +150,7 @@ describe('renderer Task Browser Surface host adapter', () => {
       url: 'https://example.com/',
       region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
       comment: 'Corrected feedback',
-    }])
+    }], { appearance: 'light' })
     expect(await controller.captureExists(capture.artifactId)).toBe(true)
     await controller.discardCapture(capture.artifactId)
 
@@ -170,6 +171,7 @@ describe('renderer Task Browser Surface host adapter', () => {
         region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
         comment: 'Corrected feedback',
       }],
+      presentation: { appearance: 'light' },
     })
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_exists', { ...owner, artifactId: 'capture-1' })
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_visible_viewport', owner)
@@ -181,6 +183,7 @@ describe('renderer Task Browser Surface host adapter', () => {
   it('qualifies requests, serializes DOM bounds, forwards state, and disposes attachments safely', async () => {
     const invocations: Array<{ command: string; payload: unknown }> = []
     let stateHandler: ((payload: unknown) => void) | null = null
+    let actionHandler: ((payload: unknown) => void) | null = null
     const bridge: OpenForgeDesktopBridge = {
       version: 1,
       async invoke(command, payload) {
@@ -195,7 +198,11 @@ describe('renderer Task Browser Surface host adapter', () => {
       },
       onEvent(eventName, handler) {
         if (eventName === 'task-browser-surface-state') stateHandler = handler
-        return () => { stateHandler = null }
+        if (eventName === 'task-browser-visual-feedback-action') actionHandler = handler
+        return () => {
+          if (eventName === 'task-browser-surface-state') stateHandler = null
+          if (eventName === 'task-browser-visual-feedback-action') actionHandler = null
+        }
       },
     }
     window.openforge = bridge
@@ -219,19 +226,38 @@ describe('renderer Task Browser Surface host adapter', () => {
     const attachment = await controller.attach(element)
     const states: string[] = []
     const subscription = controller.onStateChanged(state => states.push(state.title))
+    const actions: unknown[] = []
+    const actionSubscription = controller.onVisualFeedbackAction(action => actions.push(action))
     ;(stateHandler as ((payload: unknown) => void) | null)?.({
       surfaceId: 'surface-1',
       generation: 4,
       state: { ...blankState, title: 'Example' },
+    })
+    ;(actionHandler as ((payload: unknown) => void) | null)?.({
+      surfaceId: 'surface-1',
+      generation: 4,
+      action: { type: 'delete-annotation', annotationNumber: 3 },
+    })
+    ;(actionHandler as ((payload: unknown) => void) | null)?.({
+      surfaceId: 'surface-1',
+      generation: 5,
+      action: { type: 'delete-annotation', annotationNumber: 4 },
+    })
+    ;(actionHandler as ((payload: unknown) => void) | null)?.({
+      surfaceId: 'surface-1',
+      generation: 4,
+      action: { type: 'delete-annotation', annotationNumber: 0 },
     })
     await controller.navigate('https://example.com/next')
     await expect(controller.openDevTools('console')).resolves.toMatchObject({ devToolsOpen: true })
     await expect(controller.closeDevTools()).resolves.toMatchObject({ devToolsOpen: false })
     await attachment.dispose()
     await subscription.dispose()
+    await actionSubscription.dispose()
     await controller.destroy()
 
     expect(states).toEqual(['Example'])
+    expect(actions).toEqual([{ type: 'delete-annotation', annotationNumber: 3 }])
     expect(invocations[0]).toEqual({
       command: 'task_browser_surface_get_or_create',
       payload: { pluginId: 'browser', taskId: 'T-1', id: 'main', initialUrl: 'https://example.com' },

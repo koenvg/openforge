@@ -93,6 +93,19 @@ export interface TaskBrowserSurfaceVisualFeedback {
   comment: string
 }
 
+export type TaskBrowserVisualFeedbackAppearance = 'light' | 'dark'
+
+export interface TaskBrowserVisualFeedbackPresentation {
+  appearance: TaskBrowserVisualFeedbackAppearance
+}
+export interface TaskBrowserDeleteAnnotationAction {
+  type: 'delete-annotation'
+  annotationNumber: number
+}
+
+export type TaskBrowserVisualFeedbackAction = TaskBrowserDeleteAnnotationAction
+
+
 export interface TaskBrowserSurfaceFeedbackSelection {
   region: TaskBrowserSurfaceRegion
   comment: string
@@ -107,6 +120,7 @@ export interface TaskBrowserNativeCapture {
 export interface NativeTaskBrowserSurface {
   getState(): TaskBrowserNativeState
   onStateChanged(listener: (state: TaskBrowserNativeState) => void): () => void
+  onVisualFeedbackAction(listener: (action: TaskBrowserVisualFeedbackAction) => void): () => void
   loadURL(url: string): Promise<void>
   attach(windowId: number, bounds: TaskBrowserBounds): void
   detach(): void
@@ -120,7 +134,10 @@ export interface NativeTaskBrowserSurface {
   selectVisibleRegion(): Promise<TaskBrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>
-  replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void>
+  replaceVisualFeedback(
+    feedback: readonly TaskBrowserSurfaceVisualFeedback[],
+    presentation?: TaskBrowserVisualFeedbackPresentation,
+  ): Promise<void>
   captureVisibleViewport(): Promise<TaskBrowserNativeCapture>
 }
 
@@ -134,6 +151,13 @@ export interface TaskBrowserSurfaceStateEvent {
   surfaceId: string
   generation: number
   state: TaskBrowserNativeState
+}
+
+export interface TaskBrowserSurfaceVisualFeedbackActionEvent {
+  windowId: number
+  surfaceId: string
+  generation: number
+  action: TaskBrowserVisualFeedbackAction
 }
 
 export interface TaskBrowserPermissionController {
@@ -150,6 +174,7 @@ export interface TaskBrowserSurfaceManagerOptions {
   /** Authorizes a plugin-wide operation that names no Task, such as a session reset. */
   authorizePlugin(pluginId: string): Promise<void>
   onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
+  onVisualFeedbackAction?(event: TaskBrowserSurfaceVisualFeedbackActionEvent): void
   /**
    * Current zoom factor of the window's renderer, used to convert the CSS pixel attachment bounds
    * it reports into the device-independent pixels the window positions native views with.

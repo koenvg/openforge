@@ -1,4 +1,7 @@
-import type { TaskBrowserSurfaceRegion } from './taskBrowserSurfaceContract.js'
+import type {
+  TaskBrowserSurfaceRegion,
+  TaskBrowserVisualFeedbackAppearance,
+} from './taskBrowserSurfaceContract.js'
 
 export interface TaskBrowserVisualFeedbackTheme {
   readonly annotationBorder: string
@@ -6,6 +9,7 @@ export interface TaskBrowserVisualFeedbackTheme {
   readonly hoverBackground: string
   readonly selectionBackground: string
   readonly accentBackground: string
+  readonly accentForeground: string
   readonly foreground: string
   readonly hintBackground: string
   readonly hintShadow: string
@@ -21,6 +25,7 @@ export const TASK_BROWSER_VISUAL_FEEDBACK_THEME: Readonly<TaskBrowserVisualFeedb
   hoverBackground: 'rgba(59,130,246,.12)',
   selectionBackground: 'rgba(59,130,246,.18)',
   accentBackground: '#2563eb',
+  accentForeground: '#ffffff',
   foreground: '#ffffff',
   hintBackground: 'rgba(20,20,24,.92)',
   hintShadow: 'rgba(0,0,0,.3)',
@@ -29,6 +34,28 @@ export const TASK_BROWSER_VISUAL_FEEDBACK_THEME: Readonly<TaskBrowserVisualFeedb
   fieldBorder: 'rgba(255,255,255,.2)',
   fieldBackground: '#111827',
 })
+
+export const TASK_BROWSER_VISUAL_FEEDBACK_LIGHT_THEME: Readonly<TaskBrowserVisualFeedbackTheme> = Object.freeze({
+  annotationBorder: '#2563eb',
+  annotationBackground: 'rgba(37,99,235,.12)',
+  hoverBackground: 'rgba(37,99,235,.1)',
+  selectionBackground: 'rgba(37,99,235,.16)',
+  accentBackground: '#2563eb',
+  accentForeground: '#ffffff',
+  foreground: '#1f2937',
+  hintBackground: 'rgba(255,255,255,.96)',
+  hintShadow: 'rgba(15,23,42,.2)',
+  panelBackground: 'rgba(255,255,255,.98)',
+  panelShadow: 'rgba(15,23,42,.2)',
+  fieldBorder: 'rgba(31,41,55,.18)',
+  fieldBackground: '#f7f7fa',
+})
+
+export const TASK_BROWSER_VISUAL_FEEDBACK_THEMES = Object.freeze({
+  light: TASK_BROWSER_VISUAL_FEEDBACK_LIGHT_THEME,
+  dark: TASK_BROWSER_VISUAL_FEEDBACK_THEME,
+})
+
 
 export interface TaskBrowserVisualFeedbackAnnotation {
   number: number
@@ -42,6 +69,7 @@ export interface TaskBrowserVisualFeedbackAnnotation {
 export interface TaskBrowserVisualFeedbackOverlayInput {
   savedAnnotations: readonly TaskBrowserVisualFeedbackAnnotation[]
   nextAnnotationNumber: number
+  appearance?: TaskBrowserVisualFeedbackAppearance
 }
 
 export interface TaskBrowserVisualFeedbackOverlayResult {
@@ -55,6 +83,7 @@ export type TaskBrowserPageScriptExecutor = (script: string, userGesture: boolea
 export interface TaskBrowserVisualFeedbackAnnotationsScriptInput {
   savedAnnotations: readonly TaskBrowserVisualFeedbackAnnotation[]
   expectedUrl?: string
+  appearance?: TaskBrowserVisualFeedbackAppearance
 }
 
 export function buildTaskBrowserVisualFeedbackAnnotationsScript(
@@ -66,7 +95,9 @@ export function buildTaskBrowserVisualFeedbackAnnotationsScript(
     if (location.href !== expectedUrl) return;`
   const pageUrlExpression = input.expectedUrl === undefined ? 'location.href' : 'expectedUrl'
 
-  return `const visualFeedbackTheme = ${JSON.stringify(TASK_BROWSER_VISUAL_FEEDBACK_THEME)};
+  return `const visualFeedbackAppearance = ${JSON.stringify(input.appearance ?? 'dark')};
+    const visualFeedbackThemes = ${JSON.stringify(TASK_BROWSER_VISUAL_FEEDBACK_THEMES)};
+    const visualFeedbackTheme = visualFeedbackThemes[visualFeedbackAppearance];
     ${expectedUrlGuard}
     const savedAnnotations = ${JSON.stringify(input.savedAnnotations)};
     const annotationsId = '__openforge_visual_feedback_annotations__';
@@ -85,13 +116,197 @@ export function buildTaskBrowserVisualFeedbackAnnotationsScript(
       annotation.style.cssText = 'position:absolute;left:' + annotationData.x + 'px;top:' + annotationData.y + 'px;width:' + annotationData.width + 'px;height:' + annotationData.height + 'px;border:2px solid ' + visualFeedbackTheme.annotationBorder + ';background:' + visualFeedbackTheme.annotationBackground + ';box-sizing:border-box;border-radius:4px;pointer-events:none;';
       const badge = document.createElement('span');
       badge.textContent = String(annotationData.number);
-      badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.foreground + ';font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
+      badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.accentForeground + ';font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
       annotation.append(badge);
       annotationsRoot.append(annotation);
     };
+    const currentPageUrl = ${pageUrlExpression};
+    const commentsId = '__openforge_visual_feedback_comments__';
+    const commentsListId = '__openforge_visual_feedback_comment_list__';
+    const previousCard = annotationsRoot.querySelector('#' + commentsId);
+    const preserveDisclosure = annotationsRoot.dataset.pageUrl === String(currentPageUrl);
+    const initiallyExpanded = !preserveDisclosure || previousCard?.dataset.expanded !== 'false';
+    const commentsCleanupProperty = '__openforgeVisualFeedbackCommentsCleanup';
+    const cleanupExistingComments = annotationsRoot[commentsCleanupProperty];
+    if (typeof cleanupExistingComments === 'function') cleanupExistingComments();
+    const renderCommentsCard = (expanded) => {
+      if (savedAnnotations.length === 0) return;
+      const card = document.createElement('section');
+      card.id = commentsId;
+      card.setAttribute('role', 'region');
+      card.setAttribute('aria-label', 'Visual feedback comments');
+      card.style.cssText = 'all:initial;position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;width:min(320px,calc(100vw - 24px));max-height:calc(100vh - 24px);border:1px solid ' + visualFeedbackTheme.fieldBorder + ';border-radius:12px;background:' + visualFeedbackTheme.panelBackground + ';box-shadow:0 8px 30px ' + visualFeedbackTheme.panelShadow + ';color:' + visualFeedbackTheme.foreground + ';font:13px/1.5 system-ui,sans-serif;pointer-events:auto;box-sizing:border-box;overflow:hidden;';
+      const disclosure = document.createElement('button');
+      disclosure.type = 'button';
+      disclosure.setAttribute('aria-controls', commentsListId);
+      disclosure.style.cssText = 'all:initial;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:0 14px;color:' + visualFeedbackTheme.foreground + ';font:600 13px/1.5 system-ui,sans-serif;cursor:pointer;box-sizing:border-box;';
+      const count = document.createElement('span');
+      count.textContent = savedAnnotations.length + (savedAnnotations.length === 1 ? ' annotation' : ' annotations');
+      const disclosureAction = document.createElement('span');
+      disclosureAction.style.cssText = 'all:initial;color:' + visualFeedbackTheme.foreground + ';font:500 12px/1 system-ui,sans-serif;';
+      disclosure.append(count, disclosureAction);
+      const list = document.createElement('ol');
+      list.id = commentsListId;
+      list.style.cssText = 'all:initial;display:flex;flex-direction:column;gap:8px;max-height:min(360px,calc(100vh - 80px));margin:0;padding:0 12px 12px;overflow-y:auto;box-sizing:border-box;';
+      [...savedAnnotations].sort((left, right) => left.number - right.number).forEach(annotationData => {
+        const item = document.createElement('li');
+        item.style.cssText = 'all:initial;display:grid;grid-template-columns:24px minmax(0,1fr) 28px;gap:8px;align-items:start;margin:0;padding:10px;border:1px solid ' + visualFeedbackTheme.fieldBorder + ';border-radius:8px;background:' + visualFeedbackTheme.fieldBackground + ';color:' + visualFeedbackTheme.foreground + ';font:13px/1.5 system-ui,sans-serif;box-sizing:border-box;';
+        const number = document.createElement('span');
+        number.textContent = String(annotationData.number);
+        number.style.cssText = 'all:initial;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.accentForeground + ';font:600 11px/1 system-ui,sans-serif;box-sizing:border-box;';
+        const comment = document.createElement('span');
+        comment.textContent = annotationData.comment;
+        comment.style.cssText = 'all:initial;display:block;min-width:0;color:' + visualFeedbackTheme.foreground + ';font:13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere;white-space:pre-wrap;';
+        const deleteControl = document.createElement('button');
+        deleteControl.type = 'button';
+        deleteControl.textContent = '×';
+        deleteControl.dataset.annotationNumber = String(annotationData.number);
+        deleteControl.setAttribute('aria-label', 'Delete annotation ' + annotationData.number);
+        deleteControl.style.cssText = 'all:initial;display:flex;align-items:center;justify-content:center;width:28px;height:28px;margin:-2px -2px 0 0;border-radius:6px;color:' + visualFeedbackTheme.foreground + ';font:600 18px/1 system-ui,sans-serif;cursor:pointer;box-sizing:border-box;';
+        item.append(number, comment, deleteControl);
+        list.append(item);
+      });
+      const setExpanded = (expanded) => {
+        card.dataset.expanded = String(expanded);
+        disclosure.setAttribute('aria-expanded', String(expanded));
+        disclosure.setAttribute('aria-label', (expanded ? 'Collapse' : 'Expand') + ' visual feedback comments');
+        disclosureAction.textContent = expanded ? 'Hide' : 'Show';
+        list.hidden = !expanded;
+        list.style.display = expanded ? 'flex' : 'none';
+      };
+      const toggleDisclosure = () => {
+        setExpanded(disclosure.getAttribute('aria-expanded') !== 'true');
+      };
+      const setDisclosureFocus = (focused) => {
+        disclosure.style.outline = focused ? '2px solid ' + visualFeedbackTheme.annotationBorder : 'none';
+        disclosure.style.outlineOffset = focused ? '-2px' : '0';
+      };
+      const setDeleteFocus = (control, focused) => {
+        control.style.outline = focused ? '2px solid ' + visualFeedbackTheme.annotationBorder : 'none';
+        control.style.outlineOffset = focused ? '1px' : '0';
+      };
+      const shieldCommentsEvent = (event) => {
+        const target = event.target;
+        if (!(target instanceof Node) || !card.contains(target)) return;
+        event.stopPropagation();
+        const deleteControl = target instanceof Element
+          ? target.closest('button[data-annotation-number]')
+          : null;
+        const activationKey = event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar';
+        if ((event.type === 'focus' || event.type === 'focusin') && deleteControl) {
+          setDeleteFocus(deleteControl, true);
+        } else if ((event.type === 'blur' || event.type === 'focusout') && deleteControl) {
+          setDeleteFocus(deleteControl, false);
+        } else if (event.type === 'click' && deleteControl) {
+          event.preventDefault();
+        } else if (event.type === 'keydown' && deleteControl && activationKey) {
+          event.preventDefault();
+        } else if ((event.type === 'focus' || event.type === 'focusin') && disclosure.contains(target)) {
+          setDisclosureFocus(true);
+        } else if ((event.type === 'blur' || event.type === 'focusout') && disclosure.contains(target)) {
+          setDisclosureFocus(false);
+        } else if (event.type === 'click' && disclosure.contains(target)) {
+          event.preventDefault();
+          toggleDisclosure();
+        } else if (event.type === 'keydown' && disclosure.contains(target) && activationKey) {
+          event.preventDefault();
+          toggleDisclosure();
+        }
+      };
+      const commentsShieldTypes = [
+        'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend', 'paste', 'cut', 'copy',
+        'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'contextmenu', 'wheel',
+        'keydown', 'keypress', 'keyup', 'focus', 'blur', 'focusin', 'focusout',
+      ];
+      commentsShieldTypes.forEach(type => window.addEventListener(type, shieldCommentsEvent, true));
+      annotationsRoot[commentsCleanupProperty] = () => {
+        commentsShieldTypes.forEach(type => window.removeEventListener(type, shieldCommentsEvent, true));
+        delete annotationsRoot[commentsCleanupProperty];
+      };
+      setExpanded(expanded);
+      card.append(disclosure, list);
+      annotationsRoot.append(card);
+    };
+    const setCommentsCardSelectionActive = (active) => {
+      if (active) annotationsRoot.dataset.selectionActive = 'true';
+      else delete annotationsRoot.dataset.selectionActive;
+      const card = annotationsRoot.querySelector('#' + commentsId);
+      if (!card) return;
+      card.style.display = active ? 'none' : 'flex';
+      card.style.pointerEvents = active ? 'none' : 'auto';
+      if (active) card.setAttribute('aria-hidden', 'true');
+      else card.removeAttribute('aria-hidden');
+    };
+    const rerenderCommentsCard = () => {
+      const existingCard = annotationsRoot.querySelector('#' + commentsId);
+      const expanded = existingCard?.dataset.expanded !== 'false';
+      const cleanupComments = annotationsRoot[commentsCleanupProperty];
+      if (typeof cleanupComments === 'function') cleanupComments();
+      existingCard?.remove();
+      renderCommentsCard(expanded);
+      if (annotationsRoot.dataset.selectionActive === 'true') setCommentsCardSelectionActive(true);
+    };
     annotationsRoot.replaceChildren();
-    annotationsRoot.dataset.pageUrl = ${pageUrlExpression};
-    savedAnnotations.forEach(renderAnnotation);`
+    annotationsRoot.dataset.pageUrl = String(currentPageUrl);
+    savedAnnotations.forEach(renderAnnotation);
+    renderCommentsCard(initiallyExpanded);`
+}
+
+export function buildTaskBrowserVisualFeedbackClearScript(): string {
+  return `(() => {
+    const annotations = document.getElementById('__openforge_visual_feedback_annotations__');
+    if (!annotations) return;
+    const cleanupComments = annotations.__openforgeVisualFeedbackCommentsCleanup;
+    if (typeof cleanupComments === 'function') cleanupComments();
+    annotations.remove();
+  })()`
+}
+
+export function buildTaskBrowserVisualFeedbackActionWaitScript(): string {
+  return `(() => {
+    const cleanupProperty = '__openforgeVisualFeedbackActionWaitCleanup';
+    const existingCleanup = window[cleanupProperty];
+    if (typeof existingCleanup === 'function') existingCleanup();
+    const annotations = document.getElementById('__openforge_visual_feedback_annotations__');
+    if (!annotations) return null;
+    const deleteControls = new Set(annotations.querySelectorAll('button[data-openforge-visual-feedback-action="delete-annotation"][data-annotation-number]'));
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('click', receiveAction, true);
+        window.removeEventListener('keydown', receiveAction, true);
+        if (window[cleanupProperty] === cleanup) delete window[cleanupProperty];
+        resolve(value);
+      };
+      const cleanup = () => finish(null);
+      const receiveAction = (event) => {
+        if (!event.isTrusted) return;
+        const control = event.target instanceof Element
+          ? event.target.closest('button[data-annotation-number]')
+          : null;
+        if (!control || !deleteControls.has(control)) return;
+        const activationKey = event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar';
+        if (event.type === 'keydown' && !activationKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const annotationNumber = Number(control.dataset.annotationNumber);
+        if (!Number.isSafeInteger(annotationNumber) || annotationNumber <= 0) return;
+        finish({ type: 'delete-annotation', annotationNumber });
+      };
+      window[cleanupProperty] = cleanup;
+      window.addEventListener('click', receiveAction, true);
+      window.addEventListener('keydown', receiveAction, true);
+    });
+  })()`
+}
+
+export function buildTaskBrowserVisualFeedbackActionCancelScript(): string {
+  return `(() => {
+    const cleanup = window.__openforgeVisualFeedbackActionWaitCleanup;
+    if (typeof cleanup === 'function') cleanup();
+  })()`
 }
 
 export function buildTaskBrowserVisualFeedbackDismissScript(): string {
@@ -107,8 +322,12 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
   return `(() => new Promise((resolve) => {
     const overlayId = '__openforge_visual_feedback_selector__';
     ${buildTaskBrowserVisualFeedbackDismissScript()};
-    ${buildTaskBrowserVisualFeedbackAnnotationsScript({ savedAnnotations: input.savedAnnotations })}
+    ${buildTaskBrowserVisualFeedbackAnnotationsScript({
+      savedAnnotations: input.savedAnnotations,
+      appearance: input.appearance,
+    })}
     const nextAnnotationNumber = ${input.nextAnnotationNumber};
+    setCommentsCardSelectionActive(true);
 
     const root = document.createElement('div');
     root.id = overlayId;
@@ -176,6 +395,7 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
     };
     const cleanup = () => {
       pageShields.forEach(([type, handler]) => window.removeEventListener(type, handler, true));
+      setCommentsCardSelectionActive(false);
       root.remove();
     };
     const finish = (value) => {
@@ -239,7 +459,7 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       save.type = 'submit';
       save.textContent = 'Save';
       save.disabled = true;
-      save.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.foreground + ';cursor:pointer;';
+      save.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.accentForeground + ';cursor:pointer;';
       actions.append(cancel, save);
       composer.append(label, textarea, actions);
       root.append(composer);
@@ -263,7 +483,9 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
           width: rect.width,
           height: rect.height,
         };
+        savedAnnotations.push(annotationData);
         renderAnnotation(annotationData);
+        rerenderCommentsCard();
         finish({ region: normalizedRegion, comment, annotation: annotationData });
       };
       onComposerKeyDown = (event) => {

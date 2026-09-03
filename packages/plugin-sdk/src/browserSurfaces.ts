@@ -80,12 +80,26 @@ export interface BrowserSurfaceVisualFeedback {
   comment: string
 }
 
+export type BrowserSurfaceVisualFeedbackAppearance = 'light' | 'dark'
+
+export interface BrowserSurfaceVisualFeedbackPresentation {
+  appearance: BrowserSurfaceVisualFeedbackAppearance
+}
+export interface BrowserSurfaceDeleteAnnotationAction {
+  type: 'delete-annotation'
+  annotationNumber: number
+}
+
+export type BrowserSurfaceVisualFeedbackAction = BrowserSurfaceDeleteAnnotationAction
+
+
 export interface TaskBrowserSurfaceController {
   attach(element: HTMLElement): Promise<Disposable>
   detach(): Promise<void>
   destroy(): Promise<void>
   getState(): Promise<TaskBrowserSurfaceState>
   onStateChanged(handler: (state: TaskBrowserSurfaceState) => void): Disposable
+  onVisualFeedbackAction(handler: (action: BrowserSurfaceVisualFeedbackAction) => void): Disposable
   navigate(url: string): Promise<TaskBrowserSurfaceState>
   goBack(): Promise<TaskBrowserSurfaceState>
   goForward(): Promise<TaskBrowserSurfaceState>
@@ -96,7 +110,10 @@ export interface TaskBrowserSurfaceController {
   selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>
-  replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void>
+  replaceVisualFeedback(
+    feedback: readonly BrowserSurfaceVisualFeedback[],
+    presentation?: BrowserSurfaceVisualFeedbackPresentation,
+  ): Promise<void>
   captureExists(artifactId: string): Promise<boolean>
   captureVisibleViewport(): Promise<BrowserSurfaceCapture>
   discardCapture(artifactId: string): Promise<void>
