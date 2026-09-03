@@ -38,6 +38,8 @@ function makeSession(overrides: Partial<AgentSession> & { id: string }): AgentSe
     claude_session_id: null,
     pi_session_id: null,
     grok_session_id: null,
+    output_revision: 0,
+    viewed_output_revision: 0,
     ...overrides,
     pty_instance_id: overrides.pty_instance_id ?? null,
   }

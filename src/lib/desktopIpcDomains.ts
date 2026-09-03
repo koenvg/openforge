@@ -84,6 +84,7 @@ export const desktopIpcFunctionDomains = {
   resetCompanionHostIdentity: 'config',
   getTaskDetail: 'tasks-projects',
   getLatestSession: 'agent-session-pty',
+  markAgentOutputViewed: 'agent-session-pty',
   listAgentSessions: 'agent-session-pty',
   listAgentSessionSummaries: 'agent-session-pty',
   sendAgentFollowUp: 'agent-session-pty',

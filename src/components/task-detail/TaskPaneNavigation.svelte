@@ -6,10 +6,17 @@
     activeView: string
     tabs: readonly ResolvedTab[]
     commandHeld: boolean
+    hasUnreadAgentOutput?: boolean
     onSelect: (viewId: string) => void
   }
 
-  let { activeView, tabs, commandHeld, onSelect }: Props = $props()
+  let {
+    activeView,
+    tabs,
+    commandHeld,
+    hasUnreadAgentOutput = false,
+    onSelect,
+  }: Props = $props()
 
   interface NavigationItem {
     id: string
@@ -38,6 +45,19 @@
       class="inline-flex h-full min-w-16 items-center justify-center gap-1 border-b-2 px-3 text-[13px] font-semibold transition-colors {item.capitalize ? 'capitalize' : ''} {activeView === item.id ? activeClasses : inactiveClasses}"
       aria-pressed={activeView === item.id}
       onclick={() => onSelect(item.id)}
-    >{item.title}{#if commandHeld && item.shortcut !== null}<kbd class="kbd kbd-xs opacity-50">{item.shortcut}</kbd>{/if}</button>
+    >
+      {item.title}
+      {#if item.id === 'agent' && hasUnreadAgentOutput}
+        <span
+          data-testid="agent-unread-marker"
+          class="h-2 w-2 shrink-0 rounded-full border border-current bg-info"
+          aria-hidden="true"
+        ></span>
+        <span class="sr-only">Unread agent output</span>
+      {/if}
+      {#if commandHeld && item.shortcut !== null}
+        <kbd class="kbd kbd-xs opacity-50">{item.shortcut}</kbd>
+      {/if}
+    </button>
   {/each}
 </nav>

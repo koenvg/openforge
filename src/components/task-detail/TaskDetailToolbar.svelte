@@ -22,6 +22,7 @@
     workspacePath: string | null
     activeView: string
     tabs: readonly ResolvedTab[]
+    hasUnreadAgentOutput?: boolean
     panelHidden?: boolean
     runAppState: TaskRunAppState
     onRunAction: (data: { taskId: string; actionPrompt: string }) => void
@@ -37,6 +38,7 @@
     workspacePath,
     activeView,
     tabs,
+    hasUnreadAgentOutput = false,
     panelHidden = $bindable(false),
     runAppState,
     onRunAction,
@@ -178,7 +180,7 @@
     {/if}
 
     {#if workspacePath !== null || tabs.length > 0}
-      <TaskPaneNavigation {activeView} {tabs} commandHeld={$commandHeld} onSelect={onSelectView} />
+      <TaskPaneNavigation {activeView} {tabs} {hasUnreadAgentOutput} commandHeld={$commandHeld} onSelect={onSelectView} />
     {/if}
 
     {#if workspacePath !== null}

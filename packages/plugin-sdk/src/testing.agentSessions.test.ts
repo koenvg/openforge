@@ -48,6 +48,8 @@ function session(
     claude_session_id: provider === 'claude-code' ? providerSessionId : null,
     pi_session_id: provider === 'pi' ? providerSessionId : null,
     grok_session_id: provider === 'grok' ? providerSessionId : null,
+    output_revision: 0,
+    viewed_output_revision: 0,
   }
 }
 

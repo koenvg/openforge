@@ -93,6 +93,8 @@ export const makeSession = (
   claude_session_id: null,
   pi_session_id: null,
   grok_session_id: null,
+  output_revision: 0,
+  viewed_output_revision: 0,
 })
 
 export const makePr = (taskId: string, unaddressed: number): PullRequestInfo => ({
@@ -189,6 +191,7 @@ export function renderBoard(overrides?: {
         state: state as TaskAttentionRow['state'],
         reason: getTaskReasonText(state, taskPrs),
         activity_at: session?.updated_at ?? task.updatedAt,
+        has_unread_agent_output: false,
       }]
     })
   taskStore.set(tasks)

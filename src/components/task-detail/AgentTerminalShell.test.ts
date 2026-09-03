@@ -173,6 +173,26 @@ describe('AgentTerminalShell', () => {
     })
   })
 
+  it('reports terminal attachment readiness and clears it on teardown', async () => {
+    setActiveSession(baseSession)
+    const onTerminalReadyChange = vi.fn()
+
+    const view = render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        sessionIdKey: 'pi_session_id',
+        onTerminalReadyChange,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(onTerminalReadyChange).toHaveBeenCalledWith(true)
+    })
+    view.unmount()
+    expect(onTerminalReadyChange.mock.calls).toEqual([[true], [false]])
+  })
+
+
   it('refits only while the Agent workbench remains active', async () => {
     setActiveSession(baseSession)
     const { agentTerminalSessions } = await import('../../lib/terminalSessionService')

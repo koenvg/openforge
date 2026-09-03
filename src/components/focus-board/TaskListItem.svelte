@@ -25,6 +25,7 @@
     session: AgentSession | null
     pullRequests: PullRequestInfo[]
     reasonText: string
+    hasUnreadAgentOutput?: boolean
     dependencyHint?: string | null
     showLabels?: boolean
     isSelected: boolean
@@ -36,7 +37,23 @@
     onTaskUpdated?: () => void | Promise<void>
   }
 
-  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, justViewed = false, isMerging, onSelect, onContextMenu, onTaskUpdated }: Props = $props()
+  let {
+    task,
+    state,
+    session,
+    pullRequests,
+    reasonText,
+    hasUnreadAgentOutput = false,
+    dependencyHint = null,
+    showLabels = false,
+    isSelected,
+    isFocused,
+    justViewed = false,
+    isMerging,
+    onSelect,
+    onContextMenu,
+    onTaskUpdated,
+  }: Props = $props()
 
   const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
 
@@ -183,6 +200,16 @@
         {presentation.stateLabel}
       {/if}
     </span>
+
+    {#if hasUnreadAgentOutput}
+      <span
+        class="inline-flex shrink-0 items-center gap-1 rounded-full border border-info/25 bg-info/10 px-2 py-1 font-medium text-info"
+        aria-label="Unread agent output"
+      >
+        <CircleDot size={13} aria-hidden="true" />
+        <span>Unread agent output</span>
+      </span>
+    {/if}
 
     {#if dependencyHint}
       <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2 py-1 font-medium text-warning">

@@ -50,6 +50,83 @@ async fn lists_filtered_agent_sessions_for_a_task() {
 }
 
 #[tokio::test]
+async fn marks_only_the_visible_agent_output_revision_viewed() {
+    let (state, _temp_dir) = test_state("app_invoke_mark_agent_output_viewed");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Unread output", "doing", None, None, None)
+            .expect("create Task");
+        db.create_agent_session(
+            "ses-unread",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create Agent Session");
+        db.update_agent_session("ses-unread", "implement", "completed", None, None)
+            .expect("complete Agent Session");
+        task.id
+    };
+
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "mark_agent_output_viewed",
+            json!({
+                "taskId": task_id,
+                "sessionId": "ses-unread",
+                "outputRevision": 1,
+            }),
+        )
+        .await,
+        true
+    );
+
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.update_agent_session("ses-unread", "implement", "running", None, None)
+            .expect("resume Agent Session");
+        db.update_agent_session("ses-unread", "implement", "completed", None, None)
+            .expect("complete newer output");
+    }
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "mark_agent_output_viewed",
+            json!({
+                "taskId": task_id,
+                "sessionId": "ses-unread",
+                "outputRevision": 1,
+            }),
+        )
+        .await,
+        false
+    );
+    let session = crate::db::acquire_db(&state.db)
+        .get_agent_session("ses-unread")
+        .expect("load Agent Session")
+        .expect("Agent Session exists");
+    assert_eq!(session.output_revision, 2);
+    assert_eq!(session.viewed_output_revision, 1);
+
+    let error = invoke(
+        &state,
+        "mark_agent_output_viewed",
+        json!({
+            "taskId": task_id,
+            "sessionId": "ses-unread",
+            "outputRevision": -1,
+        }),
+    )
+    .await
+    .expect_err("negative output revision must be rejected");
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn lists_paginated_agent_session_summaries() {
     let (state, _temp_dir) = test_state("app_invoke_agent_session_list");
     let task_id = {

@@ -159,6 +159,8 @@ export interface AgentSession {
   claude_session_id: string | null;
   pi_session_id: string | null;
   grok_session_id: string | null;
+  output_revision: number;
+  viewed_output_revision: number;
 }
 
 export interface ClaudeInstallStatus {
@@ -806,6 +808,7 @@ export interface TaskAttentionRow {
   state: TaskAttentionState;
   reason: string;
   activity_at: number;
+  has_unread_agent_output: boolean;
 }
 
 export interface WorktreeInfo {

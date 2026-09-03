@@ -46,4 +46,36 @@ describe('TaskPaneNavigation', () => {
     expect(screen.getByRole('button', { name: /^Activity/ }).textContent).toContain('⌘3')
     expect(screen.getByRole('button', { name: /^Activity/ }).getAttribute('aria-pressed')).toBe('true')
   })
+
+  it('marks the Agent tab visibly and accessibly while another pane is active', () => {
+    render(TaskPaneNavigation, {
+      props: {
+        activeView: 'review',
+        tabs: [],
+        commandHeld: false,
+        hasUnreadAgentOutput: true,
+        onSelect: vi.fn(),
+      },
+    })
+
+    const agentTab = screen.getByRole('button', { name: /agent.*unread agent output/i })
+    expect(agentTab.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('agent-unread-marker')).toBeTruthy()
+  })
+
+  it('removes the Agent tab marker after output is viewed', () => {
+    render(TaskPaneNavigation, {
+      props: {
+        activeView: 'review',
+        tabs: [],
+        commandHeld: false,
+        hasUnreadAgentOutput: false,
+        onSelect: vi.fn(),
+      },
+    })
+
+    expect(screen.queryByText('Unread agent output')).toBeNull()
+    expect(screen.queryByTestId('agent-unread-marker')).toBeNull()
+    expect(screen.getByRole('button', { name: 'agent' })).toBeTruthy()
+  })
 })

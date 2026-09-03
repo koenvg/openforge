@@ -60,6 +60,7 @@ function attentionRow(
     state: 'idle',
     reason: 'No agent running. Start when ready.',
     activity_at: 0,
+    has_unread_agent_output: false,
     ...overrides,
   }
 }
@@ -166,6 +167,46 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     expect(ipc.getTaskLanes).toHaveBeenCalled()
     expect(ipc.getAllTasks).not.toHaveBeenCalled()
   })
+
+  it('updates Focus and In Flight counts when unread output is acknowledged', async () => {
+    projects.set([projectRecord('p1', 'Project One')])
+    const unread = attentionRow('t1', 'p1', 'Unread reply', {
+      state: 'review-pending',
+      reason: 'Waiting on code review.',
+      has_unread_agent_output: true,
+    })
+    ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [unread] }))
+    taskAttentionRows.set([unread])
+    renderDialog()
+
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^T Focus 1$/i })).toBeTruthy()
+      expect(screen.getByText('Unread agent output')).toBeTruthy()
+    })
+    const dialog = screen.getByRole('dialog')
+
+    ipc.getTaskLanes.mockResolvedValue(laneRows({
+      in_flight: [attentionRow('t1', 'p1', 'Unread reply', {
+        state: 'review-pending',
+        reason: 'Waiting on code review.',
+      })],
+    }))
+    taskAttentionRows.set([])
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^T Focus 0$/i })).toBeTruthy()
+      expect(screen.queryByText('Unread reply')).toBeNull()
+    })
+    await fireEvent.keyDown(dialog, { key: 't' })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByRole('button', { name: /^T In Flight 1$/i })).toBeTruthy()
+    expect(screen.getByText('Unread reply')).toBeTruthy()
+    expect(screen.queryByText('Unread agent output')).toBeNull()
+  })
+
 
   it('keeps the newest Task attention snapshot when refreshes finish out of order', async () => {
     projects.set([projectRecord('p1', 'Project One')])
@@ -389,6 +430,30 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     expect(visible()).toEqual(['Focus task'])
   })
 
+
+  it('shows unread Agent output in both Focus and Out of Focus without replacing the reason', async () => {
+    ipc.getTaskLanes.mockResolvedValue(laneRows({
+      focus: [attentionRow('t1', 'p1', 'Focus task', {
+        state: 'review-pending',
+        reason: 'Waiting on code review.',
+        has_unread_agent_output: true,
+      })],
+      out_of_focus: [attentionRow('t2', 'p1', 'Parked one', {
+        has_unread_agent_output: true,
+      })],
+    }))
+    const dialog = await renderLoaded()
+
+    expect(screen.getByText('Unread agent output')).toBeTruthy()
+    expect(screen.getByText(/Review Pending · Waiting on code review\./)).toBeTruthy()
+
+    await press(dialog, 't')
+    await press(dialog, 't')
+
+    expect(screen.getByText('Parked one')).toBeTruthy()
+    expect(screen.getByText('Unread agent output')).toBeTruthy()
+    expect(screen.getByText(/No agent running\. Start when ready\./)).toBeTruthy()
+  })
   it('ages the in-flight rows off their last state change, and only those rows', async () => {
     const dialog = await renderLoaded()
 

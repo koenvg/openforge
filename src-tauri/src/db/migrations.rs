@@ -1741,6 +1741,47 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    // Unread Agent output uses monotonic per-session revisions. Existing sessions start
+    // read so upgrades do not surface historical output as new activity.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+
+        for (column, sql) in [
+            (
+                "output_revision",
+                "ALTER TABLE agent_sessions ADD COLUMN output_revision INTEGER NOT NULL DEFAULT 0 CHECK (output_revision >= 0)",
+            ),
+            (
+                "viewed_output_revision",
+                "ALTER TABLE agent_sessions ADD COLUMN viewed_output_revision INTEGER NOT NULL DEFAULT 0 CHECK (viewed_output_revision >= 0)",
+            ),
+        ] {
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = '{}'",
+                        column
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                tx.execute(sql, [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2417,6 +2458,7 @@ mod tests {
         SelfReviewCommentsRemoval,
         AgentSessionListIndex,
         TaskQueryIndexes,
+        AgentSessionOutputRevisions,
     }
 
     impl MigrationBoundary {
@@ -2433,6 +2475,7 @@ mod tests {
                 Self::SelfReviewCommentsRemoval => 52,
                 Self::AgentSessionListIndex => 54,
                 Self::TaskQueryIndexes => 55,
+                Self::AgentSessionOutputRevisions => 57,
             }
         }
     }
@@ -2462,6 +2505,35 @@ mod tests {
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
         );
+    }
+
+    #[test]
+    fn agent_session_output_revision_migration_adds_zero_defaults() {
+        let mut conn = Connection::open_in_memory().expect("open legacy database");
+        conn.execute_batch(
+            "CREATE TABLE agent_sessions (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL
+            );
+            INSERT INTO agent_sessions (id, status) VALUES ('legacy-session', 'completed');",
+        )
+        .expect("create legacy agent session");
+        set_user_version_before(&conn, MigrationBoundary::AgentSessionOutputRevisions);
+
+        get_migrations()
+            .to_latest(&mut conn)
+            .expect("migrate agent session output revisions");
+
+        let values: (i64, i64) = conn
+            .query_row(
+                "SELECT output_revision, viewed_output_revision
+                   FROM agent_sessions
+                  WHERE id = 'legacy-session'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read migrated output revisions");
+        assert_eq!(values, (0, 0));
     }
 
     #[test]

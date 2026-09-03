@@ -45,6 +45,7 @@ export interface AttentionFocusTask {
    * running, which is what lets the In Flight lane show how long a task has been flying.
    */
   activityAt: number
+  hasUnreadAgentOutput: boolean
 }
 
 /** One project's slice of the overview: its four task lanes and its owed review PRs. */
@@ -114,6 +115,7 @@ function buildLaneTasks(
         title: row.title,
         reason: row.reason,
         activityAt: row.activity_at,
+        hasUnreadAgentOutput: row.has_unread_agent_output,
       }]
     })
 }

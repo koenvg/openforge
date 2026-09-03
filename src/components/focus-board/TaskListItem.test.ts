@@ -142,6 +142,29 @@ describe('TaskListItem', () => {
     expect(screen.getByText('A'.repeat(80) + '...')).toBeTruthy()
   })
 
+  it('shows unread Agent output without replacing workflow status or reason text', () => {
+    render(TaskListItem, {
+      props: {
+        ...baseProps,
+        state: 'review-pending',
+        reasonText: 'Waiting on code review.',
+        hasUnreadAgentOutput: true,
+      },
+    })
+
+    expect(screen.getByText('Unread agent output')).toBeTruthy()
+    expect(screen.getByText('Review Pending')).toBeTruthy()
+    expect(screen.getByText('Waiting on code review.')).toBeTruthy()
+    expect(screen.getByLabelText('Unread agent output')).toBeTruthy()
+  })
+
+  it('hides the unread Agent output label after acknowledgement', () => {
+    render(TaskListItem, { props: { ...baseProps, hasUnreadAgentOutput: false } })
+
+    expect(screen.queryByText('Unread agent output')).toBeNull()
+  })
+
+
   it('renders reasonText', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.getByText('Agent is running.')).toBeTruthy()

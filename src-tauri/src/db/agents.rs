@@ -1,7 +1,7 @@
 use rusqlite::Result;
 use serde::Serialize;
 
-const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id, grok_session_id";
+const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id, grok_session_id, output_revision, viewed_output_revision";
 
 /// Agent session row from database
 #[derive(Debug, Clone, Serialize)]
@@ -20,6 +20,8 @@ pub struct AgentSessionRow {
     pub claude_session_id: Option<String>,
     pub pi_session_id: Option<String>,
     pub grok_session_id: Option<String>,
+    pub output_revision: i64,
+    pub viewed_output_revision: i64,
 }
 
 fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
@@ -40,6 +42,8 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
         claude_session_id: row.get(11)?,
         pi_session_id: row.get(12)?,
         grok_session_id: row.get(13)?,
+        output_revision: row.get(14)?,
+        viewed_output_revision: row.get(15)?,
     })
 }
 
@@ -93,10 +97,42 @@ impl super::Database {
         let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
-            "UPDATE agent_sessions SET stage = ?1, status = ?2, checkpoint_data = ?3, error_message = ?4, updated_at = ?5 WHERE id = ?6",
+            "UPDATE agent_sessions
+                SET stage = ?1,
+                    output_revision = output_revision + CASE
+                        WHEN status <> ?2
+                         AND ?2 IN ('completed', 'paused', 'failed', 'interrupted')
+                        THEN 1
+                        ELSE 0
+                    END,
+                    status = ?2,
+                    checkpoint_data = ?3,
+                    error_message = ?4,
+                    updated_at = ?5
+              WHERE id = ?6",
             rusqlite::params![stage, status, checkpoint_data, error_message, now, id],
         )?;
         Ok(())
+    }
+
+    pub fn mark_agent_output_viewed(
+        &self,
+        task_id: &str,
+        session_id: &str,
+        output_revision: i64,
+    ) -> Result<bool> {
+        let conn = self.lock_conn()?;
+        let changed = conn.execute(
+            "UPDATE agent_sessions
+                SET viewed_output_revision = ?3
+              WHERE ticket_id = ?1
+                AND id = ?2
+                AND status IN ('completed', 'paused', 'failed', 'interrupted')
+                AND viewed_output_revision < ?3
+                AND ?3 <= output_revision",
+            rusqlite::params![task_id, session_id, output_revision],
+        )?;
+        Ok(changed > 0)
     }
 
     pub fn set_agent_session_opencode_id(&self, id: &str, opencode_session_id: &str) -> Result<()> {
@@ -360,7 +396,12 @@ impl super::Database {
         let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
-            "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running' AND updated_at < ?2",
+            "UPDATE agent_sessions
+                SET output_revision = output_revision + 1,
+                    status = 'interrupted',
+                    error_message = 'Session interrupted by app restart',
+                    updated_at = ?1
+              WHERE status = 'running' AND updated_at < ?2",
             rusqlite::params![now, cutoff_updated_at],
         )?;
         Ok(conn.changes() as usize)
@@ -386,6 +427,8 @@ mod tests {
         assert_eq!(session.ticket_id, "T-100");
         assert_eq!(session.stage, "read_ticket");
         assert_eq!(session.status, "running");
+        assert_eq!(session.output_revision, 0);
+        assert_eq!(session.viewed_output_revision, 0);
         assert!(session.opencode_session_id.is_none());
 
         db.set_agent_session_opencode_id("ses-1", "oc-abc")
@@ -418,6 +461,133 @@ mod tests {
         );
 
         drop(db);
+    }
+
+    #[test]
+    fn stopped_status_transitions_increment_output_revision_once() {
+        let (db, _temp_dir) = make_test_db("agent_session_output_revisions");
+        insert_test_task(&db);
+
+        for (index, status) in ["completed", "paused", "failed", "interrupted"]
+            .into_iter()
+            .enumerate()
+        {
+            let session_id = format!("ses-{index}");
+            db.create_agent_session(
+                &session_id,
+                "T-100",
+                None,
+                "implement",
+                "running",
+                "opencode",
+            )
+            .expect("create running session");
+
+            db.update_agent_session(&session_id, "implement", status, None, None)
+                .expect("enter stopped status");
+            let stopped = db
+                .get_agent_session(&session_id)
+                .expect("load stopped session")
+                .expect("stopped session exists");
+            assert_eq!(stopped.output_revision, 1, "status {status}");
+
+            db.update_agent_session(&session_id, "implement", status, None, None)
+                .expect("repeat stopped status");
+            let duplicate = db
+                .get_agent_session(&session_id)
+                .expect("load duplicate status session")
+                .expect("duplicate status session exists");
+            assert_eq!(duplicate.output_revision, 1, "duplicate {status}");
+        }
+
+        db.update_agent_session("ses-0", "implement", "running", None, None)
+            .expect("resume completed session");
+        db.update_agent_session("ses-0", "implement", "completed", None, None)
+            .expect("complete follow-up turn");
+        let follow_up = db
+            .get_agent_session("ses-0")
+            .expect("load follow-up session")
+            .expect("follow-up session exists");
+        assert_eq!(follow_up.output_revision, 2);
+    }
+
+    #[test]
+    fn mark_agent_output_viewed_is_revision_scoped() {
+        let (db, _temp_dir) = make_test_db("mark_agent_output_viewed");
+        insert_test_task(&db);
+        db.create_agent_session(
+            "ses-viewed",
+            "T-100",
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create session");
+        db.update_agent_session("ses-viewed", "implement", "completed", None, None)
+            .expect("complete first turn");
+        db.update_agent_session("ses-viewed", "implement", "running", None, None)
+            .expect("resume session");
+        db.update_agent_session("ses-viewed", "implement", "completed", None, None)
+            .expect("complete second turn");
+
+        assert!(db
+            .mark_agent_output_viewed("T-100", "ses-viewed", 1)
+            .expect("acknowledge first revision"));
+        let stale = db
+            .get_agent_session("ses-viewed")
+            .expect("load stale acknowledgement")
+            .expect("session exists");
+        assert_eq!(stale.output_revision, 2);
+        assert_eq!(stale.viewed_output_revision, 1);
+
+        assert!(!db
+            .mark_agent_output_viewed("T-100", "ses-viewed", 1)
+            .expect("repeat stale acknowledgement"));
+        assert!(!db
+            .mark_agent_output_viewed("T-100", "ses-viewed", 3)
+            .expect("reject future acknowledgement"));
+        assert!(!db
+            .mark_agent_output_viewed("another-task", "ses-viewed", 2)
+            .expect("reject mismatched task"));
+
+        assert!(db
+            .mark_agent_output_viewed("T-100", "ses-viewed", 2)
+            .expect("acknowledge current revision"));
+        let current = db
+            .get_agent_session("ses-viewed")
+            .expect("load current acknowledgement")
+            .expect("session exists");
+        assert_eq!(current.viewed_output_revision, 2);
+    }
+
+    #[test]
+    fn acknowledging_superseded_session_does_not_clear_latest_output() {
+        let (db, _temp_dir) = make_test_db("mark_superseded_agent_output_viewed");
+        insert_test_task(&db);
+        for session_id in ["ses-old", "ses-new"] {
+            db.create_agent_session(
+                session_id,
+                "T-100",
+                None,
+                "implement",
+                "running",
+                "opencode",
+            )
+            .expect("create session");
+            db.update_agent_session(session_id, "implement", "completed", None, None)
+                .expect("complete session");
+        }
+
+        assert!(db
+            .mark_agent_output_viewed("T-100", "ses-old", 1)
+            .expect("acknowledge old session"));
+        let latest = db
+            .get_latest_session_for_ticket("T-100")
+            .expect("load latest session")
+            .expect("latest session exists");
+        assert_eq!(latest.id, "ses-new");
+        assert!(latest.output_revision > latest.viewed_output_revision);
     }
 
     #[test]
@@ -564,6 +734,7 @@ mod tests {
 
         let s1 = db.get_agent_session("ses-run1").expect("get").unwrap();
         assert_eq!(s1.status, "interrupted");
+        assert_eq!(s1.output_revision, 1);
         assert_eq!(
             s1.error_message,
             Some("Session interrupted by app restart".to_string())
@@ -571,6 +742,7 @@ mod tests {
 
         let s2 = db.get_agent_session("ses-run2").expect("get").unwrap();
         assert_eq!(s2.status, "interrupted");
+        assert_eq!(s2.output_revision, 1);
 
         let s3 = db.get_agent_session("ses-done").expect("get").unwrap();
         assert_eq!(s3.status, "completed");

@@ -87,6 +87,7 @@ fn attention_row(task_id: &str, project_id: &str, activity_at: i64) -> TaskAtten
         state: "needs-input".to_string(),
         reason: "Agent needs your input to continue.".to_string(),
         activity_at,
+        has_unread_agent_output: false,
     }
 }
 

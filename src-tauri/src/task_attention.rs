@@ -48,6 +48,10 @@ pub(crate) struct TaskAttentionSession {
     pub status: String,
     pub checkpoint_data: Option<String>,
     pub updated_at: i64,
+    #[serde(default)]
+    pub output_revision: i64,
+    #[serde(default)]
+    pub viewed_output_revision: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -95,6 +99,8 @@ pub(crate) struct TaskAttentionRow {
     pub state: String,
     pub reason: String,
     pub activity_at: i64,
+    #[serde(default)]
+    pub has_unread_agent_output: bool,
 }
 
 fn readiness(pr: &TaskAttentionPullRequest) -> PullRequestReadinessView {
@@ -223,6 +229,15 @@ pub(crate) fn task_state(
     "idle"
 }
 
+fn has_unread_agent_output(session: Option<&TaskAttentionSession>) -> bool {
+    session.is_some_and(|session| {
+        matches!(
+            session.status.as_str(),
+            "completed" | "paused" | "failed" | "interrupted"
+        ) && session.output_revision > session.viewed_output_revision
+    })
+}
+
 pub(crate) fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     if state == "unaddressed-comments" {
         let count = driving_pr(prs)
@@ -308,13 +323,16 @@ pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAtten
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let state = task_state(session, prs);
+            let has_unread_agent_output = has_unread_agent_output(session);
             let has_unaddressed_comments = prs.iter().any(|pr| pr.unaddressed_comment_count > 0);
             let is_focus_state = if uses_default_focus_states {
                 DEFAULT_FOCUS_STATES.contains(&state)
             } else {
                 focus_states.contains(state)
             };
-            if matches!(state, "active" | "done") || (!is_focus_state && !has_unaddressed_comments)
+            if !has_unread_agent_output
+                && (matches!(state, "active" | "done")
+                    || (!is_focus_state && !has_unaddressed_comments))
             {
                 continue;
             }
@@ -343,6 +361,7 @@ fn attention_row(
         state: state.to_string(),
         reason: task_reason(state, prs),
         activity_at: session.map_or(task.updated_at, |session| session.updated_at),
+        has_unread_agent_output: has_unread_agent_output(session),
     }
 }
 
@@ -515,6 +534,8 @@ mod tests {
                 status: "running".to_string(),
                 checkpoint_data: None,
                 updated_at: 60,
+                output_revision: 0,
+                viewed_output_revision: 0,
             }],
             pull_requests: Vec::new(),
             out_of_focus_by_project: HashMap::from([(
@@ -558,6 +579,8 @@ mod tests {
                 status: "running".to_string(),
                 checkpoint_data: None,
                 updated_at: 50,
+                output_revision: 0,
+                viewed_output_revision: 0,
             }],
             pull_requests: Vec::new(),
             out_of_focus_by_project: HashMap::from([(
@@ -648,6 +671,96 @@ mod tests {
     }
 
     #[test]
+    fn unread_agent_output_overrides_focus_placement_without_hiding_workflow_state() {
+        let session = |ticket_id: &str, status: &str, output_revision, viewed_output_revision| {
+            TaskAttentionSession {
+                ticket_id: ticket_id.to_string(),
+                status: status.to_string(),
+                checkpoint_data: None,
+                updated_at: 100,
+                output_revision,
+                viewed_output_revision,
+            }
+        };
+        let mut review_unread_pr = pull_request();
+        review_unread_pr.ticket_id = "review-unread".to_string();
+        review_unread_pr.review_status = Some("review_required".to_string());
+        let mut review_read_pr = review_unread_pr.clone();
+        review_read_pr.ticket_id = "review-read".to_string();
+        let mut ci_unread_pr = pull_request();
+        ci_unread_pr.ticket_id = "ci-unread".to_string();
+        ci_unread_pr.ci_status = Some("pending".to_string());
+
+        let lanes = project_task_lanes(TaskAttentionInput {
+            projects: vec![TaskAttentionProject {
+                id: "p1".to_string(),
+                name: "Project One".to_string(),
+            }],
+            tasks: [
+                "review-unread",
+                "review-read",
+                "ci-unread",
+                "failed-read",
+                "set-aside-unread",
+            ]
+            .into_iter()
+            .map(|id| set_aside_task(id, "p1", 10))
+            .collect(),
+            sessions: vec![
+                session("review-unread", "completed", 1, 0),
+                session("review-read", "completed", 1, 1),
+                session("ci-unread", "completed", 1, 0),
+                session("failed-read", "failed", 1, 1),
+                session("set-aside-unread", "completed", 1, 0),
+            ],
+            pull_requests: vec![review_unread_pr, review_read_pr, ci_unread_pr],
+            out_of_focus_by_project: HashMap::from([(
+                "p1".to_string(),
+                vec!["set-aside-unread".to_string()],
+            )]),
+            focus_states_by_project: HashMap::new(),
+        });
+
+        let review_unread = lanes
+            .focus
+            .iter()
+            .find(|row| row.task_id == "review-unread")
+            .expect("unread review Task is in Focus");
+        assert_eq!(review_unread.state, "review-pending");
+        assert!(review_unread.has_unread_agent_output);
+
+        let ci_unread = lanes
+            .focus
+            .iter()
+            .find(|row| row.task_id == "ci-unread")
+            .expect("unread CI Task is in Focus");
+        assert_eq!(ci_unread.state, "ci-running");
+        assert!(ci_unread.has_unread_agent_output);
+
+        let failed_read = lanes
+            .focus
+            .iter()
+            .find(|row| row.task_id == "failed-read")
+            .expect("read failed Task remains actionable");
+        assert!(!failed_read.has_unread_agent_output);
+
+        let review_read = lanes
+            .in_flight
+            .iter()
+            .find(|row| row.task_id == "review-read")
+            .expect("read review Task falls back to In Flight");
+        assert_eq!(review_read.state, "review-pending");
+        assert!(!review_read.has_unread_agent_output);
+
+        let set_aside = lanes
+            .out_of_focus
+            .iter()
+            .find(|row| row.task_id == "set-aside-unread")
+            .expect("set-aside Task keeps its manual lane");
+        assert!(set_aside.has_unread_agent_output);
+    }
+
+    #[test]
     fn agent_lifecycle_state_boundaries_match_desktop() {
         let cases = [
             ("running", None, "active"),
@@ -664,6 +777,8 @@ mod tests {
                 status: status.to_string(),
                 checkpoint_data: checkpoint_data.map(ToOwned::to_owned),
                 updated_at: 10,
+                output_revision: 0,
+                viewed_output_revision: 0,
             };
             assert_eq!(task_state(Some(&session), &[]), expected, "status {status}");
         }

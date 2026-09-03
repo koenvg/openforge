@@ -11,6 +11,7 @@ function row(taskId: string, projectId: string): TaskAttentionRow {
     state: 'idle',
     reason: 'No agent running. Start when ready.',
     activity_at: 0,
+    has_unread_agent_output: false,
   }
 }
 

@@ -16,6 +16,7 @@
     sessionIdKey: ProviderSessionIdKey | null
     isStarting?: boolean
     isActive?: boolean
+    onTerminalReadyChange?: (ready: boolean) => void
     rootTestId?: string | null
   }
 
@@ -24,6 +25,7 @@
     sessionIdKey,
     isStarting = false,
     isActive = false,
+    onTerminalReadyChange,
     rootTestId = null,
   }: Props = $props()
 
@@ -105,6 +107,7 @@
       return
     }
     poolEntryAttached = true
+    onTerminalReadyChange?.(true)
 
     syncTerminalActiveFromLifecycle()
 
@@ -123,6 +126,7 @@
     unlisteners.forEach((fn) => {
       fn()
     })
+    onTerminalReadyChange?.(false)
     poolEntryAttached = false
     viewAttachment?.detach()
     viewAttachment = null

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TaskLabel } from '../../lib/types'
+import type { TaskAttentionRow, TaskLabel } from '../../lib/types'
 import { backlogLabelFilters, focusBoardFilters } from '../../lib/stores'
 import { requireElement } from '../../test-utils/dom'
 import {
@@ -20,6 +20,24 @@ import {
   taskFocus,
   uiLabel,
 } from './FocusBoard.test-utils'
+
+function projectedRow(
+  taskId: string,
+  state: TaskAttentionRow['state'],
+  hasUnreadAgentOutput: boolean,
+): TaskAttentionRow {
+  return {
+    task_id: taskId,
+    project_id: 'proj-1',
+    project_name: 'Test Project',
+    title: taskId,
+    state,
+    reason: state === 'ci-failed' ? 'CI pipeline failed — check the logs.' : 'Waiting on code review.',
+    activity_at: 3000,
+    has_unread_agent_output: hasUnreadAgentOutput,
+  }
+}
+
 
 describe('FocusBoard filtering and labels', () => {
   beforeEach(resetFocusBoardTestState)
@@ -198,6 +216,50 @@ describe('FocusBoard filtering and labels', () => {
     expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Backlog task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
+  })
+
+  it('moves read workflow output back to In Flight while actionable work stays in Focus', async () => {
+    const commonProps = {
+      projectId: 'proj-1',
+      projectName: 'Test Project',
+      tasks: [taskDoing],
+      taskDetailsById: new Map([[taskDoing.id, taskDoing]]),
+      dependencyReferenceTasks: [],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      attentionRowsLoaded: true,
+      onOpenTask,
+      onRunAction,
+    }
+    const view = renderBoard({
+      tasks: [taskDoing],
+      attentionRows: [projectedRow(taskDoing.id, 'review-pending', true)],
+    })
+
+    expect(await screen.findByRole('button', { name: /^Focus 1$/i })).toBeTruthy()
+    expect(screen.getByText('Unread agent output')).toBeTruthy()
+
+    await view.rerender({ ...commonProps, attentionRows: [] })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Focus 0$/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^In Flight 1$/i })).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /^In Flight 1$/i }))
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+
+    await view.rerender({
+      ...commonProps,
+      attentionRows: [projectedRow(taskDoing.id, 'ci-failed', false)],
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Focus 1$/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^In Flight 0$/i })).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /^Focus 1$/i }))
+    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+    expect(screen.getByText('CI pipeline failed — check the logs.')).toBeTruthy()
   })
 
   it('shows only backlog tasks when Backlog chip is clicked', async () => {
