@@ -3,7 +3,7 @@
 //! ends (a dev server, a `persistent` Monitor) never resumes it.
 
 use super::AppState;
-use crate::claude_background_work::PendingBackgroundTask;
+use crate::claude_background_work::{OutstandingWork, PendingBackgroundTask};
 use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -73,7 +73,7 @@ impl DeferredCompletionWatcher {
         &self,
         state: &AppState,
         deferral: DeferredCompletion,
-        live: &[PendingBackgroundTask],
+        outstanding: &OutstandingWork,
     ) {
         let mut scheduled = self.scheduled.lock().await;
         if let Some(previous) = scheduled.remove(&deferral.task_id) {
@@ -91,9 +91,16 @@ impl DeferredCompletionWatcher {
             grace_ms: now_ms.saturating_add(grace_period(state).as_millis() as u64),
             ceiling_ms: now_ms.saturating_add(MAX_DEFERRAL.as_millis() as u64),
         };
-        let wake_at_ms = match next_wake(expiries(live), now_ms, deadlines) {
+        let wake_at_ms = match next_wake(expiries(outstanding.tasks()), now_ms, deadlines) {
             Next::WakeAt(wake_at_ms) => wake_at_ms,
             Next::CompleteNow => now_ms,
+        };
+
+        let reported = match outstanding {
+            OutstandingWork::Reported(tasks) => {
+                Some(crate::claude_background_work::describe_tasks(tasks))
+            }
+            OutstandingWork::Replayed(_) => None,
         };
 
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -102,7 +109,7 @@ impl DeferredCompletionWatcher {
         let state = state.clone();
         let task = tokio::spawn(async move {
             watcher
-                .watch(state, deferral, generation, deadlines, wake_at_ms)
+                .watch(state, deferral, generation, deadlines, wake_at_ms, reported)
                 .await;
         });
         scheduled.insert(task_id, ScheduledCompletion { generation, task });
@@ -114,6 +121,12 @@ impl DeferredCompletionWatcher {
         }
     }
 
+    /// Claude's own inventory is a complete account of its in-flight work, so a deferral it
+    /// sourced is not re-checked: replaying the transcript at the deadline would let work the
+    /// Claude's own inventory is a complete account of its in-flight work, so a deferral it
+    /// sourced is not re-checked: replaying the transcript at the deadline would let work the
+    /// inventory omitted extend a deferral it never authorised. Replayed work is re-polled,
+    /// because a backgrounded shell may have exited since the turn ended.
     async fn watch(
         &self,
         state: AppState,
@@ -121,9 +134,16 @@ impl DeferredCompletionWatcher {
         generation: u64,
         deadlines: Deadlines,
         mut wake_at_ms: u64,
+        reported: Option<String>,
     ) {
         while let Some(now_ms) = current_ms() {
             tokio::time::sleep(sleep_for(now_ms, wake_at_ms)).await;
+
+            if let Some(reported) = &reported {
+                let reason = format!("its background work outlived the grace period: {reported}");
+                self.complete(&state, &deferral, generation, &reason).await;
+                return;
+            }
 
             let live = crate::claude_background_work::live_pending_background_tasks(
                 state.pty_manager.as_ref(),
