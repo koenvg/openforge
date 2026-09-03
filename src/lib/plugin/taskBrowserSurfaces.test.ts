@@ -93,6 +93,7 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'destroy'
       | 'getState'
       | 'onStateChanged'
+      | 'onVisualFeedbackAction'
       | 'navigate'
       | 'goBack'
       | 'goForward'

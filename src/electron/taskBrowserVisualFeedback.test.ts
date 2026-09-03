@@ -86,7 +86,7 @@ describe('Task Browser visual feedback integration', () => {
       comment: 'Corrected live marker',
     }], { appearance: 'light' })
 
-    const script = contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')) ?? ''
+    const script = contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')) ?? ''
     expect(script).toContain('Corrected live marker')
     expect(script).toContain('const visualFeedbackAppearance = "light";')
     expect(script).toContain('"region":{"x":0.25,"y":0.1,"width":0.5,"height":0.2}')
@@ -130,13 +130,13 @@ describe('Task Browser visual feedback integration', () => {
       },
     ])
 
-    const script = contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')) ?? ''
+    const script = contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')) ?? ''
     expect(script).toContain('Visual feedback comments')
     expect(script).toContain('Comment for the visible URL')
     expect(script).not.toContain('Comment from another URL')
 
     await surface.replaceVisualFeedback([])
-    const emptyScript = contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')) ?? ''
+    const emptyScript = contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')) ?? ''
     expect(emptyScript).toContain('const savedAnnotations = [];')
     expect(emptyScript).toContain('annotationsRoot.replaceChildren();')
   })
@@ -239,17 +239,17 @@ describe('Task Browser visual feedback integration', () => {
 
     contents.url = 'https://first.example/'
     contents.emit('did-navigate')
-    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.findLast(call =>
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.slice().reverse().find(call =>
       call.includes('const savedAnnotations'))).toContain('First page feedback'))
-    const firstPageScript = contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')) ?? ''
+    const firstPageScript = contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')) ?? ''
     expect(firstPageScript).toContain('Visual feedback comments')
     expect(firstPageScript).not.toContain('Second page feedback')
 
     contents.url = 'https://second.example/'
     contents.emit('did-navigate-in-page')
-    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.findLast(call =>
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.slice().reverse().find(call =>
       call.includes('const savedAnnotations'))).toContain('Second page feedback'))
-    const secondPageScript = contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')) ?? ''
+    const secondPageScript = contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')) ?? ''
     expect(secondPageScript).toContain('Visual feedback comments')
     expect(secondPageScript).not.toContain('First page feedback')
 
@@ -261,7 +261,7 @@ describe('Task Browser visual feedback integration', () => {
 
     contents.url = 'https://first.example/'
     contents.emit('did-navigate')
-    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.findLast(call =>
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.slice().reverse().find(call =>
       call.includes('const savedAnnotations'))).toContain('First page feedback'))
   })
 

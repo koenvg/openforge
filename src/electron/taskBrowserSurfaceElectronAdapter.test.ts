@@ -68,7 +68,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
       region: { x: 0.1, y: 0.2, width: 0.3, height: 0.2 },
       comment: 'Keep comments out of captured evidence',
     }])
-    expect(contents.executeJavaScriptCalls.findLast(call => call.includes('const savedAnnotations')))
+    expect(contents.executeJavaScriptCalls.slice().reverse().find(call => call.includes('const savedAnnotations')))
       .toContain('Visual feedback comments')
     contents.executeJavaScriptCalls.length = 0
 
