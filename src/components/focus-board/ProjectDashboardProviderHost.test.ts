@@ -8,6 +8,8 @@ import {
   clearComponentRegistry,
   registerRenderableContributionComponent,
 } from '../../lib/plugin/componentRegistry'
+import { resolveContributions } from '../../lib/plugin/contributionResolver'
+import { resolveTaskDetailProviderAvailability } from '../../lib/plugin/taskDetailProviders'
 import {
   clearProjectDashboardProviderIds,
   globalProjectDashboardProviderId,
@@ -17,6 +19,7 @@ import {
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import ProjectDashboardPluginTestView from './ProjectDashboardPluginTestView.svelte'
 import PluginSlotCrashingView from '../plugin/PluginSlotCrashingView.svelte'
+import TaskDetailPluginTestView from '../task-detail/TaskDetailPluginTestView.svelte'
 import ProjectDashboardProviderHost from './ProjectDashboardProviderHost.svelte'
 import FocusBoard from './FocusBoard.svelte'
 
@@ -31,6 +34,16 @@ const project = {
 }
 const task = createTask({ id: 'task-1', projectId: 'project-1' })
 
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 function createProps(overrides: Record<string, unknown> = {}) {
   return {
     project,
@@ -154,6 +167,62 @@ describe('ProjectDashboardProviderHost', () => {
     expect(onOpenCommandSearch).toHaveBeenCalledOnce()
   })
 
+
+  it('ignores a plugin component load from the previous logical project', async () => {
+    const firstLoad = deferred<unknown>()
+    const secondLoad = deferred<unknown>()
+    const componentLoader = vi.fn()
+      .mockImplementationOnce(() => firstLoad.promise)
+      .mockImplementationOnce(() => secondLoad.promise)
+    selectPluginDashboard(componentLoader)
+    projectDashboardProviderIds.set(new Map([
+      [project.id, 'planning-plugin.dashboard'],
+      ['project-2', 'planning-plugin.dashboard'],
+    ]))
+    const rendered = render(ProjectDashboardProviderHost, { props: createProps() })
+    await vi.waitFor(() => expect(componentLoader).toHaveBeenCalledTimes(1))
+
+    await rendered.rerender(createProps({
+      project: { ...project, id: 'project-2', name: 'Project Two' },
+    }))
+    await vi.waitFor(() => expect(componentLoader).toHaveBeenCalledTimes(2))
+
+    firstLoad.resolve(ProjectDashboardPluginTestView)
+    await vi.waitFor(() => expect(screen.queryByTestId('plugin-project-dashboard')).toBeNull())
+
+    secondLoad.resolve(ProjectDashboardPluginTestView)
+    expect((await screen.findByTestId('plugin-project-dashboard')).textContent).toContain('Project Two')
+  })
+
+  it('keeps task detail replacements available when the dashboard replacement crashes', async () => {
+    selectPluginDashboard(PluginSlotCrashingView)
+    runtimeContributionSources.set(new Map([['planning-plugin', {
+      pluginId: 'planning-plugin',
+      viewReplacements: [
+        { id: 'dashboard', target: 'project.dashboard', title: 'Planning', icon: 'panels-top-left' },
+        { id: 'task-workspace', target: 'task.detail', title: 'Task workspace' },
+      ],
+    }]]))
+    registerRenderableContributionComponent(
+      'viewReplacements',
+      'planning-plugin:task-workspace',
+      TaskDetailPluginTestView as never,
+    )
+
+    render(ProjectDashboardProviderHost, { props: createProps() })
+    await vi.waitFor(() => expect(vi.mocked(FocusBoard)).toHaveBeenCalled())
+
+    const pluginEntries = get(installedPlugins)
+    const contributions = resolveContributions(Array.from(get(runtimeContributionSources).values()))
+    const taskDetailAvailability = resolveTaskDetailProviderAvailability(
+      'planning-plugin.task-workspace',
+      'core',
+      contributions.viewReplacements,
+      pluginEntries,
+    )
+    expect(pluginEntries.get('planning-plugin')).toMatchObject({ state: 'active', error: null })
+    expect(taskDetailAvailability.provider?.qualifiedId).toBe('planning-plugin.task-workspace')
+  })
 
   it('renders OpenForge during activation and restores an inherited provider when it becomes ready', async () => {
     globalProjectDashboardProviderId.set('planning-plugin.dashboard')

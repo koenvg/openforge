@@ -61,6 +61,16 @@ const relatedTask = {
   dependsOn: [],
 }
 
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 function createProps(selectedTask: TaskDetail = task) {
   return {
     task: selectedTask,
@@ -168,6 +178,27 @@ describe('TaskDetailProviderHost', () => {
     expect(get(globalTaskDetailProviderId)).toBe('core')
   })
 
+
+  it('ignores a plugin component load from the previous logical task', async () => {
+    const firstLoad = deferred<unknown>()
+    const secondLoad = deferred<unknown>()
+    const componentLoader = vi.fn()
+      .mockImplementationOnce(() => firstLoad.promise)
+      .mockImplementationOnce(() => secondLoad.promise)
+    selectPluginTaskDetail(componentLoader)
+    const rendered = render(TaskDetailProviderHost, { props: createProps() })
+    await vi.waitFor(() => expect(componentLoader).toHaveBeenCalledTimes(1))
+
+    const nextTask = createTask({ id: 'task-2', projectId: project.id })
+    await rendered.rerender(createProps(nextTask))
+    await vi.waitFor(() => expect(componentLoader).toHaveBeenCalledTimes(2))
+
+    firstLoad.resolve(TaskDetailPluginTestView)
+    await vi.waitFor(() => expect(screen.queryByTestId('plugin-task-detail')).toBeNull())
+
+    secondLoad.resolve(TaskDetailPluginTestView)
+    expect((await screen.findByTestId('plugin-task-detail')).textContent).toContain('task-2')
+  })
   it('uses core while an inherited provider is absent and restores it when enablement returns', async () => {
     globalTaskDetailProviderId.set('planning-plugin.task-workspace')
     projectTaskDetailProviderIds.set(new Map([[project.id, 'inherit']]))

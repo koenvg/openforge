@@ -1,23 +1,16 @@
 <script lang="ts">
-  import { onDestroy, type Component } from 'svelte'
-  import type { PluginTaskDetailReplacementProps } from '@openforge-app/plugin-sdk/frontend'
   import type { Project, TaskDetail, TaskReference } from '../../lib/types'
-  import { getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
-  import { resolveContributions } from '../../lib/plugin/contributionResolver'
+  import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
+  import { createViewReplacementHostState } from '../../lib/plugin/viewReplacementHostState.svelte'
   import {
-    CORE_TASK_DETAIL_PROVIDER_ID,
-    INHERIT_TASK_DETAIL_PROVIDER_ID,
     globalTaskDetailProviderId,
     globalTaskDetailProviderLoaded,
     loadGlobalTaskDetailProviderId,
     loadProjectTaskDetailProviderId,
     projectTaskDetailProviderIds,
-    resolveTaskDetailProviderAvailability,
   } from '../../lib/plugin/taskDetailProviders'
   import TaskDetailHostLifecycle from './TaskDetailHostLifecycle.svelte'
   import type { TaskDetailHostLifecycleState } from './taskDetailHostLifecycle'
-  import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
-  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import type { TaskRunAppRegistration } from './taskRunAppController'
   import TaskDetailView from './TaskDetailView.svelte'
 
@@ -51,91 +44,26 @@
     windowFocused = true,
   }: Props = $props()
 
-  let resolvedComponent = $state<Component<PluginTaskDetailReplacementProps> | null>(null)
-  let resolvedProviderSignature = $state<string | null>(null)
-  let failedProviderId = $state<string | null>(null)
-  let loadRunId = 0
-
-  let contributionSources = $derived(
-    Array.from($enabledPluginIds)
-      .map(pluginId => $runtimeContributionSources.get(pluginId))
-      .filter(source => source !== undefined),
-  )
-  let resolvedContributions = $derived(resolveContributions(contributionSources))
-  let taskDetailProviders = $derived(resolvedContributions.viewReplacements)
-  let projectProviderPreferenceLoaded = $derived(
-    !project || $projectTaskDetailProviderIds.has(project.id),
-  )
-  let projectProviderPreferenceId = $derived(
-    project && projectProviderPreferenceLoaded
-      ? ($projectTaskDetailProviderIds.get(project.id) ?? INHERIT_TASK_DETAIL_PROVIDER_ID)
-      : CORE_TASK_DETAIL_PROVIDER_ID,
-  )
-  let providerResolution = $derived(resolveTaskDetailProviderAvailability(
-    projectProviderPreferenceId,
-    $globalTaskDetailProviderId,
-    taskDetailProviders,
-    $installedPlugins,
-  ))
-  let selectedProvider = $derived(providerResolution.provider)
-  let selectedComponentSource = $derived(selectedProvider
-    ? getRegisteredRenderableComponent(
-        'viewReplacements',
-        `${selectedProvider.pluginId}:${selectedProvider.contributionId}`,
-      )
-    : undefined)
-  let providerSignature = $derived(
-    selectedProvider && project
-      ? `${project.id}:${task.id}:${selectedProvider.qualifiedId}:available`
-      : providerResolution.configuredProvider
-        ? `${project?.id ?? ''}:${task.id}:${providerResolution.configuredProvider.qualifiedId}:${providerResolution.unavailableReason}`
-        : `core:${project?.id ?? ''}:${task.id}`,
-  )
-
-  $effect(() => {
-    if (!$globalTaskDetailProviderLoaded) {
-      void loadGlobalTaskDetailProviderId().catch((error) => {
-        console.error('[TaskDetailProviderHost] Failed to load global provider default:', error)
-      })
-    }
-    const projectId = project?.id
-    if (projectId && !$projectTaskDetailProviderIds.has(projectId)) {
-      void loadProjectTaskDetailProviderId(projectId).catch((error) => {
-        console.error(`[TaskDetailProviderHost] Failed to load provider preference for ${projectId}:`, error)
-      })
-    }
+  const providerState = createViewReplacementHostState({
+    target: 'task.detail',
+    hostName: 'TaskDetailProviderHost',
+    getProjectId: () => project?.id ?? null,
+    getLogicalIdentity: () => `${project?.id ?? ''}:${task.id}`,
+    preferences: {
+      globalProviderId: globalTaskDetailProviderId,
+      globalProviderLoaded: globalTaskDetailProviderLoaded,
+      projectProviderIds: projectTaskDetailProviderIds,
+      loadGlobalProviderId: loadGlobalTaskDetailProviderId,
+      loadProjectProviderId: loadProjectTaskDetailProviderId,
+    },
+    reportProviderFailure,
   })
 
-  $effect(() => {
-    const signature = providerSignature
-    const provider = selectedProvider
-    const componentSource = selectedComponentSource
-    const runId = ++loadRunId
-    resolvedComponent = null
-    resolvedProviderSignature = null
-    failedProviderId = null
-
-    if (!project || !provider || !componentSource) return
-
-    void (async () => {
-      try {
-        const component = await resolvePluginComponent(componentSource)
-        if (runId === loadRunId) {
-          resolvedComponent = component as Component<PluginTaskDetailReplacementProps>
-          resolvedProviderSignature = signature
-        }
-      } catch (error) {
-        if (runId !== loadRunId) return
-        reportProviderFailure(provider.pluginId, provider.qualifiedId, 'load', error)
-        failedProviderId = provider.qualifiedId
-      }
-    })()
-  })
-
-  onDestroy(() => {
-    loadRunId += 1
-  })
-
+  let resolvedContributions = $derived(providerState.contributions)
+  let selectedProvider = $derived(providerState.selectedProvider)
+  let resolvedComponent = $derived(providerState.resolvedComponent)
+  let componentReady = $derived(providerState.componentReady)
+  let providerFailed = $derived(providerState.providerFailed)
   function reportProviderFailure(
     pluginId: string,
     providerId: string,
@@ -146,10 +74,6 @@
     console.error(`[TaskDetailProviderHost] ${diagnostic.message}:`, error)
   }
 
-  function handleRenderError(pluginId: string, providerId: string, error: unknown): void {
-    reportProviderFailure(pluginId, providerId, 'render', error)
-    failedProviderId = providerId
-  }
 </script>
 
 {#snippet coreTaskDetail(hostLifecycle: TaskDetailHostLifecycleState)}
@@ -173,23 +97,16 @@
     {onRunAppRegistrationChange}
   >
     {#snippet children(hostLifecycle)}
-      {#if selectedProvider && project && failedProviderId === selectedProvider.qualifiedId}
+      {#if selectedProvider && project && providerFailed}
         {@render coreTaskDetail(hostLifecycle)}
-      {:else if selectedProvider
-        && resolvedComponent
-        && resolvedProviderSignature === providerSignature
-        && project}
+      {:else if selectedProvider && resolvedComponent && componentReady && project}
         {@const TaskWorkspace = resolvedComponent}
         {@const renderProps = getPluginRenderProps(selectedProvider.pluginId, {
           projectId: project.id,
           taskId: task.id,
         })}
         {#key `${project.id}:${task.id}:${selectedProvider.qualifiedId}`}
-          <svelte:boundary onerror={(error) => handleRenderError(
-            selectedProvider.pluginId,
-            selectedProvider.qualifiedId,
-            error,
-          )}>
+          <svelte:boundary onerror={providerState.handleRenderError}>
             {#snippet failed(_error, _reset)}
               {@render coreTaskDetail(hostLifecycle)}
             {/snippet}
