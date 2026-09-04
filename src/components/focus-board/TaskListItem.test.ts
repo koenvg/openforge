@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { compile } from 'svelte/compiler'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskListItem from './TaskListItem.svelte'
@@ -90,6 +93,27 @@ describe('TaskListItem', () => {
   it('shows a Rename task button', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+  })
+
+  it('keeps forwarded action icon classes global in compiled CSS', () => {
+    const source = readFileSync(resolve(import.meta.dirname, 'TaskListItem.svelte'), 'utf8')
+    const { css, warnings } = compile(source, { filename: 'TaskListItem.svelte', generate: 'client' })
+    const forwardedClasses = ['task-item-action', 'task-item-action--quiet', 'task-item-action--muted']
+
+    expect(warnings.filter((warning) => warning.code === 'css_unused_selector')).toEqual([])
+    for (const className of forwardedClasses) {
+      expect(css?.code, className).toContain(`.${className}`)
+      expect(css?.code, className).not.toContain(`.${className}.svelte-`)
+    }
+
+    render(TaskListItem, { props: baseProps })
+    const renameIcon = screen.getByRole('button', { name: 'Rename task' }).querySelector('svg')
+    const moreActionsIcon = screen.getByRole('button', { name: 'More actions for T-100' }).querySelector('svg')
+
+    expect(renameIcon?.classList.contains('task-item-action')).toBe(true)
+    expect(renameIcon?.classList.contains('task-item-action--quiet')).toBe(true)
+    expect(moreActionsIcon?.classList.contains('task-item-action')).toBe(true)
+    expect(moreActionsIcon?.classList.contains('task-item-action--muted')).toBe(true)
   })
 
   it('clicking Rename reveals a title input pre-filled with the title without selecting the card', async () => {

@@ -248,17 +248,17 @@
     opacity: 1;
   }
 
-  .task-item-action {
+  .task-item-action-control :global(.task-item-action) {
     transition-property: opacity, transform;
     transition-duration: 200ms;
     will-change: opacity;
   }
 
-  .task-item-action--quiet {
+  .task-item-action-control :global(.task-item-action--quiet) {
     opacity: 0.4;
   }
 
-  .task-item-action--muted {
+  .task-item-action-control :global(.task-item-action--muted) {
     opacity: 0.45;
   }
 
