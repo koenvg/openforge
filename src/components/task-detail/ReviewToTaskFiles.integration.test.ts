@@ -72,6 +72,7 @@ async function activateFileViewerCommand(api: FrontendOpenForgeAPI): Promise<voi
     taskUISections: [],
     reviewRowActions: [],
     settingsSections: [],
+    themes: [],
     injectionPoints: [],
     taskStartPrefixProviders: [],
     commands: [{
