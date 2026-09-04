@@ -23,6 +23,7 @@ const outputArgument = process.argv.find(argument => argument.startsWith('--outp
 const outputDirectory = resolve(repositoryRoot, outputArgument ?? 'artifacts/terminal-presentation')
 const baselineDirectory = join(directory, 'baselines', `${platform()}-${arch()}`, renderer)
 const visualBounds = { pixelThreshold: 0.15, maxDiffPixelRatio: 0.01 }
+const lifecycleVisualBounds = { pixelThreshold: 0, maxDiffPixelRatio: 0 }
 mkdirSync(outputDirectory, { recursive: true })
 
 function recordCheck(report, name, details = {}) {
@@ -55,6 +56,20 @@ async function reset(page, options) {
 
 async function play(page, id) {
   return page.evaluate(recordingId => window.terminalConformance.play(recordingId), id)
+}
+
+async function runWithPhaseTimeout(phase, operation, timeoutMs = 10_000) {
+  let timeout
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${phase} timed out after ${timeoutMs} ms`)), timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function captureVisual(page, key, report) {
@@ -134,6 +149,91 @@ async function runSemanticAndVisualMatrix(browser, report) {
     } finally {
       await harness.context.close()
     }
+  }
+}
+
+async function runConcurrentTerminalLifecycle(browser, report) {
+  const harness = await openHarness(browser, { surface: 'agent', theme: 'dark', dpr: 1 })
+  const { page } = harness
+  const key = 'concurrent-terminal-lifecycle'
+  const beforePath = join(outputDirectory, `${key}-before.png`)
+  const afterPath = join(outputDirectory, `${key}-after.png`)
+  try {
+    await reset(page, { surface: 'agent', theme: 'dark' })
+    const prepared = await runWithPhaseTimeout(
+      `${key}: prepare`,
+      page.evaluate(() => window.terminalConformance.prepareConcurrentLifecycle()),
+    )
+    const terminalHost = page.locator('#terminal-host')
+    const before = await terminalHost.screenshot({ animations: 'disabled' })
+    writeFileSync(beforePath, before)
+
+    const cycles = []
+    for (let cycle = 0; cycle < 24; cycle += 1) {
+      cycles.push(await runWithPhaseTimeout(
+        `${key}: cycle ${cycle + 1}`,
+        page.evaluate(value => window.terminalConformance.runConcurrentLifecycleCycle(value), cycle),
+      ))
+    }
+
+    const after = await terminalHost.screenshot({ animations: 'disabled' })
+    writeFileSync(afterPath, after)
+    const comparison = comparePngBuffers(before, after, lifecycleVisualBounds)
+    const final = cycles.at(-1)
+    if (!final) throw new Error('concurrent terminal lifecycle completed without a final cycle')
+    const finalText = flattenText(final.presentation)
+    for (const sentinel of ['UNCHANGED_SENTINEL_0123456789', 'BOTTOM_SENTINEL_9876543210']) {
+      if (!finalText.includes(sentinel)) {
+        throw new Error(`concurrent terminal lifecycle corrupted the sentinel Terminal View buffer: ${sentinel}`)
+      }
+    }
+    const visual = {
+      key,
+      status: comparison.passed ? 'passed' : 'failed',
+      diffPixels: comparison.diffPixels,
+      diffPixelRatio: comparison.diffPixelRatio,
+      bounds: lifecycleVisualBounds,
+      beforePath,
+      afterPath,
+    }
+    if (!comparison.passed) {
+      const diffPath = join(outputDirectory, `${key}.diff.png`)
+      writeFileSync(diffPath, comparison.diff)
+      visual.diffPath = diffPath
+      visual.reason = comparison.reason
+    }
+    report.visual.push(visual)
+    if (!comparison.passed) {
+      throw new Error(`${key}: sentinel visual diff ratio ${comparison.diffPixelRatio} exceeded ${lifecycleVisualBounds.maxDiffPixelRatio}; diff: ${visual.diffPath}`)
+    }
+    if (final.rendererFailures.length > 0) {
+      throw new Error(`${key}: WebGL renderer failure: ${JSON.stringify(final.rendererFailures)}`)
+    }
+    const rendererEvidence = [
+      { phase: 'prepared sentinel', evidence: prepared.evidence },
+      { phase: 'prepared churn', evidence: prepared.secondaryEvidence },
+      ...cycles.flatMap((result, index) => [
+        { phase: `cycle ${index + 1} sentinel`, evidence: result.evidence },
+        { phase: `cycle ${index + 1} churn`, evidence: result.secondaryEvidence },
+      ]),
+    ]
+    const fallback = rendererEvidence.find(result => result.evidence.renderer !== 'xterm-webgl')
+    if (fallback) {
+      throw new Error(`${key}: ${fallback.phase} used ${fallback.evidence.renderer}; expected xterm-webgl`)
+    }
+    recordCheck(report, key, {
+      cycles: cycles.length,
+      prepared: prepared.evidence,
+      preparedSecondary: prepared.secondaryEvidence,
+      final: final.evidence,
+      finalSecondary: final.secondaryEvidence,
+      rendererFailures: final.rendererFailures,
+    })
+    if (harness.consoleErrors.length > 0) {
+      throw new Error(`browser console errors: ${harness.consoleErrors.join(' | ')}`)
+    }
+  } finally {
+    await harness.context.close()
   }
 }
 
@@ -334,6 +434,7 @@ try {
   })
   browser = await chromium.connect(browserServer.wsEndpoint())
   await runSemanticAndVisualMatrix(browser, report)
+  await runConcurrentTerminalLifecycle(browser, report)
   await runInteractionAndRecovery(browser, report, browserServer.process()?.pid)
   const failedVisuals = report.visual.filter(result => result.status === 'failed')
   report.status = failedVisuals.length === 0 ? 'passed' : 'failed'
