@@ -1,0 +1,74 @@
+@keyframes border-glow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+@keyframes ci-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@keyframes slideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slideIn {
+  animation: slideIn 0.2s ease-out;
+}
+/* Drawer slide-in animation */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+@keyframes focus-empty-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.focus-empty-enter {
+  animation: focus-empty-enter 0.5s ease-out;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.dev-badge-gradient {
+  background: linear-gradient(
+    270deg,
+    var(--color-primary),
+    var(--color-blue-500),
+    var(--color-purple-500),
+    var(--color-primary)
+  );
+  background-size: 300% 300%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* Zen mode backdrop: pale, slowly drifting cloud of soft radial blobs. The blur is
+   painted once and only the transform animates (compositor-cheap); the global
+   prefers-reduced-motion block above freezes it. */
+@keyframes zen-cloud-drift {
+  0%   { transform: translate3d(-9%, -6%, 0) scale(1.05) rotate(-5deg); }
+  50%  { transform: translate3d(9%, 7%, 0) scale(1.28) rotate(7deg); }
+  100% { transform: translate3d(-5%, 9%, 0) scale(1.12) rotate(-3deg); }
+}
+/* VoiceInput recording pulse */
+@keyframes pulse-recording {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.recording-pulse {
+  animation: pulse-recording 1s ease-in-out infinite;
+}
