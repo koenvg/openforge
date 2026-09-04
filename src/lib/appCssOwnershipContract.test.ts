@@ -27,7 +27,7 @@ const ownedStylesheets = [
   {
     importRule: '@import "./styles/animation-utilities.css";',
     source: stylesheet('src/styles/animation-utilities.css'),
-    markers: ['@keyframes border-glow-spin', '@keyframes slide-in-right', '@keyframes zen-cloud-drift', '.recording-pulse {'],
+    markers: ['@keyframes border-glow-spin', '@keyframes slideIn', '@keyframes zen-cloud-drift', '.recording-pulse {'],
   },
 ] as const
 
