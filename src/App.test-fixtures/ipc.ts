@@ -72,6 +72,7 @@ vi.mock('../lib/ipc', () => ({
     return 'prod'
   }),
   getConfig: vi.fn(async () => null),
+  setConfig: vi.fn(async () => undefined),
   getProjectAttention: vi.fn(async () => {
     callOrder.push('getProjectAttention')
     return []

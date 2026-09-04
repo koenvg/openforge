@@ -36,6 +36,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     mockLoadEnabledForApp.mockImplementationOnce(() => new Promise<void>((resolve) => {
       finishPluginActivation = resolve
     }))
+    const { setConfig } = await import('./lib/ipc')
     const App = (await import('./App.svelte')).default
 
     render(App)
@@ -51,6 +52,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     await vi.waitFor(() => {
       expect(shell?.dataset.appReady).toBe('true')
       expect(shell?.style.opacity).toBe('1')
+      expect(setConfig).toHaveBeenCalledWith('theme', 'openforge-light')
     })
   })
 

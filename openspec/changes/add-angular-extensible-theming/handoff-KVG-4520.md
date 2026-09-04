@@ -31,6 +31,8 @@
 
 A fresh-context review initially requested two changes: use the public `AnchoredMenu` instead of exposing a bindable SDK button element, and make the inventory check resistant to Svelte class-expression and allowlist bypasses. Both findings were resolved. The temporary `element` API was removed before handoff.
 
+A PR CI follow-up added the missing `setConfig` function to the shared App IPC test fixture. The reported `App.compose.test.ts` cases had passed but logged caught theme-initialization errors. After the fixture fix, all 11 App test files and 74 tests passed without the missing-export or theme-initialization diagnostics; TypeScript and lint checks also passed. The referenced Frontend Tests job was cancelled before Vitest produced a final suite result, so no separate failing test remained to fix.
+
 A full `pnpm test` attempt exceeded six minutes while several worktrees were running build-heavy suites concurrently. Before termination it reported one unrelated five-second CLI test timeout. The affected renderer and full plugin SDK suites above passed independently. No Rust, desktop IPC, database, or plugin-host contract changed, so Rust and Electron contract suites were not selected for this frontend-only slice.
 
 Cleanup Task KVG-4607 tracks the cold-compilation timeout behavior in `ProjectSwitcherModal.test.ts`.
