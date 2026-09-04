@@ -93,6 +93,8 @@ describe('TaskSchedulesView composer and actions', () => {
     expect(within(form).getByText('This becomes the Task prompt for every scheduled run.')).toBeTruthy()
     expect(within(form).getByText('Creates a Task and starts implementation when the previous scheduled Task is closed.')).toBeTruthy()
     expect(within(form).getByText('Paused Task Schedules can still be run manually.')).toBeTruthy()
+    const enabledSwitch = within(form).getByRole('switch', { name: 'Enable after creation' }) as HTMLInputElement
+    expect(enabledSwitch.checked).toBe(true)
     expect(within(form).queryByLabelText('Cron expression')).toBeNull()
 
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Every minute' } })
@@ -202,7 +204,11 @@ describe('TaskSchedulesView composer and actions', () => {
     let form = await openNewSchedule()
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Release notes' } })
     await fireEvent.input(within(form).getByLabelText(/prompt/i), { target: { value: 'Draft weekly release notes.' } })
-    await fireEvent.change(within(form).getByLabelText('Mode'), { target: { value: 'create-only' } })
+    const modeSelect = within(form).getByRole('button', { name: 'Mode' })
+    modeSelect.focus()
+    await fireEvent.keyDown(modeSelect, { key: 'ArrowDown' })
+    await fireEvent.keyDown(modeSelect, { key: 'ArrowDown' })
+    await fireEvent.keyDown(modeSelect, { key: 'Enter' })
     await fireEvent.click(within(form).getByRole('button', { name: 'Create Task Schedule' }))
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
