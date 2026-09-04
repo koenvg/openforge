@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { createAudioRecorder } from '../../../lib/audioRecorder'
   import type { AudioRecorder } from '../../../lib/audioRecorder'
   import { transcribeAudio, getWhisperModelStatus } from '../../../lib/ipc'
@@ -155,9 +156,10 @@
 </script>
 
 <div bind:this={rootElement} class="flex flex-col items-center gap-1">
-  <button
+  <Button
     type="button"
-    class="btn {size === 'md' ? 'h-10 min-h-10 px-4' : 'btn-sm'} {voiceState === 'recording' ? 'btn-error' : appearance === 'outline' ? 'btn-outline' : 'btn-ghost'}"
+    size={size}
+    variant={voiceState === 'recording' ? 'danger' : appearance}
     onclick={handleClick}
     disabled={disabled || voiceState === 'transcribing'}
     aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice input'}
@@ -189,9 +191,9 @@
       {#if showLabel}<span>Voice input</span>{/if}
       {#if showShortcut}<span class="text-[0.65rem] opacity-50">⌘D</span>{/if}
     {/if}
-  </button>
+  </Button>
 
   {#if voiceState === 'error' && errorMessage}
-    <span class="text-error text-xs">{errorMessage}</span>
+    <span class="text-xs text-[var(--of-danger)]">{errorMessage}</span>
   {/if}
 </div>

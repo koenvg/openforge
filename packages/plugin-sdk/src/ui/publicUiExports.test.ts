@@ -108,6 +108,7 @@ describe('plugin-sdk public UI exports', () => {
       'ResizablePanel',
       'Modal',
       'Select',
+      'SearchableSelect',
       'Tabs',
       'AnchoredMenu',
       'Tooltip',

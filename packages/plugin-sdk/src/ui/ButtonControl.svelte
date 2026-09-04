@@ -12,6 +12,7 @@
     size: ButtonControlSize
     kind: ButtonControlKind
     onClick?: (event: MouseEvent) => void
+    element?: HTMLButtonElement
   }
 
   let {
@@ -19,6 +20,7 @@
     variant,
     size,
     kind,
+    element = $bindable(),
     class: className,
     disabled = false,
     onclick,
@@ -28,6 +30,7 @@
 </script>
 
 <button
+  bind:this={element}
   {...attributes}
   class={className}
   data-variant={variant}

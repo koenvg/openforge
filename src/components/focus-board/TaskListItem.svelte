@@ -13,7 +13,10 @@
   import { getTaskLabels } from '../../lib/taskLabels'
   import type { TaskState } from '../../lib/taskState'
   import { getStateDrivingPr } from '../../lib/taskState'
-  import { getTaskListItemPresentation, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
+  import { getTaskListItemPresentation } from '../../lib/taskStatePresentation'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
@@ -77,8 +80,8 @@
     return CircleDot
   }
 
+
   let title = $derived(truncate(getTaskTitle(task), 80))
-  let badgeClass = $derived(getTaskStateBadgeClass(state))
   let StatusIcon = $derived(statusIcon(state))
   let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))
@@ -87,47 +90,48 @@
   let dependencyCount = $derived(task.dependsOn.length)
 </script>
 
-<div
-  role="button"
-  tabindex="0"
-  data-vim-item
-  data-selected={isSelected ? 'true' : undefined}
-  data-focused={isFocused ? 'true' : undefined}
-  data-just-viewed={justViewed ? 'true' : undefined}
-  aria-current={isFocused ? 'true' : undefined}
-  class:vim-focus={isFocused}
-  class:just-viewed-pop={justViewed}
-  class="task-list-item relative flex w-full cursor-pointer flex-col gap-4 overflow-hidden rounded-xl border border-base-300 bg-base-100 p-5 text-left {isSelected
-    ? 'task-list-item--selected'
-    : 'composited-hover-layer task-list-item--interactive'}"
-  onclick={onSelect}
-  oncontextmenu={onContextMenu}
-  onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSelect()
-    }
-  }}
->
+<Panel class="task-list-item-shell" padding="none">
+  <div
+    role="button"
+    tabindex="0"
+    data-vim-item
+    data-selected={isSelected ? 'true' : undefined}
+    data-focused={isFocused ? 'true' : undefined}
+    data-just-viewed={justViewed ? 'true' : undefined}
+    aria-current={isFocused ? 'true' : undefined}
+    class:vim-focus={isFocused}
+    class:just-viewed-pop={justViewed}
+    class="task-list-item relative flex cursor-pointer flex-col gap-4 overflow-hidden p-5 text-left {isSelected
+      ? 'task-list-item--selected'
+      : 'task-list-item--interactive'}"
+    onclick={onSelect}
+    oncontextmenu={onContextMenu}
+    onkeydown={(e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onSelect()
+      }
+    }}
+  >
   <span class="task-list-item-selection-layer" aria-hidden="true"></span>
 
   <div class="flex items-start gap-3 pt-0.5">
 
     <div class="min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="font-mono text-sm font-semibold text-primary">{task.id}</span>
-        <span class="badge badge-sm gap-1 {badgeClass}">
+        <span class="font-mono text-sm font-semibold text-[var(--of-accent)]">{task.id}</span>
+        <Badge variant={presentation.badgeVariant} class="gap-1">
           {#if isMerging}
             <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
           {:else}
             <StatusIcon size={14} aria-hidden="true" />
           {/if}
           {presentation.stateLabel}
-        </span>
+        </Badge>
       </div>
     </div>
 
-    <div class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm text-base-content/55">
+    <div class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm text-[var(--of-text-secondary)]">
       {#if dependencyCount > 0}
         <span class="inline-flex items-center gap-1" aria-label={pluralize(dependencyCount, 'dependency', 'dependencies')}>
           <Link size={14} aria-hidden="true" />
@@ -146,14 +150,14 @@
           <span>{pluralize(pullRequests.length, 'PR')}</span>
         </span>
       {/if}
-      <span class="font-mono text-sm text-base-content/50">{timeAgoFromSeconds(task.updatedAt)}</span>
+      <span class="font-mono text-sm text-[var(--of-text-muted)]">{timeAgoFromSeconds(task.updatedAt)}</span>
     </div>
   </div>
 
   <div class="flex items-start gap-2">
     {#if titleRename.editing}
       <input
-        class="input input-xs input-bordered min-w-0 flex-1 text-base font-semibold"
+        class="task-title-input min-w-0 flex-1 text-base font-semibold"
         aria-label="Task title"
         value={titleRename.draft}
         oninput={(e) => titleRename.draft = e.currentTarget.value}
@@ -163,21 +167,25 @@
         use:focusAndSelect
       />
     {:else}
-      <div class="min-w-0 flex-1 text-lg font-semibold leading-snug text-base-content">
+      <div class="min-w-0 flex-1 text-lg font-semibold leading-snug text-[var(--of-text)]">
         {title}
       </div>
-      <button
+      <IconButton
         type="button"
-        class="task-item-action-control btn btn-ghost btn-sm btn-square shrink-0 text-base-content"
-        aria-label="Rename task"
+        size="sm"
+        variant="ghost"
+        class="task-item-action-control shrink-0"
+        label="Rename task"
         onclick={(e) => { e.stopPropagation(); titleRename.start() }}
-      ><Pencil class="task-item-action task-item-action--quiet" size={15} aria-hidden="true" /></button>
-      <button
+      ><Pencil class="task-item-action task-item-action--quiet" size={15} aria-hidden="true" /></IconButton>
+      <IconButton
         type="button"
-        class="task-item-action-control btn btn-ghost btn-sm btn-square shrink-0 text-base-content"
-        aria-label="More actions for {task.id}"
+        size="sm"
+        variant="ghost"
+        class="task-item-action-control shrink-0"
+        label="More actions for {task.id}"
         onclick={(e) => { e.stopPropagation(); onContextMenu(e) }}
-      ><MoreHorizontal class="task-item-action task-item-action--muted" size={16} aria-hidden="true" /></button>
+      ><MoreHorizontal class="task-item-action task-item-action--muted" size={16} aria-hidden="true" /></IconButton>
     {/if}
   </div>
   {#if showLabels && labels.length > 0}
@@ -186,13 +194,13 @@
 
   {#if firstPr}
     <div class="flex gap-1">
-      <span class="rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-mono text-[10px] font-medium text-primary">
+      <Badge variant="info" class="font-mono">
         PR #{firstPr.id}
-      </span>
+      </Badge>
     </div>
   {/if}
 
-  <div class="-mx-5 -mb-5 flex min-h-12 items-center gap-3 border-t border-base-300 px-5 py-3.5 text-sm text-base-content/60">
+  <div class="-mx-5 -mb-5 flex min-h-[var(--of-control-height-touch)] items-center gap-3 border-t border-[var(--of-border)] px-5 py-3.5 text-sm text-[var(--of-text-secondary)]">
     <span class="min-w-0 flex-1 truncate">
       {#if presentation.reasonText}
         {presentation.reasonText}
@@ -212,32 +220,58 @@
     {/if}
 
     {#if dependencyHint}
-      <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2 py-1 font-medium text-warning">
+      <Badge variant="warning" class="shrink-0 gap-1">
         <TriangleAlert size={13} aria-hidden="true" />
         {dependencyHint}
-      </span>
+      </Badge>
     {/if}
 
   </div>
-</div>
+  </div>
+</Panel>
 
 <style>
   .task-list-item {
     isolation: isolate;
+    border-radius: var(--of-radius-container);
+    color: var(--of-text);
+    transition:
+      background-color var(--of-duration-fast) var(--of-ease-standard),
+      color var(--of-duration-fast) var(--of-ease-standard);
   }
 
-  .task-list-item--interactive {
-    --composited-hover-background: color-mix(in oklch, var(--color-base-200) 30%, transparent);
-    --composited-hover-border: 1px solid color-mix(in oklch, var(--color-base-content) 25%, transparent);
+  .task-list-item--interactive:hover {
+    background: var(--of-control-hover);
+  }
+
+  .task-list-item:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
+  }
+
+  .task-title-input {
+    box-sizing: border-box;
+    min-height: var(--of-control-height-compact);
+    padding-inline: var(--of-space2);
+    border: var(--of-border-width) solid var(--of-border-interactive);
+    border-radius: var(--of-radius-control);
+    background: var(--of-field);
+    color: var(--of-text);
+    font-family: var(--of-font-sans);
+  }
+
+  .task-title-input:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
   }
 
   .task-list-item-selection-layer {
     position: absolute;
     inset: 0;
     z-index: -1;
-    border: 1px solid var(--color-accent);
+    border: var(--of-border-width) solid var(--of-accent);
     border-radius: inherit;
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-accent) 20%, transparent);
+    box-shadow: inset 0 0 0 var(--of-border-width) color-mix(in srgb, var(--of-accent) 20%, transparent);
     pointer-events: none;
     opacity: 0;
     transition: opacity 200ms ease;
@@ -248,21 +282,21 @@
     opacity: 1;
   }
 
-  .task-item-action-control :global(.task-item-action) {
+  :global(.task-item-action) {
     transition-property: opacity, transform;
-    transition-duration: 200ms;
+    transition-duration: var(--of-duration-standard);
     will-change: opacity;
   }
 
-  .task-item-action-control :global(.task-item-action--quiet) {
+  :global(.task-item-action--quiet) {
     opacity: 0.4;
   }
 
-  .task-item-action-control :global(.task-item-action--muted) {
+  :global(.task-item-action--muted) {
     opacity: 0.45;
   }
 
-  .task-item-action-control:is(:hover, :focus-visible) :global(.task-item-action) {
+  :global(.task-item-action-control:is(:hover, :focus-visible) .task-item-action) {
     opacity: 1;
   }
 

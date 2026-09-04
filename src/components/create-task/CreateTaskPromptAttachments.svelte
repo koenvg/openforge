@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ImagePlus } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { TaskDetail } from '../../lib/types'
   import {
     formatTaskPromptWithImageReferences,
@@ -179,15 +180,15 @@
 
 <div>
   <div class="flex items-center gap-3 py-4">
-    <button
+    <Button
       type="button"
-      class="btn btn-outline h-10 min-h-10 px-4"
+      variant="outline"
       onclick={pasteImageFromClipboard}
       disabled={imagePastePending}
     >
       <ImagePlus size={16} aria-hidden="true" />
       Attach image
-    </button>
+    </Button>
     <VoiceInput
       {onTranscription}
       listenToHotkey
@@ -196,7 +197,7 @@
       size="md"
     />
     {#if pastedImages.length > 0}
-      <span class="truncate text-xs text-base-content/60" aria-live="polite">{pastedImageSummary}</span>
+      <span class="truncate text-xs text-[var(--of-text-secondary)]" aria-live="polite">{pastedImageSummary}</span>
     {/if}
   </div>
 
@@ -204,17 +205,18 @@
     {#if pastedImages.length > 0}
       <div class="flex flex-wrap items-center gap-1" aria-label="Pasted image markers">
         {#each pastedImages as image (image.id)}
-          <button
+          <Button
             type="button"
-            class="btn btn-outline btn-xs"
+            variant="outline"
+            size="xs"
             aria-label="Preview {image.marker}"
             onclick={() => { previewImage = image }}
-          >{image.marker}</button>
+          >{image.marker}</Button>
         {/each}
       </div>
     {/if}
     {#if imagePasteError}
-      <p class="m-0 text-xs text-error" role="status" aria-live="polite">{imagePasteError}</p>
+      <p class="m-0 text-xs text-[var(--of-danger)]" role="status" aria-live="polite">{imagePasteError}</p>
     {/if}
   </div>
 </div>
@@ -222,16 +224,16 @@
 {#if previewImage}
   <Modal onClose={() => { previewImage = null }} maxWidth="720px" ariaLabel="Pasted image {previewImage.marker}" initialFocus={null}>
     {#snippet header()}
-      <h3 class="text-[0.95rem] font-semibold text-base-content m-0">Pasted image {previewImage.marker}</h3>
+      <h3 class="m-0 text-[0.95rem] font-semibold text-[var(--of-text)]">Pasted image {previewImage.marker}</h3>
     {/snippet}
 
     <div class="p-4 flex flex-col gap-3">
       <img
         src={previewImage.dataUrl}
         alt="Pasted image {previewImage.marker}"
-        class="max-h-[70vh] w-full object-contain rounded border border-base-300 bg-base-200"
+        class="max-h-[70vh] w-full rounded-[var(--of-radius-container)] border border-[var(--of-border)] bg-[var(--of-surface-subtle)] object-contain"
       />
-      <p class="m-0 text-xs text-base-content/60">{previewImage.mimeType} · {formatBytes(previewImage.size)}</p>
+      <p class="m-0 text-xs text-[var(--of-text-secondary)]">{previewImage.mimeType} · {formatBytes(previewImage.size)}</p>
     </div>
   </Modal>
 {/if}

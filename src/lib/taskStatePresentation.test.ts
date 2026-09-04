@@ -41,6 +41,7 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
 describe('getTaskListItemPresentation', () => {
   it('overrides the compact badge and reason while a merge is in progress', () => {
     expect(getTaskListItemPresentation('ready-to-merge', 'Ready to merge — all checks passed.', true)).toEqual({
+      badgeVariant: 'info',
       stateLabel: 'Merging...',
       reasonText: 'Pull request merge is in progress.',
     })
@@ -48,9 +49,18 @@ describe('getTaskListItemPresentation', () => {
 
   it('uses the task state compact label and reason when no merge is in progress', () => {
     expect(getTaskListItemPresentation('ready-to-merge', 'Ready to merge — all checks passed.', false)).toEqual({
+      badgeVariant: 'info',
       stateLabel: 'Ready to Merge',
       reasonText: 'Ready to merge — all checks passed.',
     })
+  })
+
+  it('provides semantic badge variants for task states', () => {
+    expect(getTaskListItemPresentation('active', '', false).badgeVariant).toBe('success')
+    expect(getTaskListItemPresentation('needs-input', '', false).badgeVariant).toBe('warning')
+    expect(getTaskListItemPresentation('failed', '', false).badgeVariant).toBe('danger')
+    expect(getTaskListItemPresentation('ready-to-merge', '', false).badgeVariant).toBe('info')
+    expect(getTaskListItemPresentation('backlog', '', false).badgeVariant).toBe('neutral')
   })
 })
 

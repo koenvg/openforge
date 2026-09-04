@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import type { TaskLabel } from '../../../lib/types'
 
   interface Props {
@@ -15,10 +16,10 @@
 {#if labels.length > 0}
   <div class="flex flex-wrap gap-1" aria-label="Task labels">
     {#each visibleLabels as label (label.id)}
-      <span class="badge badge-sm badge-info badge-outline max-w-full truncate">{label.name}</span>
+      <Badge variant="info" class="max-w-full truncate">{label.name}</Badge>
     {/each}
     {#if hiddenCount > 0}
-      <span class="badge badge-sm badge-ghost">+{hiddenCount}</span>
+      <Badge>+{hiddenCount}</Badge>
     {/if}
   </div>
 {/if}

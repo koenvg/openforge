@@ -11,12 +11,14 @@
     variant?: ButtonVariant
     size?: ButtonSize
     onClick?: (event: MouseEvent) => void
+    element?: HTMLButtonElement
   }
 
   let {
     children,
     variant = 'primary',
     size = 'md',
+    element = $bindable(),
     class: className,
     disabled = false,
     onclick,
@@ -28,6 +30,7 @@
 </script>
 
 <ButtonControl
+  bind:element
   {...attributes}
   class={className}
   variant={semanticVariant}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Check, ChevronDown, Tags } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { TaskLabel } from '../../lib/types'
   import AnchoredMenu from '../shared/ui/AnchoredMenu.svelte'
 
@@ -39,10 +40,12 @@
 </script>
 
 <div class="relative inline-flex">
-  <button
-    bind:this={trigger}
+  <Button
+    bind:element={trigger}
     type="button"
-    class="btn btn-ghost h-8 min-h-8 gap-1.5 border border-base-300 bg-base-100 px-2.5 text-xs font-medium"
+    size="xs"
+    variant={selectedCount > 0 ? 'secondary' : 'outline'}
+    class="label-filter-trigger"
     aria-label="Filter by Task Labels"
     aria-haspopup="menu"
     aria-controls={menuId}
@@ -54,32 +57,83 @@
     <Tags size={14} aria-hidden="true" />
     <span>Labels</span>
     {#if selectedCount > 0}
-      <span class="badge badge-primary badge-xs min-w-4 px-1 font-mono" aria-hidden="true">{selectedCount}</span>
+      <span class="selected-count" aria-hidden="true">{selectedCount}</span>
       <span id={summaryId} class="sr-only">{selectedCount} selected</span>
     {/if}
-    <ChevronDown size={13} class="transition-transform duration-150 {open ? 'rotate-180' : ''}" aria-hidden="true" />
-  </button>
+    <ChevronDown size={13} class="label-filter-chevron {open ? 'rotate-180' : ''}" aria-hidden="true" />
+  </Button>
 
   <AnchoredMenu visible={open} {trigger} id={menuId} detached onClose={() => { open = false }}>
     <div class="max-h-64 min-w-52 overflow-y-auto py-0.5">
       {#each labels as label (label.id)}
         {@const selected = selectedLabelIds.has(label.id)}
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="ghost"
           role="menuitemcheckbox"
           aria-checked={selected}
           tabindex="-1"
-          class="flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-base-content hover:bg-base-300/70 focus-visible:bg-base-300/70 focus-visible:outline-none"
+          class="label-filter-option w-full justify-start gap-2 text-left"
           onclick={() => onToggle(label.id)}
           onkeydown={(event) => handleOptionKeydown(event, label.id)}
         >
-          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border {selected ? 'border-primary bg-primary text-primary-content' : 'border-base-content/25'}" aria-hidden="true">
+          <span class="selection-box" data-selected={selected ? '' : undefined} aria-hidden="true">
             {#if selected}<Check size={12} strokeWidth={2.5} />{/if}
           </span>
           <span class="min-w-0 flex-1 truncate">{label.name}</span>
-          <span class="font-mono text-[10px] text-base-content/55">{labelCounts.get(label.id) ?? 0}</span>
-        </button>
+          <span class="label-count">{labelCounts.get(label.id) ?? 0}</span>
+        </Button>
       {/each}
     </div>
   </AnchoredMenu>
 </div>
+
+<style>
+  .selected-count,
+  .selection-box {
+    display: inline-grid;
+    place-items: center;
+    border-radius: var(--of-radius-round);
+  }
+
+  .selected-count {
+    min-width: var(--of-space4);
+    min-height: var(--of-space4);
+    padding-inline: var(--of-space1);
+    background: var(--of-accent);
+    color: var(--of-on-accent);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+  }
+
+  .selection-box {
+    width: var(--of-space4);
+    height: var(--of-space4);
+    border: var(--of-border-width) solid var(--of-border-interactive);
+    border-radius: var(--of-radius-control);
+  }
+
+  .selection-box[data-selected] {
+    border-color: var(--of-accent);
+    background: var(--of-accent);
+    color: var(--of-on-accent);
+  }
+
+  .label-count {
+    color: var(--of-text-muted);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+  }
+
+  :global(.label-filter-chevron) {
+    transition: transform var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.label-filter-trigger),
+    :global(.label-filter-chevron) {
+      transition: none;
+    }
+  }
+</style>

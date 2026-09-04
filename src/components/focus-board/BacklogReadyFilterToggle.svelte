@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Check, ListFilter } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 
   interface Props {
     active: boolean
@@ -10,11 +11,11 @@
   let { active, readyCount, onToggle }: Props = $props()
 </script>
 
-<button
+<Button
   type="button"
-  class="btn h-8 min-h-8 gap-1.5 border px-2.5 text-xs font-medium {active
-    ? 'border-primary bg-primary/[0.03] text-primary ring-1 ring-primary/20'
-    : 'btn-ghost composited-hover-layer border-base-300 bg-base-100 text-base-content'}"
+  size="sm"
+  variant={active ? 'outline' : 'secondary'}
+  class="backlog-ready-filter gap-1.5 {active ? 'backlog-ready-filter--active' : ''}"
   aria-pressed={active}
   onclick={onToggle}
 >
@@ -24,5 +25,24 @@
     <ListFilter size={14} aria-hidden="true" />
   {/if}
   <span>Ready to start</span>
-  <span class="badge badge-ghost badge-xs min-w-4 px-1 font-mono">{readyCount}</span>
-</button>
+  <span class="filter-count">{readyCount}</span>
+</Button>
+
+<style>
+  :global(.backlog-ready-filter--active) {
+    color: var(--of-accent);
+  }
+
+  .filter-count {
+    display: inline-grid;
+    min-width: var(--of-space4);
+    min-height: var(--of-space4);
+    place-items: center;
+    padding-inline: var(--of-space1);
+    border-radius: var(--of-radius-round);
+    background: var(--of-status-neutral-subtle);
+    color: var(--of-on-status-neutral);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+  }
+</style>

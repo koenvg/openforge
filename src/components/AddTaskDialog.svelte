@@ -10,6 +10,7 @@
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
   import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
   import CreateTaskEnvironment from './create-task/CreateTaskEnvironment.svelte'
@@ -323,14 +324,13 @@
   overflowVisible
   initialFocus="textarea"
   ariaLabel={dialogTitle}
-  boxClass="rounded-xl border border-base-300"
 >
   {#snippet header()}
     <div class="flex min-w-0 flex-1 items-center justify-between gap-4 pr-3">
-      <h2 class="m-0 text-2xl font-semibold tracking-[-0.02em] text-base-content">{dialogTitle}</h2>
+      <h2 class="m-0 text-2xl font-semibold tracking-[-0.02em] text-[var(--of-text)]">{dialogTitle}</h2>
       {#if mode === 'create'}
         <div class="min-w-0 text-right">
-          <span class="block max-w-56 truncate text-sm font-medium text-base-content">{projectName ?? 'Current project'}</span>
+          <span class="block max-w-56 truncate text-sm font-medium text-[var(--of-text)]">{projectName ?? 'Current project'}</span>
         </div>
       {/if}
     </div>
@@ -338,14 +338,14 @@
 
   <div class="max-h-[calc(90vh-4rem)] overflow-y-auto p-6">
     {#if taskDefaultsError}
-      <div class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-sm text-error" role="alert">
+      <div class="mb-4 flex items-center justify-between gap-3 rounded-[var(--of-radius-container)] border border-[var(--of-danger)] bg-[var(--of-danger-subtle)] px-3 py-2 text-sm text-[var(--of-danger)]" role="alert">
         <span>{taskDefaultsError}</span>
-        <button class="btn btn-sm btn-error btn-outline shrink-0" type="button" onclick={() => void initializeDialog()}>
+        <Button size="sm" variant="danger" type="button" onclick={() => void initializeDialog()}>
           Retry loading defaults
-        </button>
+        </Button>
       </div>
     {:else if error}
-      <div class="mb-4 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-sm text-error" role="alert">{error}</div>
+      <div class="mb-4 rounded-[var(--of-radius-container)] border border-[var(--of-danger)] bg-[var(--of-danger-subtle)] px-3 py-2 text-sm text-[var(--of-danger)]" role="alert">{error}</div>
     {/if}
 
     <InjectionPointSlot
@@ -357,8 +357,8 @@
         nextInjectableInsertRequestId += 1
       }}
     />
-    <label class="mb-2 block text-sm font-semibold text-base-content" for="create-task-prompt">What should the agent do?</label>
-    <div class="relative overflow-visible rounded-xl border border-base-300 bg-base-100 transition-colors focus-within:border-primary">
+    <label class="mb-2 block text-sm font-semibold text-[var(--of-text)]" for="create-task-prompt">What should the agent do?</label>
+    <div class="create-task-prompt-frame relative overflow-visible">
       <PromptInput
         bind:this={promptEditor}
         projectId={$activeProjectId || ''}
@@ -381,9 +381,9 @@
         onValueChange={handlePromptDraftChange}
         onCancel={() => onClose?.()}
       />
-      <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-base-content/45">{promptDraft.length.toLocaleString()} / 10,000</span>
+      <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-[var(--of-text-muted)]">{promptDraft.length.toLocaleString()} / 10,000</span>
     </div>
-    <p class="mt-2 text-xs text-base-content/55">Be specific about the goal, constraints, and relevant context.</p>
+    <p class="mt-2 text-xs text-[var(--of-text-secondary)]">Be specific about the goal, constraints, and relevant context.</p>
 
     <div class="flex flex-col gap-2 pb-4">
       <CreateTaskPromptAttachments
@@ -406,27 +406,27 @@
     </div>
   </div>
 
-  <footer class="flex items-center justify-between gap-4 border-t border-base-300 bg-base-100 px-6 py-4">
+  <footer class="flex items-center justify-between gap-4 border-t border-[var(--of-border)] bg-[var(--of-surface)] px-6 py-4">
     <div class="flex min-w-0 items-center gap-3">
-      <button type="button" class="btn btn-ghost h-10 min-h-10 gap-2 px-0 hover:bg-transparent" aria-label="Close" onclick={() => onClose?.()}>
-        <kbd class="kbd kbd-sm border-base-300 bg-base-100">Esc</kbd>
+      <Button type="button" variant="ghost" class="gap-2" aria-label="Close" onclick={() => onClose?.()}>
+        <kbd class="kbd kbd-sm border-[var(--of-border)] bg-[var(--of-surface)]">Esc</kbd>
         Close
-      </button>
+      </Button>
       {#if mode === 'create' && taskDefaultsLoading}
-        <span class="truncate text-xs text-base-content/55">Loading task defaults…</span>
+        <span class="truncate text-xs text-[var(--of-text-secondary)]">Loading task defaults…</span>
       {/if}
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
       {#if mode === 'create'}
-        <button
-          class="btn btn-outline h-10 min-h-10 px-4"
+        <Button
+          variant="outline"
           type="button"
           disabled={!promptReady || !createReady}
           onclick={handleAddToBacklogFromDraft}
-        >{submissionIntent === 'backlog' ? 'Adding…' : 'Add to backlog'}</button>
-        <button
-          class="btn btn-primary h-10 min-h-10 min-w-36 px-5"
+        >{submissionIntent === 'backlog' ? 'Adding…' : 'Add to backlog'}</Button>
+        <Button
+          class="min-w-36"
           type="button"
           disabled={!promptReady || !createReady}
           onclick={handleStartTaskFromDraft}
@@ -434,18 +434,37 @@
         >
           {submissionIntent === 'start' ? 'Starting…' : 'Start Task'}
           {#if submissionIntent !== 'start'}
-            <kbd class="kbd kbd-xs ml-1 border-primary-content/30 bg-primary-content text-primary">⌘↵</kbd>
+            <kbd class="kbd kbd-xs ml-1 border-[var(--of-on-accent)] bg-[var(--of-on-accent)] text-[var(--of-accent)]">⌘↵</kbd>
           {/if}
-        </button>
+        </Button>
       {:else}
-        <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
-        <button
-          class="btn btn-primary btn-sm"
+        <span class="text-xs text-[var(--of-text-secondary)]">⌘Enter to submit</span>
+        <Button
+          size="sm"
           type="button"
           disabled={!promptReady || !createReady}
           onclick={() => handleCreateOrUpdate(promptDraft)}
-        >{isSaving ? 'Saving…' : 'Submit'}</button>
+        >{isSaving ? 'Saving…' : 'Submit'}</Button>
       {/if}
     </div>
   </footer>
 </Modal>
+
+<style>
+  .create-task-prompt-frame {
+    border: var(--of-border-width) solid var(--of-border-interactive);
+    border-radius: var(--of-radius-container);
+    background: var(--of-field);
+    transition: border-color var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  .create-task-prompt-frame:focus-within {
+    border-color: var(--of-accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .create-task-prompt-frame {
+      transition: none;
+    }
+  }
+</style>

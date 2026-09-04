@@ -3,12 +3,14 @@
   import type { HTMLAttributes } from 'svelte/elements'
 
   type PanelVariant = 'default' | 'subtle' | 'raised'
+  type PanelPadding = 'default' | 'none'
 
   interface Props extends HTMLAttributes<HTMLElement> {
     children: Snippet
     header?: Snippet
     footer?: Snippet
     variant?: PanelVariant
+    padding?: PanelPadding
   }
 
   let {
@@ -16,12 +18,13 @@
     header,
     footer,
     variant = 'default',
+    padding = 'default',
     class: className,
     ...attributes
   }: Props = $props()
 </script>
 
-<section {...attributes} class={className} data-variant={variant}>
+<section {...attributes} class={className} data-variant={variant} data-padding={padding}>
   {#if header}
     <div class="of-panel-header">{@render header()}</div>
   {/if}
@@ -54,6 +57,10 @@
   .of-panel-body,
   .of-panel-footer {
     padding: var(--of-space4);
+  }
+
+  section[data-padding='none'] > .of-panel-body {
+    padding: 0;
   }
 
   .of-panel-header {

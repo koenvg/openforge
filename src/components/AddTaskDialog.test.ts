@@ -886,18 +886,19 @@ describe('AddTaskDialog', () => {
     await expandEnvironment()
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Mode' })).toBeTruthy() // Mode select
+      expect(screen.getByRole('button', { name: 'Mode' })).toBeTruthy()
     })
   })
 
-  it('includes autorun as a Claude Code permission mode using Claude\'s auto value', async () => {
+  it('includes Autorun in the Claude Code permission modes', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await expandEnvironment()
-    const select = await screen.findByRole('combobox', { name: 'Mode' }) as HTMLSelectElement
-    const autorunOption = Array.from(select.options).find((option) => option.textContent === 'Autorun')
+    const modeSelect = await screen.findByRole('button', { name: 'Mode' })
+    modeSelect.focus()
+    await fireEvent.keyDown(modeSelect, { key: 'ArrowDown' })
 
-    expect(autorunOption?.value).toBe('auto')
+    expect(await screen.findByRole('option', { name: 'Autorun' })).toBeTruthy()
   })
 
   it('creates a task with the AI provider chosen in the environment controls', async () => {
@@ -906,10 +907,13 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     await expandEnvironment()
 
-    const providerSelect = await screen.findByRole('combobox', { name: 'Provider' }) as HTMLSelectElement
-    expect(providerSelect.value).toBe('claude-code')
-    await fireEvent.change(providerSelect, { target: { value: 'opencode' } })
-
+    const providerSelect = await screen.findByRole('button', { name: 'Provider' })
+    expect(providerSelect.textContent).toContain('Claude Code')
+    providerSelect.focus()
+    await fireEvent.keyDown(providerSelect, { key: 'ArrowDown' })
+    await fireEvent.keyDown(providerSelect, { key: 'ArrowDown' })
+    await fireEvent.keyDown(providerSelect, { key: 'Enter' })
+    expect(providerSelect.textContent).toContain('OpenCode')
     await fireEvent.input(textbox, { target: { value: 'Task with chosen provider' } })
     await clickAddToBacklogFromMore()
 
@@ -926,9 +930,12 @@ describe('AddTaskDialog', () => {
 
     const textbox = await findPromptTextbox()
     await expandEnvironment()
-    const select = await screen.findByRole('combobox', { name: 'Mode' }) as HTMLSelectElement
+    const select = await screen.findByRole('button', { name: 'Mode' })
 
-    await fireEvent.change(select, { target: { value: 'auto' } })
+    select.focus()
+    await fireEvent.keyDown(select, { key: 'ArrowDown' })
+    await fireEvent.keyDown(select, { key: 'ArrowDown' })
+    await fireEvent.keyDown(select, { key: 'Enter' })
     expect(screen.getByText('autorun')).toBeTruthy()
     await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
     await clickAddToBacklogFromMore()
@@ -967,7 +974,8 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
 
     await waitFor(() => {
-      expect(screen.queryByRole('combobox')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Provider' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Mode' })).toBeNull()
     })
 
     await fireEvent.input(textbox, { target: { value: 'Task for default agent' } })

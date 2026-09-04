@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Plus, Search } from '@lucide/svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { commandHeld, mergingTaskIds } from '../../lib/stores'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
@@ -133,48 +135,48 @@
 
 </script>
 
-<div class="of-board-theme flex h-full flex-col bg-base-100">
-  <header class="shrink-0 border-b border-base-300 bg-base-100 px-8 py-2">
+<div class="of-board-theme flex h-full flex-col bg-[var(--of-canvas)]">
+  <header class="shrink-0 border-b border-[var(--of-border)] bg-[var(--of-surface)] px-8 py-2">
     <div class="flex min-w-0 flex-wrap items-center gap-4 xl:flex-nowrap">
       <div class="w-60 shrink-0">
-        <h1 class="truncate text-base font-semibold leading-5 tracking-[-0.01em] text-base-content">{projectName}</h1>
+        <h1 class="truncate text-base font-semibold leading-5 tracking-[-0.01em] text-[var(--of-text)]">{projectName}</h1>
       </div>
 
-      <button
+      <Button
         type="button"
-        class="composited-hover-layer board-search of-field flex h-9 min-w-64 max-w-[30rem] flex-1 items-center gap-2.5 px-3 text-left text-xs text-base-content/55"
+        variant="secondary"
+        class="board-search min-w-64 max-w-[30rem] flex-1 justify-start gap-2.5 text-left"
         aria-label="Search tasks or use a command"
         onclick={() => onOpenCommandSearch?.()}
       >
         <Search size={16} aria-hidden="true" />
         <span class="min-w-0 flex-1 truncate">Search tasks or use a command</span>
-        <kbd class="kbd kbd-xs shrink-0 border-base-300 bg-base-200 text-base-content/55">⌘K</kbd>
-      </button>
-
-      <button type="button" class="btn btn-primary h-9 min-h-9 shrink-0 px-3.5 text-xs" onclick={() => onNewTask?.()}>
+        <kbd class="kbd kbd-xs shrink-0 border-[var(--of-border)] bg-[var(--of-surface-subtle)] text-[var(--of-text-secondary)]">⌘K</kbd>
+      </Button>
+      <Button type="button" class="shrink-0 gap-2" onclick={() => onNewTask?.()}>
         <Plus size={16} aria-hidden="true" />
         New task
         {#if $commandHeld}
-          <kbd aria-hidden="true" class="kbd kbd-xs border-primary-content/25 bg-primary-content/10 text-primary-content/75">⌘N</kbd>
+          <kbd aria-hidden="true" class="kbd kbd-xs border-[var(--of-on-accent)] bg-transparent text-[var(--of-on-accent)] opacity-75">⌘N</kbd>
         {/if}
-      </button>
+      </Button>
 
       <div class="ml-auto flex shrink-0 items-center" role="group" aria-label="Board filters">
         <div class="join">
           {#each FILTER_OPTIONS as opt}
-            <button
+            <Button
               type="button"
-              class="board-filter join-item relative min-h-8 border border-base-300 bg-base-100 px-3 text-xs font-medium {activeFilter === opt.value
-                ? 'z-10 border-primary bg-primary/[0.03] text-primary ring-1 ring-primary/20'
-                : 'composited-hover-layer board-filter--interactive text-base-content'}"
+              size="sm"
+              variant={activeFilter === opt.value ? 'outline' : 'ghost'}
+              class="board-filter join-item relative {activeFilter === opt.value ? 'board-filter--active' : 'board-filter--interactive'}"
               aria-pressed={activeFilter === opt.value}
               onclick={() => interactionController.activateFilter(opt.value)}
             >
               <span class="board-filter-content">{opt.label} <span class="ml-1 text-[10px] opacity-60">{filterCounts[opt.value]}</span></span>
               {#if $commandHeld}
-                <kbd class="kbd kbd-xs ml-1 opacity-60 {activeFilter === opt.value ? '' : 'text-base-content/65'}">{opt.shortcut}</kbd>
+                <kbd class="kbd kbd-xs ml-1 opacity-60">{opt.shortcut}</kbd>
               {/if}
-            </button>
+            </Button>
           {/each}
         </div>
       </div>
@@ -184,7 +186,7 @@
   <div class="flex min-h-0 flex-1">
     <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-8 pb-6 pr-6 {activeFilter === 'backlog' && filterCounts.backlog > 0 ? 'pt-4' : 'pt-6'}">
       {#if activeFilter === 'backlog' && filterCounts.backlog > 0}
-        <div class="flex flex-wrap items-center gap-2 border-b border-base-300 py-2">
+        <div class="flex flex-wrap items-center gap-2 border-b border-[var(--of-border)] py-2">
           <BacklogReadyFilterToggle
             active={readyOnly}
             {readyCount}
@@ -210,23 +212,23 @@
       <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto" role="region" aria-label="Task list">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <h2 class="text-base font-semibold text-base-content">{FILTER_SECTION_LABELS[activeFilter]}</h2>
-            <span class="badge badge-ghost badge-sm font-mono text-xs">{filterCounts[activeFilter]}</span>
+            <h2 class="text-base font-semibold text-[var(--of-text)]">{FILTER_SECTION_LABELS[activeFilter]}</h2>
+            <Badge class="font-mono">{filterCounts[activeFilter]}</Badge>
           </div>
-          <span class="text-sm text-base-content/45">Select a task to keep its context visible</span>
+          <span class="text-sm text-[var(--of-text-muted)]">Select a task to keep its context visible</span>
         </div>
 
         {#if visibleTasks.length === 0 && filterController.textFilterQuery.trim()}
           <div class="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center" role="status">
-            <Search size={24} class="text-base-content/35" aria-hidden="true" />
-            <p class="text-sm font-medium text-base-content/70">No tasks match ‘{filterController.textFilterQuery.trim()}’.</p>
-            <p class="text-xs text-base-content/45">Try a different filter or press Escape to clear it.</p>
+            <Search size={24} class="text-[var(--of-icon-muted)]" aria-hidden="true" />
+            <p class="text-sm font-medium text-[var(--of-text-secondary)]">No tasks match ‘{filterController.textFilterQuery.trim()}’.</p>
+            <p class="text-xs text-[var(--of-text-muted)]">Try a different filter or press Escape to clear it.</p>
           </div>
         {:else if visibleTasks.length === 0 && activeFilter === 'backlog' && (readyOnly || selectedLabelIds.size > 0)}
           <div class="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center" role="status">
-            <Search size={24} class="text-base-content/35" aria-hidden="true" />
-            <p class="text-sm font-medium text-base-content/70">No tasks match the active Backlog filters.</p>
-            <p class="text-xs text-base-content/45">Change or clear a filter to see more tasks.</p>
+            <Search size={24} class="text-[var(--of-icon-muted)]" aria-hidden="true" />
+            <p class="text-sm font-medium text-[var(--of-text-secondary)]">No tasks match the active Backlog filters.</p>
+            <p class="text-xs text-[var(--of-text-muted)]">Change or clear a filter to see more tasks.</p>
           </div>
         {:else if visibleTasks.length === 0}
           <FocusEmptyState filter={activeFilter} />
@@ -306,29 +308,31 @@
 </div>
 
 <style>
-  .board-search {
-    --composited-hover-border: 1px solid color-mix(in srgb, var(--of-text) 24%, var(--of-divider));
-    transition-property: opacity, transform;
+  :global(.board-filter--active) {
+    z-index: 10;
+    color: var(--of-accent);
   }
 
-  .board-search:hover {
-    border-color: var(--of-divider);
-  }
-
-  .board-filter--interactive {
-    --composited-hover-background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+  :global(.board-filter--interactive) {
+    color: var(--of-text-secondary);
   }
 
   .board-filter-content {
-    transition: opacity 200ms ease;
+    transition: opacity var(--of-duration-standard) var(--of-ease-standard);
     will-change: opacity;
   }
 
-  .board-filter--interactive .board-filter-content {
+  :global(.board-filter--interactive) .board-filter-content {
     opacity: 0.65;
   }
 
-  .board-filter--interactive:hover .board-filter-content {
+  :global(.board-filter--interactive:hover) .board-filter-content {
     opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .board-filter-content {
+      transition: none;
+    }
   }
 </style>

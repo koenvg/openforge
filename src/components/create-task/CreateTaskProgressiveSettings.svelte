@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ChevronDown, Info } from '@lucide/svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import type { CreateTaskDraft } from './createTaskDraft'
 
   interface Props {
@@ -9,37 +11,76 @@
   let { draft = $bindable() }: Props = $props()
 </script>
 
-<details class="group rounded-xl border border-base-300 bg-base-100">
-  <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 text-sm font-medium text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<details class="task-settings-section group">
+  <summary>
     <span>Title and source ticket</span>
     <ChevronDown size={16} class="transition-transform group-open:rotate-180" aria-hidden="true" />
   </summary>
-  <div class="grid gap-4 border-t border-base-300 p-4 sm:grid-cols-2">
-    <label class="flex flex-col gap-1.5 text-xs font-medium text-base-content/70">
-      Optional title
-      <input type="text" class="input input-bordered w-full" placeholder="Generated automatically if omitted" aria-label="Task title" bind:value={draft.title} />
-    </label>
-    <label class="flex flex-col gap-1.5 text-xs font-medium text-base-content/70">
-      Source ticket
-      <input type="text" inputmode="url" class="input input-bordered w-full" placeholder="GitHub issue, Linear, or Jira URL" aria-label="Source ticket link" bind:value={draft.sourceTicketUrl} />
-    </label>
+  <div class="grid gap-4 border-t border-[var(--of-border)] p-4 sm:grid-cols-2">
+    <TextField
+      label="Optional title"
+      aria-label="Task title"
+      placeholder="Generated automatically if omitted"
+      bind:value={draft.title}
+    />
+    <TextField
+      label="Source ticket"
+      aria-label="Source ticket link"
+      inputmode="url"
+      placeholder="GitHub issue, Linear, or Jira URL"
+      bind:value={draft.sourceTicketUrl}
+    />
   </div>
 </details>
 
-<details class="group rounded-xl border border-base-300 bg-base-100">
-  <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 text-sm font-medium text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<details class="task-settings-section group">
+  <summary>
     <span>Advanced settings</span>
     <ChevronDown size={16} class="transition-transform group-open:rotate-180" aria-hidden="true" />
   </summary>
-  <div class="grid gap-3 border-t border-base-300 p-4 sm:grid-cols-2">
-    <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80 sm:col-span-2">
-      <input type="checkbox" class="toggle toggle-primary toggle-sm" aria-label="Task display title updates" bind:checked={draft.taskDisplayTitleUpdatesEnabled} />
-      <span>Auto-update task display title</span>
-    </label>
+  <div class="grid gap-3 border-t border-[var(--of-border)] p-4 sm:grid-cols-2">
+    <Switch
+      class="sm:col-span-2"
+      label="Auto-update task display title"
+      aria-label="Task display title updates"
+      bind:checked={draft.taskDisplayTitleUpdatesEnabled}
+    />
   </div>
 </details>
 
-<div class="flex items-start gap-2 rounded-lg bg-base-200 px-3 py-2 text-xs text-base-content/60">
+<div class="flex items-start gap-2 bg-[var(--of-surface-subtle)] px-3 py-2 text-xs text-[var(--of-text-muted)]">
   <Info size={15} class="mt-0.5 shrink-0" aria-hidden="true" />
   <span>You can refine details after starting. The agent will confirm the plan before making changes.</span>
 </div>
+
+<style>
+  .task-settings-section {
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-container);
+    background: var(--of-surface);
+    color: var(--of-text);
+  }
+
+  summary {
+    display: flex;
+    min-height: var(--of-control-height-touch);
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: var(--of-space4);
+    font-size: var(--of-text-sm);
+    font-weight: var(--of-weight-medium);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  summary:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    summary :global(svg) {
+      transition: none;
+    }
+  }
+</style>

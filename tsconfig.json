@@ -43,6 +43,7 @@
       "@openforge-app/plugin-sdk/ui/ResizablePanel.svelte": ["./packages/plugin-sdk/src/ui/ResizablePanel.svelte"],
       "@openforge-app/plugin-sdk/ui/Modal.svelte": ["./packages/plugin-sdk/src/ui/Modal.svelte"],
       "@openforge-app/plugin-sdk/ui/Select.svelte": ["./packages/plugin-sdk/src/ui/Select.svelte"],
+      "@openforge-app/plugin-sdk/ui/SearchableSelect.svelte": ["./packages/plugin-sdk/src/ui/SearchableSelect.svelte"],
       "@openforge-app/plugin-sdk/ui/Tabs.svelte": ["./packages/plugin-sdk/src/ui/Tabs.svelte"],
       "@openforge-app/plugin-sdk/ui/AnchoredMenu.svelte": ["./packages/plugin-sdk/src/ui/AnchoredMenu.svelte"],
       "@openforge-app/plugin-sdk/ui/Tooltip.svelte": ["./packages/plugin-sdk/src/ui/Tooltip.svelte"],

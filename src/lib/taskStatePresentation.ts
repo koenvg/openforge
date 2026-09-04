@@ -52,7 +52,18 @@ export const TASK_STATE_COMPACT_LABELS: Record<TaskState, string> = {
   'merge-conflict': 'Merge Conflict',
 }
 
+export type TaskBadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+
+export function getTaskStateBadgeVariant(state: TaskState): TaskBadgeVariant {
+  if (state === 'active' || state === 'agent-done') return 'success'
+  if (state === 'needs-input' || state === 'unaddressed-comments') return 'warning'
+  if (['ci-failed', 'failed', 'changes-requested', 'merge-conflict'].includes(state)) return 'danger'
+  if (state === 'ready-to-merge' || state === 'ready-to-enqueue' || state === 'pr-queued') return 'info'
+  return 'neutral'
+}
+
 export interface TaskListItemPresentation {
+  badgeVariant: TaskBadgeVariant
   stateLabel: string
   reasonText: string
 }
@@ -64,32 +75,28 @@ export function getTaskListItemPresentation(
 ): TaskListItemPresentation {
   if (isMerging) {
     return {
+      badgeVariant: getTaskStateBadgeVariant(state),
       stateLabel: 'Merging...',
       reasonText: 'Pull request merge is in progress.',
     }
   }
 
   return {
+    badgeVariant: getTaskStateBadgeVariant(state),
     stateLabel: TASK_STATE_COMPACT_LABELS[state] ?? state,
     reasonText,
   }
 }
 
 export function getTaskStateBadgeClass(state: TaskState): string {
-  switch (state) {
-    case 'active': return 'badge-success'
-    case 'needs-input': return 'badge-warning'
-    case 'unaddressed-comments': return 'badge-warning'
-    case 'ci-failed':
-    case 'failed':
-    case 'changes-requested':
-    case 'merge-conflict': return 'badge-error'
-    case 'agent-done': return 'badge-success'
-    case 'ready-to-merge': return 'badge-info'
-    case 'ready-to-enqueue': return 'badge-info'
-    case 'pr-queued': return 'badge-info'
-    case 'backlog': return 'badge-ghost'
-    default: return ''
+  if (state === 'backlog') return 'badge-ghost'
+
+  switch (getTaskStateBadgeVariant(state)) {
+    case 'success': return 'badge-success'
+    case 'warning': return 'badge-warning'
+    case 'danger': return 'badge-error'
+    case 'info': return 'badge-info'
+    case 'neutral': return ''
   }
 }
 
