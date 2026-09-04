@@ -11,7 +11,9 @@ const MIGRATION_TARGETS: readonly {
   { relativePath: 'review/pr/PrWalkthroughButton.svelte', publicComponents: ['Badge', 'Button'] },
   { relativePath: 'review/pr/RepositoryFilterSection.svelte', publicComponents: ['Badge', 'Button', 'IconButton', 'Panel', 'TextField'] },
   { relativePath: 'review/pr/TicketCoveragePanel.svelte', publicComponents: ['Badge', 'Button', 'Panel', 'TextField'] },
-  { relativePath: 'review/pr/WalkthroughTab.svelte', publicComponents: ['Badge', 'Button', 'IconButton', 'Panel', 'TextField', 'Textarea'] },
+  { relativePath: 'review/pr/WalkthroughAiQuestions.svelte', publicComponents: ['Badge', 'Button', 'Panel', 'TextField', 'Textarea'] },
+  { relativePath: 'review/pr/WalkthroughStepNavigation.svelte', publicComponents: ['Button'] },
+  { relativePath: 'review/pr/WalkthroughTab.svelte', publicComponents: ['Button', 'IconButton'] },
   { relativePath: 'settings/JiraSettingsSection.svelte', publicComponents: ['Button', 'TextField'] },
   { relativePath: 'task/PullRequestCard.svelte', publicComponents: ['Badge', 'Button'] },
   { relativePath: 'task/PullRequestLinkForm.svelte', publicComponents: ['Button', 'Panel', 'TextField'] },
@@ -19,8 +21,8 @@ const MIGRATION_TARGETS: readonly {
 ]
 
 const NATIVE_CONTROL_ALLOWLIST: Readonly<Record<string, readonly RegExp[]>> = {
-  'review/pr/WalkthroughTab.svelte': [
-    /aria-current=\{i === clampedStepIndex \? 'step' : undefined\}/,
+  'review/pr/WalkthroughStepNavigation.svelte': [
+    /aria-current=\{index === currentIndex \? 'step' : undefined\}/,
   ],
   'task/PullRequestCard.svelte': [
     /aria-label=\{`#\$\{prNumber\(pr\)\} \$\{pr\.title\}`\}/,
