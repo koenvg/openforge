@@ -6,6 +6,7 @@
   import { writeAgentTerminalTranscription } from '../../lib/agentTerminalPanel'
   import { deriveAgentStatusPillView } from '../../lib/agentStatusPill'
   import VoiceInput from '../shared/adapters/VoiceInput.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import InjectionPointSlot from '../plugin/InjectionPointSlot.svelte'
 
   interface Props {
@@ -37,13 +38,6 @@
 
   let view = $derived(deriveAgentStatusPillView(session, status))
 
-  function dotClass(current: AgentPanelStatus): string {
-    if (current === 'running') return 'status status-success'
-    if (current === 'paused') return 'status status-warning'
-    if (current === 'complete') return 'status status-primary'
-    if (current === 'error') return 'status status-error'
-    return 'status status-neutral'
-  }
 
   function handleTranscription(text: string) {
     void writeAgentTerminalTranscription(taskId, text, 'AgentStatusPill')
@@ -59,14 +53,54 @@
   onInsert={(text) => { void writeAgentTerminalTranscription(taskId, text, 'InjectionPoint') }}
 />
 {#if view}
-  <div class="flex shrink-0 items-center gap-2" data-testid="agent-status-pill" aria-label="Agent status">
+  <div class="agent-status-pill" data-testid="agent-status-pill" aria-label="Agent status">
     {#if view.statusText !== null}
-      <span class="shrink-0 {dotClass(status)}"></span>
-      <span class="of-toolbar-compact-label whitespace-nowrap text-xs font-semibold text-base-content">{view.statusText}</span>
+      <span class="agent-status-dot" data-status={status}></span>
+      <span class="of-toolbar-compact-label agent-status-label">{view.statusText}</span>
     {/if}
     {#if view.checkpointActive}
-      <span class="of-toolbar-compact-label badge badge-sm badge-warning shrink-0" aria-label="Checkpoint question pending">! checkpoint</span>
+      <Badge class="of-toolbar-compact-label" variant="warning" aria-label="Checkpoint question pending">! checkpoint</Badge>
     {/if}
     <VoiceInput onTranscription={handleTranscription} listenToHotkey showShortcut={false} />
   </div>
 {/if}
+
+<style>
+  .agent-status-pill {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--of-space2);
+  }
+
+  .agent-status-dot {
+    width: var(--of-space3);
+    height: var(--of-space3);
+    flex-shrink: 0;
+    border-radius: var(--of-radius-round);
+    background: var(--of-status-neutral);
+  }
+
+  .agent-status-dot[data-status='running'] {
+    background: var(--of-status-running);
+  }
+
+  .agent-status-dot[data-status='paused'] {
+    background: var(--of-status-waiting);
+  }
+
+  .agent-status-dot[data-status='complete'] {
+    background: var(--of-status-success);
+  }
+
+  .agent-status-dot[data-status='error'] {
+    background: var(--of-status-danger);
+  }
+
+  .agent-status-label {
+    color: var(--of-text);
+    font-size: var(--of-text-xs);
+    font-weight: var(--of-weight-semibold);
+    white-space: nowrap;
+  }
+</style>

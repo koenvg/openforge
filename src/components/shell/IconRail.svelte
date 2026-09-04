@@ -5,6 +5,8 @@
   import type { DashboardNavItem, IconRailPluginNavItem } from '../../lib/iconRailNav'
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import PluginNavigationIcon from './PluginNavigationIcon.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
 
   interface Props {
     currentView: AppView
@@ -29,35 +31,90 @@
   let navItems = $derived(getIconRailNavItems(pluginNavItems, dashboardNavItem))
 </script>
 
-<nav class="of-icon-rail flex h-full w-[4.5rem] flex-col items-center gap-2 border-r border-base-300 bg-base-100 py-4" aria-label="Project tools">
+<nav class="of-icon-rail" aria-label="Project tools">
   {#each navItems as { view, icon, shortcut, label }}
-    <button
+    <IconButton
       type="button"
-      class="relative grid h-11 w-11 cursor-pointer place-items-center rounded-lg transition-colors {currentView === view ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
+      size="lg"
+      variant="ghost"
+      class="rail-navigation-button"
+      label={label}
       title={label}
-      aria-label={label}
       aria-current={currentView === view ? 'page' : undefined}
       onclick={() => onNavigate(view)}
     >
       <PluginNavigationIcon {icon} size={24} />
-      <!-- Active project's Focus attention count. Uses the same success/green as the
-           project sidebar's green dot, so the rail badge matches the sidebar for the
-           active project. Only shown when there are tasks in focus. -->
       {#if view === 'board' && activeProjectAttentionCount > 0}
-        <span
-          class="badge badge-success badge-xs absolute -right-1 -top-1 h-4 min-w-4 text-[0.6rem] font-bold"
+        <Badge
+          class="rail-count-badge"
+          variant="success"
           title="{activeProjectAttentionCount} task{activeProjectAttentionCount === 1 ? '' : 's'} in focus"
-        >{activeProjectAttentionCount}</span>
+        >{activeProjectAttentionCount}</Badge>
       {/if}
-      <!-- Per-repo unopened review requests for the active project's repo. Uses the
-           same error/red as the "All Pull Requests" sidebar badge for consistency. -->
       {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}
-        <span class="badge badge-error badge-xs absolute -right-1 -top-1 h-4 min-w-4 text-[0.6rem] font-bold">{activeRepoReviewRequestCount}</span>
+        <Badge class="rail-count-badge" variant="danger">{activeRepoReviewRequestCount}</Badge>
       {/if}
       {#if shortcut && $commandHeld && !modalsOpen}
-        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
+        <kbd class="rail-shortcut">{shortcut}</kbd>
       {/if}
-    </button>
+    </IconButton>
   {/each}
-
 </nav>
+
+<style>
+  .of-icon-rail {
+    display: flex;
+    width: 4.5rem;
+    height: 100%;
+    flex-direction: column;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--of-space2);
+    padding: var(--of-space4) 0;
+    border-right: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface);
+  }
+
+  :global(.rail-navigation-button) {
+    position: relative;
+    color: var(--of-icon-muted);
+  }
+
+  :global(.rail-navigation-button[aria-current='page']) {
+    border-color: var(--of-border-interactive);
+    background: var(--of-accent-subtle);
+    color: var(--of-on-accent-subtle);
+  }
+
+  .of-icon-rail :global(.rail-count-badge) {
+    position: absolute;
+    top: calc(var(--of-space1) * -1);
+    right: calc(var(--of-space1) * -1);
+    min-width: var(--of-space5);
+    min-height: var(--of-space5);
+    padding: 0 var(--of-space1);
+    justify-content: center;
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+    line-height: 1;
+  }
+
+  .rail-shortcut {
+    position: absolute;
+    bottom: calc(var(--of-space2) * -1);
+    left: calc(var(--of-space3) * -1);
+    display: inline-flex;
+    min-width: var(--of-space5);
+    min-height: var(--of-space5);
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--of-space1);
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface-subtle);
+    color: var(--of-text-muted);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+    pointer-events: none;
+  }
+</style>

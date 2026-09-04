@@ -5,6 +5,7 @@
   import type { SidebarPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
   import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import PluginSidebarNavigationSlot from './PluginSidebarNavigationSlot.svelte'
   import ProjectSidebarList from './ProjectSidebarList.svelte'
 
@@ -56,7 +57,7 @@
   ]
 </script>
 
-<div class="{collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full bg-base-100 border-r border-base-300 flex flex-col transition-[width] duration-200">
+<aside class="of-app-sidebar {collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full flex flex-col">
   {#if appMode === 'dev'}
     <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
        <span class="text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
@@ -66,40 +67,39 @@
      </div>
   {/if}
 
-  <div class="h-12 px-2 flex items-center justify-end border-b border-base-300/50">
-    <button
+  <div class="of-sidebar-header h-12 px-2 flex items-center justify-end">
+    <IconButton
       type="button"
-      class="group btn btn-ghost btn-xs text-base-content"
-      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      size="sm"
+      variant="ghost"
+      label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       onclick={onToggleCollapse}
     >
       <span class="sidebar-toggle-glyph">
-      {#if collapsed}
-        <ChevronRight size={16} />
-      {:else}
-        <ChevronLeft size={16} />
-      {/if}
+        {#if collapsed}
+          <ChevronRight size={16} />
+        {:else}
+          <ChevronLeft size={16} />
+        {/if}
       </span>
-    </button>
+    </IconButton>
   </div>
 
-  <div class="border-b border-base-300/50 py-2">
-    <!-- Attention overview trigger. Mirrors the keyboard shortcut (⌘E / ⌘;) so mouse-only
-         users have a persistent way to open the dialog. It opens a modal rather than
-         navigating to a view, so it never carries aria-current. The LocateFixed glyph
-         matches the target icon in the dialog's own header. -->
-    <button
-      type="button"
-      class="composited-hover-layer sidebar-hover-base-200 group w-full flex min-h-11 items-center {collapsed ? 'justify-center px-0' : 'px-4'} gap-3 py-2.5 cursor-pointer text-base-content"
-      title={collapsed ? 'Attention' : undefined}
-      aria-label="Attention"
-      onclick={onOpenAttentionOverview}
+  <div class="of-sidebar-section py-2">
+    <!-- Attention opens a dialog, so it deliberately never carries aria-current. -->
+    <PluginSidebarLink
+      accessibleName="Attention"
+      active={false}
+      {collapsed}
+      onActivate={onOpenAttentionOverview}
     >
-      <LocateFixed size={18} class="sidebar-fade-content shrink-0" />
-      {#if !collapsed}
-        <span class="sidebar-fade-content text-sm font-medium">Attention</span>
-      {/if}
-    </button>
+      {#snippet leading()}
+        <LocateFixed size={18} />
+      {/snippet}
+      {#snippet label()}
+        Attention
+      {/snippet}
+    </PluginSidebarLink>
   </div>
 
   <ProjectSidebarList
@@ -109,7 +109,7 @@
     {onSelectProject}
   />
 
-  <div class="border-t border-base-300/50 py-2">
+  <div class="of-sidebar-section of-sidebar-section-top py-2">
     {#each pluginNavItems as item (item.viewKey)}
       <PluginSidebarNavigationSlot
         {item}
@@ -137,35 +137,41 @@
     {/each}
   </div>
 
-</div>
+</aside>
 
 <style>
-
-  .sidebar-hover-base-200 {
-    --composited-hover-background: var(--color-base-200);
+  .of-app-sidebar {
+    border-right: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface);
+    color: var(--of-text);
+    transition: width var(--of-duration-standard) var(--of-ease-standard);
   }
 
-
-
-  .sidebar-fade-content {
-    opacity: 0.55;
-    transition: opacity 200ms ease;
-    will-change: opacity;
+  .of-sidebar-header,
+  .of-sidebar-section {
+    border-bottom: var(--of-border-width) solid var(--of-border);
   }
 
-  .group:hover .sidebar-fade-content,
-  .group:focus-visible .sidebar-fade-content {
-    opacity: 1;
+  .of-sidebar-section-top {
+    border-top: var(--of-border-width) solid var(--of-border);
+    border-bottom: 0;
   }
 
   .sidebar-toggle-glyph {
-    opacity: 0.3;
-    transition: opacity 200ms ease;
-    will-change: opacity;
+    display: inline-flex;
+    opacity: 0.55;
+    transition: opacity var(--of-duration-fast) var(--of-ease-standard);
   }
 
-  .group:hover .sidebar-toggle-glyph,
-  .group:focus-visible .sidebar-toggle-glyph {
-    opacity: 0.6;
+  :global(.of-sidebar-header button:hover) .sidebar-toggle-glyph,
+  :global(.of-sidebar-header button:focus-visible) .sidebar-toggle-glyph {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .of-app-sidebar,
+    .sidebar-toggle-glyph {
+      transition: none;
+    }
   }
 </style>

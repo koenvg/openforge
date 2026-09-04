@@ -72,6 +72,18 @@ describe('TaskDetailToolbar — more actions menu', () => {
     expect(screen.getByTestId('task-workbench-toolbar').contains(menu)).toBe(false)
   })
 
+  it('returns focus to the public icon trigger when the menu closes with Escape', async () => {
+    await renderToolbar(doingTask)
+    const trigger = await openMoreActions()
+
+    await fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+    })
+  })
+
   it('sets an in-focus task aside from the menu', async () => {
     const onProjectAttentionChanged = vi.fn()
     const { setProjectConfig } = await import('../../lib/ipc')

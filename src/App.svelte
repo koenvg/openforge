@@ -313,7 +313,7 @@
 </script>
 
 <div
-  class="flex h-screen overflow-hidden bg-base-100"
+  class="of-application-shell flex h-screen overflow-hidden"
   style:opacity={appReady ? 1 : 0}
   inert={!appReady}
   data-app-ready={appReady}
@@ -435,3 +435,10 @@
   taskSelected={selectedTask !== null}
   boardVisible={$currentView === 'board' && selectedTask === null}
 />
+
+<style>
+  .of-application-shell {
+    background: var(--of-canvas);
+    color: var(--of-text);
+  }
+</style>

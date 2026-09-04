@@ -1,6 +1,6 @@
 <script lang="ts">
   import { DropdownMenu } from 'bits-ui'
-  import type { Snippet } from 'svelte'
+  import { tick, type Snippet } from 'svelte'
 
   export type AnchoredMenuItem = Readonly<{
     value: string
@@ -41,11 +41,20 @@
     onSelect,
     trigger,
   }: Props = $props()
+
+  let triggerElement = $state<HTMLButtonElement | null>(null)
+
+  function handleOpenChange(nextOpen: boolean): void {
+    onOpenChange?.(nextOpen)
+    if (!nextOpen) {
+      void tick().then(() => triggerElement?.focus())
+    }
+  }
 </script>
 
 <div class="of-anchored-menu {className ?? ''}" data-testid={testId}>
-  <DropdownMenu.Root bind:open {onOpenChange}>
-    <DropdownMenu.Trigger class="of-menu-trigger" aria-label={label} {disabled}>
+  <DropdownMenu.Root bind:open onOpenChange={handleOpenChange}>
+    <DropdownMenu.Trigger bind:ref={triggerElement} class="of-menu-trigger" aria-label={label} {disabled}>
       {@render trigger()}
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>

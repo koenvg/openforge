@@ -1,6 +1,8 @@
 <script lang="ts">
   import { ArrowLeft, ChevronDown, PanelRightClose, PanelRightOpen, Pencil, Play } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { onMount } from 'svelte'
   import { activeProjectId, commandHeld, completingTasks, startingTasks } from '../../lib/stores'
   import { confirmTerminalTaskAction, runCompleteTask } from '../../lib/completeTask'
@@ -12,8 +14,7 @@
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
   import type { TaskDetail } from '../../lib/types'
   import type { TaskRunAppState } from './taskRunAppController'
-  import AnchoredMenu from '../shared/ui/AnchoredMenu.svelte'
-  import ContextMenuItem from '../shared/ui/ContextMenuItem.svelte'
+  import AnchoredMenu from '@openforge-app/plugin-sdk/ui/AnchoredMenu.svelte'
   import TaskPaneNavigation from './TaskPaneNavigation.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
 
@@ -60,16 +61,15 @@
   let persistedTaskId = ''
   let vsCodeProtocolAvailable = $state(false)
   let moreActionsOpen = $state(false)
-  let moreActionsTrigger = $state<HTMLButtonElement | null>(null)
   let displayTitle = $derived(getTaskTitle(task))
   let isStarting = $derived($startingTasks.has(task.id))
   let isCompleting = $derived($completingTasks.has(task.id))
   let isOutOfFocus = $derived(outOfFocusController.taskIds.has(task.id))
+  let moreActionItems = $derived([{
+    value: isOutOfFocus ? 'return-to-board' : 'set-aside',
+    label: isOutOfFocus ? returnPresentation.label : setAsidePresentation.label,
+  }])
 
-  function focusAndSelect(node: HTMLInputElement): void {
-    node.focus()
-    node.select()
-  }
 
   function readPanelHidden(taskId: string): boolean {
     try {
@@ -96,8 +96,12 @@
     if (await runCompleteTask(task.id)) onBack()
   }
 
-  function toggleMoreActions(): void {
-    moreActionsOpen = !moreActionsOpen
+  async function handleMoreAction(value: string): Promise<void> {
+    if (value === 'return-to-board') {
+      await handleReturnToBoard()
+      return
+    }
+    await handleSetAside()
   }
 
   async function handleSetAside(): Promise<void> {
@@ -147,35 +151,33 @@
   })
 </script>
 
-<header
-  data-testid="task-workbench-toolbar"
-  class="of-task-workbench-toolbar isolate flex h-[52px] shrink-0 items-center overflow-x-auto overflow-y-hidden border-b border-base-300 bg-base-100 px-4"
->
-  <div class="relative flex h-full min-w-max flex-1 items-center gap-2">
-    <button class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content" aria-label="Back to task board" onclick={onBack}>
+<header data-testid="task-workbench-toolbar" class="of-task-workbench-toolbar">
+  <div class="toolbar-content">
+    <Button type="button" size="md" variant="ghost" class="toolbar-back-button" aria-label="Back to task board" onclick={onBack}>
       <ArrowLeft size={16} aria-hidden="true" />
       <span>Back</span>
-    </button>
-    <span class="h-5 w-px shrink-0 bg-base-300" aria-hidden="true"></span>
-    <span class="shrink-0 font-mono text-[0.8125rem] font-semibold text-primary">{task.id}</span>
+    </Button>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <span class="toolbar-task-id">{task.id}</span>
     {#if titleRename.editing}
-      <input
-        class="input input-sm input-bordered h-9 min-h-9 min-w-32 max-w-72 text-base font-semibold"
-        aria-label="Task title"
-        value={titleRename.draft}
-        oninput={(event) => titleRename.draft = event.currentTarget.value}
-        onkeydown={titleRename.handleKeydown}
-        onblur={() => titleRename.finish(true)}
-        use:focusAndSelect
-      />
+      <div class="toolbar-title-editor">
+        <TextField
+          label="Task title"
+          class="toolbar-title-input"
+          value={titleRename.draft}
+          autofocus
+          onfocus={(event) => event.currentTarget.select()}
+          onValueChange={(value) => { titleRename.draft = value }}
+          onkeydown={titleRename.handleKeydown}
+          onblur={() => titleRename.finish(true)}
+        />
+      </div>
     {:else}
-      <div class="flex min-w-24 max-w-72 items-center gap-1">
-        <h1 class="m-0 min-w-0 truncate text-base font-semibold text-base-content" title={displayTitle}>{displayTitle}</h1>
-        <button
-          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content"
-          aria-label="Rename task"
-          onclick={() => titleRename.start()}
-        ><Pencil size={14} aria-hidden="true" /></button>
+      <div class="toolbar-title">
+        <h1 title={displayTitle}>{displayTitle}</h1>
+        <IconButton type="button" size="sm" variant="ghost" label="Rename task" onclick={() => titleRename.start()}>
+          <Pencil size={14} aria-hidden="true" />
+        </IconButton>
       </div>
     {/if}
 
@@ -184,89 +186,90 @@
     {/if}
 
     {#if workspacePath !== null}
-      <div class="ml-auto flex shrink-0 items-center gap-2">
+      <div class="toolbar-secondary-actions">
         <AgentStatusPill taskId={task.id} />
-        <button
-          class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-1.5 text-base-content/65 hover:text-base-content"
+        <Button
+          type="button"
+          size="md"
+          variant="ghost"
+          class="toolbar-action"
           aria-label="Run app locally"
           title={runAppState.title}
           disabled={!runAppState.available || runAppState.isLaunching}
           onclick={onRunApp}
         >
           {#if runAppState.isLaunching}
-            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            <span class="toolbar-spinner" aria-hidden="true"></span>
           {:else}
-            <Play class="h-3.5 w-3.5" aria-hidden="true" />
+            <Play class="toolbar-action-icon" aria-hidden="true" />
           {/if}
           <span class="of-toolbar-compact-label">Run app</span>
-        </button>
+        </Button>
         {#if vsCodeProtocolAvailable}
-          <button
-            class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-2 text-base-content/65 hover:text-base-content"
+          <Button
+            type="button"
+            size="md"
+            variant="ghost"
+            class="toolbar-action"
             aria-label="Open in VS Code"
             title="Open in VS Code"
             onclick={openInVsCode}
           >
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
+            <svg viewBox="0 0 24 24" class="toolbar-action-icon" fill="currentColor" aria-hidden="true"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
             <span class="of-toolbar-compact-label">Open in VS Code</span>
-          </button>
+          </Button>
         {/if}
       </div>
     {/if}
 
     {#if task.status === 'backlog'}
-      <button
-        class="btn btn-primary btn-sm min-h-9 shrink-0"
+      <Button
+        type="button"
+        size="md"
+        variant="primary"
+        class="toolbar-primary-action"
         disabled={isStarting}
         onclick={() => onRunAction({ taskId: task.id, actionPrompt: '' })}
       >
         {#if isStarting}
-          <span class="loading loading-spinner loading-xs"></span>
+          <span class="toolbar-spinner" aria-hidden="true"></span>
           Starting...
         {:else}
           Start Task
         {/if}
-      </button>
+      </Button>
     {:else if task.status === 'doing'}
-      <div class="relative flex shrink-0 items-stretch">
-        <Button
-          size="sm"
-          variant="outline"
-          class="min-h-9 rounded-r-none border-r-0 border-primary px-4 text-primary"
-          disabled={isCompleting}
-          onclick={handleComplete}
-        >
+      <div class="toolbar-complete-actions">
+        <Button type="button" size="md" variant="outline" disabled={isCompleting} onclick={handleComplete}>
           {#if isCompleting}
-            <span class="loading loading-spinner loading-xs"></span>
+            <span class="toolbar-spinner" aria-hidden="true"></span>
             Completing…
           {:else}
             Complete
           {/if}
         </Button>
-        <button
-          bind:this={moreActionsTrigger}
-          type="button"
-          class="btn btn-outline btn-sm min-h-9 rounded-l-none border-primary px-1.5 text-primary"
-          aria-label="More task actions"
-          aria-haspopup="menu"
-          aria-expanded={moreActionsOpen}
-          onclick={toggleMoreActions}
+        <AnchoredMenu
+          label="More task actions"
+          items={moreActionItems}
+          bind:open={moreActionsOpen}
+          side="bottom"
+          align="end"
+          class="toolbar-more-menu"
+          onSelect={(value) => { void handleMoreAction(value) }}
         >
-          <ChevronDown size={14} class="transition-transform duration-200 {moreActionsOpen ? 'rotate-180' : ''}" aria-hidden="true" />
-        </button>
-        <AnchoredMenu detached visible={moreActionsOpen} trigger={moreActionsTrigger} onClose={() => { moreActionsOpen = false }}>
-          {#if isOutOfFocus}
-            <ContextMenuItem label={returnPresentation.label} onclick={handleReturnToBoard} />
-          {:else}
-            <ContextMenuItem label={setAsidePresentation.label} onclick={handleSetAside} />
-          {/if}
+          {#snippet trigger()}
+            <ChevronDown size={14} class="toolbar-disclosure-icon {moreActionsOpen ? 'rotate-180' : ''}" aria-hidden="true" />
+          {/snippet}
         </AnchoredMenu>
       </div>
     {/if}
 
     {#if activeView === 'agent' && workspacePath !== null}
-      <button
-        class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-2 {!panelHidden ? 'bg-primary/5 text-primary' : 'text-base-content/60'}"
+      <Button
+        type="button"
+        size="md"
+        variant="ghost"
+        class="toolbar-details-button"
         aria-label={panelHidden ? 'Show task info panel' : 'Hide task info panel'}
         title={panelHidden ? 'Show details' : 'Hide details'}
         aria-pressed={!panelHidden}
@@ -274,8 +277,170 @@
       >
         {#if panelHidden}<PanelRightOpen size={16} aria-hidden="true" />{:else}<PanelRightClose size={16} aria-hidden="true" />{/if}
         <span>Details</span>
-        {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘/</kbd>{/if}
-      </button>
+        {#if $commandHeld}<kbd class="toolbar-shortcut">⌘/</kbd>{/if}
+      </Button>
     {/if}
   </div>
 </header>
+
+<style>
+  .of-task-workbench-toolbar {
+    isolation: isolate;
+    height: calc(var(--of-control-height) + var(--of-space4));
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 var(--of-space4);
+    border-bottom: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface);
+    color: var(--of-text);
+  }
+
+  .toolbar-content {
+    position: relative;
+    display: flex;
+    min-width: max-content;
+    height: 100%;
+    flex: 1;
+    align-items: center;
+    gap: var(--of-space2);
+  }
+
+  :global(.toolbar-back-button),
+  :global(.toolbar-action),
+  :global(.toolbar-details-button) {
+    flex-shrink: 0;
+    gap: var(--of-space2);
+    color: var(--of-text-secondary);
+  }
+
+  .toolbar-divider {
+    width: var(--of-border-width);
+    height: var(--of-space6);
+    flex-shrink: 0;
+    background: var(--of-border);
+  }
+
+  .toolbar-task-id {
+    flex-shrink: 0;
+    color: var(--of-accent);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-sm);
+    font-weight: var(--of-weight-semibold);
+  }
+
+  .toolbar-title-editor {
+    width: 18rem;
+  }
+
+  .toolbar-title-editor :global(.of-text-field) {
+    display: block;
+  }
+
+  .toolbar-title-editor :global(label) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .toolbar-title-editor :global(.toolbar-title-input) {
+    width: 100%;
+    font-size: var(--of-text-md);
+    font-weight: var(--of-weight-semibold);
+  }
+
+  .toolbar-title {
+    display: flex;
+    min-width: var(--of-control-height-touch);
+    max-width: 18rem;
+    align-items: center;
+    gap: var(--of-space1);
+  }
+
+  .toolbar-title h1 {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--of-text);
+    font-size: var(--of-text-md);
+    font-weight: var(--of-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .toolbar-secondary-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--of-space2);
+    margin-left: auto;
+  }
+
+  .of-task-workbench-toolbar :global(.toolbar-action-icon) {
+    width: var(--of-space4);
+    height: var(--of-space4);
+  }
+
+  :global(.toolbar-primary-action),
+  .toolbar-complete-actions {
+    flex-shrink: 0;
+  }
+
+  .toolbar-complete-actions {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: var(--of-space1);
+  }
+
+  :global(.toolbar-details-button[aria-pressed='true']) {
+    border-color: var(--of-border-interactive);
+    background: var(--of-accent-subtle);
+    color: var(--of-on-accent-subtle);
+  }
+
+  .of-task-workbench-toolbar :global(.toolbar-disclosure-icon) {
+    transition: transform var(--of-duration-standard) var(--of-ease-standard);
+  }
+
+  .toolbar-spinner {
+    display: inline-block;
+    width: var(--of-space3);
+    height: var(--of-space3);
+    border: var(--of-border-width) solid currentColor;
+    border-right-color: transparent;
+    border-radius: var(--of-radius-round);
+    animation: toolbar-spin var(--of-duration-deliberate) linear infinite;
+  }
+
+  .toolbar-shortcut {
+    padding: 0 var(--of-space1);
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface-subtle);
+    color: var(--of-text-muted);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+  }
+
+  @keyframes toolbar-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .of-task-workbench-toolbar :global(.toolbar-disclosure-icon) {
+      transition: none;
+    }
+
+    .toolbar-spinner {
+      animation-duration: 1ms;
+    }
+  }
+</style>

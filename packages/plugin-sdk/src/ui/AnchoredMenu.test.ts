@@ -56,12 +56,14 @@ describe('plugin-sdk AnchoredMenu', () => {
     const onOpenChange = vi.fn()
     render(AnchoredMenuTestWrapper, { props: { onOpenChange } })
     await tick()
+    const trigger = screen.getByRole('button', { name: 'Task actions' })
     await fireEvent.click(screen.getByRole('button', { name: 'Open actions externally' }))
 
     await fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('prevents opening when disabled', async () => {
