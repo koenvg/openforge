@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
 import ContextMenuTest from './ContextMenu.test.svelte'
@@ -108,5 +108,19 @@ describe('ContextMenu', () => {
     expect(tabEvent.defaultPrevented).toBe(false)
     // jsdom does not perform Tab's default focus navigation. Chromium continues from this restored control.
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('describes a focused menu action and dismisses the nested tooltip before the menu', async () => {
+    render(ContextMenuTest, { props: { visible: true, x: 0, y: 0, onClose: vi.fn() } })
+    const menuItem = screen.getByRole('menuitem', { name: 'Danger Item' })
+
+    menuItem.focus()
+    await waitFor(() => expect(screen.getByRole('tooltip').textContent).toBe('Helpful context'))
+
+    await fireEvent.keyDown(menuItem, { key: 'Escape' })
+
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(document.activeElement).toBe(menuItem)
   })
 })

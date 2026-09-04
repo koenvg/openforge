@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Tooltip } from 'bits-ui'
   import type { Snippet } from 'svelte'
+  import type { HTMLButtonAttributes } from 'svelte/elements'
 
   export type TooltipSide = 'top' | 'right' | 'bottom' | 'left'
   export type TooltipAlign = 'start' | 'center' | 'end'
@@ -16,6 +17,13 @@
     sideOffset?: number
     class?: string
     testId?: string
+    triggerClass?: string
+    triggerRole?: HTMLButtonAttributes['role']
+    triggerTabindex?: number
+    triggerTitle?: string
+    triggerAriaDescribedby?: string
+    onTriggerClick?: (event: MouseEvent) => void
+    onTriggerKeydown?: (event: KeyboardEvent) => void
     onOpenChange?: (open: boolean) => void
     trigger: Snippet
   }
@@ -36,20 +44,72 @@
     sideOffset = 6,
     class: className,
     testId,
+    triggerClass = '',
+    triggerRole,
+    triggerTabindex,
+    triggerTitle,
+    triggerAriaDescribedby,
+    onTriggerClick,
+    onTriggerKeydown,
     onOpenChange,
     trigger,
   }: Props = $props()
+
+  let triggerDescriptionIds = $derived(
+    [triggerAriaDescribedby?.trim(), open ? contentId : undefined].filter(Boolean).join(' ') || undefined,
+  )
+
+  function invokeEventHandler(handler: unknown, event: MouseEvent | KeyboardEvent) {
+    if (typeof handler === 'function') handler(event)
+  }
+
+  function handleTriggerClick(event: MouseEvent, internalHandler: unknown) {
+    invokeEventHandler(internalHandler, event)
+    if (!event.defaultPrevented) onTriggerClick?.(event)
+  }
+
+  function handleTriggerKeydown(event: KeyboardEvent, internalHandler: unknown) {
+    invokeEventHandler(internalHandler, event)
+    onTriggerKeydown?.(event)
+    if (event.key !== 'Escape' || !open || event.defaultPrevented) return
+    event.preventDefault()
+    event.stopPropagation()
+    open = false
+    onOpenChange?.(false)
+  }
 </script>
 
 <div class="of-tooltip {className ?? ''}" data-testid={testId}>
   <Tooltip.Provider {delayDuration}>
     <Tooltip.Root bind:open bind:triggerId={activeTriggerId} {disabled} {delayDuration} {onOpenChange}>
-      <Tooltip.Trigger id={triggerId} class="of-tooltip-trigger" aria-label={label} aria-describedby={open ? contentId : undefined} {disabled}>
-        {@render trigger()}
+      <Tooltip.Trigger id={triggerId} {disabled}>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            type="button"
+            class="of-tooltip-trigger {triggerClass}"
+            aria-label={label}
+            aria-describedby={triggerDescriptionIds}
+            role={triggerRole}
+            tabindex={triggerTabindex}
+            title={triggerTitle}
+            {disabled}
+            onclick={(event) => handleTriggerClick(event, props.onclick)}
+            onkeydown={(event) => handleTriggerKeydown(event, props.onkeydown)}
+          >
+            {@render trigger()}
+          </button>
+        {/snippet}
       </Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content id={contentId} role="tooltip" class="of-tooltip-content" {side} {align} {sideOffset}>
-          {content}
+        <Tooltip.Content {side} {align} {sideOffset}>
+          {#snippet child({ props, wrapperProps })}
+            <div {...wrapperProps}>
+              <div {...props} id={contentId} role="tooltip" class="of-tooltip-content">
+                {content}
+              </div>
+            </div>
+          {/snippet}
         </Tooltip.Content>
       </Tooltip.Portal>
     </Tooltip.Root>

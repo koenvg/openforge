@@ -1,5 +1,5 @@
 <script lang="ts">
-  import HoverTooltip from './HoverTooltip.svelte'
+  import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
 
   interface Props {
     label: string
@@ -20,24 +20,30 @@
           ? 'text-error hover:bg-error hover:text-error-content cursor-pointer'
           : 'text-base-content hover:bg-primary hover:text-primary-content cursor-pointer'
   )
+  let menuItemClasses = $derived(`context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${variantClasses}`)
 </script>
 
 {#if description}
-  <HoverTooltip text={description}>
-    <button type="button"
-      class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
-      {onclick}
-      {disabled}
-      title={description}
-      role="menuitem"
-      tabindex="-1"
-    >
+  <Tooltip
+    label={label}
+    content={description}
+    delayDuration={200}
+    side="right"
+    class="block w-full"
+    {disabled}
+    triggerClass={menuItemClasses}
+    triggerRole="menuitem"
+    triggerTabindex={-1}
+    triggerTitle={description}
+    onTriggerClick={onclick}
+  >
+    {#snippet trigger()}
       {label}
-    </button>
-  </HoverTooltip>
+    {/snippet}
+  </Tooltip>
 {:else}
   <button type="button"
-    class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
+    class={menuItemClasses}
     {onclick}
     {disabled}
     role="menuitem"

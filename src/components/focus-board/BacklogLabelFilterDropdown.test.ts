@@ -23,6 +23,9 @@ describe('BacklogLabelFilterDropdown', () => {
     expect(trigger.textContent).toContain('Labels')
     expect(trigger.textContent).toContain('1')
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    const summaryId = trigger.getAttribute('aria-describedby')
+    expect(summaryId).not.toBeNull()
+    expect(document.getElementById(summaryId!)?.textContent).toBe('1 selected')
 
     await fireEvent.click(trigger)
 

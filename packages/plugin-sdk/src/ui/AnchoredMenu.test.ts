@@ -77,4 +77,25 @@ describe('plugin-sdk AnchoredMenu', () => {
     expect(screen.queryByRole('menu')).toBeNull()
     expect(onOpenChange).not.toHaveBeenCalled()
   })
+
+  it('supports persistent checkbox items for multi-select menus', async () => {
+    const onSelect = vi.fn()
+    render(AnchoredMenuTestWrapper, { props: { multiple: true, onSelect } })
+    await tick()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Task actions' }))
+    const rename = screen.getByRole('menuitemcheckbox', { name: 'Rename' })
+    const remove = screen.getByRole('menuitemcheckbox', { name: 'Delete' })
+
+    expect(within(rename).getByText('3')).toBeTruthy()
+    expect(within(remove).getByText('2')).toBeTruthy()
+    expect(rename.getAttribute('aria-checked')).toBe('true')
+    expect(remove.getAttribute('aria-checked')).toBe('false')
+
+    await fireEvent.click(remove)
+
+    expect(onSelect).toHaveBeenCalledWith('delete')
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Delete' }).getAttribute('aria-checked')).toBe('true')
+  })
 })
