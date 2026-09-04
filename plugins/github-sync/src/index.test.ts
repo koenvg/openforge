@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import { createMockPluginContext } from '@openforge-app/plugin-sdk/testing'
+import type { PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
 const { mockPrReviewView, mockTaskPullRequestStatus } = vi.hoisted(() => ({
@@ -30,8 +32,15 @@ function getPackageMetadata() {
   return packageJson.openforge
 }
 
-function makeRuntimeHarness() {
+function makePluginContext(subscriptions: FrontendPluginContext['subscriptions']): FrontendPluginContext {
   const packageMetadata = getPackageMetadata()
+  return {
+    ...createMockPluginContext({ pluginId: packageMetadata.id, packageMetadata }),
+    subscriptions,
+  }
+}
+
+function makeRuntimeHarness() {
   const sectionDisposable = { dispose: vi.fn() }
   const rowActionDisposable = { dispose: vi.fn() }
   const subscriptions = { add: vi.fn() }
@@ -39,7 +48,11 @@ function makeRuntimeHarness() {
   const backendInvoke = vi.fn(async () => null)
   const backendWhenReady = vi.fn(async () => undefined)
   const onGlobal = vi.fn(() => ({ dispose: vi.fn() }))
-  const navigate = vi.fn(async () => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null }))
+  const navigate = vi.fn(async (_request: Parameters<FrontendOpenForgeAPI['navigation']['navigate']>[0]) => ({
+    activeProjectId: 'project-1',
+    currentView: 'board',
+    selectedTaskId: null,
+  }))
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskUI: { registerSection: vi.fn(() => sectionDisposable) },
@@ -53,13 +66,18 @@ function makeRuntimeHarness() {
       navigate,
     },
   } as unknown as FrontendOpenForgeAPI
-  const context = { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions } as FrontendPluginContext
+  const context = makePluginContext(subscriptions)
   return { api, context, subscriptions, sectionDisposable, rowActionDisposable, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
+}
+const commandInvocationContext: PluginCommandInvocationContext = {
+  taskId: null,
+  projectId: null,
+  source: 'plugin',
 }
 
 function findCommandHandler(api: FrontendOpenForgeAPI, id: string) {
   const call = vi.mocked(api.commands.register).mock.calls.find((c) => (c[0] as { id: string }).id === id)
-  return (call?.[0] as { handler: (payload: unknown) => Promise<unknown> } | undefined)?.handler
+  return (call?.[0] as { handler: (payload: unknown, context: PluginCommandInvocationContext) => Promise<unknown> } | undefined)?.handler
 }
 
 describe('github-sync plugin', () => {
@@ -205,7 +223,7 @@ describe('github-sync plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
 
     const refreshRegistration = vi.mocked(api.commands.register).mock.calls[0]?.[0]
-    await refreshRegistration?.handler(undefined)
+    await refreshRegistration?.handler(undefined, commandInvocationContext)
     expect(backendWhenReady).toHaveBeenCalled()
     expect(backendInvoke).toHaveBeenCalledWith('forceGithubSync', undefined)
     expect(api.navigation.get).toHaveBeenCalled()
@@ -229,7 +247,7 @@ describe('github-sync plugin', () => {
     expect(handler).toBeDefined()
 
     const pr = { id: 42, number: 7, repo_owner: 'me', repo_name: 'app' } as unknown
-    await handler?.({ pr, projectId: 'project-9' })
+    await handler?.({ pr, projectId: 'project-9' }, commandInvocationContext)
 
     // A PR nested under a project opens the per-project PR review view for that project.
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({
@@ -250,7 +268,7 @@ describe('github-sync plugin', () => {
 
     const handler = findCommandHandler(api, 'open_review_pr')
     const pr = { id: 99, number: 3, repo_owner: 'someone', repo_name: 'other' } as unknown
-    await handler?.({ pr, projectId: null })
+    await handler?.({ pr, projectId: null }, commandInvocationContext)
 
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({
       viewId: `plugin:${context.pluginId}:pr_review_global`,
@@ -268,8 +286,7 @@ describe('github-sync plugin', () => {
       commands: { invokeGlobal: vi.fn(async () => null) },
     }
 
-    const packageMetadata = getPackageMetadata()
-    await backend.activate(api as never, { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions })
+    await backend.activate(api as never, makePluginContext(subscriptions))
 
     expect(api.backend.registerMethod).toHaveBeenCalledWith('forceGithubSync', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('fetchReviewPrs', expect.objectContaining({ handler: expect.any(Function) }))
@@ -321,9 +338,7 @@ describe('github-sync plugin', () => {
       return { dispose: vi.fn() }
     })
     const api = { backend: { registerMethod }, commands: { invokeGlobal } }
-    const packageMetadata = getPackageMetadata()
-
-    await backend.activate(api as never, { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions })
+    await backend.activate(api as never, makePluginContext(subscriptions))
     await listTaskPullRequests?.({ taskId: 'T-42' })
 
     expect(invokeGlobal).toHaveBeenCalledWith('openforge.getPullRequests', { taskId: 'T-42' })

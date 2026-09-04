@@ -52,7 +52,7 @@ jobs:
         id: typecheck
         run: |
           set +e -o pipefail
-          pnpm exec tsc --noEmit 2>&1 | tee /tmp/typecheck.log
+          (pnpm exec tsc --noEmit && pnpm --filter @openforge-app/plugin-github-sync typecheck) 2>&1 | tee /tmp/typecheck.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Lint

@@ -137,6 +137,7 @@ describe('ticket snapshot', () => {
       url: 'https://collibra.atlassian.net/browse/AVIV-304',
       summary: 'Compare the PR against its ticket',
       description: 'Some description',
+      acceptance_criteria: '',
       status: 'In Progress',
       issue_type: 'Story',
     },

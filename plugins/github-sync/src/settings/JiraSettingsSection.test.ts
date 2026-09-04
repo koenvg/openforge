@@ -14,7 +14,7 @@ const SAVED = {
 }
 
 function fakeApi(overrides: Record<string, unknown> = {}) {
-  const invoke = vi.fn(async (method: string) => {
+  const invoke = vi.fn(async (method: string, _payload?: unknown) => {
     if (method === 'getJiraSettings') return SAVED
     if (method === 'saveJiraSettings') return SAVED
     if (method === 'testJiraConnection') return { ok: true, displayName: 'Aviv Hadar' }
