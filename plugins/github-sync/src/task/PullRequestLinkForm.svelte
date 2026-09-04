@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   interface Props {
     onLink: (url: string) => Promise<void>
     onLinked: () => void
@@ -41,14 +44,20 @@
   }
 </script>
 
-<form class="flex flex-col gap-2 rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2" novalidate onsubmit={(event) => { event.preventDefault(); void submit() }}>
-  <label class="form-control w-full">
-    <span class="label-text text-xs">GitHub pull request URL</span>
-    <input class="input input-bordered input-sm w-full" type="url" placeholder="https://github.com/owner/repo/pull/123" bind:value={prUrl} disabled={linking} />
-  </label>
-  {#if linkError}<p class="m-0 text-xs text-error" role="alert">{linkError}</p>{/if}
-  <div class="flex justify-end gap-2">
-    <button type="button" class="btn btn-ghost btn-xs" disabled={linking} onclick={cancel}>Cancel</button>
-    <button type="submit" class="btn btn-primary btn-xs" disabled={linking}>{linking ? 'Linking…' : 'Link PR'}</button>
-  </div>
-</form>
+<Panel variant="subtle" aria-label="Link a GitHub pull request">
+  <form class="flex flex-col gap-2" novalidate onsubmit={(event) => { event.preventDefault(); void submit() }}>
+    <TextField
+      label="GitHub pull request URL"
+      type="url"
+      placeholder="https://github.com/owner/repo/pull/123"
+      class="w-full"
+      bind:value={prUrl}
+      disabled={linking}
+      error={linkError}
+    />
+    <div class="flex justify-end gap-2">
+      <Button type="button" variant="ghost" size="xs" disabled={linking} onclick={cancel}>Cancel</Button>
+      <Button type="submit" size="xs" disabled={linking}>{linking ? 'Linking…' : 'Link PR'}</Button>
+    </div>
+  </form>
+</Panel>

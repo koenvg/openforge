@@ -490,6 +490,8 @@ describe('GitHub Sync Task pull request section', () => {
       await screen.findByTestId('task-pull-requests-empty')
       const section = container.querySelector('[data-task-info-card="pull-requests"]')
       expect(section?.getAttribute('data-card-layout')).toBe('row')
+      expect(section?.tagName).toBe('SECTION')
+      expect(screen.getByTestId('task-pull-requests-empty').parentElement).toBe(section)
     })
 
     it('opens the link form from the row and restores the row on cancel', async () => {

@@ -19,6 +19,7 @@
     activationMode?: TabsActivationMode
     loop?: boolean
     disabled?: boolean
+    fill?: boolean
     class?: string
     testId?: string
     onValueChange?: (value: string) => void
@@ -33,6 +34,7 @@
     activationMode = 'automatic',
     loop = true,
     disabled = false,
+    fill = false,
     class: className,
     testId,
     onValueChange,
@@ -40,8 +42,8 @@
   }: Props = $props()
 </script>
 
-<div class="of-tabs {className ?? ''}" data-testid={testId}>
-  <Tabs.Root bind:value {orientation} {activationMode} {loop} {disabled} {onValueChange}>
+<div class="of-tabs {className ?? ''}" data-fill={fill ? '' : undefined} data-testid={testId}>
+  <Tabs.Root class="of-tabs-root" bind:value {orientation} {activationMode} {loop} {disabled} {onValueChange}>
     <Tabs.List class="of-tabs-list" aria-label={label}>
       {#each tabs as tab (tab.value)}
         <Tabs.Trigger class="of-tabs-trigger" value={tab.value} disabled={tab.disabled}>
@@ -61,6 +63,29 @@
   .of-tabs {
     color: var(--of-text);
     font-family: var(--of-font-sans);
+  }
+
+  .of-tabs[data-fill] {
+    display: contents;
+  }
+
+  .of-tabs[data-fill] :global(.of-tabs-root) {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .of-tabs[data-fill] :global(.of-tabs-list) {
+    flex: none;
+  }
+
+  .of-tabs[data-fill] :global(.of-tabs-content) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 0;
   }
 
   .of-tabs :global(.of-tabs-list) {

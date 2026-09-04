@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { AuthoredPullRequest, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
@@ -138,11 +140,18 @@
         <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
-            <span class="badge badge-primary badge-xs">{filteredReviewPrs.length}</span>
+            <Badge variant="info">{filteredReviewPrs.length}</Badge>
           </div>
-          <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh review requests" onclick={onRefreshPrs} disabled={isLoading}>
+          <Button
+            variant="ghost"
+            size="xs"
+            class="text-base-content/50"
+            aria-label="Refresh review requests"
+            onclick={onRefreshPrs}
+            disabled={isLoading}
+          >
             {isLoading ? 'Refreshing' : 'Refresh'}
-          </button>
+          </Button>
         </div>
 
         <div class="flex-1 overflow-y-auto p-5 pb-8">
@@ -151,8 +160,8 @@
           {:else if error}
             <PluginViewState error={error} errorTitle="Unable to load review requests">
               {#snippet errorActions()}
-                <button class="btn btn-primary btn-sm" onclick={onRefreshPrs}>Retry loading review requests</button>
-                <button class="btn btn-ghost btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+                <Button size="sm" onclick={onRefreshPrs}>Retry loading review requests</Button>
+                <Button variant="ghost" size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredReviewPrs.length === 0 && allReviewPrs.length > 0 && hiddenReviewRepos.length > 0}
@@ -162,7 +171,7 @@
               emptyDescription={`${allReviewPrs.length} ${pluralize(allReviewPrs.length, 'PR')} from ${hiddenReviewRepos.join(', ')} ${pluralize(hiddenReviewRepos.length, 'is', 'are')} currently unchecked for this project.`}
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
+                <Button size="sm" onclick={onOpenRepositoryFilters}>Review repository filters</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredReviewPrs.length === 0 && githubTokenConfigured === false}
@@ -172,7 +181,7 @@
               emptyDescription={`No GitHub token is configured, so OpenForge cannot check review requests for ${projectName}.`}
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+                <Button size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredReviewPrs.length === 0}
@@ -182,8 +191,10 @@
               emptyDescription={`GitHub is connected for ${projectName}. Sync again if you expected review requests, or check repository filters for hidden repos.`}
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onRefreshPrs}>Sync review requests</button>
-                {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>{/if}
+                <Button size="sm" onclick={onRefreshPrs}>Sync review requests</Button>
+                {#if showFilters}
+                  <Button variant="ghost" size="sm" onclick={onOpenRepositoryFilters}>Review repository filters</Button>
+                {/if}
               {/snippet}
             </PluginViewState>
           {:else}
@@ -220,11 +231,18 @@
         <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
-            <span class="badge badge-primary badge-xs">{filteredAuthoredPrs.length}</span>
+            <Badge variant="info">{filteredAuthoredPrs.length}</Badge>
           </div>
-          <button class="btn btn-xs btn-ghost text-base-content/50" aria-label="Refresh authored pull requests" onclick={onRefreshAuthoredPrs} disabled={isLoadingAuthored}>
+          <Button
+            variant="ghost"
+            size="xs"
+            class="text-base-content/50"
+            aria-label="Refresh authored pull requests"
+            onclick={onRefreshAuthoredPrs}
+            disabled={isLoadingAuthored}
+          >
             {isLoadingAuthored ? 'Refreshing' : 'Refresh'}
-          </button>
+          </Button>
         </div>
 
         <div class="flex-1 overflow-y-auto p-5 pb-8">
@@ -233,8 +251,8 @@
           {:else if authoredError}
             <PluginViewState error={authoredError} errorTitle="Unable to load your pull requests">
               {#snippet errorActions()}
-                <button class="btn btn-primary btn-sm" onclick={onRefreshAuthoredPrs}>Retry loading your pull requests</button>
-                <button class="btn btn-ghost btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+                <Button size="sm" onclick={onRefreshAuthoredPrs}>Retry loading your pull requests</Button>
+                <Button variant="ghost" size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0 && allAuthoredPrs.length > 0 && hiddenAuthoredRepos.length > 0}
@@ -244,7 +262,7 @@
               emptyDescription={`${allAuthoredPrs.length} ${pluralize(allAuthoredPrs.length, 'PR')} from ${hiddenAuthoredRepos.join(', ')} ${pluralize(hiddenAuthoredRepos.length, 'is', 'are')} currently unchecked for this project.`}
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>
+                <Button size="sm" onclick={onOpenRepositoryFilters}>Review repository filters</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0 && githubTokenConfigured === false}
@@ -254,7 +272,7 @@
               emptyDescription="No GitHub token is configured, so OpenForge cannot check pull requests authored by your account."
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onOpenGithubSettings}>Open GitHub settings</button>
+                <Button size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
           {:else if filteredAuthoredPrs.length === 0}
@@ -264,8 +282,10 @@
               emptyDescription="GitHub is connected for your account. Sync again if you expected authored PRs, or check repository filters for hidden repos."
             >
               {#snippet emptyActions()}
-                <button class="btn btn-primary btn-sm" onclick={onRefreshAuthoredPrs}>Sync my pull requests</button>
-                {#if showFilters}<button class="btn btn-ghost btn-sm" onclick={onOpenRepositoryFilters}>Review repository filters</button>{/if}
+                <Button size="sm" onclick={onRefreshAuthoredPrs}>Sync my pull requests</Button>
+                {#if showFilters}
+                  <Button variant="ghost" size="sm" onclick={onOpenRepositoryFilters}>Review repository filters</Button>
+                {/if}
               {/snippet}
             </PluginViewState>
           {:else}
@@ -282,15 +302,16 @@
                       {#snippet footer()}
                         {#if onStartTaskFromAuthoredPr}
                           <div class="pt-1">
-                            <button
+                            <Button
                               type="button"
-                              class="btn btn-xs btn-outline"
+                              variant="outline"
+                              size="xs"
                               aria-label={`Start a task from this branch for pull request #${pr.number}`}
                               onclick={(event) => {
                                 event.stopPropagation()
                                 onStartTaskFromAuthoredPr(pr)
                               }}
-                            >Start a task from this branch</button>
+                            >Start a task from this branch</Button>
                           </div>
                         {/if}
                       {/snippet}

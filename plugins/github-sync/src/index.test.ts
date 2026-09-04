@@ -18,6 +18,8 @@ vi.mock('./review/pr/PrReviewView.svelte', () => ({
 vi.mock('./task/TaskPullRequestStatus.svelte', () => ({
   default: mockTaskPullRequestStatus,
 }))
+
+import plugin, { PrReviewRowActionComponent, PrReviewViewComponent, TaskPullRequestStatusComponent } from './index'
 import packageJson from '../package.json'
 
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
@@ -126,7 +128,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers and disposes the plugin-owned Task pull request section', async () => {
-    const { default: plugin, TaskPullRequestStatusComponent } = await import('./index')
     const { api, context, subscriptions, sectionDisposable } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
@@ -149,7 +150,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers and disposes the walkthrough control shown on every review row', async () => {
-    const { default: plugin, PrReviewRowActionComponent } = await import('./index')
     const { api, context, subscriptions, rowActionDisposable } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
@@ -172,7 +172,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {
-    const { default: plugin, PrReviewViewComponent } = await import('./index')
     const { api, context, subscriptions, backendInvoke, backendWhenReady } = makeRuntimeHarness()
 
     await plugin.activate(api, context)
@@ -212,7 +211,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers an open_review_pr command that opens a PR under its project view', async () => {
-    const { default: plugin } = await import('./index')
     const { pendingReviewPrOpen } = await import('./lib/stores')
     const { get } = await import('svelte/store')
     const { api, context, navigate } = makeRuntimeHarness()
@@ -240,7 +238,6 @@ describe('github-sync plugin', () => {
   })
 
   it('open_review_pr opens an "other repositories" PR in the global view without switching project', async () => {
-    const { default: plugin } = await import('./index')
     const { pendingReviewPrOpen } = await import('./lib/stores')
     const { get } = await import('svelte/store')
     const { api, context, navigate } = makeRuntimeHarness()

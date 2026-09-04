@@ -3,6 +3,9 @@
   import { GitPullRequest, Plus } from '@lucide/svelte'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import type { PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import { pluginSectionKey, setSectionCollapsed } from '@openforge-app/plugin-sdk/collapsibleSectionState'
@@ -173,14 +176,16 @@
       <span class="w-3 shrink-0" aria-hidden="true"></span>
       <GitPullRequest size={14} class="shrink-0 text-base-content/50" aria-hidden="true" />
       <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Pull Requests</h3>
-      <button
+      <Button
         type="button"
-        class="btn btn-ghost btn-xs h-auto min-h-0 gap-1 px-1 font-normal text-base-content/60"
+        variant="ghost"
+        size="xs"
+        class="gap-1 px-1 font-normal text-base-content/60"
         onclick={toggleAdding}
       >
         <Plus size={12} class="shrink-0" aria-hidden="true" />
         <span>Add PR</span>
-      </button>
+      </Button>
     </div>
 
     {@render body()}
@@ -189,17 +194,18 @@
   <CollapsibleSection {sectionKey} title="Pull Requests" cardId="pull-requests">
     {#snippet icon()}<GitPullRequest size={14} />{/snippet}
     {#snippet actions()}
-      <span class="badge badge-ghost badge-sm font-mono">{pullRequests.length} {pullRequests.length === 1 ? 'PR' : 'PRs'}</span>
-      <button type="button" class="btn btn-ghost btn-xs" onclick={toggleAdding}>Add PR</button>
-      <!-- Icon only, in the same spot and shape as the Changes card's refresh: the label
-           this used to carry pushed the section title into an ellipsis. -->
-      <button
+      <Badge class="font-mono">{pullRequests.length} {pullRequests.length === 1 ? 'PR' : 'PRs'}</Badge>
+      <Button type="button" variant="ghost" size="xs" onclick={toggleAdding}>Add PR</Button>
+      <!-- Icon only, in the same spot and shape as the Changes card's refresh. -->
+      <IconButton
         type="button"
-        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
-        aria-label="Refresh GitHub status"
+        variant="ghost"
+        size="xs"
+        class="text-base-content/50 hover:text-base-content"
+        label="Refresh GitHub status"
         disabled={refreshing}
         onclick={() => void refreshGithubStatus()}
-      >↻</button>
+      >↻</IconButton>
     {/snippet}
 
     <div class="flex flex-col gap-2.5 py-2" aria-busy={loading}>
@@ -214,8 +220,8 @@
     <div class="flex flex-col gap-4 p-5">
       <p>Enqueue {confirmingEnqueue.repo_owner}/{confirmingEnqueue.repo_name} pull request #{prNumber(confirmingEnqueue)} “{confirmingEnqueue.title}”?</p>
       <div class="flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" onclick={() => { confirmingEnqueue = null }}>Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick={() => void confirmEnqueue()}>Confirm Enqueue</button>
+        <Button variant="ghost" size="sm" onclick={() => { confirmingEnqueue = null }}>Cancel</Button>
+        <Button size="sm" onclick={() => void confirmEnqueue()}>Confirm Enqueue</Button>
       </div>
     </div>
   </Modal>
