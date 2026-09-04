@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validateOpenForgePackageMetadata } from './manifest'
 import { createOpenForgeRegistryFake } from './testing'
-import type { PluginTaskDetailReplacementProps } from './types'
+import type { PluginTaskDetailReplacementProps } from './viewReplacements'
 
 const Dashboard = vi.fn() as never
 const TaskWorkspace = vi.fn() as never
