@@ -198,6 +198,7 @@ function registerPrReviewBackends(
   backend.registerMethod('getPrAiReviewComments', { handler: async () => [] })
   backend.registerMethod('updatePrAiReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getPrWalkthrough', { handler: async () => getWalkthrough() })
+  backend.registerMethod('getPrTicket', { handler: async () => ({ snapshot: null, jiraConfigured: false }) })
   backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ walkthrough_session_key: 'session-key' }) })
   backend.registerMethod('deletePrWalkthrough', { handler: async () => undefined })
   backend.registerMethod('abortAgentWalkthrough', { handler: async () => undefined })
@@ -1301,7 +1302,35 @@ describe('PrReviewView walkthrough generation', () => {
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
 
     // The tab appears once the open PR's status resolves to ready.
-    expect(await screen.findByRole('button', { name: 'Walkthrough' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Walkthrough' })).toBeTruthy()
+  })
+
+  it('does not initialize an inactive walkthrough tab', async () => {
+    const readyWalkthrough: PrWalkthrough = {
+      pr_id: basePr.id,
+      head_sha: basePr.head_sha,
+      walkthrough_session_key: 'k',
+      status: 'ready',
+      steps_json: JSON.stringify({ steps: [] }),
+      error_message: null,
+      created_at: 0,
+      updated_at: 0,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', () => readyWalkthrough)
+
+    renderPrReviewView(registry)
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    const walkthroughTab = await screen.findByRole('tab', { name: 'Walkthrough' })
+
+    expect(registry.calls.backendInvocations.some((call) => call.method === 'getPrTicket')).toBe(false)
+
+    await fireEvent.click(walkthroughTab)
+    await waitFor(() =>
+      expect(registry.calls.backendInvocations.some((call) => call.method === 'getPrTicket')).toBe(true),
+    )
   })
 
   it('hides the Walkthrough tab when the open PR has no ready walkthrough', async () => {
@@ -1314,7 +1343,7 @@ describe('PrReviewView walkthrough generation', () => {
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
     await screen.findByRole('tab', { name: 'Overview' })
 
-    expect(screen.queryByRole('button', { name: 'Walkthrough' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Walkthrough' })).toBeNull()
   })
 })
 

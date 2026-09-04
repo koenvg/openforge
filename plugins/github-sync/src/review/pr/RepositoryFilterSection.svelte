@@ -1,4 +1,9 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   interface Props {
     excludedRepos: Set<string>
     showFilterDropdown: boolean
@@ -25,8 +30,10 @@
 </script>
 
 <div class="relative">
-  <button
-    class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
+  <Button
+    variant="ghost"
+    size="sm"
+    class="gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
     title="Filter repositories"
     aria-label="Filter repositories"
     aria-haspopup="dialog"
@@ -34,60 +41,69 @@
     onclick={onToggleDropdown}
   >
     {#if excludedRepos.size > 0}
-      <span class="badge badge-warning badge-xs">{excludedRepos.size}</span>
+      <Badge variant="warning">{excludedRepos.size}</Badge>
     {/if}
     Filter
-  </button>
+  </Button>
   {#if showFilterDropdown}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div role="presentation" class="fixed inset-0 z-40" onclick={onCloseDropdown}></div>
-    <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3" role="dialog" aria-label="Excluded repositories filter">
-      <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
+    <Panel
+      variant="raised"
+      class="absolute right-0 top-full z-50 mt-1 w-[320px]"
+      role="dialog"
+      aria-label="Excluded repositories filter"
+    >
+      <div class="mb-2 text-xs font-semibold text-base-content/50">Excluded Repositories</div>
 
-      <form class="flex gap-1.5 mb-3" onsubmit={(event) => { event.preventDefault(); onAddExcludedRepo(newRepoInput) }}>
-        <input
-          type="text"
-          class="input input-bordered input-xs flex-1"
-          aria-label="Repository to exclude"
-          placeholder="owner/repo"
-          value={newRepoInput}
-          oninput={(event) => onNewRepoInputChange(event.currentTarget.value)}
-        />
-        <button type="submit" class="btn btn-primary btn-xs" disabled={!newRepoInput.trim()}>Add</button>
+      <form class="mb-3 flex items-end gap-1.5" onsubmit={(event) => { event.preventDefault(); onAddExcludedRepo(newRepoInput) }}>
+        <div class="min-w-0 flex-1">
+          <TextField
+            label="Repository to exclude"
+            placeholder="owner/repo"
+            value={newRepoInput}
+            onValueChange={onNewRepoInputChange}
+          />
+        </div>
+        <Button type="submit" size="xs" disabled={!newRepoInput.trim()}>Add</Button>
       </form>
 
       {#if excludedRepos.size > 0}
-        <div class="flex flex-col gap-1 mb-3 max-h-[160px] overflow-y-auto">
+        <div class="mb-3 flex max-h-[160px] flex-col gap-1 overflow-y-auto">
           {#each [...excludedRepos].sort() as repo}
-            <div class="flex items-center justify-between px-2 py-1 rounded bg-base-200 text-sm">
-              <span class="text-base-content truncate">{repo}</span>
-              <button
-                class="btn btn-ghost btn-xs text-base-content/40 hover:text-error"
-                onclick={() => onRemoveExcludedRepo(repo)}
+            <div class="flex items-center justify-between bg-base-200 px-2 py-1 text-sm">
+              <span class="truncate text-base-content">{repo}</span>
+              <IconButton
+                variant="ghost"
+                size="xs"
+                class="text-base-content/40 hover:text-error"
+                label={`Remove ${repo} from excluded repositories`}
                 title="Remove from exclusion list"
-                aria-label="Remove {repo} from excluded repositories"
-              ><span aria-hidden="true">✕</span></button>
+                onclick={() => onRemoveExcludedRepo(repo)}
+              ><span aria-hidden="true">✕</span></IconButton>
             </div>
           {/each}
         </div>
       {:else}
-        <div class="text-xs text-base-content/40 px-1 mb-3">No repositories excluded</div>
+        <div class="mb-3 px-1 text-xs text-base-content/40">No repositories excluded</div>
       {/if}
 
       {#if suggestedRepos.length > 0}
         <div class="border-t border-base-300 pt-2">
-          <div class="text-xs text-base-content/40 mb-1.5">Quick add from open PRs</div>
+          <div class="mb-1.5 text-xs text-base-content/40">Quick add from open PRs</div>
           <div class="flex flex-wrap gap-1">
             {#each suggestedRepos as repo}
-              <button
-                class="btn btn-ghost btn-xs text-base-content/60"
-                aria-label="Exclude {repo} from pull request lists"
+              <Button
+                variant="ghost"
+                size="xs"
+                class="text-base-content/60"
+                aria-label={`Exclude ${repo} from pull request lists`}
                 onclick={() => onAddExcludedRepo(repo)}
-              >+ {repo}</button>
+              >+ {repo}</Button>
             {/each}
           </div>
         </div>
       {/if}
-    </div>
+    </Panel>
   {/if}
 </div>

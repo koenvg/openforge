@@ -27,6 +27,12 @@
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw } from '@lucide/svelte'
@@ -453,7 +459,7 @@
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-error text-sm text-center p-5">
       <span class="text-5xl">⚠</span>
       <span>{loadError}</span>
-      <button class="btn btn-sm btn-ghost" onclick={loadCachedWalkthrough}>Retry</button>
+      <Button variant="ghost" size="sm" onclick={loadCachedWalkthrough}>Retry</Button>
     </div>
   {:else if !walkthrough}
     <div class="flex flex-col items-center justify-center flex-1 gap-4 text-center p-8 max-w-xl mx-auto">
@@ -461,29 +467,29 @@
       <p class="text-sm text-base-content/60 m-0">
         Have an AI scan the {files.length} changed file{files.length === 1 ? '' : 's'} ({pr.additions + pr.deletions} lines) and break the change into ordered, concept-sized steps — as if the author had landed several small commits.
       </p>
-      <button class="btn btn-primary btn-sm" onclick={handleGenerate} disabled={isStarting || files.length === 0}>
+      <Button size="sm" onclick={handleGenerate} disabled={isStarting || files.length === 0}>
         {isStarting ? 'Starting…' : 'Generate walkthrough'}
-      </button>
+      </Button>
     </div>
   {:else if walkthrough.status === 'generating'}
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/60 text-sm">
       <span class="loading loading-spinner loading-md text-primary"></span>
       <span>The agent is reading the diff and assembling steps…</span>
       <div class="flex gap-2">
-        <button class="btn btn-ghost btn-xs" onclick={loadCachedWalkthrough}>Refresh</button>
-        <button class="btn btn-outline btn-error btn-xs" onclick={handleStop}>Stop</button>
+        <Button variant="ghost" size="xs" onclick={loadCachedWalkthrough}>Refresh</Button>
+        <Button variant="danger" size="xs" onclick={handleStop}>Stop</Button>
       </div>
     </div>
   {:else if walkthrough.status === 'error'}
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-error text-sm text-center p-5">
       <span class="text-5xl">⚠</span>
       <span>{walkthrough.error_message ?? 'The walkthrough failed.'}</span>
-      <button class="btn btn-sm btn-ghost" onclick={handleRegenerate}>Try again</button>
+      <Button variant="ghost" size="sm" onclick={handleRegenerate}>Try again</Button>
     </div>
   {:else if !parsedSteps || parsedSteps.length === 0}
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/60 text-sm text-center p-5">
       <p class="m-0">The walkthrough was generated but couldn't be aligned with the current diff.</p>
-      <button class="btn btn-sm btn-ghost" onclick={handleRegenerate}>Regenerate</button>
+      <Button variant="ghost" size="sm" onclick={handleRegenerate}>Regenerate</Button>
     </div>
   {:else}
     {#if stale}
@@ -491,22 +497,24 @@
         <span class="text-warning-content/80">
           A new commit landed since this walkthrough was generated. Showing the cached version.
         </span>
-        <button class="btn btn-xs btn-warning" onclick={handleRegenerate}>Regenerate</button>
+        <Button variant="secondary" size="xs" onclick={handleRegenerate}>Regenerate</Button>
       </div>
     {/if}
 
     <!-- Step navigation. Prev/Next are the reviewer's primary control, so they are
          full-size buttons flanking the step rail instead of ghost text in a corner. -->
     <div class="flex items-center gap-3 px-4 py-2 border-b border-base-300 bg-base-200/40 shrink-0">
-      <button
-        class="btn btn-sm btn-outline gap-1 shrink-0"
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1 shrink-0"
         onclick={goPrev}
         disabled={clampedStepIndex <= 0}
         title="Previous step (←)"
       >
         <ChevronLeft size={16} aria-hidden="true" />
         Prev
-      </button>
+      </Button>
 
       <div class="flex items-center justify-center gap-1 flex-1 min-w-0 overflow-x-auto">
         {#each stepEntries as entry, i}
@@ -524,15 +532,16 @@
         {/each}
       </div>
 
-      <button
-        class="btn btn-sm btn-primary gap-1 shrink-0"
+      <Button
+        size="sm"
+        class="gap-1 shrink-0"
         onclick={goNext}
         disabled={clampedStepIndex >= totalSteps - 1}
         title="Next step (→)"
       >
         Next
         <ChevronRight size={16} aria-hidden="true" />
-      </button>
+      </Button>
     </div>
 
     <!-- Step details. Collapsible: the summary and Q&A threads are the only thing
@@ -554,9 +563,9 @@
             {#if activeStep && onAskAgentStep}
               <div class="flex flex-col gap-2">
                 {#each activeStepThreads as thread}
-                  <div class="px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md text-[0.8rem]">
+                  <Panel class="border-l-4 border-l-info text-[0.8rem]">
                     <div class="flex items-center gap-2 mb-1">
-                      <span class="badge badge-info badge-sm">Ask the AI</span>
+                      <Badge variant="info">Ask the AI</Badge>
                       {#if thread.status === 'pending'}
                         <span class="loading loading-spinner loading-xs"></span>
                         <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
@@ -565,48 +574,55 @@
                         <span class="text-error text-[0.7rem]">failed — send again</span>
                       {/if}
                     </div>
-                    {#each thread.messages as m}
+                    {#each thread.messages as message}
                       <div class="mb-1">
-                        <span class="text-base-content/50 text-[0.7rem] mr-1 {m.role === 'user' ? 'font-semibold' : ''}">{m.role === 'ai' ? 'AI author' : 'You'}</span>
-                        <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={m.body} {onOpenUrl} /></span>
+                        <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'user' ? 'font-semibold' : ''}">{message.role === 'ai' ? 'AI author' : 'You'}</span>
+                        <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
                       </div>
                     {/each}
                     {#if thread.status === 'answered'}
-                      <div class="flex gap-2 mt-1">
-                        <input
-                          class="input input-bordered input-xs flex-1"
-                          aria-label="Reply to the AI author"
-                          placeholder="Reply…"
-                          value={stepReplyDrafts[thread.id] ?? ''}
-                          oninput={(e: Event) => {
-                            if (!(e.currentTarget instanceof HTMLInputElement)) return
-                            stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: e.currentTarget.value }
-                          }}
-                          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); submitStepReply(thread.id) } }}
-                        />
-                        <button type="button" class="btn btn-xs btn-primary" onclick={() => submitStepReply(thread.id)}>Reply</button>
+                      <div class="mt-1 flex items-end gap-2">
+                        <div class="min-w-0 flex-1">
+                          <TextField
+                            label="Reply to the AI author"
+                            placeholder="Reply…"
+                            value={stepReplyDrafts[thread.id] ?? ''}
+                            onValueChange={(value) => {
+                              stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: value }
+                            }}
+                            onkeydown={(event: KeyboardEvent) => {
+                              if (event.key === 'Enter') { event.preventDefault(); submitStepReply(thread.id) }
+                            }}
+                          />
+                        </div>
+                        <Button type="button" size="xs" onclick={() => submitStepReply(thread.id)}>Reply</Button>
                       </div>
                     {/if}
-                  </div>
+                  </Panel>
                 {/each}
 
                 {#if stepQuestionOpen}
                   <div>
-                    <textarea
-                      class="textarea textarea-bordered w-full min-h-[44px] text-[0.8rem] resize-y"
-                      aria-label="Ask the AI author about this step"
+                    <Textarea
+                      label="Ask the AI author about this step"
                       placeholder="Ask the AI author about this step… (Cmd/Ctrl+Enter to send)"
-                      rows="2"
+                      rows={2}
+                      class="min-h-[44px] w-full resize-y text-[0.8rem]"
                       bind:value={stepQuestionText}
-                      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitStepQuestion() } }}
-                    ></textarea>
+                      onkeydown={(event: KeyboardEvent) => {
+                        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                          event.preventDefault()
+                          submitStepQuestion()
+                        }
+                      }}
+                    />
                     <div class="flex justify-end gap-2 mt-1">
-                      <button type="button" class="btn btn-xs btn-ghost" onclick={() => { stepQuestionOpen = false; stepQuestionText = '' }}>Cancel</button>
-                      <button type="button" class="btn btn-xs btn-primary" onclick={submitStepQuestion}>Ask</button>
+                      <Button type="button" variant="ghost" size="xs" onclick={() => { stepQuestionOpen = false; stepQuestionText = '' }}>Cancel</Button>
+                      <Button type="button" size="xs" onclick={submitStepQuestion}>Ask</Button>
                     </div>
                   </div>
                 {:else}
-                  <button type="button" class="btn btn-ghost btn-xs text-info self-start" onclick={() => { stepQuestionOpen = true }}>+ Ask about this step</button>
+                  <Button type="button" variant="ghost" size="xs" class="self-start text-info" onclick={() => { stepQuestionOpen = true }}>+ Ask about this step</Button>
                 {/if}
               </div>
             {/if}
@@ -616,20 +632,24 @@
 
       <div class="flex items-center gap-0.5 shrink-0">
         {#if !stale}
-          <button
-            class="btn btn-ghost btn-xs btn-square text-base-content/40"
+          <IconButton
+            variant="ghost"
+            size="xs"
+            class="text-base-content/40"
             onclick={handleRegenerate}
             title="Regenerate walkthrough"
-            aria-label="Regenerate walkthrough"
+            label="Regenerate walkthrough"
           >
             <RefreshCw size={14} aria-hidden="true" />
-          </button>
+          </IconButton>
         {/if}
-        <button
-          class="btn btn-ghost btn-xs btn-square text-base-content/50"
+        <IconButton
+          variant="ghost"
+          size="xs"
+          class="text-base-content/50"
           onclick={toggleStepDetails}
           title={stepDetailsExpanded ? 'Collapse step details' : 'Expand step details'}
-          aria-label={stepDetailsExpanded ? 'Collapse step details' : 'Expand step details'}
+          label={stepDetailsExpanded ? 'Collapse step details' : 'Expand step details'}
           aria-expanded={stepDetailsExpanded}
         >
           {#if stepDetailsExpanded}
@@ -637,7 +657,7 @@
           {:else}
             <ChevronDown size={14} aria-hidden="true" />
           {/if}
-        </button>
+        </IconButton>
       </div>
     </div>
 

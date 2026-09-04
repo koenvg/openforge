@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { EMPTY_JIRA_CONFIG, type JiraConfig } from '../lib/jiraStore'
 
   /**
@@ -103,83 +105,72 @@
     </p>
   </div>
 
-  <label class="form-control">
-    <span class="label-text text-xs text-base-content/60">Site URL</span>
-    <input
-      class="input input-bordered input-sm"
-      aria-label="Jira site URL"
-      placeholder="https://your-org.atlassian.net"
-      bind:value={config.baseUrl}
-    />
-  </label>
+  <TextField
+    label="Site URL"
+    aria-label="Jira site URL"
+    placeholder="https://your-org.atlassian.net"
+    bind:value={config.baseUrl}
+  />
 
-  <label class="form-control">
-    <span class="label-text text-xs text-base-content/60">Email</span>
-    <input
-      class="input input-bordered input-sm"
-      aria-label="Jira account email"
-      placeholder="you@example.com"
-      bind:value={config.email}
-    />
-  </label>
+  <TextField
+    label="Email"
+    aria-label="Jira account email"
+    placeholder="you@example.com"
+    bind:value={config.email}
+  />
 
-  <label class="form-control">
-    <span class="label-text text-xs text-base-content/60">API token</span>
-    <input
-      type="password"
-      class="input input-bordered input-sm"
-      aria-label="Jira API token"
-      placeholder={tokenConfigured ? 'Leave blank to keep the stored token' : 'Paste your API token'}
-      bind:value={tokenDraft}
-    />
-    {#if tokenConfigured}
-      <span class="label-text-alt text-xs text-base-content/50 mt-1">
-        A token is stored in your keychain.
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs text-error"
-          disabled={isSaving}
-          onclick={() => void save({ clearToken: true })}
-        >Clear token</button>
-      </span>
-    {/if}
-  </label>
+  <TextField
+    label="API token"
+    type="password"
+    aria-label="Jira API token"
+    placeholder={tokenConfigured ? 'Leave blank to keep the stored token' : 'Paste your API token'}
+    bind:value={tokenDraft}
+  />
+  {#if tokenConfigured}
+    <div class="flex items-center gap-2 text-xs text-base-content/50">
+      <span>A token is stored in your keychain.</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        class="text-error"
+        disabled={isSaving}
+        onclick={() => void save({ clearToken: true })}
+      >Clear token</Button>
+    </div>
+  {/if}
 
-  <label class="form-control">
-    <span class="label-text text-xs text-base-content/60">Acceptance criteria field (optional)</span>
-    <input
-      class="input input-bordered input-sm font-mono"
-      aria-label="Acceptance criteria field id"
-      placeholder="customfield_12100"
-      bind:value={config.acFieldId}
-    />
-    <span class="label-text-alt text-xs text-base-content/50 mt-1">
-      The custom field holding acceptance criteria. When set, it is the list the review is judged
-      against. Leave blank to read them from an "Acceptance Criteria" section in the description.
-    </span>
-  </label>
+  <TextField
+    label="Acceptance criteria field (optional)"
+    aria-label="Acceptance criteria field id"
+    placeholder="customfield_12100"
+    class="font-mono"
+    helperText={'The custom field holding acceptance criteria. When set, it is the list the review is judged against. Leave blank to read them from an "Acceptance Criteria" section in the description.'}
+    bind:value={config.acFieldId}
+  />
 
-  <label class="form-control">
-    <span class="label-text text-xs text-base-content/60">Project keys (optional)</span>
-    <input
-      class="input input-bordered input-sm font-mono"
-      aria-label="Jira project keys"
-      placeholder="AVIV,KVG"
-      bind:value={config.projectKeys}
-    />
-    <span class="label-text-alt text-xs text-base-content/50 mt-1">
-      Comma-separated. Without these, a title mentioning something like UTF-8 can be mistaken for a
-      ticket key.
-    </span>
-  </label>
+  <TextField
+    label="Project keys (optional)"
+    aria-label="Jira project keys"
+    placeholder="AVIV,KVG"
+    class="font-mono"
+    helperText="Comma-separated. Without these, a title mentioning something like UTF-8 can be mistaken for a ticket key."
+    bind:value={config.projectKeys}
+  />
 
   <div class="flex items-center gap-2">
-    <button type="button" class="btn btn-sm btn-primary" disabled={isSaving} onclick={() => void save()}>
+    <Button type="button" size="sm" disabled={isSaving} onclick={() => void save()}>
       Save
-    </button>
-    <button type="button" class="btn btn-sm" disabled={isTesting} onclick={() => void testConnection()}>
+    </Button>
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      disabled={isTesting}
+      onclick={() => void testConnection()}
+    >
       Test connection
-    </button>
+    </Button>
     {#if status}
       <span class="text-xs {status.kind === 'ok' ? 'text-success' : 'text-error'}">{status.message}</span>
     {/if}

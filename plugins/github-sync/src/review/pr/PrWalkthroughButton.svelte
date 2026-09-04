@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { WalkthroughButtonState } from '../../lib/walkthroughButtonState'
 
   interface Props {
@@ -20,10 +22,7 @@
 </script>
 
 {#if state === 'ready'}
-  <span class="inline-flex items-center gap-1 text-xs text-success" aria-label="Walkthrough ready">
-    <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
-    Walkthrough ready
-  </span>
+  <Badge variant="success" aria-label="Walkthrough ready">Walkthrough ready</Badge>
 {:else if state === 'generating'}
   <span class="inline-flex items-center gap-1">
     <span class="inline-flex items-center gap-1 text-xs text-base-content/60" aria-label="Generating walkthrough">
@@ -31,23 +30,26 @@
       Generating…
     </span>
     {#if onStop}
-      <button
+      <Button
         type="button"
-        class="btn btn-xs btn-ghost text-error"
+        variant="ghost"
+        size="xs"
+        class="text-error"
         aria-label="Stop walkthrough generation"
-        onclick={(e) => { e.stopPropagation(); onStop?.() }}
+        onclick={(event) => { event.stopPropagation(); onStop?.() }}
       >
         Stop
-      </button>
+      </Button>
     {/if}
   </span>
 {:else}
-  <button
+  <Button
     type="button"
-    class="btn btn-xs btn-outline"
+    variant="outline"
+    size="xs"
     aria-label="Generate walkthrough and AI review"
-    onclick={(e) => { e.stopPropagation(); onGenerate() }}
+    onclick={(event) => { event.stopPropagation(); onGenerate() }}
   >
     {IDLE_LABELS[state]}
-  </button>
+  </Button>
 {/if}

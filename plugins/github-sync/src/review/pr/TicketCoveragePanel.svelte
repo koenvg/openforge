@@ -1,5 +1,9 @@
 <script lang="ts">
   import { Check, Plus } from '@lucide/svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { criterionFinding, outOfScopeFinding, STATUS_LABELS } from '../../lib/ticketCoverage'
   import type {
@@ -61,18 +65,20 @@
     unassessable: 'Unassessable',
   }
 
-  const VERDICT_CLASSES: Record<TicketCoverageVerdict, string> = {
-    complete: 'badge-success',
-    partial: 'badge-warning',
-    missing: 'badge-error',
-    unassessable: 'badge-ghost',
+  type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger'
+
+  const VERDICT_VARIANTS: Record<TicketCoverageVerdict, BadgeVariant> = {
+    complete: 'success',
+    partial: 'warning',
+    missing: 'danger',
+    unassessable: 'neutral',
   }
 
-  const STATUS_CLASSES: Record<CriterionStatus, string> = {
-    covered: 'badge-success',
-    partial: 'badge-warning',
-    missing: 'badge-error',
-    unclear: 'badge-ghost',
+  const STATUS_VARIANTS: Record<CriterionStatus, BadgeVariant> = {
+    covered: 'success',
+    partial: 'warning',
+    missing: 'danger',
+    unclear: 'neutral',
   }
 </script>
 
@@ -83,27 +89,31 @@
       Jira, then regenerate this walkthrough to compare the changes against their ticket.
     </div>
   {:else if !snapshot}
-    <div class="flex items-center justify-between gap-3 px-3 py-2 bg-base-200 rounded-md text-xs">
-      <span class="text-base-content/70">
-        This walkthrough was generated before Jira was connected, so no ticket was looked up.
-      </span>
-      <button type="button" class="btn btn-xs" onclick={onRegenerate}>Regenerate</button>
-    </div>
+    <Panel variant="subtle">
+      <div class="flex items-center justify-between gap-3 text-xs">
+        <span class="text-base-content/70">
+          This walkthrough was generated before Jira was connected, so no ticket was looked up.
+        </span>
+        <Button type="button" variant="secondary" size="xs" onclick={onRegenerate}>Regenerate</Button>
+      </div>
+    </Panel>
   {:else}
     {#if ticket}
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-2 flex-wrap">
-          <button
+          <Button
             type="button"
-            class="badge badge-outline font-mono"
+            variant="outline"
+            size="xs"
+            class="font-mono"
             onclick={() => void onOpenUrl(ticket.url)}
             title="Open in Jira"
-          >{ticket.issue_key}</button>
+          >{ticket.issue_key}</Button>
           {#if ticket.issue_type}
             <span class="text-[0.7rem] uppercase tracking-wider text-base-content/50">{ticket.issue_type}</span>
           {/if}
           {#if ticket.status}
-            <span class="badge badge-sm badge-ghost">{ticket.status}</span>
+            <Badge>{ticket.status}</Badge>
           {/if}
         </div>
         <h4 class="text-sm font-semibold text-base-content m-0">{ticket.summary}</h4>
@@ -111,16 +121,20 @@
     {/if}
 
     {#if snapshot.error}
-      <div class="flex items-center justify-between gap-3 px-3 py-2 bg-error/10 border border-error/30 rounded-md text-xs">
-        <span class="text-base-content/80">{snapshot.error}</span>
-        <button type="button" class="btn btn-xs btn-error" onclick={onRegenerate}>Retry</button>
-      </div>
+      <Panel variant="subtle">
+        <div class="flex items-center justify-between gap-3 text-xs text-error">
+          <span>{snapshot.error}</span>
+          <Button type="button" variant="danger" size="xs" onclick={onRegenerate}>Retry</Button>
+        </div>
+      </Panel>
     {/if}
 
     {#if coverage}
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-2">
-          <span class="badge {VERDICT_CLASSES[coverage.verdict]}">{VERDICT_LABELS[coverage.verdict]}</span>
+          <Badge variant={VERDICT_VARIANTS[coverage.verdict]}>
+            {VERDICT_LABELS[coverage.verdict]}
+          </Badge>
           <span class="text-[0.7rem] uppercase tracking-wider text-base-content/50">
             {coverage.criteria.length} criteria
           </span>
@@ -134,13 +148,15 @@
         {#each coverage.criteria as criterion (criterion.id)}
           <li class="flex flex-col gap-1.5 px-3 py-2 bg-base-100 border border-base-300 rounded-md">
             <div class="flex items-start gap-2">
-              <span class="badge badge-sm {STATUS_CLASSES[criterion.status]} shrink-0 mt-0.5">
+              <Badge variant={STATUS_VARIANTS[criterion.status]} class="mt-0.5 shrink-0">
                 {STATUS_LABELS[criterion.status]}
-              </span>
+              </Badge>
               <span class="text-sm text-base-content leading-snug flex-1">{criterion.text}</span>
-              <button
+              <Button
                 type="button"
-                class="btn btn-ghost btn-xs gap-1 shrink-0 {includedFindingIds.has(criterion.id) ? 'text-success' : 'text-base-content/50'}"
+                variant="ghost"
+                size="xs"
+                class="gap-1 shrink-0 {includedFindingIds.has(criterion.id) ? 'text-success' : 'text-base-content/50'}"
                 onclick={() => onToggleFinding(criterionFinding(criterion))}
                 title={includedFindingIds.has(criterion.id) ? 'Remove from review' : 'Add to review'}
                 aria-pressed={includedFindingIds.has(criterion.id)}
@@ -150,7 +166,7 @@
                 {:else}
                   <Plus size={12} aria-hidden="true" /> Add to review
                 {/if}
-              </button>
+              </Button>
             </div>
             {#if criterion.notes}
               <p class="text-xs text-base-content/70 m-0 pl-1">{criterion.notes}</p>
@@ -158,9 +174,9 @@
             {#if criterion.evidence.length > 0}
               <div class="flex flex-wrap gap-1.5 pl-1">
                 {#each criterion.evidence as evidence}
-                  <span class="badge badge-sm badge-ghost font-mono text-[0.7rem]" title={evidence.note ?? ''}>
+                  <Badge class="font-mono text-[0.7rem]" title={evidence.note ?? ''}>
                     {evidence.filename}
-                  </span>
+                  </Badge>
                 {/each}
               </div>
             {/if}
@@ -178,9 +194,11 @@
               <li class="flex flex-col gap-1 px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md">
                 <div class="flex items-start gap-2">
                   <span class="text-sm text-base-content leading-snug flex-1">{change.description}</span>
-                  <button
+                  <Button
                     type="button"
-                    class="btn btn-ghost btn-xs gap-1 shrink-0 {includedFindingIds.has(`oos-${index}`) ? 'text-success' : 'text-base-content/50'}"
+                    variant="ghost"
+                    size="xs"
+                    class="gap-1 shrink-0 {includedFindingIds.has(`oos-${index}`) ? 'text-success' : 'text-base-content/50'}"
                     onclick={() => onToggleFinding(outOfScopeFinding(change, index))}
                     title={includedFindingIds.has(`oos-${index}`) ? 'Remove from review' : 'Add to review'}
                     aria-pressed={includedFindingIds.has(`oos-${index}`)}
@@ -190,12 +208,12 @@
                     {:else}
                       <Plus size={12} aria-hidden="true" /> Add to review
                     {/if}
-                  </button>
+                  </Button>
                 </div>
                 {#if change.files.length > 0}
                   <div class="flex flex-wrap gap-1.5">
                     {#each change.files as filename}
-                      <span class="badge badge-sm badge-ghost font-mono text-[0.7rem]">{filename}</span>
+                      <Badge class="font-mono text-[0.7rem]">{filename}</Badge>
                     {/each}
                   </div>
                 {/if}
@@ -205,12 +223,14 @@
         </div>
       {/if}
     {:else if ticket}
-      <div class="flex items-center justify-between gap-3 px-3 py-2 bg-base-200 rounded-md text-xs">
-        <span class="text-base-content/70">
-          The agent did not return a usable coverage assessment for this ticket.
-        </span>
-        <button type="button" class="btn btn-xs" onclick={onRegenerate}>Regenerate</button>
-      </div>
+      <Panel variant="subtle">
+        <div class="flex items-center justify-between gap-3 text-xs">
+          <span class="text-base-content/70">
+            The agent did not return a usable coverage assessment for this ticket.
+          </span>
+          <Button type="button" variant="secondary" size="xs" onclick={onRegenerate}>Regenerate</Button>
+        </div>
+      </Panel>
     {:else if !snapshot.error}
       <div class="text-sm text-base-content/70">
         No Jira ticket could be found for this pull request. Set one below to compare the changes
@@ -223,9 +243,11 @@
         <h5 class="text-xs font-semibold uppercase tracking-wider text-base-content/50 m-0">
           Acceptance criteria (from the ticket)
         </h5>
-        <div class="px-3 py-2 bg-base-100 border border-base-300 rounded-md text-sm">
-          <MarkdownContent content={ticket.acceptance_criteria} {onOpenUrl} />
-        </div>
+        <Panel>
+          <div class="text-sm">
+            <MarkdownContent content={ticket.acceptance_criteria} {onOpenUrl} />
+          </div>
+        </Panel>
       </div>
     {/if}
 
@@ -241,19 +263,18 @@
     {/if}
 
     <div class="flex items-end gap-2 pt-2 border-t border-base-300">
-      <label class="form-control flex-1 max-w-xs">
-        <span class="label-text text-xs text-base-content/60">Jira ticket key</span>
-        <input
-          class="input input-bordered input-sm font-mono"
-          aria-label="Jira ticket key"
+      <div class="max-w-xs flex-1">
+        <TextField
+          label="Jira ticket key"
           placeholder="AVIV-304"
+          class="font-mono"
           bind:value={issueKeyDraft}
           onkeydown={(event: KeyboardEvent) => {
             if (event.key === 'Enter') { event.preventDefault(); submitIssueKey() }
           }}
         />
-      </label>
-      <button type="button" class="btn btn-sm" onclick={submitIssueKey}>Set ticket</button>
+      </div>
+      <Button type="button" variant="secondary" size="sm" onclick={submitIssueKey}>Set ticket</Button>
     </div>
   {/if}
 </div>

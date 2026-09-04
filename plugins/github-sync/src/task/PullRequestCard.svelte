@@ -2,6 +2,7 @@
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
   import { getPrStatusChips, getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { collapsedSections, isSectionCollapsed, toggleSection } from '@openforge-app/plugin-sdk/collapsibleSectionState'
@@ -99,19 +100,29 @@
         <span class="text-sm font-medium truncate" title={pr.title}>{pr.title}</span>
       </button>
     </h4>
-    <span class="badge badge-xs shrink-0 capitalize {pr.state === 'open' ? 'badge-success badge-outline' : 'badge-ghost'}">{displayState(pr)}</span>
+    <Badge
+      variant={pr.state === 'open' ? 'success' : 'neutral'}
+      class="shrink-0 capitalize"
+    >{displayState(pr)}</Badge>
   </div>
 
   {#if !collapsed}
     <div id={bodyId}>
       <div class="flex flex-col gap-1 px-2.5 pb-2.5">
         <span class="text-[0.7rem] text-base-content/55">{pr.repo_owner}/{pr.repo_name}</span>
-        <button class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline text-[0.7rem] break-all text-left justify-start w-fit" onclick={() => onOpenUrl(pr.url)}>{pr.url}</button>
+        <Button
+          variant="ghost"
+          size="xs"
+          class="h-auto min-h-0 w-fit justify-start break-all p-0 text-left text-[0.7rem] text-primary hover:underline"
+          onclick={() => onOpenUrl(pr.url)}
+        >{pr.url}</Button>
       </div>
 
       <div class="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5" aria-label="Pull request signals">
         {#each chips as chip (`${pr.id}-${chip.type}-${chip.label}`)}<PrStatusChip {chip} />{/each}
-        {#if pr.unaddressed_comment_count > 0}<span class="badge badge-ghost badge-sm">{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</span>{/if}
+        {#if pr.unaddressed_comment_count > 0}
+          <Badge>{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</Badge>
+        {/if}
       </div>
 
       {#if checkSummary.visible.length > 0 || checkSummary.passingCount > 0}
@@ -159,7 +170,13 @@
             <article class="rounded-md border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}>
               <div class="flex items-start justify-between gap-2">
                 <span class="min-w-0 break-all text-[0.65rem] font-semibold text-base-content/60" title={comment.file_path ?? undefined}>{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
-                <button type="button" class="btn btn-ghost btn-xs shrink-0 whitespace-nowrap text-success" onclick={() => void onMarkAddressed(comment.id)}>✓ Mark addressed</button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  class="shrink-0 whitespace-nowrap text-success"
+                  onclick={() => void onMarkAddressed(comment.id)}
+                >✓ Mark addressed</Button>
               </div>
               <div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {resolveRemoteMedia} {onOpenUrl} /></div>
             </article>

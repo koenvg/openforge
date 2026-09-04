@@ -62,4 +62,18 @@ describe('plugin-sdk Tabs', () => {
     await fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
     expect(onValueChange).not.toHaveBeenCalled()
   })
+
+  it('fills a bounded work area when requested', async () => {
+    render(TabsTestWrapper, { props: { fill: true } })
+    await tick()
+
+    const tabList = screen.getByRole('tablist', { name: 'Project sections' })
+    const tabsRoot = tabList.parentElement
+    const activePanel = screen.getByRole('tabpanel', { name: 'Overview' })
+
+    expect(tabsRoot).not.toBeNull()
+    expect(tabsRoot?.classList.contains('of-tabs-root')).toBe(true)
+    expect(tabsRoot?.parentElement?.hasAttribute('data-fill')).toBe(true)
+    expect(activePanel.classList.contains('of-tabs-content')).toBe(true)
+  })
 })

@@ -7,6 +7,9 @@
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Tabs from '@openforge-app/plugin-sdk/ui/Tabs.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
@@ -162,148 +165,84 @@
   // tab badge and the Walkthrough tab keep the full changed-file list.
   let visibleFiles = $derived(filterApplicationFiles(files, includeNonApplicationFiles))
   let nonApplicationFileCount = $derived(countNonApplicationFiles(files))
+  let detailTabs = $derived([
+    { value: 'overview', label: 'Overview' },
+    { value: 'files', label: `Files changed ${files.length}` },
+    ...(walkthroughReady ? [{ value: 'walkthrough', label: 'Walkthrough' }] : []),
+  ])
+
+  function changeActiveTab(value: string): void {
+    if (value === 'overview' || value === 'files' || value === 'walkthrough') {
+      onActiveTabChange(value)
+    }
+  }
 
   function handleFileSelect(filename: string) {
     diffViewer?.scrollToFile(filename)
   }
 </script>
 
-<div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 bg-base-200 shrink-0">
+<div class="flex h-full min-h-0 flex-col overflow-hidden">
+  <div class="flex flex-col gap-1.5 border-b border-base-300 bg-base-200 px-4 py-2.5 shrink-0">
     <div class="flex items-center gap-2 min-w-0">
-      <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={onBackToList}>← Back</button>
-      <span class="badge badge-primary badge-sm shrink-0">{pr.repo_owner}/{pr.repo_name}</span>
+      <Button variant="ghost" size="xs" class="shrink-0 text-base-content/50" onclick={onBackToList}>← Back</Button>
+      <Badge variant="info" class="shrink-0">{pr.repo_owner}/{pr.repo_name}</Badge>
       <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{pr.title}</h2>
-      <span
-        class="text-xs text-primary font-medium cursor-pointer hover:opacity-80 hover:underline shrink-0"
-        role="link"
-        tabindex="0"
-        onclick={onOpenPrOnGitHub}
-        onkeydown={(event: KeyboardEvent) => event.key === 'Enter' && onOpenPrOnGitHub()}
-      >GitHub ↗</span>
-    </div>
-    <div class="flex items-center">
-      <div class="flex gap-1" role="tablist" aria-label="Pull request detail sections">
-        <button
-          role="tab"
-          aria-selected={activeTab === 'overview'}
-          class="btn btn-ghost btn-xs {activeTab === 'overview' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-          onclick={() => onActiveTabChange('overview')}
-        >Overview</button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'files'}
-          class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-          onclick={() => onActiveTabChange('files')}
-        >Files changed <span class="badge badge-xs ml-1">{files.length}</span></button>
-        {#if walkthroughReady}
-          <button
-            class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-            onclick={() => onActiveTabChange('walkthrough')}
-            title="AI walkthrough"
-          >
-            Walkthrough
-          </button>
-        {/if}
-      </div>
-      <span class="flex-1"></span>
       {#if aiThreadsPendingCount > 0}
-        <button
-          type="button"
-          class="btn btn-xs btn-primary mr-2"
+        <Button
+          size="xs"
+          class="mr-2"
           onclick={() => onSendQuestionsToAgent?.()}
           title="Send your unanswered questions to the AI author (stays local, never posted to GitHub)"
         >
           Send {aiThreadsPendingCount} question{aiThreadsPendingCount === 1 ? '' : 's'} to AI
-        </button>
+        </Button>
       {/if}
-      <div class="flex items-center gap-2 text-xs text-base-content/50">
-        <span class="font-semibold text-base-content">#{pr.number}</span>
-        <span class="text-base-300">•</span>
-        <span class="font-medium">{pr.user_login}</span>
-        <span class="text-base-300">•</span>
-        <span>{timeAgoFromSeconds(pr.created_at)}</span>
-      </div>
+      <Button
+        variant="ghost"
+        size="xs"
+        class="shrink-0 text-primary"
+        role="link"
+        onclick={onOpenPrOnGitHub}
+      >GitHub ↗</Button>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-base-content/50">
+      <span class="font-semibold text-base-content">#{pr.number}</span>
+      <span class="text-base-300">•</span>
+      <span class="font-medium">{pr.user_login}</span>
+      <span class="text-base-300">•</span>
+      <span>{timeAgoFromSeconds(pr.created_at)}</span>
     </div>
   </div>
 
-  {#if activeTab === 'overview'}
-    <PrOverviewTab
-      {pr}
-      comments={overviewComments}
-      onCommentsChange={onOverviewCommentsChange}
-      loadComments={loadOverviewComments}
-      {resolveRemoteMedia}
-      {onOpenUrl}
-    />
-  {:else if activeTab === 'walkthrough'}
-    <WalkthroughTab
-      {api}
-      {githubSync}
-      {pr}
-      {files}
-      {fetchFileContents}
-      {resolveRepositoryImage}
-      projectId={activeProjectId}
-      existingComments={reviewComments}
-      agentComments={agentReviewComments}
-      pendingComments={pendingManualComments}
-      onPendingCommentsChange={onPendingCommentsChange}
-      onAgentCommentsChange={onAgentCommentsChange}
-      onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
-      {onOpenUrl}
-      aiThreads={aiThreads}
-      onAskAgent={onAskAgent}
-      onCommentNow={onCommentNow}
-      onReplyToThread={onReplyToThread}
-      onAskAboutComment={onAskAboutComment}
-      onReplyToExistingComment={onReplyToExistingComment}
-      pendingReplies={pendingReplies}
-      onAddReplyToReview={onAddReplyToReview}
-      onRemovePendingReply={onRemovePendingReply}
-      onAskAgentStep={onAskAgentStep}
-      onSubmitReview={onSubmitReview}
-    />
-  {:else}
-    <div class="flex flex-1 min-h-0 overflow-hidden">
-      {#if isLoading}
-        <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
-          <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
-          <span>Loading diffs...</span>
-        </div>
-      {:else if error}
-        <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert" aria-live="assertive">
-          <span class="text-5xl" aria-hidden="true">⚠</span>
-          <span>{error}</span>
-        </div>
-      {:else}
-        {#if fileTreeVisible}
-          <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
-            <FileTree
-              bind:this={prFileTree}
-              files={visibleFiles}
-              onSelectFile={handleFileSelect}
-              {reviewedFileShas}
-              getFileReviewIdentity={getReviewFileIdentity}
-              onToggleFileReviewed={onToggleFileReviewed}
-              onRequestFocusDiff={() => diffViewer?.focusDiff()}
-              {includeNonApplicationFiles}
-              {nonApplicationFileCount}
-              {onToggleNonApplicationFiles}
-            />
-          </ResizablePanel>
-        {/if}
-        <DiffViewer
-          bind:this={diffViewer}
-          files={visibleFiles}
-          existingComments={reviewComments}
-          repoOwner={pr.repo_owner}
-          repoName={pr.repo_name}
-          headSha={pr.head_sha}
-          {fileTreeVisible}
-          onToggleFileTree={onToggleFileTree}
+  <Tabs
+    label="Pull request detail sections"
+    tabs={detailTabs}
+    value={activeTab}
+    onValueChange={changeActiveTab}
+    fill
+  >
+    {#snippet children(tab)}
+      {#if tab === activeTab}
+      {#if tab === 'overview'}
+        <PrOverviewTab
+          {pr}
+          comments={overviewComments}
+          onCommentsChange={onOverviewCommentsChange}
+          loadComments={loadOverviewComments}
+          {resolveRemoteMedia}
+          {onOpenUrl}
+        />
+      {:else if tab === 'walkthrough'}
+        <WalkthroughTab
+          {api}
+          {githubSync}
+          {pr}
+          {files}
           {fetchFileContents}
           {resolveRepositoryImage}
+          projectId={activeProjectId}
+          existingComments={reviewComments}
           agentComments={agentReviewComments}
           pendingComments={pendingManualComments}
           onPendingCommentsChange={onPendingCommentsChange}
@@ -319,27 +258,88 @@
           pendingReplies={pendingReplies}
           onAddReplyToReview={onAddReplyToReview}
           onRemovePendingReply={onRemovePendingReply}
-          {reviewedFileShas}
-          onToggleFileReviewed={onToggleFileReviewed}
-          getFileReviewIdentity={getReviewFileIdentity}
-          onRequestFocusFileTree={() => prFileTree?.focusTree()}
-        >
-          {#snippet footer()}
-            <ReviewSubmitPanel
+          onAskAgentStep={onAskAgentStep}
+          onSubmitReview={onSubmitReview}
+        />
+      {:else}
+        <div class="flex h-full min-h-0 overflow-hidden">
+          {#if isLoading}
+            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
+              <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+              <span>Loading diffs...</span>
+            </div>
+          {:else if error}
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert" aria-live="assertive">
+              <span class="text-5xl" aria-hidden="true">⚠</span>
+              <span>{error}</span>
+            </div>
+          {:else}
+            {#if fileTreeVisible}
+              <ResizablePanel storageKey="pr-review-file-tree" defaultWidth={260} minWidth={160} maxWidth={500} side="left">
+                <FileTree
+                  bind:this={prFileTree}
+                  files={visibleFiles}
+                  onSelectFile={handleFileSelect}
+                  {reviewedFileShas}
+                  getFileReviewIdentity={getReviewFileIdentity}
+                  onToggleFileReviewed={onToggleFileReviewed}
+                  onRequestFocusDiff={() => diffViewer?.focusDiff()}
+                  {includeNonApplicationFiles}
+                  {nonApplicationFileCount}
+                  {onToggleNonApplicationFiles}
+                />
+              </ResizablePanel>
+            {/if}
+            <DiffViewer
+              bind:this={diffViewer}
+              files={visibleFiles}
+              existingComments={reviewComments}
               repoOwner={pr.repo_owner}
               repoName={pr.repo_name}
-              prNumber={pr.number}
-              commitId={pr.head_sha}
+              headSha={pr.head_sha}
+              {fileTreeVisible}
+              onToggleFileTree={onToggleFileTree}
+              {fetchFileContents}
+              {resolveRepositoryImage}
+              agentComments={agentReviewComments}
               pendingComments={pendingManualComments}
-              approvedAgentComments={approvedAgentSubmissionComments}
-              pendingReplyCount={pendingReplies.length}
               onPendingCommentsChange={onPendingCommentsChange}
-              onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
-              onSubmitReview={onSubmitReview}
-            />
-          {/snippet}
-        </DiffViewer>
+              onAgentCommentsChange={onAgentCommentsChange}
+              onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
+              {onOpenUrl}
+              aiThreads={aiThreads}
+              onAskAgent={onAskAgent}
+              onCommentNow={onCommentNow}
+              onReplyToThread={onReplyToThread}
+              onAskAboutComment={onAskAboutComment}
+              onReplyToExistingComment={onReplyToExistingComment}
+              pendingReplies={pendingReplies}
+              onAddReplyToReview={onAddReplyToReview}
+              onRemovePendingReply={onRemovePendingReply}
+              {reviewedFileShas}
+              onToggleFileReviewed={onToggleFileReviewed}
+              getFileReviewIdentity={getReviewFileIdentity}
+              onRequestFocusFileTree={() => prFileTree?.focusTree()}
+            >
+              {#snippet footer()}
+                <ReviewSubmitPanel
+                  repoOwner={pr.repo_owner}
+                  repoName={pr.repo_name}
+                  prNumber={pr.number}
+                  commitId={pr.head_sha}
+                  pendingComments={pendingManualComments}
+                  approvedAgentComments={approvedAgentSubmissionComments}
+                  pendingReplyCount={pendingReplies.length}
+                  onPendingCommentsChange={onPendingCommentsChange}
+                  onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
+                  onSubmitReview={onSubmitReview}
+                />
+              {/snippet}
+            </DiffViewer>
+          {/if}
+        </div>
       {/if}
-    </div>
-  {/if}
+      {/if}
+    {/snippet}
+  </Tabs>
 </div>
