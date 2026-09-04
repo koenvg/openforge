@@ -244,6 +244,40 @@ describe('createDiffViewerNavigation', () => {
     cleanup()
   })
 
+  it('retries until a late-rendering comment row appears after a tab switch', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    const container = document.createElement('div')
+    const fileElement = document.createElement('div')
+    fileElement.dataset.diffFile = 'src/main.ts'
+    container.append(fileElement)
+    const scrollToIndex = vi.fn()
+    const { navigation, cleanup } = createNavigation({
+      files: [makeFile('src/main.ts')],
+      scrollContainer: container,
+      scrollToIndex,
+    })
+
+    const navigationPromise = navigation.scrollToComment('src/main.ts', 12)
+    // Diff just mounted: the row for line 12 has not rendered yet.
+    await vi.advanceTimersByTimeAsync(0)
+
+    const annotationLine = document.createElement('tr')
+    annotationLine.dataset.line = '12-extend'
+    const scrollIntoView = vi.fn()
+    annotationLine.scrollIntoView = scrollIntoView
+    fileElement.append(annotationLine)
+
+    await vi.advanceTimersByTimeAsync(25)
+    await navigationPromise
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+    cleanup()
+  })
+
   it('focuses the scroll area and hands Shift+Tab back to the file tree', () => {
     const container = document.createElement('div')
     const focus = vi.spyOn(container, 'focus')
