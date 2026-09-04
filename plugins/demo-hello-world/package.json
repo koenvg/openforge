@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm --filter @openforge-app/plugin-sdk build && pnpm run build:bundle",
     "build:bundle": "vite build",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@openforge-app/plugin-sdk": "workspace:*"
