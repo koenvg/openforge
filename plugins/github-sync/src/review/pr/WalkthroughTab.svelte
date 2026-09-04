@@ -68,6 +68,8 @@
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
+    onEditThread?: (threadId: string, body: string) => void
+    onDeleteThread?: (threadId: string) => void
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -77,6 +79,8 @@
       comments: ReviewSubmissionComment[]
       commitId: string
     }) => Promise<void>
+    // Requests the walkthrough jump to the step with this id (set by the questions panel).
+    focusStepId?: string | null
   }
 
   let {
@@ -104,7 +108,10 @@
     onAddReplyToReview,
     onRemovePendingReply,
     onAskAgentStep,
+    onEditThread,
+    onDeleteThread,
     onSubmitReview,
+    focusStepId = null,
   }: Props = $props()
 
   // Approved AI review comments submit with the review directly (mirrors the Files
@@ -211,6 +218,38 @@
   let stepQuestionOpen = $state(false)
   let stepQuestionText = $state('')
   let stepReplyDrafts = $state<Record<string, string>>({})
+  let editingThreadId = $state<string | null>(null)
+  let editText = $state('')
+
+  // An unsent question or reply: the latest message is still the reviewer's and it
+  // hasn't been dispatched. These are the only threads that can be edited or deleted.
+  function isUnsentThread(thread: AiThread): boolean {
+    return thread.status !== 'pending' && thread.messages.at(-1)?.role === 'user'
+  }
+  // While a step has an unsent draft, "Ask about this step" hides so the reviewer
+  // refines that draft instead of stacking a second unsent question.
+  let hasUnsentStepDraft = $derived(activeStepThreads.some(isUnsentThread))
+
+  function startEditThread(thread: AiThread) {
+    editingThreadId = thread.id
+    editText = thread.messages.at(-1)?.body ?? ''
+  }
+  function saveEditThread() {
+    const id = editingThreadId
+    const text = editText.trim()
+    if (!id || !text) return
+    onEditThread?.(id, text)
+    editingThreadId = null
+    editText = ''
+  }
+  function cancelEditThread() {
+    editingThreadId = null
+    editText = ''
+  }
+  function handleDeleteThread(threadId: string) {
+    if (editingThreadId === threadId) cancelEditThread()
+    onDeleteThread?.(threadId)
+  }
 
   function submitStepQuestion() {
     const text = stepQuestionText.trim()
@@ -265,6 +304,22 @@
     activeStepIndex = 0
     activeStepFilename = null
     void initWalkthrough()
+  })
+
+  // When the questions panel asks to jump to a step-anchored thread, select that
+  // step. Applied once per distinct requested id, so manual Prev/Next navigation
+  // is never yanked back; a remount (leaving and re-entering the tab) re-applies
+  // it because this guard resets with the component.
+  let lastFocusedStepId: string | null = null
+  $effect(() => {
+    const id = focusStepId
+    const steps = parsedSteps
+    if (!id || !steps || id === lastFocusedStepId) return
+    const conceptIndex = steps.findIndex(s => s.id === id)
+    if (conceptIndex === -1) return
+    lastFocusedStepId = id
+    // Step entries are [ticket, ...concepts, submit]; the ticket occupies index 0.
+    activeStepIndex = clampStepIndex(conceptIndex + 1, totalSteps)
   })
 
   // Generation is now triggered explicitly from the PR card (see PrReviewView /
@@ -574,34 +629,64 @@
                         <span class="text-error text-[0.7rem]">failed — send again</span>
                       {/if}
                     </div>
-                    {#each thread.messages as message}
-                      <div class="mb-1">
-                        <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'user' ? 'font-semibold' : ''}">{message.role === 'ai' ? 'AI author' : 'You'}</span>
-                        <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
+                    {#if editingThreadId === thread.id}
+                      <Textarea
+                        label="Edit your question"
+                        rows={2}
+                        class="min-h-[44px] w-full resize-y text-[0.8rem]"
+                        bind:value={editText}
+                        onkeydown={(event: KeyboardEvent) => {
+                          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                            event.preventDefault()
+                            saveEditThread()
+                          }
+                        }}
+                      />
+                      <div class="flex justify-end gap-2 mt-1">
+                        <Button type="button" variant="ghost" size="xs" onclick={cancelEditThread}>Cancel</Button>
+                        <Button type="button" size="xs" onclick={saveEditThread}>Save</Button>
                       </div>
-                    {/each}
-                    {#if thread.status === 'answered'}
-                      <div class="mt-1 flex items-end gap-2">
-                        <div class="min-w-0 flex-1">
-                          <TextField
-                            label="Reply to the AI author"
-                            placeholder="Reply…"
-                            value={stepReplyDrafts[thread.id] ?? ''}
-                            onValueChange={(value) => {
-                              stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: value }
-                            }}
-                            onkeydown={(event: KeyboardEvent) => {
-                              if (event.key === 'Enter') { event.preventDefault(); submitStepReply(thread.id) }
-                            }}
-                          />
+                    {:else}
+                      {#each thread.messages as message}
+                        <div class="mb-1">
+                          <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'user' ? 'font-semibold' : ''}">{message.role === 'ai' ? 'AI author' : 'You'}</span>
+                          <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
                         </div>
-                        <Button type="button" size="xs" onclick={() => submitStepReply(thread.id)}>Reply</Button>
-                      </div>
+                      {/each}
+                      {#if isUnsentThread(thread)}
+                        <div class="flex gap-2 mt-1">
+                          <Button type="button" variant="ghost" size="xs" onclick={() => startEditThread(thread)}>Edit</Button>
+                          {#if thread.messages.length === 1}
+                            <!-- Only a never-sent question can be deleted; a thread with an AI answer keeps its history. -->
+                            <Button type="button" variant="ghost" size="xs" class="text-error" onclick={() => handleDeleteThread(thread.id)}>Delete</Button>
+                          {/if}
+                        </div>
+                      {/if}
+                      {#if thread.status === 'answered'}
+                        <div class="mt-1 flex items-end gap-2">
+                          <div class="min-w-0 flex-1">
+                            <TextField
+                              label="Reply to the AI author"
+                              placeholder="Reply…"
+                              value={stepReplyDrafts[thread.id] ?? ''}
+                              onValueChange={(value) => {
+                                stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: value }
+                              }}
+                              onkeydown={(event: KeyboardEvent) => {
+                                if (event.key === 'Enter') { event.preventDefault(); submitStepReply(thread.id) }
+                              }}
+                            />
+                          </div>
+                          <Button type="button" size="xs" onclick={() => submitStepReply(thread.id)}>Reply</Button>
+                        </div>
+                      {/if}
                     {/if}
                   </Panel>
                 {/each}
 
-                {#if stepQuestionOpen}
+                {#if hasUnsentStepDraft}
+                  <!-- An unsent draft already exists on this step; edit it above instead of stacking another. -->
+                {:else if stepQuestionOpen}
                   <div>
                     <Textarea
                       label="Ask the AI author about this step"

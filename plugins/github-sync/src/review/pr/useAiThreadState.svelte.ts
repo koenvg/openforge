@@ -2,6 +2,8 @@ import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { AiThread, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import { activeProjectId, aiThreads, selectedReviewPr } from '../../lib/stores'
+import { markThreadSeen as markThreadSeenInList } from '../../lib/questionsIndex'
+import { editLastUserMessage } from '../../lib/aiThreadStore'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
 
 export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
@@ -87,6 +89,48 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
     }
   }
 
+  // Edit an unsent question in place (before it's sent to the AI), then persist.
+  async function editThread(threadId: string, body: string): Promise<void> {
+    const pr = selectedPr.current
+    if (!pr) return
+
+    const now = Math.floor(Date.now() / 1000)
+    const updated = threadStore.current.map(thread => (
+      thread.id === threadId ? editLastUserMessage(thread, body, now) : thread
+    ))
+    threadStore.current = updated
+
+    const thread = updated.find(candidate => candidate.id === threadId)
+    if (thread) {
+      await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+    }
+  }
+
+  // Drop a thread entirely (used to remove an unsent question).
+  async function deleteThread(threadId: string): Promise<void> {
+    const pr = selectedPr.current
+    if (!pr) return
+
+    threadStore.current = threadStore.current.filter(thread => thread.id !== threadId)
+    await githubSync.deleteAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, threadId })
+  }
+
+  // Mark an answered thread as read so it leaves the "answers to read" group.
+  // Persisted (via saveAiThread) so the state survives leaving and returning.
+  async function markThreadSeen(threadId: string): Promise<void> {
+    const pr = selectedPr.current
+    if (!pr) return
+
+    const now = Math.floor(Date.now() / 1000)
+    const updated = markThreadSeenInList(threadStore.current, threadId, now)
+    threadStore.current = updated
+
+    const thread = updated.find(candidate => candidate.id === threadId)
+    if (thread) {
+      await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+    }
+  }
+
   async function load(pr: ReviewPullRequest): Promise<void> {
     const sequence = ++loadSequence
     const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
@@ -159,6 +203,9 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
     askAgentStep,
     askAboutComment,
     replyToThread,
+    editThread,
+    deleteThread,
+    markThreadSeen,
     sendQuestionsToAgent,
   }
 }

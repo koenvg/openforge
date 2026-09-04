@@ -2,9 +2,11 @@ import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import { activeProjectId, agentReviewComments, selectedReviewPr } from '../../lib/stores'
+import { activeProjectId, agentReviewComments, prFileDiffs, selectedReviewPr } from '../../lib/stores'
 import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
 import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
+import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
+import { buildWalkthroughStepList } from '../../lib/walkthroughViewState'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
 
 export function useWalkthroughPolling(
@@ -14,6 +16,7 @@ export function useWalkthroughPolling(
   const activeProject = fromStore(activeProjectId)
   const agentComments = fromStore(agentReviewComments)
   const selectedPr = fromStore(selectedReviewPr)
+  const fileDiffs = fromStore(prFileDiffs)
   let walkthroughByPr = $state<Map<number, PrWalkthrough | null>>(new Map())
   const pollTimers = new Map<number, ReturnType<typeof setInterval>>()
 
@@ -22,6 +25,23 @@ export function useWalkthroughPolling(
       ? walkthroughButtonState(walkthroughByPr.get(selectedPr.current.id), selectedPr.current.head_sha) === 'ready'
       : false,
   )
+
+  // Human-facing labels for step-anchored questions in the questions panel. Numbers
+  // match the walkthrough rail exactly (ticket is step 1, so the first concept is
+  // step 2) by reusing the same entry list the rail builds. Missing ids fall back to
+  // a generic label in the panel, so a stale walkthrough never breaks the row.
+  let selectedStepLabels = $derived.by(() => {
+    const labels = new Map<string, { number: number; title: string }>()
+    const pr = selectedPr.current
+    const walkthrough = pr ? walkthroughByPr.get(pr.id) : null
+    if (!walkthrough || walkthrough.status !== 'ready') return labels
+    const steps = parseAndValidateWalkthroughSteps(walkthrough.steps_json, fileDiffs.current)
+    if (!steps) return labels
+    buildWalkthroughStepList(steps).forEach((entry, index) => {
+      if (entry.kind === 'concept') labels.set(entry.step.id, { number: index + 1, title: entry.step.title })
+    })
+    return labels
+  })
 
   async function refreshStatus(pr: ReviewPullRequest): Promise<void> {
     try {
@@ -131,6 +151,7 @@ export function useWalkthroughPolling(
   return {
     get byPr() { return walkthroughByPr },
     get selectedReady() { return selectedReady },
+    get selectedStepLabels() { return selectedStepLabels },
     refreshStatus,
     refreshVisible,
     generate,
