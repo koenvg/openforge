@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
 
 // Replace the heavy diff renderer with a stub that records the props WalkthroughTab
@@ -311,6 +311,40 @@ describe('WalkthroughTab step-details collapse', () => {
     await goToStep(2)
     await screen.findByText('Step one')
     expect(screen.queryByText('First concept')).toBeNull()
+  })
+
+  it('keeps unsent AI question and reply drafts when step details are collapsed', async () => {
+    globalThis.localStorage?.clear()
+    const thread: AiThread = {
+      id: 'thread-1',
+      anchor: { type: 'step', step_id: 's1' },
+      status: 'answered',
+      messages: [
+        { role: 'user', body: 'Why this change?', created_at: 1 },
+        { role: 'ai', body: 'Because it fixes the flow.', created_at: 2 },
+      ],
+      created_at: 1,
+      updated_at: 2,
+    }
+    renderWalkthrough({
+      aiThreads: [thread],
+      onAskAgentStep: vi.fn(),
+      onReplyToThread: vi.fn(),
+    })
+    await goToStep(2)
+    await screen.findByText('Step one')
+
+    await fireEvent.click(screen.getByRole('button', { name: '+ Ask about this step' }))
+    const question = screen.getByLabelText('Ask the AI author about this step') as HTMLTextAreaElement
+    const reply = screen.getByLabelText('Reply to the AI author') as HTMLInputElement
+    await fireEvent.input(question, { target: { value: 'Question draft' } })
+    await fireEvent.input(reply, { target: { value: 'Reply draft' } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse step details' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Expand step details' }))
+
+    expect((screen.getByLabelText('Ask the AI author about this step') as HTMLTextAreaElement).value).toBe('Question draft')
+    expect((screen.getByLabelText('Reply to the AI author') as HTMLInputElement).value).toBe('Reply draft')
   })
 })
 
