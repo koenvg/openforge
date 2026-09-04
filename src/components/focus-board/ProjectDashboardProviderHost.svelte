@@ -1,22 +1,14 @@
 <script lang="ts">
-  import { onDestroy, type Component } from 'svelte'
-  import type { PluginProjectDashboardReplacementProps } from '@openforge-app/plugin-sdk/frontend'
   import type { AgentSession, Project, PullRequestInfo, TaskAttentionRow, TaskDetail, TaskReference } from '../../lib/types'
-  import { getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
-  import { resolveContributions } from '../../lib/plugin/contributionResolver'
+  import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
+  import { createViewReplacementHostState } from '../../lib/plugin/viewReplacementHostState.svelte'
   import {
-    CORE_PROJECT_DASHBOARD_PROVIDER_ID,
-    INHERIT_PROJECT_DASHBOARD_PROVIDER_ID,
     globalProjectDashboardProviderId,
     globalProjectDashboardProviderLoaded,
     loadGlobalProjectDashboardProviderId,
     loadProjectDashboardProviderId,
     projectDashboardProviderIds,
-    resolveProjectDashboardProviderAvailability,
   } from '../../lib/plugin/projectDashboardProviders'
-  import { setPluginRuntimeError } from '../../lib/plugin/pluginInstallState'
-  import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
-  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import FocusBoard from './FocusBoard.svelte'
 
   interface Props {
@@ -57,100 +49,35 @@
     onRunAction,
   }: Props = $props()
 
-  let resolvedComponent = $state<Component<PluginProjectDashboardReplacementProps> | null>(null)
-  let failedProviderId = $state<string | null>(null)
-  let loadRunId = 0
-
-  let contributionSources = $derived(
-    Array.from($enabledPluginIds)
-      .map(pluginId => $runtimeContributionSources.get(pluginId))
-      .filter(source => source !== undefined),
-  )
-  let dashboardProviders = $derived(resolveContributions(contributionSources).viewReplacements)
-  let projectProviderPreferenceLoaded = $derived(
-    !project || $projectDashboardProviderIds.has(project.id),
-  )
-  let projectProviderPreferenceId = $derived(
-    project && projectProviderPreferenceLoaded
-      ? ($projectDashboardProviderIds.get(project.id) ?? INHERIT_PROJECT_DASHBOARD_PROVIDER_ID)
-      : CORE_PROJECT_DASHBOARD_PROVIDER_ID,
-  )
-  let providerResolution = $derived(resolveProjectDashboardProviderAvailability(
-    projectProviderPreferenceId,
-    $globalProjectDashboardProviderId,
-    dashboardProviders,
-    $installedPlugins,
-  ))
-  let selectedProvider = $derived(providerResolution.provider)
-  let selectedComponentSource = $derived(selectedProvider
-    ? getRegisteredRenderableComponent(
-        'viewReplacements',
-        `${selectedProvider.pluginId}:${selectedProvider.contributionId}`,
-      )
-    : undefined)
-  let providerSignature = $derived(
-    selectedProvider
-      ? `${project?.id ?? ''}:${selectedProvider.qualifiedId}:available`
-      : providerResolution.configuredProvider
-        ? `${project?.id ?? ''}:${providerResolution.configuredProvider.qualifiedId}:${providerResolution.unavailableReason}`
-        : `core:${project?.id ?? ''}`,
-  )
-
-  $effect(() => {
-    if (!$globalProjectDashboardProviderLoaded) {
-      void loadGlobalProjectDashboardProviderId().catch((error) => {
-        console.error('[ProjectDashboardProviderHost] Failed to load global provider default:', error)
-      })
-    }
-    const projectId = project?.id
-    if (projectId && !$projectDashboardProviderIds.has(projectId)) {
-      void loadProjectDashboardProviderId(projectId).catch((error) => {
-        console.error(`[ProjectDashboardProviderHost] Failed to load provider preference for ${projectId}:`, error)
-      })
-    }
+  const providerState = createViewReplacementHostState({
+    target: 'project.dashboard',
+    hostName: 'ProjectDashboardProviderHost',
+    getProjectId: () => project?.id ?? null,
+    getLogicalIdentity: () => project?.id ?? '',
+    preferences: {
+      globalProviderId: globalProjectDashboardProviderId,
+      globalProviderLoaded: globalProjectDashboardProviderLoaded,
+      projectProviderIds: projectDashboardProviderIds,
+      loadGlobalProviderId: loadGlobalProjectDashboardProviderId,
+      loadProjectProviderId: loadProjectDashboardProviderId,
+    },
+    reportProviderFailure,
   })
 
-  $effect(() => {
-    void providerSignature
-    const provider = selectedProvider
-    const componentSource = selectedComponentSource
-    const runId = ++loadRunId
-    resolvedComponent = null
-    failedProviderId = null
-
-    if (!project || !provider || !componentSource) return
-
-    void (async () => {
-      try {
-        const component = await resolvePluginComponent(componentSource)
-        if (runId === loadRunId) resolvedComponent = component as Component<PluginProjectDashboardReplacementProps>
-      } catch (error) {
-        if (runId !== loadRunId) return
-        reportProviderFailure(provider.pluginId, provider.qualifiedId, 'load', error)
-        failedProviderId = provider.qualifiedId
-      }
-    })()
-  })
-
-  onDestroy(() => {
-    loadRunId += 1
-  })
-
+  let selectedProvider = $derived(providerState.selectedProvider)
+  let resolvedComponent = $derived(providerState.resolvedComponent)
+  let componentReady = $derived(providerState.componentReady)
+  let providerFailed = $derived(providerState.providerFailed)
   function reportProviderFailure(
     pluginId: string,
     providerId: string,
     phase: 'load' | 'render',
     error: unknown,
   ): void {
-    const diagnostic = new Error(`Dashboard provider ${providerId} failed to ${phase}`, { cause: error })
+    const diagnostic = new Error(`Dashboard provider ${providerId} from plugin ${pluginId} failed to ${phase}`, { cause: error })
     console.error(`[ProjectDashboardProviderHost] ${diagnostic.message}:`, error)
-    setPluginRuntimeError(pluginId, diagnostic)
   }
 
-  function handleRenderError(pluginId: string, providerId: string, error: unknown): void {
-    reportProviderFailure(pluginId, providerId, 'render', error)
-    failedProviderId = providerId
-  }
 </script>
 
 {#snippet coreDashboard()}
@@ -183,14 +110,10 @@
   </div>
 {/snippet}
 
-{#if selectedProvider && resolvedComponent && project && failedProviderId !== selectedProvider.qualifiedId}
+{#if selectedProvider && resolvedComponent && componentReady && project && !providerFailed}
   {@const Dashboard = resolvedComponent}
   {@const renderProps = getPluginRenderProps(selectedProvider.pluginId, { projectId: project.id })}
-  <svelte:boundary onerror={(error) => handleRenderError(
-    selectedProvider.pluginId,
-    selectedProvider.qualifiedId,
-    error,
-  )}>
+  <svelte:boundary onerror={providerState.handleRenderError}>
     {#snippet failed(_error, _reset)}
       {@render coreDashboard()}
     {/snippet}
