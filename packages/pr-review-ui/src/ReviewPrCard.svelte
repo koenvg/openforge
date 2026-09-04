@@ -2,6 +2,8 @@
   import type { Snippet } from 'svelte'
   import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import { hasDoNotReviewLabel } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
   import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
@@ -28,17 +30,18 @@
 
 <div class="relative group">
 {#if pr.viewed_at && onMarkUnread}
-  <button
+  <IconButton
+    label="Mark as unread"
+    size="xs"
+    class="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
     type="button"
-    class="absolute top-2 right-2 z-10 btn btn-xs btn-circle btn-ghost text-base-content/50 hover:text-base-content opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-    aria-label="Mark as unread"
     title="Mark as unread"
     onclick={(e) => { e.stopPropagation(); onMarkUnread?.() }}
   >
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
     </svg>
-  </button>
+  </IconButton>
 {/if}
 <Card
   class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {pr.viewed_at || doNotReview ? 'opacity-50' : ''}"
@@ -46,9 +49,9 @@
   onclick={onClick}
 >
   <div class="flex items-center gap-2">
-    <span class="inline-flex items-center px-2 py-0.5 text-[0.7rem] font-semibold text-primary bg-primary/15 rounded">{pr.repo_owner}/{pr.repo_name}</span>
+    <Badge variant="info">{pr.repo_owner}/{pr.repo_name}</Badge>
     {#if pr.draft}
-      <span class="inline-flex items-center px-2 py-0.5 text-[0.7rem] font-semibold text-base-content/50 bg-base-200 border border-base-300 rounded">Draft</span>
+      <Badge>Draft</Badge>
     {/if}
   </div>
 
@@ -81,14 +84,10 @@
     <div class="flex flex-wrap items-center gap-1">
       {#each visibleLabels as label}
         {@const style = labelChipStyle(label.color)}
-        <span
-          class="badge badge-sm {style ? '' : 'badge-outline'}"
-          style={style}
-          title={label.name}
-        >{label.name}</span>
+        <Badge style={style} title={label.name}>{label.name}</Badge>
       {/each}
       {#if overflowCount > 0}
-        <span class="badge badge-sm badge-ghost">+{overflowCount}</span>
+        <Badge>+{overflowCount}</Badge>
       {/if}
     </div>
   {/if}

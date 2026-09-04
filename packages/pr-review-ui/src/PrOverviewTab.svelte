@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import type { ReviewPullRequest, PrOverviewComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgo, timeAgoFromSeconds } from './timeAgo'
   import { getGitHubMarkdownImageBaseUrl } from './githubMarkdown'
@@ -85,16 +86,16 @@
     </div>
 
     <div class="flex items-center gap-3 flex-wrap text-xs">
-      <span class="badge badge-outline gap-1">
+      <Badge>
         <span class="text-base-content/50">{pr.head_ref}</span>
         <span class="text-base-content/30">→</span>
         <span class="text-base-content/50">{pr.base_ref}</span>
-      </span>
-      <span class="badge badge-outline gap-1">
+      </Badge>
+      <Badge>
         <span class="text-success">+{pr.additions}</span>
         <span class="text-error">−{pr.deletions}</span>
-      </span>
-      <span class="badge badge-outline">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'} changed</span>
+      </Badge>
+      <Badge>{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'} changed</Badge>
     </div>
 
     {#if isLoading}

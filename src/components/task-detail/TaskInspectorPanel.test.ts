@@ -99,7 +99,7 @@ describe('TaskInspectorPanel', () => {
     const inspector = screen.getByRole('complementary', { name: 'Task inspector for T-748' })
     expect(inspector.textContent).toContain('T-748')
     expect(inspector.textContent).toContain('Fix the dashboard bug.')
-    expect(inspector.textContent).toContain('In Progress')
+    expect(screen.getByText('In Progress').getAttribute('data-variant')).toBe('status-running')
   })
 
   it('leads with the task itself instead of a redundant "Task" label', () => {

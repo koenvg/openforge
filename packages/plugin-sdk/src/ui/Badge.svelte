@@ -2,7 +2,17 @@
   import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
 
-  type BadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+  type BadgeVariant =
+    | 'neutral'
+    | 'info'
+    | 'success'
+    | 'warning'
+    | 'danger'
+    | 'status-neutral'
+    | 'status-running'
+    | 'status-warning'
+    | 'status-danger'
+    | 'status-success'
 
   interface Props extends HTMLAttributes<HTMLSpanElement> {
     children: Snippet
@@ -60,5 +70,35 @@
     border-color: var(--of-danger);
     background: var(--of-danger-subtle);
     color: var(--of-danger);
+  }
+
+  span[data-variant='status-neutral'] {
+    border-color: var(--of-status-neutral);
+    background: var(--of-status-neutral-subtle);
+    color: var(--of-on-status-neutral);
+  }
+
+  span[data-variant='status-running'] {
+    border-color: var(--of-status-running);
+    background: var(--of-status-running-subtle);
+    color: var(--of-on-status-running);
+  }
+
+  span[data-variant='status-warning'] {
+    border-color: var(--of-status-warning);
+    background: var(--of-status-warning-subtle);
+    color: var(--of-on-status-warning);
+  }
+
+  span[data-variant='status-danger'] {
+    border-color: var(--of-status-danger);
+    background: var(--of-status-danger-subtle);
+    color: var(--of-on-status-danger);
+  }
+
+  span[data-variant='status-success'] {
+    border-color: var(--of-status-success);
+    background: var(--of-status-success-subtle);
+    color: var(--of-on-status-success);
   }
 </style>

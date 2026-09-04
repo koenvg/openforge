@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onMount, onDestroy } from 'svelte'
   import './xterm.css'
   import {
@@ -128,15 +129,17 @@
     {#if lifecycle.shellExited}
       <div class="absolute bottom-3 right-3 flex items-center gap-2 rounded-box bg-base-200/95 px-3 py-2 shadow z-[1]">
         <span class="text-sm font-mono text-base-content/70">Shell exited</span>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          class="font-mono"
           type="button"
-          class="btn btn-sm btn-ghost text-primary font-mono focus-visible:ring-2 focus-visible:ring-primary"
           onclick={handleRestart}
           aria-label={restartShellLabel}
           title={restartShellTitle}
         >
           Restart shell
-        </button>
+        </Button>
       </div>
     {/if}
   </div>

@@ -3,6 +3,7 @@
   import type { GitStatusSummary } from '../../lib/types'
   import { activeSessions } from '../../lib/stores'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import FileDiff from '@lucide/svelte/icons/file-diff'
 
   interface Props {
@@ -49,13 +50,13 @@
 <CollapsibleSection sectionKey="git-status" title="Changes" cardId="git-status">
   {#snippet icon()}<FileDiff size={14} />{/snippet}
   {#snippet actions()}
-    <button
+    <IconButton
+      label="Refresh changes"
+      size="xs"
       type="button"
-      class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
-      aria-label="Refresh changes"
       disabled={loading}
       onclick={() => void refresh()}
-    >↻</button>
+    >↻</IconButton>
   {/snippet}
 
   {#if errored}

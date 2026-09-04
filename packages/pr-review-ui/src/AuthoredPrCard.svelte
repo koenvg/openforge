@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import type { AuthoredPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
   import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
@@ -28,12 +29,12 @@
   onclick={onClick}
 >
   <div class="flex items-center gap-2">
-    <span class="inline-flex items-center px-2 py-0.5 text-[0.7rem] font-semibold text-primary bg-primary/15 rounded">{pr.repo_owner}/{pr.repo_name}</span>
+    <Badge variant="info">{pr.repo_owner}/{pr.repo_name}</Badge>
     {#if pr.draft}
-      <span class="inline-flex items-center px-2 py-0.5 text-[0.7rem] font-semibold text-base-content/50 bg-base-200 border border-base-300 rounded">Draft</span>
+      <Badge>Draft</Badge>
     {/if}
     {#if pr.task_id}
-      <span class="inline-flex items-center px-2 py-0.5 text-[0.7rem] font-semibold text-secondary bg-secondary/15 rounded">{pr.task_id}</span>
+      <Badge variant="info">{pr.task_id}</Badge>
     {/if}
   </div>
 
@@ -67,14 +68,10 @@
     <div class="flex flex-wrap items-center gap-1">
       {#each visibleLabels as label}
         {@const style = labelChipStyle(label.color)}
-        <span
-          class="badge badge-sm {style ? '' : 'badge-outline'}"
-          style={style}
-          title={label.name}
-        >{label.name}</span>
+        <Badge style={style} title={label.name}>{label.name}</Badge>
       {/each}
       {#if overflowCount > 0}
-        <span class="badge badge-sm badge-ghost">+{overflowCount}</span>
+        <Badge>+{overflowCount}</Badge>
       {/if}
     </div>
   {/if}

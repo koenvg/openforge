@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Reply } from '@lucide/svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type { ExistingCommentDisplayData } from './diffComments'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineReplyEditor from './InlineReplyEditor.svelte'
@@ -60,14 +61,15 @@
     </span>
   {/if}
   {#if onReplyToExistingComment && !comment.isReply}
-    <button
-      class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary ml-auto"
+    <IconButton
+      label="Reply to this comment"
+      size="xs"
+      class="ml-auto"
       title="Reply on GitHub"
-      aria-label="Reply to this comment"
       onclick={onToggleReply}
     >
       <Reply size={14} strokeWidth={2} aria-hidden="true" />
-    </button>
+    </IconButton>
   {/if}
 </div>
 <InlineCommentBody>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   interface Props {
     filename: string
     error: string
@@ -13,10 +14,11 @@
     <p class="font-medium">Couldn’t load file contents</p>
     <p class="break-words text-xs opacity-80">{error}</p>
   </div>
-  <button
+  <Button
+    variant="outline"
+    size="sm"
     type="button"
-    class="btn btn-sm btn-outline"
     aria-label="Retry loading {filename}"
     onclick={onRetry}
-  >Retry</button>
+  >Retry</Button>
 </div>

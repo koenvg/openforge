@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   interface Props {
     value: string
     ariaLabel: string
@@ -45,17 +46,18 @@
     }}
   />
   {#if secondaryLabel && onSecondarySubmit}
-    <button
+    <Button
+      variant="outline"
+      size="xs"
       type="button"
-      class="btn btn-xs btn-outline"
       title={secondaryTitle}
       onclick={onSecondarySubmit}
-    >{secondaryLabel}</button>
+    >{secondaryLabel}</Button>
   {/if}
-  <button
+  <Button
+    size="xs"
     type="button"
-    class="btn btn-xs btn-primary"
     title={primaryTitle}
     onclick={onSubmit}
-  >{primaryLabel}</button>
+  >{primaryLabel}</Button>
 </div>
