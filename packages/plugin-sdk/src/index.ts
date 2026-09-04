@@ -21,6 +21,21 @@ export {
   validateOpenForgePackageMetadata,
   validatePluginPackageMetadata,
 } from './manifest.js'
+export {
+  THEME_TOKEN_NAMES,
+  THEME_TOKEN_CSS_PROPERTIES,
+  freezeThemeDefinition,
+  validateThemeDefinition,
+} from './themes.js'
+export type {
+  PluginThemeDefinition,
+  ThemeAppearance,
+  ThemeDefinition,
+  ThemeTokenName,
+  ThemeTokens,
+  ThemeValidationResult,
+} from './themes.js'
+
 
 export {
   createMemoryPluginStorage,
@@ -174,6 +189,7 @@ export type {
   TestingRuntimeKind,
   TestingRuntimeScope,
   TestingSettingsSectionContribution,
+  TestingThemeContribution,
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,

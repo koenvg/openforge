@@ -48,6 +48,36 @@ describe('theme registry', () => {
     expect(get(registry.availableThemes).filter((theme) => theme.id === 'com.example.theme:paper')).toHaveLength(1)
   })
 
+
+  it('publishes an activation batch once and leaves the registry unchanged when any definition is invalid', () => {
+    const registry = createThemeRegistry()
+    const owner = { pluginId: 'com.example.theme', generation: 8 }
+    const observed: string[][] = []
+    const unsubscribe = registry.availableThemes.subscribe(themes => {
+      observed.push(themes.map(theme => theme.id))
+    })
+    observed.length = 0
+
+    registry.registerContributedThemes([
+      contributedTheme('com.example.theme:paper'),
+      contributedTheme('com.example.theme:ink'),
+    ], owner)
+
+    expect(observed).toEqual([[
+      LIGHT_THEME.id,
+      DARK_THEME.id,
+      'com.example.theme:paper',
+      'com.example.theme:ink',
+    ]])
+    unsubscribe()
+
+    const before = get(registry.availableThemes)
+    expect(() => registry.registerContributedThemes([
+      contributedTheme('com.example.theme:valid'),
+      { ...contributedTheme('com.example.theme:invalid'), tokens: {} as never },
+    ], owner)).toThrow('Invalid theme definition')
+    expect(get(registry.availableThemes)).toBe(before)
+  })
   it('selects a registered theme through the adapter and persists its stable id', async () => {
     const applyTheme = vi.fn()
     const persistSelection = vi.fn(async () => undefined)

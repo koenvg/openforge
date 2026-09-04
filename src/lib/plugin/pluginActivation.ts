@@ -135,6 +135,16 @@ async function activateFrontendRuntimePlugin(
       setPluginRuntimeState(pluginId, 'installed', null)
       return false
     }
+    await runtimeRegistry.prepareFrontendThemes()
+    const themesCommitted = runtimeRegistry.commitFrontendThemes(
+      activationGeneration,
+      () => (pluginFrontendReloadGenerations.get(pluginId) ?? 0) === activationGeneration,
+    )
+    if (!themesCommitted) {
+      await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
+      setPluginRuntimeState(pluginId, 'installed', null)
+      return false
+    }
     activeRuntimeRegistries.set(pluginId, runtimeRegistry)
     setPluginRuntimeState(pluginId, 'active', null)
     return true

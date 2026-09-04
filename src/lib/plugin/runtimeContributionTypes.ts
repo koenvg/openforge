@@ -3,6 +3,7 @@ import type {
   PluginInjectionPointRegistration,
   PluginReviewRowActionRegistration,
   PluginSettingsSectionRegistration,
+  PluginThemeDefinition,
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
@@ -57,7 +58,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 
 export type MaybePromise<T> = T | Promise<T>
-export type RuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
+export type RuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'themes' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
 export type RuntimeScope = 'global' | 'project' | 'task'
 export type RuntimeHandler = (
   payload?: unknown,
@@ -156,6 +157,7 @@ export type RuntimeTaskPaneTabContribution = RuntimeContributionBase & PluginTas
 export type RuntimeTaskUISectionContribution = RuntimeContributionBase & PluginTaskUISectionRegistration
 export type RuntimeReviewRowActionContribution = RuntimeContributionBase & PluginReviewRowActionRegistration
 export type RuntimeSettingsSectionContribution = RuntimeContributionBase & PluginSettingsSectionRegistration
+export type RuntimeThemeContribution = RuntimeContributionBase & PluginThemeDefinition
 export type RuntimeInjectionPointContribution = RuntimeContributionBase & {
   location: InjectionPointLocation
   component: PluginInjectionPointRegistration['component']
@@ -184,6 +186,7 @@ export type RuntimeContributionSnapshot = {
   taskUISections: RuntimeTaskUISectionContribution[]
   reviewRowActions: RuntimeReviewRowActionContribution[]
   settingsSections: RuntimeSettingsSectionContribution[]
+  themes: RuntimeThemeContribution[]
   injectionPoints: RuntimeInjectionPointContribution[]
   taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
   commands: RuntimeCommandContribution[]

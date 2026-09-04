@@ -30,22 +30,39 @@ var openforgePackageMetadataSchema_default = {
 		"description"
 	],
 	dependentRequired: { "frontendStyles": ["frontend"] },
-	allOf: [{
-		"if": {
-			"properties": { "requires": { "contains": { "enum": ["browserSurfaces", "viewReplacements"] } } },
-			"required": ["requires"]
+	allOf: [
+		{
+			"if": {
+				"properties": { "requires": { "contains": { "enum": [
+					"browserSurfaces",
+					"viewReplacements",
+					"themes"
+				] } } },
+				"required": ["requires"]
+			},
+			"then": { "required": ["frontend"] }
 		},
-		"then": { "required": ["frontend"] }
-	}, {
-		"if": {
-			"properties": { "enablement": { "const": "app" } },
-			"required": ["enablement"]
+		{
+			"if": {
+				"properties": { "enablement": { "const": "app" } },
+				"required": ["enablement"]
+			},
+			"then": {
+				"properties": { "requires": { "contains": { "const": "appEnablement" } } },
+				"required": ["requires"]
+			}
 		},
-		"then": {
-			"properties": { "requires": { "contains": { "const": "appEnablement" } } },
-			"required": ["requires"]
+		{
+			"if": {
+				"properties": { "requires": { "contains": { "const": "themes" } } },
+				"required": ["requires"]
+			},
+			"then": {
+				"properties": { "enablement": { "const": "app" } },
+				"required": ["enablement"]
+			}
 		}
-	}],
+	],
 	properties: {
 		"id": {
 			"type": "string",
@@ -139,7 +156,8 @@ var openforgePackageMetadataSchema_default = {
 				"browserSurfaces",
 				"appEnablement",
 				"customSidebarNavigation",
-				"reviewUI"
+				"reviewUI",
+				"themes"
 			] }
 		}
 	}
@@ -192,7 +210,8 @@ var OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
 	"browserSurfaces",
 	"appEnablement",
 	"customSidebarNavigation",
-	"reviewUI"
+	"reviewUI",
+	"themes"
 ];
 function assertOpenForgePluginCapabilitiesMatchSchema() {
 	const schemaCapabilities = openforgePackageMetadataSchema_default.properties.requires.items.enum;
@@ -377,6 +396,16 @@ function validateOpenForgePackageMetadata(data) {
 		path: "requires",
 		message: "App enablement requires the appEnablement capability"
 	});
+	if (Array.isArray(data.requires) && data.requires.includes("themes")) {
+		if (data.enablement !== "app") errors.push({
+			path: "enablement",
+			message: "themes capability requires app enablement"
+		});
+		if (!isNonEmptyString(data.frontend)) errors.push({
+			path: "requires",
+			message: "themes capability requires a frontend entry"
+		});
+	}
 	if (Array.isArray(data.requires) && data.requires.includes("browserSurfaces") && !isNonEmptyString(data.frontend)) errors.push({
 		path: "requires",
 		message: "browserSurfaces capability requires a frontend entry"
@@ -402,6 +431,300 @@ function isOpenForgePackageMetadata(data) {
 	return validateOpenForgePackageMetadata(data).length === 0;
 }
 var isPluginPackageMetadata = isOpenForgePackageMetadata;
+//#endregion
+//#region packages/plugin-sdk/src/themes.ts
+var THEME_TOKEN_NAMES = [
+	"canvas",
+	"surface",
+	"surfaceSubtle",
+	"surfaceRaised",
+	"surfaceTint",
+	"scrim",
+	"text",
+	"textSecondary",
+	"textMuted",
+	"textInverse",
+	"link",
+	"icon",
+	"iconMuted",
+	"border",
+	"borderStrong",
+	"borderInteractive",
+	"focusRing",
+	"selection",
+	"accent",
+	"accentHover",
+	"accentPressed",
+	"onAccent",
+	"accentSubtle",
+	"onAccentSubtle",
+	"info",
+	"onInfo",
+	"infoSubtle",
+	"success",
+	"onSuccess",
+	"successSubtle",
+	"warning",
+	"onWarning",
+	"warningSubtle",
+	"danger",
+	"onDanger",
+	"dangerSubtle",
+	"control",
+	"controlHover",
+	"controlPressed",
+	"controlDisabled",
+	"controlText",
+	"controlTextDisabled",
+	"field",
+	"fieldHover",
+	"fieldInvalid",
+	"statusNeutral",
+	"statusNeutralSubtle",
+	"onStatusNeutral",
+	"statusRunning",
+	"statusRunningSubtle",
+	"onStatusRunning",
+	"statusWaiting",
+	"statusWaitingSubtle",
+	"onStatusWaiting",
+	"statusSuccess",
+	"statusSuccessSubtle",
+	"onStatusSuccess",
+	"statusWarning",
+	"statusWarningSubtle",
+	"onStatusWarning",
+	"statusDanger",
+	"statusDangerSubtle",
+	"onStatusDanger",
+	"codeCanvas",
+	"codeText",
+	"codeMuted",
+	"codeBorder",
+	"diffAdded",
+	"diffAddedSubtle",
+	"diffRemoved",
+	"diffRemovedSubtle",
+	"diffChanged",
+	"diffChangedSubtle",
+	"terminalBackground",
+	"terminalForeground",
+	"terminalCursor",
+	"terminalCursorAccent",
+	"terminalSelectionBackground",
+	"terminalSelectionForeground",
+	"terminalBlack",
+	"terminalRed",
+	"terminalGreen",
+	"terminalYellow",
+	"terminalBlue",
+	"terminalMagenta",
+	"terminalCyan",
+	"terminalWhite",
+	"terminalBrightBlack",
+	"terminalBrightRed",
+	"terminalBrightGreen",
+	"terminalBrightYellow",
+	"terminalBrightBlue",
+	"terminalBrightMagenta",
+	"terminalBrightCyan",
+	"terminalBrightWhite",
+	"borderWidth",
+	"focusWidth",
+	"radiusControl",
+	"radiusContainer",
+	"radiusOverlay",
+	"radiusShell",
+	"radiusRound",
+	"controlHeightCompact",
+	"controlHeight",
+	"controlHeightTouch",
+	"space1",
+	"space2",
+	"space3",
+	"space4",
+	"space5",
+	"space6",
+	"space7",
+	"space8",
+	"space9",
+	"fontSans",
+	"fontMono",
+	"textXs",
+	"textSm",
+	"textMd",
+	"textLg",
+	"textXl",
+	"lineHeightXs",
+	"lineHeightSm",
+	"lineHeightMd",
+	"lineHeightLg",
+	"lineHeightXl",
+	"weightRegular",
+	"weightMedium",
+	"weightSemibold",
+	"shadowSurface",
+	"shadowRaised",
+	"shadowOverlay",
+	"durationPress",
+	"durationFast",
+	"durationStandard",
+	"durationDeliberate",
+	"easeStandard",
+	"easeEnter",
+	"easeExit"
+];
+function cssPropertyForToken(token) {
+	return `--of-${token.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+}
+var THEME_TOKEN_CSS_PROPERTIES = Object.freeze(Object.fromEntries(THEME_TOKEN_NAMES.map((token) => [token, cssPropertyForToken(token)])));
+var STABLE_THEME_ID = /^[a-z0-9]+(?:[._:-][a-z0-9]+)*$/;
+var COLOR_TOKENS = new Set(THEME_TOKEN_NAMES.slice(0, THEME_TOKEN_NAMES.indexOf("terminalBrightWhite") + 1));
+var LENGTH_TOKENS = /* @__PURE__ */ new Set([
+	"borderWidth",
+	"focusWidth",
+	"radiusControl",
+	"radiusContainer",
+	"radiusOverlay",
+	"radiusShell",
+	"radiusRound",
+	"controlHeightCompact",
+	"controlHeight",
+	"controlHeightTouch",
+	"space1",
+	"space2",
+	"space3",
+	"space4",
+	"space5",
+	"space6",
+	"space7",
+	"space8",
+	"space9",
+	"textXs",
+	"textSm",
+	"textMd",
+	"textLg",
+	"textXl"
+]);
+var LINE_HEIGHT_TOKENS = /* @__PURE__ */ new Set([
+	"lineHeightXs",
+	"lineHeightSm",
+	"lineHeightMd",
+	"lineHeightLg",
+	"lineHeightXl"
+]);
+var WEIGHT_TOKENS = /* @__PURE__ */ new Set([
+	"weightRegular",
+	"weightMedium",
+	"weightSemibold"
+]);
+var SHADOW_TOKENS = /* @__PURE__ */ new Set([
+	"shadowSurface",
+	"shadowRaised",
+	"shadowOverlay"
+]);
+var DURATION_TOKENS = /* @__PURE__ */ new Set([
+	"durationPress",
+	"durationFast",
+	"durationStandard",
+	"durationDeliberate"
+]);
+var EASING_TOKENS = /* @__PURE__ */ new Set([
+	"easeStandard",
+	"easeEnter",
+	"easeExit"
+]);
+function supportsCssValue(property, value, fallback) {
+	if (fallback) return true;
+	return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports(property, value);
+}
+function containsUnsafeCss(value) {
+	return /[;{}]/.test(value);
+}
+function isValidColor(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("color", value, /^(?:#[0-9a-f]{3,4}|#[0-9a-f]{6}|#[0-9a-f]{8}|transparent|currentcolor)$/i.test(value) || /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|var)\([^(){};]+\)$/i.test(value));
+}
+function isValidLength(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("width", value, /^(?:0|\d*\.?\d+(?:px|rem|em|ch|ex|vw|vh|vmin|vmax|%))$/i.test(value) || /^(?:calc|min|max|clamp|var)\([^{};]+\)$/i.test(value));
+}
+function isValidLineHeight(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("line-height", value, /^(?:\d*\.?\d+|\d*\.?\d+(?:px|rem|em|%))$/i.test(value) || /^(?:calc|min|max|clamp|var)\([^{};]+\)$/i.test(value));
+}
+function isValidWeight(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("font-weight", value, /^(?:[1-9]\d{0,2}|1000|normal|bold|bolder|lighter)$/i.test(value) || /^var\([^{};]+\)$/i.test(value));
+}
+function isValidDuration(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("transition-duration", value, /^(?:0|\d*\.?\d+(?:ms|s))$/i.test(value) || /^(?:calc|var)\([^{};]+\)$/i.test(value));
+}
+function isValidEasing(value) {
+	if (containsUnsafeCss(value)) return false;
+	return supportsCssValue("transition-timing-function", value, /^(?:linear|ease|ease-in|ease-out|ease-in-out)$/i.test(value) || /^(?:cubic-bezier|steps|linear|var)\([^{};]+\)$/i.test(value));
+}
+function isValidShadow(value) {
+	if (containsUnsafeCss(value)) return false;
+	if (value === "none" || /^var\([^{};]+\)$/i.test(value)) return true;
+	const lengths = value.match(/(?:^|\s)(?:0|\d*\.?\d+(?:px|rem|em))(?=\s|$)/gi) ?? [];
+	const hasColor = /#[0-9a-f]{3,8}\b/i.test(value) || /(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\([^{};]+\)$/i.test(value);
+	return supportsCssValue("box-shadow", value, lengths.length >= 2 && hasColor);
+}
+function tokenSyntaxError(token, value) {
+	if (COLOR_TOKENS.has(token) && !isValidColor(value)) return `tokens.${token} must be a valid color`;
+	if (LENGTH_TOKENS.has(token) && !isValidLength(value)) return `tokens.${token} must be a valid length`;
+	if (LINE_HEIGHT_TOKENS.has(token) && !isValidLineHeight(value)) return `tokens.${token} must be a valid line height`;
+	if (WEIGHT_TOKENS.has(token) && !isValidWeight(value)) return `tokens.${token} must be a valid font weight`;
+	if (SHADOW_TOKENS.has(token) && !isValidShadow(value)) return `tokens.${token} must be a valid shadow`;
+	if (DURATION_TOKENS.has(token) && !isValidDuration(value)) return `tokens.${token} must be a valid duration`;
+	if (EASING_TOKENS.has(token) && !isValidEasing(value)) return `tokens.${token} must be a valid easing function`;
+	if ((token === "fontSans" || token === "fontMono") && containsUnsafeCss(value)) return `tokens.${token} must be a valid font family`;
+	return null;
+}
+function validateThemeDefinition(candidate) {
+	const errors = [];
+	const value = candidate;
+	if (!value || typeof value !== "object") return {
+		valid: false,
+		errors: ["theme definition must be an object"]
+	};
+	if (typeof value.id !== "string" || !STABLE_THEME_ID.test(value.id)) errors.push("id must be a stable theme identifier");
+	if (typeof value.label !== "string" || value.label.trim() === "") errors.push("label is required");
+	if (value.appearance !== "light" && value.appearance !== "dark") errors.push("appearance must be light or dark");
+	const tokens = value.tokens;
+	for (const token of THEME_TOKEN_NAMES) {
+		const tokenValue = tokens?.[token];
+		if (typeof tokenValue !== "string" || tokenValue.trim() === "") {
+			errors.push(`tokens.${token} is required`);
+			continue;
+		}
+		const syntaxError = tokenSyntaxError(token, tokenValue);
+		if (syntaxError) errors.push(syntaxError);
+	}
+	if (value.stylesheets !== void 0 && (!Array.isArray(value.stylesheets) || value.stylesheets.some((stylesheet) => typeof stylesheet !== "string" || stylesheet.trim() === ""))) errors.push("stylesheets must contain non-empty paths");
+	return errors.length === 0 ? {
+		valid: true,
+		errors: []
+	} : {
+		valid: false,
+		errors
+	};
+}
+function freezeThemeDefinition(candidate) {
+	const validation = validateThemeDefinition(candidate);
+	if (!validation.valid) throw new Error(`Invalid theme definition: ${validation.errors.join("; ")}`);
+	const tokens = Object.freeze(Object.fromEntries(THEME_TOKEN_NAMES.map((token) => [token, candidate.tokens[token]])));
+	const stylesheets = candidate.stylesheets === void 0 ? void 0 : Object.freeze([...candidate.stylesheets]);
+	return Object.freeze({
+		id: candidate.id,
+		label: candidate.label,
+		appearance: candidate.appearance,
+		tokens,
+		...stylesheets ? { stylesheets } : {}
+	});
+}
 //#endregion
 //#region packages/plugin-sdk/src/testing/support.ts
 function createDisposable(dispose) {
@@ -436,6 +759,7 @@ function createTestingCalls() {
 		emittedGlobalEvents: [],
 		openUrl: [],
 		clipboardWrites: [],
+		themeRegistrations: [],
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
@@ -4234,6 +4558,7 @@ var TestingFrontendContributionFake = class {
 	taskUISections = /* @__PURE__ */ new Map();
 	reviewRowActions = /* @__PURE__ */ new Map();
 	settingsSections = /* @__PURE__ */ new Map();
+	themes = /* @__PURE__ */ new Map();
 	injectionPoints = /* @__PURE__ */ new Map();
 	taskStartPrefixProviders = /* @__PURE__ */ new Map();
 	browserSurfaces;
@@ -4256,6 +4581,7 @@ var TestingFrontendContributionFake = class {
 			reviewUI: { registerRowAction: (registration) => this.registerReviewRowAction(registration) },
 			taskPane: { registerTab: (registration) => this.registerTaskPaneTab(registration) },
 			settings: { registerSection: (registration) => this.registerSettingsSection(registration) },
+			themes: { register: (definition) => this.registerTheme(definition) },
 			backend: {
 				state: "ready",
 				whenReady: async () => void 0,
@@ -4282,6 +4608,7 @@ var TestingFrontendContributionFake = class {
 			taskUISections: Array.from(this.taskUISections.values()),
 			reviewRowActions: Array.from(this.reviewRowActions.values()),
 			settingsSections: Array.from(this.settingsSections.values()),
+			themes: Array.from(this.themes.values()),
 			injectionPoints: Array.from(this.injectionPoints.values()),
 			taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
 		};
@@ -4409,6 +4736,35 @@ var TestingFrontendContributionFake = class {
 		return createDisposable(() => {
 			this.settingsSections.delete(qualifiedId);
 			this.services.claims.release("settings", qualifiedId);
+		});
+	}
+	registerTheme(definition) {
+		if (!this.services.packageMetadata.requires?.includes("themes")) throw new Error("themes registration requires the themes capability");
+		if (this.services.packageMetadata.enablement !== "app") throw new Error("themes registration requires app enablement");
+		const localId = definition?.id;
+		if (typeof localId === "string" && (localId === "openforge-light" || localId === "openforge-dark" || localId.startsWith("openforge."))) throw new Error(`themes registration cannot use reserved id "${localId}"`);
+		assertLocalId("themes", localId);
+		const validation = validateThemeDefinition(definition);
+		if (!validation.valid) throw new Error(`themes registration ${validation.errors.join("; ")}`);
+		const qualifiedId = `${this.services.pluginId}:${localId.trim()}`;
+		this.services.claims.claim("themes", qualifiedId);
+		const frozen = freezeThemeDefinition({
+			...definition,
+			id: localId.trim(),
+			label: definition.label.trim()
+		});
+		const contribution = {
+			...frozen,
+			id: frozen.id,
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: null
+		};
+		this.services.calls.themeRegistrations.push(definition);
+		this.themes.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.themes.delete(qualifiedId);
+			this.services.claims.release("themes", qualifiedId);
 		});
 	}
 	registerTaskStartPrefixProvider(registration) {
@@ -4963,4 +5319,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { BrowserSurfaceError, DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_AGENT_SESSION_PAGE_SIZE, MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_SUPPORTED_API_VERSION, MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, resolveExternalTextFileChunkSize, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { BrowserSurfaceError, DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_AGENT_SESSION_PAGE_SIZE, MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_SUPPORTED_API_VERSION, MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, THEME_TOKEN_CSS_PROPERTIES, THEME_TOKEN_NAMES, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, freezeThemeDefinition, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, resolveExternalTextFileChunkSize, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata, validateThemeDefinition };

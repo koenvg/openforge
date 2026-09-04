@@ -153,6 +153,14 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   if (data.enablement === 'app' && (!Array.isArray(data.requires) || !data.requires.includes('appEnablement'))) {
     errors.push({ path: 'requires', message: 'App enablement requires the appEnablement capability' })
   }
+  if (Array.isArray(data.requires) && data.requires.includes('themes')) {
+    if (data.enablement !== 'app') {
+      errors.push({ path: 'enablement', message: 'themes capability requires app enablement' })
+    }
+    if (!isNonEmptyString(data.frontend)) {
+      errors.push({ path: 'requires', message: 'themes capability requires a frontend entry' })
+    }
+  }
   if (Array.isArray(data.requires) && data.requires.includes('browserSurfaces') && !isNonEmptyString(data.frontend)) {
     errors.push({ path: 'requires', message: 'browserSurfaces capability requires a frontend entry' })
   }

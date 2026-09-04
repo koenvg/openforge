@@ -41,6 +41,7 @@ export type {
   RuntimeInjectionPointContribution,
   RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
+  RuntimeThemeContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
@@ -96,6 +97,14 @@ class RuntimeContributionRegistry {
     await this.runActivationTransaction(this.frontendSubscriptions, async () => {
       await plugin.activate(this.getFrontendApi(), this.createFrontendContext())
     })
+  }
+
+  prepareFrontendThemes(): Promise<void> {
+    return this.frontendContributions.prepareThemes()
+  }
+
+  commitFrontendThemes(generation: number, isGenerationCurrent: () => boolean): boolean {
+    return this.frontendContributions.commitThemes(generation, isGenerationCurrent)
   }
 
   async activateBackend(plugin: BackendPlugin): Promise<void> {

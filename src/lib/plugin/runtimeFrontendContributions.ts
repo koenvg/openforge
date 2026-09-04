@@ -1,9 +1,12 @@
 import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
+import { freezeThemeDefinition, validateThemeDefinition } from '@openforge-app/plugin-sdk'
+import type { ThemeBatchRegistration, ThemeRegistration, ThemeRegistry } from '../themeRegistry'
 import type {
   FrontendOpenForgeAPI,
   PluginInjectionPointRegistration,
   PluginReviewRowActionRegistration,
   PluginSettingsSectionRegistration,
+  PluginThemeDefinition,
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
@@ -23,6 +26,7 @@ import type {
   RuntimeInjectionPointContribution,
   RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
+  RuntimeThemeContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
@@ -30,9 +34,16 @@ import type {
   RuntimeViewReplacementContribution,
 } from './runtimeContributionTypes'
 
+type ThemeRegistryResolver = () => Promise<ThemeRegistry | null>
+
+async function resolveBrowserThemeRegistry(): Promise<ThemeRegistry | null> {
+  if (typeof document === 'undefined') return null
+  return (await import('../theme')).themeRegistry
+}
+
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
+  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'themes' | 'injectionPoints' | 'taskStart' | 'backend'
 >
 
 export class RuntimeFrontendContributionRegistry {
@@ -42,6 +53,11 @@ export class RuntimeFrontendContributionRegistry {
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly reviewRowActions = new Map<string, RuntimeReviewRowActionContribution>()
   private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
+  private readonly themes = new Map<string, RuntimeThemeContribution>()
+  private committedThemes: ThemeBatchRegistration | null = null
+  private readonly lateThemeRegistrations = new Map<string, ThemeRegistration>()
+  private committedThemeGeneration: number | null = null
+  private themeRegistry: ThemeRegistry | null = null
   private readonly injectionPoints = new Map<string, RuntimeInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, RuntimeTaskStartPrefixProviderContribution>()
   private api: FrontendContributionApi | null = null
@@ -49,6 +65,7 @@ export class RuntimeFrontendContributionRegistry {
   constructor(
     private readonly services: RuntimeRegistryServices,
     private readonly invokeBackendMethod: (method: string, payload?: unknown) => Promise<unknown>,
+    private readonly resolveThemeRegistry: ThemeRegistryResolver = resolveBrowserThemeRegistry,
   ) {}
 
   createApi(): FrontendContributionApi {
@@ -81,6 +98,9 @@ export class RuntimeFrontendContributionRegistry {
       },
       settings: {
         registerSection: (registration) => this.registerSettingsSection(registration),
+      },
+      themes: {
+        register: (definition) => this.registerTheme(definition),
       },
       injectionPoints: {
         register: (registration) => this.registerInjectionPoint(registration),
@@ -116,6 +136,7 @@ export class RuntimeFrontendContributionRegistry {
     taskUISections: RuntimeTaskUISectionContribution[]
     reviewRowActions: RuntimeReviewRowActionContribution[]
     settingsSections: RuntimeSettingsSectionContribution[]
+    themes: RuntimeThemeContribution[]
     injectionPoints: RuntimeInjectionPointContribution[]
     taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
   } {
@@ -126,6 +147,7 @@ export class RuntimeFrontendContributionRegistry {
       taskUISections: Array.from(this.taskUISections.values()),
       reviewRowActions: Array.from(this.reviewRowActions.values()),
       settingsSections: Array.from(this.settingsSections.values()),
+      themes: Array.from(this.themes.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
       taskStartPrefixProviders: this.listTaskStartPrefixProviders(),
     }
@@ -139,6 +161,109 @@ export class RuntimeFrontendContributionRegistry {
     return Array.from(this.taskStartPrefixProviders.values()).sort(
       (left, right) => left.order - right.order || left.qualifiedId.localeCompare(right.qualifiedId),
     )
+  }
+
+  async prepareThemes(): Promise<void> {
+    if (this.themeRegistry) return
+    this.themeRegistry = await this.resolveThemeRegistry()
+    if (!this.themeRegistry && this.themes.size > 0) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
+  }
+
+  commitThemes(generation: number, isGenerationCurrent: () => boolean = () => true): boolean {
+    if (this.committedThemeGeneration !== null) {
+      throw new Error(`Theme contributions for ${this.services.pluginId} are already committed`)
+    }
+    if (!isGenerationCurrent()) return false
+
+    const definitions = Array.from(this.themes.values(), contribution => freezeThemeDefinition({
+      id: contribution.qualifiedId,
+      label: contribution.label,
+      appearance: contribution.appearance,
+      tokens: contribution.tokens,
+      ...(contribution.stylesheets ? { stylesheets: contribution.stylesheets } : {}),
+    }))
+    if (!this.themeRegistry && definitions.length > 0) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
+
+    if (this.themeRegistry) {
+      this.committedThemes = this.themeRegistry.registerContributedThemes(definitions, {
+        pluginId: this.services.pluginId,
+        generation,
+      })
+    }
+    this.committedThemeGeneration = generation
+    return true
+  }
+
+  private registerTheme(definition: PluginThemeDefinition): Disposable {
+    if (!this.services.packageMetadata?.requires?.includes('themes')) {
+      throw new RuntimeValidationError('themes', 'requires the themes capability')
+    }
+    if (this.services.packageMetadata.enablement !== 'app') {
+      throw new RuntimeValidationError('themes', 'requires app enablement')
+    }
+
+    const localId = definition?.id
+    if (typeof localId === 'string' && (
+      localId === 'openforge-light'
+      || localId === 'openforge-dark'
+      || localId.startsWith('openforge.')
+    )) {
+      throw new RuntimeValidationError('themes', `cannot use reserved id "${localId}"`)
+    }
+    if (typeof localId !== 'string' || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(localId)) {
+      throw new RuntimeValidationError('themes', 'requires a stable local id')
+    }
+
+    const validation = validateThemeDefinition(definition)
+    if (!validation.valid) {
+      throw new RuntimeValidationError('themes', validation.errors.join('; '))
+    }
+    if (this.committedThemeGeneration !== null && !this.themeRegistry) {
+      throw new RuntimeValidationError('themes', 'requires a browser theme host')
+    }
+
+    const qualifiedId = `${this.services.pluginId}:${localId}`
+    this.services.claims.claim('themes', qualifiedId)
+    const frozen = freezeThemeDefinition(definition)
+    const contribution: RuntimeThemeContribution = {
+      ...frozen,
+      id: frozen.id,
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: null,
+    }
+    this.themes.set(qualifiedId, contribution)
+
+    if (this.committedThemeGeneration !== null) {
+      const themeRegistry = this.themeRegistry
+      if (!themeRegistry) {
+        throw new RuntimeValidationError('themes', 'requires a browser theme host')
+      }
+      const registration = themeRegistry.registerContributedTheme({
+        ...frozen,
+        id: qualifiedId,
+      }, {
+        pluginId: this.services.pluginId,
+        generation: this.committedThemeGeneration,
+      })
+      this.lateThemeRegistrations.set(qualifiedId, registration)
+    }
+
+    return this.services.trackDisposable(createDisposable(async () => {
+      this.themes.delete(qualifiedId)
+      this.services.claims.release('themes', qualifiedId)
+      const lateRegistration = this.lateThemeRegistrations.get(qualifiedId)
+      if (lateRegistration) {
+        this.lateThemeRegistrations.delete(qualifiedId)
+        await lateRegistration.dispose()
+        return
+      }
+      await this.committedThemes?.disposeTheme(qualifiedId)
+    }))
   }
 
   private registerView(registration: PluginViewRegistration): Disposable {

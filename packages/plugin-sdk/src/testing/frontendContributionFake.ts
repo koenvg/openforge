@@ -2,6 +2,8 @@ import { createTestingBrowserSurfaces } from '../browserSurfacesTesting.js'
 import type { TestingBrowserSurfaces } from '../browserSurfacesTesting.js'
 import { sanitizePluginIcon } from '../pluginIcons.js'
 import type { TaskBrowserSurfaceState } from '../browserSurfaces.js'
+import { freezeThemeDefinition, validateThemeDefinition } from '../themes.js'
+import type { PluginThemeDefinition } from '../themes.js'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -16,6 +18,7 @@ import type {
 } from '../types.js'
 import {
   assertFunction,
+  assertLocalId,
   assertTitle,
   createDisposable,
   type TestingRegistryServices,
@@ -24,6 +27,7 @@ import type {
   TestingInjectionPointContribution,
   TestingTaskStartPrefixProviderContribution,
   TestingSettingsSectionContribution,
+  TestingThemeContribution,
   TestingTaskPaneTabContribution,
   TestingReviewRowActionContribution,
   TestingTaskUISectionContribution,
@@ -33,7 +37,7 @@ import type {
 
 type TestingFrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
+  'browserSurfaces' | 'views' | 'viewReplacements' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'themes' | 'backend' | 'injectionPoints' | 'taskStart'
 >
 
 export class TestingFrontendContributionFake {
@@ -43,6 +47,7 @@ export class TestingFrontendContributionFake {
   private readonly taskUISections = new Map<string, TestingTaskUISectionContribution>()
   private readonly reviewRowActions = new Map<string, TestingReviewRowActionContribution>()
   private readonly settingsSections = new Map<string, TestingSettingsSectionContribution>()
+  private readonly themes = new Map<string, TestingThemeContribution>()
   private readonly injectionPoints = new Map<string, TestingInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, TestingTaskStartPrefixProviderContribution>()
   private readonly browserSurfaces: TestingBrowserSurfaces
@@ -79,6 +84,9 @@ export class TestingFrontendContributionFake {
       settings: {
         registerSection: (registration) => this.registerSettingsSection(registration),
       },
+      themes: {
+        register: (definition) => this.registerTheme(definition),
+      },
       backend: {
         state: 'ready' as const,
         whenReady: async () => undefined,
@@ -111,6 +119,7 @@ export class TestingFrontendContributionFake {
     taskUISections: TestingTaskUISectionContribution[]
     reviewRowActions: TestingReviewRowActionContribution[]
     settingsSections: TestingSettingsSectionContribution[]
+    themes: TestingThemeContribution[]
     injectionPoints: TestingInjectionPointContribution[]
     taskStartPrefixProviders: TestingTaskStartPrefixProviderContribution[]
   } {
@@ -121,6 +130,7 @@ export class TestingFrontendContributionFake {
       taskUISections: Array.from(this.taskUISections.values()),
       reviewRowActions: Array.from(this.reviewRowActions.values()),
       settingsSections: Array.from(this.settingsSections.values()),
+      themes: Array.from(this.themes.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
       taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort(
         (left, right) => left.order - right.order || left.id.localeCompare(right.id),
@@ -271,6 +281,50 @@ export class TestingFrontendContributionFake {
     return createDisposable(() => {
       this.settingsSections.delete(qualifiedId)
       this.services.claims.release('settings', qualifiedId)
+    })
+  }
+
+  private registerTheme(definition: PluginThemeDefinition): Disposable {
+    if (!this.services.packageMetadata.requires?.includes('themes')) {
+      throw new Error('themes registration requires the themes capability')
+    }
+    if (this.services.packageMetadata.enablement !== 'app') {
+      throw new Error('themes registration requires app enablement')
+    }
+    const localId = definition?.id
+    if (typeof localId === 'string' && (
+      localId === 'openforge-light'
+      || localId === 'openforge-dark'
+      || localId.startsWith('openforge.')
+    )) {
+      throw new Error(`themes registration cannot use reserved id "${localId}"`)
+    }
+    assertLocalId('themes', localId)
+    const validation = validateThemeDefinition(definition)
+    if (!validation.valid) {
+      throw new Error(`themes registration ${validation.errors.join('; ')}`)
+    }
+
+    const qualifiedId = `${this.services.pluginId}:${localId.trim()}`
+    this.services.claims.claim('themes', qualifiedId)
+    const frozen = freezeThemeDefinition({
+      ...definition,
+      id: localId.trim(),
+      label: definition.label.trim(),
+    })
+    const contribution: TestingThemeContribution = {
+      ...frozen,
+      id: frozen.id,
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: null,
+    }
+    this.services.calls.themeRegistrations.push(definition)
+    this.themes.set(qualifiedId, contribution)
+
+    return createDisposable(() => {
+      this.themes.delete(qualifiedId)
+      this.services.claims.release('themes', qualifiedId)
     })
   }
 

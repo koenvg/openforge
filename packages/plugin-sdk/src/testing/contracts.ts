@@ -37,10 +37,11 @@ import type {
   UserDataFileRequest,
   UserDataFileWriteRequest,
 } from '../types.js'
+import type { PluginThemeDefinition } from '../themes.js'
 import type { AgentSession, FileContent, FileEntry, Task, TaskLabel } from '../domain.js'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
-export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
+export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'themes' | 'backend' | 'background'
 export type TestingMaybePromise<T> = T | Promise<T>
 export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
 export type TestingEventHandler = (payload: unknown) => void
@@ -110,6 +111,7 @@ export interface TestingOpenForgeApiCalls {
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
   clipboardWrites: string[]
+  themeRegistrations: PluginThemeDefinition[]
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]
@@ -182,6 +184,7 @@ export type TestingTaskPaneTabContribution = TestingContributionBase & PluginTas
 export type TestingTaskUISectionContribution = TestingContributionBase & PluginTaskUISectionRegistration
 export type TestingReviewRowActionContribution = TestingContributionBase & PluginReviewRowActionRegistration
 export type TestingSettingsSectionContribution = TestingContributionBase & PluginSettingsSectionRegistration
+export type TestingThemeContribution = TestingContributionBase & PluginThemeDefinition
 export type TestingBackendMethodContribution = TestingContributionBase & {
   registration: BackendMethodRegistration
 }
@@ -210,6 +213,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   taskUISections: TestingTaskUISectionContribution[]
   reviewRowActions: TestingReviewRowActionContribution[]
   settingsSections: TestingSettingsSectionContribution[]
+  themes: TestingThemeContribution[]
   commands: TestingCommandContribution[]
   eventListeners: TestingEventListenerContribution[]
   backendMethods: TestingBackendMethodContribution[]

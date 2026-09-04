@@ -22,7 +22,7 @@ Use this page as the available/unavailable capability reference for API version 
 }
 ```
 
-Declare only the host capabilities your plugin needs. The field is useful for review, installation UI, and package validation, but today it is **declarative metadata**, not a runtime permission sandbox. The current SDK/runtime validates that listed capability names are known; it does not currently deny `openforge.*` API access because a plugin omitted a capability from `requires`.
+Declare only the host capabilities your plugin needs. The field supports review, installation UI, and package validation. Most capabilities remain declarative metadata rather than a runtime permission sandbox. Theme registration is an explicit exception: `openforge.themes.register(...)` checks both the `themes` declaration and app enablement.
 
 Validation that exists today:
 
@@ -31,6 +31,7 @@ Validation that exists today:
   - `requires`: `Must be an array` when `requires` is not an array.
   - `requires[index]`: `Must be a string` when an item is not a string.
   - `requires[index]`: `Unknown OpenForge capability "..."` when a string is not in the supported capability list.
+  - `themes` requires a frontend entry, `enablement: "app"`, and the separate `appEnablement` capability.
 
 Do not depend on `requires` to enforce security boundaries. OpenForge plugins are Trusted Plugins; install and enable only code you trust.
 
@@ -66,6 +67,7 @@ These capabilities are part of `FrontendOpenForgeAPI` and are available to front
 | `views` | `openforge.views` | Register plugin views that OpenForge can route to and surface in navigation. |
 | `taskPane` | `openforge.taskUI` | Register task-pane tabs and titleless plugin-owned sections rendered for a selected task. The API-v1 capability identifier remains `taskPane`; `openforge.taskPane.registerTab(...)` is a deprecated compatibility alias. |
 | `settings` | `openforge.settings` | Register plugin settings sections. |
+| `themes` | `openforge.themes` | Register complete selectable application themes. This capability is limited to app-enabled frontend plugins. |
 | `navigation` | `openforge.navigation` | Read or request changes to the active OpenForge view/project/task. |
 
 Frontend plugins also receive `openforge.backend`, but the capability name is `backend` and it is documented once below because it spans the frontend bridge and backend method registry.
@@ -95,7 +97,7 @@ OpenForge errors try to name the missing or invalid capability/API path so plugi
 - Render props for a plugin that has not activated provide an unavailable frontend API for most calls. Those calls throw `OpenForge frontend runtime API is unavailable for plugin <pluginId>: <api.method>`. A few safe frontend render-prop operations still return fallbacks, such as registering no-op UI contributions, reading a context/navigation snapshot, and `system.openUrl`.
 - Invalid runtime registrations throw `RuntimeValidationError` with messages like `views registration requires a component`, `commands registration requires a non-empty id`, or `background registration requires scope to be global, project, or task`.
 
-These errors describe actual missing host wiring or invalid registrations. They are not evidence that `requires` currently gates access to a capability at runtime.
+These errors describe missing host wiring or invalid registrations. Except for APIs that document an explicit gate, such as `themes`, they do not prove that `requires` denies runtime access.
 
 ## Explicitly unavailable APIs and non-goals
 

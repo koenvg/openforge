@@ -125,6 +125,7 @@ describe('pluginRegistry contribution queries', () => {
           started: false,
         },
       ],
+      themes: [],
       injectionPoints: [],
       reviewRowActions: [],
       taskStartPrefixProviders: [],

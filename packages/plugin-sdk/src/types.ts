@@ -2,6 +2,7 @@ import packageMetadataSchemaData from './openforgePackageMetadataSchema.json' wi
 
 import type { Component } from 'svelte'
 import type { BrowserSurfacesAPI } from './browserSurfaces.js'
+import type { PluginThemeDefinition } from './themes.js'
 import type {
   BoardStatus,
   AgentSession,
@@ -82,6 +83,7 @@ const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
   'appEnablement',
   'customSidebarNavigation',
   'reviewUI',
+  'themes',
 ] as const
 
 export type OpenForgePluginCapability = (typeof OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS)[number]
@@ -537,6 +539,10 @@ export interface FrontendSettingsRegistry {
   registerSection(registration: PluginSettingsSectionRegistration): Disposable
 }
 
+export interface FrontendThemeRegistry {
+  register(definition: PluginThemeDefinition): Disposable
+}
+
 export type BackendReadyState = 'missing' | 'starting' | 'ready' | 'error'
 
 export interface FrontendBackendBridge {
@@ -985,6 +991,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   /** @deprecated Use `taskUI.registerTab(...)`. */
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry
+  themes: FrontendThemeRegistry
   backend: FrontendBackendBridge
   injectionPoints: FrontendInjectionPointRegistry
   taskStart: FrontendTaskStartRegistry

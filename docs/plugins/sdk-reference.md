@@ -83,9 +83,14 @@ Frontend-specific API areas are:
 - `taskPane`: deprecated API-v1 alias for `taskUI.registerTab(...)`.
 - `reviewUI`: register controls rendered on each review-requested pull-request row.
 - `settings`: register plugin settings sections.
+- `themes`: register complete app-level theme definitions from an app-enabled plugin.
 - `backend`: wait for and invoke this plugin's backend methods.
 
 Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, `PluginReviewRowActionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
+
+### Application themes
+
+`openforge.themes.register(definition)` is available only when package metadata uses `enablement: "app"` and declares both `appEnablement` and `themes`. The definition contains a plugin-local `id`, label, explicit `light` or `dark` appearance, and every token named by `THEME_TOKEN_NAMES`. OpenForge exposes the theme as `${pluginId}:${id}`. Missing tokens, invalid values, reserved IDs, and duplicate local IDs fail registration without changing available themes. The returned `Disposable` unregisters the theme; OpenForge also removes registrations when activation ends.
 
 ### Review row actions
 
@@ -321,6 +326,7 @@ export type OpenForgePluginCapability =
   | 'appEnablement'
   | 'customSidebarNavigation'
   | 'reviewUI'
+  | 'themes'
 ```
 
 Manifest contribution arrays are not supported. `validateOpenForgePackageMetadata` rejects a `contributes` field with the message that contribution arrays are not supported; register contributions at runtime in `activate()` instead.
@@ -399,7 +405,7 @@ Use `@openforge-app/plugin-sdk/testing` to exercise plugins without the real Ope
 - `TestingOpenForgeRegistryFake`
 - `TestingSubscriptionSink`
 
-The testing module also exports mock API and contribution types, including `MockFrontendOpenForgeAPI`, `MockBackendOpenForgeAPI`, `TestingOpenForgeApiCalls`, `TestingOpenForgeRegistrySnapshot`, and contribution records for commands, events, views, task-pane tabs, settings sections, backend methods, and background services. Pass `externalTextFiles` to a backend fake to seed `fs.external.readTextFileChunks(...)`; calls are recorded in `fsExternalReadTextFileChunks`.
+The testing module also exports mock API and contribution types, including `MockFrontendOpenForgeAPI`, `MockBackendOpenForgeAPI`, `TestingOpenForgeApiCalls`, `TestingOpenForgeRegistrySnapshot`, and contribution records for commands, events, views, task-pane tabs, settings sections, themes, backend methods, and background services. Theme registrations appear in `snapshot.themes`, while calls appear in `calls.themeRegistrations`. Pass `externalTextFiles` to a backend fake to seed `fs.external.readTextFileChunks(...)`; calls are recorded in `fsExternalReadTextFileChunks`.
 
 ## Vite/build exports
 
