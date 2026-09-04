@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
-import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
-import type { PollResult, PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
+import type { FrontendOpenForgeAPI, PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
+import type { PollResult, PrComment, PullRequestInfo, TaskDetail } from '@openforge-app/plugin-sdk/domain'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import {
@@ -21,6 +21,7 @@ const emptyPollResult: PollResult = {
   errors: 0,
   rate_limited: false,
   rate_limit_reset_at: null,
+  outcome: 'completed',
 }
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
@@ -76,14 +77,35 @@ const baseComment: PrComment = {
   created_at: 2000,
 }
 
+const task: TaskDetail = {
+  id: 'T-42',
+  status: 'doing',
+  projectId: 'P-1',
+  title: 'Test task',
+  dependsOn: [],
+  createdAt: 1000,
+  updatedAt: 2000,
+  promptPreview: 'Test task',
+  labels: [],
+  sourceTicketUrl: null,
+  prompt: 'Test task',
+  agent: null,
+  permissionMode: null,
+  worktreeSource: null,
+  worktreeBranch: null,
+  titleSource: null,
+  titleGeneratedAt: null,
+}
+
 function renderSection(invoke: ReturnType<typeof vi.fn>, taskActionPending = false) {
   const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.github-sync', projectId: 'P-1' })
   api.backend.whenReady = vi.fn(async () => undefined)
-  api.backend.invoke = invoke
+  api.backend.invoke = invoke as unknown as FrontendOpenForgeAPI['backend']['invoke']
   const props: PluginTaskUISectionProps & { taskActionPending: boolean } = {
     api,
     context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' },
     taskId: 'T-42',
+    task,
     projectId: 'P-1',
     taskActionPending,
   }
@@ -195,11 +217,11 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('Task A PR')).toBeTruthy()
     expect(screen.getByText(baseComment.body)).toBeTruthy()
     await waitFor(() => {
-      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
+      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload?.taskId === 'T-42')).toHaveLength(2)
     })
     resolveTaskARefresh([refreshedTaskAPr])
     expect(await screen.findByText('Refreshed Task A PR')).toBeTruthy()
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload.prId === taskAPr.id)).toHaveLength(2)
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload?.prId === taskAPr.id)).toHaveLength(2)
   })
 
   it('coalesces concurrent task loads and never renders a stale response over the selected task', async () => {
@@ -218,17 +240,17 @@ describe('GitHub Sync Task pull request section', () => {
     expect(await screen.findByText('Current Task B PR')).toBeTruthy()
 
     await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' }, taskId: 'T-42', projectId: 'P-1' })
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(1)
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload?.taskId === 'T-42')).toHaveLength(1)
 
     await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-43' }, taskId: 'T-43', projectId: 'P-1' })
     resolveTaskA([taskAPr])
     await waitFor(() => expect(screen.getByText('Current Task B PR')).toBeTruthy())
-    await waitFor(() => expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload.prId === taskAPr.id)).toHaveLength(1))
+    await waitFor(() => expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload?.prId === taskAPr.id)).toHaveLength(1))
     expect(screen.queryByText('Delayed Task A PR')).toBeNull()
 
     await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' }, taskId: 'T-42', projectId: 'P-1' })
     expect(screen.getByText('Delayed Task A PR')).toBeTruthy()
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload?.taskId === 'T-42')).toHaveLength(2)
   })
 
   it('refreshes visible data after a pushed GitHub Sync event and revalidates cached tasks when revisited', async () => {
@@ -265,7 +287,7 @@ describe('GitHub Sync Task pull request section', () => {
     await waitFor(() => expect(taskBLoads).toBe(2))
     expect(screen.getByText('Cached Task B PR')).toBeTruthy()
     expect(screen.getByText('Cached Task B comment')).toBeTruthy()
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(1)
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload?.taskId === 'T-42')).toHaveLength(1)
     expect(invoke.mock.calls.filter(([method]) => method === 'refreshTaskGithubStatus')).toHaveLength(0)
 
     resolveTaskBRefresh([taskBNew])
@@ -274,7 +296,7 @@ describe('GitHub Sync Task pull request section', () => {
 
     await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' }, taskId: 'T-42', projectId: 'P-1' })
     await waitFor(() => {
-      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
+      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload?.taskId === 'T-42')).toHaveLength(2)
     })
   })
 
