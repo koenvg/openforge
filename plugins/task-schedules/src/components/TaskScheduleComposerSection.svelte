@@ -1,6 +1,13 @@
 <script lang="ts">
   import { CheckCircle2, Clock3, X } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import type { SchedulePreset, TaskScheduleMode } from '../lib/types'
   import { emptyScheduleDraftTiming, emptyScheduleFieldErrors } from '../lib/taskSchedulesViewModel'
   import type {
@@ -46,25 +53,39 @@
     onClose,
   }: Props = $props()
 
-  let titleInput = $state<HTMLInputElement | null>(null)
-  let cronInput = $state<HTMLInputElement | null>(null)
-  let runAtInput = $state<HTMLInputElement | null>(null)
+  const titleInputId = 'schedule-title'
+  const cronInputId = 'cron-expression'
+  const runAtInputId = 'schedule-run-at'
+  const frequencyOptions = [
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+  ]
+  const modeOptions = [
+    { value: 'create-and-start', label: 'Create + start' },
+    { value: 'create-only', label: 'Create only' },
+  ]
+  let timeSelectOptions = $derived(timeOptions.map((time) => ({ value: time, label: time })))
+  let daySelectOptions = $derived(dayOfWeekOptions.map((day) => ({ value: String(day.value), label: day.label })))
   let recurringTiming = $state<RecurringScheduleDraftTiming>(emptyScheduleDraftTiming())
   let oneOffTiming = $state<OneOffScheduleDraftTiming>(emptyScheduleDraftTiming('once'))
   let previousFocusRequest = $state(0)
   let previousErrorFocusRequest = $state(0)
 
+  function focusField(id: string): void {
+    document.getElementById(id)?.focus()
+  }
+
   $effect(() => {
     if (titleFocusRequest === previousFocusRequest) return
     previousFocusRequest = titleFocusRequest
-    titleInput?.focus()
+    focusField(titleInputId)
   })
 
   $effect(() => {
     if (errorFocusRequest === previousErrorFocusRequest) return
     previousErrorFocusRequest = errorFocusRequest
-    if (fieldErrors.runAt) runAtInput?.focus()
-    else cronInput?.focus()
+    focusField(fieldErrors.runAt ? runAtInputId : cronInputId)
   })
 
   $effect(() => {
@@ -79,151 +100,342 @@
   }
 </script>
 
-<aside class="flex h-full min-h-0 flex-col border-l border-base-300 bg-base-100" aria-label="Task Schedule form">
-  <header class="flex min-h-16 items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
+<aside class="schedule-composer-shell" aria-label="Task Schedule form">
+  <header class="schedule-composer-header">
     <div>
-      <h2 class="text-lg font-semibold">{composerTitle}</h2>
-      <p class="mt-1 text-xs text-secondary">Create a Task once or on a recurring cadence.</p>
+      <h2>{composerTitle}</h2>
+      <p>Create a Task once or on a recurring cadence.</p>
     </div>
-    <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close Task Schedule form" disabled={saving} onclick={onClose}>
+    <IconButton label="Close Task Schedule form" type="button" disabled={saving} onClick={onClose}>
       <X class="size-4" aria-hidden="true" />
-    </button>
+    </IconButton>
   </header>
 
-  <form class="flex min-h-0 flex-1 flex-col" onsubmit={(event) => { event.preventDefault(); onSaveSchedule() }}>
-    <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
-      <label class="form-control flex w-full flex-col gap-1.5">
-        <span class="text-sm font-medium">Title <span class="text-error" aria-hidden="true">*</span></span>
-        <input bind:this={titleInput} class="input input-bordered min-h-10 w-full" value={draft.title} oninput={(event) => onDraftChange({ ...draft, title: event.currentTarget.value })} placeholder="Update dependencies" required />
-      </label>
+  <form id="task-schedule-form" class="schedule-composer-form" onsubmit={(event) => { event.preventDefault(); onSaveSchedule() }}>
+    <Panel class="schedule-composer-body">
+    <div class="schedule-composer-content">
+      <TextField
+        id={titleInputId}
+        label="Title (required)"
+        value={draft.title}
+        onValueChange={(title) => onDraftChange({ ...draft, title })}
+        placeholder="Update dependencies"
+        required
+      />
 
-      <label class="form-control flex w-full flex-col gap-1.5">
-        <span class="text-sm font-medium">Prompt <span class="text-error" aria-hidden="true">*</span></span>
-        <textarea class="textarea textarea-bordered min-h-36 w-full resize-y leading-relaxed" value={draft.prompt} oninput={(event) => onDraftChange({ ...draft, prompt: event.currentTarget.value })} placeholder="Describe the Task created on each run" required></textarea>
-        <span class="text-xs text-secondary">This becomes the Task prompt for every scheduled run.</span>
-      </label>
+      <Textarea
+        label="Prompt (required)"
+        value={draft.prompt}
+        onValueChange={(prompt) => onDraftChange({ ...draft, prompt })}
+        helperText="This becomes the Task prompt for every scheduled run."
+        placeholder="Describe the Task created on each run"
+        style="min-height: calc(var(--of-control-height) * 4)"
+        required
+      />
 
-      <fieldset class="space-y-2">
-        <legend class="text-sm font-medium">Task Schedule type</legend>
-        <div class="grid gap-2 sm:grid-cols-2">
-          <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
-            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="recurring" checked={draft.timing.type === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
-            <span><span class="block font-medium">Recurring</span><span class="block text-xs text-secondary">Run on a repeating cadence</span></span>
+      <fieldset class="schedule-fieldset">
+        <legend>Task Schedule type</legend>
+        <div class="schedule-type-grid">
+          <label class="schedule-type-option">
+            <input type="radio" name="schedule-kind" value="recurring" checked={draft.timing.type === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
+            <span><span class="schedule-option-title">Recurring</span><span class="schedule-help">Run on a repeating cadence</span></span>
           </label>
-          <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
-            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="once" checked={draft.timing.type === 'once'} disabled={draft.id !== null} onclick={() => changeKind('once')} />
-            <span><span class="block font-medium">One time</span><span class="block text-xs text-secondary">Run once at a future date</span></span>
+          <label class="schedule-type-option">
+            <input type="radio" name="schedule-kind" value="once" checked={draft.timing.type === 'once'} disabled={draft.id !== null} onclick={() => changeKind('once')} />
+            <span><span class="schedule-option-title">One time</span><span class="schedule-help">Run once at a future date</span></span>
           </label>
         </div>
-        {#if draft.id}<p class="text-xs text-secondary">Task Schedule type can’t be changed after creation.</p>{/if}
+        {#if draft.id}<p class="schedule-help">Task Schedule type can’t be changed after creation.</p>{/if}
       </fieldset>
 
-      <fieldset class="space-y-3">
-        <legend class="text-sm font-semibold">Cadence</legend>
+      <fieldset class="schedule-fieldset cadence-fieldset">
+        <legend>Cadence</legend>
         {#if draft.timing.type === 'once'}
-          <div class="form-control flex w-full flex-col gap-1.5">
-            <label for="schedule-run-at" class="text-sm font-medium">Run on <span class="text-error" aria-hidden="true">*</span></label>
-            <input
-              bind:this={runAtInput}
-              id="schedule-run-at"
-              type="datetime-local"
-              class="input input-bordered min-h-10 w-full {fieldErrors.runAt ? 'input-error' : ''}"
-              value={draft.timing.runAt}
-              oninput={(event) => {
-                onDraftChange({ ...draft, timing: { ...draft.timing, runAt: event.currentTarget.value } })
-                onFieldErrorsChange({ ...fieldErrors, runAt: null })
-              }}
-              aria-describedby="run-at-help"
-              aria-invalid={fieldErrors.runAt ? 'true' : 'false'}
-              onblur={() => { if (draft.timing.type === 'once' && draft.timing.runAt) onValidateDraft() }}
-              required
-            />
-            <span id="run-at-help" class="text-xs {fieldErrors.runAt ? 'text-error' : 'text-secondary'}" role={fieldErrors.runAt ? 'alert' : undefined}>
-              {fieldErrors.runAt ?? 'This Task Schedule runs once at the selected local date and time.'}
-            </span>
-          </div>
+          <TextField
+            id={runAtInputId}
+            label="Run on (required)"
+            type="datetime-local"
+            value={draft.timing.runAt}
+            onValueChange={(runAt) => {
+              onDraftChange({ ...draft, timing: { ...draft.timing, runAt } })
+              onFieldErrorsChange({ ...fieldErrors, runAt: null })
+            }}
+            helperText={fieldErrors.runAt ? undefined : 'This Task Schedule runs once at the selected local date and time.'}
+            error={fieldErrors.runAt}
+            onblur={() => { if (draft.timing.type === 'once' && draft.timing.runAt) onValidateDraft() }}
+            required
+          />
         {:else}
           {#if draft.timing.advancedCron}
-          <div class="form-control flex w-full flex-col gap-1.5">
-            <label for="cron-expression" class="text-sm font-medium">Cron expression</label>
-            <input
-              bind:this={cronInput}
-              id="cron-expression"
-              class="input input-bordered min-h-10 w-full font-mono {fieldErrors.cron ? 'input-error' : ''}"
-              value={draft.timing.cron}
-              oninput={(event) => { onDraftChange({ ...draft, timing: { ...draft.timing, cron: event.currentTarget.value } }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }}
-              placeholder="0 9 * * 1-5"
-              aria-describedby="cron-help"
-              aria-invalid={fieldErrors.cron ? 'true' : 'false'}
-              onblur={() => { if (draft.timing.type === 'recurring' && draft.timing.advancedCron && draft.timing.cron.trim()) onValidateDraft() }}
-            />
-            <span id="cron-help" class="text-xs {fieldErrors.cron ? 'text-error' : 'text-secondary'}" role={fieldErrors.cron ? 'alert' : undefined}>{fieldErrors.cron ?? cronHelpText}</span>
-          </div>
+          <TextField
+            id={cronInputId}
+            label="Cron expression"
+            value={draft.timing.cron}
+            onValueChange={(cron) => {
+              onDraftChange({ ...draft, timing: { ...draft.timing, cron } })
+              onFieldErrorsChange({ ...fieldErrors, cron: null })
+            }}
+            placeholder="0 9 * * 1-5"
+            helperText={fieldErrors.cron ? undefined : cronHelpText}
+            error={fieldErrors.cron}
+            style="font-family: var(--of-font-mono)"
+            onblur={() => { if (draft.timing.type === 'recurring' && draft.timing.advancedCron && draft.timing.cron.trim()) onValidateDraft() }}
+          />
         {:else}
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="form-control flex w-full flex-col gap-1.5">
-              <span class="text-sm font-medium">Frequency</span>
-              <select class="select select-bordered min-h-10 w-full" value={draft.timing.preset} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, preset: event.currentTarget.value as SchedulePreset } })}>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </label>
+          <div class="schedule-timing-grid">
+            <Select
+              label="Frequency"
+              options={frequencyOptions}
+              value={draft.timing.preset}
+              onValueChange={(preset) => onDraftChange({ ...draft, timing: { ...draft.timing, preset: preset as SchedulePreset } })}
+            />
 
-            <label class="form-control flex w-full flex-col gap-1.5">
-              <span class="text-sm font-medium">Run at</span>
-              <select class="select select-bordered min-h-10 w-full" value={draft.timing.timeOfDay} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, timeOfDay: event.currentTarget.value } })}>
-                {#each timeOptions as time}<option value={time}>{time}</option>{/each}
-              </select>
-            </label>
+            <Select
+              label="Run at"
+              options={timeSelectOptions}
+              value={draft.timing.timeOfDay}
+              onValueChange={(timeOfDay) => onDraftChange({ ...draft, timing: { ...draft.timing, timeOfDay } })}
+            />
 
             {#if draft.timing.preset === 'weekly'}
-              <label class="form-control flex w-full flex-col gap-1.5">
-                <span class="text-sm font-medium">Day</span>
-                <select class="select select-bordered min-h-10 w-full" value={draft.timing.dayOfWeek} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, dayOfWeek: Number(event.currentTarget.value) } })}>
-                  {#each dayOfWeekOptions as day}<option value={day.value}>{day.label}</option>{/each}
-                </select>
-              </label>
+              <Select
+                label="Day"
+                options={daySelectOptions}
+                value={String(draft.timing.dayOfWeek)}
+                onValueChange={(dayOfWeek) => onDraftChange({ ...draft, timing: { ...draft.timing, dayOfWeek: Number(dayOfWeek) } })}
+              />
             {/if}
           </div>
         {/if}
 
-        <label class="flex min-h-10 items-center gap-3 rounded-box border border-base-300 px-3 text-sm">
-          <Checkbox checked={draft.timing.advancedCron} onchange={(event) => { onDraftChange({ ...draft, timing: { ...draft.timing, advancedCron: event.currentTarget.checked } }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }} />
+        <label class="schedule-checkbox-option">
+          <Checkbox
+            checked={draft.timing.advancedCron}
+            onCheckedChange={(advancedCron) => {
+              onDraftChange({ ...draft, timing: { ...draft.timing, advancedCron } })
+              onFieldErrorsChange({ ...fieldErrors, cron: null })
+            }}
+          />
           <span>Use a custom cron expression</span>
         </label>
         {/if}
-        <p class="flex items-center gap-1.5 text-xs text-secondary"><Clock3 class="size-3.5" aria-hidden="true" /> Times use {Intl.DateTimeFormat().resolvedOptions().timeZone || 'your local timezone'}.</p>
+        <p class="schedule-timezone"><Clock3 class="size-3.5" aria-hidden="true" /> Times use {Intl.DateTimeFormat().resolvedOptions().timeZone || 'your local timezone'}.</p>
       </fieldset>
 
-      <div class="form-control flex w-full flex-col gap-1.5">
-        <label for="schedule-mode" class="text-sm font-medium">Mode</label>
-        <select id="schedule-mode" class="select select-bordered min-h-10 w-full" value={draft.mode} aria-describedby="schedule-mode-help" onchange={(event) => onDraftChange({ ...draft, mode: event.currentTarget.value as TaskScheduleMode })}>
-          <option value="create-and-start">Create + start</option>
-          <option value="create-only">Create only</option>
-        </select>
-        <span id="schedule-mode-help" class="text-xs leading-5 text-secondary">
-          {draft.mode === 'create-and-start'
-            ? 'Creates a Task and starts implementation when the previous scheduled Task is closed.'
-            : 'Creates a Task in the backlog for a manual start.'}
-        </span>
+      <Select
+        id="schedule-mode"
+        label="Mode"
+        options={modeOptions}
+        value={draft.mode}
+        onValueChange={(mode) => onDraftChange({ ...draft, mode: mode as TaskScheduleMode })}
+        helperText={draft.mode === 'create-and-start'
+          ? 'Creates a Task and starts implementation when the previous scheduled Task is closed.'
+          : 'Creates a Task in the backlog for a manual start.'}
+      />
+
+      <div class="schedule-enabled-control">
+        <Switch
+          label={enabledToggleLabel}
+          checked={draft.enabled}
+          onCheckedChange={(enabled) => onDraftChange({ ...draft, enabled })}
+        />
+        <span class="schedule-help">Paused Task Schedules can still be run manually.</span>
       </div>
-
-      <label class="flex min-h-11 items-center justify-between gap-3 rounded-box border border-base-300 px-3 text-sm">
-        <span>
-          <span class="block font-medium">{enabledToggleLabel}</span>
-          <span class="block text-xs text-secondary">Paused Task Schedules can still be run manually.</span>
-        </span>
-        <input class="toggle toggle-primary" type="checkbox" checked={draft.enabled} onchange={(event) => onDraftChange({ ...draft, enabled: event.currentTarget.checked })} />
-      </label>
     </div>
-
-    <footer class="flex shrink-0 items-center justify-end gap-2 border-t border-base-300 p-4">
-      <button class="btn min-h-10" type="button" disabled={saving} onclick={onClose}>Cancel</button>
-      <button class="btn btn-primary min-h-10" type="submit" disabled={saving}>
-        {#if saving}<span class="loading loading-spinner loading-xs" aria-hidden="true"></span>{:else}<CheckCircle2 class="size-4" aria-hidden="true" />{/if}
-        {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create Task Schedule'}
-      </button>
-    </footer>
+    </Panel>
   </form>
+
+  <footer class="schedule-composer-footer">
+    <Button variant="secondary" type="button" disabled={saving} onClick={onClose}>Cancel</Button>
+    <Button form="task-schedule-form" type="submit" disabled={saving}>
+      {#if saving}<span class="schedule-spinner" aria-hidden="true"></span>{:else}<CheckCircle2 class="size-4" aria-hidden="true" />{/if}
+      {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create Task Schedule'}
+    </Button>
+  </footer>
 </aside>
+
+<style>
+  .schedule-composer-shell {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    border-left: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface);
+    color: var(--of-text);
+    font-family: var(--of-font-sans);
+  }
+
+  :global(.schedule-composer-body) {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .schedule-composer-header {
+    display: flex;
+    flex: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--of-space3);
+    min-height: var(--of-control-height-touch);
+    padding: var(--of-space4) var(--of-space5);
+    border-bottom: var(--of-border-width) solid var(--of-border);
+  }
+
+  .schedule-composer-header h2 {
+    margin: 0;
+    color: var(--of-text);
+    font-size: var(--of-text-lg);
+    font-weight: var(--of-weight-semibold);
+    line-height: var(--of-line-height-lg);
+  }
+
+  .schedule-composer-header p,
+  .schedule-help,
+  .schedule-timezone {
+    color: var(--of-text-muted);
+    font-size: var(--of-text-xs);
+    line-height: var(--of-line-height-xs);
+  }
+
+  .schedule-composer-header p {
+    margin: var(--of-space1) 0 0;
+  }
+
+  .schedule-composer-form {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .schedule-composer-content,
+  .schedule-fieldset,
+  .schedule-enabled-control {
+    display: grid;
+  }
+
+  .schedule-composer-content {
+    gap: var(--of-space5);
+  }
+
+
+  .schedule-fieldset {
+    gap: var(--of-space2);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .cadence-fieldset {
+    gap: var(--of-space3);
+  }
+
+  .schedule-fieldset legend {
+    margin-bottom: var(--of-space2);
+    color: var(--of-text);
+    font-size: var(--of-text-sm);
+    font-weight: var(--of-weight-medium);
+    line-height: var(--of-line-height-sm);
+  }
+
+  .schedule-type-grid,
+  .schedule-timing-grid {
+    display: grid;
+    gap: var(--of-space2);
+  }
+
+  .schedule-type-option,
+  .schedule-checkbox-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--of-space3);
+    min-height: var(--of-control-height-touch);
+    padding: var(--of-space2) var(--of-space3);
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-container);
+    background: var(--of-surface);
+    color: var(--of-text);
+    font-size: var(--of-text-sm);
+    line-height: var(--of-line-height-sm);
+  }
+
+  .schedule-type-option input {
+    margin-top: var(--of-space1);
+    accent-color: var(--of-accent);
+  }
+
+  .schedule-type-option input:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
+  }
+
+  .schedule-type-option:has(input:disabled) {
+    color: var(--of-control-text-disabled);
+  }
+
+  .schedule-option-title,
+  .schedule-help {
+    display: block;
+  }
+
+  .schedule-option-title {
+    font-weight: var(--of-weight-medium);
+  }
+
+  .schedule-checkbox-option {
+    align-items: center;
+  }
+
+  .schedule-timezone {
+    display: flex;
+    align-items: center;
+    gap: var(--of-space2);
+    margin: 0;
+  }
+
+  .schedule-enabled-control {
+    gap: var(--of-space2);
+    padding: var(--of-space3);
+    border: var(--of-border-width) solid var(--of-border);
+    border-radius: var(--of-radius-container);
+    background: var(--of-surface);
+  }
+
+  .schedule-composer-footer {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--of-space2);
+    padding: var(--of-space4);
+    border-top: var(--of-border-width) solid var(--of-border);
+  }
+
+  .schedule-spinner {
+    box-sizing: border-box;
+    width: var(--of-space4);
+    height: var(--of-space4);
+    border: var(--of-border-width) solid currentColor;
+    border-right-color: transparent;
+    border-radius: var(--of-radius-round);
+    animation: schedule-spin var(--of-duration-deliberate) linear infinite;
+  }
+
+  @media (min-width: 40rem) {
+    .schedule-type-grid,
+    .schedule-timing-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .schedule-spinner {
+      animation-duration: 1ms;
+    }
+  }
+
+  @keyframes schedule-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>

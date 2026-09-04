@@ -70,7 +70,7 @@
 - [ ] 7.5 Migrate task creation, focus board filters, task cards, and shared task controls while preserving draft state, label behavior, filtering, and keyboard interactions; verify create-task and focus-board suites pass.
 - [ ] 7.6 Migrate task detail, review, terminal shell, inspector, relationship, and feedback controls while preserving mounted-pane, lifecycle, diff, and completion behavior; verify the task-detail and review suites pass.
 - [ ] 7.7 Migrate plugin installation, inventory, lifecycle, diagnostics, and settings controls in the host; verify plugin settings and lifecycle component suites pass.
-- [ ] 7.8 Migrate the task-schedules plugin's covered controls and durable panels while retaining feature layout and schedule behavior; verify its package tests and build pass.
+- [x] 7.8 Migrate the task-schedules plugin's covered controls and durable panels while retaining feature layout and schedule behavior; verify its package tests and build pass.
 - [ ] 7.9 Migrate the GitHub sync plugin's covered controls, forms, tabs, badges, menus, and panels while retaining PR, Jira, review, and walkthrough behavior; verify its package tests and build pass.
 - [ ] 7.10 Migrate covered UI in file-viewer, task-browser, terminal, and demo plugins while retaining their feature-specific layout and custom presentation; verify each affected plugin's tests and build pass.
 - [ ] 7.11 Run the inventory check across all migrated host and built-in plugin areas and resolve every unapproved direct covered control or fixed-geometry occurrence; verify the inventory reports no violations.

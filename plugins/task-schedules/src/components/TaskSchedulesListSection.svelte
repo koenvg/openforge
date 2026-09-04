@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ArrowDown, ArrowUp, CheckCircle2, CirclePause, CircleX, Clock3, TriangleAlert } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import type { TaskSchedule } from '../lib/types'
   import { nextScheduleFireAt, scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
@@ -74,25 +76,28 @@
   {#if loading && schedules.length === 0}
     <PluginViewState loading loadingLabel="Loading Task Schedules" />
   {:else if schedules.length === 0}
-    <div class="flex min-h-64 items-center justify-center rounded-box border border-dashed border-base-300 bg-base-100 p-8">
-      <div class="max-w-sm text-center">
-        <Clock3 class="mx-auto size-8 text-secondary" aria-hidden="true" />
-        <h3 class="mt-3 text-base font-semibold">No Task Schedules found</h3>
-        <p class="mt-1 text-sm text-secondary">Use New Task Schedule to create a one-off or recurring Task Schedule.</p>
+    <Panel class="schedule-list-empty" style="display: grid; min-height: 16rem; border-style: dashed; place-items: center">
+      <div class="schedule-list-empty-content">
+        <Clock3 class="size-8" aria-hidden="true" />
+        <h3>No Task Schedules found</h3>
+        <p>Use New Task Schedule to create a one-off or recurring Task Schedule.</p>
       </div>
-    </div>
+    </Panel>
   {:else}
-    <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-      <table class="table table-sm w-full min-w-[760px]" aria-label="Task Schedules">
+    <Panel class="schedule-table-panel">
+      <table class="schedule-table" aria-label="Task Schedules">
         <thead>
-          <tr class="border-base-300 text-xs text-secondary">
+          <tr class="schedule-table-header">
             {#each columns as column}
               <th aria-sort={sortKey === column.key ? sortDirection : 'none'}>
-                <button
-                  class="inline-flex min-h-10 items-center gap-1 rounded-md px-1 font-semibold text-base-content hover:text-primary"
+                <Button
+                  class="schedule-sort-button"
+                  style="justify-content: flex-start; padding-inline: var(--of-space1)"
+                  variant="ghost"
+                  size="sm"
                   type="button"
                   aria-label={`Sort by ${column.label}`}
-                  onclick={() => onSort(column.key)}
+                  onClick={() => onSort(column.key)}
                 >
                   {column.label}
                   {#if sortKey === column.key}
@@ -102,7 +107,7 @@
                       <ArrowDown class="size-3.5" aria-hidden="true" />
                     {/if}
                   {/if}
-                </button>
+                </Button>
               </th>
             {/each}
           </tr>
@@ -120,16 +125,16 @@
               onclick={(event) => handleRowClick(event, schedule)}
               onkeydown={(event) => handleRowKeydown(event, schedule)}
             >
-              <td class="max-w-72 py-3">
-                <button class="flex w-full items-center gap-3 rounded-md text-left" type="button" tabindex="-1" aria-label={schedule.title} onclick={() => onSelectSchedule(schedule)}>
-                  <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Clock3 class="size-4" aria-hidden="true" /></span>
-                  <span class="min-w-0"><span class="block truncate text-sm font-semibold text-base-content">{schedule.title}</span><span class="mt-0.5 block truncate text-xs text-secondary">{schedule.prompt}</span></span>
-                </button>
+              <td class="schedule-title-cell">
+                <Button class="schedule-title-button" style="width: 100%; justify-content: flex-start; gap: var(--of-space3); padding-inline: 0; text-align: left" variant="ghost" size="sm" type="button" tabindex="-1" aria-label={schedule.title} onClick={() => onSelectSchedule(schedule)}>
+                  <span class="schedule-icon"><Clock3 class="size-4" aria-hidden="true" /></span>
+                  <span class="schedule-title-copy"><span>{schedule.title}</span><span>{schedule.prompt}</span></span>
+                </Button>
               </td>
               <td class="text-sm">
                 <span class="font-medium">{cadenceLabel(schedule)}</span>
                 {#if schedule.timing.type === 'recurring' && schedule.timing.preset === 'custom'}
-                  <span class="mt-0.5 block max-w-40 truncate font-mono text-xs text-secondary">{schedule.timing.cron}</span>
+                  <span class="schedule-cron">{schedule.timing.cron}</span>
                 {/if}
               </td>
               <td class="text-sm">{schedule.mode === 'create-and-start' ? 'Create + start' : 'Create only'}</td>
@@ -137,30 +142,30 @@
               <td class="text-sm">
                 <span class="inline-flex items-center gap-1.5 font-medium">
                   {#if !outcome}
-                    <Clock3 class="size-4 text-secondary" aria-hidden="true" />
+                    <Clock3 class="size-4 status-muted" aria-hidden="true" />
                   {:else if outcome.status === 'started' || outcome.status === 'created'}
-                    <CheckCircle2 class="size-4 text-success" aria-hidden="true" />
+                    <CheckCircle2 class="size-4 status-success" aria-hidden="true" />
                   {:else if outcome.status === 'skipped'}
-                    <TriangleAlert class="size-4 text-warning" aria-hidden="true" />
+                    <TriangleAlert class="size-4 status-warning" aria-hidden="true" />
                   {:else}
-                    <CircleX class="size-4 text-error" aria-hidden="true" />
+                    <CircleX class="size-4 status-danger" aria-hidden="true" />
                   {/if}
                   {resultLabel(schedule)}
                 </span>
                 {#if outcome?.taskId}
-                  <button class="mt-0.5 block rounded text-xs font-medium text-primary hover:underline" type="button" onclick={() => onOpenTask(outcome.taskId!)}>{outcome.taskId}</button>
+                  <Button style="justify-content: flex-start; margin-top: var(--of-space1); padding-inline: 0; color: var(--of-link)" variant="ghost" size="xs" type="button" onClick={() => onOpenTask(outcome.taskId!)}>{outcome.taskId}</Button>
                 {/if}
               </td>
               <td class="text-sm">
                 <span class="inline-flex items-center gap-1.5 font-medium">
                   {#if status === 'Enabled'}
-                    <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Enabled
+                    <CheckCircle2 class="size-4 status-success" aria-hidden="true" /> Enabled
                   {:else if status === 'Completed'}
-                    <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Completed
+                    <CheckCircle2 class="size-4 status-success" aria-hidden="true" /> Completed
                   {:else if status === 'Cancelled'}
-                    <CircleX class="size-4 text-error" aria-hidden="true" /> Cancelled
+                    <CircleX class="size-4 status-danger" aria-hidden="true" /> Cancelled
                   {:else}
-                    <CirclePause class="size-4 text-warning" aria-hidden="true" /> Paused
+                    <CirclePause class="size-4 status-warning" aria-hidden="true" /> Paused
                   {/if}
                 </span>
               </td>
@@ -168,27 +173,133 @@
           {/each}
         </tbody>
       </table>
-    </div>
+    </Panel>
   {/if}
 </section>
 
 <style>
+
+  .schedule-list-empty-content {
+    max-width: 24rem;
+    text-align: center;
+  }
+
+  .schedule-list-empty-content :global(svg) {
+    margin: 0 auto;
+    color: var(--of-icon-muted);
+  }
+
+  .schedule-list-empty-content h3 {
+    margin: var(--of-space3) 0 0;
+    color: var(--of-text);
+    font-size: var(--of-text-md);
+    font-weight: var(--of-weight-semibold);
+    line-height: var(--of-line-height-md);
+  }
+
+  .schedule-list-empty-content p {
+    margin: var(--of-space1) 0 0;
+    color: var(--of-text-muted);
+    font-size: var(--of-text-sm);
+    line-height: var(--of-line-height-sm);
+  }
+
+  :global(.schedule-table-panel) {
+    overflow-x: auto;
+  }
+
+  .schedule-table {
+    width: 100%;
+    min-width: 47.5rem;
+    border-collapse: collapse;
+    color: var(--of-text);
+    font-size: var(--of-text-sm);
+    line-height: var(--of-line-height-sm);
+  }
+
+  .schedule-table th,
+  .schedule-table td {
+    padding: var(--of-space2) var(--of-space3);
+    text-align: left;
+  }
+
+  .schedule-table-header {
+    color: var(--of-text-muted);
+    font-size: var(--of-text-xs);
+    line-height: var(--of-line-height-xs);
+  }
+
   tbody tr {
-    border-color: var(--of-divider);
+    border-top: var(--of-border-width) solid var(--of-border);
     cursor: pointer;
   }
 
   tbody tr:focus-visible {
-    outline: 2px solid var(--of-focus);
-    outline-offset: -2px;
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: calc(-1 * var(--of-focus-width));
   }
 
   tbody tr.selected {
-    background: color-mix(in srgb, var(--color-primary) 7%, var(--of-surface));
-    box-shadow: inset 3px 0 var(--color-primary);
+    background: var(--of-accent-subtle);
+    box-shadow: inset var(--of-focus-width) 0 var(--of-accent);
   }
 
   tbody tr:hover {
-    background: color-mix(in srgb, var(--color-primary) 4%, var(--of-surface));
+    background: var(--of-surface-subtle);
   }
+
+  .schedule-title-cell {
+    max-width: 18rem;
+  }
+
+
+  .schedule-icon {
+    display: grid;
+    width: var(--of-control-height-compact);
+    height: var(--of-control-height-compact);
+    flex: none;
+    border-radius: var(--of-radius-control);
+    background: var(--of-accent-subtle);
+    color: var(--of-on-accent-subtle);
+    place-items: center;
+  }
+
+  .schedule-title-copy {
+    min-width: 0;
+  }
+
+  .schedule-title-copy span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .schedule-title-copy span:first-child {
+    color: var(--of-text);
+    font-weight: var(--of-weight-semibold);
+  }
+
+  .schedule-title-copy span:last-child,
+  .schedule-cron {
+    color: var(--of-text-muted);
+    font-size: var(--of-text-xs);
+    line-height: var(--of-line-height-xs);
+  }
+
+  .schedule-cron {
+    display: block;
+    max-width: 10rem;
+    margin-top: var(--of-space1);
+    overflow: hidden;
+    font-family: var(--of-font-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+
+  .schedule-table :global(.status-muted) { color: var(--of-icon-muted); }
+  .schedule-table :global(.status-success) { color: var(--of-status-success); }
+  .schedule-table :global(.status-warning) { color: var(--of-status-warning); }
+  .schedule-table :global(.status-danger) { color: var(--of-status-danger); }
 </style>
