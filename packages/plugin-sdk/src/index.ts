@@ -138,10 +138,6 @@ export type {
   PluginTaskPaneProps,
   PluginTaskUISectionProps,
   PluginViewProps,
-  PluginProjectDashboardReplacementProps,
-  PluginProjectDashboardReplacementRegistration,
-  PluginViewReplacementRegistration,
-  ReplaceableViewTarget,
   PluginStorage,
   PluginStorageScope,
   PluginViewKey,
@@ -171,6 +167,13 @@ export type {
   TasksAPI,
   ValidationError,
 } from './types.js'
+
+export type {
+  PluginProjectDashboardReplacementProps,
+  PluginProjectDashboardReplacementRegistration,
+  PluginViewReplacementRegistration,
+  ReplaceableViewTarget,
+} from './viewReplacements.js'
 
 export type {
   MockBackendOpenForgeAPI,
