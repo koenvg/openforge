@@ -121,8 +121,11 @@ describe('Scheduled Fire execution', () => {
   })
 
   it('skips a Scheduled Fire when the previous scheduled Task is still open', async () => {
-    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('T-open', 'doing'), related: [] }))
+    const api = createMockBackendOpenForgeApi({
+      pluginId: 'com.openforge.task-schedules',
+      projectId,
+      tasks: [makeScheduleTask('T-open', 'doing')],
+    })
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-open' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -164,8 +167,11 @@ describe('Scheduled Fire execution', () => {
   it('fires when the previous scheduled Task still resolves but is already done', async () => {
     // 'done' is a recognized-but-unreachable status after AVIV-118: only legacy
     // rows can still resolve as 'done'. Such a last Task counts as closed.
-    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('T-done', 'done'), related: [] }))
+    const api = createMockBackendOpenForgeApi({
+      pluginId: 'com.openforge.task-schedules',
+      projectId,
+      tasks: [makeScheduleTask('T-done', 'done')],
+    })
     await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-done' })])
 
     const outcome = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
@@ -193,7 +199,12 @@ describe('Scheduled Fire execution', () => {
     // The Task is created before implementation starts. If startImplementation
     // throws, the created Task must still be recorded as lastTaskId; otherwise
     // every subsequent fire spawns another orphan Task (the weekend flood).
-    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const tasks: Task[] = []
+    const api = createMockBackendOpenForgeApi({
+      pluginId: 'com.openforge.task-schedules',
+      projectId,
+      tasks,
+    })
     api.tasks.startImplementation = vi.fn(async () => { throw new Error('failed to create worktree') })
     await setStoredSchedules(api, [makeSchedule()])
 
@@ -205,7 +216,7 @@ describe('Scheduled Fire execution', () => {
 
     // The created Task is still open, so the next fire must skip rather than
     // create a second Task.
-    api.tasks.detail = vi.fn(async () => ({ task: makeScheduleTask('mock-task-1', 'backlog'), related: [] }))
+    tasks.push(makeScheduleTask('mock-task-1', 'backlog'))
     const second = await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 11))
 
     expect(second).toMatchObject({ status: 'skipped', taskId: 'mock-task-1' })
