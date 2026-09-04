@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
@@ -175,6 +175,7 @@ function registerPrReviewBackends(
   submitReview: () => Promise<void> = async () => undefined,
   fileContent = '',
   getWalkthrough: () => PrWalkthrough | null | Promise<PrWalkthrough | null> = () => null,
+  getAiThreads: () => AiThread[] | Promise<AiThread[]> = () => [],
 ) {
   // Per-repo scope now shows only the project's resolved repo (never all repos), so
   // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
@@ -201,7 +202,7 @@ function registerPrReviewBackends(
   backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ walkthrough_session_key: 'session-key' }) })
   backend.registerMethod('deletePrWalkthrough', { handler: async () => undefined })
   backend.registerMethod('abortAgentWalkthrough', { handler: async () => undefined })
-  backend.registerMethod('getAiThreads', { handler: async () => [] })
+  backend.registerMethod('getAiThreads', { handler: async () => getAiThreads() })
   backend.registerMethod('saveAiThread', { handler: async () => undefined })
   backend.registerMethod('deleteAiThread', { handler: async () => undefined })
   backend.registerMethod('askAgentQuestions', { handler: async () => undefined })
@@ -287,6 +288,64 @@ describe('PrReviewView host-driven open', () => {
     })
     // The request is consumed so it does not re-fire on later store updates.
     expect(get(pendingReviewPrOpen)).toBeNull()
+  })
+})
+
+describe('PrReviewView AI thread loading', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('does not let an older thread request replace a newer load after reopening the same pull request', async () => {
+    let resolveFirst: (threads: AiThread[]) => void = () => {}
+    let resolveSecond: (threads: AiThread[]) => void = () => {}
+    const firstRequest = new Promise<AiThread[]>((resolve) => { resolveFirst = resolve })
+    const secondRequest = new Promise<AiThread[]>((resolve) => { resolveSecond = resolve })
+    const olderThread: AiThread = {
+      id: 'older-thread',
+      anchor: { type: 'line', filename: 'src/main.rs', line: 1, side: 'RIGHT' },
+      status: 'draft',
+      messages: [{ role: 'user', body: 'Older question', created_at: 1 }],
+      created_at: 1,
+      updated_at: 1,
+    }
+    const newerThread: AiThread = {
+      ...olderThread,
+      id: 'newer-thread',
+      messages: [{ role: 'user', body: 'Newer question', created_at: 2 }],
+      created_at: 2,
+      updated_at: 2,
+    }
+    let requestCount = 0
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(
+      registry,
+      () => [baseDiff],
+      [basePr],
+      [],
+      async () => undefined,
+      '',
+      () => null,
+      async () => ++requestCount === 1 ? firstRequest : secondRequest,
+    )
+
+    renderPrReviewView(registry)
+    const title = await screen.findByText(basePr.title)
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await waitFor(() => expect(requestCount).toBe(1))
+
+    await fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+    await fireEvent.click(requireElement((await screen.findByText(basePr.title)).closest('button'), HTMLButtonElement))
+    await waitFor(() => expect(requestCount).toBe(2))
+
+    resolveSecond([newerThread])
+    await waitFor(() => expect(get(aiThreads).map(thread => thread.id)).toEqual(['newer-thread']))
+
+    resolveFirst([olderThread])
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(get(aiThreads).map(thread => thread.id)).toEqual(['newer-thread'])
   })
 })
 
