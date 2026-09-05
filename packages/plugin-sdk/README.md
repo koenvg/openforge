@@ -80,6 +80,8 @@ export default defineFrontendPlugin({
 
 Add every registration and cleanup handle to `context.subscriptions`. OpenForge disposes them when it deactivates or reloads the plugin.
 
+For user-selectable `project.dashboard` and `task.detail` providers, declare `viewReplacements` and use `openforge.viewReplacements.register(...)`. Registration does not select a provider, and ordinary rail/sidebar Views remain additive. See the [replacement authoring contract](https://github.com/koenvg/openforge/blob/main/docs/plugins/view-replacements.md) for compiled examples, target-specific props, Core fallback, invalidation cleanup, and host resource ownership.
+
 Task reads support project-filtered invalidation subscriptions. Notifications may be coalesced and contain identity plus a reason, not a Task snapshot. Repeat only the bounded read your view needs:
 
 ```ts

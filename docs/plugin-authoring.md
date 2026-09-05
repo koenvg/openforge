@@ -211,6 +211,12 @@ The navigation component receives `api`, the current `context`, `active`, `colla
 
 For a standard row, import `PluginSidebarLink.svelte` from the SDK UI layer. Pass `accessibleName`, `active`, `collapsed`, and `onActivate`, then provide optional `leading`, `label`, and `trailing` snippets. It uses native button focus/keyboard behavior, `aria-current`, and a collapsed tooltip. Custom components may ignore this shared link when they need richer trusted controls.
 
+### Selectable dashboard and task detail providers
+
+Declare `viewReplacements` and register through `openforge.viewReplacements.register(...)` to offer a `project.dashboard` or `task.detail` provider. Registration never selects the provider. Users choose each target independently in host settings, and Core remains the fallback. Ordinary rail and sidebar Views stay additive.
+
+The [replacement authoring contract](./plugins/view-replacements.md) contains compiled dashboard and task detail examples, capability metadata, target-specific props, selection and fallback rules, task invalidation cleanup, and host resource ownership. The plugin owns its content, not the application shell, task runtime, or recovery controls.
+
 ### Plugin icons
 
 `package.json#openforge.icon` and `openforge.views.register(...)#icon` both use `PluginIcon`: a supported Lucide icon name or an inline SVG icon.
