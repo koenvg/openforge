@@ -29,14 +29,14 @@ function makeRegistry(requires: OpenForgePackageMetadata['requires'] = ['viewRep
 }
 
 describe('runtime project dashboard replacements', () => {
-  it('registers a valid provider separately from an additive View with the same local id', () => {
+  it.each(['rail', 'sidebar'] as const)('keeps an additive %s View separate from a replacement with the same local id', (placement) => {
     const registry = makeRegistry(['views', 'viewReplacements'])
 
     registry.getFrontendApi().views.register({
       id: 'dashboard',
       title: 'Dashboard page',
       icon: 'layout-dashboard',
-      placement: 'sidebar',
+      placement,
       component: AdditiveView,
     })
     registry.getFrontendApi().viewReplacements.register({
@@ -47,7 +47,7 @@ describe('runtime project dashboard replacements', () => {
       component: Dashboard,
     })
 
-    expect(registry.getSnapshot().views).toHaveLength(1)
+    expect(registry.getSnapshot().views).toMatchObject([{ id: 'dashboard', placement }])
     expect(registry.getSnapshot().viewReplacements).toMatchObject([
       {
         id: 'dashboard',

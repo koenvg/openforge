@@ -136,11 +136,13 @@ describe('PluginSlot', () => {
     expect(div?.children.length).toBe(0)
   })
 
-  it('renders a registered plugin view component through the slot', async () => {
+  it.each(['rail', 'sidebar'] as const)('renders an existing %s View through its unchanged view key', async (placement) => {
     const manifest = makeManifest()
 
     registerViewComponent(makePluginViewKey('test-plugin', 'main'), PluginSlotTestView)
-    enablePlugin({ manifest, state: 'active', error: null }, makeViewSource())
+    const source = makeViewSource()
+    source.views![0]!.placement = placement
+    enablePlugin({ manifest, state: 'active', error: null }, source)
 
     render(PluginSlot, {
       props: {

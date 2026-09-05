@@ -11,6 +11,7 @@ import { build as viteBuild } from 'vite'
 import { assertPublicUiDeclarationsHideBitsUi } from './public-ui-declaration-contract.mjs'
 import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../src/publicUiExports.mjs'
 import { assertPackedTextFieldDocumentation } from './text-field-documentation-contract.mjs'
+import { buildReplacementAuthoringContract } from './view-replacement-authoring-contract.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -290,6 +291,10 @@ try {
     })),
   )
   await buildPackedExternalPluginFixture(consumerRoot, installedPackageRoot)
+  const { openforgePluginViteExternals } = await import(pathToFileURL(join(installedPackageRoot, 'dist/vite.js')).href)
+  const replacementAuthoringFiles = await buildReplacementAuthoringContract({
+    repoRoot, consumerRoot, external: openforgePluginViteExternals,
+  })
 
   for (const [dependencyName, range] of Object.entries(packedManifest.dependencies ?? {})) {
     if (typeof range !== 'string' || validRange(range) === null) {
@@ -351,9 +356,9 @@ if (typeof vite?.createOpenForgePluginSdkSourceAliases !== 'function') {
       strict: true,
       skipLibCheck: true,
       noEmit: true,
-      types: [],
+      types: ['svelte'],
     },
-    files: ['./authoring-contract.ts'],
+    files: ['./authoring-contract.ts', ...replacementAuthoringFiles],
   }, null, 2)}\n`)
 
   run('pnpm', ['exec', 'tsc', '--project', join(consumerRoot, 'tsconfig.json')], { cwd: consumerRoot })

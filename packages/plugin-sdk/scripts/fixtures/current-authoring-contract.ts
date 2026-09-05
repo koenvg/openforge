@@ -30,6 +30,7 @@ import {
   type PluginTaskDetailReplacementProps,
   type PluginThemeDefinition,
   type PluginViewRegistration,
+  type ReplaceableViewTarget,
 } from '@openforge-app/plugin-sdk/frontend'
 import {
   createOpenForgeRegistryFake,
@@ -165,6 +166,8 @@ const dashboardPropsContract = (props: PluginProjectDashboardReplacementProps) =
   void props.project.id
   void props.api.tasks.onDidChange
   void props.onOpenTask('task-id')
+  void props.onComposeTask()
+  void props.onOpenCommandSearch()
   void props.api.navigation.navigate({ viewId: 'board' })
   void props.api.system.openUrl('https://example.com')
 }
@@ -208,6 +211,22 @@ void registry.frontendApi.viewReplacements.register({
   title: 'Task workspace',
   component: taskDetailComponent,
 })
+const supportedTargets: Record<ReplaceableViewTarget, true> = {
+  'project.dashboard': true,
+  'task.detail': true,
+}
+void supportedTargets
+// @ts-expect-error The application shell is not a replacement target.
+const unsupportedTarget: ReplaceableViewTarget = 'app.shell'
+void unsupportedTarget
+void registry.frontendApi.views.register({
+  id: 'rail-usage',
+  title: 'Usage in rail',
+  icon: 'chart-column-big',
+  placement: 'rail',
+  component: viewComponent,
+})
+
 void defineBackendPlugin({
   activate(openforge, context) {
     context.subscriptions.add(openforge.commands.register(registration))
