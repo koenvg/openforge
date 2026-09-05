@@ -75,7 +75,7 @@
   const truncationStats = $derived(getTruncationStats(file))
 </script>
 
-<div class="border border-base-300 rounded-md">
+<div class="border border-base-300 rounded-[var(--of-radius-container)]">
   <DiffFileHeader
     {file}
     {collapsed}

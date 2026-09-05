@@ -42,7 +42,7 @@
   let statusSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let projectSpanClass = $derived(isDependencies
     ? 'inline-flex shrink-0 items-center gap-1 border-l border-current/20 pl-1.5 font-semibold'
-    : 'inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
+    : 'inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-container)] border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
   )
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')

@@ -61,7 +61,7 @@
     {#each entries as entry, index}
       <button
         type="button"
-        class="size-6 shrink-0 rounded-full text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(index === currentIndex, index < currentIndex)}"
+        class="size-[var(--of-control-height-compact)] shrink-0 rounded-[var(--of-radius-round)] text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(index === currentIndex, index < currentIndex)}"
         onclick={() => selectStep(index)}
         title={entry.kind === 'ticket'
           ? 'Ticket coverage'

@@ -128,7 +128,7 @@
           aria-controls={panelId(tab)}
           aria-label={tabAccessibleLabel(tab)}
           title={`${tab.label} (${tabStatus(tab)})`}
-          class="flex items-center gap-1 pl-3 pr-1 py-1.5 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'text-base-content font-semibold' : 'text-base-content/50'}"
+          class="flex items-center gap-1 pl-3 pr-1 py-1.5 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-primary rounded-[var(--of-radius-container)] {activeTabIndex === tab.index ? 'text-base-content font-semibold' : 'text-base-content/50'}"
           onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>

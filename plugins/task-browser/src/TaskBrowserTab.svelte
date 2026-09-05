@@ -260,7 +260,7 @@
 <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
   <form
     data-testid="browser-navigation-toolbar"
-    class="flex h-10 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-100 px-2"
+    class="flex min-h-[var(--of-control-height-touch)] shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-100 px-2"
     onsubmit={submitAddress}
   >
     <div class="flex shrink-0 items-center gap-0.5">

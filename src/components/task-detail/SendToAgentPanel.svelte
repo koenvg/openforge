@@ -153,12 +153,13 @@
       </p>
       <Textarea
         label="Prompt sent to the agent"
-        class="min-h-80 w-full font-mono text-[13px] leading-relaxed"
+        class="w-full font-mono text-[13px] leading-relaxed"
+        rows={16}
         bind:value={promptDraft}
       />
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" class="mr-auto" onclick={cancelPromptDialog}>Cancel</Button>
-        <div class="join" role="group" aria-label="Prompt mode">
+        <div class="flex gap-1" role="group" aria-label="Prompt mode">
           <Button
             size="sm"
             variant={promptMode === 'address' ? 'primary' : 'ghost'}

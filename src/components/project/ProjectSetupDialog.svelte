@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
   import { onMount, tick } from 'svelte'
   import type { Project } from '../../lib/types'
   import { createProject, createProjectFromGit, createProjectFromNewRepo, selectDirectory, getConfig, setConfig } from '../../lib/ipc'
@@ -171,7 +174,7 @@
           type="button"
           role="radio"
           aria-checked={mode === option.id}
-          class="flex flex-col items-start gap-1 rounded-lg border border-base-300 p-3 text-left transition hover:bg-base-200 {mode === option.id ? 'ring-2 ring-primary' : ''}"
+          class="flex flex-col items-start gap-1 rounded-[var(--of-radius-container)] border border-base-300 p-3 text-left transition hover:bg-base-200 {mode === option.id ? 'ring-2 ring-primary' : ''}"
           onclick={() => { mode = option.id as typeof mode; createError = null }}
           disabled={isSubmitting}
         >
@@ -205,40 +208,39 @@
     {#if mode === 'local'}
       {#if !path}
         <div class="flex flex-col gap-1.5">
-          <button
+          <Button
             data-select-repository
-            class="btn btn-primary btn-sm w-full"
+            variant="primary" size="sm" class="w-full"
             type="button"
             onclick={handleSelectRepository}
             disabled={isSubmitting}
           >
             Select Repository
-          </button>
+          </Button>
           <span class="text-[0.65rem] text-base-content/40">Pick the local git repository for this project. Using the picker lets OpenForge access folders in macOS Documents/Desktop.</span>
         </div>
       {:else}
         <div class="flex flex-col gap-1.5">
           <span id="add-project-repository-label" class="text-xs text-base-content/60 font-medium">Repository</span>
           <div class="flex items-center gap-2">
-            <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-repository-label" title={path}>{path}</span>
-            <button
+            <span class="w-full flex items-center font-mono text-xs truncate border border-[var(--of-border-interactive)] rounded-[var(--of-radius-control)] min-h-[var(--of-control-height-compact)] px-2" role="group" aria-labelledby="add-project-repository-label" title={path}>{path}</span>
+            <Button
               data-select-repository
-              class="btn btn-ghost btn-sm"
+              variant="ghost" size="sm"
               type="button"
               onclick={handleSelectRepository}
               disabled={isSubmitting}
             >
               Change
-            </button>
+            </Button>
           </div>
         </div>
 
         <label class="flex flex-col gap-1.5">
           <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error" aria-hidden="true">*</span></span>
-          <input
+          <TextField label="Project Name" hideLabel size="sm"
             data-project-name-input
             type="text"
-            class="input input-bordered input-sm w-full"
             bind:value={projectName}
             placeholder="My Awesome Project"
             oninput={handleNameInput}
@@ -250,9 +252,8 @@
     {:else if mode === 'github'}
       <label class="flex flex-col gap-1.5">
         <span class="text-xs text-base-content/60 font-medium">Repository URL <span class="text-error" aria-hidden="true">*</span></span>
-        <input
+        <TextField label="Repository URL" hideLabel size="sm"
           type="text"
-          class="input input-bordered input-sm w-full"
           bind:value={repoUrl}
           oninput={handleRepoUrlInput}
           placeholder="https://github.com/owner/repo"
@@ -264,17 +265,16 @@
       <div class="flex flex-col gap-1.5">
         <span id="add-project-parent-label" class="text-xs text-base-content/60 font-medium">Parent Folder <span class="text-error" aria-hidden="true">*</span></span>
         <div class="flex items-center gap-2">
-          <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
-          <button class="btn btn-ghost btn-sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</button>
+          <span class="w-full flex items-center font-mono text-xs truncate border border-[var(--of-border-interactive)] rounded-[var(--of-radius-control)] min-h-[var(--of-control-height-compact)] px-2" role="group" aria-labelledby="add-project-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
+          <Button variant="ghost" size="sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</Button>
         </div>
       </div>
 
       <label class="flex flex-col gap-1.5">
         <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error" aria-hidden="true">*</span></span>
-        <input
+        <TextField label="Project Name" hideLabel size="sm"
           data-project-name-input
           type="text"
-          class="input input-bordered input-sm w-full"
           bind:value={projectName}
           placeholder="My Awesome Project"
           oninput={handleNameInput}
@@ -289,10 +289,9 @@
     {:else}
       <label class="flex flex-col gap-1.5">
         <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error" aria-hidden="true">*</span></span>
-        <input
+        <TextField label="Project Name" hideLabel size="sm"
           data-project-name-input
           type="text"
-          class="input input-bordered input-sm w-full"
           bind:value={projectName}
           placeholder="my-idea"
           oninput={handleNameInput}
@@ -305,15 +304,12 @@
       <div class="flex flex-col gap-1.5">
         <span id="add-project-newrepo-parent-label" class="text-xs text-base-content/60 font-medium">Repositories Folder <span class="text-error" aria-hidden="true">*</span></span>
         <div class="flex items-center gap-2">
-          <span class="input input-bordered input-sm w-full flex items-center font-mono text-xs truncate" role="group" aria-labelledby="add-project-newrepo-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
-          <button class="btn btn-ghost btn-sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</button>
+          <span class="w-full flex items-center font-mono text-xs truncate border border-[var(--of-border-interactive)] rounded-[var(--of-radius-control)] min-h-[var(--of-control-height-compact)] px-2" role="group" aria-labelledby="add-project-newrepo-parent-label" title={parentDir}>{parentDir || 'No folder selected'}</span>
+          <Button variant="ghost" size="sm" type="button" onclick={handleSelectParentFolder} disabled={isSubmitting}>Choose</Button>
         </div>
       </div>
 
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={repoPrivate} disabled={isSubmitting} />
-        <span class="text-xs text-base-content/70">Private repository</span>
-      </label>
+      <Switch label="Private repository" bind:checked={repoPrivate} disabled={isSubmitting} />
 
       {#if newRepoTargetPreview}
         <p class="text-[0.65rem] text-base-content/40 m-0">Will create at <span class="font-mono">{newRepoTargetPreview}</span></p>
@@ -322,15 +318,15 @@
   </form>
 
   <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
-    <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>Cancel</button>
-    <button
-      class="btn btn-primary btn-sm"
+    <Button variant="ghost" size="sm" onclick={close} type="button" disabled={isSubmitting}>Cancel</Button>
+    <Button
+      variant="primary" size="sm"
       form="add-project-form"
       type="submit"
       disabled={!canSubmit}
       aria-describedby={createError || successMessage ? creationFeedbackId : undefined}
     >
       {isSubmitting ? (mode === 'newRepo' ? 'Creating repo...' : mode === 'github' ? 'Cloning...' : 'Creating...') : 'Create Project'}
-    </button>
+    </Button>
   </div>
 </Modal>

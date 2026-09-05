@@ -168,7 +168,7 @@
     {#if voiceState === 'transcribing'}
       <span class="loading loading-spinner loading-xs"></span>
     {:else if voiceState === 'recording'}
-      <span class="recording-pulse inline-block w-2 h-2 rounded-full bg-current"></span>
+      <span class="recording-pulse inline-block w-2 h-2 rounded-[var(--of-radius-round)] bg-current"></span>
       <span class="text-xs tabular-nums">{formatDuration(recordingDuration)}</span>
     {:else}
       <svg

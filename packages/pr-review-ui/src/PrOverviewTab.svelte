@@ -65,9 +65,9 @@
 
 <div class="flex-1 overflow-y-auto">
   <div class="max-w-[900px] mx-auto p-6 flex flex-col gap-6">
-    <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden">
+    <div class="bg-base-100 border border-base-300 rounded-[var(--of-radius-container)] overflow-hidden">
       <div class="flex items-center gap-3 px-5 py-3 bg-base-200 border-b border-base-300">
-        <div class="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+        <div class="w-8 h-8 rounded-[var(--of-radius-round)] bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
           {pr.user_login.charAt(0).toUpperCase()}
         </div>
         <div class="flex items-center gap-2 text-sm flex-wrap">
@@ -113,9 +113,9 @@
     {:else}
       <div class="flex flex-col gap-4">
         {#each comments as comment (comment.id)}
-          <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.comment_type === 'review_comment' ? 'border-l-4 border-l-primary/40' : comment.comment_type === 'review_body' ? 'border-l-4 border-l-accent/40' : ''}">
+          <div class="bg-base-100 border border-base-300 rounded-[var(--of-radius-container)] overflow-hidden {comment.comment_type === 'review_comment' ? 'border-l-4 border-l-primary/40' : comment.comment_type === 'review_body' ? 'border-l-4 border-l-accent/40' : ''}">
             <div class="flex items-center gap-3 px-5 py-3 bg-base-200 border-b border-base-300">
-              <div class="w-7 h-7 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold text-base-content/70 shrink-0">
+              <div class="w-7 h-7 rounded-[var(--of-radius-round)] bg-base-300 flex items-center justify-center text-xs font-bold text-base-content/70 shrink-0">
                 {comment.author.charAt(0).toUpperCase()}
               </div>
               <div class="flex items-center gap-2 text-sm flex-wrap flex-1 min-w-0">

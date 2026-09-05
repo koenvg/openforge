@@ -162,13 +162,13 @@
       </Button>
 
       <div class="ml-auto flex shrink-0 items-center" role="group" aria-label="Board filters">
-        <div class="join">
+        <div class="flex gap-1">
           {#each FILTER_OPTIONS as opt}
             <Button
               type="button"
               size="sm"
               variant={activeFilter === opt.value ? 'outline' : 'ghost'}
-              class="board-filter join-item relative {activeFilter === opt.value ? 'board-filter--active' : 'board-filter--interactive'}"
+              class="board-filter relative {activeFilter === opt.value ? 'board-filter--active' : 'board-filter--interactive'}"
               aria-pressed={activeFilter === opt.value}
               onclick={() => interactionController.activateFilter(opt.value)}
             >

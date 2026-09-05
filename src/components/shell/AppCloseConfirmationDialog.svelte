@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { AppCloseController } from '../../lib/appCloseController.svelte'
 
@@ -22,8 +23,8 @@
     <div class="p-5 flex flex-col gap-4">
       <p class="text-sm text-base-content/70 m-0">One or more agents are still running or waiting for your input. Quitting now will stop them. Are you sure you want to quit?</p>
       <div class="flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" type="button" onclick={controller.cancelClose}>Cancel</button>
-        <button data-close-confirm-action="quit" class="btn btn-error btn-sm" type="button" onclick={controller.confirmClose}>Quit</button>
+        <Button variant="ghost" size="sm" type="button" onclick={controller.cancelClose}>Cancel</Button>
+        <Button data-close-confirm-action="quit" variant="danger" size="sm" type="button" onclick={controller.confirmClose}>Quit</Button>
       </div>
     </div>
   </Modal>

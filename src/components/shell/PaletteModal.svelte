@@ -22,7 +22,7 @@
   maxWidth="520px"
   initialFocus="[data-palette-initial-focus]"
   modalClass="items-start pt-[15vh]"
-  boxClass="bg-base-200 border border-base-300 rounded-lg shadow-2xl overflow-hidden"
+  boxClass="bg-base-200 border border-base-300 shadow-2xl overflow-hidden"
 >
   {@render children()}
 </Modal>

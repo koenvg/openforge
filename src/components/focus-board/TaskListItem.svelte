@@ -211,7 +211,7 @@
 
     {#if hasUnreadAgentOutput}
       <span
-        class="inline-flex shrink-0 items-center gap-1 rounded-full border border-info/25 bg-info/10 px-2 py-1 font-medium text-info"
+        class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-info/25 bg-info/10 px-2 py-1 font-medium text-info"
         aria-label="Unread agent output"
       >
         <CircleDot size={13} aria-hidden="true" />

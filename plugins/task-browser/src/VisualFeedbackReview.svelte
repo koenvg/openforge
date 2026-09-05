@@ -82,7 +82,7 @@
 
         <ol class="mt-3 space-y-2">
           {#each captureAnnotations(capture.number) as annotation (annotation.number)}
-            <li class="rounded-box bg-base-200/60 p-2 text-xs">
+            <li class="rounded-[var(--of-radius-container)] bg-base-200/60 p-2 text-xs">
               <form onsubmit={(event) => saveAnnotation(event, annotation)}>
                 {#if capture.artifactState !== 'available'}
                   <p class="mt-2 border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert">

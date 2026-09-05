@@ -23,12 +23,12 @@
     controls
     preload="metadata"
     onerror={() => { playbackFailed = true }}
-    class="max-h-96 max-w-full rounded bg-black object-contain"
+    class="max-h-96 max-w-full rounded-[var(--of-radius-container)] bg-black object-contain"
   >
     Video playback is unavailable for this file.
   </video>
   {#if playbackFailed}
-    <div class="rounded bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
+    <div class="rounded-[var(--of-radius-container)] bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
       This video cannot be played by this browser. The file may use an unsupported codec.
     </div>
   {/if}

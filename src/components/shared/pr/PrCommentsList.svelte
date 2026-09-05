@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { PrComment } from '../../../lib/types'
   import { createCommentAddressing } from '../../../lib/commentAddressing.svelte'
@@ -101,8 +104,8 @@
 
   let cardBaseClass = $derived(
     density === 'compact'
-      ? 'rounded-xl bg-base-200/50 border border-base-300/40 p-3 flex items-start gap-2 min-w-0'
-      : 'rounded-md border border-base-300/70 bg-base-100 p-2.5 flex items-start gap-2 min-w-0'
+      ? 'rounded-[var(--of-radius-container)] bg-base-200/50 border border-base-300/40 p-3 flex items-start gap-2 min-w-0'
+      : 'rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 p-2.5 flex items-start gap-2 min-w-0'
   )
 </script>
 
@@ -128,10 +131,10 @@
           <span class="min-w-0 break-all" title={comment.file_path}>{comment.file_path}{comment.line_number ? `:${comment.line_number}` : ''}</span>
         {/if}
         {#if comment.addressed === 1}
-          <span class="badge badge-success badge-xs shrink-0">Addressed</span>
+          <Badge variant="success" class="shrink-0">Addressed</Badge>
         {/if}
         {#if comment.outdated}
-          <span class="badge badge-warning badge-xs shrink-0">Outdated</span>
+          <Badge variant="warning" class="shrink-0">Outdated</Badge>
         {/if}
         {#if commentHref}
           <button
@@ -146,8 +149,8 @@
       {#if showMarkAddressed && onMarkAddressed && comment.addressed === 0}
         {@const addressError = addressingError(comment.id)}
         {@const busy = addressingBusy(comment.id)}
-        <button
-          class="btn btn-ghost btn-xs text-success text-[0.65rem] h-auto min-h-0 py-0.5 shrink-0"
+        <Button
+          variant="ghost" size="xs" class="text-success text-[0.65rem] shrink-0"
           disabled={busy}
           onclick={(e) => { e.stopPropagation(); handleMarkClick(comment.id) }}
         >
@@ -158,7 +161,7 @@
           {:else}
             ✓ Mark addressed
           {/if}
-        </button>
+        </Button>
       {/if}
     </div>
     <div class={density === 'compact'
@@ -174,16 +177,12 @@
 
 <div class="flex flex-col gap-2 min-w-0">
   {#if showAuthorFilter && authors.length > 1}
-    <select
-      class="select select-xs select-bordered w-full"
-      aria-label="Filter comments by reviewer"
-      bind:value={selectedAuthor}
-    >
-      <option value={null}>All reviewers ({comments.length})</option>
-      {#each authors as author}
-        <option value={author}>{author}</option>
-      {/each}
-    </select>
+    <Select
+      label="Filter comments by reviewer" hideLabel
+      value={selectedAuthor ?? ''}
+      options={[{ value: '', label: `All reviewers (${comments.length})` }, ...authors.map(author => ({ value: author, label: author }))]}
+      onValueChange={(value) => { selectedAuthor = value || null }}
+    />
   {/if}
   {#each displayedComments as comment (comment.id)}
     {#if onCommentClick}
