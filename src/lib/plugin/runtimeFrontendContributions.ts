@@ -49,6 +49,7 @@ type FrontendContributionApi = Pick<
 export class RuntimeFrontendContributionRegistry {
   private readonly views = new Map<string, RuntimeViewContribution>()
   private readonly viewReplacements = new Map<string, RuntimeViewReplacementContribution>()
+  private readonly viewReplacementObservers = new Set<(replacements: RuntimeViewReplacementContribution[]) => void>()
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly reviewRowActions = new Map<string, RuntimeReviewRowActionContribution>()
@@ -300,6 +301,16 @@ export class RuntimeFrontendContributionRegistry {
   }
 
 
+  observeViewReplacements(observer: (replacements: RuntimeViewReplacementContribution[]) => void): Disposable {
+    this.viewReplacementObservers.add(observer)
+    observer([...this.viewReplacements.values()])
+    return createDisposable(() => { this.viewReplacementObservers.delete(observer) })
+  }
+
+  private publishViewReplacements(): void {
+    for (const observer of this.viewReplacementObservers) observer([...this.viewReplacements.values()])
+  }
+
   private registerViewReplacement(registration: PluginViewReplacementRegistration): Disposable {
     if (!this.services.packageMetadata?.requires?.includes('viewReplacements')) {
       throw new RuntimeValidationError('viewReplacements', 'requires the viewReplacements capability')
@@ -327,10 +338,12 @@ export class RuntimeFrontendContributionRegistry {
       ? { ...registration, ...identity, icon: sanitizeViewIcon(registration.icon, 'viewReplacements') }
       : { ...registration, ...identity }
     this.viewReplacements.set(qualifiedId, contribution)
+    this.publishViewReplacements()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.viewReplacements.delete(qualifiedId)
       this.services.claims.release('viewReplacements', qualifiedId)
+      this.publishViewReplacements()
     }))
   }
   private registerTaskPaneTab(registration: PluginTaskPaneTabRegistration): Disposable {
