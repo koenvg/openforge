@@ -72,6 +72,10 @@ try {
   await trigger.waitFor()
   const field = page.getByRole('textbox', { name: 'Project Name', exact: true })
   await field.fill('Edited project')
+  if (!process.argv.includes('--compatibility-only')) {
+    // Sample settled colors, including token probes, rather than reduced-motion transitions.
+    await page.addStyleTag({ content: '* { transition-property: none !important; }' })
+  }
 
   const reports = []
   const themes = [
@@ -118,17 +122,39 @@ try {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       await trigger.press('Tab')
       await field.focus()
-      const presentation = await field.evaluate((element) => ({
-        radius: getComputedStyle(element).borderRadius,
-        background: getComputedStyle(element).backgroundColor,
-        outline: getComputedStyle(element).outlineWidth,
-        value: element.value,
-        overflow: document.documentElement.scrollWidth > innerWidth,
-      }))
-      assert.equal(presentation.radius, theme.radius)
+      const presentation = await field.evaluate((element) => {
+        // TextField paints the control wrapper; the native input owns value and focus.
+        const control = element.closest('.of-field-control')
+        if (!control) throw new Error('Project Name must have a TextField control wrapper')
+        const style = getComputedStyle(control)
+        const reference = document.createElement('div')
+        reference.style.backgroundColor = 'var(--of-field)'
+        reference.style.color = 'var(--of-focus-ring)'
+        control.append(reference)
+        const expected = getComputedStyle(reference)
+        const result = {
+          radius: style.borderRadius,
+          background: style.backgroundColor,
+          expectedBackground: expected.backgroundColor,
+          outline: style.outlineWidth,
+          outlineStyle: style.outlineStyle,
+          outlineColor: style.outlineColor,
+          expectedOutlineColor: expected.color,
+          focused: document.activeElement === element && element.matches(':focus-visible'),
+          value: element.value,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        }
+        reference.remove()
+        return result
+      })
+      assert.equal(presentation.radius, theme.radius, `${theme.label} control radius`)
+      assert.equal(presentation.background, presentation.expectedBackground, `${theme.label} control background`)
       assert.equal(presentation.value, 'Edited project')
       assert.equal(presentation.overflow, false)
-      assert.equal(presentation.outline, '2px')
+      assert.equal(presentation.focused, true, `${theme.label} input keyboard focus`)
+      assert.equal(presentation.outline, '2px', `${theme.label} control focus outline width`)
+      assert.equal(presentation.outlineStyle, 'solid', `${theme.label} control focus outline style`)
+      assert.equal(presentation.outlineColor, presentation.expectedOutlineColor, `${theme.label} control focus outline color`)
       const headingColor = await page.getByRole('heading', { name: 'Preferences', exact: true }).evaluate((element) => getComputedStyle(element).color)
       const descriptionColor = await page.getByText('Choose an application theme', { exact: true }).evaluate((element) => getComputedStyle(element).color)
       assert.equal(headingColor, theme.text, `${theme.label} heading color`)
