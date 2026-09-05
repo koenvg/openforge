@@ -17,15 +17,19 @@ export class RuntimeValidationError extends Error {
 }
 
 async function disposeSubscriptions(subscriptions: Disposable[]): Promise<void> {
-  let firstError: unknown = null
+  let firstError: unknown
+  let hasError = false
   for (const subscription of subscriptions) {
     try {
       await subscription.dispose()
     } catch (error) {
-      firstError ??= error
+      if (!hasError) {
+        firstError = error
+        hasError = true
+      }
     }
   }
-  if (firstError) throw firstError
+  if (hasError) throw firstError
 }
 
 export class RuntimeSubscriptionSink implements SubscriptionSink {
