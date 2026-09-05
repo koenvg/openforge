@@ -94,6 +94,9 @@ export function createTerminalSessionCoordinator({
     requestedAttachmentGeneration: number,
     requestedVisibilityGeneration: number,
   ): Promise<void> {
+    // A reconstructed xterm starts at 80x24. Replaying before its first fit
+    // wraps coordinate-based editor output, which a later resize cannot undo.
+    await attachment.refitCurrent()
     await authority.setModelOutputEnabled(true)
     if (!attachment.isCurrentVisibleAttachment(
       requestedAttachmentGeneration,
@@ -117,7 +120,6 @@ export function createTerminalSessionCoordinator({
       if (!attachment.isActive()) await authority.setModelOutputEnabled(false)
       return
     }
-    await attachment.refitCurrent()
   }
 
   attachment.configureLifecycle({

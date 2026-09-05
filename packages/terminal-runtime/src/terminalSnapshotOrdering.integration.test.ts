@@ -44,6 +44,28 @@ describe('terminal snapshot ordering', () => {
     })
   })
 
+  it('fits a replacement view before restoring coordinate-based editor output', async () => {
+    const shellSessionKey = 'T-editor-shell-0'
+    let geometry = { cols: 80, rows: 24 }
+    let restoredGeometry: typeof geometry | undefined
+    const view = createFakeTerminalView({
+      fit: vi.fn(() => {
+        geometry = { cols: 109, rows: 27 }
+        return geometry
+      }),
+      replaceSnapshot: vi.fn(async () => { restoredGeometry = { ...geometry } }),
+    })
+    const host = createHost()
+    host.setBuffer(shellSessionKey, 'unfinished editor')
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
+    const entry = await runtime.acquire(shellSessionKey)
+
+    await attachTestTerminal(runtime, entry)
+
+    expect(restoredGeometry).toEqual({ cols: 109, rows: 27 })
+    runtime.dispose()
+  })
+
   it('queues live output until authoritative snapshot replacement finishes', async () => {
     const shellSessionKey = 'T-snapshot-barrier-shell-0'
     let finishReplacement!: () => void
