@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LIGHT_THEME } from '../../lib/themeContract'
 import { activeProjectId, error, projects } from '../../lib/stores'
-import { themeRegistry } from '../../lib/theme'
-import { requireElement } from '../../test-utils/dom'
+import { get } from 'svelte/store'
+import { themeRegistry, themeDiagnostics } from '../../lib/theme'
+import { chooseSelectOption, openSelect } from '../../test-utils/select'
 import { defaultProps } from './SettingsView.testUtils'
 import { resetSettingsViewRenderIpc } from './SettingsView.renderIpc.testFixture'
 import SettingsView from './SettingsView.svelte'
@@ -32,6 +33,19 @@ describe('SettingsView theme selection', () => {
     error.set(null)
   })
 
+  it('reflects external selection and diagnoses an unavailable theme without an autosave overwrite', async () => {
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    const select = await screen.findByRole('button', { name: 'Theme' })
+    await themeRegistry.selectTheme('openforge-dark')
+    await vi.waitFor(() => expect(select.textContent).toContain('OpenForge Dark'))
+    await themeRegistry.selectTheme('com.example.missing:theme')
+    await vi.waitFor(() => expect(select.textContent).toContain('OpenForge Light'))
+    expect(themeIpc.setConfig).toHaveBeenLastCalledWith('theme', LIGHT_THEME.id)
+    expect(get(themeDiagnostics).at(-1)).toMatchObject({
+      themeId: 'com.example.missing:theme', fallbackThemeId: LIGHT_THEME.id, reason: 'invalid-or-unavailable',
+    })
+  })
+
   it('lists registry themes, persists stable selection, and reflects contribution fallback', async () => {
     const registration = themeRegistry.registerContributedTheme({
       ...LIGHT_THEME,
@@ -45,16 +59,17 @@ describe('SettingsView theme selection', () => {
 
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-    const select = requireElement(await screen.findByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
-    expect(Array.from(select.options).map((option) => option.textContent)).toContain(
+    const select = await screen.findByRole('button', { name: 'Theme' })
+    await openSelect(select)
+    expect(screen.getAllByRole('option').map((option) => option.textContent?.trim())).toContain(
       'Paper — Provided by com.example.paper',
     )
 
     themeIpc.setConfig.mockClear()
-    await fireEvent.change(select, { target: { value: 'com.example.paper:paper' } })
+    await chooseSelectOption(select, /Paper/)
 
     await vi.waitFor(() => {
-      expect(select.value).toBe('com.example.paper:paper')
+      expect(select.textContent).toContain('Paper')
       expect(themeIpc.setConfig).toHaveBeenCalledWith('theme', 'com.example.paper:paper')
     })
 
@@ -62,9 +77,10 @@ describe('SettingsView theme selection', () => {
     await registration.dispose()
 
     await vi.waitFor(() => {
-      expect(select.value).toBe(LIGHT_THEME.id)
+      expect(select.textContent).toContain('OpenForge Light')
       expect(screen.queryByRole('option', { name: /Paper/ })).toBeNull()
       expect(themeIpc.setConfig).toHaveBeenCalledWith('theme', LIGHT_THEME.id)
+      expect(get(themeDiagnostics).at(-1)).toMatchObject({ themeId: 'com.example.paper:paper', reason: 'unregistered' })
     })
   })
 
@@ -76,19 +92,19 @@ describe('SettingsView theme selection', () => {
     try {
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
       render(ToastHost)
-      const select = requireElement(await screen.findByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
+      const select = await screen.findByRole('button', { name: 'Theme' })
       themeIpc.setConfig.mockClear()
-      await fireEvent.change(select, { target: { value: id } })
-      expect(select.value).toBe(LIGHT_THEME.id)
+      await chooseSelectOption(select, /CSS Paper/)
+      expect(select.textContent).toContain('OpenForge Light')
       expect(themeIpc.setConfig).not.toHaveBeenCalled()
       await vi.waitFor(() => expect(document.querySelector('link[data-openforge-theme-stylesheet]')).not.toBeNull())
       document.querySelector('link[data-openforge-theme-stylesheet]')!.dispatchEvent(new Event(outcome))
       if (outcome === 'load') {
-        await vi.waitFor(() => expect(select.value).toBe(id))
+        await vi.waitFor(() => expect(select.textContent).toContain('CSS Paper'))
         expect(themeIpc.setConfig).toHaveBeenCalledWith('theme', id)
       } else {
         await vi.waitFor(() => expect(screen.getByText(/Plugin com.example.css.*failed to load stylesheet/)).toBeTruthy())
-        expect(select.value).toBe(LIGHT_THEME.id)
+        expect(select.textContent).toContain('OpenForge Light')
         expect(themeIpc.setConfig).not.toHaveBeenCalled()
       }
     } finally {

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import { Activity } from '@lucide/svelte'
   import { onDestroy, onMount } from 'svelte'
   import { getProcessMemoryHistory, setProcessMemoryHistoryEnabled } from '../../lib/ipc'
@@ -11,10 +14,10 @@
   const CHART_PADDING = 8
 
   const series = [
-    { label: 'Electron', key: 'electronTotalTreeRssBytes', color: 'text-primary' },
-    { label: 'Sidecar', key: 'sidecarTotalTreeRssBytes', color: 'text-secondary' },
-    { label: 'Managed PTY', key: 'managedPtyTotalTreeRssBytes', color: 'text-accent' },
-    { label: 'Plugin host', key: 'pluginHostTotalTreeRssBytes', color: 'text-warning' },
+    { label: 'Electron', key: 'electronTotalTreeRssBytes', color: 'text-[var(--of-accent)]', dash: 'none', pattern: 'Solid' },
+    { label: 'Sidecar', key: 'sidecarTotalTreeRssBytes', color: 'text-[var(--of-info)]', dash: '6 3', pattern: 'Dashed' },
+    { label: 'Managed PTY', key: 'managedPtyTotalTreeRssBytes', color: 'text-[var(--of-accent)]', dash: '2 3', pattern: 'Dotted' },
+    { label: 'Plugin host', key: 'pluginHostTotalTreeRssBytes', color: 'text-[var(--of-warning)]', dash: '8 3 2 3', pattern: 'Dash-dot' },
   ] as const
 
   let snapshot = $state<ProcessMemoryHistorySnapshot | null>(null)
@@ -112,69 +115,75 @@
 >
   {#snippet icon()}<Activity size={16} />{/snippet}
   {#snippet actions()}
-    <label class="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
-      <span>Collect history</span>
-      <input
-        type="checkbox"
-        class="toggle toggle-sm toggle-primary"
-        aria-label="Collect process memory history"
+    <div class="flex items-center gap-2 text-sm">
+      <Switch label="Collect process memory history"
         checked={snapshot?.enabled ?? false}
         disabled={loading || saving}
         onchange={handleEnabledChange}
       />
-    </label>
+    </div>
   {/snippet}
 
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
-      <p class="m-0 max-w-3xl text-sm text-base-content/70">
+      <p class="m-0 max-w-3xl text-sm text-[var(--of-text-secondary)]">
         Sampling runs once per minute only while enabled. OpenForge keeps the latest {snapshot?.maxSamples ?? 60} samples in memory and never records commands or payloads.
       </p>
-      <span class="badge badge-ghost font-mono text-xs">
+      <Badge variant="neutral">
         {snapshot?.samples.length ?? 0}/{snapshot?.maxSamples ?? 60} samples
-      </span>
+      </Badge>
     </div>
 
     {#if loadError}
-      <p class="m-0 text-sm text-error" role="alert">Process memory history failed: {loadError}</p>
+      <p class="m-0 text-sm text-[var(--of-danger)]" role="alert">Process memory history failed: {loadError}</p>
     {:else if loading}
-      <p class="m-0 text-sm text-base-content/60" aria-live="polite">Loading process memory history…</p>
+      <p class="m-0 text-sm text-[var(--of-text-muted)]" aria-live="polite">Loading process memory history…</p>
     {:else if !snapshot?.enabled && snapshot?.samples.length === 0}
-      <p class="m-0 rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm text-base-content/65">
+      <Panel padding="none" variant="subtle">
+        <p class="m-0 p-4 text-sm text-[var(--of-text-secondary)]">
         History is off. Enable it to begin collecting totals-only RSS samples.
       </p>
+      </Panel>
     {:else if snapshot?.samples.length === 0}
-      <p class="m-0 rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm text-base-content/65" aria-live="polite">
+      <Panel padding="none" variant="subtle">
+        <p class="m-0 p-4 text-sm text-[var(--of-text-secondary)]" aria-live="polite">
         Sampling is on. The first totals are being collected.
       </p>
+      </Panel>
     {:else}
       <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {#each series as item (item.key)}
-          <div class="rounded-lg border border-base-300 bg-base-200/45 px-3 py-2">
-            <div class="flex items-center gap-2 text-xs text-base-content/65">
-              <span class="h-2 w-2 rounded-full bg-current {item.color}" aria-hidden="true"></span>
-              {item.label}
+          <Panel padding="none" variant="subtle">
+            <div class="px-3 py-2">
+              <div class="flex items-center gap-2 text-xs text-[var(--of-text-secondary)]">
+                <svg width="32" height="8" class={item.color} aria-hidden="true">
+                  <line x1="0" y1="4" x2="32" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray={item.dash} />
+                </svg>
+                <span>{item.label}</span>
+                <span class="sr-only">{item.pattern} line</span>
+              </div>
+              <div class="mt-1 font-mono text-sm font-semibold tabular-nums">
+                {formatBytes(latestSample?.[item.key] ?? 0)}
+              </div>
             </div>
-            <div class="mt-1 font-mono text-sm font-semibold tabular-nums">
-              {formatBytes(latestSample?.[item.key] ?? 0)}
-            </div>
-          </div>
+          </Panel>
         {/each}
       </div>
 
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        class="h-28 w-full overflow-visible rounded-lg border border-base-300 bg-base-200/35"
+        class="settings-layout h-28 w-full overflow-visible border border-[var(--of-border)] bg-[var(--of-surface-subtle)]"
         role="img"
         aria-label={chartLabel}
       >
-        <line x1={CHART_PADDING} y1={CHART_HEIGHT - CHART_PADDING} x2={CHART_WIDTH - CHART_PADDING} y2={CHART_HEIGHT - CHART_PADDING} class="stroke-base-content/15" />
+        <line x1={CHART_PADDING} y1={CHART_HEIGHT - CHART_PADDING} x2={CHART_WIDTH - CHART_PADDING} y2={CHART_HEIGHT - CHART_PADDING} class="stroke-[var(--of-border)]" />
         {#each series as item (item.key)}
           <polyline
             points={pointsFor(item.key)}
             fill="none"
             stroke="currentColor"
             stroke-width="2"
+            stroke-dasharray={item.dash}
             vector-effect="non-scaling-stroke"
             class={item.color}
           />
@@ -183,7 +192,7 @@
     {/if}
 
     {#if snapshot}
-      <p class="m-0 text-xs leading-relaxed text-base-content/55">{snapshot.rssSemantics}</p>
+      <p class="m-0 text-xs leading-relaxed text-[var(--of-text-muted)]">{snapshot.rssSemantics}</p>
     {/if}
   </div>
 </SettingsSectionCard>

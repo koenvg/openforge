@@ -3,6 +3,8 @@
 
   interface Props extends Omit<HTMLInputAttributes, 'children' | 'size' | 'value'> {
     label: string
+    /** Keep the accessible name when the caller renders the visible caption. */
+    hideLabel?: boolean
     value?: string
     helperText?: string
     error?: string | null
@@ -16,12 +18,14 @@
 
   let {
     label,
+    hideLabel = false,
     value = $bindable(''),
     helperText,
     error = null,
     invalid = false,
     id = `of-text-field-${generatedId}`,
     class: className,
+    'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedby,
     'aria-invalid': ariaInvalid,
     oninput,
@@ -40,12 +44,13 @@
 </script>
 
 <div class="of-text-field">
-  <label for={id}>{label}</label>
+  {#if !hideLabel}<label for={id}>{label}</label>{/if}
   <input
     {...attributes}
     {id}
     class={className}
     {value}
+    aria-label={hideLabel ? label : ariaLabel}
     aria-describedby={describedBy}
     aria-invalid={isInvalid ? 'true' : ariaInvalid}
     oninput={(event) => {

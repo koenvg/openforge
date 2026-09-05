@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { FolderOpen } from '@lucide/svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
 
@@ -28,9 +29,8 @@
   {#snippet icon()}<FolderOpen size={16} />{/snippet}
   <div class="flex flex-col gap-4">
     <div class="grid grid-cols-2 gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Name</span>
-        <input
+      <div class="flex flex-col gap-1">
+        <TextField label="Project Name"
           type="text"
           value={projectName}
           oninput={(e) => {
@@ -38,14 +38,13 @@
             onProjectNameChange(e.currentTarget.value)
           }}
           placeholder="My Project"
-          class="input input-bordered input-sm w-full"
+          class="w-full"
           disabled={disabled}
         />
-      </label>
+      </div>
 
-      <label class="flex flex-col gap-1">
-        <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Project Path</span>
-        <input
+      <div class="flex flex-col gap-1">
+        <TextField label="Project Path"
           type="text"
           value={projectPath}
           oninput={(e) => {
@@ -53,16 +52,15 @@
             onProjectPathChange(e.currentTarget.value)
           }}
           placeholder="/path/to/project"
-          class="input input-bordered input-sm w-full"
+          class="w-full"
           disabled={disabled}
         />
-      </label>
+      </div>
     </div>
 
     <div class="flex flex-col gap-2">
-      <label class="flex flex-col gap-1">
-        <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Run Command</span>
-        <input
+      <div class="flex flex-col gap-1">
+        <TextField label="Run Command"
           type="text"
           value={runCommand}
           oninput={(e) => {
@@ -70,13 +68,14 @@
             onRunCommandChange(e.currentTarget.value)
           }}
           placeholder="pnpm dev"
-          class="input input-bordered input-sm w-full max-w-xl font-mono"
+          class="w-full max-w-xl"
+          style="font-family: var(--of-font-mono)"
           disabled={disabled}
         />
-        <span class="text-xs text-base-content/60">
+        <span class="text-xs text-[var(--of-text-muted)]">
           Command run in the task terminal by the “Run app” button (e.g. <span class="font-mono">pnpm dev</span>). Leave blank to disable the button.
         </span>
-      </label>
+      </div>
     </div>
 
   </div>

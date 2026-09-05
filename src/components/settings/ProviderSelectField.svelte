@@ -1,4 +1,9 @@
 <script lang="ts">
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { AlertCircle, Bot, CheckCircle2, RefreshCw } from '@lucide/svelte'
   import { openUrl } from '../../lib/ipc'
 
@@ -137,133 +142,129 @@
 </script>
 
 <div class="flex flex-col gap-2">
-  <div class="flex min-h-14 items-center gap-3 rounded-lg border border-base-300 bg-base-200/45 px-3 py-2" role="status" aria-live="polite">
+  <Panel padding="none" variant="subtle">
+    <div class="settings-layout flex min-h-14 items-center gap-3 px-3 py-2" role="status" aria-live="polite">
     {#if installationStatusLoading}
       <span class="loading loading-spinner loading-sm shrink-0" aria-hidden="true"></span>
-      <div class="min-w-0 flex-1">
-        <p class="m-0 text-sm font-medium text-base-content">Checking provider health…</p>
-        <p class="m-0 mt-0.5 text-xs text-base-content/60">Detecting installed provider CLIs and authentication.</p>
+      <div class="settings-layout min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-[var(--of-text)]">Checking provider health…</p>
+        <p class="m-0 mt-0.5 text-xs text-[var(--of-text-muted)]">Detecting installed provider CLIs and authentication.</p>
       </div>
     {:else if installationStatusError}
-      <AlertCircle size={18} class="shrink-0 text-error" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
-        <p class="m-0 text-sm font-medium text-base-content">Provider health unavailable</p>
-        <p class="m-0 mt-0.5 text-xs text-base-content/60">{installationStatusError}</p>
+      <AlertCircle size={18} class="shrink-0 text-[var(--of-danger)]" aria-hidden="true" />
+      <div class="settings-layout min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-[var(--of-text)]">Provider health unavailable</p>
+        <p class="m-0 mt-0.5 text-xs text-[var(--of-text-muted)]">{installationStatusError}</p>
       </div>
     {:else if selectedProviderRecovery?.installed && selectedProviderRecovery.authenticated}
-      <CheckCircle2 size={18} class="shrink-0 text-success" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
-        <p class="m-0 text-sm font-medium text-base-content">{selectedProviderRecovery.label} is ready</p>
-        <p class="m-0 mt-0.5 text-xs text-base-content/60">Installed{selectedProviderRecovery.version ? ` · ${selectedProviderRecovery.version}` : ''} and available for new tasks.</p>
+      <CheckCircle2 size={18} class="shrink-0 text-[var(--of-success)]" aria-hidden="true" />
+      <div class="settings-layout min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-[var(--of-text)]">{selectedProviderRecovery.label} is ready</p>
+        <p class="m-0 mt-0.5 text-xs text-[var(--of-text-muted)]">Installed{selectedProviderRecovery.version ? ` · ${selectedProviderRecovery.version}` : ''} and available for new tasks.</p>
       </div>
     {:else}
-      <Bot size={18} class="shrink-0 text-warning" aria-hidden="true" />
-      <div class="min-w-0 flex-1">
-        <p class="m-0 text-sm font-medium text-base-content">Selected provider needs attention</p>
-        <p class="m-0 mt-0.5 text-xs text-base-content/60">Install or authenticate the selected provider before starting tasks.</p>
+      <Bot size={18} class="shrink-0 text-[var(--of-warning)]" aria-hidden="true" />
+      <div class="settings-layout min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-[var(--of-text)]">Selected provider needs attention</p>
+        <p class="m-0 mt-0.5 text-xs text-[var(--of-text-muted)]">Install or authenticate the selected provider before starting tasks.</p>
       </div>
     {/if}
-    <button
+    <IconButton
       type="button"
-      class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10 shrink-0"
-      aria-label="Refresh provider health"
+      variant="ghost" size="sm" class="shrink-0"
+      label="Refresh provider health"
       title="Refresh provider health"
       disabled={disabled || installationStatusLoading}
       onclick={onRefreshInstallationStatus}
-    ><RefreshCw size={15} aria-hidden="true" /></button>
+    ><RefreshCw size={15} aria-hidden="true" /></IconButton>
   </div>
+  </Panel>
 
-  <select
-    class="select select-bordered select-sm min-h-10 w-full max-w-xs"
-    aria-label="AI Provider"
+  <Select
+    label="AI Provider"
+    options={providerRecoveryInfo.map((provider) => ({
+      value: provider.id,
+      label: installStatusKnown && !provider.installed ? `${provider.label} — not installed` : provider.label,
+      disabled: installStatusKnown && !provider.installed,
+    }))}
     value={aiProvider}
-    disabled={disabled}
-    onchange={(e) => {
-      if (disabled || !(e.currentTarget instanceof HTMLSelectElement)) return
-      const value = e.currentTarget.value
+    {disabled}
+    onValueChange={(value) => {
+      if (disabled) return
       const next = providerRecoveryInfo.find((provider) => provider.id === value)
-      // Defense-in-depth beyond the native `disabled` option: never adopt a
-      // provider whose binary is missing — that selection silently fails at
-      // task-start time with no usable agent.
       if (installStatusKnown && next && !next.installed) return
       onChange(value)
     }}
-  >
-    {#each providerRecoveryInfo as provider (provider.id)}
-      <option value={provider.id} disabled={installStatusKnown && !provider.installed}>
-        {installStatusKnown && !provider.installed ? `${provider.label} — not installed` : provider.label}
-      </option>
-    {/each}
-  </select>
+  />
 
   {#snippet installLink(url: string, providerLabel: string)}
-    <button
+    <Button
       type="button"
-      class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline"
+      variant="ghost" size="xs"
       onclick={() => openUrl(url)}
       disabled={disabled}
       aria-label={`Install ${providerLabel} (opens in browser)`}
-    >Install ↗</button>
+    >Install ↗</Button>
   {/snippet}
 
   <div class="flex flex-col gap-1 text-xs" aria-live="polite">
     <div class="flex items-center gap-2">
       {#if opencodeInstalled}
-        <span class="text-success">✓</span>
+        <span class="text-[var(--of-success)]">✓</span>
         <span>OpenCode {opencodeVersion || ''}</span>
       {:else}
-        <span class="text-error">✗</span>
-        <span class="text-base-content/50">OpenCode not installed</span>
+        <span class="text-[var(--of-danger)]">✗</span>
+        <span class="text-[var(--of-text-muted)]">OpenCode not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['opencode'], 'OpenCode')}
       {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if claudeInstalled}
-        <span class="text-success">✓</span>
+        <span class="text-[var(--of-success)]">✓</span>
         <span>Claude Code {claudeVersion || ''}</span>
         {#if claudeAuthenticated}
-          <span class="badge badge-xs badge-success">Authenticated</span>
+          <Badge variant="success">Authenticated</Badge>
         {:else}
-          <span class="badge badge-xs badge-warning">Not authenticated</span>
+          <Badge variant="warning">Not authenticated</Badge>
         {/if}
       {:else}
-        <span class="text-error">✗</span>
-        <span class="text-base-content/50">Claude Code not installed</span>
+        <span class="text-[var(--of-danger)]">✗</span>
+        <span class="text-[var(--of-text-muted)]">Claude Code not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['claude-code'], 'Claude Code')}
       {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if piInstalled}
-        <span class="text-success">✓</span>
+        <span class="text-[var(--of-success)]">✓</span>
         <span>Pi {piVersion || ''}</span>
       {:else}
-        <span class="text-error">✗</span>
-        <span class="text-base-content/50">Pi not installed</span>
+        <span class="text-[var(--of-danger)]">✗</span>
+        <span class="text-[var(--of-text-muted)]">Pi not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['pi'], 'Pi')}
       {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if codexInstalled}
-        <span class="text-success">✓</span>
+        <span class="text-[var(--of-success)]">✓</span>
         <span>Codex {codexVersion || ''}</span>
       {:else}
-        <span class="text-error">✗</span>
-        <span class="text-base-content/50">Codex not installed</span>
+        <span class="text-[var(--of-danger)]">✗</span>
+        <span class="text-[var(--of-text-muted)]">Codex not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['codex'], 'Codex')}
       {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if grokInstalled}
-        <span class="text-success">✓</span>
+        <span class="text-[var(--of-success)]">✓</span>
         <span>Grok {grokVersion || ''}</span>
       {:else}
-        <span class="text-error">✗</span>
-        <span class="text-base-content/50">Grok not installed</span>
+        <span class="text-[var(--of-danger)]">✗</span>
+        <span class="text-[var(--of-text-muted)]">Grok not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['grok'], 'Grok')}
       {/if}
     </div>
     {#if installationStatusLoading}
-      <div class="flex items-center gap-2 text-base-content/60">
+      <div class="flex items-center gap-2 text-[var(--of-text-muted)]">
         <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
         <span>Checking provider installs…</span>
       </div>
@@ -271,18 +272,19 @@
   </div>
 
   {#if selectedProviderRecovery && (selectedProviderNeedsInstall || selectedProviderNeedsAuth)}
-    <div class="alert alert-warning flex w-full min-w-0 flex-col items-start gap-2 py-2 text-xs" role="status">
+    <Panel padding="none" variant="subtle">
+      <div class="settings-layout flex w-full min-w-0 flex-col items-start gap-2 py-2 text-xs" role="status">
       <div class="flex flex-col gap-1">
         <span class="font-semibold">{selectedProviderNeedsInstall ? selectedProviderRecovery.installTitle : selectedProviderRecovery.authTitle}</span>
         <span>{selectedProviderNeedsInstall ? selectedProviderRecovery.installGuidance : selectedProviderRecovery.authGuidance}</span>
         {#if installationStatusError}
-          <span class="text-error">Could not refresh install status: {installationStatusError}</span>
+          <span class="text-[var(--of-danger)]">Could not refresh install status: {installationStatusError}</span>
         {/if}
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
+        <Button
           type="button"
-          class="btn btn-xs btn-warning"
+          variant="ghost" size="xs"
           onclick={() => {
             if (disabled) return
             onRefreshInstallationStatus()
@@ -290,12 +292,12 @@
           disabled={disabled || installationStatusLoading}
         >
           {installationStatusLoading ? 'Refreshing…' : 'Refresh install status'}
-        </button>
+        </Button>
         {#if installedProviderAlternatives.length > 0}
           {#each installedProviderAlternatives as provider (provider.id)}
-            <button
+            <Button
               type="button"
-              class="btn btn-xs btn-ghost"
+              variant="ghost" size="xs"
               onclick={() => {
                 if (disabled) return
                 onChange(provider.id)
@@ -303,12 +305,13 @@
               disabled={disabled}
             >
               Switch to {provider.label}
-            </button>
+            </Button>
           {/each}
         {:else}
-          <span class="text-base-content/60">No installed provider alternatives detected yet.</span>
+          <span class="text-[var(--of-text-muted)]">No installed provider alternatives detected yet.</span>
         {/if}
       </div>
     </div>
+    </Panel>
   {/if}
 </div>

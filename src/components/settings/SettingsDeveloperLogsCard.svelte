@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onDestroy, onMount, tick } from 'svelte'
   import { Terminal } from '@lucide/svelte'
   import { getDeveloperLogSnapshot, openInEditor } from '../../lib/ipc'
@@ -88,34 +89,34 @@
 <SettingsSectionCard id="section-developer" title="Developer">
   {#snippet icon()}<Terminal size={16} />{/snippet}
   {#snippet actions()}
-    <button type="button" class="btn btn-xs btn-ghost" onclick={openFullLogFile} disabled={!logFilePath}>
+    <Button type="button" variant="ghost" size="xs" onclick={openFullLogFile} disabled={!logFilePath}>
       Open full log file
-    </button>
-    <button type="button" class="btn btn-xs btn-ghost" onclick={() => { void refreshLogs() }} disabled={loading}>
+    </Button>
+    <Button type="button" variant="ghost" size="xs" onclick={() => { void refreshLogs() }} disabled={loading}>
       {loading ? 'Refreshing…' : 'Refresh logs'}
-    </button>
+    </Button>
   {/snippet}
   <div class="flex flex-col gap-3">
-    <p class="text-sm text-base-content/70 m-0">
+    <p class="text-sm text-[var(--of-text-secondary)] m-0">
       Live OpenForge desktop log tail, including Electron and Rust sidecar output. The full trace is appended to a file so it does not have to stay in memory.
     </p>
 
     {#if logFilePath}
-      <p class="text-xs text-base-content/60 m-0 break-all">Full trace file: {logFilePath}</p>
+      <p class="text-xs text-[var(--of-text-muted)] m-0 break-all">Full trace file: {logFilePath}</p>
     {/if}
 
     {#if logs.length > 0}
-      <p class="text-xs text-base-content/60 m-0">{showingSummary}</p>
+      <p class="text-xs text-[var(--of-text-muted)] m-0">{showingSummary}</p>
     {/if}
 
     {#if loadError}
-      <p class="text-sm text-error m-0">Failed to load logs: {loadError}</p>
+      <p class="text-sm text-[var(--of-danger)] m-0">Failed to load logs: {loadError}</p>
     {:else if loading && logs.length === 0}
-      <p class="text-sm text-base-content/60 m-0">Loading logs…</p>
+      <p class="text-sm text-[var(--of-text-muted)] m-0">Loading logs…</p>
     {:else if logs.length === 0}
-      <p class="text-sm text-base-content/60 m-0">No logs captured yet.</p>
+      <p class="text-sm text-[var(--of-text-muted)] m-0">No logs captured yet.</p>
     {:else}
-      <pre bind:this={logTraceElement} aria-label="OpenForge log trace" class="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-base-200 p-3 text-xs text-base-content">{formattedLogs}</pre>
+      <pre bind:this={logTraceElement} aria-label="OpenForge log trace" class="settings-layout max-h-96 overflow-auto whitespace-pre-wrap bg-[var(--of-surface-subtle)] p-3 text-xs text-[var(--of-text)]">{formattedLogs}</pre>
     {/if}
   </div>
 </SettingsSectionCard>

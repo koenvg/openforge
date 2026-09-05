@@ -508,6 +508,14 @@ Import `IconButton` from `@openforge-app/plugin-sdk/ui/IconButton.svelte` for ic
 
 The component renders a native button, keeps a visible token-driven focus ring, and disables motion under `prefers-reduced-motion: reduce`. Test it by role and `label`; do not assert icon paths, variant attributes, or classes.
 
+### Caller-owned field captions
+
+`TextField`, `Textarea`, `Switch`, and `Select` accept `hideLabel: boolean`, default `false`. Use it only when your layout already renders a visible caption. The required `label` still names the control through `aria-label`; the component does not repeat the caption. Help and validation descriptions remain linked. No field state or callbacks change.
+
+Import `Select` from `@openforge-app/plugin-sdk/ui/Select.svelte`. Its `options` are `{ value: string, label: string, disabled?: boolean }` records; `value` is bindable and `onValueChange(value)` reports selection. Test its named button, opened listbox, option states, and keyboard selection. `hideLabel` also preserves that button's accessible name.
+
+`Select` accepts `aria-describedby` for caller-owned descriptions. It combines those IDs with its own `helperText` and error descriptions rather than replacing them.
+
 ### `TextField`
 
 Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. It renders a visible label and a native single-line input.

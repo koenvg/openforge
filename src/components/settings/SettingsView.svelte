@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import {
     AudioLines,
     Blocks,
@@ -14,7 +16,7 @@
     Tags,
     TriangleAlert,
   } from '@lucide/svelte'
-  import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import GlobalSettingsContent from './GlobalSettingsContent.svelte'
   import ProjectSettingsContent from './ProjectSettingsContent.svelte'
   import SettingsCategoryNav from './SettingsCategoryNav.svelte'
@@ -69,66 +71,69 @@
   })
 </script>
 
-<div class="flex h-full w-full flex-col overflow-hidden bg-base-200 lg:flex-row">
+<div class="flex h-full w-full flex-col overflow-hidden bg-[var(--of-surface-subtle)] lg:flex-row">
   <SettingsCategoryNav
     categories={settingsCategories}
     activeId={activeSection}
     onSelect={(id) => { activeSection = id }}
   />
 
-  <main class="min-w-0 flex-1 overflow-y-auto bg-base-200" aria-label={controller.activePage === 'project' ? 'Project settings' : 'Global settings'}>
-    <ProjectPageHeader
-      title={controller.activePage === 'project'
-        ? `${controller.projectName || 'Project'} / Project Settings`
-        : 'Global Settings'}
-      subtitle={controller.activePage === 'project'
-        ? 'Configure settings for this project only. Inherited defaults remain visible.'
-        : 'Configure app-wide defaults, integrations, and credentials.'}
-    >
-      {#snippet actions()}
+  <main class="settings-layout min-w-0 flex-1 overflow-y-auto bg-[var(--of-surface-subtle)]" aria-label={controller.activePage === 'project' ? 'Project settings' : 'Global settings'}>
+    <Panel padding="none">
+      <header class="flex shrink-0 flex-col gap-3 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <h1 class="m-0 text-xl font-semibold tracking-tight sm:text-[1.4rem]">
+            {controller.activePage === 'project' ? `${controller.projectName || 'Project'} / Project Settings` : 'Global Settings'}
+          </h1>
+          <p class="m-0 mt-1 text-sm leading-5 text-[var(--of-text-muted)]">
+            {controller.activePage === 'project'
+              ? 'Configure settings for this project only. Inherited defaults remain visible.'
+              : 'Configure app-wide defaults, integrations, and credentials.'}
+          </p>
+        </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <div class="min-w-32 text-right text-xs" aria-live="polite">
+          <div class="settings-layout min-w-32 text-right text-xs" aria-live="polite">
             {#if controller.projectSettingsLoadError || controller.globalSettingsLoadError}
-              <span class="font-medium text-error">Failed to load settings: {controller.projectSettingsLoadError ?? controller.globalSettingsLoadError}</span>
+              <span class="font-medium text-[var(--of-danger)]">Failed to load settings: {controller.projectSettingsLoadError ?? controller.globalSettingsLoadError}</span>
             {:else if controller.settingsLoading}
-              <span class="inline-flex items-center gap-2 text-base-content/60"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Loading settings…</span>
+              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Loading settings…</span>
             {:else if controller.saveStatus === 'dirty'}
-              <span class="font-medium text-warning">Unsaved changes — autosaving soon…</span>
+              <span class="font-medium text-[var(--of-warning)]">Unsaved changes — autosaving soon…</span>
             {:else if controller.isSaving || controller.saveStatus === 'saving'}
-              <span class="inline-flex items-center gap-2 text-base-content/60"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Saving changes…</span>
+              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Saving changes…</span>
             {:else if controller.saved || controller.saveStatus === 'saved'}
-              <span class="font-medium text-success">All changes saved</span>
+              <span class="font-medium text-[var(--of-success)]">All changes saved</span>
             {:else if controller.saveStatus === 'error'}
-              <span class="inline-flex items-center gap-2 text-error">
+              <span class="inline-flex items-center gap-2 text-[var(--of-danger)]">
                 Autosave failed: {controller.saveError}
-                <button type="button" class="btn btn-xs btn-error" onclick={controller.runImmediateSave}>Retry autosave</button>
+                <Button type="button" variant="danger" size="xs" onclick={controller.runImmediateSave}>Retry autosave</Button>
               </span>
             {:else}
-              <span class="text-base-content/55">Autosaves changes</span>
+              <span class="text-[var(--of-text-muted)]">Autosaves changes</span>
             {/if}
           </div>
 
           {#if controller.activePage === 'project'}
-            <span class="badge min-h-8 border-warning/35 bg-warning/10 px-3 text-warning">
+            <Badge variant="warning">
               {controller.projectOverrideCount} {controller.projectOverrideCount === 1 ? 'override' : 'overrides'}
-            </span>
-            <button
+            </Badge>
+            <Button
               type="button"
-              class="btn btn-outline btn-sm min-h-10"
+              variant="outline" size="sm"
               onclick={controller.handleResetToGlobal}
               disabled={!controller.hasProject || controller.projectOverrideCount === 0}
             >
               <RotateCcw size={15} aria-hidden="true" />
               Reset all
-            </button>
+            </Button>
           {/if}
 
-          <button type="button" class="btn btn-ghost btn-sm min-h-10" onclick={onClose}>Back to Board</button>
+          <Button type="button" variant="ghost" size="sm" onclick={onClose}>Back to Board</Button>
         </div>
-      {/snippet}
-    </ProjectPageHeader>
+      </header>
+    </Panel>
 
-    <div class="mx-auto flex w-full max-w-[76rem] flex-col gap-5 p-4 sm:p-6 xl:p-8">
+    <div class="settings-layout mx-auto flex w-full max-w-[76rem] flex-col gap-5 p-4 sm:p-6 xl:p-8">
       {#if controller.activePage === 'project'}
         <ProjectSettingsContent {activeSection} {controller} />
       {:else}

@@ -47,7 +47,7 @@ describe('SettingsProcessMemoryCard', () => {
 
     const { unmount } = render(SettingsProcessMemoryCard)
     try {
-      const toggle = await screen.findByRole('checkbox', { name: 'Collect process memory history' })
+      const toggle = await screen.findByRole('switch', { name: 'Collect process memory history' })
       expect((toggle as HTMLInputElement).checked).toBe(false)
 
       await fireEvent.click(toggle)
@@ -57,6 +57,11 @@ describe('SettingsProcessMemoryCard', () => {
       expect(screen.getByText('Electron')).toBeTruthy()
       expect(screen.getByText('100 MB')).toBeTruthy()
       expect(screen.getByRole('img', { name: /Process memory RSS trends/ })).toBeTruthy()
+      // Series remain identifiable when a theme assigns the same color to multiple tokens.
+      const chart = screen.getByRole('img', { name: /Process memory RSS trends/ })
+      const patterns = Array.from(chart.querySelectorAll('polyline'), (line) => line.getAttribute('stroke-dasharray'))
+      expect(patterns).toHaveLength(4)
+      expect(new Set(patterns).size).toBe(4)
       expect(screen.getByText('1/60 samples')).toBeTruthy()
     } finally {
       unmount()
@@ -75,7 +80,7 @@ describe('SettingsProcessMemoryCard', () => {
 
     const { unmount } = render(SettingsProcessMemoryCard)
     try {
-      const toggle = await screen.findByRole('checkbox', { name: 'Collect process memory history' })
+      const toggle = await screen.findByRole('switch', { name: 'Collect process memory history' })
       await vi.advanceTimersByTimeAsync(15_000)
       expect(getProcessMemoryHistory).toHaveBeenCalledTimes(2)
 

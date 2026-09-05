@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import { Brain } from '@lucide/svelte'
   import ModelDownloadProgress from '../shared/adapters/ModelDownloadProgress.svelte'
   import type { WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
@@ -35,23 +38,16 @@
   {#snippet icon()}<Brain size={16} />{/snippet}
   <div class="flex flex-col gap-4">
     <!-- Whisper Model Select -->
-    <label class="flex flex-col gap-1">
-      <span class="text-[0.7rem] text-base-content/50">Whisper Model</span>
-      <select
-        class="select select-bordered select-sm w-full max-w-xs"
-        value={activeModelSize ?? 'small'}
-        onchange={(e) => {
-          if (!(e.currentTarget instanceof HTMLSelectElement)) return
-          onWhisperModelSelect(e.currentTarget.value)
-        }}
-      >
-        {#each modelStatuses as model}
-          <option value={model.size}>
-            {model.display_name} — {formatSize(model.disk_size_mb)} download, ~{formatSize(model.ram_usage_mb)} RAM{model.downloaded ? ' ✓' : ''}
-          </option>
-        {/each}
-      </select>
-    </label>
+    <Select
+      label="Whisper Model"
+      class="max-w-xs"
+      value={activeModelSize ?? 'small'}
+      onValueChange={onWhisperModelSelect}
+      options={modelStatuses.map((model) => ({
+        value: model.size,
+        label: `${model.display_name} — ${formatSize(model.disk_size_mb)} download, ~${formatSize(model.ram_usage_mb)} RAM${model.downloaded ? ' ✓' : ''}`,
+      }))}
+    />
 
     <!-- Whisper Model Download Status / Progress -->
     {#if downloadingModel}
@@ -65,42 +61,42 @@
     {:else if activeModel?.downloaded}
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2">
-          <span class="badge badge-success badge-sm">Downloaded</span>
-          <span class="text-[0.7rem] text-base-content/50">{activeModel.model_name}</span>
+          <Badge variant="success">Downloaded</Badge>
+          <span class="text-[0.7rem] text-[var(--of-text-muted)]">{activeModel.model_name}</span>
         </div>
         {#if activeModel.model_size_bytes}
-          <span class="text-[0.7rem] text-base-content/50">
+          <span class="text-[0.7rem] text-[var(--of-text-muted)]">
             Size: {(activeModel.model_size_bytes / 1024 / 1024).toFixed(0)} MB
           </span>
         {/if}
         {#if activeModel.model_path}
-          <span class="text-[0.7rem] text-base-content/50 break-all">
+          <span class="text-[0.7rem] text-[var(--of-text-muted)] break-all">
             Path: {activeModel.model_path}
           </span>
         {/if}
-        <button class="btn btn-ghost btn-sm mt-1" onclick={() => onDownloadModel(activeModel.size)}>
+        <Button variant="ghost" size="sm" class="mt-1" onclick={() => onDownloadModel(activeModel.size)}>
           Re-download Model
-        </button>
+        </Button>
       </div>
     {:else if activeModel}
       <div class="flex flex-col gap-2">
-        <p class="text-[0.7rem] text-base-content/50">Whisper {activeModel.display_name} model required for voice dictation (~{formatSize(activeModel.disk_size_mb)} download).</p>
-        <button class="btn btn-primary btn-sm" onclick={() => onDownloadModel(activeModel.size)}>
+        <p class="text-[0.7rem] text-[var(--of-text-muted)]">Whisper {activeModel.display_name} model required for voice dictation (~{formatSize(activeModel.disk_size_mb)} download).</p>
+        <Button variant="primary" size="sm" onclick={() => onDownloadModel(activeModel.size)}>
           Download Model
-        </button>
+        </Button>
       </div>
     {/if}
 
-    <p class="text-[0.7rem] text-base-content/50 mt-1">
+    <p class="text-[0.7rem] text-[var(--of-text-muted)] mt-1">
       {#if activeModel}
         Uses approximately {formatSize(activeModel.ram_usage_mb)} of RAM during transcription.
       {:else}
         Uses approximately 1 GB of RAM during transcription.
       {/if}
     </p>
-    <p class="text-[0.7rem] text-base-content/50">
+    <p class="text-[0.7rem] text-[var(--of-text-muted)]">
       OpenForge keeps the model in memory for five minutes after use so consecutive dictation stays fast, then releases it. The next dictation reloads the model and may start more slowly.
     </p>
-    <p class="text-[0.7rem] text-base-content/50">Note: macOS controls microphone access per installed app bundle; re-approve access after replacing a local build if prompted.</p>
+    <p class="text-[0.7rem] text-[var(--of-text-muted)]">Note: macOS controls microphone access per installed app bundle; re-approve access after replacing a local build if prompted.</p>
   </div>
 </SettingsSectionCard>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
   import { FileText, LayoutDashboard } from '@lucide/svelte'
   import type { ReplaceableViewTarget } from '@openforge-app/plugin-sdk'
   import type { ResolvedViewReplacement } from '../../lib/plugin/contributionResolver'
@@ -57,11 +58,10 @@
     return provider?.title ?? `${inheritedProviderId} unavailable`
   })
 
-  async function handleChange(event: Event): Promise<void> {
+  async function handleChange(value: string): Promise<void> {
     if (saving) return
-    const select = event.currentTarget as HTMLSelectElement
     const runId = ++changeRunId
-    pendingProviderId = select.value
+    pendingProviderId = value
     saving = true
     try {
       await onProviderChange(pendingProviderId)
@@ -85,27 +85,21 @@
   {#snippet icon()}
     {#if isTaskDetail}<FileText size={18} />{:else}<LayoutDashboard size={18} />{/if}
   {/snippet}
-  <div class="form-control w-full max-w-md">
-    <label for={fieldId} class="label-text mb-2 text-sm font-medium">{title}</label>
-    <select
+  <div class="w-full max-w-md">
+    <Select
       id={fieldId}
-      class="select select-bordered min-h-11 w-full"
+      label={title}
       value={displayedProviderId}
-      onchange={(event) => void handleChange(event)}
+      onValueChange={(value) => void handleChange(value)}
       disabled={disabled || saving}
-    >
-      {#if scope === 'project'}
-        <option value={INHERIT_PROJECT_DASHBOARD_PROVIDER_ID}>Use global default ({inheritedProviderLabel})</option>
-      {/if}
-      <option value={CORE_PROJECT_DASHBOARD_PROVIDER_ID}>OpenForge</option>
-      {#each providers as provider (provider.qualifiedId)}
-        <option value={provider.qualifiedId}>{provider.title}</option>
-      {/each}
-      {#if unavailableSelectedProviderId}
-        <option value={unavailableSelectedProviderId}>{unavailableSelectedProviderId} (unavailable)</option>
-      {/if}
-    </select>
-    <span class="mt-2 text-xs leading-5 text-base-content/60">
+      options={[
+        ...(scope === 'project' ? [{ value: INHERIT_PROJECT_DASHBOARD_PROVIDER_ID, label: `Use global default (${inheritedProviderLabel})` }] : []),
+        { value: CORE_PROJECT_DASHBOARD_PROVIDER_ID, label: 'OpenForge' },
+        ...providers.map((provider) => ({ value: provider.qualifiedId, label: `${provider.title} — Provided by ${provider.pluginId}` })),
+        ...(unavailableSelectedProviderId ? [{ value: unavailableSelectedProviderId, label: `${unavailableSelectedProviderId} (unavailable)` }] : []),
+      ]}
+    />
+    <span class="mt-2 text-xs leading-5 text-[var(--of-text-muted)]">
       {scope === 'global'
         ? `Projects can inherit this default or choose their own ${isTaskDetail ? 'task workspace' : 'dashboard'}.`
         : 'Unavailable choices stay selected and return automatically when the plugin is ready.'}

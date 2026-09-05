@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 	import { ListFilter } from '@lucide/svelte';
 	import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte';
 	import type { TaskState } from '../../lib/taskState';
@@ -32,7 +33,7 @@
 <SettingsSectionCard id="section-focus-filter" title="Focus Filter States" {disabled}>
 	{#snippet icon()}<ListFilter size={16} />{/snippet}
 	<div class="flex flex-col gap-3">
-		<p class="text-xs text-base-content/50">Choose which task states appear in the "Focus" filter chip on the board.</p>
+		<p class="text-xs text-[var(--of-text-muted)]">Choose which task states appear in the "Focus" filter chip on the board.</p>
 
 		<div class="flex flex-col gap-1">
 			{#each FOCUS_FILTER_STATES as state}
@@ -42,17 +43,17 @@
 						disabled={disabled}
 						onchange={(e) => toggleState(state, e.currentTarget.checked)}
 					/>
-					<span class="text-sm text-base-content">{TASK_STATE_LABELS[state]}</span>
+					<span class="text-sm text-[var(--of-text)]">{TASK_STATE_LABELS[state]}</span>
 				</label>
 			{/each}
 		</div>
 
-		<button
-			class="btn btn-ghost btn-sm border border-base-300 text-base-content/50 hover:border-base-content hover:text-base-content"
+		<Button
+			variant="ghost" size="sm"
 			disabled={disabled}
 			onclick={resetToDefault}
 		>
 			Reset to Default
-		</button>
+		</Button>
 	</div>
 </SettingsSectionCard>

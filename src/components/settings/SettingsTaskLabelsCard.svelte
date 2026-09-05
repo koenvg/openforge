@@ -1,4 +1,9 @@
 <script lang="ts">
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { Tags, Trash2 } from '@lucide/svelte'
   import { createTaskLabel, deleteTaskLabel, getProjectTaskLabels } from '../../lib/ipc'
   import type { TaskLabel } from '../../lib/types'
@@ -91,14 +96,13 @@
 <SettingsSectionCard id="section-labels" title="Task Labels" {disabled}>
   {#snippet icon()}<Tags size={16} />{/snippet}
   <div class="flex flex-col gap-3">
-    <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">
+    <p class="text-[0.7rem] text-[var(--of-text-muted)] mb-2 leading-snug">
       Manage the project labels available for tasks.
     </p>
 
-    <div class="flex items-center gap-2">
-      <input
-        class="input input-bordered input-sm flex-1"
-        aria-label="New task label"
+    <div class="flex items-end gap-2">
+      <div class="flex-1">
+      <TextField label="New task label"
         placeholder="New label name"
         value={labelInput}
         disabled={disabled || isSaving}
@@ -110,39 +114,42 @@
           }
         }}
       />
-      <button
+      </div>
+      <Button
         type="button"
-        class="btn btn-sm bg-neutral text-neutral-content"
+        variant="primary" size="sm"
         disabled={disabled || isSaving || !labelInput.trim()}
         onclick={handleCreateLabel}
       >
         Add Label
-      </button>
+      </Button>
     </div>
 
     {#if error}
-      <p class="text-sm text-error m-0">{error}</p>
+      <p class="text-sm text-[var(--of-danger)] m-0" role="alert">{error}</p>
     {/if}
 
     {#if isLoading}
-      <p class="text-sm text-base-content/60 m-0">Loading labels…</p>
+      <p class="text-sm text-[var(--of-text-muted)] m-0">Loading labels…</p>
     {:else if labels.length === 0}
-      <p class="text-sm text-base-content/60 m-0">No task labels yet.</p>
+      <p class="text-sm text-[var(--of-text-muted)] m-0">No task labels yet.</p>
     {:else}
       <div class="flex flex-col gap-2" aria-label="Project task labels">
         {#each labels as label (label.id)}
-          <div class="flex items-center justify-between gap-2 rounded-md border border-base-300 bg-base-200 p-2">
-            <span class="badge badge-sm badge-info badge-outline max-w-full truncate">{label.name}</span>
-            <button
+          <Panel padding="none" variant="subtle">
+            <div class="flex items-center justify-between gap-2 p-2">
+            <Badge variant="info" class="max-w-full truncate">{label.name}</Badge>
+            <IconButton
               type="button"
-              class="btn btn-ghost btn-xs text-base-content/60 hover:bg-error hover:text-error-content"
+              variant="danger" size="xs"
               disabled={disabled || isSaving}
-              aria-label="Delete task label {label.name}"
+              label="Delete task label {label.name}"
               onclick={() => handleDeleteLabel(label)}
             >
               <Trash2 size={14} aria-hidden="true" />
-            </button>
+            </IconButton>
           </div>
+          </Panel>
         {/each}
       </div>
     {/if}

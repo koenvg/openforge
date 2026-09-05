@@ -32,6 +32,11 @@ describe('SettingsPreferencesCard', () => {
 	})
 
 	describe('theme selector', () => {
+		it('associates the caller-owned theme description with the selector', () => {
+			render(SettingsPreferencesCard, { props: defaultProps() })
+			expect(screen.getByRole('button', { name: 'Theme', description: 'Choose an application theme' })).toBeTruthy()
+		})
+
 		const themes: readonly RegisteredTheme[] = [
 			{ ...LIGHT_THEME, owner: { kind: 'builtin' } },
 			{ ...DARK_THEME, owner: { kind: 'builtin' } },
@@ -43,17 +48,31 @@ describe('SettingsPreferencesCard', () => {
 			},
 		]
 
-		it('lists registry themes with provider attribution', () => {
+		it('lists registry themes with provider attribution', async () => {
 			render(SettingsPreferencesCard, {
 				props: defaultProps({ availableThemes: themes, selectedThemeId: 'openforge-light' }),
 			})
 
-			const select = requireElement(screen.getByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
-			expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+			const select = screen.getByRole('button', { name: 'Theme' })
+			await fireEvent.keyDown(select, { key: 'ArrowDown' })
+			expect(screen.getAllByRole('option').map((option) => option.textContent?.trim())).toEqual([
 				'OpenForge Light — Built in',
 				'OpenForge Dark — Built in',
 				'Paper — Provided by com.example.paper',
 			])
+		})
+
+		it('selects a theme with the keyboard and keeps focus on the selector', async () => {
+			const onThemeChange = vi.fn()
+			render(SettingsPreferencesCard, { props: defaultProps({ availableThemes: themes, onThemeChange }) })
+			const select = screen.getByRole('button', { name: 'Theme' })
+			select.focus()
+			await fireEvent.keyDown(select, { key: 'ArrowDown' })
+			await screen.findByRole('option', { name: /OpenForge Dark/ })
+			await fireEvent.keyDown(select, { key: 'ArrowDown' })
+			await fireEvent.keyDown(select, { key: 'Enter' })
+			expect(onThemeChange).toHaveBeenCalledWith(DARK_THEME.id)
+			expect(document.activeElement).toBe(select)
 		})
 
 		it('selects a registry theme by stable id', async () => {
@@ -66,9 +85,8 @@ describe('SettingsPreferencesCard', () => {
 				}),
 			})
 
-			await fireEvent.change(screen.getByRole('combobox', { name: 'Theme' }), {
-				target: { value: 'com.example.paper:paper' },
-			})
+			await fireEvent.keyDown(screen.getByRole('button', { name: 'Theme' }), { key: 'ArrowDown' })
+			await fireEvent.pointerUp(screen.getByRole('option', { name: /Paper/ }), { button: 0 })
 
 			expect(onThemeChange).toHaveBeenCalledWith('com.example.paper:paper')
 		})
@@ -77,34 +95,34 @@ describe('SettingsPreferencesCard', () => {
 			const view = render(SettingsPreferencesCard, {
 				props: defaultProps({ availableThemes: themes, selectedThemeId: 'com.example.paper:paper' }),
 			})
-			const select = requireElement(screen.getByRole('combobox', { name: 'Theme' }), HTMLSelectElement)
-			expect(select.value).toBe('com.example.paper:paper')
+			const select = screen.getByRole('button', { name: 'Theme' })
+			expect(select.textContent).toContain('Paper')
 
 			await view.rerender(defaultProps({
 				availableThemes: themes.slice(0, 2),
 				selectedThemeId: 'openforge-light',
 			}))
 
-			expect(select.value).toBe('openforge-light')
+			expect(select.textContent).toContain('OpenForge Light')
 			expect(screen.queryByRole('option', { name: /Paper/ })).toBeNull()
 		})
 	})
 
 	describe('terminal font picker', () => {
-		it('renders all curated terminal font options', () => {
+		it('renders all curated terminal font options', async () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
-			const select = requireElement(screen.getByTestId('terminal-font-select'), HTMLSelectElement)
-			const optionValues = Array.from(select.options).map((option) => option.value)
+			await fireEvent.keyDown(screen.getByRole('button', { name: 'Terminal font' }), { key: 'ArrowDown' })
+			const optionValues = screen.getAllByRole('option').map((option) => option.textContent?.trim())
 			expect(optionValues).toEqual([
-				'jetbrains-mono',
-				'ibm-plex-mono',
-				'cascadia-code',
-				'vt323',
-				'martian-mono',
-				'overpass-mono',
-				'courier-prime',
-				'space-mono',
+				'JetBrains Mono (default)',
+				'IBM Plex Mono',
+				'Cascadia Code',
+				'VT323 (exotic)',
+				'Martian Mono',
+				'Overpass Mono',
+				'Courier Prime',
+				'Space Mono',
 			])
 		})
 
@@ -113,8 +131,7 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ terminalFont: 'vt323' }),
 			})
 
-			const select = requireElement(screen.getByTestId('terminal-font-select'), HTMLSelectElement)
-			expect(select.value).toBe('vt323')
+			expect(screen.getByRole('button', { name: 'Terminal font' }).textContent).toContain('VT323')
 		})
 
 		it('calls onTerminalFontChange when a different font is selected', async () => {
@@ -123,8 +140,8 @@ describe('SettingsPreferencesCard', () => {
 				props: defaultProps({ onTerminalFontChange }),
 			})
 
-			const select = screen.getByTestId('terminal-font-select')
-			await fireEvent.change(select, { target: { value: 'vt323' } })
+			await fireEvent.keyDown(screen.getByRole('button', { name: 'Terminal font' }), { key: 'ArrowDown' })
+			await fireEvent.pointerUp(screen.getByRole('option', { name: 'VT323 (exotic)' }), { button: 0 })
 
 			expect(onTerminalFontChange).toHaveBeenCalledWith('vt323')
 		})
