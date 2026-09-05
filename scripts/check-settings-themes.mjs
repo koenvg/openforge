@@ -75,9 +75,9 @@ try {
 
   const reports = []
   const themes = [
-    { label: 'OpenForge Light', keys: ['Home'], radius: '3px', text: 'rgb(17, 19, 24)', muted: 'rgb(98, 104, 114)' },
-    { label: 'OpenForge Dark', keys: ['Home', 'ArrowDown'], radius: '3px', text: 'rgb(243, 245, 247)', muted: 'rgb(154, 163, 174)' },
-    { label: 'Ink', keys: ['End'], radius: '8px', text: 'rgb(243, 245, 247)', muted: 'rgb(154, 163, 174)' },
+    { id: 'openforge-light', label: 'OpenForge Light', keys: ['Home'], radius: '3px', text: 'rgb(17, 19, 24)', muted: 'rgb(98, 104, 114)' },
+    { id: 'openforge-dark', label: 'OpenForge Dark', keys: ['Home', 'ArrowDown'], radius: '3px', text: 'rgb(243, 245, 247)', muted: 'rgb(154, 163, 174)' },
+    { id: 'com.example.ink:ink', label: 'Ink', keys: ['End'], radius: '8px', text: 'rgb(243, 245, 247)', muted: 'rgb(154, 163, 174)' },
   ]
   for (const theme of themes) {
     await trigger.focus()
@@ -86,6 +86,32 @@ try {
     await trigger.press('Enter')
     await page.waitForFunction((label) => document.querySelector('[aria-label="Theme"]')?.textContent.includes(label), theme.label)
     assert(await trigger.evaluate((element) => document.activeElement === element), 'Theme selection must retain focus')
+
+    const compatibility = await page.evaluate(() => {
+      const style = (id) => getComputedStyle(document.querySelector(`[data-testid="${id}"]`))
+      const legacy = style('daisy-compatibility')
+      const accent = style('daisy-accent')
+      const reference = document.createElement('div')
+      document.body.append(reference)
+      const color = (token) => {
+        reference.style.color = `var(${token})`
+        return getComputedStyle(reference).color
+      }
+      const result = {
+        id: document.documentElement.dataset.theme,
+        actual: [legacy.color, legacy.borderTopColor, legacy.backgroundColor, accent.color, accent.backgroundColor, accent.borderTopColor, style('daisy-on-accent').color],
+        expected: ['--of-text', '--of-border', '--of-surface', '--of-accent', '--of-accent', '--of-accent', '--of-on-accent'].map(color),
+      }
+      reference.remove()
+      return result
+    })
+    assert.equal(compatibility.id, theme.id, `${theme.label} stable theme ID`)
+    assert.deepEqual(compatibility.actual, compatibility.expected, `${theme.label} daisyUI text, border, surface and accent utilities`)
+
+    if (process.argv.includes('--compatibility-only')) {
+      reports.push({ theme: theme.label, compatibility })
+      continue
+    }
 
     for (const width of [1440, 1000]) {
       await page.setViewportSize({ width, height: 1000 })
@@ -122,7 +148,7 @@ try {
   assert.equal(await instructions.inputValue(), 'Edited instructions')
   assert.deepEqual(errors, [])
   writeFileSync(join(artifacts, 'results.json'), JSON.stringify({ reports, errors }, null, 2))
-  console.log(`Settings theme checks passed for ${reports.length} theme/viewport combinations. Artifacts: ${artifacts}`)
+  console.log(`Settings theme checks passed for ${reports.length} ${process.argv.includes('--compatibility-only') ? 'theme compatibility cases' : 'theme/viewport combinations'}. Artifacts: ${artifacts}`)
 } finally {
   await browser?.close()
   await server.close()

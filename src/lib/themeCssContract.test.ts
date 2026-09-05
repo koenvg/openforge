@@ -43,6 +43,15 @@ function daisyThemeBlock(id: string): string {
 }
 
 describe('daisyUI theme compatibility contract', () => {
+  it('maps root compatibility values for arbitrary contributed theme IDs', () => {
+    const root = themeAdapterCss.match(/:root\s*\{([^}]+)\}/)?.[1] ?? ''
+    for (const [daisyToken, semanticToken] of Object.entries(DAISY_TOKEN_ADAPTER)) {
+      expect(root).toContain(`${daisyToken}: var(${semanticToken});`)
+    }
+    expect(root).toContain('--size-field: calc(var(--of-control-height) / 10);')
+    expect(root).toContain('--size-selector: calc(var(--of-control-height-compact) / 8);')
+  })
+
   it('keeps theme adapters separate from unrelated global presentation rules', () => {
     expect(appCss).toContain('@import "./styles/theme-adapter.css";')
     expect(appCss).not.toContain('@plugin "daisyui/theme"')
