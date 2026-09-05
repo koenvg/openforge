@@ -12,6 +12,7 @@ export interface SelfReviewDiffControllerOptions {
 export function createSelfReviewDiffController(options: SelfReviewDiffControllerOptions) {
   let includeCommitted = $state(true)
   let includeUncommitted = $state(true)
+  let disposed = false
 
   const initialReviewContext = createInitialSelfReviewContextLoader()
   const diffLoader = createDiffLoader({
@@ -36,6 +37,7 @@ export function createSelfReviewDiffController(options: SelfReviewDiffController
 
   async function load(): Promise<void> {
     await diffLoader.loadDiff()
+    if (disposed) return
     await diffLoader.loadCommits()
   }
 
@@ -67,7 +69,10 @@ export function createSelfReviewDiffController(options: SelfReviewDiffController
     setIncludeCommitted,
     setIncludeUncommitted,
     selectCommit: diffLoader.selectCommit,
-    dispose: diffLoader.cleanup,
+    dispose() {
+      disposed = true
+      diffLoader.cleanup()
+    },
   }
 }
 
