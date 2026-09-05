@@ -17,7 +17,7 @@ import {
   uninstallPlugin,
 } from '../../lib/plugin/pluginRegistry'
 import { chooseSelectOption } from '../../test-utils/select'
-import { writeClipboardText } from '../../lib/ipc'
+import { getConfig, selectDirectory, setConfig, writeClipboardText } from '../../lib/ipc'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 vi.mock('../../lib/plugin/pluginStore', () => {
@@ -48,6 +48,9 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
+  getConfig: vi.fn(),
+  setConfig: vi.fn(),
+  selectDirectory: vi.fn(),
   writeClipboardText: vi.fn(),
 }))
 
@@ -70,16 +73,21 @@ const mockPlugin: PluginEntry = {
   installedAt: 1234,
 }
 
-describe('PluginSettingsPanel', () => {
-  beforeEach(() => {
-    cleanup()
-    vi.clearAllMocks()
+beforeEach(() => {
+  cleanup()
+  vi.resetAllMocks()
+  vi.mocked(getConfig).mockResolvedValue(null)
+  vi.mocked(setConfig).mockResolvedValue(undefined)
+  vi.mocked(selectDirectory).mockResolvedValue(null)
+  vi.mocked(writeClipboardText).mockResolvedValue(undefined)
 
-    installedPlugins.set(new Map())
-    enabledPluginIds.set(new Set())
-    appEnabledPluginIds.set(new Set())
-    pluginLoadError.set(null)
-  })
+  installedPlugins.set(new Map())
+  enabledPluginIds.set(new Set())
+  appEnabledPluginIds.set(new Set())
+  pluginLoadError.set(null)
+})
+
+describe('PluginSettingsPanel', () => {
 
   it('renders the project empty state when no project-enabled plugins are installed', () => {
     render(PluginSettingsPanel, { projectId: 'proj-1' })
@@ -194,24 +202,16 @@ describe('PluginSettingsPanel', () => {
 })
 
 describe('GlobalPluginSettingsPanel', () => {
-  beforeEach(() => {
-    cleanup()
-    vi.clearAllMocks()
-
-    installedPlugins.set(new Map())
-    enabledPluginIds.set(new Set())
-    appEnabledPluginIds.set(new Set())
-    pluginLoadError.set(null)
-  })
-
-  it('renders empty global installation inventory', () => {
+  it('renders empty global installation inventory without alerts', async () => {
     render(GlobalPluginSettingsPanel)
     expect(screen.getByText('Plugins')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Install package' })).toBeTruthy()
     expect(screen.getByText('No plugins installed')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Choose plugin folder' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders app-wide install metadata for installed plugins', () => {
+  it('renders app-wide install metadata for installed plugins without alerts', async () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
 
     render(GlobalPluginSettingsPanel)
@@ -223,6 +223,9 @@ describe('GlobalPluginSettingsPanel', () => {
     expect(screen.getByText('npm:@acme/test-plugin@1.0.0')).toBeTruthy()
     expect(screen.queryByText('test-plugin')).toBeNull()
     expect(screen.getByText('read:files')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Choose plugin folder' })).toBeEnabled()
+    expect(getConfig).toHaveBeenCalledWith('plugin_folder_path')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('enables and disables app-owned plugins once from Global Settings', async () => {
