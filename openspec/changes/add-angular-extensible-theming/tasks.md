@@ -63,8 +63,8 @@
 
 ## 7. Host and built-in plugin migration
 
-- [ ] 7.1 Add a bounded inventory check for direct covered control classes and fixed geometry in migrated areas, with an explicit allowlist for feature-specific layout and status presentation; verify the check catches a seeded violation without flagging allowed layout.
-- [ ] 7.2 Migrate application shell, sidebar, toolbar, and project navigation controls to public building blocks while preserving keyboard shortcuts and navigation behavior; verify shell and navigation suites pass.
+- [x] 7.1 Add a bounded inventory check for direct covered control classes and fixed geometry in migrated areas, with an explicit allowlist for feature-specific layout and status presentation; verify the check catches a seeded violation without flagging allowed layout.
+- [x] 7.2 Migrate application shell, sidebar, toolbar, and project navigation controls to public building blocks while preserving keyboard shortcuts and navigation behavior; verify shell and navigation suites pass.
 - [ ] 7.3 Migrate palette, modal, dialog, anchored menu, and tooltip callers to public building blocks while preserving focus restoration, escape, overlay dismissal, and close confirmation behavior; verify the modal and palette suites pass.
 - [ ] 7.4 Migrate global and project settings forms, selectors, toggles, panels, badges, and actions to public building blocks; verify settings autosave, provider, plugin, companion, and accessibility suites pass.
 - [ ] 7.5 Migrate task creation, focus board filters, task cards, and shared task controls while preserving draft state, label behavior, filtering, and keyboard interactions; verify create-task and focus-board suites pass.

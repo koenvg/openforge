@@ -27,22 +27,89 @@
 
 <button
   type="button"
-  class={[
-    'relative mx-2 flex min-h-11 w-[calc(100%_-_1rem)] items-center rounded-lg gap-3 py-2.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-    collapsed ? 'justify-center px-0' : 'px-3',
-    active ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content',
-    className,
-  ]}
+  class={['of-plugin-sidebar-link', className]}
+  data-active={active}
+  data-collapsed={collapsed}
   title={collapsed ? accessibleName : undefined}
   aria-label={accessibleName}
   aria-current={active ? 'page' : undefined}
   onclick={onActivate}
 >
   {#if leading}
-    <span class="relative shrink-0">{@render leading()}</span>
+    <span class="of-plugin-sidebar-link-leading">{@render leading()}</span>
   {/if}
   {#if !collapsed}
-    {#if label}<span class="min-w-0 text-sm font-medium">{@render label()}</span>{/if}
-    {#if trailing}<span class="ml-auto shrink-0">{@render trailing()}</span>{/if}
+    {#if label}<span class="of-plugin-sidebar-link-label">{@render label()}</span>{/if}
+    {#if trailing}<span class="of-plugin-sidebar-link-trailing">{@render trailing()}</span>{/if}
   {/if}
 </button>
+
+<style>
+  button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: calc(100% - (var(--of-space2) * 2));
+    min-height: var(--of-control-height-touch);
+    margin: 0 var(--of-space2);
+    padding: var(--of-space2) var(--of-space3);
+    gap: var(--of-space3);
+    border: var(--of-border-width) solid transparent;
+    border-radius: var(--of-radius-round);
+    background: transparent;
+    color: var(--of-text-muted);
+    font-family: var(--of-font-sans);
+    cursor: pointer;
+    transition:
+      background-color var(--of-duration-fast) var(--of-ease-standard),
+      border-color var(--of-duration-fast) var(--of-ease-standard),
+      color var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  button:hover {
+    background: var(--of-control-hover);
+    color: var(--of-text);
+  }
+
+  button:active {
+    background: var(--of-control-pressed);
+  }
+
+  button[data-active='true'] {
+    border-color: var(--of-border-interactive);
+    background: var(--of-accent-subtle);
+    color: var(--of-on-accent-subtle);
+  }
+
+  button[data-collapsed='true'] {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  button:focus-visible {
+    outline: var(--of-focus-width) solid var(--of-focus-ring);
+    outline-offset: var(--of-space1);
+  }
+
+  .of-plugin-sidebar-link-leading {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .of-plugin-sidebar-link-label {
+    min-width: 0;
+    font-size: var(--of-text-sm);
+    font-weight: var(--of-weight-medium);
+  }
+
+  .of-plugin-sidebar-link-trailing {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button {
+      transition: none;
+    }
+  }
+</style>

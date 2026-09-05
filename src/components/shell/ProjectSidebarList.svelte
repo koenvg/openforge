@@ -24,6 +24,8 @@
     GitPullRequest,
     Plus,
   } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
 
   interface Props {
     collapsed: boolean
@@ -98,14 +100,14 @@
   }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col">
-  <div class="h-12 px-4 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
+<div class="project-sidebar-list flex min-h-0 flex-1 flex-col">
+  <div class="project-list-header h-12 px-4 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
     {#if !collapsed}
-      <span class="text-xs text-secondary font-semibold uppercase tracking-[0.12em]">PROJECTS</span>
+      <span class="project-list-heading">PROJECTS</span>
     {/if}
-    <button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Add project" onclick={() => onNewProject?.()}>
+    <IconButton type="button" size="sm" variant="ghost" label="Add project" onclick={() => onNewProject?.()}>
       <Plus size={14} />
-    </button>
+    </IconButton>
   </div>
 
   <div class="flex-1 overflow-y-auto">
@@ -115,93 +117,100 @@
       {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
 
       {#if collapsed}
-        <button
+        <IconButton
           type="button"
-          class="composited-hover-layer w-full flex justify-center py-2 {isActive ? 'bg-base-100' : 'sidebar-hover-content-10 active:bg-base-content/20'}"
-          aria-current={isActive ? 'true' : undefined}
+          size="lg"
+          variant="ghost"
+          class="collapsed-project-button"
+          label={project.name}
           title={project.name}
+          aria-current={isActive ? 'true' : undefined}
           onclick={() => onSelectProject(project.id)}
         >
-          <div class="relative">
-            <div class="w-8 h-8 rounded-full {isActive ? 'bg-primary text-primary-content' : 'bg-base-content/10 text-base-content'} flex items-center justify-center text-xs font-bold uppercase">
-              {project.name.charAt(0)}
-            </div>
-            {#if attentionCount > 0}
-              <span
-                class="absolute -bottom-1 -right-1 grid place-items-center w-4 h-4 rounded-full bg-success text-success-content ring-2 ring-base-300"
-                title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
-              >
-                <Bot size={9} />
-              </span>
-            {/if}
-            {#if reviewCount > 0}
-              <span
-                class="absolute -top-1 -right-1 grid place-items-center w-4 h-4 rounded-full bg-error text-error-content ring-2 ring-base-300"
-                title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
-              >
-                <GitPullRequest size={9} />
-              </span>
-            {/if}
-          </div>
-        </button>
+          <span class="project-avatar" aria-hidden="true">{project.name.charAt(0)}</span>
+          {#if attentionCount > 0}
+            <span
+              class="project-status-indicator project-status-attention"
+              title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
+            >
+              <Bot size={9} />
+            </span>
+          {/if}
+          {#if reviewCount > 0}
+            <span
+              class="project-status-indicator project-status-review"
+              title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
+            >
+              <GitPullRequest size={9} />
+            </span>
+          {/if}
+        </IconButton>
       {:else}
-        <div class="composited-hover-layer group relative flex border-l-2 {isActive ? 'border-primary bg-primary/10' : 'sidebar-hover-base-200 border-transparent active:bg-base-300'}">
-          <button
+        <div class="project-row group relative flex">
+          <Button
             type="button"
-            class="flex-1 px-4 py-3 text-left"
+            size="lg"
+            variant="ghost"
+            class="expanded-project-button"
+            aria-label={project.name}
             aria-current={isActive ? 'true' : undefined}
             onclick={() => onSelectProject(project.id)}
           >
-            <div class="text-sm {isActive ? 'font-semibold text-primary' : 'font-medium text-base-content'}">{project.name}</div>
-            {#if reviewCount > 0 || attentionCount > 0}
-              <div class="mt-1 flex items-center gap-2">
-                {#if reviewCount > 0}
-                  <span class="flex items-center gap-1 text-error" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
-                    <GitPullRequest size={12} />
-                    <span class="text-[10px] text-base-content/60">{reviewCount}</span>
-                  </span>
-                {/if}
-                {#if attentionCount > 0}
-                  <span class="flex items-center gap-1 text-success" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
-                    <Bot size={12} />
-                    <span class="text-[10px] text-base-content/60">{attentionCount}</span>
-                  </span>
-                {/if}
-              </div>
-            {/if}
-          </button>
-          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            <button
+            <span class="project-copy">
+              <span class="project-name">{project.name}</span>
+              {#if reviewCount > 0 || attentionCount > 0}
+                <span class="project-statuses">
+                  {#if reviewCount > 0}
+                    <span class="project-status project-review-status" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
+                      <GitPullRequest size={12} />
+                      <span>{reviewCount}</span>
+                    </span>
+                  {/if}
+                  {#if attentionCount > 0}
+                    <span class="project-status project-attention-status" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
+                      <Bot size={12} />
+                      <span>{attentionCount}</span>
+                    </span>
+                  {/if}
+                </span>
+              {/if}
+            </span>
+          </Button>
+          <div class="project-actions">
+            <IconButton
               type="button"
-              class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
-              aria-label="Hide {project.name}"
+              size="xs"
+              variant="ghost"
+              label="Hide {project.name}"
               disabled={isSavingHidden}
               onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, true) }}
             >
               <EyeOff size={14} />
-            </button>
+            </IconButton>
             <div class="flex flex-col gap-1">
               {#if index > 0}
-                <button
+                <IconButton
                   type="button"
-                  class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
-                  aria-label="Move {project.name} up"
+                  size="xs"
+                  variant="ghost"
+                  label="Move {project.name} up"
                   disabled={isSavingProjectOrder}
                   onclick={(event) => { event.stopPropagation(); moveProject(index, 'up') }}
                 >
                   <ArrowUp size={14} />
-                </button>
+                </IconButton>
               {/if}
               {#if index < visibleProjects.length - 1}
-                <button
+                <IconButton
                   type="button"
-                  class="btn btn-ghost btn-xs p-1 min-h-0 h-auto"
-                  aria-label="Move {project.name} down"
+                  size="xs"
+                  variant="ghost"
+                  label="Move {project.name} down"
                   disabled={isSavingProjectOrder}
                   onclick={(event) => { event.stopPropagation(); moveProject(index, 'down') }}
                 >
                   <ArrowDown size={14} />
-                </button>
+                </IconButton>
               {/if}
             </div>
           </div>
@@ -210,10 +219,12 @@
     {/each}
 
     {#if !collapsed && hiddenProjects.length > 0}
-      <div class="border-t border-base-300/40 mt-1">
-        <button
+      <div class="hidden-projects">
+        <Button
           type="button"
-          class="w-full flex items-center gap-1 px-3 py-2 text-left text-base-content opacity-50 transition-opacity hover:opacity-80"
+          size="xs"
+          variant="ghost"
+          class="hidden-projects-toggle"
           aria-expanded={hiddenExpanded}
           onclick={() => (hiddenExpanded = !hiddenExpanded)}
         >
@@ -222,30 +233,34 @@
           {:else}
             <ChevronRight size={12} />
           {/if}
-          <span class="text-[10px] font-bold uppercase tracking-wide">Hidden ({hiddenProjects.length})</span>
-        </button>
+          <span>Hidden ({hiddenProjects.length})</span>
+        </Button>
         {#if hiddenExpanded}
           {#each hiddenProjects as project (project.id)}
             {@const isActive = project.id === $activeProjectId && projectContextActive}
-            <div class="composited-hover-layer group relative flex border-l-2 {isActive ? 'border-primary bg-base-100' : 'sidebar-hover-base-300-30 border-transparent'}">
-              <button
+            <div class="hidden-project-row group relative flex">
+              <Button
                 type="button"
-                class="flex-1 px-3 py-2 text-left"
+                size="sm"
+                variant="ghost"
+                class="hidden-project-button"
+                aria-label={project.name}
                 aria-current={isActive ? 'true' : undefined}
                 onclick={() => onSelectProject(project.id)}
               >
-                <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content/70'}">{project.name}</div>
-              </button>
-              <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                <button
+                {project.name}
+              </Button>
+              <div class="hidden-project-actions">
+                <IconButton
                   type="button"
-                  class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
-                  aria-label="Unhide {project.name}"
+                  size="xs"
+                  variant="ghost"
+                  label="Unhide {project.name}"
                   disabled={isSavingHidden}
                   onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, false) }}
                 >
                   <Eye size={12} />
-                </button>
+                </IconButton>
               </div>
             </div>
           {/each}
@@ -256,15 +271,181 @@
 </div>
 
 <style>
-  .sidebar-hover-base-200 {
-    --composited-hover-background: var(--color-base-200);
+  .project-list-header {
+    color: var(--of-text);
   }
 
-  .sidebar-hover-content-10 {
-    --composited-hover-background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  .project-list-heading {
+    color: var(--of-text-secondary);
+    font-family: var(--of-font-mono);
+    font-size: var(--of-text-xs);
+    font-weight: var(--of-weight-semibold);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
-  .sidebar-hover-base-300-30 {
-    --composited-hover-background: color-mix(in oklch, var(--color-base-300) 30%, transparent);
+  :global(.collapsed-project-button) {
+    position: relative;
+    display: grid;
+    margin-inline: auto;
+    color: var(--of-text-secondary);
+  }
+
+  :global(.collapsed-project-button[aria-current='true']) {
+    border-color: var(--of-border-interactive);
+    background: var(--of-accent-subtle);
+    color: var(--of-on-accent-subtle);
+  }
+
+  .project-avatar {
+    display: grid;
+    place-items: center;
+    width: var(--of-control-height-compact);
+    height: var(--of-control-height-compact);
+    border-radius: var(--of-radius-round);
+    background: var(--of-surface-subtle);
+    color: currentColor;
+    font-size: var(--of-text-xs);
+    font-weight: var(--of-weight-semibold);
+    text-transform: uppercase;
+  }
+
+  .project-status-indicator {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: var(--of-space4);
+    height: var(--of-space4);
+    border-radius: var(--of-radius-round);
+    box-shadow: 0 0 0 var(--of-focus-width) var(--of-surface);
+  }
+
+  .project-status-attention {
+    right: calc(var(--of-space1) * -1);
+    bottom: calc(var(--of-space1) * -1);
+    background: var(--of-status-success);
+    color: var(--of-on-status-success);
+  }
+
+  .project-status-review {
+    right: calc(var(--of-space1) * -1);
+    top: calc(var(--of-space1) * -1);
+    background: var(--of-status-danger);
+    color: var(--of-on-status-danger);
+  }
+
+  .project-row,
+  .hidden-project-row {
+    border-left: calc(var(--of-border-width) * 2) solid transparent;
+  }
+
+  .project-row:has(:global(.expanded-project-button[aria-current='true'])),
+  .hidden-project-row:has(:global(.hidden-project-button[aria-current='true'])) {
+    border-left-color: var(--of-accent);
+    background: var(--of-accent-subtle);
+  }
+
+  :global(.expanded-project-button),
+  :global(.hidden-project-button) {
+    width: 100%;
+    justify-content: flex-start;
+    overflow: hidden;
+    padding-inline: var(--of-space4);
+    text-align: left;
+  }
+
+  :global(.expanded-project-button) {
+    min-height: var(--of-control-height-touch);
+    padding-right: calc(var(--of-space9) * 2);
+  }
+
+  :global(.expanded-project-button[aria-current='true']),
+  :global(.hidden-project-button[aria-current='true']) {
+    color: var(--of-on-accent-subtle);
+  }
+
+  .project-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .project-name {
+    max-width: 100%;
+    overflow: hidden;
+    color: currentColor;
+    font-size: var(--of-text-sm);
+    font-weight: var(--of-weight-medium);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-statuses {
+    display: flex;
+    align-items: center;
+    gap: var(--of-space2);
+    margin-top: var(--of-space1);
+  }
+
+  .project-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--of-space1);
+    font-size: var(--of-text-xs);
+  }
+
+  .project-review-status {
+    color: var(--of-danger);
+  }
+
+  .project-attention-status {
+    color: var(--of-success);
+  }
+
+  .project-actions,
+  .hidden-project-actions {
+    position: absolute;
+    right: var(--of-space2);
+    top: 50%;
+    display: flex;
+    align-items: center;
+    gap: var(--of-space1);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  .project-row:hover .project-actions,
+  .project-row:focus-within .project-actions,
+  .hidden-project-row:hover .hidden-project-actions,
+  .hidden-project-row:focus-within .hidden-project-actions {
+    opacity: 1;
+  }
+
+  .hidden-projects {
+    margin-top: var(--of-space1);
+    border-top: var(--of-border-width) solid var(--of-border);
+  }
+
+  :global(.hidden-projects-toggle) {
+    width: 100%;
+    justify-content: flex-start;
+    gap: var(--of-space1);
+    color: var(--of-text-muted);
+    font-family: var(--of-font-mono);
+    text-transform: uppercase;
+  }
+
+  :global(.hidden-project-button) {
+    padding-right: var(--of-space8);
+    color: var(--of-text-muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .project-actions,
+    .hidden-project-actions {
+      transition: none;
+    }
   }
 </style>
