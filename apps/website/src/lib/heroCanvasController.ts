@@ -22,6 +22,10 @@ export async function startHeroCanvas({
     const gpu = await init();
     const target = surface(gpu, canvas, { dpr: policy.devicePixelRatio });
     const timer = clock(gpu);
+    const pointer: [number, number] = [0.5, 0.5];
+    const pointerTarget: [number, number] = [0.5, 0.5];
+    let hover = 0;
+    let hoverTarget = 0;
     const shader = effect(gpu, HERO_CANVAS_SHADER_SOURCE, {
       label: 'openforge-anvil-hero',
       set: {
@@ -30,10 +34,24 @@ export async function startHeroCanvas({
           time: 0,
           motion: policy.animate ? 1 : 0,
           detail: policy.shaderDetail,
-          pad0: 0,
+          hover: 0,
+          pointer,
         },
       },
     });
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
+      const bounds = canvas.getBoundingClientRect();
+      pointerTarget[0] = Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(bounds.width, 1)));
+      pointerTarget[1] = Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(bounds.height, 1)));
+      hoverTarget = 1;
+    };
+    const handlePointerLeave = () => { hoverTarget = 0; };
+    if (policy.animate) {
+      canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
+      canvas.addEventListener('pointerleave', handlePointerLeave);
+    }
 
     const unsubscribeResize = target.onResize(() => {
       shader.set({ params: { resolution: target.size } });
@@ -51,10 +69,14 @@ export async function startHeroCanvas({
       if (policy.animate) {
         const deltaSeconds = Math.min(Math.max((timestamp - lastTimestamp) / 1000, 0), 0.1);
         timer.advance(deltaSeconds);
+        const blend = 1 - Math.exp(-deltaSeconds * 10);
+        pointer[0] += (pointerTarget[0] - pointer[0]) * blend;
+        pointer[1] += (pointerTarget[1] - pointer[1]) * blend;
+        hover += (hoverTarget - hover) * blend;
       }
       lastTimestamp = timestamp;
 
-      shader.set({ params: { time: timer.time } });
+      shader.set({ params: { time: timer.time, pointer: [...pointer], hover } });
       frame(gpu, (currentFrame) => currentFrame.pass(target, shader));
       visual.dataset.vgpuReady = 'true';
     };
@@ -117,6 +139,8 @@ export async function startHeroCanvas({
       stopRendering();
       if (resizeFrameId !== null) cancelAnimationFrame(resizeFrameId);
       intersectionObserver.disconnect();
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('pagehide', handlePageHide);

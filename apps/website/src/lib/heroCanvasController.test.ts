@@ -120,8 +120,23 @@ describe('startHeroCanvas', () => {
     shader.set.mockClear();
     secondFrame(performance.now() + 80);
 
-    // Per frame the controller ships only the animation clock.
-    expect(shader.set).toHaveBeenCalledWith({ params: { time: expect.any(Number) } });
+    expect(shader.set).toHaveBeenCalledWith({ params: { time: expect.any(Number), pointer: [0.5, 0.5], hover: 0 } });
+
+    const removePointerListener = vi.spyOn(elements.canvas, 'removeEventListener');
+    shader.set.mockClear();
+    elements.canvas.dispatchEvent(eventWith('pointermove', { clientX: 400, clientY: -50 }));
+    expect(shader.set).not.toHaveBeenCalled();
+    secondFrame(performance.now() + 160);
+    const attracted = shader.set.mock.lastCall?.[0].params;
+    expect(attracted.pointer[0]).toBeGreaterThan(0.5);
+    expect(attracted.pointer[0]).toBeLessThanOrEqual(1);
+    expect(attracted.pointer[1]).toBeGreaterThanOrEqual(0);
+    expect(attracted.pointer[1]).toBeLessThan(0.5);
+    expect(attracted.hover).toBeGreaterThan(0);
+
+    elements.canvas.dispatchEvent(new Event('pointerleave'));
+    secondFrame(performance.now() + 240);
+    expect(shader.set.mock.lastCall?.[0].params.hover).toBeLessThan(attracted.hover);
 
     windowTarget.dispatchEvent(eventWith('pagehide', { persisted: false }));
 
@@ -129,6 +144,35 @@ describe('startHeroCanvas', () => {
     expect(TestIntersectionObserver.instance?.disconnect).toHaveBeenCalledOnce();
     expect(target.dispose).toHaveBeenCalledOnce();
     expect(gpu.dispose).toHaveBeenCalledOnce();
+    expect(removePointerListener).toHaveBeenCalledWith('pointermove', expect.any(Function));
+    expect(removePointerListener).toHaveBeenCalledWith('pointerleave', expect.any(Function));
+  });
+
+  it('keeps reduced-motion rendering frozen across mouse input and redraws', async () => {
+    const shader = { set: vi.fn() };
+    const advance = vi.fn();
+    vgpu.init.mockResolvedValue({ dispose: vi.fn() });
+    vgpu.surface.mockReturnValue({ size: [640, 480], onResize: () => () => {}, dispose: vi.fn() });
+    vgpu.effect.mockReturnValue(shader);
+    vgpu.clock.mockReturnValue({ time: 0, advance });
+    vgpu.frame.mockImplementation(() => {});
+    vi.stubGlobal('document', Object.assign(new EventTarget(), { hidden: false }));
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
+    vi.stubGlobal('requestAnimationFrame', vi.fn());
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const elements = createElementFixtures();
+    const controller = await startHeroCanvas({ ...elements, policy: { ...animatedPolicy, animate: false } });
+    TestIntersectionObserver.instance?.emit(true);
+    const first = shader.set.mock.lastCall?.[0];
+    shader.set.mockClear();
+    elements.canvas.dispatchEvent(eventWith('pointermove', { clientX: 200, clientY: 30 }));
+    expect(shader.set).not.toHaveBeenCalled();
+    TestIntersectionObserver.instance?.emit(true);
+    expect(shader.set).toHaveBeenCalledWith(first);
+    expect(advance).not.toHaveBeenCalled();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    controller?.dispose();
   });
 
   it('reports initialization errors on the visual element', async () => {
