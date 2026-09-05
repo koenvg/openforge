@@ -240,16 +240,21 @@ describe('PluginFolderPanel', () => {
     ).toBeTruthy()
   })
 
-  it('copies the build command for a plugin that has not been built', async () => {
+  it.each([
+    ['ordinary path', `${FOLDER}/plugins/alpha`, `'${FOLDER}/plugins/alpha'`],
+    ['spaces', '/Users/me/My Plugins/alpha', "'/Users/me/My Plugins/alpha'"],
+    ['apostrophes', "/Users/me/it's/alpha's", "'/Users/me/it'\"'\"'s/alpha'\"'\"'s'"],
+    ['shell metacharacters', '/plugins/$HOME;$(echo injected)`echo injected`&|<>*?[]"\\alpha', "'/plugins/$HOME;$(echo injected)`echo injected`&|<>*?[]\"\\alpha'"],
+  ])('copies a safely quoted build command for %s', async (_label, path, quotedPath) => {
     await renderWithFolder([
-      discovered({ installable: false, needsBuild: true, problem: 'entry missing' }),
+      discovered({ path, installable: false, needsBuild: true, problem: 'entry missing' }),
     ])
 
     await fireEvent.click(screen.getByRole('button', { name: 'Copy build command: Alpha' }))
 
     await vi.waitFor(() =>
       expect(mocks.writeClipboardText).toHaveBeenCalledWith(
-        `pnpm -C ${FOLDER}/plugins/alpha build`,
+        `pnpm -C ${quotedPath} build`,
       ),
     )
   })
