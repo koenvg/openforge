@@ -94,7 +94,9 @@ export default defineFrontendPlugin({
 
     const navigation = openforge.navigation.get()
     if (navigation.activeProjectId) {
-      void githubSync.syncPullRequests()
+      void githubSync.syncPullRequests().catch((error: unknown) => {
+        console.error('[github-sync] Automatic pull request sync failed', error)
+      })
     }
   },
 })

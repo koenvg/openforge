@@ -232,6 +232,75 @@ describe('github-sync plugin', () => {
     expect(api.navigation.get).toHaveBeenCalled()
   })
 
+  it('handles rejected backend readiness during automatic sync without blocking views', async () => {
+    const { api, context, backendInvoke, backendWhenReady } = makeRuntimeHarness()
+    const failure = new Error('Backend unavailable')
+    let rejectReadiness!: (reason: unknown) => void
+    backendWhenReady.mockReturnValueOnce(new Promise<undefined>((_resolve, reject) => {
+      rejectReadiness = reject
+    }))
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await plugin.activate(api, context)
+
+      expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'pr_review' }))
+      expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'pr_review_global' }))
+      expect(backendInvoke).not.toHaveBeenCalled()
+
+      rejectReadiness(failure)
+
+      await vi.waitFor(() => {
+        expect(logError).toHaveBeenCalledWith('[github-sync] Automatic pull request sync failed', failure)
+      })
+      expect(backendInvoke).not.toHaveBeenCalled()
+    } finally {
+      logError.mockRestore()
+    }
+  })
+
+  it('handles a rejected automatic sync without blocking views', async () => {
+    const { api, context, backendInvoke } = makeRuntimeHarness()
+    const failure = new Error('GitHub sync failed')
+    let rejectSync!: (reason: unknown) => void
+    backendInvoke.mockReturnValueOnce(new Promise<null>((_resolve, reject) => {
+      rejectSync = reject
+    }))
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await plugin.activate(api, context)
+
+      expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'pr_review' }))
+      expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'pr_review_global' }))
+      expect(backendInvoke).toHaveBeenCalledWith('forceGithubSync', undefined)
+
+      rejectSync(failure)
+
+      await vi.waitFor(() => {
+        expect(logError).toHaveBeenCalledWith('[github-sync] Automatic pull request sync failed', failure)
+      })
+    } finally {
+      logError.mockRestore()
+    }
+  })
+
+  it.each(['readiness', 'sync'] as const)('propagates explicit refresh %s failures', async (stage) => {
+    const { api, context, backendInvoke, backendWhenReady } = makeRuntimeHarness()
+    vi.mocked(api.navigation.get).mockReturnValue({ activeProjectId: null, currentView: 'board', selectedTaskId: null })
+    await plugin.activate(api, context)
+    expect(backendWhenReady).not.toHaveBeenCalled()
+    expect(backendInvoke).not.toHaveBeenCalled()
+
+    const failure = new Error(`${stage} failed`)
+    if (stage === 'readiness') backendWhenReady.mockRejectedValueOnce(failure)
+    else backendInvoke.mockRejectedValueOnce(failure)
+
+    const handler = findCommandHandler(api, 'refresh')
+    expect(handler).toBeDefined()
+    await expect(handler!(undefined, commandInvocationContext)).rejects.toBe(failure)
+  })
+
   it('registers an open_review_pr command that opens a PR under its project view', async () => {
     const { api, context, navigate } = makeRuntimeHarness()
 
