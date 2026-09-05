@@ -99,9 +99,9 @@
   async function handleMoreAction(value: string): Promise<void> {
     if (value === 'return-to-board') {
       await handleReturnToBoard()
-      return
+    } else if (value === 'set-aside') {
+      await handleSetAside()
     }
-    await handleSetAside()
   }
 
   async function handleSetAside(): Promise<void> {

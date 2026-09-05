@@ -22,7 +22,7 @@ const EXPECTED_PUBLIC_CONTROLS = {
   './create-task/CreateTaskEnvironment.svelte': ['Button', 'Panel', 'SearchableSelect', 'Select', 'Switch'],
   './create-task/CreateTaskProgressiveSettings.svelte': ['Switch', 'TextField'],
   './create-task/CreateTaskPromptAttachments.svelte': ['Button', 'Modal'],
-  './focus-board/BacklogLabelFilterDropdown.svelte': ['Button'],
+  './focus-board/BacklogLabelFilterDropdown.svelte': ['AnchoredMenu'],
   './focus-board/BacklogReadyFilterToggle.svelte': ['Button'],
   './focus-board/BoardTextFilter.svelte': ['Button', 'IconButton'],
   './focus-board/FocusBoard.svelte': ['Badge', 'Button'],

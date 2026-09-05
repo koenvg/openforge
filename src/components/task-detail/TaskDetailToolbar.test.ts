@@ -61,4 +61,33 @@ describe('TaskDetailToolbar', () => {
       expect(screen.getByRole('button', { name: 'Show task info panel' })).toBeTruthy()
     })
   })
+
+  it('opens task actions with keyboard focus and restores the trigger on Escape', async () => {
+    const TaskDetailToolbar = (await import('./TaskDetailToolbar.svelte')).default
+    render(TaskDetailToolbar, {
+      props: {
+        task: { ...baseTask, status: 'doing' },
+        workspacePath: '/tmp/worktree',
+        activeView: 'agent',
+        tabs: [],
+        panelHidden: false,
+        runAppState: INITIAL_TASK_RUN_APP_STATE,
+        onRunAction: mockOnRunAction,
+        onBack: vi.fn(),
+        onSelectView: vi.fn(),
+        onRunApp: vi.fn(),
+      },
+    })
+
+    const trigger = screen.getByRole('button', { name: 'More task actions' })
+    trigger.focus()
+    await fireEvent.click(trigger)
+    const menuItem = await screen.findByRole('menuitem')
+    await waitFor(() => expect(document.activeElement).toBe(menuItem))
+
+    await fireEvent.keyDown(menuItem, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
 })

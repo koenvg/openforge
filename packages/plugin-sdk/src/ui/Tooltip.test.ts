@@ -27,7 +27,9 @@ describe('plugin-sdk Tooltip', () => {
     const tooltip = screen.getByRole('tooltip')
     expect(view.container.contains(tooltip)).toBe(false)
     expect(tooltip.closest('[data-side]')).not.toBeNull()
-    expect(trigger.getAttribute('aria-describedby')).toBe(tooltip.id)
+    const descriptionId = trigger.getAttribute('aria-describedby')
+    expect(descriptionId).toMatch(/^of-tooltip-content-/)
+    expect(document.getElementById(descriptionId ?? '')?.textContent).toContain('Shows whether review is required')
   })
 
   it('opens from keyboard focus and dismisses on Escape without moving focus', async () => {
@@ -59,5 +61,31 @@ describe('plugin-sdk Tooltip', () => {
 
     expect(screen.queryByRole('tooltip')).toBeNull()
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('supports described menu-action triggers without exposing headless props', async () => {
+    const onActivate = vi.fn()
+    render(TooltipTestWrapper, { props: { menuItem: true, onActivate } })
+    await tick()
+
+    const trigger = screen.getByRole('menuitem', { name: 'Review status help' })
+    expect(trigger.tabIndex).toBe(-1)
+    await fireEvent.click(trigger)
+
+    expect(onActivate).toHaveBeenCalledOnce()
+  })
+
+  it('preserves an existing trigger description when the tooltip opens', async () => {
+    render(TooltipTestWrapper, { props: { existingDescription: true } })
+    await tick()
+    const trigger = screen.getByRole('button', { name: 'Review status help' })
+
+    expect(trigger.getAttribute('aria-describedby')).toBe('persistent-trigger-help')
+    await fireEvent.click(screen.getByRole('button', { name: 'Show help externally' }))
+
+    const descriptionIds = trigger.getAttribute('aria-describedby')?.split(/\s+/) ?? []
+    expect(descriptionIds[0]).toBe('persistent-trigger-help')
+    expect(descriptionIds[1]).toMatch(/^of-tooltip-content-/)
+    expect(document.getElementById(descriptionIds[1])?.textContent).toContain('Shows whether review is required')
   })
 })

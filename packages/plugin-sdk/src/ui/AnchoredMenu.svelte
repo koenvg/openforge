@@ -7,6 +7,8 @@
     label: string
     disabled?: boolean
     danger?: boolean
+    checked?: boolean
+    closeOnSelect?: boolean
   }>
 
   export type AnchoredMenuSide = 'top' | 'right' | 'bottom' | 'left'
@@ -22,8 +24,10 @@
     sideOffset?: number
     class?: string
     testId?: string
+    ariaDescribedby?: string
     onOpenChange?: (open: boolean) => void
     onSelect?: (value: string) => void
+    item?: Snippet<[AnchoredMenuItem]>
     trigger: Snippet
   }
 
@@ -37,28 +41,81 @@
     sideOffset = 4,
     class: className,
     testId,
+    ariaDescribedby,
     onOpenChange,
     onSelect,
+    item: renderItem,
     trigger,
   }: Props = $props()
 
-  let triggerElement = $state<HTMLButtonElement | null>(null)
+  let triggerElement: HTMLButtonElement | null = $state(null)
+  let menuElement: HTMLDivElement | null = $state(null)
+  let lastFocusedIndex = 0
 
-  function handleOpenChange(nextOpen: boolean): void {
+  function getEnabledMenuItems(menu: HTMLElement): HTMLElement[] {
+    return Array.from(menu.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]:not([aria-disabled="true"])',
+    ))
+  }
+
+  async function focusFirstEnabledItem() {
+    await tick()
+    if (!open || !menuElement) return
+    getEnabledMenuItems(menuElement)[0]?.focus()
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
     onOpenChange?.(nextOpen)
-    if (!nextOpen) {
+    if (nextOpen) {
+      void focusFirstEnabledItem()
+    } else {
       void tick().then(() => triggerElement?.focus())
     }
   }
+
+  function handleFocusIn(event: FocusEvent) {
+    if (!(event.target instanceof HTMLElement) || !menuElement) return
+    const focusedIndex = getEnabledMenuItems(menuElement).indexOf(event.target)
+    if (focusedIndex >= 0) lastFocusedIndex = focusedIndex
+  }
+
+  $effect(() => {
+    if (!open || !menuElement) return
+    const observedMenu = menuElement
+    void focusFirstEnabledItem()
+
+    const observer = new MutationObserver(() => {
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLElement
+        && activeElement !== observedMenu
+        && observedMenu.contains(activeElement)) return
+
+      const enabledItems = getEnabledMenuItems(observedMenu)
+      const nextIndex = Math.min(lastFocusedIndex, Math.max(enabledItems.length - 1, 0))
+      ;(enabledItems[nextIndex] ?? observedMenu).focus()
+    })
+    observer.observe(observedMenu, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  })
 </script>
+
+{#snippet itemContent(menuItem: AnchoredMenuItem)}
+  {#if renderItem}
+    {@render renderItem(menuItem)}
+  {:else}
+    {menuItem.label}
+  {/if}
+{/snippet}
 
 <div class="of-anchored-menu {className ?? ''}" data-testid={testId}>
   <DropdownMenu.Root bind:open onOpenChange={handleOpenChange}>
-    <DropdownMenu.Trigger bind:ref={triggerElement} class="of-menu-trigger" aria-label={label} {disabled}>
+    <DropdownMenu.Trigger bind:ref={triggerElement} class="of-menu-trigger" aria-label={label} aria-describedby={ariaDescribedby} {disabled}>
       {@render trigger()}
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
       <DropdownMenu.Content
+        bind:ref={menuElement}
+        onfocusin={handleFocusIn}
         class="of-menu-content"
         aria-label={label}
         {side}
@@ -67,15 +124,30 @@
         loop
       >
         {#each items as item (item.value)}
-          <DropdownMenu.Item
-            class="of-menu-item"
-            data-danger={item.danger ? '' : undefined}
-            disabled={item.disabled}
-            textValue={item.label}
-            onSelect={() => onSelect?.(item.value)}
-          >
-            {item.label}
-          </DropdownMenu.Item>
+          {#if item.checked !== undefined}
+            <DropdownMenu.CheckboxItem
+              class="of-menu-item"
+              data-danger={item.danger ? '' : undefined}
+              disabled={item.disabled}
+              textValue={item.label}
+              checked={item.checked}
+              closeOnSelect={item.closeOnSelect}
+              onSelect={() => onSelect?.(item.value)}
+            >
+              {@render itemContent(item)}
+            </DropdownMenu.CheckboxItem>
+          {:else}
+            <DropdownMenu.Item
+              class="of-menu-item"
+              data-danger={item.danger ? '' : undefined}
+              disabled={item.disabled}
+              textValue={item.label}
+              closeOnSelect={item.closeOnSelect}
+              onSelect={() => onSelect?.(item.value)}
+            >
+              {@render itemContent(item)}
+            </DropdownMenu.Item>
+          {/if}
         {/each}
       </DropdownMenu.Content>
     </DropdownMenu.Portal>
