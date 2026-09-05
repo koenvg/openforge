@@ -120,9 +120,13 @@ class RuntimeContributionRegistry {
     let firstError: unknown = null
     try {
       await this.backendSubscriptions.disposeAll()
-      await this.frontendSubscriptions.disposeAll()
     } catch (error) {
       firstError = error
+    }
+    try {
+      await this.frontendSubscriptions.disposeAll()
+    } catch (error) {
+      firstError ??= error
     }
     try {
       await this.services.host.destroyPluginBrowserSurfaces?.(this.services.pluginId)
