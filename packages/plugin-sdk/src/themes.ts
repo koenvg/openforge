@@ -51,6 +51,7 @@ export interface PluginThemeDefinition {
   readonly label: string
   readonly appearance: ThemeAppearance
   readonly tokens: ThemeTokens
+  /** Package-relative .css artifacts, loaded only for the selected theme. Not frontendStyles. */
   readonly stylesheets?: readonly string[]
 }
 
@@ -162,6 +163,12 @@ function tokenSyntaxError(token: ThemeTokenName, value: string): string | null {
   return null
 }
 
+function isPackageStylesheet(path: unknown): path is string {
+  if (typeof path !== 'string' || !path.endsWith('.css') || /[\\\\:%?#\u0000-\u001f\u007f]/.test(path)) return false
+  const segments = path.replace(/^\.\//, '').split('/')
+  return segments.every(segment => segment.trim() !== '' && segment !== '.' && segment !== '..')
+}
+
 export function validateThemeDefinition(candidate: unknown): ThemeValidationResult {
   const errors: string[] = []
   const value = candidate as Partial<PluginThemeDefinition> | null
@@ -192,9 +199,9 @@ export function validateThemeDefinition(candidate: unknown): ThemeValidationResu
 
   if (value.stylesheets !== undefined && (
     !Array.isArray(value.stylesheets)
-    || value.stylesheets.some((stylesheet) => typeof stylesheet !== 'string' || stylesheet.trim() === '')
+    || value.stylesheets.some((stylesheet) => !isPackageStylesheet(stylesheet))
   )) {
-    errors.push('stylesheets must contain non-empty paths')
+    errors.push('stylesheets must contain package-relative CSS artifact paths without traversal, URLs, queries, or fragments')
   }
 
   return errors.length === 0

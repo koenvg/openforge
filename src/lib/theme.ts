@@ -6,6 +6,7 @@ import {
   LIGHT_THEME,
 } from './themeContract'
 import { createThemeDocumentAdapter } from './themeDocumentAdapter'
+import { prepareThemeStylesheets } from './themeStylesheetLoader'
 import {
   createThemeRegistry,
   type ThemeDiagnostic,
@@ -40,6 +41,7 @@ export function createThemeRuntime(options: ThemeRuntimeOptions): ThemeRuntime {
   adapter.apply(LIGHT_THEME)
 
   const registry = createThemeRegistry({
+    prepareTheme: (theme, signal) => prepareThemeStylesheets(options.root.ownerDocument, theme, signal),
     applyTheme: adapter.apply,
     persistSelection: options.persistThemeId,
     reportDiagnostic: options.reportDiagnostic,

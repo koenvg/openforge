@@ -102,11 +102,19 @@ export async function reloadInstalledPluginMetadata(pluginId: string): Promise<b
 }
 
 export async function reloadPluginForApp(pluginId: string): Promise<boolean> {
-  await deactivatePluginById(pluginId)
-  const refreshed = await refreshInstalledPluginMetadata(pluginId)
-  await loadEnabledAppPluginIds()
-  if (!refreshed || !get(enabledPluginIds).has(pluginId)) return false
-  return activateEnabledPlugin(pluginId, get(activeProjectId))
+  const reload = async () => {
+    await deactivatePluginById(pluginId)
+    const refreshed = await refreshInstalledPluginMetadata(pluginId)
+    await loadEnabledAppPluginIds()
+    if (!refreshed || !get(enabledPluginIds).has(pluginId)) return false
+    return activateEnabledPlugin(pluginId, get(activeProjectId))
+  }
+  const metadata = get(installedPlugins).get(pluginId)?.packageMetadata
+  if (typeof document !== 'undefined' && metadata?.requires?.includes('themes')) {
+    const { themeRegistry } = await import('../theme')
+    return themeRegistry.withPluginReload(pluginId, reload)
+  }
+  return reload()
 }
 
 export async function reloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {

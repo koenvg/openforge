@@ -683,6 +683,10 @@ function tokenSyntaxError(token, value) {
 	if ((token === "fontSans" || token === "fontMono") && containsUnsafeCss(value)) return `tokens.${token} must be a valid font family`;
 	return null;
 }
+function isPackageStylesheet(path) {
+	if (typeof path !== "string" || !path.endsWith(".css") || /[\\\\:%?#\u0000-\u001f\u007f]/.test(path)) return false;
+	return path.replace(/^\.\//, "").split("/").every((segment) => segment.trim() !== "" && segment !== "." && segment !== "..");
+}
 function validateThemeDefinition(candidate) {
 	const errors = [];
 	const value = candidate;
@@ -703,7 +707,7 @@ function validateThemeDefinition(candidate) {
 		const syntaxError = tokenSyntaxError(token, tokenValue);
 		if (syntaxError) errors.push(syntaxError);
 	}
-	if (value.stylesheets !== void 0 && (!Array.isArray(value.stylesheets) || value.stylesheets.some((stylesheet) => typeof stylesheet !== "string" || stylesheet.trim() === ""))) errors.push("stylesheets must contain non-empty paths");
+	if (value.stylesheets !== void 0 && (!Array.isArray(value.stylesheets) || value.stylesheets.some((stylesheet) => !isPackageStylesheet(stylesheet)))) errors.push("stylesheets must contain package-relative CSS artifact paths without traversal, URLs, queries, or fragments");
 	return errors.length === 0 ? {
 		valid: true,
 		errors: []
