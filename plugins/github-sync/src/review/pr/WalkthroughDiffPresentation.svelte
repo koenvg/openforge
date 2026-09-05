@@ -101,14 +101,12 @@
     onSubmitReview,
   }: Props = $props()
 
-  let activeFilename = $state<string | null>(null)
   let diffViewer = $state<DiffViewer>()
   let approvedAgentSubmissionComments = $derived(
     approvedInlineAgentComments(agentComments).map(agentCommentToSubmission),
   )
 
   function handleFileSelect(filename: string): void {
-    activeFilename = filename
     diffViewer?.scrollToFile(filename)
   }
 
@@ -123,16 +121,6 @@
       ),
     )
   }
-
-  $effect(() => {
-    if (!files.length) {
-      activeFilename = null
-      return
-    }
-    if (!activeFilename || !files.some(file => file.filename === activeFilename)) {
-      activeFilename = files[0].filename
-    }
-  })
 </script>
 
 <div class="flex flex-1 min-h-0 overflow-hidden">
