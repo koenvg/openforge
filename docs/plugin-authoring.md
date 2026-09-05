@@ -113,6 +113,8 @@ Use the public package exports only:
 
 The complete UI component reference, including props, accessibility behavior, examples, and testing guidance, is in the [`@openforge-app/plugin-sdk` reference](./plugins/sdk-reference.md#ui-component-exports).
 
+For compact toolbar inputs, use `TextField` with `labelHidden`, `size="sm"`, and optional `leading`/`trailing` snippets. Keep the required accessible `label`, and use a caller-owned wrapper for layout instead of targeting `.of-text-field` or internal labels. See the [toolbar example](../packages/plugin-sdk/README.md#compact-toolbar-field) and [TextField props](./plugins/sdk-reference.md#textfield).
+
 ### Modal accessible names
 
 Import `Modal` from `@openforge-app/plugin-sdk/ui/Modal.svelte`. Every modal requires exactly one non-empty accessible-name prop:

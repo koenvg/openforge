@@ -230,6 +230,40 @@ Shared Svelte components use explicit imports. The package exports:
 - `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte`
 Use only documented package exports. Do not import OpenForge renderer stores, Electron or preload APIs, Rust internals, app IPC wrappers, or files under this package's `src/` directory.
 
+## Compact toolbar field
+
+Use `labelHidden` to keep a required `label` available to assistive technology without displaying it. `size="sm"` uses the host's compact control height; the default `size="md"` and visible label suit forms. Optional `leading` and `trailing` Svelte snippets sit beside the input inside the field border.
+
+`hideLabel` remains available for layouts with a caller-owned visible caption. It omits the component label and uses `label` as the input's `aria-label`. It takes precedence if combined with `labelHidden`.
+
+```svelte
+<script lang="ts">
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+
+  let query = $state('')
+</script>
+
+<div style="width: 16rem; max-width: 100%">
+  <TextField label="Filter tasks" labelHidden size="sm" name="query" bind:value={query} placeholder="Search tasks">
+    {#snippet leading()}
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="10" cy="10" r="7" /><path d="m15 15 6 6" />
+      </svg>
+    {/snippet}
+    {#snippet trailing()}
+      <Button type="button" size="sm" variant="ghost" aria-label="Clear filter" onclick={() => (query = '')}>Clear</Button>
+    {/snippet}
+  </TextField>
+</div>
+```
+
+Adornments are caller-owned. Mark decorative icons `aria-hidden="true"`; give interactive adornments accessible names and `type="button"`. Pass their disabled state explicitly, for example `disabled={disabled || readonly}` on a clear button. The field's `disabled` and `readonly` props apply only to its native input.
+
+`class`, `style`, native input attributes, and event handlers still target the input. Use a caller-owned wrapper for field width and toolbar layout. Do not target `.of-text-field`, internal labels, wrappers, or other private selectors. No internal markup is a styling contract.
+
+Value binding, linked helper/error text, and `onValueChange` work with either label presentation and with or without adornments. `onValueChange` runs on native input events, after `oninput`; assigning the bound value from a clear button does not synthesize an input event or call it.
+
 ## Documentation
 
 - [Plugin authoring guide](https://github.com/koenvg/openforge/blob/main/docs/plugin-authoring.md)

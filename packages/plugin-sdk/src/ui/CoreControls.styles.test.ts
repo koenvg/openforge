@@ -97,7 +97,7 @@ describe('plugin-sdk core control styling contract', () => {
 
   it.each(['TextField', 'Textarea'] as const)('%s keeps the normal field background when invalid', (componentName) => {
     const source = componentSource(componentName)
-    const invalidRule = source.match(/\[aria-invalid='true'\]\s*\{([^}]*)\}/)?.[1] ?? ''
+    const invalidRule = source.match(/\[aria-invalid='true'\]\)?\s*\{([^}]*)\}/)?.[1] ?? ''
 
     expect(invalidRule).toContain('border-color: var(--of-field-invalid)')
     expect(invalidRule).not.toContain('background:')

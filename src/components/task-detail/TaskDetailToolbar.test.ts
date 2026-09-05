@@ -90,4 +90,44 @@ describe('TaskDetailToolbar', () => {
     expect(screen.queryByRole('menu')).toBeNull()
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
+
+  it('keeps title editing accessible and supports cancel, Enter, and blur saves', async () => {
+    const TaskDetailToolbar = (await import('./TaskDetailToolbar.svelte')).default
+    const { updateTaskTitle } = await import('../../lib/ipc')
+    const onTaskUpdated = vi.fn()
+    render(TaskDetailToolbar, {
+      props: {
+        task: baseTask,
+        workspacePath: null,
+        activeView: 'agent',
+        tabs: [],
+        runAppState: INITIAL_TASK_RUN_APP_STATE,
+        onRunAction: mockOnRunAction,
+        onBack: vi.fn(),
+        onSelectView: vi.fn(),
+        onRunApp: vi.fn(),
+        onTaskUpdated,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+    let input = screen.getByRole('textbox', { name: 'Task title' })
+    expect(input).toHaveProperty('value', 'Implement auth middleware')
+    await fireEvent.input(input, { target: { value: 'Discard this title' } })
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+    expect(updateTaskTitle).not.toHaveBeenCalled()
+
+    for (const action of ['Enter', 'blur']) {
+      await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+      input = screen.getByRole('textbox', { name: 'Task title' })
+      await fireEvent.input(input, { target: { value: `Saved by ${action}` } })
+      if (action === 'Enter') await fireEvent.keyDown(input, { key: 'Enter' })
+      else await fireEvent.blur(input)
+      await waitFor(() => expect(updateTaskTitle).toHaveBeenLastCalledWith('T-42', `Saved by ${action}`))
+      expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+    }
+    await waitFor(() => expect(onTaskUpdated).toHaveBeenCalledTimes(2))
+    expect(updateTaskTitle).toHaveBeenCalledTimes(2)
+  })
 })
