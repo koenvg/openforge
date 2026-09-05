@@ -1,6 +1,7 @@
 import { registerRenderableContributionComponent, registerViewComponent, unregisterViewComponentsForPlugin } from './componentRegistry'
 import { clearRuntimeContributionSource, setRuntimeContributionSource } from './pluginStore'
 import { makePluginViewKey } from './types'
+import { frontendContributionSource } from './liveFrontendContributions'
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
@@ -22,41 +23,12 @@ export function toNamespacedContributionId(pluginId: string, contributionId: str
 
 function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapshot) {
   return {
-    views: snapshot.views.map((view) => ({
-      id: view.id,
-      title: view.title,
-      icon: view.icon,
-      shortcut: view.shortcut,
-      placement: view.placement,
-      order: view.order,
-      navigationComponent: view.navigationComponent,
-    })),
+    ...frontendContributionSource(snapshot),
     viewReplacements: snapshot.viewReplacements.map((replacement) => ({
       id: replacement.id,
       target: replacement.target,
       title: replacement.title,
       ...(replacement.target === 'project.dashboard' ? { icon: replacement.icon } : {}),
-    })),
-    taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
-      id: tab.id,
-      title: tab.title,
-      icon: tab.icon,
-      order: tab.order,
-      requiresWorkspace: tab.requiresWorkspace,
-    })),
-    taskUISections: snapshot.taskUISections.map((section) => ({
-      id: section.id,
-      order: section.order,
-    })),
-    reviewRowActions: snapshot.reviewRowActions.map((action) => ({
-      id: action.id,
-      order: action.order,
-    })),
-    settingsSections: snapshot.settingsSections.map((section) => ({
-      id: section.id,
-      title: section.title,
-      order: section.order,
-      scope: section.scope,
     })),
     commands: snapshot.commands.map((command) => ({
       id: command.id,

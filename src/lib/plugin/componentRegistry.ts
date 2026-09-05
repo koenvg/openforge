@@ -104,6 +104,17 @@ export function unregisterViewReplacementComponent(key: string): void {
   clearViewReplacementFailure(key)
 }
 
+export function unregisterViewComponent(key: PluginViewKey): void {
+  registry.delete(key)
+}
+
+export function unregisterRenderableContributionComponent(
+  slotType: keyof typeof renderableRegistries,
+  key: string,
+): void {
+  renderableRegistries[slotType].delete(key)
+}
+
 export function unregisterViewComponentsForPlugin(pluginId: string): void {
   clearViewReplacementFailuresForPlugin(pluginId)
   const prefix = `plugin:${pluginId}:`
