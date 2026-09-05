@@ -135,32 +135,46 @@ The installer creates `~/.openforge/bin/openforge` and adds that directory to `~
 ```bash
 openforge --help
 openforge project list
-openforge task get --task-id T-123
+openforge task detail --project-id P-1 --task-id T-123
+openforge task active --project-id P-1
+openforge task completed --project-id P-1
+openforge task completed --project-id P-1 --cursor '<nextCursor>'
 openforge task update --task-id T-123 --initial-prompt "Corrected backlog prompt"
 openforge task create --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
 
-The CLI talks to the local Open Forge HTTP bridge and is used by the installed provider skills. `openforge task list` returns compact rows by default; pass `--full` for complete task objects. Completed tasks are excluded unless `--state done` is provided.
+The CLI talks to the local Open Forge HTTP bridge and is used by the installed provider skills. Use the nested commands above instead of the deprecated `task get` and `task list` commands.
+
+`task detail`, `task active`, and `task completed` require an explicit `--project-id`. Find it with `openforge project list` and replace `P-1` in these examples with that ID. `task create` can infer the project from `--worktree "$PWD"` when no project ID is known.
+
+- `task detail` returns one task's full authoring prompt and relationship context.
+- `task active` returns every non-Completed task in the project with bounded full details and immediate relationship references.
+- `task completed` returns at most 50 summaries per page and a `nextCursor`. Pass that opaque value unchanged to `--cursor` for the next page, repeating until no next cursor remains. Optional `--search <text>` and `--label <name>` filters narrow the results; keep the same filters on subsequent pages. Use `task detail` when you need a completed task's full prompt or relationships.
 
 ### Task prompts
 
 `openforge task update --initial-prompt` updates `initial_prompt` and `prompt` together only while the task has never started. Started or completed tasks reject prompt updates and require a replacement task.
 
-If a task has the wrong initial prompt:
+If a task has the wrong initial prompt, use `task update --initial-prompt` while it is still a never-started backlog task. If it has started or completed, create a replacement:
 
-1. Record its labels and complete `depends_on` list.
-2. Find dependent tasks whose `depends_on` entries contain the old task ID.
-3. Delete the incorrect task.
-4. Create a replacement with the correct prompt and preserved metadata.
-5. Repoint every dependent task to the replacement while preserving its other dependencies.
+1. Read the original task's detail and record its labels and complete `depends_on` list.
+2. Inspect its relationship references and use `task active` to find unfinished tasks that depend on it. If completed dependents need inspection, page through `task completed` and use `task detail` for their relationships.
+3. Create a replacement with the correct prompt and preserved labels and prerequisites. Keep the original task and its execution history; do not delete it as part of prompt repair.
+4. Repoint unfinished dependent tasks that need the corrected work to the new task ID returned by creation, preserving their other dependencies. Leave completed tasks' historical dependencies unchanged.
+
+For example, assume `T-123` has prerequisite `T-122` and label `cleanup`:
 
 ```bash
-openforge task get --task-id T-123
+openforge task detail --project-id P-1 --task-id T-123
 openforge task labels list --task-id T-123
-openforge task list --project-id P-1 --full
-openforge task delete --task-id T-123
+openforge task active --project-id P-1
 openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
+```
+
+If creation returns `T-456`, and unfinished task `T-999` previously depended on `T-123` and `T-122`, replace only `T-123`:
+
+```bash
 openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
 ```
 
-`task dependencies set` replaces the entire dependency list. Pass each dependent task's full desired list, changing only the obsolete task ID.
+`task dependencies set` replaces the entire dependency list. Pass each dependent task's full desired list, changing only the obsolete task ID. Use the actual task IDs, labels, and prerequisites from your project rather than copying these example values.
