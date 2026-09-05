@@ -10,6 +10,7 @@ import { svelte as sveltePlugin } from '@sveltejs/vite-plugin-svelte'
 import { build as viteBuild } from 'vite'
 import { assertPublicUiDeclarationsHideBitsUi } from './public-ui-declaration-contract.mjs'
 import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../src/publicUiExports.mjs'
+import { assertPackedTextFieldDocumentation } from './text-field-documentation-contract.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -280,6 +281,7 @@ try {
   const sourceReadme = readFileSync(join(packageRoot, 'README.md'), 'utf8')
   const packedReadme = readFileSync(packedReadmePath, 'utf8')
   if (packedReadme !== sourceReadme) fail('Packed Plugin SDK README.md does not match the package README.')
+  await assertPackedTextFieldDocumentation(consumerRoot, packedReadme)
 
   assertPublicUiDeclarationsHideBitsUi(
     OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ componentName, distPath }) => ({

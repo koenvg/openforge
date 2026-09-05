@@ -518,11 +518,15 @@ Import `Select` from `@openforge-app/plugin-sdk/ui/Select.svelte`. Its `options`
 
 ### `TextField`
 
-Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. It renders a visible label and a native single-line input.
+Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. By default it renders a visible label and a native single-line input. For toolbars, use `labelHidden` and `size="sm"`; `label` is still required.
 
 | Prop | Type and default | Notes |
 | --- | --- | --- |
-| `label` | `string`, required | Visible input label and accessible name. |
+| `label` | `string`, required | Input label and accessible name, including when visually hidden. |
+| `labelHidden` | `boolean`, default `false` | Visually hides the label without removing its input association or accessible name. |
+| `hideLabel` | `boolean`, default `false` | Omits the label when the caller renders the caption and names the input through `aria-label`. Takes precedence over `labelHidden` when both are set. |
+| `size` | `'sm' \| 'md'`, default `'md'` | Compact toolbar height or the standard form height, using host control tokens. Not the native input's character-width attribute. |
+| `leading`, `trailing` | `Snippet`, optional | Caller-owned content before or after the input, inside the field border. |
 | `value` | `string`, bindable, default `''` | Native input value. |
 | `helperText` | `string` | Help text linked through `aria-describedby`. |
 | `error` | `string \| null`, default `null` | Linked alert text. A non-empty value marks the field invalid. |
@@ -531,6 +535,10 @@ Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. It rend
 | Native input attributes | `HTMLInputAttributes` except `children`, `size`, and `value` | `name`, `required`, `disabled`, `autocomplete`, `placeholder`, `class`, and native handlers pass through. |
 
 The component preserves a caller-provided `aria-describedby` value and appends its help and error ids. Its scoped CSS uses only `--of-*` tokens, keeps focus visible, and removes transitions for reduced motion. Test the native textbox by label, value, callback, disabled or required state, and linked validation text.
+
+See the [compact toolbar example](../../packages/plugin-sdk/README.md#compact-toolbar-field) for a leading search icon and trailing clear button. Both snippets are optional. Mark decorative content `aria-hidden="true"` and give interactive content its own accessible name, keyboard behavior, and disabled state. `disabled` and `readonly` apply to the input, not to snippet children.
+
+`class` and `style` target the native input, as do native attributes and handlers. Put width and layout styles on a caller-owned wrapper. Never target `.of-text-field`, internal labels, or other private markup. `onValueChange` follows native `oninput`; programmatic bound-value changes, including a trailing clear action, do not invoke either callback.
 
 ### `Textarea`
 

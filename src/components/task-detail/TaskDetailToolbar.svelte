@@ -163,6 +163,8 @@
       <div class="toolbar-title-editor">
         <TextField
           label="Task title"
+          labelHidden
+          size="sm"
           class="toolbar-title-input"
           value={titleRename.draft}
           autofocus
@@ -331,21 +333,6 @@
 
   .toolbar-title-editor {
     width: 18rem;
-  }
-
-  .toolbar-title-editor :global(.of-text-field) {
-    display: block;
-  }
-
-  .toolbar-title-editor :global(label) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 
   .toolbar-title-editor :global(.toolbar-title-input) {
