@@ -1,15 +1,21 @@
 import type { Component } from 'svelte'
+import { SvelteMap } from 'svelte/reactivity'
 import type { PluginComponentLoader, PluginComponentModule } from '@openforge-app/plugin-sdk'
 import type { PluginViewProps } from '@openforge-app/plugin-sdk/frontend'
 import type { PluginViewKey } from './types'
+import { clearViewReplacementFailure, clearViewReplacementFailuresForPlugin, viewReplacementFailures } from './viewReplacementDiagnostics'
 
 export type PluginComponentSource<Props extends Record<string, unknown> = Record<string, unknown>> =
   | Component<Props>
   | PluginComponentLoader<Props>
 
+export interface ViewReplacementRegistration {
+  source: PluginComponentSource<Record<string, unknown>>
+}
+
+const viewReplacementRegistrations = new SvelteMap<string, ViewReplacementRegistration>()
 const registry = new Map<PluginViewKey, PluginComponentSource<PluginViewProps>>()
 const renderableRegistries = {
-  viewReplacements: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
   taskPaneTabs: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
   taskUISections: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
   reviewRowActions: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
@@ -17,7 +23,7 @@ const renderableRegistries = {
   injectionPoints: new Map<string, PluginComponentSource<Record<string, unknown>>>(),
 } as const
 
-type RenderableSlotType = keyof typeof renderableRegistries
+type RenderableSlotType = 'viewReplacements' | keyof typeof renderableRegistries
 
 function isComponentModule<Props extends Record<string, unknown>>(value: unknown): value is PluginComponentModule<Props> {
   return value !== null && typeof value === 'object' && 'default' in value && typeof (value as { default?: unknown }).default === 'function'
@@ -72,17 +78,34 @@ export function registerRenderableContributionComponent(
   key: string,
   component: PluginComponentSource<Record<string, unknown>>
 ): void {
-  renderableRegistries[slotType].set(key, component)
+  if (slotType === 'viewReplacements') {
+    viewReplacementRegistrations.set(key, { source: component })
+    clearViewReplacementFailure(key)
+  } else {
+    renderableRegistries[slotType].set(key, component)
+  }
+}
+
+export function getViewReplacementRegistration(key: string): ViewReplacementRegistration | undefined {
+  return viewReplacementRegistrations.get(key)
 }
 
 export function getRegisteredRenderableComponent(
   slotType: RenderableSlotType,
   key: string
 ): PluginComponentSource<Record<string, unknown>> | undefined {
-  return renderableRegistries[slotType].get(key)
+  return slotType === 'viewReplacements'
+    ? getViewReplacementRegistration(key)?.source
+    : renderableRegistries[slotType].get(key)
+}
+
+export function unregisterViewReplacementComponent(key: string): void {
+  viewReplacementRegistrations.delete(key)
+  clearViewReplacementFailure(key)
 }
 
 export function unregisterViewComponentsForPlugin(pluginId: string): void {
+  clearViewReplacementFailuresForPlugin(pluginId)
   const prefix = `plugin:${pluginId}:`
   for (const key of Array.from(registry.keys())) {
     if (key.startsWith(prefix)) {
@@ -91,8 +114,7 @@ export function unregisterViewComponentsForPlugin(pluginId: string): void {
   }
 
   const namespacedPrefix = `${pluginId}:`
-  for (const slotType of Object.keys(renderableRegistries) as RenderableSlotType[]) {
-    const slotRegistry = renderableRegistries[slotType]
+  for (const slotRegistry of [...Object.values(renderableRegistries), viewReplacementRegistrations]) {
     for (const key of Array.from(slotRegistry.keys())) {
       if (key.startsWith(namespacedPrefix)) {
         slotRegistry.delete(key)
@@ -103,6 +125,8 @@ export function unregisterViewComponentsForPlugin(pluginId: string): void {
 
 export function clearComponentRegistry(): void {
   registry.clear()
+  viewReplacementRegistrations.clear()
+  viewReplacementFailures.set(new Map())
   for (const slotRegistry of Object.values(renderableRegistries)) {
     slotRegistry.clear()
   }

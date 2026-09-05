@@ -2,6 +2,7 @@ import { get } from 'svelte/store'
 import { activeProjectId } from '../stores'
 import { failPendingFrontendPluginCommands } from '../frontendHostRequestBridge'
 import { installedPlugins } from './pluginStore'
+import { syncViewReplacementContributions } from './viewReplacementContributions'
 import {
   clearLoadedPlugin,
   deactivatePlugin as deactivatePluginLoader,
@@ -135,6 +136,7 @@ async function activateFrontendRuntimePlugin(
       setPluginRuntimeState(pluginId, 'installed', null)
       return false
     }
+    runtimeRegistry.observeViewReplacements(replacements => syncViewReplacementContributions(pluginId, replacements))
     await runtimeRegistry.prepareFrontendThemes()
     const themesCommitted = runtimeRegistry.commitFrontendThemes(
       activationGeneration,

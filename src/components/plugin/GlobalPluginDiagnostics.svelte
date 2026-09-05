@@ -2,6 +2,7 @@
   import { writeClipboardText } from '../../lib/ipc'
   import { appEnabledPluginIds, enabledPluginIds, error as pluginLoadError } from '../../lib/plugin/pluginStore'
   import type { PluginEntry } from '../../lib/plugin/types'
+  import { viewReplacementFailures } from '../../lib/plugin/viewReplacementDiagnostics'
   import { pluginActionErrorMessage } from './globalPluginSettings'
 
   interface Props {
@@ -31,6 +32,7 @@
       backend: plugin.manifest.backend,
       error: plugin.error,
       loadError: $pluginLoadError,
+      replacementFailures: [...$viewReplacementFailures.values()].filter(failure => failure.pluginId === plugin.manifest.id),
     }, null, 2)
   }
 

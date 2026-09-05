@@ -27,6 +27,7 @@ import { RuntimeFrontendContributionRegistry } from './runtimeFrontendContributi
 import type {
   RuntimeContributionSnapshot,
   RuntimeInjectionPointContribution,
+  RuntimeViewReplacementContribution,
   RuntimeOptions,
   RuntimeTaskStartPrefixProviderContribution,
 } from './runtimeContributionTypes'
@@ -129,6 +130,10 @@ class RuntimeContributionRegistry {
       firstError ??= error
     }
     if (firstError) throw firstError
+  }
+
+  observeViewReplacements(observer: (replacements: RuntimeViewReplacementContribution[]) => void): void {
+    this.frontendSubscriptions.add(this.frontendContributions.observeViewReplacements(observer))
   }
 
   getSnapshot(): RuntimeContributionSnapshot {

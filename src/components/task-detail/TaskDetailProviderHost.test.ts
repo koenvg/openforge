@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getLatestComponentProps } from '../../App.test-fixtures/component-props'
@@ -282,6 +283,38 @@ describe('TaskDetailProviderHost', () => {
     expect(get(projectTaskDetailProviderIds).get(project.id)).toBe('planning-plugin.task-workspace')
   })
 
+
+  it('retries a failed loader when the same provider is re-registered without changing its preference', async () => {
+    const loader = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary loader failure'))
+      .mockResolvedValue(TaskDetailPluginTestView)
+    selectPluginTaskDetail(loader)
+    render(TaskDetailProviderHost, { props: createProps() })
+    await vi.waitFor(() => expect(vi.mocked(TaskDetailView)).toHaveBeenCalled())
+    expect(loader).toHaveBeenCalledTimes(1)
+
+    registerRenderableContributionComponent('viewReplacements', 'planning-plugin:task-workspace', loader)
+
+    expect(await screen.findByTestId('plugin-task-detail')).toBeTruthy()
+    expect(loader).toHaveBeenCalledTimes(2)
+    expect(get(projectTaskDetailProviderIds).get(project.id)).toBe('planning-plugin.task-workspace')
+  })
+
+  it('does not retry a failed provider when unrelated contributions or plugin metadata change', async () => {
+    const loader = vi.fn().mockRejectedValue(new Error('broken workspace'))
+    selectPluginTaskDetail(loader)
+    render(TaskDetailProviderHost, { props: createProps() })
+    await vi.waitFor(() => expect(vi.mocked(TaskDetailView)).toHaveBeenCalled())
+
+    runtimeContributionSources.update(sources => new Map(sources).set('other-plugin', {
+      pluginId: 'other-plugin',
+      commands: [{ id: 'refresh', title: 'Refresh' }],
+    }))
+    installedPlugins.update(plugins => new Map(plugins))
+    await tick()
+
+    expect(loader).toHaveBeenCalledTimes(1)
+  })
 
   it('tears down plugin renderers once for each logical task, project, provider, enablement, and route change', async () => {
     const mounted: string[] = []

@@ -3,10 +3,11 @@ import type {
   PluginProjectDashboardReplacementProps,
   PluginTaskDetailReplacementProps,
 } from '@openforge-app/plugin-sdk/frontend'
-import { onDestroy, type Component } from 'svelte'
+import { onDestroy, untrack, type Component } from 'svelte'
 import { fromStore, type Readable } from 'svelte/store'
-import { getRegisteredRenderableComponent, resolvePluginComponent } from './componentRegistry'
+import { getViewReplacementRegistration, resolvePluginComponent } from './componentRegistry'
 import { resolveContributions } from './contributionResolver'
+import { recordViewReplacementFailure } from './viewReplacementDiagnostics'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from './pluginStore'
 import {
   CORE_VIEW_REPLACEMENT_PROVIDER_ID,
@@ -80,8 +81,7 @@ export function createViewReplacementHostState<Target extends ReplaceableViewTar
   ))
   let selectedProvider = $derived(providerResolution.provider)
   let selectedComponentSource = $derived(selectedProvider
-    ? getRegisteredRenderableComponent(
-        'viewReplacements',
+    ? getViewReplacementRegistration(
         `${selectedProvider.pluginId}:${selectedProvider.contributionId}`,
       )
     : undefined)
@@ -109,7 +109,7 @@ export function createViewReplacementHostState<Target extends ReplaceableViewTar
 
   $effect(() => {
     const signature = providerSignature
-    const provider = selectedProvider
+    const provider = untrack(() => selectedProvider)
     const componentSource = selectedComponentSource
     const currentProjectId = projectId
     const runId = ++loadRunId
@@ -121,13 +121,17 @@ export function createViewReplacementHostState<Target extends ReplaceableViewTar
 
     void (async () => {
       try {
-        const component = await resolvePluginComponent(componentSource)
+        const component = await resolvePluginComponent(componentSource.source)
         if (runId === loadRunId) {
           resolvedComponent = component as Component<ViewReplacementHostPropsByTarget[Target]>
           resolvedProviderSignature = signature
         }
       } catch (error) {
         if (runId !== loadRunId) return
+        recordViewReplacementFailure({
+          pluginId: provider.pluginId, contributionId: provider.contributionId, providerId: provider.qualifiedId,
+          target: options.target, projectId: currentProjectId, logicalIdentity: options.getLogicalIdentity(), phase: 'load',
+        }, error)
         options.reportProviderFailure(provider.pluginId, provider.qualifiedId, 'load', error)
         failedProviderSignature = signature
       }
@@ -140,6 +144,10 @@ export function createViewReplacementHostState<Target extends ReplaceableViewTar
 
   function handleRenderError(error: unknown): void {
     if (!selectedProvider) return
+    recordViewReplacementFailure({
+      pluginId: selectedProvider.pluginId, contributionId: selectedProvider.contributionId, providerId: selectedProvider.qualifiedId,
+      target: options.target, projectId, logicalIdentity, phase: 'render',
+    }, error)
     options.reportProviderFailure(
       selectedProvider.pluginId,
       selectedProvider.qualifiedId,
