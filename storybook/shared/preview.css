@@ -1,0 +1,18 @@
+@import '../../src/app.css';
+
+@source '../../src';
+@source '../../packages/plugin-sdk/src';
+@source '../../packages/pr-review-ui/src';
+@source '../../packages/terminal-runtime/src';
+@source '../../plugins/*/src';
+@source '../';
+
+/* Freeze visual state without replacing runtime timers used by interactions. */
+html[data-storybook-motion='reduced'] *,
+html[data-storybook-motion='reduced'] *::before,
+html[data-storybook-motion='reduced'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+  caret-color: transparent !important;
+}

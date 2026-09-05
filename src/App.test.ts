@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
+import { createProject } from '../storybook/shared/fixtures/appFixtures'
 import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
 import type { Project, TaskDetail } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
@@ -194,8 +195,8 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     const setupDialogModule = await import('./components/project/ProjectSetupDialog.svelte')
     const { get } = await import('svelte/store')
 
-    const existingProject: Project = { id: 'proj-old', name: 'Old Project', path: '/test/old', created_at: 0, updated_at: 0 }
-    const createdProject: Project = { id: 'proj-new', name: 'New Project', path: '/test/new', created_at: 1, updated_at: 1 }
+    const existingProject: Project = createProject({ id: 'proj-old', name: 'Old Project', path: '/test/old', created_at: 0, updated_at: 0 })
+    const createdProject: Project = createProject({ id: 'proj-new', name: 'New Project', path: '/test/new', created_at: 1, updated_at: 1 })
     stores.activeProjectId.set(existingProject.id)
     vi.mocked(ipc.getProjects)
       .mockResolvedValueOnce([existingProject])

@@ -2,6 +2,7 @@ import { cleanup, render } from '@testing-library/svelte'
 import type { FileContent, FileEntry } from '@openforge-app/plugin-sdk/domain'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 import { vi } from 'vitest'
+import { createFileEntry, createTextFileContent } from '../../../storybook/shared/fixtures/appFixtures'
 
 vi.mock('@lucide/svelte', () => ({
   Archive: vi.fn(() => ({})),
@@ -37,14 +38,13 @@ const runtimeContext: OpenForgeContextSnapshot = {
 }
 
 export function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
-  return {
+  return createFileEntry({
     name: 'file.ts',
     path: 'file.ts',
-    isDir: false,
     size: 512,
     modifiedAt: null,
     ...overrides,
-  }
+  })
 }
 
 export const sampleEntries: FileEntry[] = [
@@ -60,12 +60,10 @@ export const noisyRootEntries: FileEntry[] = [
   makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1024 }),
 ]
 
-export const sampleFileContent: FileContent = {
-  type: 'text',
+export const sampleFileContent: FileContent = createTextFileContent({
   content: 'Hello world',
   mimeType: null,
-  size: 11,
-}
+})
 
 export function renderFilesView(
   props: { projectName?: string; projectId?: string | null; api?: FrontendOpenForgeAPI } = {},

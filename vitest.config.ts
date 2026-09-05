@@ -49,7 +49,7 @@ export default defineConfig({
           pool: 'threads',
           globals: true,
           setupFiles: ['src/test-setup.ts'],
-          include: ['src/**/*.test.ts', WORKSPACE_TEST_SUITE_GLOB],
+          include: ['src/**/*.test.ts', 'storybook/**/*.test.ts', WORKSPACE_TEST_SUITE_GLOB],
           exclude: [
             'src/lib/terminalSessionService.*.test.ts',
             pluginSdk.suiteGlob,

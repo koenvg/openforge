@@ -13,6 +13,7 @@
   import AppShortcutHelpDialog from './components/shell/AppShortcutHelpDialog.svelte'
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
+  import ApplicationShell from './components/shell/ApplicationShell.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
   import AttentionOverviewDialog from './components/attention/AttentionOverviewDialog.svelte'
   import ProjectSetupDialog from './components/project/ProjectSetupDialog.svelte'
@@ -312,13 +313,8 @@
   })
 </script>
 
-<div
-  class="of-application-shell flex h-screen overflow-hidden"
-  style:opacity={appReady ? 1 : 0}
-  inert={!appReady}
-  data-app-ready={appReady}
->
-  {#if !zenActive}
+<ApplicationShell ready={appReady} zen={zenActive}>
+  {#snippet sidebar()}
     <AppSidebar
       collapsed={appSidebarCollapsed}
       currentView={$currentView}
@@ -331,114 +327,107 @@
       pluginNavItems={sidebarPluginNavItems}
       reviewRequestCount={$reviewRequestCount}
     />
-  {/if}
-  {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet) && !zenActive}
-    <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
-  {/if}
+  {/snippet}
+  {#snippet projectNavigation()}
+    {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
+      <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+    {/if}
+  {/snippet}
+  {#snippet children()}
+    {#if renderedActiveView !== null}
+      <renderedActiveView.component {...(renderedActiveView?.props ?? {})} />
+    {:else if pluginViewActive}
+      <PluginSlot slotType="views" slotId={$currentView} />
+    {:else if selectedTaskForView}
+      <TaskDetailProviderHost
+        task={selectedTaskForView}
+        project={activeProject}
+        relatedTasks={$dependencyReferenceTasks}
+        onRunAction={handleRunAction}
+        onEdit={taskCreation.openEditTask}
+        onOpenTask={navigation.openTaskInProject}
+        onOpenTaskActions={actionPalette.openActionPalette}
+        onRefreshTask={async () => { await appData.loadTasks() }}
+        onTaskUpdated={async () => { await appData.loadTasks() }}
+        onProjectAttentionChanged={appData.loadProjectAttention}
+        {windowFocused}
+        onRunAppRegistrationChange={handleRunAppRegistrationChange}
+      />
+    {:else}
+      <ProjectDashboardProviderHost
+        project={activeProject}
+        tasks={$tasks}
+        taskDetailsById={$taskDetailsById}
+        dependencyReferenceTasks={$dependencyReferenceTasks}
+        activeSessions={$activeSessions}
+        ticketPrs={$ticketPrs}
+        attentionRows={$taskAttentionRows}
+        attentionRowsLoaded={$taskAttentionLoaded}
+        isLoading={$isLoading}
+        onOpenTask={navigation.openTaskInProject}
+        onEditTask={taskCreation.openEditTask}
+        onTaskUpdated={async () => { await appData.loadTasks() }}
+        onProjectAttentionChanged={appData.loadProjectAttention}
+        onOpenCommandSearch={() => { showCommandPalette = true }}
+        onNewTask={taskCreation.openNewTask}
+        onRunAction={handleRunAction}
+      />
+    {/if}
 
-  <div class="flex flex-col flex-1 min-w-0 relative">
-    <main class="flex-1 overflow-hidden flex">
-      <div class="flex-1 overflow-hidden flex flex-col">
-        {#if renderedActiveView !== null}
-          <renderedActiveView.component {...(renderedActiveView?.props ?? {})} />
-        {:else if pluginViewActive}
-          <PluginSlot slotType="views" slotId={$currentView} />
-        {:else if selectedTaskForView}
-          <TaskDetailProviderHost
-            task={selectedTaskForView}
-            project={activeProject}
-            relatedTasks={$dependencyReferenceTasks}
-            onRunAction={handleRunAction}
-            onEdit={taskCreation.openEditTask}
-            onOpenTask={navigation.openTaskInProject}
-            onOpenTaskActions={actionPalette.openActionPalette}
-            onRefreshTask={async () => { await appData.loadTasks() }}
-            onTaskUpdated={async () => { await appData.loadTasks() }}
-            onProjectAttentionChanged={appData.loadProjectAttention}
-            {windowFocused}
-            onRunAppRegistrationChange={handleRunAppRegistrationChange}
-          />
-        {:else}
-          <ProjectDashboardProviderHost
-            project={activeProject}
-            tasks={$tasks}
-            taskDetailsById={$taskDetailsById}
-            dependencyReferenceTasks={$dependencyReferenceTasks}
-            activeSessions={$activeSessions}
-            ticketPrs={$ticketPrs}
-            attentionRows={$taskAttentionRows}
-            attentionRowsLoaded={$taskAttentionLoaded}
-            isLoading={$isLoading}
-            onOpenTask={navigation.openTaskInProject}
-            onEditTask={taskCreation.openEditTask}
-            onTaskUpdated={async () => { await appData.loadTasks() }}
-            onProjectAttentionChanged={appData.loadProjectAttention}
-            onOpenCommandSearch={() => { showCommandPalette = true }}
-            onNewTask={taskCreation.openNewTask}
-            onRunAction={handleRunAction}
-          />
-        {/if}
+  {/snippet}
+  {#snippet dialogs()}
+    <AppTaskCreationDialogs
+      controller={taskCreation}
+      projectPath={activeProject?.path ?? null}
+      projectName={activeProject?.name ?? null}
+    />
 
-        <AppTaskCreationDialogs
-          controller={taskCreation}
-          projectPath={activeProject?.path ?? null}
-          projectName={activeProject?.name ?? null}
-        />
+    {#if showProjectSetup}
+      <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
+    {/if}
+  {/snippet}
+  {#snippet overlays()}
 
-        {#if showProjectSetup}
-          <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
-        {/if}
-      </div>
-    </main>
+    <ToastHost />
 
-  </div>
-</div>
+    {#if showProjectSwitcher}
+      <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={navigation.switchToProject} />
+    {/if}
 
-<ToastHost />
+    {#if showAttentionOverview}
+      <AttentionOverviewDialog
+        onClose={closeAttentionOverview}
+        onOpenTask={navigation.openTaskFromOverview}
+        onOpenPr={reviewNavigation.openReviewFromOverview}
+      />
+    {/if}
 
-{#if showProjectSwitcher}
-  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={navigation.switchToProject} />
-{/if}
+    {#if showCommandPalette}
+      <CommandPalette onClose={() => showCommandPalette = false} />
+    {/if}
 
-{#if showAttentionOverview}
-  <AttentionOverviewDialog
-    onClose={closeAttentionOverview}
-    onOpenTask={navigation.openTaskFromOverview}
-    onOpenPr={reviewNavigation.openReviewFromOverview}
-  />
-{/if}
+    {#if actionPalette.showActionPalette}
+      <ActionPalette
+        task={actionPalette.actionPaletteTask}
+        taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
+        canRunApp={actionPalette.actionPaletteCanRunApp}
+        onClose={actionPalette.closeActionPalette}
+        onExecute={actionPalette.executeAction}
+      />
+    {/if}
 
-{#if showCommandPalette}
-  <CommandPalette onClose={() => showCommandPalette = false} />
-{/if}
+    {#if showFileQuickOpen}
+      <FileQuickOpen onClose={() => { showFileQuickOpen = false }} />
+    {/if}
 
-{#if actionPalette.showActionPalette}
-  <ActionPalette
-    task={actionPalette.actionPaletteTask}
-    taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
-    canRunApp={actionPalette.actionPaletteCanRunApp}
-    onClose={actionPalette.closeActionPalette}
-    onExecute={actionPalette.executeAction}
-  />
-{/if}
+    <!-- Branch divergence prompt (global, store-driven, awaited as a Promise) -->
+    <BranchDivergenceModal />
 
-{#if showFileQuickOpen}
-  <FileQuickOpen onClose={() => { showFileQuickOpen = false }} />
-{/if}
-
-<!-- Branch divergence prompt (global, store-driven, awaited as a Promise) -->
-<BranchDivergenceModal />
-
-<AppCloseConfirmationDialog controller={closeController} />
-<AppShortcutHelpDialog
-  controller={shortcutHelp}
-  taskSelected={selectedTask !== null}
-  boardVisible={$currentView === 'board' && selectedTask === null}
-/>
-
-<style>
-  .of-application-shell {
-    background: var(--of-canvas);
-    color: var(--of-text);
-  }
-</style>
+    <AppCloseConfirmationDialog controller={closeController} />
+    <AppShortcutHelpDialog
+      controller={shortcutHelp}
+      taskSelected={selectedTask !== null}
+      boardVisible={$currentView === 'board' && selectedTask === null}
+    />
+  {/snippet}
+</ApplicationShell>

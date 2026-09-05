@@ -1,6 +1,7 @@
 src-tauri/target/
 .cargo-target/
 dist/
+storybook-static/
 dist-electron/
 node_modules/
 .astro/
