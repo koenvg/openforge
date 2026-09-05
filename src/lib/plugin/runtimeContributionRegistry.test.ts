@@ -196,6 +196,48 @@ describe('runtime contribution registry', () => {
     expect(registry.getSnapshot().commands).toEqual([])
   })
 
+  it.each([false, true])('disposes frontend listeners after backend teardown fails, with frontend failure: %s', async (frontendFails) => {
+    const registry = makeRegistry()
+    const backendError = new Error('backend stop failed')
+    const stop = vi.fn(async () => { throw backendError })
+    const listener = vi.fn()
+    const frontendCleanup = vi.fn(() => {
+      if (frontendFails) throw new Error('frontend cleanup failed')
+    })
+
+    await registry.activateBackend(defineBackendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.background.register({
+          id: 'poller',
+          scope: 'project',
+          start: async () => undefined,
+          stop,
+        }))
+      },
+    }))
+    await registry.activateFrontend(defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.events.on('sync.finished', listener))
+        context.subscriptions.add(frontendCleanup)
+      },
+    }))
+
+    const frontend = registry.getFrontendApi()
+    await frontend.events.emit('sync.finished', { synced: 1 })
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    await expect(registry.deactivate()).rejects.toBe(backendError)
+
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(frontendCleanup).toHaveBeenCalledTimes(1)
+    expect(registry.getSnapshot().eventListeners).toEqual([])
+    await frontend.events.emit('sync.finished', { synced: 2 })
+    expect(listener).toHaveBeenCalledTimes(1)
+    await expect(registry.deactivate()).resolves.toBeUndefined()
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(frontendCleanup).toHaveBeenCalledTimes(1)
+  })
+
   it('allows multiple local event listeners for the same event and disposes them independently', async () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()
