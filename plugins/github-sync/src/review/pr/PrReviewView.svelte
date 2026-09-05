@@ -112,7 +112,11 @@
       onAddReplyToReview={selectedPrState.addReplyToReview}
       onRemovePendingReply={selectedPrState.removePendingReply}
       onAskAgentStep={aiThreadState.askAgentStep}
+      onEditThread={aiThreadState.editThread}
+      onDeleteThread={aiThreadState.deleteThread}
       onSendQuestionsToAgent={aiThreadState.sendQuestionsToAgent}
+      onMarkThreadSeen={aiThreadState.markThreadSeen}
+      stepLabelById={walkthroughState.selectedStepLabels}
       onSubmitReview={selectedPrState.submitReview}
       onOpenUrl={(url) => api.system.openUrl(url)}
     />

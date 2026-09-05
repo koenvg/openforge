@@ -1078,6 +1078,13 @@ export interface AiThread {
   messages: AiThreadMessage[];
   created_at: number;
   updated_at: number;
+  /**
+   * When the reviewer last opened this thread's answer, in the same unit as
+   * message `created_at`. An answer counts as read only while `seen_at` is at or
+   * after the latest AI message's `created_at`; a newer answer makes it unread
+   * again without clearing the field. `null`/absent means never opened.
+   */
+  seen_at?: number | null;
 }
 
 /** App-level view for top-bar navigation */

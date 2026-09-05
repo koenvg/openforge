@@ -48,3 +48,16 @@ export function upsertThread(threads: AiThread[], thread: AiThread): AiThread[] 
   next[idx] = thread
   return next
 }
+
+/**
+ * Replace the body of the latest message when it's still the reviewer's (an unsent
+ * question or reply), returning it to draft so it can be sent. No-op when the last
+ * message is the AI's — there is nothing unsent to edit.
+ */
+export function editLastUserMessage(thread: AiThread, body: string, now: number): AiThread {
+  const lastIndex = thread.messages.length - 1
+  const last = thread.messages[lastIndex]
+  if (!last || last.role !== 'user') return thread
+  const messages = thread.messages.map((m, i) => (i === lastIndex ? { ...m, body } : m))
+  return { ...thread, status: 'draft', messages, updated_at: now }
+}

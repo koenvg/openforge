@@ -4,6 +4,10 @@ import { tick } from 'svelte'
 const MAX_SCROLL_RESTORE_ATTEMPTS = 40
 const SCROLL_RESTORE_RETRY_MS = 25
 const COMMENT_HIGHLIGHT_MS = 2_000
+// Switching to the Files tab remounts the diff and lazily renders it over several
+// seconds. Poll longer for a comment row than for a fragment so a jump from the
+// questions panel lands once the target actually renders, not on the first frame.
+const MAX_COMMENT_SCROLL_ATTEMPTS = 160
 
 interface DiffViewerNavigationDependencies {
   getFiles: () => PrFileDiff[]
@@ -180,6 +184,7 @@ export function createDiffViewerNavigation(
 
   async function scrollToComment(filename: string, lineNumber: number) {
     fragmentNavigationId++
+    const navigationId = fragmentNavigationId
     const target = findFile(filename)
     if (!target) return
 
@@ -188,30 +193,41 @@ export function createDiffViewerNavigation(
     }
     deps.scrollToIndex(target.index, { align: 'start' })
 
-    await tick()
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-    await tick()
+    // The row for a comment may not exist yet: the diff can still be mounting after
+    // a tab switch, or the file's hunks render a few frames later. Poll until the
+    // row appears (or another navigation supersedes this one), re-nudging the
+    // virtualizer while the file itself is still outside the render window.
+    for (let attempt = 0; attempt <= MAX_COMMENT_SCROLL_ATTEMPTS; attempt++) {
+      await tick()
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      if (navigationId !== fragmentNavigationId) return
 
-    const scrollContainer = deps.getScrollContainer()
-    if (!scrollContainer) return
+      const scrollContainer = deps.getScrollContainer()
+      const fileElement = scrollContainer?.querySelector(
+        `[data-diff-file="${CSS.escape(filename)}"]`,
+      )
 
-    const fileElement = scrollContainer.querySelector(
-      `[data-diff-file="${CSS.escape(filename)}"]`,
-    )
-    if (!fileElement) return
+      if (!fileElement) {
+        deps.scrollToIndex(target.index, { align: 'start' })
+      } else {
+        const targetElement =
+          fileElement.querySelector(`tr[data-line="${lineNumber}-extend"]`) ??
+          fileElement.querySelector(`tr[data-line="${lineNumber}"]`)
+        if (targetElement instanceof HTMLElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          targetElement.classList.add('diff-comment-highlight')
+          const timer = setTimeout(() => {
+            targetElement.classList.remove('diff-comment-highlight')
+            commentHighlightTimers.delete(timer)
+          }, COMMENT_HIGHLIGHT_MS)
+          commentHighlightTimers.add(timer)
+          return
+        }
+      }
 
-    const targetElement =
-      fileElement.querySelector(`tr[data-line="${lineNumber}-extend"]`) ??
-      fileElement.querySelector(`tr[data-line="${lineNumber}"]`)
-    if (!(targetElement instanceof HTMLElement)) return
-
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    targetElement.classList.add('diff-comment-highlight')
-    const timer = setTimeout(() => {
-      targetElement.classList.remove('diff-comment-highlight')
-      commentHighlightTimers.delete(timer)
-    }, COMMENT_HIGHLIGHT_MS)
-    commentHighlightTimers.add(timer)
+      if (attempt === MAX_COMMENT_SCROLL_ATTEMPTS) return
+      await new Promise<void>(resolve => setTimeout(resolve, SCROLL_RESTORE_RETRY_MS))
+    }
   }
 
   return {
