@@ -1,8 +1,10 @@
 import { get } from 'svelte/store'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
+import { syncFrontendContributions } from './liveFrontendContributions'
 
 import { clearComponentRegistry, getRegisteredRenderableComponent } from './componentRegistry'
-import { applyRuntimeSnapshotContributions, clearPluginRuntimeContributions } from './pluginRuntimeContributions'
+import { applyRuntimeSnapshotContributions, clearPluginRuntimeContributions, stopPluginBackgroundServices } from './pluginRuntimeContributions'
 import { runtimeContributionSources } from './pluginStore'
 import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
 
@@ -95,5 +97,35 @@ describe('plugin runtime task UI contributions', () => {
     const icon = get(runtimeContributionSources).get('plugin.sections')?.views?.[0]?.icon
     expect(icon).toMatchObject({ type: 'svg' })
     expect(icon).not.toEqual(expect.objectContaining({ svg: expect.stringContaining('onclick') }))
+  })
+
+  it('keeps background services and commands alive across frontend registration changes', async () => {
+    const registry = createRuntimeContributionRegistry({ pluginId: 'plugin.sections', projectId: 'P-1' })
+    const start = vi.fn(), stop = vi.fn(), command = vi.fn()
+    await registry.activateBackend(defineBackendPlugin({
+      activate(api, context) {
+        context.subscriptions.add(api.background.register({ id: 'watcher', scope: 'project', start, stop }))
+      },
+    }))
+    const api = registry.getFrontendApi()
+    api.commands.register({ id: 'refresh', title: 'Refresh', handler: command })
+    await applyRuntimeSnapshotContributions('plugin.sections', registry.getSnapshot())
+    registry.observeFrontendContributions(snapshot => syncFrontendContributions('plugin.sections', snapshot))
+    const source = get(runtimeContributionSources).get('plugin.sections')!
+    const first = api.taskPane.registerTab({ id: 'late', title: 'First', component: DirectSection })
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'plugin.sections:late')).toBe(DirectSection)
+    await first.dispose()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'plugin.sections:late')).toBeUndefined()
+    const second = api.taskPane.registerTab({ id: 'late', title: 'Second', requiresWorkspace: false, component: LazySection })
+    expect(get(runtimeContributionSources).get('plugin.sections')?.taskPaneTabs).toMatchObject([{ id: 'late', title: 'Second', requiresWorkspace: false }])
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'plugin.sections:late')).toBe(LazySection)
+    expect(get(runtimeContributionSources).get('plugin.sections')?.commands).toBe(source.commands)
+    expect(get(runtimeContributionSources).get('plugin.sections')?.backgroundServices).toBe(source.backgroundServices)
+    expect(start).toHaveBeenCalledOnce()
+    expect(stop).not.toHaveBeenCalled()
+    await second.dispose()
+    await stopPluginBackgroundServices('plugin.sections')
+    await registry.deactivate()
+    expect(stop).toHaveBeenCalledOnce()
   })
 })

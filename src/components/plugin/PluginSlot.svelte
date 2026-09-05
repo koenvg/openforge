@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, type Component } from 'svelte'
+  import { onDestroy, untrack, type Component } from 'svelte'
   import { get } from 'svelte/store'
   import PluginErrorBoundary from './PluginErrorBoundary.svelte'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
@@ -47,8 +47,8 @@
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
-  let activationRunId = 0
-  let lastContributionSignature: string | null = null
+  type ComponentLoad = { source: PluginComponentSource<Record<string, unknown>> | undefined }
+  const componentLoads = new Map<string, ComponentLoad>()
 
   let slotLayout = $derived(slotType === 'views' || slotType === 'taskPaneTabs' ? 'fill' : null)
   let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
@@ -101,79 +101,59 @@
     renderErrors = next
   }
 
-  onDestroy(() => {
-    activationRunId += 1
-  })
+  onDestroy(() => componentLoads.clear())
 
-  function contributionSetSignature(contributions: readonly (typeof slotContributions)[number][]): string {
-    // Include whether each contribution currently resolves to a registered component so a
-    // recovery (component registered after a failed activation) still rebuilds, while a
-    // re-activation that re-registers the same components keeps the same signature.
-    return contributions.map((contrib) => `${contrib.namespacedId}:${getContributionComponent(contrib) ? '1' : '0'}`).join('|')
+  async function loadContribution(contrib: (typeof slotContributions)[number], viewKey: string, load: ComponentLoad): Promise<void> {
+    try {
+      if (!load.source) {
+        await activatePlugin(contrib.pluginId)
+        if (componentLoads.get(viewKey) !== load) return
+        load.source = getContributionComponent(contrib)
+      }
+      if (load.source) {
+        const component = await resolvePluginComponent(load.source)
+        if (componentLoads.get(viewKey) !== load) return
+        renderedComponents = new Map(renderedComponents).set(viewKey, component)
+      } else {
+        const error = get(installedPlugins).get(contrib.pluginId)?.error
+        if (error) setRenderError(viewKey, error)
+      }
+    } catch (error) {
+      if (componentLoads.get(viewKey) === load) setRenderError(viewKey, error)
+    }
   }
 
   $effect(() => {
-    const contributions = [...slotContributions]
-    const signature = contributionSetSignature(contributions)
-
-    // Rebuild only when the contribution set actually changes. A plugin re-activating
-    // re-emits an equivalent runtimeContributionSources map (same namespacedIds); wiping
-    // renderedComponents on every store tick would unmount + remount the mounted section,
-    // which is the visible flash on the Settings page.
-    if (signature === lastContributionSignature) {
-      return
-    }
-    lastContributionSignature = signature
-
-    renderedComponents = new Map()
-    renderErrors = new Map()
-
-    if (contributions.length === 0) {
-      return
-    }
-
-    const runId = ++activationRunId
-
-    void (async () => {
-      const nextRenderedComponents = new Map<string, Component<Record<string, unknown>>>()
-      const nextRenderErrors = new Map<string, string>()
-
-      for (const contrib of contributions) {
-        const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)
-
-        let componentSource = getContributionComponent(contrib)
-        if (!componentSource) {
-          await activatePlugin(contrib.pluginId)
-          componentSource = getContributionComponent(contrib)
-        }
-
-        if (runId !== activationRunId) {
-          return
-        }
-
-        if (componentSource) {
-          try {
-            nextRenderedComponents.set(viewKey, await resolvePluginComponent(componentSource))
-          } catch (error) {
-            nextRenderErrors.set(viewKey, normalizeErrorMessage(error))
-          }
-          continue
-        }
-
-        const pluginError = get(installedPlugins).get(contrib.pluginId)?.error
-        if (pluginError) {
-          nextRenderErrors.set(viewKey, pluginError)
+    const contributions = slotContributions.map(contrib => ({
+      contrib,
+      viewKey: makePluginViewKey(contrib.pluginId, contrib.contributionId),
+      source: getContributionComponent(contrib),
+    }))
+    untrack(() => {
+      const keys = new Set(contributions.map(({ viewKey }) => viewKey))
+      const nextComponents = new Map(renderedComponents)
+      const nextErrors = new Map(renderErrors)
+      for (const key of componentLoads.keys()) {
+        if (!keys.has(key)) {
+          componentLoads.delete(key)
+          nextComponents.delete(key)
+          nextErrors.delete(key)
         }
       }
-
-      if (runId !== activationRunId) {
-        return
+      const pending: Array<() => void> = []
+      for (const { contrib, viewKey, source } of contributions) {
+        const previous = componentLoads.get(viewKey)
+        if (previous && previous.source === source) continue
+        const load = { source }
+        componentLoads.set(viewKey, load)
+        nextComponents.delete(viewKey)
+        nextErrors.delete(viewKey)
+        pending.push(() => { void loadContribution(contrib, viewKey, load) })
       }
-
-      renderedComponents = nextRenderedComponents
-      renderErrors = nextRenderErrors
-    })()
-
+      renderedComponents = nextComponents
+      renderErrors = nextErrors
+      for (const start of pending) start()
+    })
   })
 </script>
 

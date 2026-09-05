@@ -34,6 +34,9 @@ import type {
   RuntimeViewReplacementContribution,
 } from './runtimeContributionTypes'
 
+export type LiveFrontendContributions = Pick<ReturnType<RuntimeFrontendContributionRegistry['getSnapshot']>,
+  'views' | 'taskPaneTabs' | 'taskUISections' | 'reviewRowActions' | 'settingsSections'>
+
 type ThemeRegistryResolver = () => Promise<ThemeRegistry | null>
 
 async function resolveBrowserThemeRegistry(): Promise<ThemeRegistry | null> {
@@ -47,6 +50,7 @@ type FrontendContributionApi = Pick<
 >
 
 export class RuntimeFrontendContributionRegistry {
+  private readonly contributionObservers = new Set<(snapshot: LiveFrontendContributions) => void>()
   private readonly views = new Map<string, RuntimeViewContribution>()
   private readonly viewReplacements = new Map<string, RuntimeViewReplacementContribution>()
   private readonly viewReplacementObservers = new Set<(replacements: RuntimeViewReplacementContribution[]) => void>()
@@ -293,13 +297,25 @@ export class RuntimeFrontendContributionRegistry {
       projectId: this.services.projectId,
     }
     this.views.set(qualifiedId, contribution)
+    this.publishContributions()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.views.delete(qualifiedId)
       this.services.claims.release('views', qualifiedId)
+      this.publishContributions()
     }))
   }
 
+
+  observeContributions(observer: (snapshot: LiveFrontendContributions) => void): Disposable {
+    this.contributionObservers.add(observer)
+    observer(this.getSnapshot())
+    return createDisposable(() => { this.contributionObservers.delete(observer) })
+  }
+
+  private publishContributions(): void {
+    for (const observer of this.contributionObservers) observer(this.getSnapshot())
+  }
 
   observeViewReplacements(observer: (replacements: RuntimeViewReplacementContribution[]) => void): Disposable {
     this.viewReplacementObservers.add(observer)
@@ -361,10 +377,12 @@ export class RuntimeFrontendContributionRegistry {
       projectId: this.services.projectId,
     }
     this.taskPaneTabs.set(qualifiedId, contribution)
+    this.publishContributions()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.taskPaneTabs.delete(qualifiedId)
       this.services.claims.release('taskPane', qualifiedId)
+      this.publishContributions()
     }))
   }
 
@@ -381,10 +399,12 @@ export class RuntimeFrontendContributionRegistry {
       projectId: this.services.projectId,
     }
     this.taskUISections.set(qualifiedId, contribution)
+    this.publishContributions()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.taskUISections.delete(qualifiedId)
       this.services.claims.release('taskUI', qualifiedId)
+      this.publishContributions()
     }))
   }
 
@@ -403,10 +423,12 @@ export class RuntimeFrontendContributionRegistry {
       projectId: this.services.projectId,
     }
     this.reviewRowActions.set(qualifiedId, contribution)
+    this.publishContributions()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.reviewRowActions.delete(qualifiedId)
       this.services.claims.release('reviewUI', qualifiedId)
+      this.publishContributions()
     }))
   }
 
@@ -425,10 +447,12 @@ export class RuntimeFrontendContributionRegistry {
       projectId: this.services.projectId,
     }
     this.settingsSections.set(qualifiedId, contribution)
+    this.publishContributions()
 
     return this.services.trackDisposable(createDisposable(() => {
       this.settingsSections.delete(qualifiedId)
       this.services.claims.release('settings', qualifiedId)
+      this.publishContributions()
     }))
   }
 

@@ -23,7 +23,7 @@ import {
   RuntimeSubscriptionSink,
   qualifyLocalContributionId,
 } from './runtimeContributionSupport'
-import { RuntimeFrontendContributionRegistry } from './runtimeFrontendContributions'
+import { RuntimeFrontendContributionRegistry, type LiveFrontendContributions } from './runtimeFrontendContributions'
 import type {
   RuntimeContributionSnapshot,
   RuntimeInjectionPointContribution,
@@ -130,6 +130,10 @@ class RuntimeContributionRegistry {
       firstError ??= error
     }
     if (firstError) throw firstError
+  }
+
+  observeFrontendContributions(observer: (snapshot: LiveFrontendContributions) => void): void {
+    this.frontendSubscriptions.add(this.frontendContributions.observeContributions(observer))
   }
 
   observeViewReplacements(observer: (replacements: RuntimeViewReplacementContribution[]) => void): void {

@@ -3,6 +3,7 @@ import { activeProjectId } from '../stores'
 import { failPendingFrontendPluginCommands } from '../frontendHostRequestBridge'
 import { installedPlugins } from './pluginStore'
 import { syncViewReplacementContributions } from './viewReplacementContributions'
+import { syncFrontendContributions } from './liveFrontendContributions'
 import {
   clearLoadedPlugin,
   deactivatePlugin as deactivatePluginLoader,
@@ -137,6 +138,7 @@ async function activateFrontendRuntimePlugin(
       return false
     }
     runtimeRegistry.observeViewReplacements(replacements => syncViewReplacementContributions(pluginId, replacements))
+    runtimeRegistry.observeFrontendContributions(snapshot => syncFrontendContributions(pluginId, snapshot))
     await runtimeRegistry.prepareFrontendThemes()
     const themesCommitted = runtimeRegistry.commitFrontendThemes(
       activationGeneration,
