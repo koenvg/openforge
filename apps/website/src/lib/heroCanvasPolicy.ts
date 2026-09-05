@@ -8,7 +8,6 @@ export interface HeroCanvasPolicy {
   devicePixelRatio: number | readonly [number, number];
   shaderDetail: 0 | 1;
   targetFramesPerSecond: number;
-  trackPointer: boolean;
 }
 
 export function getHeroCanvasPolicy({
@@ -19,15 +18,13 @@ export function getHeroCanvasPolicy({
     devicePixelRatio: 1,
     shaderDetail: 0 as const,
     targetFramesPerSecond: 18,
-    trackPointer: false,
   };
   const renderingPolicy = usesCompactRendering
     ? compactPolicy
     : {
-        devicePixelRatio: [1, 2] as const,
+        devicePixelRatio: [1, 1.5] as const,
         shaderDetail: 1 as const,
         targetFramesPerSecond: 30,
-        trackPointer: true,
       };
 
   if (prefersReducedMotion) {
@@ -35,7 +32,6 @@ export function getHeroCanvasPolicy({
       ...renderingPolicy,
       animate: false,
       targetFramesPerSecond: 0,
-      trackPointer: false,
     };
   }
 

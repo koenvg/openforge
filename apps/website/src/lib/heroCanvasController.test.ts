@@ -34,7 +34,6 @@ const animatedPolicy: HeroCanvasPolicy = {
   devicePixelRatio: [1, 2],
   shaderDetail: 1,
   targetFramesPerSecond: 30,
-  trackPointer: true,
 };
 
 function eventWith<T extends object>(type: string, properties: T): Event & T {
@@ -60,7 +59,7 @@ describe('startHeroCanvas', () => {
     TestIntersectionObserver.instance = undefined;
   });
 
-  it('owns rendering, interaction, and teardown for an animated canvas', async () => {
+  it('owns rendering and teardown for an animated canvas', async () => {
     const gpu = { dispose: vi.fn() };
     const target = {
       dispose: vi.fn(),
@@ -100,7 +99,7 @@ describe('startHeroCanvas', () => {
     const controller = await startHeroCanvas({ ...elements, policy: animatedPolicy });
 
     expect(vgpu.effect).toHaveBeenCalledWith(gpu, HERO_CANVAS_SHADER_SOURCE, expect.objectContaining({
-      label: 'openforge-plugin-builder',
+      label: 'openforge-anvil-hero',
     }));
     expect(TestIntersectionObserver.instance?.observe).toHaveBeenCalledWith(elements.visual);
     expect(vgpu.frame).not.toHaveBeenCalled();
@@ -115,8 +114,14 @@ describe('startHeroCanvas', () => {
     expect(pass).toHaveBeenCalledWith(target, shader);
     expect(elements.visual.dataset.vgpuReady).toBe('true');
 
-    elements.canvas.dispatchEvent(eventWith('pointermove', { clientX: 110, clientY: 45 }));
-    expect(shader.set).toHaveBeenCalledWith({ params: { pointer: [0.5, 0.25] } });
+    const secondFrame = [...scheduledFrames.values()][1];
+    expect(secondFrame).toBeTypeOf('function');
+    if (!secondFrame) throw new Error('Expected a second animation frame to be scheduled');
+    shader.set.mockClear();
+    secondFrame(performance.now() + 80);
+
+    // Per frame the controller ships only the animation clock.
+    expect(shader.set).toHaveBeenCalledWith({ params: { time: expect.any(Number) } });
 
     windowTarget.dispatchEvent(eventWith('pagehide', { persisted: false }));
 

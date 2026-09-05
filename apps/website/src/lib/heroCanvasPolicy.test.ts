@@ -9,17 +9,15 @@ describe('getHeroCanvasPolicy', () => {
       devicePixelRatio: 1,
       shaderDetail: 0,
       targetFramesPerSecond: 18,
-      trackPointer: false,
     });
   });
 
   it('preserves the full desktop rendering budget', () => {
     expect(getHeroCanvasPolicy({ prefersReducedMotion: false, usesCompactRendering: false })).toEqual({
       animate: true,
-      devicePixelRatio: [1, 2],
+      devicePixelRatio: [1, 1.5],
       shaderDetail: 1,
       targetFramesPerSecond: 30,
-      trackPointer: true,
     });
   });
 
@@ -29,7 +27,6 @@ describe('getHeroCanvasPolicy', () => {
       devicePixelRatio: 1,
       shaderDetail: 0,
       targetFramesPerSecond: 0,
-      trackPointer: false,
     });
   });
 });

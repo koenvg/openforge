@@ -135,129 +135,86 @@
   background-size: 2.5rem 2.5rem, 2.5rem 2.5rem, auto;
 }
 
-.fallback-building {
+.fallback-anvil {
   position: absolute;
-  top: 18%;
+  top: 26%;
   left: 50%;
-  display: grid;
-  width: min(64%, 30rem);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-  padding: 0.4rem;
-  border: 0.32rem solid var(--ink);
-  background: var(--line-strong);
-  box-shadow: 1.2rem 1.4rem 3rem rgba(20, 26, 38, 0.13);
+  width: min(70%, 28rem);
+  aspect-ratio: 2.1;
   transform: translateX(-50%);
+  animation: fallback-anvil-settle 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.fallback-building span {
-  position: relative;
-  min-height: 5.5rem;
-  border: 1px solid color-mix(in srgb, var(--blue) 58%, var(--line));
-  background: rgba(242, 245, 255, 0.96);
-  animation: fallback-module-build 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.fallback-building span:first-child {
-  min-height: 4.4rem;
-  grid-column: 1 / -1;
-  border-color: rgba(124, 58, 237, 0.55);
-  background: #f6f1ff;
-  animation-delay: 0.42s;
-}
-
-.fallback-building span:nth-child(2) {
-  animation-delay: 0.34s;
-}
-
-.fallback-building span:nth-child(3) {
-  border-color: rgba(71, 85, 105, 0.55);
-  background: #f4f6f8;
-  animation-delay: 0.26s;
-}
-
-.fallback-building span:nth-child(4) {
-  border-color: rgba(5, 150, 105, 0.55);
-  background: #effbf6;
-  animation-delay: 0.18s;
-}
-
-.fallback-building span:nth-child(5) {
-  border-color: rgba(217, 119, 6, 0.55);
-  background: #fff8eb;
-  animation-delay: 0.1s;
-}
-
-.fallback-building span::before,
-.fallback-building span::after {
+.fallback-anvil i {
   position: absolute;
-  top: -0.38rem;
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 2px solid white;
-  background: currentColor;
+  display: block;
+  border: 1px solid rgba(96, 118, 168, 0.28);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(214, 228, 248, 0.42) 55%, rgba(198, 236, 226, 0.36));
+  box-shadow: inset 0 0 1.4rem rgba(255, 255, 255, 0.65);
+}
+
+.fallback-anvil-face {
+  top: 0;
+  left: 6%;
+  width: 88%;
+  height: 20%;
+  border-radius: 0.45rem;
+}
+
+.fallback-anvil-horn {
+  top: 4%;
+  left: -2%;
+  width: 26%;
+  height: 16%;
+  border-radius: 100% 0.3rem 0.3rem 100%;
+  transform: skewY(-6deg);
+}
+
+.fallback-anvil-waist {
+  top: 20%;
+  left: 34%;
+  width: 32%;
+  height: 38%;
+  border-radius: 0.3rem;
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+}
+
+.fallback-anvil-base {
+  top: 58%;
+  left: 16%;
+  width: 68%;
+  height: 26%;
+  border-radius: 0.5rem;
+}
+
+.fallback-anvil-glow {
+  top: -24%;
+  left: 32%;
+  width: 30%;
+  height: 34%;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(188, 216, 255, 0.5), transparent);
+  box-shadow: none;
+  filter: blur(2px);
+}
+
+.fallback-anvil::after {
+  position: absolute;
+  top: 92%;
+  left: 10%;
+  width: 80%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(24, 32, 52, 0.16), transparent);
   content: "";
 }
 
-.fallback-building span::before {
-  left: 0.75rem;
-}
-
-.fallback-building span::after {
-  right: 0.75rem;
-}
-
-.fallback-building i {
-  min-height: 3.2rem;
-  grid-column: 1 / -1;
-  border-top: 0.32rem solid var(--ink);
-  background: var(--surface-soft);
-}
-
-@keyframes fallback-module-build {
+@keyframes fallback-anvil-settle {
   from {
     opacity: 0;
-    transform: translateY(-2rem) scale(0.96);
+    transform: translateX(-50%) translateY(0.8rem);
   }
-}
-
-.hero-build-label {
-  position: absolute;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid rgba(17, 19, 24, 0.14);
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: var(--shadow-small);
-  color: var(--muted-strong);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.025em;
-  backdrop-filter: blur(12px);
-}
-
-.hero-build-label span {
-  width: 0.36rem;
-  height: 0.36rem;
-  background: var(--blue);
-  box-shadow: 0 0 0 0.22rem rgba(41, 71, 255, 0.1);
-}
-
-.hero-build-label-top {
-  top: 13%;
-  right: 9%;
-}
-
-.hero-build-label-bottom {
-  right: 13%;
-  bottom: 18%;
-}
-
-.hero-build-label-bottom span {
-  background: var(--mint);
-  box-shadow: 0 0 0 0.22rem rgba(8, 168, 130, 0.1);
 }
 
 .hero-status-strip {
@@ -380,19 +337,9 @@
     min-height: 34rem;
   }
 
-  .fallback-building {
-    top: 12%;
-    width: min(78%, 30rem);
-  }
-
-  .hero-build-label-top {
-    top: 9%;
-    right: 5%;
-  }
-
-  .hero-build-label-bottom {
-    right: 8%;
-    bottom: 32%;
+  .fallback-anvil {
+    top: 22%;
+    width: min(80%, 28rem);
   }
 
   .hero-status-strip {

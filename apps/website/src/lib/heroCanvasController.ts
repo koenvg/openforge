@@ -21,17 +21,16 @@ export async function startHeroCanvas({
   try {
     const gpu = await init();
     const target = surface(gpu, canvas, { dpr: policy.devicePixelRatio });
-    const pointer: [number, number] = [0.5, 0.5];
     const timer = clock(gpu);
     const shader = effect(gpu, HERO_CANVAS_SHADER_SOURCE, {
-      label: 'openforge-plugin-builder',
+      label: 'openforge-anvil-hero',
       set: {
         params: {
           resolution: target.size,
-          pointer,
           time: 0,
           motion: policy.animate ? 1 : 0,
           detail: policy.shaderDetail,
+          pad0: 0,
         },
       },
     });
@@ -39,17 +38,6 @@ export async function startHeroCanvas({
     const unsubscribeResize = target.onResize(() => {
       shader.set({ params: { resolution: target.size } });
     });
-
-    const updatePointer = (event: PointerEvent) => {
-      const bounds = canvas.getBoundingClientRect();
-      pointer[0] = (event.clientX - bounds.left) / bounds.width;
-      pointer[1] = (event.clientY - bounds.top) / bounds.height;
-      shader.set({ params: { pointer } });
-    };
-
-    if (policy.trackPointer) {
-      canvas.addEventListener('pointermove', updatePointer, { passive: true });
-    }
 
     let animationFrameId: number | null = null;
     let resizeFrameId: number | null = null;
@@ -65,6 +53,7 @@ export async function startHeroCanvas({
         timer.advance(deltaSeconds);
       }
       lastTimestamp = timestamp;
+
       shader.set({ params: { time: timer.time } });
       frame(gpu, (currentFrame) => currentFrame.pass(target, shader));
       visual.dataset.vgpuReady = 'true';
@@ -133,7 +122,6 @@ export async function startHeroCanvas({
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
       unsubscribeResize();
-      canvas.removeEventListener('pointermove', updatePointer);
       target.dispose();
       gpu.dispose();
     };
