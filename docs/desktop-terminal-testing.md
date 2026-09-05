@@ -80,6 +80,14 @@ Each mark has `timestampMs` and `available`. Each adjacent segment has start and
 
 `fullDriverToPaintedEcho` is one separate focus-and-type sample. It clicks the visible Shell 1 tab before typing, so it keeps browser-driver focus coverage. Both modes require the same completion marker, sequence continuity, expected byte count, and presentation proof.
 
+### Execution completion
+
+Every measured command prints a fresh completion receipt only after the workload succeeds. The receipt uses a UUID and adjacent shell-quoted fragments, so the full receipt never appears literally in typed input. The probe's `markerMatch: 'line'` expectation requires a whole logical output line, joining soft-wrapped rows. Existing substring expectations remain available for non-command E2E fixtures.
+
+The scenario waits for that receipt, the byte and sequence thresholds, and presentation evidence before sending another command. View recovery reuses the final executed receipt rather than issuing another command. Bulk-input byte counts include the handshake command; output thresholds include the receipt. Echo timings therefore include shell execution and receipt presentation, not just input echo.
+
+The KVG-4638 failure with 10,610 received bytes versus 1,058,367 expected showed commands concatenated during this completion race. It is not evidence that the separately reported terminal tearing occurred.
+
 ### Profiler-off overhead
 
 Run the alternating warmed A/B check with:

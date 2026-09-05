@@ -176,6 +176,68 @@ function createRuntimeDiagnostics(): TerminalRuntimeDiagnostics {
 }
 
 describe('terminal desktop-test probe', () => {
+  it('does not accept echoed completion markers as executed output, including consecutive commands', async () => {
+    const diagnostics = createRuntimeDiagnostics()
+    const target = {} as TerminalTestProbeWindow
+    let visibleText = "printf 'FIRST_DONE\\n'"
+    let currentTime = 0
+    vi.mocked(diagnostics.capturePresentation).mockImplementation(() => ({
+      geometry: { cols: 80, rows: 24 },
+      activeBuffer: 'normal',
+      cursor: { x: 0, y: 1 },
+      selectionText: '',
+      lines: visibleText.split('\n').map((text, row) => ({ row, text, wrapped: false, cells: [] })),
+    }))
+    installTerminalPerformanceProbe({
+      isDevelopment: true,
+      url: 'http://localhost/?openforge-desktop-test=1',
+      target,
+      diagnostics,
+      performanceTrace: createTerminalPerformanceTrace(),
+      now: () => currentTime,
+      delay: async ms => { currentTime += ms },
+    })
+    const terminal = target.__openforgeDesktopTest!.terminal
+    const first = { marker: 'FIRST_DONE', markerMatch: 'line' as const, timeoutMs: 0 }
+    await expect(terminal.drain('T-1-shell-0', first)).rejects.toThrow('was not presented')
+    visibleText += '\nFIRST_DONE\n$ '
+    await expect(terminal.drain('T-1-shell-0', first)).resolves.toMatchObject({ markerFound: true })
+
+    visibleText += "printf 'SECOND_DONE\\n'"
+    const second = { marker: 'SECOND_DONE', markerMatch: 'line' as const, timeoutMs: 16 }
+    await expect(terminal.drain('T-1-shell-0', second)).rejects.toThrow('was not presented')
+    visibleText += '\nSECOND_DONE\n$ '
+    await expect(terminal.drain('T-1-shell-0', second)).resolves.toMatchObject({ markerFound: true })
+  })
+
+  it('matches complete logical lines across soft wraps without accepting wrapped echo', async () => {
+    const diagnostics = createRuntimeDiagnostics()
+    const target = {} as TerminalTestProbeWindow
+    const snapshot = diagnostics.capturePresentation('T-1-shell-0')
+    const capture = vi.mocked(diagnostics.capturePresentation)
+    installTerminalPerformanceProbe({
+      isDevelopment: true,
+      url: 'http://localhost/?openforge-desktop-test=1',
+      target,
+      diagnostics,
+      performanceTrace: createTerminalPerformanceTrace(),
+    })
+    const terminal = target.__openforgeDesktopTest!.terminal
+    const expectation = { marker: 'TEST_DONE', markerMatch: 'line' as const, timeoutMs: 0 }
+    capture.mockReturnValue({ ...snapshot, lines: [
+      { row: 0, text: "printf '", wrapped: false, cells: [] },
+      { row: 1, text: 'TEST_DONE', wrapped: true, cells: [] },
+      { row: 2, text: "\\n'", wrapped: true, cells: [] },
+    ] })
+    await expect(terminal.drain('T-1-shell-0', expectation)).rejects.toThrow('was not presented')
+    capture.mockReturnValue({ ...snapshot, lines: [
+      { row: 0, text: 'TEST_', wrapped: false, cells: [] },
+      { row: 1, text: 'DONE', wrapped: true, cells: [] },
+      { row: 2, text: '$ ', wrapped: false, cells: [] },
+    ] })
+    await expect(terminal.drain('T-1-shell-0', expectation)).resolves.toMatchObject({ markerFound: true })
+  })
+
   it('is enabled only when development, the E2E flag, and the launch token all match', () => {
     const url = 'http://127.0.0.1:1420/?openforge-e2e-token=run-secret'
     expect(shouldEnableTerminalTestProbe(true, true, url, 'run-secret')).toBe(true)
