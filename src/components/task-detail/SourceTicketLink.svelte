@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Ticket, ExternalLink, Pencil, Plus } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { openUrl } from '../../lib/ipc'
   import { getSourceTicketLink, normalizeSourceTicketUrl } from '../../lib/sourceTicket'
 
@@ -98,39 +100,42 @@
         />
       {:else if link}
         {#if link.clickable}
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             type="button"
-            class="btn btn-ghost btn-xs h-auto min-h-0 gap-1 px-1 font-normal text-primary"
             onclick={handleOpen}
             title={link.url}
             aria-label="Open source ticket {link.label}"
           >
             <span class="truncate">{link.label}</span>
             <ExternalLink size={12} class="shrink-0" aria-hidden="true" />
-          </button>
+          </Button>
         {:else}
           <span class="truncate text-xs text-base-content/70" title={link.url}>{link.label}</span>
         {/if}
         {#if editable}
-          <button
+          <IconButton
+            label="Edit source ticket link"
+            size="xs"
+            class="ml-auto shrink-0"
             type="button"
-            class="btn btn-ghost btn-xs h-auto min-h-0 px-1 ml-auto shrink-0"
             onclick={startEditing}
-            aria-label="Edit source ticket link"
           >
             <Pencil size={12} aria-hidden="true" />
-          </button>
+          </IconButton>
         {/if}
       {:else}
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           type="button"
-          class="btn btn-ghost btn-xs h-auto min-h-0 gap-1 px-1 font-normal text-base-content/60"
           onclick={startEditing}
           aria-label="Add source ticket link"
         >
           <Plus size={12} class="shrink-0" aria-hidden="true" />
           <span>Add ticket link</span>
-        </button>
+        </Button>
       {/if}
     </div>
 
@@ -139,10 +144,10 @@
         <p class="m-0 text-xs text-error" role="alert">{error}</p>
       {/if}
       <div class="flex items-center justify-end gap-2">
-        <button type="button" class="btn btn-ghost btn-xs" disabled={isSaving} onclick={cancelEditing}>Cancel</button>
-        <button type="button" class="btn btn-primary btn-xs" disabled={isSaving} onclick={() => void submit()}>
+        <Button variant="ghost" size="xs" type="button" disabled={isSaving} onclick={cancelEditing}>Cancel</Button>
+        <Button size="xs" type="button" disabled={isSaving} onclick={() => void submit()}>
           {isSaving ? 'Saving…' : 'Save'}
-        </button>
+        </Button>
       </div>
     {/if}
   </section>

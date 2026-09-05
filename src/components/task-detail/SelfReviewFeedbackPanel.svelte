@@ -1,5 +1,7 @@
 <script lang="ts">
   import { CheckCircle2, MessageSquare } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { SelfReviewFeedbackPane } from './selfReviewFeedbackPane.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
@@ -38,37 +40,34 @@
         <h2 class="m-0 text-sm font-semibold text-base-content">Feedback</h2>
         <p class="m-0 whitespace-nowrap text-xs text-base-content/60">{totalCommentCount} comments</p>
       </div>
-      <button
+      <IconButton
+        label="Collapse Feedback panel"
+        size="sm"
         type="button"
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 text-base-content/60"
-        aria-label="Collapse Feedback panel"
         title="Collapse Feedback"
         onclick={onCollapse}
-      ><span aria-hidden="true">››</span></button>
+      ><span aria-hidden="true">››</span></IconButton>
     </div>
     <div class="flex-1 overflow-hidden flex flex-col">
       {#if linkedPr}
         <div class="flex items-center gap-2 px-3 py-2 bg-base-200/50 border-b border-base-300 shrink-0">
           {#if commentSelection.selectedCount > 0}
             <span class="text-[13px] font-semibold text-primary">{commentSelection.selectedCount} selected</span>
-            <button class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60 hover:text-base-content" onclick={commentSelection.deselectAll}>Clear</button>
+            <Button variant="ghost" size="sm" onclick={commentSelection.deselectAll}>Clear</Button>
           {:else if commentSelection.unaddressedCount > 0}
-            <button class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60 hover:text-primary" onclick={commentSelection.selectAll}>Select all</button>
+            <Button variant="ghost" size="sm" onclick={commentSelection.selectAll}>Select all</Button>
           {/if}
           <span class="flex-1"></span>
           {#if commentSelection.addressedCount > 0}
-            <button
-              class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60"
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={() => onShowAddressedChange(!showAddressed)}
             >
               {showAddressed ? 'Hide addressed' : `Show ${commentSelection.addressedCount} addressed`}
-            </button>
+            </Button>
           {/if}
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm h-10 min-h-10 px-2 text-[13px] text-primary"
-            onclick={onOpenLinkedPr}
-          >GitHub ↗</button>
+          <Button variant="ghost" size="sm" type="button" onclick={onOpenLinkedPr}>GitHub ↗</Button>
         </div>
         {#if prComments.length === 0}
           <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { onDestroy, onMount, tick, type Component } from 'svelte'
   import {
     createTerminalTabsController,
@@ -129,31 +132,34 @@
           onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>
-          {#if isTabExited(tab.key)}<span class="badge badge-warning badge-xs">Exited</span>{/if}
+          {#if isTabExited(tab.key)}<Badge variant="warning">Exited</Badge>{/if}
           {#if shortcutHintsVisible && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
         </button>
-        <button
+        <IconButton
+          label={`Close ${tab.label}`}
+          size="xs"
+          class="mr-1"
           type="button"
-          class="flex items-center pl-1 pr-3 py-1.5 text-base leading-none cursor-pointer disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary rounded {activeTabIndex === tab.index ? 'text-base-content/70 hover:text-base-content' : 'text-base-content/40 hover:text-base-content/70'}"
           disabled={tabs.length <= 1 && !isTabExited(tab.key)}
           onclick={() => closeTab(tab, { allowClosingLastTab: isTabExited(tab.key) })}
-          aria-label={`Close ${tab.label}`}
           title={`Close ${tab.label}`}
         >
           <span aria-hidden="true">×</span>
-        </button>
+        </IconButton>
       </div>
     {/each}
-    <button
+    <Button
+      variant="ghost"
+      size="xs"
+      class="mx-2"
       type="button"
-      class="btn btn-ghost btn-xs mx-2 text-base-content/70 hover:text-base-content focus-visible:ring-2 focus-visible:ring-primary"
       onclick={addTab}
       aria-label="Open new shell"
       title="Open new shell (⌘T)"
     >
       <span aria-hidden="true">+</span>
       <span>New shell</span>
-    </button>
+    </Button>
   </div>
   <div class="flex-1 min-h-0 overflow-hidden relative">
     {#each tabs as tab (tab.index)}

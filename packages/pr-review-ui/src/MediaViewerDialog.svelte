@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minimize2, X } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import type { ReviewImageOpenRequest } from './reviewMedia'
 
@@ -11,7 +13,6 @@
   let { request, onClose }: Props = $props()
   let activeIndex = $state(0)
   let fitImage = $state(true)
-  let closeButton = $state<HTMLButtonElement | null>(null)
 
   const activeItem = $derived(request.items[activeIndex] ?? request.items[0])
   const hasMultipleItems = $derived(request.items.length > 1)
@@ -45,7 +46,7 @@
   showHeader={false}
   maxWidth="calc(100vw - 2rem)"
   boxClass="h-[calc(100vh-2rem)] !max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)]"
-  initialFocus={() => closeButton}
+  initialFocus="[data-media-preview-close]"
   onKeydown={handleKeydown}
 >
   <div class="flex min-h-0 flex-1 flex-col bg-base-300/40">
@@ -60,39 +61,40 @@
       </div>
 
       {#if activeItem?.openLink}
-        <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 gap-2 px-3" onclick={activeItem.openLink}>
+        <Button variant="ghost" size="sm" type="button" onclick={activeItem.openLink}>
           <ExternalLink size={16} aria-hidden="true" />
           Open link
-        </button>
+        </Button>
       {/if}
 
       {#if hasMultipleItems}
         <div class="flex items-center gap-1" role="group" aria-label="Media navigation">
-          <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0" aria-label="Previous media" onclick={() => selectIndex(activeIndex - 1)}>
+          <IconButton label="Previous media" size="sm" type="button" onclick={() => selectIndex(activeIndex - 1)}>
             <ChevronLeft size={20} aria-hidden="true" />
-          </button>
+          </IconButton>
           <span class="min-w-12 text-center text-xs tabular-nums text-base-content/60">{activeIndex + 1} of {request.items.length}</span>
-          <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0" aria-label="Next media" onclick={() => selectIndex(activeIndex + 1)}>
+          <IconButton label="Next media" size="sm" type="button" onclick={() => selectIndex(activeIndex + 1)}>
             <ChevronRight size={20} aria-hidden="true" />
-          </button>
+          </IconButton>
         </div>
       {/if}
 
       {#if activeItem}
-        <button
+        <IconButton
+          label={fitImage ? 'Show image at actual size' : 'Fit image to window'}
+          size="sm"
+          variant={!fitImage ? 'outline' : 'ghost'}
           type="button"
-          class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0"
-          aria-label={fitImage ? 'Show image at actual size' : 'Fit image to window'}
           aria-pressed={!fitImage}
           onclick={() => { fitImage = !fitImage }}
         >
           {#if fitImage}<Maximize2 size={18} aria-hidden="true" />{:else}<Minimize2 size={18} aria-hidden="true" />{/if}
-        </button>
+        </IconButton>
       {/if}
 
-      <button bind:this={closeButton} type="button" class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0" aria-label="Close media preview" onclick={onClose}>
+      <IconButton label="Close media preview" size="sm" data-media-preview-close type="button" onclick={onClose}>
         <X size={20} aria-hidden="true" />
-      </button>
+      </IconButton>
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto p-4">

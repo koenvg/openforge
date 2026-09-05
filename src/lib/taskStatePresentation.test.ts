@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PullRequestInfo } from './types'
-import { getTaskReasonText, TASK_STATE_LABELS, getTaskListItemPresentation } from './taskStatePresentation'
+import { getBoardStatusPresentation, getTaskReasonText, TASK_STATE_LABELS, getTaskListItemPresentation } from './taskStatePresentation'
 
 function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullRequestInfo {
   return {
@@ -37,6 +37,17 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
     ...overrides,
   }
 }
+
+describe('getBoardStatusPresentation', () => {
+  it.each([
+    ['doing', 'In Progress', 'status-running'],
+    ['done', 'Done', 'status-success'],
+    ['backlog', 'Backlog', 'status-neutral'],
+    [null, 'Unknown', 'status-neutral'],
+  ] as const)('maps %s to its domain status presentation', (status, label, badgeVariant) => {
+    expect(getBoardStatusPresentation(status)).toEqual({ label, badgeVariant })
+  })
+})
 
 describe('getTaskListItemPresentation', () => {
   it('overrides the compact badge and reason while a merge is in progress', () => {

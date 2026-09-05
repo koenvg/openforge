@@ -1,5 +1,7 @@
 <script lang="ts">
   import { AlertTriangle, FolderOpen } from '@lucide/svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import DiffViewerComponent from '../review/shared/diff-viewer/DiffViewer.svelte'
   import type { SelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
@@ -35,7 +37,7 @@
     <div class="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center text-sm text-error" role="alert">
       <AlertTriangle size={40} strokeWidth={1.6} aria-hidden="true" />
       <span>{controller.error}</span>
-      <button type="button" class="btn btn-sm h-10 min-h-10" onclick={controller.refresh}>Retry loading diff</button>
+      <Button size="sm" onclick={controller.refresh}>Retry loading diff</Button>
     </div>
   {:else if controller.visibleDiffFiles.length === 0}
     {#if !controller.includeNonApplicationFiles && controller.selfReviewDiffFiles.length > 0}
@@ -45,12 +47,13 @@
         <p class="text-sm m-0 max-w-md">
           All {controller.nonApplicationFileCount} changed {controller.nonApplicationFileCount === 1 ? 'file is a non-application file' : 'files are non-application files'} (tests, fixtures, snapshots, docs, or generated files), which are hidden by default.
         </p>
-        <button
-          class="btn btn-soft btn-sm"
+        <Button
+          variant="secondary"
+          size="sm"
           onclick={() => controller.setIncludeNonApplicationFiles(true)}
         >
           Show non-application files
-        </button>
+        </Button>
       </div>
     {:else}
       <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
@@ -64,13 +67,14 @@
           {/if}
         </p>
         {#if !controller.fileTreeVisible}
-          <button
-            class="btn btn-soft btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onclick={() => controller.setFileTreeVisible(true)}
             title="Show file tree"
           >
             Show file tree
-          </button>
+          </Button>
         {/if}
       </div>
     {/if}
@@ -100,8 +104,10 @@
       {#snippet fileHeaderExtra(file)}
         {@const comparisonActive = controller.hasComparison(file.filename)}
         {#if comparisonActive || controller.hasReviewedBaselineChange(file)}
-          <button
-            class="btn btn-ghost btn-sm h-10 min-h-10 flex-shrink-0 gap-1 text-[13px] {comparisonActive ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+          <Button
+            variant={comparisonActive ? 'outline' : 'ghost'}
+            size="sm"
+            class="flex-shrink-0"
             aria-label={comparisonActive ? `Show normal diff for ${file.filename}` : `Compare ${file.filename} with Reviewed File Snapshot`}
             title={comparisonActive ? 'Show the normal diff for this file' : 'Compare this file with the last version you marked reviewed'}
             onclick={() => comparisonActive
@@ -109,13 +115,14 @@
               : controller.showChangesSinceReviewed(file)}
           >
             {comparisonActive ? 'Current diff' : 'Since reviewed'}
-          </button>
+          </Button>
         {/if}
       {/snippet}
       {#snippet toolbarExtra()}
         <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-        <button
-          class="btn btn-ghost btn-sm h-10 min-h-10 gap-1 px-3 text-[13px] {controller.sidebarVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+        <Button
+          variant={controller.sidebarVisible ? 'outline' : 'ghost'}
+          size="sm"
           aria-label="Toggle Feedback panel"
           aria-expanded={controller.sidebarVisible}
           onclick={controller.toggleSidebar}
@@ -123,9 +130,9 @@
         >
           Feedback
           {#if controller.commentSelection.unaddressedCount > 0 && !controller.sidebarVisible}
-            <span class="badge badge-error badge-xs">{controller.commentSelection.unaddressedCount}</span>
+            <Badge variant="danger">{controller.commentSelection.unaddressedCount}</Badge>
           {/if}
-        </button>
+        </Button>
       {/snippet}
     </DiffViewerComponent>
   {/if}

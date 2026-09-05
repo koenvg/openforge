@@ -3,6 +3,7 @@
   import { parseTaskPrompt } from '../../lib/taskPrompt'
   import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import MessageSquareQuote from '@lucide/svelte/icons/message-square-quote'
 
   interface Props {
@@ -23,12 +24,12 @@
   {#snippet icon()}<MessageSquareQuote size={14} />{/snippet}
   {#snippet actions()}
     {#if canEditPrompt}
-      <button
+      <IconButton
+        label="Edit prompt"
+        size="xs"
         type="button"
-        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
-        aria-label="Edit prompt"
         onclick={() => onEditPrompt?.()}
-      >✎</button>
+      >✎</IconButton>
     {/if}
   {/snippet}
   <div class="py-2 flex flex-col gap-2">

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onDestroy, onMount, type Component } from 'svelte'
   import {
     TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT,
@@ -122,7 +123,7 @@
         {#if workspaceLookupState === 'error'}
           <p class="sr-only">Terminal workspace error</p>
         {/if}
-        <button type="button" class="btn btn-sm btn-primary" onclick={retryWorkspaceLookup}>Retry workspace lookup</button>
+        <Button size="sm" type="button" onclick={retryWorkspaceLookup}>Retry workspace lookup</Button>
       </div>
     </div>
   {/if}

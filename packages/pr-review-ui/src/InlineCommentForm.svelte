@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MessageSquarePlus } from '@lucide/svelte'
   import { SplitSide } from '@git-diff-view/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 
   interface Props {
     filename: string
@@ -90,36 +91,34 @@
         <kbd class="kbd kbd-xs border-base-300 bg-base-200 text-base-content/70">Enter</kbd>
       </p>
       <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm h-10 min-h-10 px-3 text-[13px] font-medium text-base-content/70 hover:bg-base-200 hover:text-base-content"
-          onclick={onCancel}
-        >Cancel</button>
+        <Button variant="ghost" size="sm" type="button" onclick={onCancel}>Cancel</Button>
         {#if onAskAgent}
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
-            class="btn btn-outline btn-sm h-10 min-h-10 px-3 text-[13px] font-medium"
             title="Ask the AI author (private, not posted to GitHub)"
             onclick={askAgent}
-          >Ask the AI</button>
+          >Ask the AI</Button>
         {/if}
         {#if onCommentNow}
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
-            class="btn btn-outline btn-sm h-10 min-h-10 px-3 text-[13px] font-medium"
             title="Post this comment to GitHub now"
             onclick={commentNow}
-          >Comment</button>
+          >Comment</Button>
         {/if}
-        <button
+        <Button
+          size="sm"
           type="button"
-          class="btn btn-primary btn-sm h-10 min-h-10 px-3 text-[13px] font-semibold shadow-sm transition-shadow hover:shadow-md"
           title="Hold this comment in your pending review"
           onclick={onSubmit}
         >
           <MessageSquarePlus size={15} strokeWidth={1.8} aria-hidden="true" />
           Add to review
-        </button>
+        </Button>
       </div>
     </div>
   </div>

@@ -1,6 +1,25 @@
 import { getStateDrivingPr } from './taskState'
 import type { TaskState } from './taskState'
-import type { PullRequestInfo } from './types'
+import type { BoardStatus, PullRequestInfo } from './types'
+
+export type DomainStatusBadgeVariant =
+  | 'status-neutral'
+  | 'status-running'
+  | 'status-warning'
+  | 'status-danger'
+  | 'status-success'
+
+export interface BoardStatusPresentation {
+  label: string
+  badgeVariant: DomainStatusBadgeVariant
+}
+
+export function getBoardStatusPresentation(status: BoardStatus | null): BoardStatusPresentation {
+  if (status === 'doing') return { label: 'In Progress', badgeVariant: 'status-running' }
+  if (status === 'done') return { label: 'Done', badgeVariant: 'status-success' }
+  if (status === 'backlog') return { label: 'Backlog', badgeVariant: 'status-neutral' }
+  return { label: 'Unknown', badgeVariant: 'status-neutral' }
+}
 
 export const TASK_STATE_LABELS: Record<TaskState, string> = {
   backlog: 'Backlog',

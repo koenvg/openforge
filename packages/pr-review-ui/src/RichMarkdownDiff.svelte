@@ -4,6 +4,7 @@
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
@@ -103,16 +104,17 @@
 </script>
 
 {#snippet commentButton(lineNumber: number, placement: 'gutter' | 'before' | 'cell', listDepth = 0)}
-  <button
+  <IconButton
+    label="Add comment to {file.filename} line {lineNumber}"
+    size={placement === 'before' ? 'sm' : 'lg'}
     type="button"
-    style:right={placement === 'before' ? `calc(100% + ${(listDepth + 1) * 1.75}rem)` : undefined}
-    class="rich-markdown-comment-button btn btn-ghost absolute z-10 p-0 text-base-content/60 opacity-0 transition-opacity duration-150 motion-reduce:transition-none hover:bg-primary/10 hover:text-primary focus:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary group-hover:opacity-100 {placement === 'before' ? '-top-1 h-9 min-h-9 w-9' : 'top-0 h-11 min-h-11 w-11'} {placement === 'cell' ? 'left-0' : placement === 'gutter' ? 'right-0' : ''}"
-    aria-label="Add comment to {file.filename} line {lineNumber}"
+    style={placement === 'before' ? `right: calc(100% + ${(listDepth + 1) * 1.75}rem); width: var(--of-control-height); min-width: var(--of-control-height); height: var(--of-control-height); min-height: var(--of-control-height)` : undefined}
+    class="rich-markdown-comment-button absolute z-10 opacity-0 transition-opacity duration-150 motion-reduce:transition-none focus:opacity-100 group-hover:opacity-100 {placement === 'before' ? '-top-1' : 'top-0'} {placement === 'cell' ? 'left-0' : placement === 'gutter' ? 'right-0' : ''}"
     title="Add comment on line {lineNumber}"
     onclick={() => { openCommentLine = openCommentLine === lineNumber ? null : lineNumber }}
   >
     <MessageSquarePlus size={17} strokeWidth={1.8} aria-hidden="true" />
-  </button>
+  </IconButton>
 {/snippet}
 
 {#snippet commentForm(lineNumber: number)}

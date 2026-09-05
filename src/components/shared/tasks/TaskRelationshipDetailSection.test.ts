@@ -46,6 +46,8 @@ describe('TaskRelationshipDetailSection', () => {
     expect(section.textContent).not.toContain('Other project:')
     expect(section.textContent).toContain('T-missing')
     expect(section.textContent).toContain('unknown')
+    expect(screen.getByText('done').closest('[data-variant]')?.getAttribute('data-variant')).toBe('status-success')
+    expect(screen.getByText('unknown').closest('[data-variant]')?.getAttribute('data-variant')).toBe('status-neutral')
     expect(section.textContent).toContain('Waiting on 1 dependency')
   })
 
@@ -109,7 +111,10 @@ describe('TaskRelationshipDetailSection', () => {
 
     expect(screen.getByLabelText('Dependent tasks').textContent).not.toContain('Other project:')
 
-    await fireEvent.click(screen.getByRole('button', { name: /T-2/ }))
+    const relationshipButton = screen.getByRole('button', { name: /T-2/ })
+    expect(relationshipButton.getAttribute('data-control-kind')).toBe('text')
+    expect(relationshipButton.style.getPropertyValue('--of-border-interactive')).toBe('var(--of-status-neutral)')
+    await fireEvent.click(relationshipButton)
 
     expect(onOpenRelatedTask).toHaveBeenCalledWith('T-2', 'P-2')
     expect(onOpenRelatedTask).toHaveBeenCalledTimes(1)

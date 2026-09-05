@@ -2,6 +2,7 @@
   import { ChevronsLeft, Search, X } from '@lucide/svelte'
   import { tick } from 'svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import FileTreeRow from './FileTreeRow.svelte'
   import { buildFileTree, flattenFileTree } from './fileTreeModel'
   import { FileTreeNavigationState } from './fileTreeNavigation.svelte'
@@ -169,13 +170,13 @@
         </div>
       </div>
       {#if onCollapse}
-        <button
+        <IconButton
+          label="Collapse Changed files panel"
+          size="sm"
           type="button"
-          class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 text-base-content/60"
-          aria-label="Collapse Changed files panel"
           title="Collapse Changed files"
           onclick={onCollapse}
-        ><ChevronsLeft size={18} strokeWidth={1.8} aria-hidden="true" /></button>
+        ><ChevronsLeft size={18} strokeWidth={1.8} aria-hidden="true" /></IconButton>
       {/if}
     </div>
     <label class="input input-bordered flex h-10 min-h-10 w-full items-center gap-2 bg-base-100 px-3 focus-within:outline-2 focus-within:outline-primary focus-within:outline-offset-1">
@@ -188,12 +189,12 @@
         bind:value={searchQuery}
       />
       {#if searchQuery}
-        <button
+        <IconButton
+          label="Clear changed file filter"
+          size="sm"
           type="button"
-          class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
-          aria-label="Clear changed file filter"
           onclick={() => { searchQuery = '' }}
-        ><X size={16} strokeWidth={1.8} aria-hidden="true" /></button>
+        ><X size={16} strokeWidth={1.8} aria-hidden="true" /></IconButton>
       {/if}
     </label>
   </div>

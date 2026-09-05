@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { TaskDependencySummary, TaskDependentSummary } from '../../../lib/taskDependencies'
   import { getDependentReadinessLabel } from '../../../lib/taskDependencies'
-  import { getDependencyStatusPresentation } from '../../../lib/dependencyStatusPresentation'
+  import { getDependencyStatusPresentation, type DependencyStatusTone } from '../../../lib/dependencyStatusPresentation'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import ListChecks from '@lucide/svelte/icons/list-checks'
   import Network from '@lucide/svelte/icons/network'
@@ -30,9 +32,9 @@
     : 'font-mono text-[10px] font-bold text-primary'
   )
   let itemListClass = $derived(isFull ? 'flex flex-wrap gap-2' : 'flex flex-wrap gap-1.5')
-  let badgeClass = $derived(isFull
-    ? 'badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0'
-    : 'badge badge-xs gap-1 border border-base-300'
+  let statusItemClass = $derived(isFull
+    ? 'gap-1.5 max-w-full min-w-0'
+    : 'gap-1'
   )
   let footerClass = $derived(isFull ? 'text-[11px] text-base-content/50' : 'text-xs text-base-content/40')
   let titleSpanClass = $derived(isFull ? 'truncate min-w-0' : 'hidden')
@@ -43,7 +45,6 @@
     : 'inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
   )
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
-  let clickableBadgeClass = $derived(`${badgeClass} hover:brightness-95 cursor-pointer`)
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')
   let dependencyPluralLabel = $derived(isFull ? 'dependencies' : 'deps')
   let dependencyWaitingText = $derived(waitingDependencyCount === 0
@@ -62,6 +63,18 @@
 
   function canOpenRelatedTask(): boolean {
     return onOpenRelatedTask !== undefined
+  }
+
+  function getRelationshipButtonStyle(tone: DependencyStatusTone): string {
+    const statusToken = `--of-status-${tone}`
+    return [
+      `--of-border-interactive: var(${statusToken})`,
+      `--of-text: var(--of-on-status-${tone})`,
+      `--of-control-hover: var(${statusToken}-subtle)`,
+      `--of-control-pressed: var(${statusToken}-subtle)`,
+      `background: var(${statusToken}-subtle)`,
+      'border-radius: var(--of-radius-round)',
+    ].join('; ')
   }
 </script>
 
@@ -87,18 +100,21 @@
     {#each items as item (item.id)}
       {@const statusPresentation = getDependencyStatusPresentation(item.status)}
       {#if canOpenRelatedTask()}
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
-          class="{clickableBadgeClass} {statusPresentation.badgeClass}"
+          class={statusItemClass}
+          style={getRelationshipButtonStyle(statusPresentation.tone)}
           title={item.tooltipTitle}
           onclick={() => onOpenRelatedTask?.(item.id, item.projectId)}
         >
           {@render itemContent(item, statusPresentation.label)}
-        </button>
+        </Button>
       {:else}
-        <span class="{badgeClass} {statusPresentation.badgeClass}" title={item.tooltipTitle}>
+        <Badge variant={statusPresentation.badgeVariant} class={statusItemClass} title={item.tooltipTitle}>
           {@render itemContent(item, statusPresentation.label)}
-        </span>
+        </Badge>
       {/if}
     {/each}
   </div>

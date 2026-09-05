@@ -2,7 +2,10 @@
   import { CheckCircle2, RefreshCw, Send, Zap } from '@lucide/svelte'
   import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
 
   interface Props {
     layout?: 'bar' | 'sidebar'
@@ -86,16 +89,14 @@
     {#if hasComments}
       <div class="flex items-center gap-2 flex-wrap">
         {#if inlineCount > 0}
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-primary/25 bg-primary/12 px-2.5 py-1 text-[13px] font-semibold text-primary">
-            <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
+          <Badge variant="info">
             {inlineCount} inline {inlineCount === 1 ? 'comment' : 'comments'}
-          </span>
+          </Badge>
         {/if}
         {#if prCommentCount > 0}
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-error/25 bg-error/12 px-2.5 py-1 text-[13px] font-semibold text-error">
-            <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
+          <Badge variant="danger">
             {prCommentCount} PR {prCommentCount === 1 ? 'comment' : 'comments'}
-          </span>
+          </Badge>
         {/if}
       </div>
     {:else}
@@ -111,24 +112,27 @@
       </span>
     {/if}
 
-    <button
-      class="btn btn-soft btn-sm h-10 min-h-10 shadow-sm transition-shadow hover:shadow-md {layout === 'sidebar' ? 'flex-1' : ''}"
+    <Button
+      variant="secondary"
+      size="sm"
+      class={layout === 'sidebar' ? 'flex-1' : ''}
       onclick={onRefresh}
       title="Refresh diff"
     >
       <RefreshCw size={17} strokeWidth={1.8} aria-hidden="true" />
       Refresh diff
-    </button>
+    </Button>
 
-    <button
-      class="btn btn-primary btn-sm h-10 min-h-10 font-semibold tracking-wide shadow-sm transition-shadow hover:shadow-md {layout === 'sidebar' ? 'flex-[1.35]' : ''}"
+    <Button
+      size="sm"
+      class={layout === 'sidebar' ? 'flex-[1.35]' : ''}
       onclick={openPromptDialog}
       disabled={!canSend}
       title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Review and send feedback to agent'}
     >
       <Send size={17} strokeWidth={1.8} aria-hidden="true" />
       Send to agent
-    </button>
+    </Button>
   </div>
 </div>
 
@@ -147,36 +151,38 @@
         Edit the prompt below if you like — the agent receives exactly this text.
         Switching mode regenerates it.
       </p>
-      <textarea
-        class="textarea textarea-bordered min-h-80 w-full font-mono text-[13px] leading-relaxed"
+      <Textarea
+        label="Prompt sent to the agent"
+        class="min-h-80 w-full font-mono text-[13px] leading-relaxed"
         bind:value={promptDraft}
-        aria-label="Prompt sent to the agent"
-      ></textarea>
+      />
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-sm mr-auto" onclick={cancelPromptDialog}>Cancel</button>
+        <Button variant="ghost" size="sm" class="mr-auto" onclick={cancelPromptDialog}>Cancel</Button>
         <div class="join" role="group" aria-label="Prompt mode">
-          <button
-            class="btn btn-sm join-item {promptMode === 'address' ? 'btn-primary' : 'btn-ghost'}"
+          <Button
+            size="sm"
+            variant={promptMode === 'address' ? 'primary' : 'ghost'}
             aria-pressed={promptMode === 'address'}
             title="Ask the agent to fix the comments"
             onclick={() => setPromptMode('address')}
-          >Address</button>
-          <button
-            class="btn btn-sm join-item {promptMode === 'analyze' ? 'btn-primary' : 'btn-ghost'}"
+          >Address</Button>
+          <Button
+            size="sm"
+            variant={promptMode === 'analyze' ? 'primary' : 'ghost'}
             aria-pressed={promptMode === 'analyze'}
             title="Ask the agent to explain the comments without changing code"
             onclick={() => setPromptMode('analyze')}
-          >Analyze</button>
+          >Analyze</Button>
         </div>
-        <button
-          class="btn btn-primary btn-sm font-semibold"
+        <Button
+          size="sm"
           data-testid="confirm-send-prompt"
           onclick={confirmSend}
           disabled={!promptDraft.trim()}
         >
           <Send size={17} strokeWidth={1.8} aria-hidden="true" />
           Send to agent
-        </button>
+        </Button>
       </div>
     </div>
   </Modal>

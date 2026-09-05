@@ -1,7 +1,10 @@
 <script lang="ts">
   import { CircleCheck, TriangleAlert, X } from '@lucide/svelte'
   import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
   import { composeReviewBody, type IncludedFinding } from './reviewBody'
 
   type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
@@ -136,7 +139,7 @@
   <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-base-300">
     <h3 class="text-[0.9rem] font-semibold text-base-content m-0">Submit Review</h3>
     {#if totalPendingCount > 0}
-      <span class="inline-flex items-center px-2.5 py-1 text-[0.7rem] font-semibold text-warning bg-warning/15 rounded-full">{totalPendingCount} comment{totalPendingCount === 1 ? '' : 's'} will be submitted</span>
+      <Badge variant="warning">{totalPendingCount} comment{totalPendingCount === 1 ? '' : 's'} will be submitted</Badge>
     {/if}
   </div>
 
@@ -145,33 +148,33 @@
       <div class="flex flex-col gap-1.5">
         {#each includedFindings as finding (finding.id)}
           <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-warning/10 border border-warning/30 rounded-md">
-            <span class="badge badge-sm badge-warning shrink-0 mt-0.5">{finding.label}</span>
+            <Badge variant="warning" class="shrink-0 mt-0.5">{finding.label}</Badge>
             <span class="flex-1 text-[0.8rem] text-base-content leading-snug">{finding.text}</span>
-            <button
+            <IconButton
+              label={`Remove "${finding.label}" from review`}
+              size="xs"
+              class="shrink-0"
               type="button"
-              class="btn btn-ghost btn-xs btn-square shrink-0"
               onclick={() => onRemoveIncludedFinding?.(finding.id)}
               title="Remove from review"
-              aria-label={`Remove "${finding.label}" from review`}
             >
               <X size={12} aria-hidden="true" />
-            </button>
+            </IconButton>
           </div>
         {/each}
       </div>
     {/if}
-    <label for="review-summary-comment" class="text-xs font-medium text-base-content/70">Review summary comment</label>
-    <textarea
+    <Textarea
       id="review-summary-comment"
-      class="textarea textarea-bordered w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y disabled:opacity-60 disabled:cursor-not-allowed"
+      label="Review summary comment"
+      class="w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y"
       placeholder="Leave a summary comment… (Cmd/Ctrl+Enter to submit)"
-      aria-describedby="review-summary-comment-help"
-      rows="3"
+      helperText="Submit with Command+Enter or Control+Enter. A summary is required for comments and change requests unless you have pending inline comments or flagged findings."
+      rows={3}
       bind:value={summary}
       disabled={isSubmitting}
       onkeydown={handleKeydown}
-    ></textarea>
-    <p id="review-summary-comment-help" class="text-xs text-base-content/50 m-0">Submit with Command+Enter or Control+Enter. A summary is required for comments and change requests unless you have pending inline comments or flagged findings.</p>
+    />
 
     {#if error}
       <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-md text-error text-[0.8rem]" role="alert" aria-live="assertive">
@@ -188,13 +191,14 @@
     {/if}
 
     <div class="flex gap-2.5 justify-end">
-      <button
-        class="btn btn-sm border border-base-300 hover:border-primary hover:text-primary"
+      <Button
+        variant="outline"
+        size="sm"
         onclick={handleCommentClick}
         disabled={!canSubmit}
       >
         {isSubmitting && selectedEvent === 'COMMENT' ? 'Submitting...' : 'Comment'}
-      </button>
+      </Button>
       <Button
         size="sm"
         onclick={handleApproveClick}
@@ -202,13 +206,14 @@
       >
         {isSubmitting && selectedEvent === 'APPROVE' ? 'Submitting...' : 'Approve'}
       </Button>
-      <button
-        class="btn btn-sm btn-error"
+      <Button
+        variant="danger"
+        size="sm"
         onclick={handleRequestChangesClick}
         disabled={!canSubmit}
       >
         {isSubmitting && selectedEvent === 'REQUEST_CHANGES' ? 'Submitting...' : 'Request Changes'}
-      </button>
+      </Button>
     </div>
   </div>
 </div>

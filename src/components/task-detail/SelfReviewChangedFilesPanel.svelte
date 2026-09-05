@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { SelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
@@ -88,12 +89,14 @@
               </label>
             </div>
           {:else}
-            <button
-              class="btn btn-ghost btn-sm h-10 min-h-10 justify-start px-2 text-[13px]"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="justify-start"
               onclick={() => onSelectCommit(null)}
             >
               Show all changes
-            </button>
+            </Button>
           {/if}
         </div>
         <div class="flex-1 overflow-y-auto py-1">

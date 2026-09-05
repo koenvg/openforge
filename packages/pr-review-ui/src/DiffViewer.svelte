@@ -5,6 +5,8 @@
   import './DiffViewerTheme.css'
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
   import type { OpenReviewImage } from './reviewImages'
   import type { OpenReviewMedia, ReviewImageOpenRequest, ReviewMediaOpenRequest } from './reviewMedia'
@@ -320,50 +322,51 @@
 >
   <div class="diff-viewer-toolbar flex min-h-10 shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-2 py-1">
     {#if onToggleFileTree}
-      <button
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+      <IconButton
+        label={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
+        size="sm"
+        variant={fileTreeVisible ? 'outline' : 'ghost'}
         title={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
-        aria-label={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
         aria-expanded={fileTreeVisible}
         onclick={() => onToggleFileTree!()}
       >
         <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" />
-      </button>
+      </IconButton>
       <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
-    <button
-      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+    <Button
+      variant={diffViewMode === DiffModeEnum.Split ? 'outline' : 'ghost'}
+      size="sm"
       aria-label="Split diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Split}
       onclick={() => (diffViewMode = DiffModeEnum.Split)}
     >
       Split
-    </button>
-    <button
-      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+    </Button>
+    <Button
+      variant={diffViewMode === DiffModeEnum.Unified ? 'outline' : 'ghost'}
+      size="sm"
       aria-label="Unified diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Unified}
       onclick={() => (diffViewMode = DiffModeEnum.Unified)}
     >
       Unified
-    </button>
+    </Button>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-    <button
-      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+    <Button
+      variant={diffViewWrap ? 'outline' : 'ghost'}
+      size="sm"
       onclick={() => { diffViewWrap = !diffViewWrap; saveDiffViewWrap(diffViewWrap) }}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-pressed={diffViewWrap}
     >
       Wrap
-    </button>
+    </Button>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-    <button
-      class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 text-base-content/60"
-      onclick={search.open}
-      title="Search (⌘F)"
-      aria-label="Search diff"
-    ><Search size={18} strokeWidth={1.8} aria-hidden="true" /></button>
+    <IconButton label="Search diff" size="sm" onclick={search.open} title="Search (⌘F)">
+      <Search size={18} strokeWidth={1.8} aria-hidden="true" />
+    </IconButton>
     {#if search.visible}
       <input
         type="text"
@@ -385,26 +388,26 @@
           {search.currentIndex + 1} of {search.matchCount}
         {/if}
       </span>
-      <button
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
+      <IconButton
+        label="Previous search match"
+        size="sm"
         onclick={search.goToPrev}
         disabled={search.matchCount === 0}
         title="Previous match (Shift+Enter)"
-        aria-label="Previous search match"
-      ><ChevronUp size={17} strokeWidth={1.8} aria-hidden="true" /></button>
-      <button
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
+      ><ChevronUp size={17} strokeWidth={1.8} aria-hidden="true" /></IconButton>
+      <IconButton
+        label="Next search match"
+        size="sm"
         onclick={search.goToNext}
         disabled={search.matchCount === 0}
         title="Next match (Enter)"
-        aria-label="Next search match"
-      ><ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" /></button>
-      <button
-        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
+      ><ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" /></IconButton>
+      <IconButton
+        label="Close diff search"
+        size="sm"
         onclick={search.close}
         title="Close search (Escape)"
-        aria-label="Close diff search"
-      ><X size={17} strokeWidth={1.8} aria-hidden="true" /></button>
+      ><X size={17} strokeWidth={1.8} aria-hidden="true" /></IconButton>
     {/if}
     {#if toolbarExtra}
       <div class="ml-auto"></div>

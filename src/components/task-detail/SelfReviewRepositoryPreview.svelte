@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AlertTriangle, ArrowLeft, FileText, FolderOpen } from '@lucide/svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import {
     getMarkdownRepositoryLinkFragment,
     type MarkdownRepositoryLinkTarget,
@@ -29,7 +30,6 @@
   }: Props = $props()
 
   let root = $state<HTMLElement | null>(null)
-  let closeButton = $state<HTMLButtonElement | null>(null)
   let focusedTargetPath: string | null = null
   let content = $state<string | null>(null)
   let error = $state<string | null>(null)
@@ -101,7 +101,9 @@
   }
 
   $effect(() => {
-    if (!closeButton || focusedTargetPath === target.repositoryPath) return
+    if (!root || focusedTargetPath === target.repositoryPath) return
+    const closeButton = root.querySelector<HTMLButtonElement>('[data-repository-preview-close]')
+    if (!closeButton) return
     focusedTargetPath = target.repositoryPath
     closeButton.focus({ preventScroll: true })
   })
@@ -131,17 +133,19 @@
   bind:this={root}
 >
   <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-base-300 px-4 py-2">
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
+      class="shrink-0"
       type="button"
-      bind:this={closeButton}
-      class="btn btn-ghost btn-sm h-10 min-h-10 px-3"
+      data-repository-preview-close
       aria-label="Close repository preview"
       title="Back to diff"
       onclick={onClose}
     >
       <ArrowLeft size={17} aria-hidden="true" />
       Back to diff
-    </button>
+    </Button>
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
         <FileText size={16} class="shrink-0 text-base-content/60" aria-hidden="true" />
@@ -154,9 +158,10 @@
     {#if onOpenInFiles}
       <div class="flex shrink-0 flex-col items-end gap-0.5">
         <span class="text-xs font-medium text-base-content/60">Live worktree</span>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          class="btn btn-outline btn-sm h-10 min-h-10 px-3"
           aria-label="Open {target.repositoryPath} in Files"
           title="Open this path from the task's live worktree"
           disabled={openingInFiles}
@@ -168,7 +173,7 @@
             <FolderOpen size={16} aria-hidden="true" />
           {/if}
           Open in Files
-        </button>
+        </Button>
       </div>
     {/if}
   </header>
@@ -191,15 +196,16 @@
       <p class="max-w-xl break-all text-sm text-base-content/65">{target.repositoryPath}</p>
       <p class="max-w-xl text-sm text-error">{error}</p>
       <div class="flex flex-wrap justify-center gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          class="btn btn-outline btn-sm h-10 min-h-10"
           aria-label="Retry loading {target.repositoryPath}"
           onclick={load}
         >
           Retry
-        </button>
-        <button type="button" class="btn btn-ghost btn-sm h-10 min-h-10" onclick={onClose}>Back to diff</button>
+        </Button>
+        <Button variant="ghost" size="sm" type="button" onclick={onClose}>Back to diff</Button>
       </div>
     </div>
   {:else if mediaSource}

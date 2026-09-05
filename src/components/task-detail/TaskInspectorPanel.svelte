@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { TaskDetail, TaskReference } from '../../lib/types'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { getTaskTitle } from '../../lib/taskTitle'
+  import { getBoardStatusPresentation } from '../../lib/taskStatePresentation'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
 
@@ -35,12 +39,7 @@
   }
 
   let taskTitle = $derived(task === null ? '' : getTaskTitle(task))
-  let statusLabel = $derived(task?.status === 'doing' ? 'In Progress' : task?.status === 'done' ? 'Done' : 'Backlog')
-  let statusClass = $derived(task?.status === 'doing'
-    ? 'border-primary/35 bg-primary/10 text-primary'
-    : task?.status === 'done'
-      ? 'border-success/35 bg-success/10 text-success'
-      : 'border-base-300 bg-base-200 text-base-content/65')
+  let statusPresentation = $derived(getBoardStatusPresentation(task?.status ?? null))
 </script>
 
 {#if task === null}
@@ -58,10 +57,10 @@
              on the board and in this panel. -->
         <div class="font-mono text-sm font-semibold text-primary">{task.id}</div>
         {#if onOpenFullView}
-          <button class="btn btn-outline btn-sm min-h-10 shrink-0" type="button" onclick={onOpenFullView}>
+          <Button variant="outline" size="sm" class="shrink-0" type="button" onclick={onOpenFullView}>
             Open full view
             <ExternalLink size={14} aria-hidden="true" />
-          </button>
+          </Button>
         {/if}
       </div>
       <div class="mt-2 flex items-start justify-between gap-3">
@@ -80,17 +79,14 @@
             <div class="flex items-start gap-1">
               <h2 class="m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-base-content" title={taskTitle}>{taskTitle}</h2>
               {#if allowRename}
-                <button
-                  class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content"
-                  type="button"
-                  aria-label="Rename task"
-                  onclick={() => titleRename.start()}
-                ><Pencil size={12} aria-hidden="true" /></button>
+                <IconButton label="Rename task" size="xs" type="button" onclick={() => titleRename.start()}>
+                  <Pencil size={12} aria-hidden="true" />
+                </IconButton>
               {/if}
             </div>
           {/if}
         </div>
-        <span class="shrink-0 rounded-md border px-2 py-1 text-xs font-semibold {statusClass}">{statusLabel}</span>
+        <Badge variant={statusPresentation.badgeVariant}>{statusPresentation.label}</Badge>
       </div>
     </header>
 

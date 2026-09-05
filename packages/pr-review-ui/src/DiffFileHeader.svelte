@@ -1,7 +1,10 @@
 <script lang="ts">
   import { Copy, MessageSquare } from '@lucide/svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type { Snippet } from 'svelte'
   import { getFileStatusColor, getFileStatusIcon, getFileStatusLabel } from './fileStatus'
 
@@ -64,48 +67,47 @@
     {/if}
     <span class="min-w-0 overflow-hidden text-ellipsis" title={file.filename}>{file.filename}</span>
     {#if onCopyFilePath}
-      <button
+      <IconButton
+        label={`Copy file path: ${file.filename}`}
+        size="sm"
+        class="flex-shrink-0"
         type="button"
-        class="inline-flex h-8 min-h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-md text-base-content/50 transition-colors hover:bg-base-300 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         title="Copy file path"
-        aria-label="Copy file path: {file.filename}"
         onclick={() => onCopyFilePath(file.filename)}
       >
         <Copy size={16} strokeWidth={1.8} aria-hidden="true" />
-      </button>
+      </IconButton>
     {/if}
   </div>
   {#if pendingCommentCount > 0}
-    <span
-      class="badge badge-sm badge-outline h-5 flex-shrink-0 gap-1 border-base-content/30 bg-base-100 px-1.5 text-xs font-medium tabular-nums text-base-content/80"
-      title={getPendingCommentLabel()}
-      aria-hidden="true"
-    >
+    <Badge variant="warning" class="flex-shrink-0" title={getPendingCommentLabel()} aria-hidden="true">
       <MessageSquare size={12} strokeWidth={1.8} />
       {pendingCommentCount}
-    </span>
+    </Badge>
   {/if}
   {#if fileHeaderExtra}
     {@render fileHeaderExtra(file)}
   {/if}
   {#if richDiffSupported}
     <div class="join flex-shrink-0" role="group" aria-label="Diff presentation for {file.filename}">
-      <button
-        class="btn btn-ghost btn-sm join-item h-10 min-h-10 px-3 text-[13px] {richDiffActive ? 'text-base-content/60' : 'text-primary bg-primary/10 border border-primary'}"
+      <Button
+        variant={!richDiffActive ? 'outline' : 'ghost'}
+        size="sm"
         aria-label="Show source diff for {file.filename}"
         aria-pressed={!richDiffActive}
         onclick={() => onSetRichDiffActive(false)}
       >
         Source
-      </button>
-      <button
-        class="btn btn-ghost btn-sm join-item h-10 min-h-10 px-3 text-[13px] {richDiffActive ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
+      </Button>
+      <Button
+        variant={richDiffActive ? 'outline' : 'ghost'}
+        size="sm"
         aria-label="Show rich diff for {file.filename}"
         aria-pressed={richDiffActive}
         onclick={() => onSetRichDiffActive(true)}
       >
         Rich
-      </button>
+      </Button>
     </div>
   {/if}
   {#if onReviewedChange}

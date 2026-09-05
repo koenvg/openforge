@@ -2,6 +2,8 @@
   import { X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type { AgentCommentDisplayData, CommentDisplayData, ExistingCommentDisplayData } from './diffComments'
   import InlineAiQuestionThread from './InlineAiQuestionThread.svelte'
   import InlineAiReviewComment from './InlineAiReviewComment.svelte'
@@ -127,16 +129,17 @@
         />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">
-          <span class="badge badge-warning badge-sm">Pending reply</span>
+          <Badge variant="warning">Pending reply</Badge>
           {#if onRemovePendingReply}
             {@const commentId = comment.commentId}
-            <button
-              class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
-              aria-label="Remove pending reply"
+            <IconButton
+              label="Remove pending reply"
+              size="xs"
+              class="ml-auto"
               onclick={() => onRemovePendingReply(commentId)}
             >
               <X size={14} strokeWidth={2} aria-hidden="true" />
-            </button>
+            </IconButton>
           {/if}
         </div>
         <InlineCommentBody>
@@ -144,14 +147,15 @@
         </InlineCommentBody>
       {:else}
         <div class="flex items-center gap-2 mb-1.5">
-          <span class="badge badge-warning badge-sm">Pending</span>
-          <button
-            class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
-            aria-label="Remove pending comment"
+          <Badge variant="warning">Pending</Badge>
+          <IconButton
+            label="Remove pending comment"
+            size="xs"
+            class="ml-auto"
             onclick={() => onPendingCommentsChange(pendingComments.filter((_, index) => index !== comment.index))}
           >
             <X size={14} strokeWidth={2} aria-hidden="true" />
-          </button>
+          </IconButton>
         </div>
         <InlineCommentBody>
           <MarkdownContent content={comment.body} {onOpenUrl} />
