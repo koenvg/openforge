@@ -1,0 +1,58 @@
+name: Storybook visual smoke
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'packages/**'
+      - 'plugins/**'
+      - 'storybook/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'patches/**'
+      - '*config*'
+      - '.github/workflows/storybook-visual.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'packages/**'
+      - 'plugins/**'
+      - 'storybook/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'patches/**'
+      - '*config*'
+      - '.github/workflows/storybook-visual.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: storybook-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm storybook:visual:unit
+      - name: Canonical Linux capture and regression probes
+        run: pnpm storybook:visual:test
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: storybook-visual-review
+          path: artifacts/storybook-visual
+          retention-days: 14
+          if-no-files-found: warn

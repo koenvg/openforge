@@ -21,6 +21,7 @@ __pycache__/
 # Live Electron invariant reports and Playwright runtime output
 /artifacts/desktop-test/
 /artifacts/terminal-presentation/
+/artifacts/storybook-visual/
 /playwright-report/
 /test-results/
 /openforge-desktop-test-*/
