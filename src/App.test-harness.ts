@@ -14,7 +14,6 @@ vi.mock('./components/task-detail/TaskDetailView.svelte', () => ({ default: vi.f
 vi.mock('./components/AddTaskDialog.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/settings/SettingsView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/prompt/PromptInput.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/shared/ui/SearchableSelect.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/feedback/toasts/ToastHost.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/shell/AppSidebar.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/project/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))

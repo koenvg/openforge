@@ -92,6 +92,7 @@
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
     "./ui/Select.svelte": "./dist/ui/Select.svelte",
+    "./ui/SearchableSelect.svelte": "./dist/ui/SearchableSelect.svelte",
     "./ui/Tabs.svelte": "./dist/ui/Tabs.svelte",
     "./ui/AnchoredMenu.svelte": "./dist/ui/AnchoredMenu.svelte",
     "./ui/Tooltip.svelte": "./dist/ui/Tooltip.svelte",

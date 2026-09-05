@@ -78,7 +78,8 @@ describe('Create Task sheet', () => {
     expect(screen.getByRole('group', { name: 'Environment summary: Worktree, latest main, default permissions' })).toBeTruthy()
     expect(screen.queryByLabelText('Worktree')).toBeNull()
     expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
-    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Provider' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Mode' })).toBeNull()
   })
 
   it('keeps optional settings progressively disclosed', async () => {

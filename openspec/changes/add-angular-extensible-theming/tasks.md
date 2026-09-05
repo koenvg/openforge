@@ -67,7 +67,7 @@
 - [x] 7.2 Migrate application shell, sidebar, toolbar, and project navigation controls to public building blocks while preserving keyboard shortcuts and navigation behavior; verify shell and navigation suites pass.
 - [ ] 7.3 Migrate palette, modal, dialog, anchored menu, and tooltip callers to public building blocks while preserving focus restoration, escape, overlay dismissal, and close confirmation behavior; verify the modal and palette suites pass.
 - [ ] 7.4 Migrate global and project settings forms, selectors, toggles, panels, badges, and actions to public building blocks; verify settings autosave, provider, plugin, companion, and accessibility suites pass.
-- [ ] 7.5 Migrate task creation, focus board filters, task cards, and shared task controls while preserving draft state, label behavior, filtering, and keyboard interactions; verify create-task and focus-board suites pass.
+- [x] 7.5 Migrate task creation, focus board filters, task cards, and shared task controls while preserving draft state, label behavior, filtering, and keyboard interactions; verify create-task and focus-board suites pass.
 - [ ] 7.6 Migrate task detail, review, terminal shell, inspector, relationship, and feedback controls while preserving mounted-pane, lifecycle, diff, and completion behavior; verify the task-detail and review suites pass.
 - [ ] 7.7 Migrate plugin installation, inventory, lifecycle, diagnostics, and settings controls in the host; verify plugin settings and lifecycle component suites pass.
 - [x] 7.8 Migrate the task-schedules plugin's covered controls and durable panels while retaining feature layout and schedule behavior; verify its package tests and build pass.

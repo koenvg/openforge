@@ -109,7 +109,7 @@
     <ContextMenuItem label={returnPresentation.label} onclick={handleReturnToBoard} />
   {/if}
   {#if hasActionsBeforeComplete}
-    <div class="border-t border-base-content/10 my-1"></div>
+    <div class="my-1 border-t border-[var(--of-border)]"></div>
   {/if}
   <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? deletePresentation.label : completePresentation.label} disabled={isCompleting} onclick={handleComplete} />
   {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}

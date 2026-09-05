@@ -158,6 +158,7 @@ export function renderBoard(overrides?: {
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
   attentionRows?: TaskAttentionRow[]
+  attentionRowsLoaded?: boolean
   dependencyReferenceTasks?: TaskDetail[]
   onProjectAttentionChanged?: () => void | Promise<void>
 }) {
@@ -205,6 +206,7 @@ export function renderBoard(overrides?: {
       activeSessions: sessions,
       ticketPrs: prs,
       attentionRows,
+      attentionRowsLoaded: overrides?.attentionRowsLoaded ?? true,
       dependencyReferenceTasks,
       onOpenTask,
       onRunAction,

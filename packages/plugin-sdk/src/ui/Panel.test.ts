@@ -24,4 +24,15 @@ describe('plugin-sdk Panel', () => {
     expect(panel.textContent).toContain('Two files changed.')
     expect(screen.getByRole('button', { name: 'Open review' })).toBeTruthy()
   })
+
+  it('can remove body padding for interactive card layouts', () => {
+    render(Panel, {
+      props: {
+        children,
+        padding: 'none',
+      },
+    })
+
+    expect(screen.getByText('Two files changed.').closest('section')?.dataset.padding).toBe('none')
+  })
 })

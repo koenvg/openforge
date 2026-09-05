@@ -22,16 +22,16 @@
     viewBox="0 0 200 200"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    class="w-48 h-48 text-base-content"
+    class="h-48 w-48 text-[var(--of-text)]"
     role="img"
     aria-label="Peaceful forge illustration"
   >
     <defs>
       <radialGradient id="focus-empty-glow" cx="50%" cy="82%" r="30%">
-        <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.18">
+        <stop offset="0%" stop-color="var(--of-accent)" stop-opacity="0.18">
           <animate attributeName="stop-opacity" values="0.14;0.22;0.14" dur="4s" repeatCount="indefinite"/>
         </stop>
-        <stop offset="100%" stop-color="var(--color-primary)" stop-opacity="0"/>
+        <stop offset="100%" stop-color="var(--of-accent)" stop-opacity="0"/>
       </radialGradient>
     </defs>
 
@@ -81,31 +81,31 @@
       />
     </g>
 
-    <circle r="2.5" fill="var(--color-primary)">
+    <circle r="2.5" fill="var(--of-accent)">
       <animate attributeName="cx" values="92;87;83" dur="4.2s" repeatCount="indefinite"/>
       <animate attributeName="cy" values="115;78;40" dur="4.2s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0;0.7;0.45;0" dur="4.2s" repeatCount="indefinite"/>
       <animate attributeName="r" values="2.5;1.8;0.4" dur="4.2s" repeatCount="indefinite"/>
     </circle>
-    <circle r="2" fill="var(--color-primary)">
+    <circle r="2" fill="var(--of-accent)">
       <animate attributeName="cx" values="110;114;118" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
       <animate attributeName="cy" values="112;74;38" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0;0.75;0.4;0" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
       <animate attributeName="r" values="2;1.4;0.3" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
     </circle>
-    <circle r="1.6" fill="var(--color-primary)">
+    <circle r="1.6" fill="var(--of-accent)">
       <animate attributeName="cx" values="99;96;92" dur="3s" begin="1.6s" repeatCount="indefinite"/>
       <animate attributeName="cy" values="110;70;32" dur="3s" begin="1.6s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0;0.6;0.3;0" dur="3s" begin="1.6s" repeatCount="indefinite"/>
       <animate attributeName="r" values="1.6;1;0.2" dur="3s" begin="1.6s" repeatCount="indefinite"/>
     </circle>
-    <circle r="1.8" fill="var(--color-primary)">
+    <circle r="1.8" fill="var(--of-accent)">
       <animate attributeName="cx" values="103;108;115" dur="4.8s" begin="2.4s" repeatCount="indefinite"/>
       <animate attributeName="cy" values="114;80;46" dur="4.8s" begin="2.4s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0;0.5;0.25;0" dur="4.8s" begin="2.4s" repeatCount="indefinite"/>
       <animate attributeName="r" values="1.8;1.1;0.2" dur="4.8s" begin="2.4s" repeatCount="indefinite"/>
     </circle>
-    <circle r="1.3" fill="var(--color-primary)">
+    <circle r="1.3" fill="var(--of-accent)">
       <animate attributeName="cx" values="95;86;78" dur="5s" begin="0.4s" repeatCount="indefinite"/>
       <animate attributeName="cy" values="116;76;36" dur="5s" begin="0.4s" repeatCount="indefinite"/>
       <animate attributeName="opacity" values="0;0.55;0.2;0" dur="5s" begin="0.4s" repeatCount="indefinite"/>
@@ -163,7 +163,7 @@
   </svg>
 
   <div class="text-center">
-    <p class="text-sm font-medium text-base-content/50">{message.title}</p>
-    <p class="text-xs text-base-content/30 mt-1">{message.subtitle}</p>
+    <p class="text-sm font-medium text-[var(--of-text-secondary)]">{message.title}</p>
+    <p class="mt-1 text-xs text-[var(--of-text-muted)]">{message.subtitle}</p>
   </div>
 </div>

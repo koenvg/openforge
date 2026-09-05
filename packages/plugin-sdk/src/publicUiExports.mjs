@@ -15,6 +15,7 @@ const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'ResizablePanel',
   'Modal',
   'Select',
+  'SearchableSelect',
   'Tabs',
   'AnchoredMenu',
   'Tooltip',
