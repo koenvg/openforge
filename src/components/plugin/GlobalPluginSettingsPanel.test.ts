@@ -6,6 +6,8 @@ import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '
 import type { RuntimeContributionSource } from '../../lib/plugin/contributionResolver'
 import type { PluginEntry } from '../../lib/plugin/types'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
+import { themeRegistry } from '../../lib/theme'
+import { LIGHT_THEME } from '../../lib/themeContract'
 
 const { activatePluginMock, uninstallPluginMock } = vi.hoisted(() => ({
   activatePluginMock: vi.fn(async () => true),
@@ -69,6 +71,46 @@ describe('GlobalPluginSettingsPanel', () => {
     runtimeContributionSources.set(new Map())
     clearComponentRegistry()
     vi.clearAllMocks()
+  })
+
+  it('warns before installing that Trusted Plugins are not sandboxed, including theme CSS risks and recovery', () => {
+    render(GlobalPluginSettingsPanel)
+
+    expect(screen.getByText('Trusted Plugins')).toBeTruthy()
+    expect(screen.getByText(/not sandboxed/)).toBeTruthy()
+    expect(screen.getByText(/theme CSS can break layout or accessibility/)).toBeTruthy()
+    expect(screen.getByText(/disable the owning plugin/)).toBeTruthy()
+  })
+
+  it('shows declared theme capabilities and registered theme ownership alongside legacy permissions', async () => {
+    const plugin = entry('com.example.paper', 'Paper')
+    plugin.manifest.permissions = ['read:files']
+    plugin.packageMetadata = {
+      id: 'com.example.paper', displayName: 'Paper', apiVersion: 1, description: 'Paper themes',
+      enablement: 'app', frontend: 'index.js', requires: ['appEnablement', 'themes'],
+    }
+    installedPlugins.set(new Map([[plugin.manifest.id, plugin]]))
+    const registration = themeRegistry.registerContributedTheme({
+      ...LIGHT_THEME, id: 'com.example.paper:paper', label: 'Paper Light',
+    }, { pluginId: 'com.example.paper', generation: 1 })
+    try {
+      render(GlobalPluginSettingsPanel)
+
+      expect(screen.getByText('Capabilities:')).toBeTruthy()
+      expect(screen.getByText('themes')).toBeTruthy()
+      expect(screen.getByText('appEnablement')).toBeTruthy()
+      expect(screen.getByText('read:files')).toBeTruthy()
+      expect(screen.getByText('Paper Light')).toBeTruthy()
+      expect(screen.getByText('Provided by com.example.paper')).toBeTruthy()
+      expect(screen.getByRole('switch', { name: 'Enabled throughout OpenForge: Paper' })).toBeTruthy()
+      expect(screen.queryByRole('switch', { name: 'Enable by default: Paper' })).toBeNull()
+
+      await registration.dispose()
+      await waitFor(() => expect(screen.queryByText('Paper Light')).toBeNull())
+      expect(screen.getByText('themes')).toBeTruthy()
+    } finally {
+      await registration.dispose()
+    }
   })
 
   it('offers the plugin folder alongside single-package installs', async () => {

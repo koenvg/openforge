@@ -32,6 +32,14 @@
 <SettingsSectionCard id="section-plugins" title="Plugins" {disabled}>
   {#snippet icon()}<Blocks size={16} />{/snippet}
   <div class="flex flex-col gap-6">
+    <Panel variant="subtle" aria-label="Trusted Plugin warning">
+      <div class="flex flex-col gap-2 text-sm">
+        <strong class="text-[var(--of-warning)]">Trusted Plugins</strong>
+        <p class="m-0">Plugins run trusted code and are not sandboxed. Only install packages from authors you trust.</p>
+        <p class="m-0">Plugin theme CSS can break layout or accessibility. To recover from a broken theme, select a built-in theme in Preferences or disable the owning plugin below.</p>
+      </div>
+    </Panel>
+
     <GlobalPluginInstallationSection {activeProjectId} {disabled} onActionError={handleActionError} />
 
     {#if $pluginLoadError}

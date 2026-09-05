@@ -18,7 +18,7 @@
 </script>
 
 {#each sections as section (section.namespacedId)}
-  <div class="border-t border-base-300 pt-3">
+  <div class="border-t border-[var(--of-border)] pt-3">
     <PluginSlot
       slotType="settingsSections"
       slotId={section.namespacedId}

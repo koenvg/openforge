@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
 import GlobalPluginSettingsPanel from './GlobalPluginSettingsPanel.svelte'
@@ -15,6 +16,7 @@ import {
   reloadPluginForProject,
   uninstallPlugin,
 } from '../../lib/plugin/pluginRegistry'
+import { chooseSelectOption } from '../../test-utils/select'
 import { writeClipboardText } from '../../lib/ipc'
 import type { PluginEntry } from '../../lib/plugin/types'
 
@@ -269,7 +271,7 @@ describe('GlobalPluginSettingsPanel', () => {
 
     render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1', disabled: true })
 
-    expect((screen.getByLabelText('Source type') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Source type' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByLabelText('Package source') as HTMLInputElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Install package' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Reload plugin: Test Plugin' }) as HTMLButtonElement).disabled).toBe(true)
@@ -311,15 +313,35 @@ describe('GlobalPluginSettingsPanel', () => {
     vi.mocked(installFromLocal).mockResolvedValue(undefined)
     render(GlobalPluginSettingsPanel, { activeProjectId: 'proj-1' })
 
-    await fireEvent.change(screen.getByLabelText('Source type'), { target: { value: 'git' } })
+    await chooseSelectOption(screen.getByRole('button', { name: 'Source type' }), 'git')
     await fireEvent.input(screen.getByLabelText('Package source'), { target: { value: 'github.com/acme/openforge-tools@main' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
     expect(installPluginFromGit).toHaveBeenCalledWith('github.com/acme/openforge-tools@main')
 
-    await fireEvent.change(screen.getByLabelText('Source type'), { target: { value: 'local' } })
+    await chooseSelectOption(screen.getByRole('button', { name: 'Source type' }), 'local path')
     await fireEvent.input(screen.getByLabelText('Package source'), { target: { value: '/Users/me/plugins/local-plugin' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
     expect(installFromLocal).toHaveBeenCalledWith('/Users/me/plugins/local-plugin', 'proj-1')
+  })
+
+  it('associates install errors with the package field and lets the user correct and retry', async () => {
+    vi.mocked(installPluginFromNpm)
+      .mockRejectedValueOnce(new Error('Package not found'))
+      .mockResolvedValueOnce(undefined)
+    render(GlobalPluginSettingsPanel)
+    const source = screen.getByRole('textbox', { name: 'Package source' })
+    await fireEvent.input(source, { target: { value: '@acme/missing' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
+
+    expect(source).toHaveAttribute('aria-invalid', 'true')
+    expect(source).toHaveAccessibleDescription('Package not found')
+    expect(screen.getByText('Package not found')).toHaveAttribute('role', 'alert')
+
+    await fireEvent.input(source, { target: { value: '@acme/found' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Install package' }))
+    expect(source).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Package not found')).toBeNull()
+    expect(screen.getByText('Installed app-wide. Enable it explicitly in each project when ready.')).toBeTruthy()
   })
 
   it('shows install and load errors and can copy plugin diagnostics', async () => {

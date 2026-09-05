@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import { onMount } from 'svelte'
   import { AlertCircle, FolderOpen } from '@lucide/svelte'
   import { getConfig, selectDirectory, setConfig } from '../../lib/ipc'
@@ -80,41 +82,42 @@
 </script>
 
 {#if configurationLoadError}
-  <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
-    <AlertCircle size={14} class="shrink-0 mt-0.5" />
-    <div class="flex flex-col items-start gap-1">
-      <span class="break-words">{configurationLoadError}</span>
-      <button
-        class="btn btn-ghost btn-xs"
-        type="button"
-        disabled={disabled || configurationLoading}
-        onclick={loadFolderConfiguration}
-      >
-        Retry loading plugin folder
-      </button>
+  <Panel padding="none" variant="subtle">
+    <div role="alert" class="text-xs text-[var(--of-danger)] p-2 flex items-start gap-2">
+      <AlertCircle size={14} class="shrink-0 mt-0.5" />
+      <div class="flex flex-col items-start gap-1">
+        <span class="break-words">{configurationLoadError}</span>
+        <Button
+          variant="ghost" size="xs"
+          type="button"
+          disabled={disabled || configurationLoading}
+          onclick={loadFolderConfiguration}
+        >
+          Retry loading plugin folder
+        </Button>
+      </div>
     </div>
-  </div>
+  </Panel>
 {/if}
 
 {#if !folderPath}
-  <button class="btn btn-primary btn-sm self-start" type="button" {disabled} onclick={chooseFolder}>
+  <Button variant="primary" size="sm" class="self-start" type="button" {disabled} onclick={chooseFolder}>
     <FolderOpen size={14} />
     Choose plugin folder
-  </button>
+  </Button>
 {:else}
   <div class="flex items-start justify-between gap-3 flex-wrap">
-    <span class="text-[10px] text-base-content/60 font-mono break-all min-w-0">{folderPath}</span>
-    <button
-      class="btn btn-ghost btn-xs shrink-0"
+    <span class="plugin-folder-path text-xs text-[var(--of-text-secondary)] font-mono break-all min-w-0">{folderPath}</span>
+    <Button
+      variant="ghost" size="xs" class="shrink-0"
       type="button"
       aria-label="Remove plugin folder"
       disabled={disabled || discoveryBusy}
       onclick={removeFolder}
     >
       Remove
-    </button>
+    </Button>
   </div>
-
 
   <PluginFolderDiscovery
     {folderPath}
