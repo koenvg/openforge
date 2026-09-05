@@ -11,13 +11,13 @@ import {
   authoredPrs,
   reviewPrs,
   selectedReviewPr,
-} from '../../lib/stores'
-import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
-import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
-import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
-import { walkthroughReadyFirst } from '../../lib/reviewListSort'
-import { composeRequestForAuthoredPr } from './authoredPrTaskCompose'
-import type { GithubSyncPrReviewClient } from './githubSyncClient'
+} from '../../../lib/stores'
+import { getHTMLElementAt, isInputFocused } from '../../../lib/domUtils'
+import { useVimNavigation } from '../../../lib/useVimNavigation.svelte'
+import { walkthroughButtonState } from '../../../lib/walkthroughButtonState'
+import { walkthroughReadyFirst } from '../../../lib/reviewListSort'
+import { composeRequestForAuthoredPr } from '../authoredPrTaskCompose'
+import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
 type ReviewScope = 'repo' | 'global'
 

@@ -26,9 +26,8 @@ vi.mock('@openforge-app/pr-review-ui/useDiffWorker.svelte', () => ({
   createDiffWorker: vi.fn(() => ({ getDiffFile: () => undefined })),
 }))
 
-vi.mock('../../lib/domUtils', () => ({ isInputFocused: () => false }))
 
-import WalkthroughTab from './WalkthroughTab.svelte'
+import WalkthroughTab from './__fixtures__/WalkthroughWorkspaceHarness.svelte'
 
 const pr: ReviewPullRequest = {
   id: 123,

@@ -1,7 +1,7 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { fromStore } from 'svelte/store'
 import type { PrFileDiff, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import { prFileDiffs, selectedReviewPr } from '../../lib/stores'
+import { prFileDiffs, selectedReviewPr } from '../../../lib/stores'
 import {
   getPrReviewFilesKey,
   loadPrReviewedFileShas,
@@ -9,7 +9,7 @@ import {
   prunePrReviewedFileShas,
   reviewedFileMapsEqual,
   updatePrReviewedFileShas,
-} from './reviewedFilesState'
+} from '../reviewedFilesState'
 
 export function useReviewedFilesState(
   api: FrontendOpenForgeAPI,

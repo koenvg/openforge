@@ -1,8 +1,8 @@
 import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { AiThread, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import { activeProjectId, aiThreads, selectedReviewPr } from '../../lib/stores'
-import type { GithubSyncPrReviewClient } from './githubSyncClient'
+import { activeProjectId, aiThreads, selectedReviewPr } from '../../../lib/stores'
+import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
 export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
   const activeProject = fromStore(activeProjectId)

@@ -10,9 +10,6 @@ vi.mock('@openforge-app/pr-review-ui/DiffViewer.svelte', async () => ({
   default: (await import('./__fixtures__/DiffViewerStub.svelte')).default,
 }))
 
-vi.mock('../../lib/domUtils', () => ({
-  isInputFocused: () => false,
-}))
 
 // Generation reads the two guidance settings through the host API; the stub api
 // used here has none, so stub the resolver to a fixed pair.
@@ -20,7 +17,7 @@ vi.mock('../../lib/walkthroughGuidance', () => ({
   resolveWalkthroughGuidance: vi.fn(async () => ({ reviewGuidance: '', walkthroughGuidance: '' })),
 }))
 
-import WalkthroughTab from './WalkthroughTab.svelte'
+import WalkthroughTab from './__fixtures__/WalkthroughWorkspaceHarness.svelte'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -376,8 +373,8 @@ describe('WalkthroughTab stop generation', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
     await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
 
-    expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
     expect(await screen.findByRole('button', { name: /generate walkthrough/i })).toBeTruthy()
+    expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
     expect(screen.queryByText(/aborted/i)).toBeNull()
   })
 })

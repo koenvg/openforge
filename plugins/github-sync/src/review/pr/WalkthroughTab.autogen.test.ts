@@ -9,11 +9,8 @@ vi.mock('@openforge-app/pr-review-ui/DiffViewer.svelte', async () => ({
   default: (await import('./__fixtures__/DiffViewerStub.svelte')).default,
 }))
 
-vi.mock('../../lib/domUtils', () => ({
-  isInputFocused: () => false,
-}))
 
-import WalkthroughTab from './WalkthroughTab.svelte'
+import WalkthroughTab from './__fixtures__/WalkthroughWorkspaceHarness.svelte'
 
 const basePr: ReviewPullRequest = {
   id: 12345,

@@ -21,10 +21,10 @@ import {
   reviewComments,
   reviewPrs,
   selectedReviewPr,
-} from '../../lib/stores'
-import { isInputFocused } from '../../lib/domUtils'
-import { fetchGithubFileContents } from './githubFileContents'
-import type { GithubSyncPrReviewClient } from './githubSyncClient'
+} from '../../../lib/stores'
+import { isInputFocused } from '../../../lib/domUtils'
+import { fetchGithubFileContents } from '../githubFileContents'
+import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
 export type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
@@ -35,7 +35,7 @@ type AiThreadState = {
 
 type WalkthroughState = {
   readonly selectedReady: boolean
-  refreshStatus(pr: ReviewPullRequest): Promise<void>
+  refreshStatus(pr: ReviewPullRequest): Promise<unknown>
 }
 
 export function useSelectedPrReview(

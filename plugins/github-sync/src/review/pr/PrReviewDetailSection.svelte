@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+  import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type { AgentReviewComment, AiThread, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
@@ -13,7 +13,6 @@
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
-  import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import WalkthroughTab from './WalkthroughTab.svelte'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
@@ -21,10 +20,8 @@
   type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
   interface Props {
-    api: FrontendOpenForgeAPI
-    githubSync: GithubSyncPrReviewClient
+    walkthrough: WalkthroughReview
     pr: ReviewPullRequest
-    activeProjectId: string | null
     activeTab: PrDetailTab
     files: PrFileDiff[]
     isLoading: boolean
@@ -80,10 +77,8 @@
   }
 
   let {
-    api,
-    githubSync,
+    walkthrough,
     pr,
-    activeProjectId,
     activeTab,
     files,
     isLoading,
@@ -235,13 +230,11 @@
         />
       {:else if tab === 'walkthrough'}
         <WalkthroughTab
-          {api}
-          {githubSync}
+          workspace={walkthrough}
           {pr}
           {files}
           {fetchFileContents}
           {resolveRepositoryImage}
-          projectId={activeProjectId}
           existingComments={reviewComments}
           agentComments={agentReviewComments}
           pendingComments={pendingManualComments}

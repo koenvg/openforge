@@ -109,8 +109,8 @@ describe('github-sync plugin', () => {
 
     expect(indexSource).not.toMatch(/["'`]openforge\./)
     expect(prReviewSource).not.toMatch(/["'`]openforge\./)
-    expect(prReviewSource).toContain('createGithubSyncPrReviewClient(api)')
-    expect(prReviewSource).toContain('api.navigation.navigate')
+    const walkthroughSource = readFileSync(join(pluginSrcDir, 'review/pr/WalkthroughTab.svelte'), 'utf8')
+    expect(walkthroughSource).not.toMatch(/["'`]openforge\./)
   })
   it('keeps the Task pull request contribution behind public plugin boundaries', () => {
     const taskSources = [
