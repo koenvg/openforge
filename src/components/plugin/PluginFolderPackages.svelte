@@ -151,7 +151,8 @@
 
     onActionError?.(null)
     try {
-      await writeClipboardText(`pnpm -C ${row.path} build`)
+      const quotedPath = `'${row.path.replace(/'/g, `'"'"'`)}'`
+      await writeClipboardText(`pnpm -C ${quotedPath} build`)
     } catch (error) {
       onActionError?.(`Failed to copy the build command: ${pluginActionErrorMessage(error)}`)
     }
