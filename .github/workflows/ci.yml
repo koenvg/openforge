@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Install Chromium for core control browser tests
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Build built-in plugins
         id: plugin_build
         run: |
@@ -172,6 +175,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for core control browser tests
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Check publishable package readiness coverage
         id: package_readiness_coverage

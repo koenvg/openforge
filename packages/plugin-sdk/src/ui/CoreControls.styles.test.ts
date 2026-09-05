@@ -14,15 +14,6 @@ const componentNames = [
   'Textarea',
 ] as const
 
-const interactiveComponentNames = [
-  'Button',
-  'Checkbox',
-  'IconButton',
-  'Switch',
-  'TextField',
-  'Textarea',
-] as const
-
 function componentSource(componentName: typeof componentNames[number]): string {
   return readFileSync(resolve(import.meta.dirname, `${componentName}.svelte`), 'utf8')
 }
@@ -41,23 +32,11 @@ describe('plugin-sdk core control styling contract', () => {
   it('keeps Button and IconButton variant and interaction styles in one private control', () => {
     const buttonSource = componentSource('Button')
     const iconButtonSource = componentSource('IconButton')
-    const sharedSource = buttonControlSource()
 
     expect(buttonSource).toContain("from './ButtonControl.svelte'")
     expect(iconButtonSource).toContain("from './ButtonControl.svelte'")
     expect(buttonSource).not.toContain('<style>')
     expect(iconButtonSource).not.toContain('<style>')
-
-    expect(sharedSource).toContain("button[data-variant='primary']")
-    expect(sharedSource).toContain("button[data-variant='primary']:hover:not(:disabled)")
-    expect(sharedSource).toContain("button[data-variant='primary']:active:not(:disabled)")
-    expect(sharedSource).toContain("button[data-variant='danger']")
-    expect(sharedSource).toContain("button[data-variant='danger']:hover:not(:disabled)")
-    expect(sharedSource).toContain("button[data-variant='danger']:active:not(:disabled)")
-    expect(sharedSource).toContain('button:disabled')
-    expect(sharedSource).toContain('button:focus-visible')
-    expect(sharedSource).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(sharedSource).toMatch(/transition:\s*none/)
   })
 
   it.each(componentNames)('%s uses scoped OpenForge token styles without utility framework coupling', (componentName) => {
@@ -66,14 +45,6 @@ describe('plugin-sdk core control styling contract', () => {
     expect(source).toContain('<style>')
     expect(source).toContain('var(--of-')
     expect(source).not.toMatch(/\bbtn(?:-|\b)|--color-/)
-  })
-
-  it.each(interactiveComponentNames)('%s keeps focus visible and removes transitions for reduced motion', (componentName) => {
-    const source = componentStyleSource(componentName)
-
-    expect(source).toContain(':focus-visible')
-    expect(source).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(source).toMatch(/transition:\s*none/)
   })
 
   it('references only canonical OpenForge theme properties', () => {
@@ -85,22 +56,6 @@ describe('plugin-sdk core control styling contract', () => {
 
     expect(referencedProperties.filter(({ property }) => !canonicalProperties.has(property as `--of-${string}`)))
       .toEqual([])
-  })
-
-  it('keeps primary and danger IconButton interaction states semantic', () => {
-    const source = buttonControlSource()
-
-    expect(source).toContain("button[data-variant='primary']:active:not(:disabled)")
-    expect(source).toContain("button[data-variant='danger']:hover:not(:disabled)")
-    expect(source).toContain("button[data-variant='danger']:active:not(:disabled)")
-  })
-
-  it.each(['TextField', 'Textarea'] as const)('%s keeps the normal field background when invalid', (componentName) => {
-    const source = componentSource(componentName)
-    const invalidRule = source.match(/\[aria-invalid='true'\]\)?\s*\{([^}]*)\}/)?.[1] ?? ''
-
-    expect(invalidRule).toContain('border-color: var(--of-field-invalid)')
-    expect(invalidRule).not.toContain('background:')
   })
 
   it('leaves Panel overflow policy to the caller', () => {
