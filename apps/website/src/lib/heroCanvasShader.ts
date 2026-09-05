@@ -255,6 +255,30 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     return 1.0 - smoothstep(0.001, 0.015, abs(secondPlane(d)));
   }
 
+  fn internalLightPosition(time: f32, motion: f32) -> vec3f {
+    let phase = time * motion;
+    return vec3f(
+      0.05 + 0.035 * sin(phase * 0.16),
+      0.76 + 0.018 * sin(phase * 0.11),
+      -0.04 + 0.025 * cos(phase * 0.14),
+    );
+  }
+
+  // Evaluate the source only along the refracted segment inside the glass.
+  // The nearest point moves with refraction; no screen-space glow is painted on.
+  fn internalLightRadiance(entry: vec3f, direction: vec3f, pathLength: f32, center: vec3f) -> vec3f {
+    let scale = vec3f(1.0, 0.70, 1.0);
+    let delta = (entry - center) * scale;
+    let ray = direction * scale;
+    let nearest = clamp(-dot(delta, ray) / max(dot(ray, ray), 0.0001), 0.0, max(pathLength, 0.0));
+    let separation = delta + ray * nearest;
+    let distanceSquared = dot(separation, separation);
+    let core = exp(-distanceSquared * 220.0);
+    let halo = exp(-distanceSquared * 45.0);
+    let transmission = exp(-nearest * 0.35) * (1.0 - exp(-max(pathLength, 0.0) * 12.0));
+    return vec3f(0.78, 0.93, 1.0) * (core * 0.15 + halo * 0.035) * transmission;
+  }
+
   // --- Main ---
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -309,12 +333,21 @@ export function createHeroCanvasShaderSource(layer = 3): string {
         let reflection = reflect(rd, n);
         let studio = pow(max(0.0, 1.0 - abs(reflection.x + 0.22)), 5.0);
         glass += vec3f(0.94, 0.96, 0.98) * studio * (0.08 + 0.15 * faceShade);
-        let softbox = exp(-pow((pos.z + 0.12 * pos.x) * 3.0, 2.0));
+        let softboxCoord = (pos.z + 0.12 * pos.x) * 3.0;
+        let softbox = exp(-softboxCoord * softboxCoord);
         glass += vec3f(0.98, 0.99, 1.0) * softbox * max(n.y, 0.0) * 0.16;
         let exitNormal = anvilNormal(exitPos);
         let backEdge = max(crystalEdge(exitPos), anvilWire(exitPos, exitNormal, params.detail));
         glass += vec3f(0.92, 0.96, 0.98) * backEdge * 0.07;
         glass = mix(glass, vec3f(0.90, 0.93, 0.95), smoothstep(0.15, 0.95, exitNormal.y) * 0.10);
+
+        let lightPos = internalLightPosition(time, motion);
+        glass += internalLightRadiance(entry, rdIn, thickness, lightPos);
+        let lightDirection = normalize(pos - lightPos);
+        let grazing = pow(clamp(1.0 - abs(dot(n, lightDirection)), 0.0, 1.0), 3.0);
+        let causticPhase = dot(exitPos, vec3f(4.8, 7.2, 3.6)) + time * motion * 0.18;
+        let caustic = smoothstep(0.82, 1.0, 0.5 + 0.5 * sin(causticPhase));
+        glass += vec3f(0.70, 0.91, 1.0) * grazing * caustic * (0.018 + 0.020 * fres);
 
         // Sparse structural seams and ordinary external reflections.
         glass += vec3f(0.86, 0.91, 1.0) * wire * 0.30;
