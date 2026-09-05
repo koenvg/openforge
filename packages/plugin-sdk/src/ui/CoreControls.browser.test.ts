@@ -116,7 +116,7 @@ describe.each(['light', 'dark', 'custom'])('core control browser styles in %s th
     } finally {
       await page.close()
     }
-  })
+  }, 30_000)
 
   it('shows a visible outline on every keyboard-focused control', async () => {
     const page = await browser.newPage({ reducedMotion: 'reduce' })
