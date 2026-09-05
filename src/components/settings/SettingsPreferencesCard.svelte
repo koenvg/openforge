@@ -32,7 +32,10 @@
 ✻ Worked for 20s`
 
 	function handleThemeChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		onThemeChange(event.currentTarget.value)
+		const requestedThemeId = event.currentTarget.value
+		// Keep the control on the committed theme while candidate CSS loads.
+		event.currentTarget.value = selectedThemeId
+		onThemeChange(requestedThemeId)
 	}
 
 	function handleTerminalFontChange(event: Event & { currentTarget: HTMLSelectElement }): void {

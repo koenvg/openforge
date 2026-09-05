@@ -1,0 +1,4 @@
+/* Ordinary plugin view CSS stays independent of theme selection. */
+.selected-theme-fixture-view {
+  padding: 12px;
+}

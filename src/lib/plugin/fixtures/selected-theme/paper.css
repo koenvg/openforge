@@ -1,0 +1,7 @@
+:root {
+  --selected-theme-fixture-paper: applied;
+}
+
+body {
+  border-top: 3px solid #805020;
+}

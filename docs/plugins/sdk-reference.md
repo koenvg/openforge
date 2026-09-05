@@ -92,6 +92,12 @@ Frontend UI contribution registrations use Svelte component loaders or component
 
 `openforge.themes.register(definition)` is available only when package metadata uses `enablement: "app"` and declares both `appEnablement` and `themes`. The definition contains a plugin-local `id`, label, explicit `light` or `dark` appearance, and every token named by `THEME_TOKEN_NAMES`. OpenForge exposes the theme as `${pluginId}:${id}`. Missing tokens, invalid values, reserved IDs, and duplicate local IDs fail registration without changing available themes. The returned `Disposable` unregisters the theme; OpenForge also removes registrations when activation ends.
 
+`stylesheets?: readonly string[]` names built `.css` files relative to the package root, for example `['./dist/paper.css', 'dist/accents.css']`. Paths may not contain traversal, URLs, percent escapes, backslashes, queries, or fragments. Include these files in the installed package. Do not also list them in `openforge.frontendStyles`, which remains active for the whole plugin lifecycle.
+
+The host loads candidate files through `plugin://` with inactive media. Only after every file loads does it commit CSS, tokens, appearance, and the selected ID together. A failed load or a 15-second timeout identifies the plugin and retains the current valid theme. Selecting another theme cancels pending files. Unregister, reload, disable, and uninstall remove the old generation's CSS. Successful reload restores the selected theme unless the user has since chosen another one.
+
+Theme CSS runs under the Trusted Plugin model and can override host layout or accessibility. Prefer tokens; use CSS only when tokens are insufficient. Disable the plugin to recover the built-in light theme. The [selected-theme fixture](../../src/lib/plugin/fixtures/selected-theme/README.md) contains a complete installable example.
+
 ### Review row actions
 
 `openforge.reviewUI.registerRowAction({ id, order?, component })` puts a control on every review-requested pull-request row a host surface shows. Today that is the cross-project attention overview. The component receives `api`, `context`, `pr` (the row's `ReviewPullRequest`) and `projectId`, and is ordered by numeric `order`, then namespaced contribution id.

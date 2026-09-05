@@ -139,8 +139,9 @@ const themeDefinition = {
   id: 'paper',
   label: 'Paper',
   appearance: 'light',
-  tokens: Object.fromEntries(THEME_TOKEN_NAMES.map(token => [token, `var(--contract-${token})`])),
-} as PluginThemeDefinition
+  tokens: Object.fromEntries(THEME_TOKEN_NAMES.map(token => [token, `var(--contract-${token})`])) as PluginThemeDefinition['tokens'],
+  stylesheets: ['./dist/paper.css', 'dist/accents.css'],
+} satisfies PluginThemeDefinition
 const themeRegistration = registry.frontendApi.themes.register(themeDefinition)
 void themeRegistration.dispose()
 void registry.frontendApi.agentSessions.list(listAgentSessionsRequest)

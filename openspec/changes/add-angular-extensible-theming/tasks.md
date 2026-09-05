@@ -44,9 +44,9 @@
 - [x] 5.3 Implement the public registration types, frontend interface, testing fake, and unavailable-host errors with app-enablement and capability checks; verify the focused SDK suites pass.
 - [x] 5.4 Add failing renderer runtime tests for registration qualification, plugin ownership, activation-generation cleanup, disable, uninstall, successful reload replacement, stale reload completion, and failed reload fallback; verify the focused plugin runtime suites fail first.
 - [x] 5.5 Implement runtime theme contribution storage and cleanup through the existing contribution lifecycle modules; verify plugin activation, app-enablement, and reload lifecycle tests pass.
-- [ ] 5.6 Add failing stylesheet lifecycle tests for package-relative `plugin://` resolution, inactive loading, atomic activation after all files load, load failure retention of the current theme, theme switch cleanup, and stale generation cleanup; verify the focused loader tests fail first.
-- [ ] 5.7 Implement selected-theme stylesheet loading separately from ordinary `frontendStyles`, including inactive preload, atomic commit, error attribution, and cleanup; verify loader and registry integration tests pass.
-- [ ] 5.8 Add an integration fixture that registers a contributed theme and verify it appears in settings, applies tokens and selected CSS, persists by qualified id, survives successful reload, and falls back after disable.
+- [x] 5.6 Add failing stylesheet lifecycle tests for package-relative `plugin://` resolution, inactive loading, atomic activation after all files load, load failure retention of the current theme, theme switch cleanup, and stale generation cleanup; verify the focused loader tests fail first.
+- [x] 5.7 Implement selected-theme stylesheet loading separately from ordinary `frontendStyles`, including inactive preload, atomic commit, error attribution, and cleanup; verify loader and registry integration tests pass.
+- [x] 5.8 Add an integration fixture that registers a contributed theme and verify it appears in settings, applies tokens and selected CSS, persists by qualified id, survives successful reload, and falls back after disable.
 
 ## 6. Public OpenForge UI building blocks
 

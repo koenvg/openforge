@@ -34,6 +34,28 @@ function appThemeApi() {
 }
 
 describe('plugin SDK theme testing fake', () => {
+  it.each([
+    '/dist/theme.css', '../theme.css', 'dist/../theme.css',
+    'https://example.com/theme.css', 'plugin://other/theme.css',
+    'C:\\theme.css', 'dist/theme.css?x=1', 'dist/theme.css#fragment',
+    'dist/%2e%2e/theme.css', 'dist/theme.js', '',
+  ])('rejects a theme stylesheet that is not a package-relative CSS artifact: %s', (path) => {
+    const api = appThemeApi()
+    expect(() => api.themes.register(theme({ stylesheets: [path] })))
+      .toThrow(/stylesheets/)
+    expect(api.__testing.registry.snapshot.themes).toEqual([])
+  })
+
+  it('keeps optional package-relative stylesheet declarations immutable', () => {
+    const api = appThemeApi()
+    const stylesheets = ['./dist/theme.css', 'dist/theme accents.css']
+    api.themes.register(theme({ stylesheets }))
+    stylesheets.push('dist/later.css')
+    expect(api.__testing.registry.snapshot.themes[0].stylesheets)
+      .toEqual(['./dist/theme.css', 'dist/theme accents.css'])
+    expect(Object.isFrozen(api.__testing.registry.snapshot.themes[0].stylesheets)).toBe(true)
+  })
+
   it('qualifies and records complete theme registrations', () => {
     const api = appThemeApi()
     const definition = theme()

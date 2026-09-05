@@ -1,0 +1,16 @@
+{
+  "name": "openforge-selected-theme-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["frontend.js", "tokens.js", "paper.css", "accents.css", "view.css"],
+  "openforge": {
+    "id": "selected-theme-fixture",
+    "apiVersion": 1,
+    "displayName": "Selected theme fixture",
+    "description": "Exercises selected-only theme stylesheets.",
+    "enablement": "app",
+    "frontend": "./frontend.js",
+    "frontendStyles": ["./view.css"],
+    "requires": ["appEnablement", "themes"]
+  }
+}

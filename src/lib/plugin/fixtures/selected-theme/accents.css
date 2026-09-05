@@ -1,0 +1,7 @@
+:root {
+  --selected-theme-fixture-accents: applied;
+}
+
+::selection {
+  background: #f0d7a8;
+}

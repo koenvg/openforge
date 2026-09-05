@@ -59,6 +59,8 @@ Metadata rules:
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.
 
+For selectable application themes, declare `themes` and `appEnablement`, use app enablement, and register a complete definition through `openforge.themes.register(...)`. Its optional `stylesheets` list is separate from `frontendStyles`: those CSS files apply only while the theme is selected. See [application themes](./plugins/sdk-reference.md#application-themes) for path rules, loading failures, lifecycle behavior, and Trusted Plugin risks.
+
 Project-enabled packages activate for the active Project and deactivate when that Project changes or clears. App-enabled packages activate once, remain available with or without an active Project, and receive current Project changes through `openforge.context.getSnapshot()` and component context props. Disabling, reloading, uninstalling, activation rollback, and app shutdown stop both entry points and registered background services.
 
 ## SDK package and host API versions
