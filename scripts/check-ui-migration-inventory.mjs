@@ -14,9 +14,84 @@ export const MIGRATED_UI_SOURCE_FILES = Object.freeze([
   'src/components/task-detail/AgentStatusPill.svelte',
   'src/components/task-detail/TaskDetailToolbar.svelte',
   'src/components/task-detail/TaskPaneNavigation.svelte',
+  'src/components/settings/CompanionGatewayHealth.svelte',
+  'src/components/settings/CompanionPairedDevices.svelte',
+  'src/components/settings/CompanionPairingSession.svelte',
+  'src/components/settings/CompanionTailscaleEndpoint.svelte',
+  'src/components/settings/GlobalSettingsContent.svelte',
+  'src/components/settings/HierarchicalSettingsCard.svelte',
+  'src/components/settings/ProjectSettingsContent.svelte',
+  'src/components/settings/ProviderSelectField.svelte',
+  'src/components/settings/SettingsAICard.svelte',
+  'src/components/settings/SettingsCategoryNav.svelte',
+  'src/components/settings/SettingsCompanionCard.svelte',
+  'src/components/settings/SettingsCredentialsCard.svelte',
+  'src/components/settings/SettingsDashboardProviderCard.svelte',
+  'src/components/settings/SettingsDeveloperLogsCard.svelte',
+  'src/components/settings/SettingsFocusFilterCard.svelte',
+  'src/components/settings/SettingsGeneralCard.svelte',
+  'src/components/settings/SettingsInstructionsCard.svelte',
+  'src/components/settings/SettingsPreferencesCard.svelte',
+  'src/components/settings/SettingsProcessMemoryCard.svelte',
+  'src/components/settings/SettingsProviderField.svelte',
+  'src/components/settings/SettingsSectionCard.svelte',
+  'src/components/settings/SettingsTaskLabelsCard.svelte',
+  'src/components/settings/SettingsView.svelte',
+  'src/components/plugin/GlobalPluginSettingsPanel.svelte',
+  'src/components/plugin/GlobalPluginSettingsSections.svelte',
+  'src/components/plugin/GlobalPluginLifecycleControls.svelte',
+  'src/components/plugin/PluginSettingsPanel.svelte',
 ])
 
 export const UI_MIGRATION_ALLOWLIST = Object.freeze({
+  // Settings keep responsive columns, diagnostic viewports, and chart geometry local.
+  'src/components/settings/CompanionPairedDevices.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+  ]),
+  'src/components/settings/CompanionTailscaleEndpoint.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+  ]),
+  'src/components/settings/HierarchicalSettingsCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-h-14' }),
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-h-16' }),
+    Object.freeze({ tag: 'span', marker: 'settings-layout', token: 'min-w-6' }),
+  ]),
+  'src/components/settings/ProviderSelectField.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-h-14' }),
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+  ]),
+  'src/components/settings/SettingsCredentialsCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-h-14' }),
+  ]),
+  'src/components/settings/SettingsDeveloperLogsCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'pre', marker: 'settings-layout', token: 'max-h-96' }),
+  ]),
+  'src/components/settings/SettingsPreferencesCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'Select', marker: 'settings-layout', token: 'min-w-0' }),
+    Object.freeze({ tag: 'span', marker: 'settings-layout', token: 'w-8' }),
+  ]),
+  'src/components/settings/SettingsProcessMemoryCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'span', marker: 'settings-layout', token: 'h-2' }),
+    Object.freeze({ tag: 'span', marker: 'settings-layout', token: 'w-2' }),
+    Object.freeze({ tag: 'span', marker: 'settings-layout', token: 'rounded-full' }),
+    Object.freeze({ tag: 'svg', marker: 'settings-layout', token: 'h-28' }),
+  ]),
+  'src/components/settings/SettingsSectionCard.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+  ]),
+  'src/components/settings/SettingsView.svelte': Object.freeze([
+    Object.freeze({ tag: 'main', marker: 'settings-layout', token: 'min-w-0' }),
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-32' }),
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'max-w-[76rem]' }),
+  ]),
+  'src/components/plugin/GlobalPluginLifecycleControls.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'max-w-48' }),
+  ]),
+  'src/components/plugin/PluginSettingsPanel.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-0' }),
+  ]),
+
   'src/components/shell/AppSidebar.svelte': Object.freeze([
     Object.freeze({ tag: 'aside', marker: 'of-app-sidebar', token: 'w-16' }),
     Object.freeze({ tag: 'aside', marker: 'of-app-sidebar', token: 'w-[17rem]' }),

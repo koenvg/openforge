@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import {
     disablePluginForApp,
     enablePluginForApp,
@@ -97,53 +99,43 @@
 
 <div class="flex flex-col items-end gap-2 shrink-0">
   {#if usesAppEnablement}
-    <label class="flex items-center gap-2 cursor-pointer">
-      <span class="text-xs text-base-content/70">Enabled throughout OpenForge</span>
-      <input
-        type="checkbox"
-        class="toggle toggle-primary toggle-sm"
-        role="switch"
-        aria-label="Enabled throughout OpenForge: {plugin.manifest.name}"
+    <div class="flex items-center gap-2">
+      <Switch label="Enabled throughout OpenForge" aria-label="Enabled throughout OpenForge: {plugin.manifest.name}"
         checked={$appEnabledPluginIds.has(plugin.manifest.id)}
         {disabled}
         onchange={(event) => handleAppToggle(event.currentTarget.checked)}
       />
-    </label>
+    </div>
   {:else}
-    <label class="flex items-center gap-2 cursor-pointer">
-      <span class="text-xs text-base-content/70">Enable by default</span>
-      <input
-        type="checkbox"
-        class="toggle toggle-primary toggle-sm"
-        role="switch"
-        aria-label="Enable by default: {plugin.manifest.name}"
+    <div class="flex items-center gap-2">
+      <Switch label="Enable by default" aria-label="Enable by default: {plugin.manifest.name}"
         data-testid="plugin-default-{plugin.manifest.id}"
         checked={pluginDefaults.get(plugin.manifest.id) ?? false}
         {disabled}
         onchange={(event) => onToggleDefault?.(plugin.manifest.id, event.currentTarget.checked)}
       />
-    </label>
+    </div>
   {/if}
-  <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" {disabled} onclick={handleReload}>Reload plugin</button>
+  <Button variant="ghost" size="xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" {disabled} onclick={handleReload}>Reload plugin</Button>
   {#if !isBuiltIn}
     {#if confirmingUninstall}
-      <div class="flex flex-col items-end gap-1 max-w-48">
-        <span class="text-[0.65rem] text-error text-right">This deletes all saved data for this plugin, in every project. It cannot be undone.</span>
+      <div class="settings-layout flex flex-col items-end gap-1 max-w-48">
+        <span class="text-[0.65rem] text-[var(--of-danger)] text-right">This deletes all saved data for this plugin, in every project. It cannot be undone.</span>
         <div class="flex items-center gap-2">
-          <button class="btn btn-ghost btn-xs" type="button" disabled={disabled || isUninstalling} onclick={cancelUninstallConfirmation}>Cancel</button>
-          <button
-            class="btn btn-error btn-xs"
+          <Button variant="ghost" size="xs" type="button" disabled={disabled || isUninstalling} onclick={cancelUninstallConfirmation}>Cancel</Button>
+          <Button
+            variant="danger" size="xs"
             type="button"
             aria-label="Confirm uninstall plugin: {plugin.manifest.name}"
             disabled={disabled || isUninstalling}
             onclick={handleUninstall}
           >
             {isUninstalling ? 'Uninstalling…' : 'Yes, uninstall'}
-          </button>
+          </Button>
         </div>
       </div>
     {:else}
-      <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" {disabled} onclick={beginUninstallConfirmation}>Uninstall plugin</button>
+      <Button variant="danger" size="xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" {disabled} onclick={beginUninstallConfirmation}>Uninstall plugin</Button>
     {/if}
   {/if}
   <GlobalPluginDiagnostics {plugin} {activeProjectId} {disabled} {onActionError} />

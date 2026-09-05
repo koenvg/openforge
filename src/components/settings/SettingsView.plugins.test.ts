@@ -6,6 +6,7 @@ import { settingsViewRenderIpc } from './SettingsView.renderIpc.testFixture'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+import { chooseSelectOption, openSelect } from '../../test-utils/select'
 import SettingsView from './SettingsView.svelte'
 
 describe('SettingsView plugin integration', () => {
@@ -140,8 +141,9 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     await openPluginsCategory()
 
-    const select = await screen.findByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
-    expect(select.value).toBe('missing-plugin.dashboard')
+    const select = await screen.findByRole('button', { name: 'Default project dashboard' }) as HTMLButtonElement
+    expect(select.textContent).toContain('missing-plugin.dashboard (unavailable)')
+    await openSelect(select)
     expect(screen.getByRole('option', { name: 'missing-plugin.dashboard (unavailable)' })).toBeTruthy()
     expect(settingsViewRenderIpc.setConfig).not.toHaveBeenCalled()
   })
@@ -154,8 +156,9 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     await openPluginsCategory()
 
-    const select = await screen.findByRole('combobox', { name: 'Default task workspace' }) as HTMLSelectElement
-    expect(select.value).toBe('missing-plugin.task-workspace')
+    const select = await screen.findByRole('button', { name: 'Default task workspace' }) as HTMLButtonElement
+    expect(select.textContent).toContain('missing-plugin.task-workspace (unavailable)')
+    await openSelect(select)
     expect(screen.getByRole('option', { name: 'missing-plugin.task-workspace (unavailable)' })).toBeTruthy()
     expect(settingsViewRenderIpc.setConfig).not.toHaveBeenCalled()
   })
@@ -173,7 +176,7 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: defaultProps })
     await openPluginsCategory()
 
-    const select = await screen.findByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
+    const select = await screen.findByRole('button', { name: 'Project dashboard' }) as HTMLButtonElement
     expect(select.disabled).toBe(true)
 
     resolvePreference('core')
@@ -188,11 +191,12 @@ describe('SettingsView plugin integration', () => {
     render(SettingsView, { props: defaultProps })
     await openPluginsCategory()
 
-    const select = await screen.findByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
-    expect(select.value).toBe('missing-plugin.dashboard')
+    const select = await screen.findByRole('button', { name: 'Project dashboard' }) as HTMLButtonElement
+    expect(select.textContent).toContain('missing-plugin.dashboard (unavailable)')
+    await openSelect(select)
     expect(screen.getByRole('option', { name: 'missing-plugin.dashboard (unavailable)' })).toBeTruthy()
 
-    await fireEvent.change(select, { target: { value: 'inherit' } })
+    await chooseSelectOption(select, /^Use global default/)
     await vi.waitFor(() => {
       expect(settingsViewRenderIpc.clearProjectConfig).toHaveBeenCalledWith(
         'test-project-id',

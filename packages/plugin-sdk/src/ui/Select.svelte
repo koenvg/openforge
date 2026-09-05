@@ -9,6 +9,10 @@
 
   interface Props {
     label: string
+    /** Keep the accessible name when the caller renders the visible caption. */
+    hideLabel?: boolean
+    /** IDs of caller-owned descriptions, combined with helper and error text. */
+    'aria-describedby'?: string
     options: readonly SelectOption[]
     value?: string
     open?: boolean
@@ -33,6 +37,8 @@
 
   let {
     label,
+    hideLabel = false,
+    'aria-describedby': externalDescription,
     options,
     value = $bindable(''),
     open = $bindable(false),
@@ -56,14 +62,14 @@
     disabled: optionDisabled,
   })))
   let describedBy = $derived(
-    [helperText ? helperId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined,
+    [externalDescription, helperText ? helperId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined,
   )
   let isInvalid = $derived(invalid || Boolean(error))
   let selectedOption = $derived(options.find((option) => option.value === value))
 </script>
 
 <div class="of-select-field {className ?? ''}" data-testid={testId}>
-  <span id={labelId} class="of-select-label">{label}</span>
+  {#if !hideLabel}<span id={labelId} class="of-select-label">{label}</span>{/if}
   <Select.Root
     type="single"
     items={rootItems}
@@ -78,7 +84,8 @@
     <Select.Trigger
       {id}
       class="of-select-trigger"
-      aria-labelledby={labelId}
+      aria-labelledby={hideLabel ? undefined : labelId}
+      aria-label={hideLabel ? label : undefined}
       aria-describedby={describedBy}
       aria-invalid={isInvalid ? 'true' : undefined}
     >

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import QRCode from 'qrcode'
   import { onMount } from 'svelte'
   import {
@@ -157,51 +159,57 @@
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 id="pair-phone-heading" class="m-0 text-sm font-medium">Pair a phone</h3>
-        <p class="m-0 text-xs text-base-content/60">The QR expires quickly and can be scanned only once.</p>
+        <p class="m-0 text-xs text-[var(--of-text-muted)]">The QR expires quickly and can be scanned only once.</p>
       </div>
       {#if !pairing}
-        <button type="button" class="btn btn-primary btn-sm" disabled={updating} onclick={startPairing}>Pair a phone</button>
+        <Button type="button" variant="primary" size="sm" disabled={updating} onclick={startPairing}>Pair a phone</Button>
       {/if}
     </div>
 
     {#if pairing?.deliveryPending}
-      <div class="rounded-md border border-base-300 p-3" aria-live="polite">
+      <Panel padding="none" variant="subtle">
+        <div class="-300 p-3" aria-live="polite">
         <div class="font-medium">Approved — waiting for phone</div>
-        <p class="m-0 mt-1 text-sm text-base-content/70">Keep this session open while the phone receives its one-time credential.</p>
+        <p class="m-0 mt-1 text-sm text-[var(--of-text-secondary)]">Keep this session open while the phone receives its one-time credential.</p>
       </div>
+      </Panel>
     {:else if pairing?.pendingRequest}
-      <div class="rounded-md border border-base-300 p-3">
+      <Panel padding="none" variant="subtle">
+        <div class="-300 p-3">
         <div class="font-medium">{pairing.pendingRequest.deviceName}</div>
-        <div class="mt-1 text-sm text-base-content/70">
+        <div class="mt-1 text-sm text-[var(--of-text-secondary)]">
           {platformLabel(pairing.pendingRequest.platform)} · Awaiting your approval
         </div>
-        <p class="m-0 mt-2 text-xs text-base-content/70">
+        <p class="m-0 mt-2 text-xs text-[var(--of-text-secondary)]">
           Approval grants this phone authority to Create backlog Tasks from a prompt, Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into
           running Agent terminals as your desktop user. This authority remains active while the Mac is locked and ends when the gateway is disabled, the device is revoked, or Companion identity is reset.
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
-          <button
+          <Button
             type="button"
-            class="btn btn-primary btn-sm"
+            variant="primary" size="sm"
             disabled={updating}
             aria-label={`Approve ${pairing.pendingRequest.deviceName}`}
             onclick={() => decidePairing('approve')}
-          >Approve</button>
-          <button
+          >Approve</Button>
+          <Button
             type="button"
-            class="btn btn-outline btn-error btn-sm"
+            variant="danger" size="sm"
             disabled={updating}
             aria-label={`Reject ${pairing.pendingRequest.deviceName}`}
             onclick={() => decidePairing('reject')}
-          >Reject</button>
+          >Reject</Button>
         </div>
       </div>
+      </Panel>
     {:else if pairing && qrDataUrl}
-      <div class="flex flex-col items-center gap-3 rounded-md border border-base-300 p-4 text-center">
-        <img src={qrDataUrl} alt="Companion pairing QR code" width="320" height="320" class="max-w-full rounded bg-white" />
-        <p class="m-0 text-sm text-base-content/70">Expires {formattedDate(pairing.expiresAt)}</p>
-        <button type="button" class="btn btn-ghost btn-sm" disabled={updating} onclick={cancelPairing}>Cancel pairing</button>
+      <Panel padding="none" variant="subtle">
+        <div class="flex flex-col items-center gap-3 p-4 text-center">
+        <img src={qrDataUrl} alt="Companion pairing QR code" width="320" height="320" class="max-w-full bg-white" />
+        <p class="m-0 text-sm text-[var(--of-text-secondary)]">Expires {formattedDate(pairing.expiresAt)}</p>
+        <Button type="button" variant="ghost" size="sm" disabled={updating} onclick={cancelPairing}>Cancel pairing</Button>
       </div>
+      </Panel>
     {/if}
   </section>
 {/if}

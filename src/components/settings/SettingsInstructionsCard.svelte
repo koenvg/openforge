@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
   import { FileText } from '@lucide/svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
 
@@ -18,12 +19,11 @@
 <SettingsSectionCard id="section-instructions" title="AI Instructions" {disabled}>
   {#snippet icon()}<FileText size={16} />{/snippet}
   <div class="flex flex-col gap-4">
-    <p class="text-[0.7rem] text-base-content/50">
+    <p class="text-[0.7rem] text-[var(--of-text-muted)]">
       Custom instructions prepended to the first prompt when starting a new task with an AI agent.
     </p>
-    <label class="flex flex-col gap-1">
-      <span class="text-[0.7rem] text-base-content/50">Instructions</span>
-      <textarea
+    <div class="flex flex-col gap-1">
+      <Textarea label="Instructions"
         bind:value={agentInstructions}
         oninput={(e) => {
           if (disabled || !(e.currentTarget instanceof HTMLTextAreaElement)) return
@@ -31,9 +31,9 @@
         }}
         placeholder="Optional instructions prepended to the first prompt when starting a new task..."
         rows="4"
-        class="textarea textarea-bordered w-full text-sm resize-y {disabled ? 'opacity-50 pointer-events-none' : ''}"
+        class="  w-full text-sm resize-y {disabled ? 'opacity-50 pointer-events-none' : ''}"
         disabled={disabled}
-      ></textarea>
-    </label>
+      ></Textarea>
+    </div>
   </div>
 </SettingsSectionCard>

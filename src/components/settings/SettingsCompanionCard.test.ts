@@ -140,6 +140,8 @@ describe('SettingsCompanionCard', () => {
 
     expect(setCompanionTailscaleHostname).toHaveBeenCalledWith('forge-mac-corrected.example.ts.net')
     expect(await screen.findByText(/Tailscale hostname saved/i)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Success')
+    expect(screen.getByRole('status').textContent).toContain('Tailscale hostname saved')
     expect(screen.getByText(/OpenForge operates no central server/i)).toBeTruthy()
   })
 
@@ -411,6 +413,7 @@ describe('SettingsCompanionCard', () => {
     )
 
     expect((await screen.findByRole('alert')).textContent).toContain('identity save failed')
+    expect(screen.getByRole('alert').textContent).toContain('Error')
     expect(getCompanionGatewayStatus).toHaveBeenCalledTimes(2)
     expect(listCompanionDevices).toHaveBeenCalledTimes(2)
     confirm.mockRestore()
@@ -449,7 +452,7 @@ describe('SettingsCompanionCard', () => {
     })
     render(SettingsCompanionCard)
 
-    expect(await screen.findByText('Error')).toBeTruthy()
+    expect((await screen.findByRole('alert')).textContent).toContain('Error')
     expect(screen.getByText('No reachable private network interface is available')).toBeTruthy()
   })
 })

@@ -1,4 +1,13 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import { createAttachmentKey, fromAction } from 'svelte/attachments'
+  const fitAttachment = createAttachmentKey()
+  import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { ChevronsDownUp, ChevronsUpDown, Info, RotateCcw, SlidersHorizontal } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
   import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
@@ -131,82 +140,81 @@
 
 {#snippet resetToGlobalButton(setting: HierarchicalSettingDef)}
   {#if mode === 'project' && setting.control !== 'plugins' && isOverridden(setting.key)}
-    <button
+    <Button
       type="button"
-      class="btn btn-ghost btn-sm min-h-10 shrink-0"
+      variant="ghost" size="sm" class="shrink-0"
       aria-label="Reset {setting.label} to global default"
       disabled={disabled || resettingKey === setting.key}
       onclick={() => onResetSetting?.(setting.key)}
     >
       <RotateCcw size={14} aria-hidden="true" />
       {resettingKey === setting.key ? 'Resetting…' : 'Reset'}
-    </button>
+    </Button>
   {/if}
 {/snippet}
 
-<section
+<Panel
   id="section-{sectionId}"
   aria-labelledby="{sectionId}-heading"
-  class="overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-sm"
+  padding="none"
 >
-  <div class="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-base-300 px-5 py-3">
-    <div class="flex min-w-0 items-center gap-3">
-      <div class="grid size-9 shrink-0 place-items-center rounded-lg border border-primary/15 bg-primary/8 text-primary" aria-hidden="true">
+  {#snippet header()}
+  <div class="settings-layout flex min-h-14 flex-wrap items-center justify-between gap-3">
+    <div class="settings-layout flex min-w-0 items-center gap-3">
+      <div class="grid shrink-0 place-items-center text-[var(--of-accent)]" aria-hidden="true">
         <SlidersHorizontal size={18} />
       </div>
-      <div class="min-w-0">
-        <h2 id="{sectionId}-heading" class="m-0 text-sm font-semibold text-base-content">
+      <div class="settings-layout min-w-0">
+        <h2 id="{sectionId}-heading" class="m-0 text-sm font-semibold text-[var(--of-text)]">
           {heading}
         </h2>
-        <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/60">{helperText}</p>
+        <p class="m-0 mt-0.5 text-xs leading-5 text-[var(--of-text-muted)]">{helperText}</p>
       </div>
     </div>
 
     {#if mode === 'project' && onResetToGlobal}
-      <button
+      <Button
         type="button"
-        class="btn btn-outline btn-sm min-h-10"
+        variant="outline" size="sm"
         disabled={disabled}
         onclick={onResetToGlobal}
         data-testid="reset-to-global"
       >
         <RotateCcw size={15} aria-hidden="true" />
         Reset all overrides
-      </button>
+      </Button>
     {/if}
   </div>
 
-  <div class="divide-y divide-base-300/80">
+  {/snippet}
+
+  <div class="divide-y divide-[var(--of-border)]">
     {#each visibleSettings as setting (setting.key)}
       {@const fullWidth = isFullWidth(setting)}
       <div
-        class="grid min-h-16 gap-3 px-5 py-3 {fullWidth ? '' : 'md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.85fr)] md:items-center'}"
+        class="settings-layout grid min-h-16 gap-3 px-5 py-3 {fullWidth ? '' : 'md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.85fr)] md:items-center'}"
         data-testid="row-{setting.key}"
         data-layout={fullWidth ? 'stacked' : 'split'}
       >
-        <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0">
+        <div class="settings-layout flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div class="settings-layout min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-sm font-medium text-base-content">{setting.label}</span>
+              <span class="text-sm font-medium text-[var(--of-text)]">{setting.label}</span>
               {#if mode === 'project' && setting.control !== 'plugins'}
-                <span
-                  class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-medium {isOverridden(setting.key) ? 'border-warning/35 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}"
-                  data-testid="status-{setting.key}"
-                >
-                  <span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
+                <Badge variant={isOverridden(setting.key) ? 'warning' : 'success'} data-testid="status-{setting.key}">
                   {settingStatus(setting)}
-                </span>
+                </Badge>
               {/if}
             </div>
-            <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/55 {fullWidth ? 'max-w-4xl' : ''}">{setting.description}</p>
+            <p class="m-0 mt-0.5 text-xs leading-5 text-[var(--of-text-muted)] {fullWidth ? 'max-w-4xl' : ''}">{setting.description}</p>
           </div>
 
           {#if fullWidth}
             <!-- Anchored beside the label so the toggle stays put while the field grows below it. -->
             <div class="flex shrink-0 flex-wrap items-center gap-1">
-              <button
+              <Button
                 type="button"
-                class="btn btn-ghost btn-sm min-h-10"
+                variant="ghost" size="sm"
                 aria-expanded={isExpanded(setting.key)}
                 aria-controls="setting-{setting.key}"
                 aria-label="{isExpanded(setting.key) ? 'Collapse' : 'Expand'} {setting.label}"
@@ -220,11 +228,11 @@
                   <ChevronsUpDown size={14} aria-hidden="true" />
                   Expand
                 {/if}
-              </button>
+              </Button>
               {#if mode === 'global' && differsFromDefault(setting)}
-                <button
+                <Button
                   type="button"
-                  class="btn btn-ghost btn-sm min-h-10"
+                  variant="ghost" size="sm"
                   aria-label="Reset {setting.label} to default"
                   disabled={disabled}
                   onclick={() => onChange(setting.key, setting.default)}
@@ -232,106 +240,95 @@
                 >
                   <RotateCcw size={14} aria-hidden="true" />
                   Reset to default
-                </button>
+                </Button>
               {/if}
               {@render resetToGlobalButton(setting)}
             </div>
           {/if}
         </div>
 
-        <div class="flex min-w-0 gap-3 {fullWidth ? 'flex-col items-stretch' : 'items-center justify-between md:justify-end'}">
+        <div class="settings-layout flex min-w-0 gap-3 {fullWidth ? 'flex-col items-stretch' : 'items-center justify-between md:justify-end'}">
           {#if setting.notice}
             <!-- Sits above the field, not in the description, because it states what
                  the value can and cannot do — easy to miss once the field is expanded. -->
-            <p
-              class="m-0 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-xs leading-5 text-base-content/75"
+            <Panel padding="none" variant="subtle">
+              <p
+              class="m-0 flex items-start gap-1.5 px-2.5 py-1.5 text-xs leading-5 text-[var(--of-text-secondary)]"
               data-testid="notice-{setting.key}"
             >
-              <Info size={14} class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+              <Info size={14} class="mt-0.5 shrink-0 text-[var(--of-warning)]" aria-hidden="true" />
               <span>{setting.notice}</span>
             </p>
+            </Panel>
           {/if}
           {#if setting.control === 'toggle'}
-            <label class="flex min-h-10 cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                role="switch"
-                class="toggle toggle-primary toggle-sm"
-                aria-label={setting.label}
+            <div class="flex items-center gap-2">
+              <Switch label={setting.label} hideLabel
                 checked={currentValue(setting.key) === 'true'}
                 disabled={disabled}
                 onchange={(event) => onChange(setting.key, event.currentTarget.checked ? 'true' : 'false')}
                 data-testid={setting.key}
               />
-              <span class="min-w-6 text-xs text-base-content/65">{currentValue(setting.key) === 'true' ? 'On' : 'Off'}</span>
-            </label>
+              <span class="settings-layout min-w-6 text-xs text-[var(--of-text-secondary)]">{currentValue(setting.key) === 'true' ? 'On' : 'Off'}</span>
+            </div>
           {:else if setting.control === 'select'}
             {#if setting.key === 'ai_provider' && providerField}
-              <div class="min-w-0 flex-1 md:max-w-md">{@render providerField()}</div>
+              <div class="settings-layout min-w-0 flex-1 md:max-w-md">{@render providerField()}</div>
             {:else}
-              <select
-                class="select select-bordered select-sm min-h-10 w-full md:max-w-64"
-                aria-label={setting.label}
+              <Select
+                label={setting.label} hideLabel
+                class="w-full md:max-w-64"
                 value={currentValue(setting.key)}
-                disabled={disabled}
-                onchange={(event) => onChange(setting.key, event.currentTarget.value)}
-                data-testid={setting.key}
-              >
-                {#each setting.options ?? [] as option (option.value)}
-                  <option value={option.value}>{option.label}</option>
-                {/each}
-              </select>
+                {disabled}
+                onValueChange={(value) => onChange(setting.key, value)}
+                testId={setting.key}
+                options={setting.options ?? []}
+              />
             {/if}
           {:else if setting.control === 'text'}
-            <input
+            <TextField label={setting.label} hideLabel
               type="text"
-              class="input input-bordered input-sm min-h-10 w-full md:max-w-64"
-              aria-label={setting.label}
+              class="w-full md:max-w-64"
               value={currentValue(setting.key)}
               disabled={disabled}
               oninput={(event) => onChange(setting.key, event.currentTarget.value)}
               data-testid={setting.key}
             />
           {:else if setting.control === 'number'}
-            <input
+            <TextField label={setting.label} hideLabel
               type="number"
-              class="input input-bordered input-sm min-h-10 w-full md:max-w-64"
-              aria-label={setting.label}
+              class="w-full md:max-w-64"
               value={currentValue(setting.key)}
               disabled={disabled}
               oninput={(event) => onChange(setting.key, event.currentTarget.value)}
               data-testid={setting.key}
             />
           {:else if setting.control === 'textarea'}
-            <textarea
+            <Textarea label={setting.label} hideLabel
               id="setting-{setting.key}"
-              class="textarea textarea-bordered w-full min-h-[12rem] resize-y font-mono text-xs leading-relaxed"
-              aria-label={setting.label}
+              class="w-full resize-y"
+              style="min-height: 12rem; font-family: var(--of-font-mono); font-size: var(--of-text-xs); line-height: var(--of-line-height-md)"
               value={currentValue(setting.key)}
               disabled={disabled}
               oninput={(event) => onChange(setting.key, event.currentTarget.value)}
               data-testid={setting.key}
-              use:fitToContent={{ expanded: isExpanded(setting.key), value: currentValue(setting.key) }}
-            ></textarea>
+              {...{ [fitAttachment]: fromAction(fitToContent, () => ({ expanded: isExpanded(setting.key), value: currentValue(setting.key) })) }}
+            ></Textarea>
           {:else if setting.control === 'plugins'}
             <div class="flex w-full flex-col gap-2">
               {#if pluginRows.length === 0}
-                <span class="text-xs text-base-content/55">No plugins installed</span>
+                <span class="text-xs text-[var(--of-text-muted)]">No plugins installed</span>
               {:else}
                 {#each pluginRows as plugin (plugin.id)}
-                  <label class="flex min-h-10 cursor-pointer items-center justify-between gap-4">
-                    <span class="text-sm text-base-content">{plugin.name}</span>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      class="toggle toggle-primary toggle-sm"
-                      aria-label="Toggle plugin default: {plugin.name}"
+                  <div class="flex items-center justify-between gap-4">
+                    <span class="text-sm">{plugin.name}</span>
+                    <Switch label="Toggle plugin default: {plugin.name}" hideLabel
                       checked={plugin.enabled}
                       disabled={disabled}
                       onchange={(event) => onPluginToggle?.(plugin.id, event.currentTarget.checked)}
                       data-testid="plugin-default-{plugin.id}"
                     />
-                  </label>
+                  </div>
                 {/each}
               {/if}
             </div>
@@ -344,4 +341,4 @@
       </div>
     {/each}
   </div>
-</section>
+</Panel>

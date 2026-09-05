@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onMount } from 'svelte'
   import {
     getCompanionGatewayStatus,
@@ -170,12 +173,12 @@
   description="Opt in to mobile Task actions with interactive Agent terminal access."
 >
   <div class="flex flex-col gap-4">
-    <p class="m-0 text-sm text-base-content/70">
+    <p class="m-0 text-sm text-[var(--of-text-secondary)]">
       OpenForge must remain running for the Mobile Companion to connect. Paired phones can Create backlog Tasks from a prompt, Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user. Task actions follow desktop lifecycle safeguards; terminal access alone cannot create, stop, or replace Agent Sessions. This authority remains active while this Mac is locked and ends when the Companion Gateway is disabled, the device is revoked, or Companion identity is reset. The internal desktop and CLI bridge stays local to this Mac.
     </p>
 
     {#if loading && !status}
-      <p class="m-0 text-sm text-base-content/60" aria-live="polite">Loading Companion Gateway status…</p>
+      <p class="m-0 text-sm text-[var(--of-text-muted)]" aria-live="polite">Loading Companion Gateway status…</p>
     {:else if status}
       <CompanionGatewayHealth {status} {updating} ontoggle={toggleGateway} />
 
@@ -203,31 +206,39 @@
         onremove={removeDevice}
       />
 
-      <section class="flex flex-col gap-2 border-t border-base-300 pt-4" aria-labelledby="companion-identity-reset-heading">
+      <section class="flex flex-col gap-2 border-t border-[var(--of-border)] pt-4" aria-labelledby="companion-identity-reset-heading">
         <div>
           <h3 id="companion-identity-reset-heading" class="m-0 text-sm font-medium">Reset Companion identity</h3>
-          <p class="m-0 text-xs text-base-content/60">
+          <p class="m-0 text-xs text-[var(--of-text-muted)]">
             Replace this desktop’s key and certificate, revoke every device, and require all phones to pair again.
           </p>
         </div>
-        <button
+        <Button
           type="button"
-          class="btn btn-outline btn-error btn-sm self-start"
+          variant="danger" size="sm" class="self-start"
           disabled={updating}
           onclick={resetIdentity}
-        >Reset Companion identity</button>
+        >Reset Companion identity</Button>
       </section>
     {/if}
 
     {#if feedback}
-      <div class="alert alert-success text-sm" aria-live="polite">{feedback}</div>
+      <Panel padding="none" variant="subtle">
+        <div class="flex items-center gap-3 p-3 text-sm" role="status">
+          <Badge variant="success">Success</Badge>
+          <span>{feedback}</span>
+        </div>
+      </Panel>
     {/if}
 
     {#if requestError}
-      <div role="alert" class="alert alert-error text-sm">
-        <span>{requestError}</span>
-        <button type="button" class="btn btn-ghost btn-xs" onclick={refresh}>Retry</button>
-      </div>
+      <Panel padding="none" variant="subtle">
+        <div role="alert" class="flex items-center gap-3 p-3 text-sm">
+          <Badge variant="danger">Error</Badge>
+          <span>{requestError}</span>
+          <Button type="button" variant="ghost" size="xs" onclick={refresh}>Retry</Button>
+        </div>
+      </Panel>
     {/if}
   </div>
 </SettingsSectionCard>

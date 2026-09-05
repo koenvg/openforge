@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { AlertCircle, Blocks, Search } from '@lucide/svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Switch from '@openforge-app/plugin-sdk/ui/Switch.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import { AlertCircle, Blocks } from '@lucide/svelte'
   import {
     installedPlugins,
     enabledPluginIds,
@@ -62,9 +67,9 @@
     return isEnabled ? 'Enabled' : 'Disabled'
   }
 
-  function statusClass(plugin: PluginEntry, isEnabled: boolean): string {
-    if (hasPluginAttention(plugin)) return 'badge-error'
-    return isEnabled ? 'badge-success' : 'badge-ghost'
+  function statusVariant(plugin: PluginEntry, isEnabled: boolean): 'danger' | 'success' | 'neutral' {
+    if (hasPluginAttention(plugin)) return 'danger'
+    return isEnabled ? 'success' : 'neutral'
   }
 
   function setFilter(filter: PluginFilter) {
@@ -95,96 +100,102 @@
 >
   {#snippet icon()}<Blocks size={18} />{/snippet}
   {#snippet actions()}
-    <span class="badge badge-success badge-outline">{enabledCount} enabled</span>
+    <Badge variant="success">{enabledCount} enabled</Badge>
     {#if attentionCount > 0}
-      <span class="badge badge-error badge-outline">{attentionCount} needs attention</span>
+      <Badge variant="danger">{attentionCount} needs attention</Badge>
     {/if}
-    <span class="badge badge-ghost">{disabledCount} disabled</span>
+    <Badge variant="neutral">{disabledCount} disabled</Badge>
   {/snippet}
   <div class="flex flex-col gap-4">
-    <p class="m-0 text-xs text-base-content/50">Plugin enablement inherits your global plugin defaults; changes here apply to this project only.</p>
+    <p class="m-0 text-xs text-[var(--of-text-muted)]">Plugin enablement inherits your global plugin defaults; changes here apply to this project only.</p>
     <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <label class="input input-bordered input-sm flex items-center gap-2 xl:w-80">
-        <Search size={16} class="text-base-content/50" />
-        <input
+      <div class="flex items-center gap-2 xl:w-80">
+        <TextField label="Search plugins"
           type="search"
           class="grow"
-          aria-label="Search plugins"
           placeholder="Search plugins"
           bind:value={searchQuery}
           disabled={disabled}
         />
-      </label>
+      </div>
 
       <div class="flex flex-wrap gap-2" aria-label="Plugin filters">
-        <button type="button" class="btn btn-xs {activeFilter === 'all' ? 'btn-primary' : 'btn-outline'}" onclick={() => setFilter('all')} disabled={disabled}>All</button>
-        <button type="button" class="btn btn-xs {activeFilter === 'enabled' ? 'btn-primary' : 'btn-outline'}" onclick={() => setFilter('enabled')} disabled={disabled}>Enabled</button>
-        <button type="button" class="btn btn-xs {activeFilter === 'disabled' ? 'btn-primary' : 'btn-outline'}" onclick={() => setFilter('disabled')} disabled={disabled}>Disabled</button>
-        <button type="button" class="btn btn-xs {activeFilter === 'attention' ? 'btn-primary' : 'btn-outline'}" onclick={() => setFilter('attention')} disabled={disabled}>Needs attention</button>
+        <Button type="button" variant={activeFilter === 'all' ? 'primary' : 'outline'} size="xs" onclick={() => setFilter('all')} disabled={disabled}>All</Button>
+        <Button type="button" variant={activeFilter === 'enabled' ? 'primary' : 'outline'} size="xs" onclick={() => setFilter('enabled')} disabled={disabled}>Enabled</Button>
+        <Button type="button" variant={activeFilter === 'disabled' ? 'primary' : 'outline'} size="xs" onclick={() => setFilter('disabled')} disabled={disabled}>Disabled</Button>
+        <Button type="button" variant={activeFilter === 'attention' ? 'primary' : 'outline'} size="xs" onclick={() => setFilter('attention')} disabled={disabled}>Needs attention</Button>
       </div>
     </div>
 
     {#if $pluginLoadError}
-      <div class="text-xs text-error bg-error/10 p-3 rounded flex items-start gap-2">
+      <Panel padding="none" variant="subtle">
+        <div class="text-xs text-[var(--of-danger)] p-3 flex items-start gap-2">
         <AlertCircle size={14} class="shrink-0 mt-0.5" />
         <span class="break-words">{$pluginLoadError}</span>
       </div>
+      </Panel>
     {/if}
 
     {#if actionError}
-      <div class="text-xs text-error bg-error/10 p-3 rounded flex items-start gap-2">
+      <Panel padding="none" variant="subtle">
+        <div class="text-xs text-[var(--of-danger)] p-3 flex items-start gap-2">
         <AlertCircle size={14} class="shrink-0 mt-0.5" />
         <span class="break-words">{actionError}</span>
       </div>
+      </Panel>
     {/if}
 
     {#if pluginsList.length === 0}
-      <div class="text-sm text-base-content/50 text-center py-8 border border-dashed border-base-300 rounded-lg">
+      <Panel padding="none" variant="subtle">
+        <div class="text-sm text-[var(--of-text-muted)] text-center py-8">
         No project-enabled plugins installed
       </div>
+      </Panel>
     {:else if filteredPlugins.length === 0}
-      <div class="text-sm text-base-content/50 text-center py-8 border border-dashed border-base-300 rounded-lg">
+      <Panel padding="none" variant="subtle">
+        <div class="text-sm text-[var(--of-text-muted)] text-center py-8">
         No plugins match the current search or filter
       </div>
+      </Panel>
     {:else}
-      <div class="overflow-hidden rounded-lg border border-base-300 bg-base-100">
+      <Panel padding="none" variant="subtle">
+        <div class="overflow-hidden">
         {#each filteredPlugins as plugin (plugin.manifest.id)}
           {@const isEnabled = $enabledPluginIds.has(plugin.manifest.id)}
-          <div class="grid gap-3 border-b border-base-300/70 p-4 transition-colors last:border-b-0 hover:bg-base-200/30 md:grid-cols-[3rem_minmax(0,1fr)_5rem_8rem] md:items-center">
-            <label class="flex min-h-11 items-center justify-start md:justify-center">
-              <input
-                type="checkbox"
-                role="switch"
-                class="toggle toggle-primary toggle-sm"
-                aria-label="{isEnabled ? 'Disable' : 'Enable'} for this project: {plugin.manifest.name}"
+          <div class="grid gap-3 border-b border-[var(--of-border)] p-4 transition-colors last:border-b-0 hover:bg-[var(--of-surface-subtle)] md:grid-cols-[3rem_minmax(0,1fr)_5rem_8rem] md:items-center">
+            <div class="flex items-center justify-start md:justify-center">
+              <Switch hideLabel label="{isEnabled ? 'Disable' : 'Enable'} for this project: {plugin.manifest.name}"
                 checked={isEnabled}
                 disabled={disabled}
                 onchange={() => handleToggle(plugin.manifest.id, isEnabled)}
               />
-            </label>
+            </div>
 
-            <div class="min-w-0">
+            <div class="settings-layout min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="font-medium text-base-content">{plugin.manifest.name}</span>
-                <span class="badge badge-ghost badge-xs ml-auto md:hidden">{statusLabel(plugin, isEnabled)}</span>
+                <span class="font-medium text-[var(--of-text)]">{plugin.manifest.name}</span>
+                <Badge variant="neutral" class="ml-auto md:hidden">{statusLabel(plugin, isEnabled)}</Badge>
               </div>
-              <p class="m-0 mt-1 text-sm leading-6 text-base-content/65">{plugin.manifest.description}</p>
+              <p class="m-0 mt-1 text-sm leading-6 text-[var(--of-text-secondary)]">{plugin.manifest.description}</p>
               {#if plugin.error}
-                <div class="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-error/10 px-2 py-1.5 text-xs text-error">
+                <Panel padding="none" variant="subtle">
+                  <div class="mt-2 flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs text-[var(--of-danger)]">
                   <AlertCircle size={14} class="shrink-0" />
                   <span class="break-words">{plugin.error}</span>
                 </div>
+                </Panel>
               {/if}
             </div>
 
-            <div class="text-xs font-mono text-base-content/50 md:justify-self-end md:text-right">v{plugin.manifest.version}</div>
+            <div class="text-xs font-mono text-[var(--of-text-muted)] md:justify-self-end md:text-right">v{plugin.manifest.version}</div>
 
             <div class="hidden md:block md:justify-self-end">
-              <span class="badge badge-sm {statusClass(plugin, isEnabled)}">{statusLabel(plugin, isEnabled)}</span>
+              <Badge variant={statusVariant(plugin, isEnabled)}>{statusLabel(plugin, isEnabled)}</Badge>
             </div>
           </div>
         {/each}
       </div>
+      </Panel>
     {/if}
   </div>
 </SettingsSectionCard>

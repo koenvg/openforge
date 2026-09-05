@@ -3,6 +3,8 @@
 
   interface Props extends Omit<HTMLInputAttributes, 'checked' | 'children' | 'size' | 'type'> {
     label: string
+    /** Keep the accessible name when the caller renders the visible caption. */
+    hideLabel?: boolean
     checked?: boolean
     error?: string | null
     invalid?: boolean
@@ -14,11 +16,13 @@
 
   let {
     label,
+    hideLabel = false,
     checked = $bindable(false),
     error = null,
     invalid = false,
     id = `of-switch-${generatedId}`,
     class: className,
+    'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedby,
     'aria-invalid': ariaInvalid,
     onchange,
@@ -43,7 +47,8 @@
       type="checkbox"
       role="switch"
       {checked}
-      aria-describedby={describedBy}
+      aria-label={hideLabel ? label : ariaLabel}
+    aria-describedby={describedBy}
       aria-invalid={isInvalid ? 'true' : ariaInvalid}
       onchange={(event) => {
         checked = event.currentTarget.checked
@@ -52,7 +57,7 @@
       }}
     />
     <span class="of-switch-track" aria-hidden="true"></span>
-    <span class="of-switch-label">{label}</span>
+    {#if !hideLabel}<span class="of-switch-label">{label}</span>{/if}
   </label>
   {#if error}
     <span id={errorId} class="of-switch-error" role="alert">{error}</span>

@@ -40,6 +40,20 @@ describe('SettingsTaskLabelsCard', () => {
     expect(await screen.findByText('docs')).toBeTruthy()
   })
 
+  it('announces duplicate-label validation and allows correction with the keyboard', async () => {
+    render(SettingsTaskLabelsCard, { props: { projectId: 'P-1', disabled: false } })
+    await screen.findByText('bug')
+    const input = screen.getByRole('textbox', { name: 'New task label' })
+    await fireEvent.input(input, { target: { value: 'bug' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('alert').textContent).toBe('Label already exists')
+    expect(createTaskLabel).not.toHaveBeenCalled()
+    await fireEvent.input(input, { target: { value: 'docs' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    await fireEvent.keyDown(input, { key: 'Enter' })
+    expect(createTaskLabel).toHaveBeenCalledWith('P-1', 'docs')
+  })
+
   it('confirms before deleting project task labels from settings', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(SettingsTaskLabelsCard, { props: { projectId: 'P-1', disabled: false } })

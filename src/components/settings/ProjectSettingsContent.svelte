@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
   import SettingsDashboardProviderCard from './SettingsDashboardProviderCard.svelte'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
@@ -199,19 +200,19 @@
 {:else if activeSection === 'danger' && controller.hasProject}
   <SettingsSectionCard title="Danger Zone" description="Actions here permanently affect this project." tone="danger">
     <div class="flex flex-col gap-3">
-      <div class="flex min-h-10 flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         {#if controller.confirmingDelete}
-          <span class="text-sm font-medium text-error">Delete “{controller.projectName}”? This cannot be undone.</span>
-          <button class="btn btn-error btn-sm min-h-10" onclick={controller.handleDelete} disabled={controller.isDeleting}>
+          <span class="text-sm font-medium text-[var(--of-danger)]">Delete “{controller.projectName}”? This cannot be undone.</span>
+          <Button variant="danger" size="sm" onclick={controller.handleDelete} disabled={controller.isDeleting}>
             {controller.isDeleting ? 'Deleting…' : 'Yes, delete'}
-          </button>
-          <button class="btn btn-ghost btn-sm min-h-10" onclick={controller.cancelDeleteConfirmation} disabled={controller.isDeleting}>Cancel</button>
+          </Button>
+          <Button variant="ghost" size="sm" onclick={controller.cancelDeleteConfirmation} disabled={controller.isDeleting}>Cancel</Button>
         {:else}
-          <button class="btn btn-error btn-sm min-h-10" onclick={controller.beginDeleteConfirmation}>Delete Project</button>
+          <Button variant="danger" size="sm" onclick={controller.beginDeleteConfirmation}>Delete Project</Button>
         {/if}
       </div>
       {#if controller.deleteError}
-        <p class="m-0 break-all font-mono text-sm text-error" role="alert">{controller.deleteError}</p>
+        <p class="m-0 break-all font-mono text-sm text-[var(--of-danger)]" role="alert">{controller.deleteError}</p>
       {/if}
     </div>
   </SettingsSectionCard>

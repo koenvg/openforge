@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { CompanionGatewayPhase, CompanionGatewayStatus } from '../../lib/types'
 
   interface Props {
@@ -23,20 +26,25 @@
 <div class="flex flex-wrap items-center justify-between gap-3">
   <div>
     <div class="text-sm font-medium">Gateway health</div>
-    <div class="text-sm text-base-content/70" aria-live="polite">{phaseLabel(status.phase)}</div>
+    <div class="text-sm text-[var(--of-text-secondary)]" aria-live="polite">{phaseLabel(status.phase)}</div>
   </div>
-  <button
+  <Button
     type="button"
-    class="btn {status.enabled ? 'btn-outline btn-error' : 'btn-primary'} btn-sm"
+    variant={status.enabled ? 'danger' : 'primary'} size="sm"
     disabled={updating}
     onclick={ontoggle}
   >
     {status.enabled ? 'Disable Companion Gateway' : 'Enable Companion Gateway'}
-  </button>
+  </Button>
 </div>
 
 {#if status.error}
-  <div role="alert" class="alert alert-error text-sm">{status.error}</div>
+  <Panel padding="none" variant="subtle">
+    <div role="alert" class="flex items-center gap-3 p-3 text-sm">
+      <Badge variant="danger">Error</Badge>
+      <span>{status.error}</span>
+    </div>
+  </Panel>
 {/if}
 
 {#if status.endpoints.length > 0}
@@ -44,17 +52,18 @@
     <div class="text-sm font-medium">Offered endpoints</div>
     <ul class="m-0 flex list-none flex-col gap-2 p-0">
       {#each status.endpoints as endpoint (endpoint.url)}
-        <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-base-300 px-3 py-2">
-          <span class="badge badge-ghost badge-sm">{endpoint.kind === 'tailscale' ? 'Tailscale' : 'LAN'}</span>
+        <li><Panel padding="none"><div class="flex flex-wrap items-center justify-between gap-3 p-3">
+          <Badge variant="neutral">{endpoint.kind === 'tailscale' ? 'Tailscale' : 'LAN'}</Badge>
           <code class="break-all text-xs">{endpoint.url}</code>
-        </li>
+        </div>
+        </Panel></li>
       {/each}
     </ul>
   </div>
 {/if}
 
 {#if status.hostId}
-  <details class="text-sm text-base-content/70">
+  <details class="text-sm text-[var(--of-text-secondary)]">
     <summary class="cursor-pointer font-medium">Desktop host identity</summary>
     <dl class="mt-2 grid gap-2">
       <div>

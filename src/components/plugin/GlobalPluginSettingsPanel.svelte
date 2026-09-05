@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import { AlertCircle, Blocks } from '@lucide/svelte'
   import { error as pluginLoadError } from '../../lib/plugin/pluginStore'
   import SettingsSectionCard from '../settings/SettingsSectionCard.svelte'
@@ -34,17 +35,21 @@
     <GlobalPluginInstallationSection {activeProjectId} {disabled} onActionError={handleActionError} />
 
     {#if $pluginLoadError}
-      <div class="text-xs text-error bg-error/10 p-3 rounded flex items-start gap-2">
+      <Panel padding="none" variant="subtle">
+        <div class="text-xs text-[var(--of-danger)] p-3 flex items-start gap-2">
         <AlertCircle size={14} class="shrink-0 mt-0.5" />
         <span class="break-words">{$pluginLoadError}</span>
       </div>
+      </Panel>
     {/if}
 
     {#if actionError}
-      <div class="text-xs text-error bg-error/10 p-3 rounded flex items-start gap-2">
+      <Panel padding="none" variant="subtle">
+        <div class="text-xs text-[var(--of-danger)] p-3 flex items-start gap-2">
         <AlertCircle size={14} class="shrink-0 mt-0.5" />
         <span class="break-words">{actionError}</span>
       </div>
+      </Panel>
     {/if}
 
     <GlobalPluginInventory

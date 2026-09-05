@@ -37,6 +37,6 @@ describe('SettingsSectionCard', () => {
 
     const group = screen.getByRole('group', { name: 'Disabled settings' })
     expect(group.getAttribute('aria-disabled')).toBe('true')
-    expect(group.inert).toBe(true)
+    expect(group.hasAttribute('inert')).toBe(true)
   })
 })

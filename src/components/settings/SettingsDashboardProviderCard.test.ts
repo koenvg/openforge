@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
+import { chooseSelectOption, openSelect } from '../../test-utils/select'
 import SettingsDashboardProviderCard from './SettingsDashboardProviderCard.svelte'
 
 const providers = [
@@ -24,7 +25,7 @@ const taskProviders = [
 ]
 
 describe('SettingsDashboardProviderCard', () => {
-  it('offers an app-wide default for the project dashboard replacement target', () => {
+  it('offers an app-wide default for the project dashboard replacement target', async () => {
     render(SettingsDashboardProviderCard, {
       props: {
         scope: 'global',
@@ -34,12 +35,13 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
-    expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
-      ['core', 'OpenForge'],
-      ['planning-plugin.dashboard', 'Planning'],
+    const select = screen.getByRole('button', { name: 'Default project dashboard' }) as HTMLButtonElement
+    await openSelect(select)
+    expect(screen.getAllByRole('option').map(option => option.textContent?.trim())).toEqual([
+      'OpenForge',
+      'Planning — Provided by planning-plugin',
     ])
-    expect(select.value).toBe('core')
+    expect(select.textContent).toContain('OpenForge')
   })
 
   it('updates the displayed provider when the selected provider changes', async () => {
@@ -53,8 +55,8 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
-    expect(select.value).toBe('core')
+    const select = screen.getByRole('button', { name: 'Default project dashboard' }) as HTMLButtonElement
+    expect(select.textContent).toContain('OpenForge')
 
     await view.rerender({
       scope: 'global',
@@ -63,10 +65,10 @@ describe('SettingsDashboardProviderCard', () => {
       onProviderChange,
     })
 
-    expect(select.value).toBe('planning-plugin.dashboard')
+    expect(select.textContent).toContain('Planning')
   })
 
-  it('offers project inheritance, OpenForge, and compatible plugin providers', () => {
+  it('offers project inheritance, OpenForge, and compatible plugin providers', async () => {
     render(SettingsDashboardProviderCard, {
       props: {
         scope: 'project',
@@ -77,16 +79,17 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
-    expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
-      ['inherit', 'Use global default (Planning)'],
-      ['core', 'OpenForge'],
-      ['planning-plugin.dashboard', 'Planning'],
+    const select = screen.getByRole('button', { name: 'Project dashboard' }) as HTMLButtonElement
+    await openSelect(select)
+    expect(screen.getAllByRole('option').map(option => option.textContent?.trim())).toEqual([
+      'Use global default (Planning)',
+      'OpenForge',
+      'Planning — Provided by planning-plugin',
     ])
-    expect(select.value).toBe('inherit')
+    expect(select.textContent).toContain('Use global default')
   })
 
-  it('keeps an unavailable stored provider visible without changing the selection', () => {
+  it('keeps an unavailable stored provider visible without changing the selection', async () => {
     render(SettingsDashboardProviderCard, {
       props: {
         scope: 'project',
@@ -97,12 +100,13 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Project dashboard' }) as HTMLSelectElement
-    expect(select.value).toBe('missing-plugin.dashboard')
+    const select = screen.getByRole('button', { name: 'Project dashboard' }) as HTMLButtonElement
+    expect(select.textContent).toContain('missing-plugin.dashboard (unavailable)')
+    await openSelect(select)
     expect(screen.getByRole('option', { name: 'missing-plugin.dashboard (unavailable)' })).toBeTruthy()
   })
 
-  it('shows an unavailable inherited choice in the project inheritance option', () => {
+  it('shows an unavailable inherited choice in the project inheritance option', async () => {
     render(SettingsDashboardProviderCard, {
       props: {
         scope: 'project',
@@ -113,6 +117,7 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
+    await openSelect(screen.getByRole('button', { name: 'Project dashboard' }))
     expect(screen.getByRole('option', {
       name: 'Use global default (missing-plugin.dashboard unavailable)',
     })).toBeTruthy()
@@ -130,9 +135,7 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Project dashboard' }), {
-      target: { value: 'inherit' },
-    })
+    await chooseSelectOption(screen.getByRole('button', { name: 'Project dashboard' }), /^Use global default/)
     expect(onProviderChange).toHaveBeenCalledWith('inherit')
   })
 
@@ -150,18 +153,18 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Default project dashboard' }) as HTMLSelectElement
-    await fireEvent.change(select, { target: { value: 'planning-plugin.dashboard' } })
+    const select = screen.getByRole('button', { name: 'Default project dashboard' }) as HTMLButtonElement
+    await chooseSelectOption(select, /Planning — Provided by planning-plugin/)
     expect(select.disabled).toBe(true)
 
     rejectChange?.(new Error('write failed'))
     await waitFor(() => {
-      expect(select.value).toBe('core')
+      expect(select.textContent).toContain('OpenForge')
       expect(select.disabled).toBe(false)
     })
   })
 
-  it('offers the task detail target through the same global preference control', () => {
+  it('offers the task detail target through the same global preference control', async () => {
     render(SettingsDashboardProviderCard, {
       props: {
         scope: 'global',
@@ -172,10 +175,11 @@ describe('SettingsDashboardProviderCard', () => {
       },
     })
 
-    const select = screen.getByRole('combobox', { name: 'Default task workspace' }) as HTMLSelectElement
-    expect(Array.from(select.options).map(option => [option.value, option.textContent])).toEqual([
-      ['core', 'OpenForge'],
-      ['planning-plugin.task-workspace', 'Task workspace'],
+    const select = screen.getByRole('button', { name: 'Default task workspace' }) as HTMLButtonElement
+    await openSelect(select)
+    expect(screen.getAllByRole('option').map(option => option.textContent?.trim())).toEqual([
+      'OpenForge',
+      'Task workspace — Provided by planning-plugin',
     ])
   })
 })
