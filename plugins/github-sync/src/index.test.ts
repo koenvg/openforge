@@ -21,6 +21,10 @@ vi.mock('./task/TaskPullRequestStatus.svelte', () => ({
   default: mockTaskPullRequestStatus,
 }))
 
+// Load dependencies during collection so parallel module transforms do not consume test timeouts.
+import { get } from 'svelte/store'
+import backend from './backend'
+import { pendingReviewPrOpen } from './lib/stores'
 import plugin, { PrReviewRowActionComponent, PrReviewViewComponent, TaskPullRequestStatusComponent } from './index'
 import packageJson from '../package.json'
 
@@ -229,8 +233,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers an open_review_pr command that opens a PR under its project view', async () => {
-    const { pendingReviewPrOpen } = await import('./lib/stores')
-    const { get } = await import('svelte/store')
     const { api, context, navigate } = makeRuntimeHarness()
 
     pendingReviewPrOpen.set(null)
@@ -256,8 +258,6 @@ describe('github-sync plugin', () => {
   })
 
   it('open_review_pr opens an "other repositories" PR in the global view without switching project', async () => {
-    const { pendingReviewPrOpen } = await import('./lib/stores')
-    const { get } = await import('svelte/store')
     const { api, context, navigate } = makeRuntimeHarness()
 
     pendingReviewPrOpen.set(null)
@@ -276,7 +276,6 @@ describe('github-sync plugin', () => {
   })
 
   it('registers GitHub Sync-owned backend methods for PR review operations', async () => {
-    const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
     const api = {
       backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) },
@@ -326,7 +325,6 @@ describe('github-sync plugin', () => {
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {
-    const { default: backend } = await import('./backend')
     const subscriptions = { add: vi.fn() }
     const invokeGlobal = vi.fn(async () => [{ id: 42, ticket_id: 'T-42' }])
     let listTaskPullRequests: ((request: { taskId: string }) => Promise<unknown>) | undefined
