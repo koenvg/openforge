@@ -28,6 +28,7 @@
     const currentProjectId = projectId
     const requestId = ++loadRequestId
     error = null
+    isSaving = false
 
     if (!currentProjectId) {
       labels = []
@@ -52,6 +53,9 @@
 
   async function handleCreateLabel() {
     if (!projectId || disabled || isSaving) return
+    const currentProjectId = projectId
+    const requestId = loadRequestId
+    const isCurrentProject = () => projectId === currentProjectId && loadRequestId === requestId
     const name = normalizeTaskLabelNameInput(labelInput)
     const validationError = validateTaskLabelName(name)
     if (validationError) {
@@ -66,29 +70,36 @@
     isSaving = true
     error = null
     try {
-      const label = await createTaskLabel(projectId, name)
+      const label = await createTaskLabel(currentProjectId, name)
+      if (!isCurrentProject()) return
       labels = [...labels, label].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
       labelInput = ''
     } catch (e) {
+      if (!isCurrentProject()) return
       error = e instanceof Error ? e.message : String(e)
     } finally {
-      isSaving = false
+      if (isCurrentProject()) isSaving = false
     }
   }
 
   async function handleDeleteLabel(label: TaskLabel) {
     if (disabled || isSaving) return
+    const currentProjectId = projectId
+    const requestId = loadRequestId
+    const isCurrentProject = () => projectId === currentProjectId && loadRequestId === requestId
     if (!confirm(`Delete task label "${label.name}"? It will be removed from every task.`)) return
 
     isSaving = true
     error = null
     try {
       await deleteTaskLabel(label.id)
+      if (!isCurrentProject()) return
       labels = labels.filter((currentLabel) => currentLabel.id !== label.id)
     } catch (e) {
+      if (!isCurrentProject()) return
       error = e instanceof Error ? e.message : String(e)
     } finally {
-      isSaving = false
+      if (isCurrentProject()) isSaving = false
     }
   }
 </script>
