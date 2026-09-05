@@ -114,6 +114,8 @@ pub(crate) enum TerminalModelError {
     ContinuationUnavailable,
     #[error("ghostty produced an empty canonical snapshot")]
     EmptySnapshot,
+    #[error("ghostty portable snapshot content did not match its state-prefixed output")]
+    PortableSnapshotLayout,
 }
 
 pub(crate) trait TerminalModel {
@@ -209,22 +211,40 @@ impl TerminalModel for GhosttyTerminalModel {
     }
 
     fn format_portable_vt(&self) -> Result<Vec<u8>, TerminalModelError> {
-        let options = FormatterOptions::new()
-            .with_format(Format::Vt)
-            .with_palette(true)
-            .with_modes(true)
-            .with_scrolling_region(true)
-            .with_tabstops(true)
-            .with_pwd(true)
-            .with_keyboard(true)
-            .with_cursor(true)
-            .with_style(true)
-            .with_hyperlink(true)
-            .with_protection(true)
-            .with_kitty_keyboard(true)
-            .with_charsets(true);
-        let mut formatter = Formatter::new(&self.terminal, options)?;
-        Ok(formatter.format_alloc(None)?.as_ref().to_vec())
+        let options = |prefix| {
+            FormatterOptions::new()
+                .with_format(Format::Vt)
+                .with_palette(prefix)
+                .with_modes(prefix)
+                .with_scrolling_region(true)
+                .with_tabstops(prefix)
+                .with_pwd(true)
+                .with_keyboard(true)
+                .with_cursor(true)
+                .with_style(true)
+                .with_hyperlink(true)
+                .with_protection(true)
+                .with_kitty_keyboard(true)
+                .with_charsets(true)
+        };
+        let mut formatter = Formatter::new(&self.terminal, options(true))?;
+        let full = formatter.format_alloc(None)?;
+        let mut formatter = Formatter::new(&self.terminal, options(false))?;
+        let content = formatter.format_alloc(None)?;
+
+        // The pinned Ghostty formatter emits palette, modes and tab stops before
+        // content, but leaves the cursor at the last tab stop. Its C API cannot
+        // format state alone. Separate the prefix without parsing VT or dropping
+        // custom tabs, and fail closed if an upstream formatter changes layout.
+        let prefix = full
+            .as_ref()
+            .strip_suffix(content.as_ref())
+            .ok_or(TerminalModelError::PortableSnapshotLayout)?;
+        let mut snapshot = Vec::with_capacity(full.as_ref().len() + 3);
+        snapshot.extend_from_slice(prefix);
+        snapshot.extend_from_slice(b"\x1b[H");
+        snapshot.extend_from_slice(content.as_ref());
+        Ok(snapshot)
     }
 
     fn take_protocol_replies(&mut self) -> Vec<Vec<u8>> {
@@ -266,6 +286,53 @@ mod tests {
             .windows(b"before".len())
             .any(|part| part == b"before"));
         assert!(portable.windows(b"red".len()).any(|part| part == b"red"));
+    }
+
+    #[test]
+    fn portable_snapshot_keeps_editor_rows_and_cursor_together() {
+        use libghostty_vt::fmt::{Format, Formatter, FormatterOptions};
+
+        let mut original = GhosttyTerminalModel::new(TerminalModelOptions::new(24, 6))
+            .expect("terminal should initialize");
+        original
+            .feed(b"\x1b[3g\x1b[5G\x1bH\x1b[13G\x1bH\x1b[HHEADER\r\n--------------------\r\nINPUT\r\n--------------------\r\nfooter\x1b[3;6H")
+            .expect("editor should render");
+        let snapshot = original
+            .format_portable_vt()
+            .expect("snapshot should format");
+        let mut restored = GhosttyTerminalModel::new(TerminalModelOptions::new(24, 6))
+            .expect("replacement terminal should initialize");
+        restored.feed(&snapshot).expect("snapshot should replay");
+        restored
+            .feed(b"_AFTER\x1b[6n")
+            .expect("typing should continue");
+
+        let mut formatter = Formatter::new(
+            &restored.terminal,
+            FormatterOptions::new()
+                .with_format(Format::Plain)
+                .with_trim(true),
+        )
+        .expect("plain formatter should initialize");
+        let text = formatter.format_alloc(None).expect("screen should format");
+        assert_eq!(
+            String::from_utf8_lossy(text.as_ref()).trim_end(),
+            "HEADER\n--------------------\nINPUT_AFTER\n--------------------\nfooter",
+        );
+        drop(formatter);
+        assert_eq!(
+            restored.take_protocol_replies(),
+            vec![b"\x1b[3;12R".to_vec()]
+        );
+
+        // Restoring the editor must not discard its non-default tab stops.
+        restored
+            .feed(b"\x1b[1;1H\t\x1b[6n")
+            .expect("tab should advance");
+        assert_eq!(
+            restored.take_protocol_replies(),
+            vec![b"\x1b[1;5R".to_vec()]
+        );
     }
 
     #[test]
