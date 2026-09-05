@@ -71,6 +71,8 @@ To reseed or clear worktree-local state, stop `pnpm electron:dev` and delete `.o
 
 ## Testing
 
+The frontend and Plugin SDK suites include Chromium checks of core control styles. After installing dependencies, run `pnpm exec playwright install --with-deps chromium` once, and again after Playwright upgrades.
+
 ```bash
 # Frontend tests
 pnpm test

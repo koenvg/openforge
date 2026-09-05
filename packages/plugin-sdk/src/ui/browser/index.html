@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>Core control interaction tests</title></head>
+  <body>
+    <script type="module">
+      import { mount } from 'svelte'
+      import Fixture from '../CoreControlsThemeFixture.svelte'
+      const params = new URLSearchParams(location.search)
+      mount(Fixture, {
+        target: document.body,
+        props: { theme: params.get('theme') || 'light', invalid: params.has('invalid') },
+      })
+    </script>
+  </body>
+</html>

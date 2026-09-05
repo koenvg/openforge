@@ -72,6 +72,9 @@ jobs:
       - name: Build plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk build
 
+      - name: Install Chromium for core control browser tests
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Test plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk test
 

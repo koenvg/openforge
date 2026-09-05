@@ -11,7 +11,7 @@
 
   type ThemeFixture = 'light' | 'dark' | 'custom'
 
-  let { theme }: { theme: ThemeFixture } = $props()
+  let { theme, invalid = false }: { theme: ThemeFixture; invalid?: boolean } = $props()
 
   const icons = createRawSnippet(() => ({ render: () => '<span aria-hidden="true">↻</span>' }))
   const themeColors: Record<ThemeFixture, string> = {
@@ -22,7 +22,7 @@
 
   let themeStyle = $derived(`
     --of-accent:${themeColors[theme]};
-    --of-accent-hover:var(--of-accent);--of-accent-pressed:var(--of-accent);
+    --of-accent-hover:#193bcc;--of-accent-pressed:#102688;
     --of-border:#777;--of-border-strong:#555;--of-border-interactive:#666;
     --of-control:#ddd;--of-control-hover:#ccc;--of-control-pressed:#bbb;
     --of-control-disabled:#aaa;--of-control-text:var(--of-text);--of-control-text-disabled:#666;
@@ -46,12 +46,20 @@
 </script>
 
 <div data-theme-fixture={theme} style={themeStyle}>
-  <Button type="button">Run review</Button>
-  <IconButton label="Refresh tasks">{@render icons()}</IconButton>
-  <TextField label="Repository name" value="openforge" />
-  <Textarea label="Review note" value="Ready" />
-  <label><Checkbox checked /> Include generated files</label>
-  <Switch label="Enable notifications" checked />
+  <div role="group" aria-label="Button"><Button type="button">Run review</Button></div>
+  <div role="group" aria-label="IconButton"><IconButton label="Refresh tasks">{@render icons()}</IconButton></div>
+  <div role="group" aria-label="TextField"><TextField label="Repository name" value="openforge" {invalid} /></div>
+  <div role="group" aria-label="Textarea"><Textarea label="Review note" value="Ready" {invalid} /></div>
+  <div role="group" aria-label="Checkbox"><label><Checkbox checked /> Include generated files</label></div>
+  <div role="group" aria-label="Switch"><Switch label="Enable notifications" checked /></div>
   <Badge role="status" variant="success">Ready</Badge>
   <Panel aria-label="Review summary"><p>Two files changed.</p></Panel>
+  {#each ['primary', 'danger'] as const as variant}
+    {#each [false, true] as disabled}
+      <div>
+        <Button {variant} {disabled}>{variant} Button{disabled ? ' disabled' : ''}</Button>
+        <IconButton {variant} {disabled} label={`${variant} IconButton${disabled ? ' disabled' : ''}`}>{@render icons()}</IconButton>
+      </div>
+    {/each}
+  {/each}
 </div>
