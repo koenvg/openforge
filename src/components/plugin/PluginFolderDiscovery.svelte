@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import { onDestroy } from 'svelte'
   import { AlertCircle } from '@lucide/svelte'
   import { scanPluginFolder } from '../../lib/ipc'
@@ -74,14 +75,18 @@
 />
 
 {#if scanError}
-  <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
-    <AlertCircle size={14} class="shrink-0 mt-0.5" />
-    <span class="break-words">{scanError}</span>
-  </div>
+  <Panel padding="none" variant="subtle">
+    <div role="alert" class="text-xs text-[var(--of-danger)] p-2 flex items-start gap-2">
+      <AlertCircle size={14} class="shrink-0 mt-0.5" />
+      <span class="break-words">{scanError}</span>
+    </div>
+  </Panel>
 {/if}
 
 {#if discovered.length === 0 && !scanError && !isScanning}
-  <div class="text-sm text-base-content/50 text-center py-4 border border-dashed border-base-300 rounded-lg">
-    No plugin packages found in this folder
-  </div>
+  <Panel variant="subtle">
+    <div class="text-sm text-[var(--of-text-muted)] text-center py-4">
+      No plugin packages found in this folder
+    </div>
+  </Panel>
 {/if}

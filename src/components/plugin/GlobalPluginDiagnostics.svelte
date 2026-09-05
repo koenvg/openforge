@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { writeClipboardText } from '../../lib/ipc'
   import { appEnabledPluginIds, enabledPluginIds, error as pluginLoadError } from '../../lib/plugin/pluginStore'
   import type { PluginEntry } from '../../lib/plugin/types'
@@ -48,4 +49,4 @@
   }
 </script>
 
-<button class="btn btn-ghost btn-xs" type="button" aria-label="Copy diagnostics: {plugin.manifest.name}" {disabled} onclick={copyDiagnostics}>Copy diagnostics</button>
+<Button variant="ghost" size="xs" type="button" aria-label="Copy diagnostics: {plugin.manifest.name}" {disabled} onclick={copyDiagnostics}>Copy diagnostics</Button>

@@ -37,6 +37,13 @@ export const MIGRATED_UI_SOURCE_FILES = Object.freeze([
   'src/components/settings/SettingsSectionCard.svelte',
   'src/components/settings/SettingsTaskLabelsCard.svelte',
   'src/components/settings/SettingsView.svelte',
+  'src/components/plugin/GlobalPluginInstallationSection.svelte',
+  'src/components/plugin/GlobalPluginInventory.svelte',
+  'src/components/plugin/GlobalPluginDiagnostics.svelte',
+  'src/components/plugin/PluginFolderPanel.svelte',
+  'src/components/plugin/PluginFolderConfiguration.svelte',
+  'src/components/plugin/PluginFolderDiscovery.svelte',
+  'src/components/plugin/PluginFolderPackages.svelte',
   'src/components/plugin/GlobalPluginSettingsPanel.svelte',
   'src/components/plugin/GlobalPluginSettingsSections.svelte',
   'src/components/plugin/GlobalPluginLifecycleControls.svelte',
@@ -84,6 +91,16 @@ export const UI_MIGRATION_ALLOWLIST = Object.freeze({
     Object.freeze({ tag: 'main', marker: 'settings-layout', token: 'min-w-0' }),
     Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'min-w-32' }),
     Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'max-w-[76rem]' }),
+  ]),
+  // Plugin metadata and folder paths must shrink and wrap within their responsive rows.
+  'src/components/plugin/GlobalPluginInventory.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'plugin-metadata', token: 'min-w-0' }),
+  ]),
+  'src/components/plugin/PluginFolderPackages.svelte': Object.freeze([
+    Object.freeze({ tag: 'div', marker: 'plugin-metadata', token: 'min-w-0' }),
+  ]),
+  'src/components/plugin/PluginFolderConfiguration.svelte': Object.freeze([
+    Object.freeze({ tag: 'span', marker: 'plugin-folder-path', token: 'min-w-0' }),
   ]),
   'src/components/plugin/GlobalPluginLifecycleControls.svelte': Object.freeze([
     Object.freeze({ tag: 'div', marker: 'settings-layout', token: 'max-w-48' }),

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import { onDestroy } from 'svelte'
   import { AlertCircle } from '@lucide/svelte'
   import { writeClipboardText } from '../../lib/ipc'
@@ -157,100 +160,104 @@
 
 <div class="flex items-center justify-end gap-2 flex-wrap">
   {#if installableRows.length > 1}
-    <button
-      class="btn btn-primary btn-xs"
+    <Button
+      variant="primary" size="xs"
       type="button"
       disabled={disabled || isBusy}
       onclick={installAll}
     >
       {isInstallingAll ? 'Installing…' : `Install all available (${installableRows.length})`}
-    </button>
+    </Button>
   {/if}
-  <button
-    class="btn btn-ghost btn-xs"
+  <Button
+    variant="ghost" size="xs"
     type="button"
     aria-label="Refresh plugin folder"
     disabled={disabled || isBusy}
     onclick={refresh}
   >
     {isScanning || isRefreshing ? 'Refreshing…' : 'Refresh'}
-  </button>
+  </Button>
 </div>
 
 {#each rows as { row, status } (row.path)}
   {@const showsProblem = status !== 'installed' && status !== 'outdated'}
-  <div class="flex items-start justify-between gap-4 p-3 border border-base-300 rounded-lg">
-    <div class="flex flex-col gap-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="font-medium text-sm text-base-content">{row.name}</span>
-        <span class="text-xs text-base-content/50 font-mono">v{row.version}</span>
-        {#if status === 'installed'}
-          <span class="badge badge-success badge-xs">Installed</span>
-        {:else if status === 'outdated'}
-          <span class="badge badge-warning badge-xs">Update available</span>
-        {:else if status === 'foreign'}
-          <span class="badge badge-neutral badge-xs">Installed from another folder</span>
-        {:else if row.needsBuild}
-          <span class="badge badge-warning badge-xs">Needs build</span>
-        {:else if !row.installable}
-          <span class="badge badge-error badge-xs">Cannot install</span>
+  <Panel>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="plugin-metadata flex flex-col gap-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-medium text-sm text-[var(--of-text)]">{row.name}</span>
+          <span class="text-xs text-[var(--of-text-muted)] font-mono">v{row.version}</span>
+          {#if status === 'installed'}
+            <Badge variant="success">Installed</Badge>
+          {:else if status === 'outdated'}
+            <Badge variant="warning">Update available</Badge>
+          {:else if status === 'foreign'}
+            <Badge>Installed from another folder</Badge>
+          {:else if row.needsBuild}
+            <Badge variant="warning">Needs build</Badge>
+          {:else if !row.installable}
+            <Badge variant="danger">Cannot install</Badge>
+          {/if}
+        </div>
+        <div class="text-xs text-[var(--of-text-secondary)]">{row.description}</div>
+        <div class="text-xs text-[var(--of-text-muted)] font-mono break-all">{row.path}</div>
+
+        {#if row.problem && showsProblem}
+          <Panel padding="none" variant="subtle">
+            <div role="alert" class="text-xs text-[var(--of-danger)] p-2 flex items-start gap-2">
+              <AlertCircle size={14} class="shrink-0 mt-0.5" />
+              <span class="break-words">{row.problem}</span>
+            </div>
+          </Panel>
         {/if}
       </div>
-      <div class="text-xs text-base-content/70">{row.description}</div>
-      <div class="text-[10px] text-base-content/50 font-mono break-all">{row.path}</div>
 
-      {#if row.problem && showsProblem}
-        <div class="mt-1 text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
-          <AlertCircle size={14} class="shrink-0 mt-0.5" />
-          <span class="break-words">{row.problem}</span>
-        </div>
-      {/if}
+      <div class="flex flex-col items-end gap-2 shrink-0">
+        {#if status === 'installable'}
+          <Button
+            variant="primary" size="xs"
+            type="button"
+            aria-label="Install plugin: {row.name}"
+            disabled={disabled || isBusy}
+            onclick={() => install(row)}
+          >
+            {busyPluginId === row.id ? 'Installing…' : 'Install'}
+          </Button>
+        {:else if status === 'installed' || status === 'outdated'}
+          <Button
+            variant="ghost" size="xs"
+            type="button"
+            aria-label="Reload plugin: {row.name}"
+            disabled={disabled || isBusy}
+            onclick={() => reload(row)}
+          >
+            {busyPluginId === row.id ? 'Reloading…' : 'Reload'}
+          </Button>
+        {:else if status === 'foreign'}
+          <Button
+            variant="ghost" size="xs"
+            type="button"
+            aria-label="Load plugin from this folder: {row.name}"
+            disabled={disabled || isBusy}
+            onclick={() => reload(row)}
+          >
+            {busyPluginId === row.id ? 'Loading…' : 'Load from this folder'}
+          </Button>
+        {/if}
+
+        {#if row.needsBuild && showsProblem}
+          <Button
+            variant="ghost" size="xs"
+            type="button"
+            aria-label="Copy build command: {row.name}"
+            disabled={disabled}
+            onclick={() => copyBuildCommand(row)}
+          >
+            Copy build command
+          </Button>
+        {/if}
+      </div>
     </div>
-
-    <div class="flex flex-col items-end gap-2 shrink-0">
-      {#if status === 'installable'}
-        <button
-          class="btn btn-primary btn-xs"
-          type="button"
-          aria-label="Install plugin: {row.name}"
-          disabled={disabled || isBusy}
-          onclick={() => install(row)}
-        >
-          {busyPluginId === row.id ? 'Installing…' : 'Install'}
-        </button>
-      {:else if status === 'installed' || status === 'outdated'}
-        <button
-          class="btn btn-ghost btn-xs"
-          type="button"
-          aria-label="Reload plugin: {row.name}"
-          disabled={disabled || isBusy}
-          onclick={() => reload(row)}
-        >
-          {busyPluginId === row.id ? 'Reloading…' : 'Reload'}
-        </button>
-      {:else if status === 'foreign'}
-        <button
-          class="btn btn-ghost btn-xs"
-          type="button"
-          aria-label="Load plugin from this folder: {row.name}"
-          disabled={disabled || isBusy}
-          onclick={() => reload(row)}
-        >
-          {busyPluginId === row.id ? 'Loading…' : 'Load from this folder'}
-        </button>
-      {/if}
-
-      {#if row.needsBuild && showsProblem}
-        <button
-          class="btn btn-ghost btn-xs"
-          type="button"
-          aria-label="Copy build command: {row.name}"
-          disabled={disabled}
-          onclick={() => copyBuildCommand(row)}
-        >
-          Copy build command
-        </button>
-      {/if}
-    </div>
-  </div>
+  </Panel>
 {/each}

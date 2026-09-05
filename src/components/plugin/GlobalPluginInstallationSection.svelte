@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { AlertCircle } from '@lucide/svelte'
+  import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import {
     enablePluginForApp,
@@ -108,57 +110,49 @@
 
 <PluginFolderPanel {activeProjectId} {disabled} />
 
-<form class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30" onsubmit={handleInstall}>
-  <div class="flex flex-col gap-1">
-    <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Install package</span>
-    <p class="text-xs text-base-content/60 m-0">Install packages here. App-owned plugins are enabled once; project-owned plugins are enabled per Project.</p>
-  </div>
+<Panel variant="subtle">
+  <form class="flex flex-col gap-3" onsubmit={handleInstall}>
+    <div class="flex flex-col gap-1">
+      <span class="text-xs text-[var(--of-text-muted)] uppercase tracking-wider">Install package</span>
+      <p class="text-xs text-[var(--of-text-secondary)] m-0">Install packages here. App-owned plugins are enabled once; project-owned plugins are enabled per Project.</p>
+    </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-[10rem_1fr_auto] gap-3 items-end">
-    <label class="form-control flex flex-col gap-1">
-      <span class="label-text text-xs">Source type</span>
-      <select class="select select-bordered select-sm" bind:value={sourceType} disabled={disabled || isInstalling}>
-        <option value="npm">npm</option>
-        <option value="git">git</option>
-        <option value="local">local path</option>
-      </select>
-    </label>
-
-    <label class="form-control flex flex-col gap-1">
-      <span class="label-text text-xs">Package source</span>
-      <input
-        class="input input-bordered input-sm font-mono"
-        bind:value={sourceInput}
-        placeholder={sourcePlaceholder}
+    <div class="grid grid-cols-1 md:grid-cols-[10rem_1fr_auto] gap-3 items-start">
+      <Select
+        label="Source type"
+        options={[{ value: 'npm', label: 'npm' }, { value: 'git', label: 'git' }, { value: 'local', label: 'local path' }]}
+        value={sourceType}
+        onValueChange={(value) => sourceType = value as SourceType}
         disabled={disabled || isInstalling}
       />
-    </label>
-
-    <button class="btn btn-primary btn-sm" type="submit" disabled={disabled || isInstalling}>
-      {isInstalling ? 'Installing…' : 'Install package'}
-    </button>
-  </div>
-
-  {#if installMessage}
-    <div class="text-xs text-success bg-success/10 p-2 rounded flex flex-col gap-2">
-      <span>{installMessage}</span>
-      {#if canEnableInstalledPluginForApp && installedPluginToEnable}
-        <Button class="self-start" size="xs" type="button" onclick={handleEnableForApp} disabled={disabled}>
-          Enable throughout OpenForge: {installedPluginToEnable.manifest.name}
-        </Button>
-      {/if}
-      {#if canEnableInstalledPluginForActiveProject && installedPluginToEnable}
-        <Button class="self-start" size="xs" type="button" onclick={handleEnableForActiveProject} disabled={disabled}>
-          Enable for active project: {installedPluginToEnable.manifest.name}
-        </Button>
-      {/if}
+      <TextField
+        label="Package source"
+        bind:value={sourceInput}
+        placeholder={sourcePlaceholder}
+        error={installError}
+        disabled={disabled || isInstalling}
+      />
+      <Button variant="primary" size="sm" class="self-end" type="submit" disabled={disabled || isInstalling}>
+        {isInstalling ? 'Installing…' : 'Install package'}
+      </Button>
     </div>
-  {/if}
 
-  {#if installError}
-    <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
-      <AlertCircle size={14} class="shrink-0 mt-0.5" />
-      <span class="break-words">{installError}</span>
-    </div>
-  {/if}
-</form>
+    {#if installMessage}
+      <Panel padding="none" variant="subtle">
+        <div role="status" class="text-xs text-[var(--of-success)] p-2 flex flex-col gap-2">
+          <span>{installMessage}</span>
+          {#if canEnableInstalledPluginForApp && installedPluginToEnable}
+            <Button class="self-start" size="xs" type="button" onclick={handleEnableForApp} disabled={disabled}>
+              Enable throughout OpenForge: {installedPluginToEnable.manifest.name}
+            </Button>
+          {/if}
+          {#if canEnableInstalledPluginForActiveProject && installedPluginToEnable}
+            <Button class="self-start" size="xs" type="button" onclick={handleEnableForActiveProject} disabled={disabled}>
+              Enable for active project: {installedPluginToEnable.manifest.name}
+            </Button>
+          {/if}
+        </div>
+      </Panel>
+    {/if}
+  </form>
+</Panel>
