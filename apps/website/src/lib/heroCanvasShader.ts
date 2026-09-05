@@ -255,13 +255,28 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     return 1.0 - smoothstep(0.001, 0.015, abs(secondPlane(d)));
   }
 
-  fn internalLightPosition(time: f32, motion: f32) -> vec3f {
-    let phase = time * motion;
-    return vec3f(
-      0.05 + 0.035 * sin(phase * 0.16),
-      0.86 + 0.018 * sin(phase * 0.11),
-      -0.04 + 0.025 * cos(phase * 0.14),
+  // A new jagged path five times a second, safely inside the narrowest waist.
+  fn lightningPoint(index: i32, epoch: f32) -> vec3f {
+    let i = f32(index);
+    let jitterX = hash21(vec2f(i * 3.7 + 11.0, epoch + 5.0)) - 0.5;
+    let jitterZ = hash21(vec2f(i * 7.1 + 23.0, epoch + 17.0)) - 0.5;
+    return vec3f(-0.10 + i * 0.03 + jitterX * 0.22, 0.30 + i * 0.095, jitterZ * 0.14);
+  }
+
+  fn lightningBranchPoint(index: i32, epoch: f32, part: i32) -> vec3f {
+    let origin = lightningPoint(index, epoch);
+    if (part == 0) { return origin; }
+    let side = select(-1.0, 1.0, index == 5);
+    return origin + select(vec3f(side * 0.21, 0.08, -0.025), vec3f(side * 0.13, 0.03, 0.025), part == 1);
+  }
+
+  fn lightningSparkPoint(index: i32, epoch: f32, age: f32) -> vec3f {
+    let drift = vec3f(
+      (hash21(vec2f(f32(index) + 37.0, epoch)) - 0.5) * 0.44,
+      0.10 + hash21(vec2f(f32(index) + 51.0, epoch)) * 0.05,
+      (hash21(vec2f(f32(index) + 73.0, epoch)) - 0.5) * 0.08,
     );
+    return lightningPoint(3 + index * 2, epoch) + drift * age;
   }
 
   // Closest distance between the in-glass ray and one piece of a light filament.
@@ -283,26 +298,42 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     return dot(separation, separation);
   }
 
-  // Evaluate the source only along the refracted segment inside the glass.
-  // The nearest point moves with refraction; no screen-space glow is painted on.
-  fn internalLightRadiance(entry: vec3f, direction: vec3f, pathLength: f32, center: vec3f) -> vec3f {
-    let scale = vec3f(1.0, 0.70, 1.0);
-    let delta = (entry - center) * scale;
-    let ray = direction * scale;
-    let nearest = clamp(-dot(delta, ray) / max(dot(ray, ray), 0.0001), 0.0, max(pathLength, 0.0));
-    let separation = delta + ray * nearest;
-    let distanceSquared = dot(separation, separation);
-    let core = exp(-distanceSquared * 220.0);
-    let halo = exp(-distanceSquared * 45.0);
-    let transmission = exp(-nearest * 0.35) * (1.0 - exp(-max(pathLength, 0.0) * 12.0));
-    let raySegment = direction * max(pathLength, 0.0);
-    let bend = center + vec3f(0.10, 0.09, 0.015);
-    let crest = center + vec3f(0.26, 0.16, 0.01);
-    let tip = center + vec3f(0.43, 0.18, -0.015);
-    let sweep = exp(-lightFilamentDistance(entry, raySegment, center, bend) * 1800.0) * 0.07
-      + exp(-lightFilamentDistance(entry, raySegment, bend, crest) * 2200.0) * 0.05
-      + exp(-lightFilamentDistance(entry, raySegment, crest, tip) * 2600.0) * 0.03;
-    return vec3f((core * 0.42 + halo * 0.055 + sweep) * transmission);
+  // Distance is measured against the bounded refracted ray, never screen UV.
+  fn internalLightRadiance(entry: vec3f, direction: vec3f, pathLength: f32, time: f32, motion: f32) -> vec3f {
+    if (pathLength <= 0.0) { return vec3f(0.0); }
+    let phase = time * motion;
+    let epoch = floor(phase * 5.0);
+    let ray = direction * pathLength;
+    var boltDistance = 10.0;
+    var branchDistance = 10.0;
+    var previous = lightningPoint(0, epoch);
+    for (var i = 1; i <= 8; i++) {
+      let next = lightningPoint(i, epoch);
+      boltDistance = min(boltDistance, lightFilamentDistance(entry, ray, previous, next));
+      if (i == 3 || i == 5 || i == 7) {
+        let elbow = lightningBranchPoint(i, epoch, 1);
+        let end = lightningBranchPoint(i, epoch, 2);
+        branchDistance = min(branchDistance, lightFilamentDistance(entry, ray, next, elbow));
+        branchDistance = min(branchDistance, lightFilamentDistance(entry, ray, elbow, end));
+      }
+      previous = next;
+    }
+
+    // Short white sparks scatter away from the branch junctions inside the glass.
+    var sparkDistance = 10.0;
+    for (var i = 0; i < 3; i++) {
+      let age = fract(phase * 2.4 + f32(i) * 0.31);
+      let spark = lightningSparkPoint(i, epoch, age);
+      let tail = lightningSparkPoint(i, epoch, max(0.0, age - 0.18));
+      sparkDistance = min(sparkDistance, lightFilamentDistance(entry, ray, tail, spark));
+    }
+    let bolt = exp(-boltDistance * 50000.0) * 0.95 + exp(-boltDistance * 2300.0) * 0.085;
+    let branches = exp(-branchDistance * 70000.0) * 0.50 + exp(-branchDistance * 2600.0) * 0.035;
+    let sparks = exp(-sparkDistance * 22000.0) * 0.90 + exp(-sparkDistance * 2000.0) * 0.09;
+    // Keep illumination present while paths jump; no large-area strobe.
+    let energy = 0.86 + 0.14 * sin(phase * 10.0);
+    let transmission = 1.0 - exp(-pathLength * 12.0);
+    return vec3f((bolt + branches + sparks) * energy * transmission);
   }
 
   // --- Main ---
@@ -367,11 +398,11 @@ export function createHeroCanvasShaderSource(layer = 3): string {
         glass += vec3f(0.96) * backEdge * 0.07;
         glass = mix(glass, vec3f(0.93), smoothstep(0.15, 0.95, exitNormal.y) * 0.10);
 
-        let lightPos = internalLightPosition(time, motion);
-        glass += internalLightRadiance(entry, rdIn, thickness, lightPos);
+        let lightPos = lightningPoint(4, floor(time * motion * 5.0));
+        glass += internalLightRadiance(entry, rdIn, thickness, time, motion);
         let lightDirection = normalize(pos - lightPos);
         let grazing = pow(clamp(1.0 - abs(dot(n, lightDirection)), 0.0, 1.0), 3.0);
-        let causticPhase = dot(exitPos, vec3f(4.8, 7.2, 3.6)) + time * motion * 0.18;
+        let causticPhase = dot(exitPos, vec3f(4.8, 7.2, 3.6)) + time * motion * 3.2;
         let caustic = smoothstep(0.82, 1.0, 0.5 + 0.5 * sin(causticPhase));
         glass += vec3f(1.0) * grazing * caustic * (0.018 + 0.020 * fres);
 

@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:gpu": "node scripts/checkHeroLightning.mjs"
   },
   "dependencies": {
     "astro": "^7.2.7",
