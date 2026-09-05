@@ -259,9 +259,28 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     let phase = time * motion;
     return vec3f(
       0.05 + 0.035 * sin(phase * 0.16),
-      0.76 + 0.018 * sin(phase * 0.11),
+      0.86 + 0.018 * sin(phase * 0.11),
       -0.04 + 0.025 * cos(phase * 0.14),
     );
+  }
+
+  // Closest distance between the in-glass ray and one piece of a light filament.
+  fn lightFilamentDistance(entry: vec3f, ray: vec3f, a: vec3f, b: vec3f) -> f32 {
+    let filament = b - a;
+    let offset = entry - a;
+    let rr = max(dot(ray, ray), 0.000001);
+    let ff = max(dot(filament, filament), 0.000001);
+    let rf = dot(ray, filament);
+    let ro = dot(ray, offset);
+    let fo = dot(filament, offset);
+    let determinant = rr * ff - rf * rf;
+    var s = clamp(-ro / rr, 0.0, 1.0);
+    if (determinant > 0.000001) { s = clamp((rf * fo - ff * ro) / determinant, 0.0, 1.0); }
+    var t = clamp((rf * s + fo) / ff, 0.0, 1.0);
+    s = clamp((rf * t - ro) / rr, 0.0, 1.0);
+    t = clamp((rf * s + fo) / ff, 0.0, 1.0);
+    let separation = offset + ray * s - filament * t;
+    return dot(separation, separation);
   }
 
   // Evaluate the source only along the refracted segment inside the glass.
@@ -276,7 +295,14 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     let core = exp(-distanceSquared * 220.0);
     let halo = exp(-distanceSquared * 45.0);
     let transmission = exp(-nearest * 0.35) * (1.0 - exp(-max(pathLength, 0.0) * 12.0));
-    return vec3f(0.78, 0.93, 1.0) * (core * 0.15 + halo * 0.035) * transmission;
+    let raySegment = direction * max(pathLength, 0.0);
+    let bend = center + vec3f(0.10, 0.09, 0.015);
+    let crest = center + vec3f(0.26, 0.16, 0.01);
+    let tip = center + vec3f(0.43, 0.18, -0.015);
+    let sweep = exp(-lightFilamentDistance(entry, raySegment, center, bend) * 1800.0) * 0.07
+      + exp(-lightFilamentDistance(entry, raySegment, bend, crest) * 2200.0) * 0.05
+      + exp(-lightFilamentDistance(entry, raySegment, crest, tip) * 2600.0) * 0.03;
+    return vec3f((core * 0.42 + halo * 0.055 + sweep) * transmission);
   }
 
   // --- Main ---
@@ -327,19 +353,19 @@ export function createHeroCanvasShaderSource(layer = 3): string {
         var glass = mix(background(clamp(exitUv, vec2f(0.0), vec2f(1.0)), aspect, 0.0, params.detail), vec3f(0.985), 0.80);
 
         // Neutral smoke-glass transmission and broad white studio reflections.
-        glass *= exp(-thickness * vec3f(0.30, 0.29, 0.27));
+        glass *= exp(-thickness * vec3f(0.29));
         let faceShade = clamp(0.65 - 0.65 * n.y, 0.0, 1.0);
-        glass *= mix(vec3f(0.78, 0.79, 0.80), vec3f(0.48, 0.50, 0.54), faceShade);
+        glass *= mix(vec3f(0.79), vec3f(0.50), faceShade);
         let reflection = reflect(rd, n);
         let studio = pow(max(0.0, 1.0 - abs(reflection.x + 0.22)), 5.0);
-        glass += vec3f(0.94, 0.96, 0.98) * studio * (0.08 + 0.15 * faceShade);
+        glass += vec3f(0.96) * studio * (0.08 + 0.15 * faceShade);
         let softboxCoord = (pos.z + 0.12 * pos.x) * 3.0;
         let softbox = exp(-softboxCoord * softboxCoord);
-        glass += vec3f(0.98, 0.99, 1.0) * softbox * max(n.y, 0.0) * 0.16;
+        glass += vec3f(0.99) * softbox * max(n.y, 0.0) * 0.16;
         let exitNormal = anvilNormal(exitPos);
         let backEdge = max(crystalEdge(exitPos), anvilWire(exitPos, exitNormal, params.detail));
-        glass += vec3f(0.92, 0.96, 0.98) * backEdge * 0.07;
-        glass = mix(glass, vec3f(0.90, 0.93, 0.95), smoothstep(0.15, 0.95, exitNormal.y) * 0.10);
+        glass += vec3f(0.96) * backEdge * 0.07;
+        glass = mix(glass, vec3f(0.93), smoothstep(0.15, 0.95, exitNormal.y) * 0.10);
 
         let lightPos = internalLightPosition(time, motion);
         glass += internalLightRadiance(entry, rdIn, thickness, lightPos);
@@ -347,20 +373,20 @@ export function createHeroCanvasShaderSource(layer = 3): string {
         let grazing = pow(clamp(1.0 - abs(dot(n, lightDirection)), 0.0, 1.0), 3.0);
         let causticPhase = dot(exitPos, vec3f(4.8, 7.2, 3.6)) + time * motion * 0.18;
         let caustic = smoothstep(0.82, 1.0, 0.5 + 0.5 * sin(causticPhase));
-        glass += vec3f(0.70, 0.91, 1.0) * grazing * caustic * (0.018 + 0.020 * fres);
+        glass += vec3f(1.0) * grazing * caustic * (0.018 + 0.020 * fres);
 
         // Sparse structural seams and ordinary external reflections.
-        glass += vec3f(0.86, 0.91, 1.0) * wire * 0.30;
+        glass += vec3f(1.0) * wire * 0.30;
         let keyLight = normalize(vec3f(0.45, 0.85, 0.55));
         let spec = pow(max(dot(reflect(rd, n), keyLight), 0.0), 52.0) * 0.30;
         let fill = pow(max(dot(reflect(rd, n), normalize(vec3f(-0.62, 0.30, 0.42))), 0.0), 16.0) * 0.08;
 
-        // Reference-color splits: cyan at the horn tip, faint rose at the heel.
-        glass += vec3f(0.48, 0.84, 1.0) * fres * smoothstep(1.35, 1.70, -pos.x) * 0.10;
-        glass += vec3f(1.0, 0.74, 0.86) * fres * smoothstep(0.95, 1.30, pos.x) * 0.06;
-        let rim = fres * vec3f(0.94, 0.98, 1.0) * 0.25;
+        // Keep the bright tip, heel, and bevels achromatic.
+        glass += vec3f(1.0) * fres * smoothstep(1.35, 1.70, -pos.x) * 0.10;
+        glass += vec3f(1.0) * fres * smoothstep(0.95, 1.30, pos.x) * 0.06;
+        let rim = fres * vec3f(1.0) * 0.25;
 
-        let glassCol = mix(glass + vec3f(spec + fill) + rim, vec3f(0.92, 0.98, 1.0), edge * 0.92);
+        let glassCol = mix(glass + vec3f(spec + fill) + rim, vec3f(1.0), edge * 0.92);
         let coverage = 0.97 * intro;
         color = mix(color, glassCol, coverage);
       }
