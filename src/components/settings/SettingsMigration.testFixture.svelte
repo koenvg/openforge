@@ -30,6 +30,11 @@
 </script>
 
 <main class="mx-auto flex max-w-5xl flex-col gap-5 p-6" aria-label="Settings migration fixture">
+  <div data-testid="daisy-compatibility" class="text-base-content border border-base-300 bg-base-100">
+    Legacy utility text
+    <span data-testid="daisy-accent" class="text-primary bg-accent border border-primary">Accent</span>
+    <span data-testid="daisy-on-accent" class="text-primary-content">On accent</span>
+  </div>
   <SettingsPreferencesCard availableThemes={$availableThemes} selectedThemeId={$selectedTheme.id}
     onThemeChange={(id) => { void registry.selectTheme(id) }}
     {terminalFont} onTerminalFontChange={(font) => { terminalFont = font }}
