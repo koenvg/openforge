@@ -38,14 +38,6 @@ function projectRecord(id: string, name: string): Project {
   return { id, name, path: `/repos/${id}`, created_at: 0, updated_at: 0 }
 }
 
-function taskRecord(id: string, projectId: string, _title: string): AttentionTaskReference {
-  return { id, projectId }
-}
-
-function mockTaskSnapshots(_tasks: AttentionTaskReference[]): void {
-  // Task identity now comes from the narrow lane projection returned by getTaskLanes.
-}
-
 function attentionRow(
   taskId: string,
   projectId: string,
@@ -125,7 +117,6 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)
@@ -257,7 +248,6 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     await vi.waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy())
 
     // Agent finished: the task is now an idle "doing" task that needs the user.
-    mockTaskSnapshots([taskRecord('t1', 'p1', '')])
     ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [attentionRow('t1', 'p1', 'Investigate flaky test')] }))
     // The orchestrator recomputes attentionCountByProject on the agent-finished event.
     taskAttentionRows.set([attentionRow('t1', 'p1', 'Investigate flaky test')])
@@ -311,10 +301,6 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
   it('keeps the newest Task attention snapshot when refreshes finish out of order', async () => {
     projects.set([projectRecord('p1', 'Project One')])
-    mockTaskSnapshots([
-      taskRecord('older', 'p1', 'Older result'),
-      taskRecord('newer', 'p1', 'Newer result'),
-    ])
     renderDialog()
     await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
     await vi.waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy())
@@ -341,10 +327,6 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
   it('preserves the collapsed-project state across a refresh (does not re-read config)', async () => {
     projects.set([projectRecord('p1', 'Project One'), projectRecord('p2', 'Project Two')])
-    mockTaskSnapshots([
-      taskRecord('t1', 'p1', 'Task One'),
-      taskRecord('t2', 'p2', 'Task Two'),
-    ])
     ipc.getTaskLanes.mockResolvedValue(laneRows({
       focus: [attentionRow('t1', 'p1', 'Task One'), attentionRow('t2', 'p2', 'Task Two')],
     }))
@@ -377,7 +359,6 @@ describe('AttentionOverviewDialog — initial focus', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    mockTaskSnapshots([taskRecord('t1', 'p1', 'Task One'), taskRecord('t2', 'p1', 'Task Two')])
     ipc.getTaskLanes.mockResolvedValue(laneRows({
       focus: [attentionRow('t1', 'p1', 'Task One'), attentionRow('t2', 'p1', 'Task Two')],
     }))
@@ -402,7 +383,6 @@ describe('AttentionOverviewDialog — initial focus', () => {
 
   it('keeps the shortcuts alive after a filter empties the list', async () => {
     // Reviews only: hiding them removes every row, including the one holding DOM focus.
-    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'Please review my fix')])
 
@@ -450,13 +430,6 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     activeProjectId.set(null)
     taskAttentionRows.set([])
 
-    mockTaskSnapshots([
-      taskRecord('t1', 'p1', 'Focus task'),
-      taskRecord('t2', 'p1', 'Parked one'),
-      taskRecord('t3', 'p2', 'Parked two'),
-      taskRecord('t4', 'p1', 'Flying task'),
-      taskRecord('t5', 'p2', 'Queued task'),
-    ])
     ipc.getTaskLanes.mockResolvedValue(laneRows({
       focus: [attentionRow('t1', 'p1', 'Focus task')],
       in_flight: [
@@ -749,7 +722,6 @@ describe('AttentionOverviewDialog — plugin review row actions', () => {
     runtimeContributionSources.set(new Map())
     clearComponentRegistry()
 
-    mockTaskSnapshots([])
     ipc.getTaskLanes.mockResolvedValue(laneRows())
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)
