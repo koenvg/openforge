@@ -34,6 +34,8 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
     taskDefaultsError: null as string | null,
     promptDraft: '',
     initialPrompt: '',
+    // Key the uncontrolled prompt editor by this revision, never by the live draft.
+    promptRevision: 0,
     isSaving: false,
     submissionIntent: null as 'backlog' | 'start' | null,
     taskDefaultsLoading: true,
@@ -41,7 +43,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
     get promptReady() { return this.promptDraft.trim().length > 0 },
     get createReady() { return (context.mode !== 'create' || (!this.taskDefaultsLoading && !this.taskDefaultsError)) && !this.isSaving },
   })
-  let lastInitialPrompt: string | null = null
+  let lastPromptSource: string | null = null
   let lastTitleSeed: string | null | undefined = null
   let lastSourceTicketSeed: string | null | undefined = null
   let lastWorktreeSourceSeed: WorktreeSource | null | undefined = null
@@ -51,12 +53,17 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
 
   function configure(input: TaskCreationContext) {
     context = { ...input, mode: input.mode ?? 'create' }
-    state.initialPrompt = context.mode === 'edit' && context.task ? getTaskPromptText(context.task) : context.promptSeed ?? ''
-    if (state.initialPrompt !== lastInitialPrompt) {
+    const editTask = context.mode === 'edit' ? context.task : null
+    // Raw task prompts include image definitions: replacing only an image is a reseed too.
+    // Equivalent inputs preserve user edits, even when the caller supplies a new task object.
+    const promptSource = JSON.stringify([context.mode, editTask?.id ?? null, editTask?.prompt ?? context.promptSeed ?? ''])
+    if (promptSource !== lastPromptSource) {
+      state.initialPrompt = editTask ? getTaskPromptText(editTask) : context.promptSeed ?? ''
       state.promptDraft = state.initialPrompt
-      lastInitialPrompt = state.initialPrompt
+      attachments.reset(context.mode ?? 'create', editTask ?? null)
+      lastPromptSource = promptSource
+      state.promptRevision++
     }
-    attachments.reset(context.mode ?? 'create', context.task ?? null)
     if (context.titleSeed === lastTitleSeed && context.sourceTicketUrlSeed === lastSourceTicketSeed
       && context.worktreeSourceSeed === lastWorktreeSourceSeed && context.worktreeBranchSeed === lastWorktreeBranchSeed) return
     applySeedsToDraft()

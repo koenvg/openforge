@@ -8,6 +8,7 @@
   import { InsertRequestCoordinator } from './insertRequestCoordinator'
 
   interface Props {
+    /** Mount-time seed. To replace a draft, remount with a key for the input's logical identity. */
     value?: string
     placeholder?: string
     ariaLabel?: string
