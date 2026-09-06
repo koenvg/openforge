@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+  import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type {
     AgentReviewComment,
     AiThread,
@@ -28,18 +28,13 @@
   import WalkthroughAiQuestions from './WalkthroughAiQuestions.svelte'
   import WalkthroughDiffPresentation from './WalkthroughDiffPresentation.svelte'
   import WalkthroughStepNavigation from './WalkthroughStepNavigation.svelte'
-  import type { GithubSyncPrReviewClient } from './githubSyncClient'
-  import { useWalkthroughLifecycle } from './useWalkthroughLifecycle.svelte'
-  import { useWalkthroughTicketCoverage } from './useWalkthroughTicketCoverage.svelte'
 
   interface Props {
-    api: FrontendOpenForgeAPI
-    githubSync: GithubSyncPrReviewClient
+    workspace: WalkthroughReview
     pr: ReviewPullRequest
     files: PrFileDiff[]
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
     resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
-    projectId: string | null
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
@@ -69,30 +64,9 @@
   }
 
   let props: Props = $props()
-  let activeStepIndex = $state(0)
   let stepDetailsExpanded = $state(loadWalkthroughStepDetailsExpanded())
-  let loadTicket = (): Promise<void> => Promise.resolve()
-
-  function resetNavigation(): void {
-    activeStepIndex = 0
-  }
-
-  const lifecycle = useWalkthroughLifecycle({
-    getApi: () => props.api,
-    getGithubSync: () => props.githubSync,
-    getPullRequest: () => props.pr,
-    getProjectId: () => props.projectId,
-    onReload: () => loadTicket(),
-    onResetNavigation: resetNavigation,
-  })
-
-  const ticketCoverage = useWalkthroughTicketCoverage({
-    getGithubSync: () => props.githubSync,
-    getPullRequest: () => props.pr,
-    getWalkthrough: () => lifecycle.walkthrough,
-    getFiles: () => props.files,
-  })
-  loadTicket = ticketCoverage.load
+  let lifecycle = $derived(props.workspace)
+  let ticketCoverage = $derived(props.workspace.ticketCoverage)
 
   let aiThreads = $derived(props.aiThreads ?? [])
   let pendingReplies = $derived(props.pendingReplies ?? [])
@@ -104,7 +78,7 @@
   let stepEntries = $derived(parsedSteps ? buildWalkthroughStepList(parsedSteps) : [])
   let totalSteps = $derived(stepEntries.length)
   let clampedStepIndex = $derived(
-    parsedSteps ? clampStepIndex(activeStepIndex, totalSteps) : 0,
+    parsedSteps ? clampStepIndex(lifecycle.activeStepIndex, totalSteps) : 0,
   )
   let activeEntry = $derived(stepEntries[clampedStepIndex] ?? null)
   let isFinalStep = $derived(activeEntry?.kind === 'submit')
@@ -140,13 +114,6 @@
     saveWalkthroughStepDetailsExpanded(stepDetailsExpanded)
   }
 
-  async function handleSetIssueKey(issueKey: string): Promise<void> {
-    if (!(await ticketCoverage.setIssueKey(issueKey))) {
-      lifecycle.reportError('Failed to set the Jira ticket.')
-      return
-    }
-    await lifecycle.regenerate()
-  }
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
@@ -201,7 +168,7 @@
       </div>
     {/if}
 
-    <WalkthroughStepNavigation entries={stepEntries} bind:activeStepIndex />
+    <WalkthroughStepNavigation entries={stepEntries} bind:activeStepIndex={lifecycle.activeStepIndex} />
 
     <div class="flex items-start gap-2 px-4 {stepDetailsExpanded ? 'py-2.5' : 'py-1'} border-b border-base-300 shrink-0">
       <div class="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -265,7 +232,7 @@
           jiraConfigured={ticketCoverage.jiraConfigured}
           includedFindingIds={ticketCoverage.includedFindingIds}
           onOpenUrl={props.onOpenUrl}
-          onSetIssueKey={(issueKey) => { void handleSetIssueKey(issueKey) }}
+          onSetIssueKey={lifecycle.setIssueKey}
           onRegenerate={lifecycle.regenerate}
           onToggleFinding={ticketCoverage.toggleFinding}
         />

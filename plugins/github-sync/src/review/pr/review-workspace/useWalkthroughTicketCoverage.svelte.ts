@@ -1,12 +1,13 @@
+import { onDestroy } from 'svelte'
 import type { PrFileDiff, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import type { CoverageFinding, TicketSnapshot } from '../../lib/ticketCoverage'
-import { parseAndValidateTicketCoverage } from '../../lib/ticketCoverageParse'
-import { toggleCoverageFinding } from '../../lib/walkthroughViewState'
-import type { GithubSyncPrReviewClient } from './githubSyncClient'
+import type { CoverageFinding, TicketSnapshot } from '../../../lib/ticketCoverage'
+import { parseAndValidateTicketCoverage } from '../../../lib/ticketCoverageParse'
+import { toggleCoverageFinding } from '../../../lib/walkthroughViewState'
+import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
 interface WalkthroughTicketCoverageDependencies {
   getGithubSync: () => GithubSyncPrReviewClient
-  getPullRequest: () => ReviewPullRequest
+  getPullRequest: () => ReviewPullRequest | null
   getWalkthrough: () => PrWalkthrough | null
   getFiles: () => PrFileDiff[]
 }
@@ -27,6 +28,14 @@ export interface WalkthroughTicketCoverage {
 export function useWalkthroughTicketCoverage(
   dependencies: WalkthroughTicketCoverageDependencies,
 ): WalkthroughTicketCoverage {
+  let disposed = false
+  let loadSequence = 0
+  let loadedKey = ''
+  const currentKey = () => {
+    const pr = dependencies.getPullRequest()
+    return pr ? `${pr.id}:${pr.head_sha}` : ''
+  }
+  onDestroy(() => { disposed = true })
   let snapshot = $state<TicketSnapshot | null>(null)
   let jiraConfigured = $state(false)
   let includedFindings = $state<CoverageFinding[]>([])
@@ -42,14 +51,25 @@ export function useWalkthroughTicketCoverage(
 
   async function load(): Promise<void> {
     const pr = dependencies.getPullRequest()
+    if (!pr) return
+    const sequence = ++loadSequence
+    const key = currentKey()
+    const isCurrent = () => !disposed && sequence === loadSequence && currentKey() === key
+    if (loadedKey !== key) {
+      snapshot = null
+      jiraConfigured = false
+    }
     try {
       const result = await dependencies.getGithubSync().getPrTicket({
         reviewPrId: pr.id,
         headSha: pr.head_sha,
       })
+      if (!isCurrent()) return
+      loadedKey = key
       snapshot = result?.snapshot ?? null
       jiraConfigured = result?.jiraConfigured ?? false
     } catch (error) {
+      if (!isCurrent()) return
       console.error('[WalkthroughTab] Failed to load the Jira ticket:', error)
       snapshot = null
       jiraConfigured = false
@@ -57,9 +77,11 @@ export function useWalkthroughTicketCoverage(
   }
 
   async function setIssueKey(issueKey: string): Promise<boolean> {
+    const pr = dependencies.getPullRequest()
+    if (!pr) return false
     try {
       await dependencies.getGithubSync().setPrJiraKey({
-        reviewPrId: dependencies.getPullRequest().id,
+        reviewPrId: pr.id,
         issueKey,
       })
       return true
