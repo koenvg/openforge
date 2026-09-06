@@ -1,0 +1,250 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "architecture": "arm64",
+  "python": "3.9.6",
+  "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Library/Developer/CommandLineTools/usr/bin",
+  "sources": {
+    "run.py": "3edea28b5b3e08073c53f933ec8cb829e5aee525a05270f526da8daee95f80c3",
+    "macos.py": "3bd50d1c08e473c2356a3f21b35bdc01e9e2246ffcbd8a1f094c84bc0b0c845c",
+    "test_cleanup.py": "1ca4f5762f7b34306013dd8a5fcf6fb951ee31b91a018175a270cf5ce8f470ff",
+    "host.c": "d31699507a0d1b9490342d5f7cf04c97c8f61cf25b91fdcb57dfcee25ae3535b",
+    "fixture.c": "26f7f5fd0f871e625013c0a95af69c4fdeaa5ed7c5d463a5fab90183892ba6c1"
+  },
+  "negativeControl": true,
+  "testsRun": 1,
+  "passed": false,
+  "failures": [
+    "test_live_host_runs_new_executable_without_restarting_children (__main__.Continuity)\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4714/scripts/experiments/pty-reexec/run.py\", line 232, in test_live_host_runs_new_executable_without_restarting_children\n    self.assertEqual(after[\"version\"], 2, \"live host did not activate v2\")\nAssertionError: 1 != 2 : live host did not activate v2\n"
+  ],
+  "events": [
+    {
+      "event": "test",
+      "name": "__main__.Continuity.test_live_host_runs_new_executable_without_restarting_children",
+      "runtimeRoot": "/private/var/folders/5f/jlmxmscj0gnb0h9z6j5by_rr0000gn/T/.ctx-mode-VVqGdI/openforge-pty-reexec-4wtgjaka",
+      "mode": "0o700"
+    },
+    {
+      "event": "initial",
+      "inventory": {
+        "version": 1,
+        "host": 1759,
+        "fds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "stateFd": 3,
+        "sentinel": 4,
+        "children": [
+          {
+            "pid": 1772,
+            "fd": 5,
+            "tty": "/dev/ttys043",
+            "device": 251658283,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 1773,
+            "fd": 6,
+            "tty": "/dev/ttys044",
+            "device": 251658284,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          }
+        ]
+      },
+      "executable": "/private/var/folders/5f/jlmxmscj0gnb0h9z6j5by_rr0000gn/T/.ctx-mode-VVqGdI/openforge-pty-reexec-4wtgjaka/v1",
+      "processes": [
+        {
+          "pid": 1759,
+          "ppid": 1736,
+          "uid": 501,
+          "pgid": 1759,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 102295,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 1772,
+          "ppid": 1759,
+          "uid": 501,
+          "pgid": 1772,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 473058,
+          "tdev": 268435499
+        },
+        {
+          "pid": 1773,
+          "ppid": 1759,
+          "uid": 501,
+          "pgid": 1773,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 474703,
+          "tdev": 268435500
+        },
+        {
+          "pid": 1788,
+          "ppid": 1773,
+          "uid": 501,
+          "pgid": 1773,
+          "status": 2,
+          "sec": 1788684671,
+          "usec": 16119,
+          "tdev": 268435500
+        }
+      ]
+    },
+    {
+      "event": "replacement",
+      "inventory": {
+        "version": 1,
+        "host": 1759,
+        "fds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "stateFd": 3,
+        "sentinel": 4,
+        "children": [
+          {
+            "pid": 1772,
+            "fd": 5,
+            "tty": "/dev/ttys043",
+            "device": 251658283,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 1773,
+            "fd": 6,
+            "tty": "/dev/ttys044",
+            "device": 251658284,
+            "cursor": 91,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          },
+          {
+            "pid": 0,
+            "fd": -1,
+            "tty": "",
+            "device": 0,
+            "cursor": 0,
+            "reaped": 0,
+            "status": 0
+          }
+        ]
+      },
+      "roundTripMs": 231.37529199999983,
+      "executable": "/private/var/folders/5f/jlmxmscj0gnb0h9z6j5by_rr0000gn/T/.ctx-mode-VVqGdI/openforge-pty-reexec-4wtgjaka/v1"
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 1759,
+          "ppid": 1736,
+          "uid": 501,
+          "pgid": 1759,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 102295,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 1772,
+          "ppid": 1759,
+          "uid": 501,
+          "pgid": 1772,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 473058,
+          "tdev": 268435499
+        },
+        {
+          "pid": 1773,
+          "ppid": 1759,
+          "uid": 501,
+          "pgid": 1773,
+          "status": 2,
+          "sec": 1788684670,
+          "usec": 474703,
+          "tdev": 268435500
+        },
+        {
+          "pid": 1788,
+          "ppid": 1773,
+          "uid": 501,
+          "pgid": 1773,
+          "status": 2,
+          "sec": 1788684671,
+          "usec": 16119,
+          "tdev": 268435500
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    }
+  ]
+}
