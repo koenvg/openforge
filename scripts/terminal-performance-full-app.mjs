@@ -111,7 +111,7 @@ export async function runFullAppTerminalPerformance(options = {}, dependencies =
 
   try {
     const completed = await lifecycle.runScenario(async context => {
-      const driver = createDriver(context.page, { timeoutMs: options.timeoutMs })
+      const driver = createDriver(context.page, { timeoutMs: options.timeoutMs, terminalProbe: 'performance' })
       const rootPid = context.launcher.children().electron?.pid ?? null
       const result = await runScenario(context, {
         driver,

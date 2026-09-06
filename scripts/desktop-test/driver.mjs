@@ -6,6 +6,28 @@ function escapeRegExp(text) {
 
 export function createDesktopAppDriver(page, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_DRIVER_TIMEOUT_MS
+  // Observation policy is independent of the token-gated invariant controls below.
+  const terminalProbe = options.terminalProbe ?? 'e2e'
+  if (!['e2e', 'performance'].includes(terminalProbe)) {
+    throw new Error(`Unknown terminal probe: ${terminalProbe}`)
+  }
+  const probeName = terminalProbe === 'performance' ? '__openforgeDesktopTest' : '__openforgeE2e'
+
+  async function findObservedTerminalKey(taskId) {
+    await page.waitForFunction(
+      ({ taskId, probeName }) => window[probeName]?.terminal.list()
+        .some(key => key.startsWith(`${taskId}-shell-`)),
+      { taskId, probeName },
+      { timeout: timeoutMs },
+    )
+    const terminalKeys = await page.evaluate(
+      name => window[name]?.terminal.list() ?? [],
+      probeName,
+    )
+    const terminalKey = terminalKeys.find(key => key.startsWith(`${taskId}-shell-`))
+    if (!terminalKey) throw new Error(`No observed shell terminal for task ${taskId}`)
+    return terminalKey
+  }
 
   async function verifyDesktopBridge() {
     await page.waitForFunction(
@@ -53,15 +75,7 @@ export function createDesktopAppDriver(page, options = {}) {
     if (!observe) return { region, terminalKey: null }
     await region.waitFor({ state: 'visible', timeout: timeoutMs })
     if (focus) await focusTerminal()
-    await page.waitForFunction(
-      expectedTaskId => window.__openforgeE2e?.terminal.list()
-        .some(key => key.startsWith(`${expectedTaskId}-shell-`)),
-      taskId,
-      { timeout: timeoutMs },
-    )
-    const terminalKeys = await page.evaluate(() => window.__openforgeE2e?.terminal.list() ?? [])
-    const terminalKey = terminalKeys.find(key => key.startsWith(`${taskId}-shell-`))
-    if (!terminalKey) throw new Error(`No observed shell terminal for task ${taskId}`)
+    const terminalKey = await findObservedTerminalKey(taskId)
     return { region, terminalKey }
   }
 
@@ -104,20 +118,10 @@ export function createDesktopAppDriver(page, options = {}) {
     const region = page.getByRole('region', { name: 'Terminal region for Shell 1' })
     await region.waitFor({ state: 'visible', timeout: timeoutMs })
     await focusTerminal()
+    const terminalKey = await findObservedTerminalKey(manifest.taskId)
     await page.waitForFunction(
-      taskId => window.__openforgeDesktopTest?.terminal.list()
-        .some(key => key.startsWith(`${taskId}-shell-`)),
-      manifest.taskId,
-      { timeout: timeoutMs },
-    )
-    const terminalKeys = await page.evaluate(
-      () => window.__openforgeDesktopTest?.terminal.list() ?? [],
-    )
-    const terminalKey = terminalKeys.find(key => key.startsWith(`${manifest.taskId}-shell-`))
-    if (!terminalKey) throw new Error(`No observed shell terminal for task ${manifest.taskId}`)
-    await page.waitForFunction(
-      key => window.__openforgeDesktopTest?.terminal.observe(key).lifecycle.ptyActive === true,
-      terminalKey,
+      ({ key, probeName }) => window[probeName]?.terminal.observe(key).lifecycle.ptyActive === true,
+      { key: terminalKey, probeName },
       { timeout: timeoutMs },
     )
     return { region, terminalKey }
@@ -156,19 +160,19 @@ export function createDesktopAppDriver(page, options = {}) {
 
   async function observeTerminal(terminalKey) {
     return page.evaluate(
-      key => window.__openforgeE2e?.terminal.observe(key) ?? null,
-      terminalKey,
+      ({ key, probeName }) => window[probeName]?.terminal.observe(key) ?? null,
+      { key: terminalKey, probeName },
     )
   }
 
   async function drainTerminal(terminalKey, expectation = {}) {
     return page.evaluate(
-      ({ key, expected }) => {
-        const probe = window.__openforgeE2e
+      ({ key, expected, probeName }) => {
+        const probe = window[probeName]
         if (!probe) throw new Error('OpenForge desktop test probe is unavailable')
         return probe.terminal.drain(key, expected)
       },
-      { key: terminalKey, expected: expectation },
+      { key: terminalKey, expected: expectation, probeName },
     )
   }
 

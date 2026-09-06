@@ -95,6 +95,9 @@ describe('full-app terminal performance runner', () => {
       outputDir: '/artifacts/run',
     }, deps)
 
+    expect(deps.createDriver).toHaveBeenCalledWith(harness.page, {
+      timeoutMs: undefined, terminalProbe: 'performance',
+    })
     expect(deps.createLifecycle).toHaveBeenCalledWith(expect.objectContaining({
       ghosttyOptimizeMode: 'ReleaseFast',
     }))
