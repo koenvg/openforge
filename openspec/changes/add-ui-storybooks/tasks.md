@@ -41,8 +41,8 @@
 
 ## 6. Coverage enforcement
 
-- [ ] 6.1 Write failing tests for source discovery, page and component inventory entries, duplicate assignments, and non-empty exclusion reasons, then implement the typed coverage inventory validator until the tests pass.
-- [ ] 6.2 Add failing tests for missing and renamed Storybook IDs, then validate inventory entries against each static Storybook index and verify diagnostics identify the catalog, source path, and missing story ID.
+- [x] 6.1 Write failing tests for source discovery, page and component inventory entries, duplicate assignments, and non-empty exclusion reasons, then implement the typed coverage inventory validator until the tests pass.
+- [x] 6.2 Add failing tests for missing and renamed Storybook IDs, then validate inventory entries against each static Storybook index and verify diagnostics identify the catalog, source path, and missing story ID.
 - [ ] 6.3 Populate the inventory for all host, package, and bundled-plugin Svelte files and visual contributions, record only allowed non-visual exclusions, then verify `pnpm storybook:coverage` passes with no unclassified source modules or contributions.
 
 ## 7. Repository visual snapshots

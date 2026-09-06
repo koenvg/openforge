@@ -258,7 +258,7 @@
          dialog keeps receiving E and R instead of losing them to <body>. -->
     <div bind:this={bodyEl} tabindex="-1" class="overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none">
       {#if error}
-        <div class="rounded-lg border border-error/30 bg-error/5 p-3 mb-2">
+        <div class="rounded-[var(--of-radius-container)] border border-error/30 bg-error/5 p-3 mb-2">
           <div role="alert">
             <p class="text-sm font-medium m-0">Couldn't load attention overview.</p>
             <p class="text-xs text-base-content/70 mt-1 mb-0 break-words">{error}</p>
@@ -266,9 +266,9 @@
               <p class="text-xs text-base-content/70 mt-1 mb-0">Showing the last available results. They may be out of date.</p>
             {/if}
           </div>
-          <button type="button" class="btn btn-sm btn-ghost mt-2" disabled={retrying} onclick={retry}>
+          <Button type="button" variant="ghost" size="sm" class="mt-2" disabled={retrying} onclick={retry}>
             {retrying ? 'Retrying…' : 'Retry'}
-          </button>
+          </Button>
         </div>
       {/if}
       {#if loading}
