@@ -117,23 +117,31 @@ class RuntimeContributionRegistry {
   }
 
   async deactivate(): Promise<void> {
-    let firstError: unknown = null
+    let firstError: unknown
+    let hasError = false
     try {
       await this.backendSubscriptions.disposeAll()
     } catch (error) {
       firstError = error
+      hasError = true
     }
     try {
       await this.frontendSubscriptions.disposeAll()
     } catch (error) {
-      firstError ??= error
+      if (!hasError) {
+        firstError = error
+        hasError = true
+      }
     }
     try {
       await this.services.host.destroyPluginBrowserSurfaces?.(this.services.pluginId)
     } catch (error) {
-      firstError ??= error
+      if (!hasError) {
+        firstError = error
+        hasError = true
+      }
     }
-    if (firstError) throw firstError
+    if (hasError) throw firstError
   }
 
   observeFrontendContributions(observer: (snapshot: LiveFrontendContributions) => void): void {
