@@ -352,14 +352,16 @@ export function useSelectedPrReview(
     const pr = selectedPr.current
     if (!pr) return
 
+    await githubSync.replyToReviewComment({
+      owner: pr.repo_owner,
+      repo: pr.repo_name,
+      prNumber: pr.number,
+      commentId,
+      body,
+    })
+
+    // Posting succeeded. A refresh failure must not make callers retry the reply.
     try {
-      await githubSync.replyToReviewComment({
-        owner: pr.repo_owner,
-        repo: pr.repo_name,
-        prNumber: pr.number,
-        commentId,
-        body,
-      })
       const comments = await githubSync.listReviewComments({
         owner: pr.repo_owner,
         repo: pr.repo_name,
@@ -367,7 +369,7 @@ export function useSelectedPrReview(
       })
       if (selectedPr.current?.id === pr.id) reviewCommentsStore.current = comments
     } catch (cause) {
-      console.error('Failed to reply to review comment:', cause)
+      console.error('Failed to refresh comments after posting reply:', cause)
     }
   }
 
@@ -390,17 +392,19 @@ export function useSelectedPrReview(
     const pr = selectedPr.current
     if (!pr) return
 
+    await githubSync.createReviewComment({
+      owner: pr.repo_owner,
+      repo: pr.repo_name,
+      prNumber: pr.number,
+      commitId: pr.head_sha,
+      path: filename,
+      line,
+      side,
+      body,
+    })
+
+    // Posting succeeded. A refresh failure must not make callers retry the comment.
     try {
-      await githubSync.createReviewComment({
-        owner: pr.repo_owner,
-        repo: pr.repo_name,
-        prNumber: pr.number,
-        commitId: pr.head_sha,
-        path: filename,
-        line,
-        side,
-        body,
-      })
       const comments = await githubSync.listReviewComments({
         owner: pr.repo_owner,
         repo: pr.repo_name,
@@ -408,7 +412,7 @@ export function useSelectedPrReview(
       })
       if (selectedPr.current?.id === pr.id) reviewCommentsStore.current = comments
     } catch (cause) {
-      console.error('Failed to create review comment:', cause)
+      console.error('Failed to refresh comments after posting comment:', cause)
     }
   }
 
