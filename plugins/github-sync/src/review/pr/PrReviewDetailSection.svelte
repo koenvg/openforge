@@ -60,6 +60,9 @@
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
+    replyPostingError?: string | null
+    isPostingReplies?: boolean
+    onRetryReplies?: () => Promise<void>
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
@@ -113,6 +116,9 @@
     onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies = [],
+    replyPostingError = null,
+    isPostingReplies = false,
+    onRetryReplies,
     onAddReplyToReview,
     onRemovePendingReply,
     onAskAgentStep,
@@ -178,6 +184,14 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden">
+  {#if replyPostingError || isPostingReplies}
+    <div class="flex items-center gap-3 border-b border-base-300 px-4 py-2 text-sm text-error" role="alert">
+      <span>{isPostingReplies ? 'Posting queued replies…' : replyPostingError}</span>
+      {#if onRetryReplies && pendingReplies.length > 0}
+        <Button size="xs" disabled={isPostingReplies} onclick={onRetryReplies}>Retry replies</Button>
+      {/if}
+    </div>
+  {/if}
   <div class="flex flex-col gap-1.5 border-b border-base-300 bg-base-200 px-4 py-2.5 shrink-0">
     <div class="flex items-center gap-2 min-w-0">
       <Button variant="ghost" size="xs" class="shrink-0 text-base-content/50" onclick={onBackToList}>← Back</Button>

@@ -58,6 +58,8 @@ export function useSelectedPrReview(
   let includeNonApplicationFiles = $state(true)
   let isLoading = $state(false)
   let error = $state<string | null>(null)
+  let replyPostingError = $state<string | null>(null)
+  let isPostingReplies = $state(false)
   let loadSequence = 0
   let viewInvokedSubscription: { dispose(): void | Promise<void> } | null = null
 
@@ -66,6 +68,8 @@ export function useSelectedPrReview(
   }
 
   function clearDetailState(): void {
+    replyPostingError = null
+    isPostingReplies = false
     fileDiffs.current = []
     reviewCommentsStore.current = []
     manualComments.current = []
@@ -290,10 +294,18 @@ export function useSelectedPrReview(
     repoName: string
     prNumber: number
   }): Promise<void> {
+    if (isPostingReplies) return
     const queued = replies.current
-    if (queued.length === 0) return
-
+    if (queued.length === 0) {
+      replyPostingError = null
+      return
+    }
+    const sequence = loadSequence
+    isPostingReplies = true
+    replyPostingError = null
+    let failedCount = 0
     for (const reply of queued) {
+      if (sequence !== loadSequence) break
       try {
         await githubSync.replyToReviewComment({
           owner: request.repoOwner,
@@ -302,12 +314,17 @@ export function useSelectedPrReview(
           commentId: reply.commentId,
           body: reply.body,
         })
+        replies.current = replies.current.filter(candidate => candidate !== reply)
       } catch (cause) {
+        failedCount += 1
         console.error('Failed to post queued reply:', cause)
       }
     }
-    replies.current = []
-
+    if (sequence !== loadSequence) return
+    isPostingReplies = false
+    if (failedCount > 0) {
+      replyPostingError = `Your review was submitted, but ${failedCount} queued ${failedCount === 1 ? 'reply was' : 'replies were'} not posted. Use Retry replies to send them without submitting the review again.`
+    }
     try {
       const comments = await githubSync.listReviewComments({
         owner: request.repoOwner,
@@ -323,6 +340,12 @@ export function useSelectedPrReview(
     } catch (cause) {
       console.error('Failed to refresh comments after posting replies:', cause)
     }
+  }
+
+  async function retryReplies(): Promise<void> {
+    const pr = selectedPr.current
+    if (!pr) return
+    await postPendingReplies({ repoOwner: pr.repo_owner, repoName: pr.repo_name, prNumber: pr.number })
   }
 
   async function replyToExistingComment(commentId: number, body: string): Promise<void> {
@@ -463,6 +486,9 @@ export function useSelectedPrReview(
     get includeNonApplicationFiles() { return includeNonApplicationFiles },
     get isLoading() { return isLoading },
     get error() { return error },
+    get replyPostingError() { return replyPostingError },
+    get isPostingReplies() { return isPostingReplies },
+    retryReplies,
     setActiveTab: (tab: PrDetailTab) => { activeTab = tab },
     setIncludeNonApplicationFiles: (value: boolean) => { includeNonApplicationFiles = value },
     toggleFileTree: () => { fileTreeVisible = !fileTreeVisible },
