@@ -295,7 +295,7 @@
     {"tag":"Button","context":"class=\"min-w-0 flex-1 justify-start truncate text-left font-mono\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/focus-board/FocusBoard.svelte": [
-    {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-4 xl:flex-nowrap\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-4\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"w-60 shrink-0\"","tokens":["w-60"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"Button","context":"class=\"board-search min-w-64 max-w-[30rem] flex-1 justify-start gap-2.5 text-left\"","tokens":["min-w-64","max-w-[30rem]"],"count":1,"reason":"Feature-specific control/content width within this row; height and corners remain token-owned."},
     {"tag":"span","context":"class=\"min-w-0 flex-1 truncate\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},

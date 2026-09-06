@@ -97,6 +97,16 @@ cargo build
 cargo clippy
 ```
 
+The Focus Board toolbar browser regression uses the populated page story and checks control bounds and filter interaction, without screenshots. Start the pages Storybook in one terminal, then run the check in another:
+
+```bash
+pnpm storybook:pages --ci
+# In another terminal:
+STORYBOOK_URL=http://localhost:6006 pnpm test storybook/stories/pages/FocusBoard.browser.test.ts
+```
+
+Without `STORYBOOK_URL`, this browser suite is skipped. It covers 1000, 1279, 1280, 1440, and 1920px widths at 800px height.
+
 For idle CPU, event-rate, and macOS peak-footprint regression checks, follow [the idle resource check guide](docs/idle-resource-checks.md).
 For isolated headed terminal testing and the full-app terminal performance scenario, follow the [desktop terminal testing guide](docs/desktop-terminal-testing.md).
 For real-development-app terminal races, isolated/reuse ownership rules, reports, and CI prerequisites, follow the [live Electron invariant guide](docs/live-electron-invariants.md).
