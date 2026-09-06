@@ -146,10 +146,10 @@ describe('AddTaskDialog prompt reseeding', () => {
       })
       await rerender({ mode: 'create', promptSeed: 'New seed' })
       await finishRead()
-      await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
-      await waitFor(() => expect(createTask).toHaveBeenCalled())
       expect(textbox().value).toBe('New seed')
       expect(screen.queryByText('1 image ready')).toBeNull()
+      await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
+      await waitFor(() => expect(createTask).toHaveBeenCalled())
       expect(vi.mocked(createTask).mock.calls[0][0]).toBe('New seed')
     } finally {
       readSpy.mockRestore()

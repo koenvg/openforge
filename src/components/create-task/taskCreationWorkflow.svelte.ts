@@ -40,6 +40,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
     submissionIntent: null as 'backlog' | 'start' | null,
     taskDefaultsLoading: true,
     branchList: { status: 'loading' } as BranchListState,
+    get savedTaskId() { return context.mode === 'create' ? savedCreation?.task.id ?? null : null },
     get promptReady() { return this.promptDraft.trim().length > 0 },
     get createReady() { return (context.mode !== 'create' || (!this.taskDefaultsLoading && !this.taskDefaultsError)) && !this.isSaving },
   })
@@ -50,6 +51,12 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   let lastWorktreeBranchSeed: string | null | undefined = null
   let branchLoadRun = 0
   let initializationRun = 0
+  let savedCreation = $state.raw<{
+    task: TaskDetail
+    intent: 'backlog' | 'start'
+    callbacks: Pick<TaskCreationContext, 'onTaskSaved' | 'onRunAction' | 'onClose'>
+    phase: 'notification' | 'start' | 'close' | 'done'
+  } | null>(null)
 
   function configure(input: TaskCreationContext) {
     context = { ...input, mode: input.mode ?? 'create' }
@@ -173,6 +180,11 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   }
 
   async function submit(intent: 'backlog' | 'start' = 'backlog', prompt = state.promptDraft) {
+    if (state.isSaving) return
+    if (context.mode === 'create' && savedCreation) {
+      await resumeCreation()
+      return
+    }
     if (!context.projectId) return
     const normalizedPrompt = prompt.trim()
     if (!normalizedPrompt) return
@@ -190,7 +202,6 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
       state.error = attachmentError
       return
     }
-    if (state.isSaving) return
     if (context.mode === 'create' && state.draft.useWorktree && state.draft.worktreeSource === 'existingBranch' && state.draft.existingBranch.trim() === '') {
       state.error = state.branchList.status === 'loading'
         ? 'Branches are still loading. Wait for the list before starting from an existing branch.'
@@ -201,16 +212,14 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
     state.submissionIntent = context.mode === 'create' ? intent : null
     state.isSaving = true
     try {
-      let savedTask: TaskDetail
       const taskPrompt = attachments.formatPrompt(normalizedPrompt)
-
+      const callbacks = { onTaskSaved: context.onTaskSaved, onRunAction: context.onRunAction, onClose: context.onClose }
       if (context.mode === 'edit' && context.task) {
         await adapter.updateTaskInitialPrompt(context.task.id, taskPrompt)
-        savedTask = context.task
-        await context.onTaskSaved?.()
+        await callbacks.onTaskSaved?.()
+        callbacks.onClose?.()
       } else {
-
-        savedTask = await adapter.createTask(
+        const task = await adapter.createTask(
           taskPrompt,
           'backlog',
           context.projectId,
@@ -223,22 +232,41 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
             aiProvider: state.draft.aiProvider,
           }
         )
-
-        if (intent === 'start' && context.onRunAction) {
-          // Report before navigating away: a compose request settles on this
-          // callback, and onRunAction hands control to the board.
-          await context.onTaskSaved?.(savedTask, { started: true })
-          context.onClose?.()
-          await context.onRunAction(savedTask.id, '')
-          return
-        } else {
-          await context.onTaskSaved?.(savedTask, { started: false })
-        }
+        savedCreation = { task, intent, callbacks, phase: 'notification' }
+        await resumeCreation()
       }
-      context.onClose?.()
     } catch (e) {
       console.error('Failed to save task:', e)
       state.error = String(e)
+    } finally {
+      state.isSaving = false
+      state.submissionIntent = null
+    }
+  }
+
+  async function resumeCreation() {
+    const saved = savedCreation
+    if (!saved || saved.phase === 'done') return
+    state.error = null
+    state.isSaving = true
+    state.submissionIntent = saved.intent
+    const start = saved.intent === 'start' ? saved.callbacks.onRunAction : undefined
+    try {
+      if (saved.phase === 'notification') {
+        // Compose must receive the saved task before start navigates away.
+        await saved.callbacks.onTaskSaved?.(saved.task, { started: !!start })
+        saved.phase = 'start'
+      }
+      if (saved.phase === 'start') {
+        await start?.(saved.task.id, '')
+        saved.phase = 'close'
+      }
+      saved.callbacks.onClose?.()
+      saved.phase = 'done'
+    } catch (e) {
+      const action = { notification: 'notification', start: 'starting', close: 'closing', done: 'closing' }[saved.phase]
+      console.error(`Task ${saved.task.id} post-save ${action} failed:`, e)
+      state.error = `Task ${saved.task.id} was saved, but ${action} failed: ${String(e)}`
     } finally {
       state.isSaving = false
       state.submissionIntent = null

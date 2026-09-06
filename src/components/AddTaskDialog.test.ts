@@ -132,7 +132,7 @@ describe('AddTaskDialog', () => {
   })
 
 
-  it('closes before awaiting the async start flow', async () => {
+  it('closes only after the async start flow succeeds', async () => {
     let resolveRunAction = () => {}
     const onClose = vi.fn()
     const onRunAction = vi.fn(() => new Promise<void>((resolve) => {
@@ -147,11 +147,12 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
-      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(onClose).not.toHaveBeenCalled()
       expect(onRunAction).toHaveBeenCalledWith('T-1', '')
     })
 
     resolveRunAction()
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
   })
 
   it('calls createTask with correct arguments on submit via PromptInput', async () => {
@@ -176,7 +177,8 @@ describe('AddTaskDialog', () => {
     vi.mocked(createTask).mockImplementationOnce(() => new Promise<TaskDetail>((resolve) => {
       resolveCreate = resolve
     }))
-    render(AddTaskDialog, { props: { mode: 'create' } })
+    const onClose = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', onClose } })
 
     await fireEvent.input(await findPromptTextbox(), { target: { value: 'Save once' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
@@ -187,7 +189,8 @@ describe('AddTaskDialog', () => {
     })
 
     resolveCreate({ ...mockTask, id: 'T-1', status: 'backlog' })
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Add to backlog' }) as HTMLButtonElement).disabled).toBe(false))
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(createTask).toHaveBeenCalledOnce()
   })
 
 

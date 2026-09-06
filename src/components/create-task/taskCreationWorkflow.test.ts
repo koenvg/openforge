@@ -3,6 +3,83 @@ import { createTaskCreationWorkflow } from './taskCreationWorkflow.svelte'
 import { LocalTaskCreationAdapter } from './testing/localTaskCreationAdapter'
 
 describe('task creation workflow', () => {
+  it('retries a failed save notification without persisting another task', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    const savedIds: string[] = []
+    let failNotification = true
+    let closed = false
+    workflow.configure({ projectId: 'project', promptSeed: 'Build',
+      onTaskSaved: async (task) => {
+        savedIds.push(task!.id)
+        if (failNotification) throw new Error('refresh offline')
+      },
+      onClose: () => { closed = true },
+    })
+    await workflow.initialize()
+    await workflow.submit()
+    expect(workflow.state.error).toContain('Task T-1 was saved')
+    expect(workflow.state.error).toContain('refresh offline')
+    expect(closed).toBe(false)
+    failNotification = false
+    await workflow.submit()
+    expect(adapter.created).toHaveLength(1)
+    expect(savedIds).toEqual(['T-1', 'T-1'])
+    expect(workflow.state.error).toBeNull()
+    expect(closed).toBe(true)
+  })
+
+  it('keeps start errors visible and retries only the start of the saved task', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    const events: string[] = []
+    let failStart = true
+    workflow.configure({ projectId: 'project', promptSeed: 'Build',
+      onTaskSaved: (task, options) => { events.push(`saved:${task!.id}:${options!.started}`) },
+      onRunAction: async (id) => {
+        events.push(`start:${id}`)
+        if (failStart) throw new Error('provider offline')
+      },
+      onClose: () => { events.push('close') },
+    })
+    await workflow.initialize()
+    await workflow.submit('start')
+    expect(events).toEqual(['saved:T-1:true', 'start:T-1'])
+    expect(workflow.state.error).toContain('Task T-1 was saved, but starting failed')
+    expect(workflow.state.error).toContain('provider offline')
+    failStart = false
+    await workflow.submit('start')
+    expect(adapter.created).toHaveLength(1)
+    expect(events).toEqual(['saved:T-1:true', 'start:T-1', 'start:T-1', 'close'])
+    expect(workflow.state.error).toBeNull()
+  })
+
+  it('resumes the saved intent regardless of later draft edits and ignores completed retries', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    const events: string[] = []
+    let failNotification = true
+    workflow.configure({ projectId: 'project', promptSeed: 'Build',
+      onTaskSaved: async (_task, options) => {
+        events.push(`saved:${options!.started}`)
+        if (failNotification) throw new Error('offline')
+      },
+      onRunAction: async (id) => { events.push(`start:${id}`) },
+      onClose: () => { events.push('close') },
+    })
+    await workflow.initialize()
+    await workflow.submit('start')
+    workflow.state.promptDraft = ''
+    workflow.state.draft.worktreeSource = 'existingBranch'
+    workflow.state.draft.existingBranch = ''
+    failNotification = false
+    await workflow.submit('backlog')
+    await workflow.submit('start')
+    expect(adapter.created).toHaveLength(1)
+    expect(events).toEqual(['saved:true', 'saved:true', 'start:T-1', 'close'])
+    expect(workflow.state.error).toBeNull()
+  })
+
   it('can create with inherited defaults while origin is stalled', async () => {
     const adapter = new LocalTaskCreationAdapter()
     adapter.listGitBranches = () => new Promise(() => {})
@@ -165,7 +242,7 @@ describe('task creation workflow', () => {
     expect(workflow.state.draft.existingBranch).toBe('new')
   })
 
-  it('reports a saved task before closing and starting, and blocks concurrent submissions', async () => {
+  it('reports a saved task before starting, closes after success, and blocks concurrent submissions', async () => {
     const adapter = new LocalTaskCreationAdapter()
     const events: string[] = []
     let finish!: () => void
@@ -180,12 +257,13 @@ describe('task creation workflow', () => {
     await workflow.initialize()
     const submitting = workflow.submit('start')
     await started
-    expect(events).toEqual(['saved:T-1:true', 'close', 'start:T-1'])
+    expect(events).toEqual(['saved:T-1:true', 'start:T-1'])
     expect(workflow.state.submissionIntent).toBe('start')
     await workflow.submit()
     expect(adapter.created).toHaveLength(1)
     finish()
     await submitting
+    expect(events).toEqual(['saved:T-1:true', 'start:T-1', 'close'])
     expect(workflow.state.isSaving).toBe(false)
     expect(workflow.state.submissionIntent).toBeNull()
   })
@@ -201,6 +279,7 @@ describe('task creation workflow', () => {
 
   it('keeps a persistence failure visible and releases the submission lock', async () => {
     const adapter = new LocalTaskCreationAdapter()
+    const persist = adapter.createTask.bind(adapter)
     adapter.createTask = async () => { throw new Error('disk full') }
     let closed = false
     const workflow = createTaskCreationWorkflow(adapter)
@@ -211,6 +290,13 @@ describe('task creation workflow', () => {
     expect(workflow.state.isSaving).toBe(false)
     expect(workflow.state.submissionIntent).toBeNull()
     expect(closed).toBe(false)
+    expect(workflow.state.savedTaskId).toBeNull()
+    adapter.createTask = persist
+    await workflow.submit()
+    expect(adapter.created).toHaveLength(1)
+    expect(workflow.state.savedTaskId).toBe('T-1')
+    expect(workflow.state.error).toBeNull()
+    expect(closed).toBe(true)
   })
 
   it('includes pasted images when saving and restores them for editing', async () => {
