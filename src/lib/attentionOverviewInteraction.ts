@@ -245,11 +245,11 @@ export function createAttentionOverviewInteraction(
     if (disposed) return
     if (loading) { refreshPending = true; return }
     const request = ++generation
-    const previousKey = rows[focusedIndex] ? rowKey(rows[focusedIndex]) : null
-    const previousIndex = focusedIndex
     try {
       const gathered = await source.load()
       if (disposed || request !== generation) return
+      const previousKey = rows[focusedIndex] ? rowKey(rows[focusedIndex]) : null
+      const previousIndex = focusedIndex
       overview = gathered.overview
       activeId = gathered.activeId
       error = null

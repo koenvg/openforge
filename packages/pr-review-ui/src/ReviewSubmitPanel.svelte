@@ -147,7 +147,7 @@
     {#if includedFindings.length > 0}
       <div class="flex flex-col gap-1.5">
         {#each includedFindings as finding (finding.id)}
-          <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-warning/10 border border-warning/30 rounded-md">
+          <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-warning/10 border border-warning/30 rounded-[var(--of-radius-container)]">
             <Badge variant="warning" class="shrink-0 mt-0.5">{finding.label}</Badge>
             <span class="flex-1 text-[0.8rem] text-base-content leading-snug">{finding.text}</span>
             <IconButton
@@ -167,7 +167,7 @@
     <Textarea
       id="review-summary-comment"
       label="Review summary comment"
-      class="w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y"
+      class="w-full text-[0.85rem] leading-relaxed resize-y"
       placeholder="Leave a summary comment… (Cmd/Ctrl+Enter to submit)"
       helperText="Submit with Command+Enter or Control+Enter. A summary is required for comments and change requests unless you have pending inline comments or flagged findings."
       rows={3}
@@ -177,14 +177,14 @@
     />
 
     {#if error}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-md text-error text-[0.8rem]" role="alert" aria-live="assertive">
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-[var(--of-radius-container)] text-error text-[0.8rem]" role="alert" aria-live="assertive">
         <TriangleAlert size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{error}</span>
       </div>
     {/if}
 
     {#if successMessage}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-md text-success text-[0.8rem]" role="status" aria-live="polite">
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-[var(--of-radius-container)] text-success text-[0.8rem]" role="status" aria-live="polite">
         <CircleCheck size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{successMessage}</span>
       </div>

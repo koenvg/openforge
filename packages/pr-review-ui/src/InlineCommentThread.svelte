@@ -81,7 +81,7 @@
   {#each data.comments as comment}
     {@const isNested = comment.type === 'pending-reply' || ((comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply)}
     {@const isConnectedReply = (comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply}
-    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
+    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-[var(--of-radius-container)] text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
       {#if comment.type === 'existing'}
         <InlineExistingComment
           {comment}

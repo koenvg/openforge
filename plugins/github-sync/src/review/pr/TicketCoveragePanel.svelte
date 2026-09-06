@@ -146,7 +146,7 @@
 
       <ul class="flex flex-col gap-3 list-none p-0 m-0">
         {#each coverage.criteria as criterion (criterion.id)}
-          <li class="flex flex-col gap-1.5 px-3 py-2 bg-base-100 border border-base-300 rounded-md">
+          <li class="flex flex-col gap-1.5 px-3 py-2 bg-base-100 border border-base-300 rounded-[var(--of-radius-container)]">
             <div class="flex items-start gap-2">
               <Badge variant={STATUS_VARIANTS[criterion.status]} class="mt-0.5 shrink-0">
                 {STATUS_LABELS[criterion.status]}
@@ -191,7 +191,7 @@
           </h5>
           <ul class="flex flex-col gap-2 list-none p-0 m-0">
             {#each coverage.out_of_scope as change, index}
-              <li class="flex flex-col gap-1 px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md">
+              <li class="flex flex-col gap-1 px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-[var(--of-radius-container)]">
                 <div class="flex items-start gap-2">
                   <span class="text-sm text-base-content leading-snug flex-1">{change.description}</span>
                   <Button

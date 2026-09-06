@@ -135,13 +135,13 @@
 
 <div class="flex flex-col gap-3 h-full" data-testid={rootTestId}>
   {#if checkpointQuestion}
-    <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-md">
-      <span class="flex items-center justify-center w-5 h-5 rounded-full bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>
+    <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-[var(--of-radius-container)]">
+      <span class="flex items-center justify-center w-5 h-5 rounded-[var(--of-radius-round)] bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>
       <span class="text-[0.8125rem] text-base-content leading-relaxed line-clamp-3">{checkpointQuestion}</span>
     </div>
   {/if}
 
-  <div class="agent-terminal-surface relative min-h-0 flex-1 overflow-hidden rounded-md border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
+  <div class="agent-terminal-surface relative min-h-0 flex-1 overflow-hidden rounded-[var(--of-radius-container)] border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
     <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
     {#if !session && !terminalActive}
       <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4 p-16 pointer-events-none" style="background: var(--of-agent-terminal-bg); color: var(--of-agent-terminal-text)">

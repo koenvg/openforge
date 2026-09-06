@@ -145,7 +145,7 @@
   {:else if onOpenMedia}
     <button
       type="button"
-      class="cursor-zoom-in rounded border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      class="cursor-zoom-in rounded-[var(--of-radius-container)] border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       aria-label={openLabel}
       onclick={(event) => {
         event.currentTarget.focus()
@@ -230,7 +230,7 @@
     <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
       {#if file.status !== 'added'}
         {@const oldItem = mediaGallery.find(item => item.label === 'Before')}
-        <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+        <div class="rounded-[var(--of-radius-container)] border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
           <div class="flex flex-1 items-center justify-center overflow-auto">
             {#if oldItem}
@@ -254,7 +254,7 @@
       {/if}
       {#if file.status !== 'removed' && file.status !== 'deleted'}
         {@const newItem = mediaGallery.find(item => item.label === 'After')}
-        <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+        <div class="rounded-[var(--of-radius-container)] border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
           <div class="flex flex-1 items-center justify-center overflow-auto">
             {#if newItem}

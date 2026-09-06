@@ -112,7 +112,7 @@
           label="Ask the AI author about this step"
           placeholder="Ask the AI author about this step… (Cmd/Ctrl+Enter to send)"
           rows={2}
-          class="min-h-[44px] w-full resize-y text-[0.8rem]"
+          class="w-full resize-y text-[0.8rem]"
           bind:value={questionText}
           onkeydown={(event: KeyboardEvent) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

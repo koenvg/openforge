@@ -8,6 +8,7 @@
   import { InsertRequestCoordinator } from './insertRequestCoordinator'
 
   interface Props {
+    /** Mount-time seed. To replace a draft, remount with a key for the input's logical identity. */
     value?: string
     placeholder?: string
     ariaLabel?: string
@@ -260,7 +261,7 @@
     visible={ac.popoverVisible && ac.autocompleteItems.length > 0}
     wrap={false}
     onCancel={ac.closePopover}
-    listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-[320px] overflow-y-auto"
+    listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto"
     optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 ${highlighted ? 'bg-primary/10 text-primary' : ''}`}
   >
     {#snippet input(listboxId, activeDescendantId)}
@@ -292,7 +293,7 @@
         {#if item.description}<span class="text-xs text-base-content/50 truncate flex-1">{item.description}</span>{/if}
       </span>
       {#if item.type === 'command' && item.source}
-        <span class="shrink-0 text-[0.6rem] bg-base-200 px-1 rounded text-base-content/50">{item.source}</span>
+        <span class="shrink-0 text-[0.6rem] bg-base-200 px-1 rounded-[var(--of-radius-container)] text-base-content/50">{item.source}</span>
       {/if}
     {/snippet}
   </PaletteListbox>

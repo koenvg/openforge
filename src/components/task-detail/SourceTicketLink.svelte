@@ -2,6 +2,7 @@
   import { Ticket, ExternalLink, Pencil, Plus } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { openUrl } from '../../lib/ipc'
   import { getSourceTicketLink, normalizeSourceTicketUrl } from '../../lib/sourceTicket'
 
@@ -75,7 +76,7 @@
     data-task-info-card="source-ticket"
     data-card-sizing="natural"
     data-card-layout="row"
-    class="flex flex-col gap-1.5 rounded-lg border border-base-300/70 bg-base-100 px-3 py-2 shrink-0"
+    class="flex flex-col gap-1.5 rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 px-3 py-2 shrink-0"
     aria-label="Source ticket"
   >
     <div class="flex items-center gap-2">
@@ -88,8 +89,8 @@
       <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Ticket</h3>
 
       {#if isEditing}
-        <input
-          class="input input-bordered input-xs flex-1 min-w-0"
+        <div class="flex-1 min-w-0">
+        <TextField label="Source ticket link" hideLabel size="sm"
           type="text"
           inputmode="url"
           placeholder="GitHub issue or Jira URL"
@@ -98,6 +99,7 @@
           disabled={isSaving}
           onkeydown={handleKeydown}
         />
+        </div>
       {:else if link}
         {#if link.clickable}
           <Button

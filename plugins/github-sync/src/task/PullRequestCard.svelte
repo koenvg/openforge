@@ -77,7 +77,7 @@
   }
 </script>
 
-<article class="rounded-lg border border-l-2 {isClosedOrMergedPullRequest(pr.state) ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'} overflow-hidden" aria-label={cardLabel(pr)}>
+<article class="rounded-[var(--of-radius-container)] border border-l-2 {isClosedOrMergedPullRequest(pr.state) ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'} overflow-hidden" aria-label={cardLabel(pr)}>
   <!-- A linked pull request carries checks, merge state and review comments, so several
        of them stack up taller than the task panel. Collapsing leaves the identity row:
        number, title, state. The caret column matches CollapsibleSection's so a card
@@ -86,7 +86,7 @@
     <h4 class="m-0 min-w-0 flex-1">
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded px-2.5 pt-2.5 text-left hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary {collapsed ? 'pb-2.5' : 'pb-1'}"
+        class="flex w-full items-center gap-2 rounded-[var(--of-radius-container)] px-2.5 pt-2.5 text-left hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary {collapsed ? 'pb-2.5' : 'pb-1'}"
         aria-expanded={!collapsed}
         aria-controls={bodyId}
         aria-label={`#${prNumber(pr)} ${pr.title}`}
@@ -113,7 +113,7 @@
         <Button
           variant="ghost"
           size="xs"
-          class="h-auto min-h-0 w-fit justify-start break-all p-0 text-left text-[0.7rem] text-primary hover:underline"
+          class="w-fit justify-start break-all text-left text-[0.7rem] text-primary hover:underline"
           onclick={() => onOpenUrl(pr.url)}
         >{pr.url}</Button>
       </div>
@@ -167,7 +167,7 @@
         <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments">
           <div class="text-[0.7rem] font-medium text-base-content/55">Unaddressed comments</div>
           {#each unaddressedComments as comment (comment.id)}
-            <article class="rounded-md border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}>
+            <article class="rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}>
               <div class="flex items-start justify-between gap-2">
                 <span class="min-w-0 break-all text-[0.65rem] font-semibold text-base-content/60" title={comment.file_path ?? undefined}>{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
                 <Button

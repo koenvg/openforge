@@ -158,6 +158,114 @@ describe('review workspace', () => {
     expect(workspace.detail!.pendingReplies).toEqual([])
   })
 
+  it('retains failed replies and retries them without submitting the review again', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    workspace.detail!.onAddReplyToReview(12, 'Posted')
+    workspace.detail!.onAddReplyToReview(12, 'Retry this')
+    workspace.detail!.onAddReplyToReview(13, 'Also posted')
+    responses.set('replyToReviewComment', ({ body }: { body: string }) => {
+      if (body === 'Retry this') throw new Error('offline')
+    })
+    await expect(workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'APPROVE', body: 'Reviewed', comments: [],
+    })).resolves.toBeUndefined()
+    expect(workspace.detail!.pendingReplies).toEqual([{ commentId: 12, body: 'Retry this' }])
+    expect(workspace.detail!.replyPostingError).toContain('Retry replies')
+    expect(calls.get('replyToReviewComment')).toHaveLength(3)
+    await workspace.detail!.onRetryReplies()
+    expect(workspace.detail!.pendingReplies).toEqual([{ commentId: 12, body: 'Retry this' }])
+    expect(workspace.detail!.replyPostingError).toContain('Retry replies')
+    responses.set('replyToReviewComment', null)
+    await workspace.detail!.onRetryReplies()
+    expect(workspace.detail!.pendingReplies).toEqual([])
+    expect(workspace.detail!.replyPostingError).toBeNull()
+    expect(calls.get('submitPrReview')).toHaveLength(1)
+    expect(calls.get('replyToReviewComment')).toHaveLength(5)
+    expect(calls.get('replyToReviewComment')!.at(-1)).toMatchObject({ body: 'Retry this' })
+  })
+
+  it('keeps replies queued during posting and prevents overlapping reply retries', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    workspace.detail!.onAddReplyToReview(12, 'First')
+    let finish!: () => void
+    responses.set('replyToReviewComment', () => new Promise<void>(resolve => { finish = resolve }))
+    const posting = workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'COMMENT', body: 'Reviewed', comments: [],
+    })
+    await waitFor(() => expect(workspace.detail!.isPostingReplies).toBe(true))
+    workspace.detail!.onAddReplyToReview(12, 'Later')
+    await workspace.detail!.onRetryReplies()
+    expect(calls.get('replyToReviewComment')).toHaveLength(1)
+    finish()
+    await posting
+    expect(workspace.detail!.pendingReplies).toEqual([{ commentId: 12, body: 'Later' }])
+    expect(workspace.detail!.isPostingReplies).toBe(false)
+  })
+
+  it('keeps failed replies when an already-posted review is recovered and comment refresh fails', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    workspace.detail!.onAddReplyToReview(12, 'Retry this')
+    responses.set('submitPrReview', () => { throw new Error('response lost') })
+    let reads = 0
+    responses.set('getReviewComments', () => {
+      if (reads++ === 0) return [comment]
+      throw new Error('refresh offline')
+    })
+    responses.set('replyToReviewComment', () => { throw new Error('offline') })
+    await expect(workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'COMMENT', body: '',
+      comments: [{ path: 'login.ts', line: 2, side: 'RIGHT', body: 'Check this' }],
+    })).resolves.toBeUndefined()
+    expect(workspace.detail!.pendingReplies).toEqual([{ commentId: 12, body: 'Retry this' }])
+    expect(workspace.detail!.replyPostingError).toContain('Your review was submitted')
+    responses.set('replyToReviewComment', null)
+    await workspace.detail!.onRetryReplies()
+    expect(workspace.detail!.pendingReplies).toEqual([])
+    expect(workspace.detail!.replyPostingError).toBeNull()
+    expect(calls.get('submitPrReview')).toHaveLength(1)
+  })
+
+  it('does not let posting on a previous PR block or clear the current PR posting state', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    workspace.detail!.onAddReplyToReview(12, 'Previous PR')
+    const finishes: (() => void)[] = []
+    responses.set('replyToReviewComment', () => new Promise<void>(resolve => { finishes.push(resolve) }))
+    const first = workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'COMMENT', body: 'Reviewed', comments: [],
+    })
+    await waitFor(() => expect(finishes).toHaveLength(1))
+    workspace.detail!.onBackToList()
+    await workspace.list.onSelectPr({ ...pr, id: 2, number: 43 })
+    workspace.detail!.onAddReplyToReview(13, 'Current PR')
+    const second = workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 43, commitId: 'head',
+      event: 'COMMENT', body: 'Reviewed', comments: [],
+    })
+    await waitFor(() => expect(finishes).toHaveLength(2))
+    finishes[0]()
+    await first
+    expect(workspace.detail!.isPostingReplies).toBe(true)
+    expect(workspace.detail!.pendingReplies).toEqual([{ commentId: 13, body: 'Current PR' }])
+    await workspace.detail!.onRetryReplies()
+    expect(calls.get('replyToReviewComment')).toHaveLength(2)
+    finishes[1]()
+    await second
+    expect(workspace.detail!.isPostingReplies).toBe(false)
+    expect(workspace.detail!.pendingReplies).toEqual([])
+    expect(workspace.detail!.replyPostingError).toBeNull()
+    expect(calls.get('replyToReviewComment')!.at(-1)).toMatchObject({ prNumber: 43, body: 'Current PR' })
+  })
+
   it('keeps AI questions local and exposes replies through the selected review', async () => {
     const { workspace, calls } = await setup()
     await workspace.list.onSelectPr(pr)

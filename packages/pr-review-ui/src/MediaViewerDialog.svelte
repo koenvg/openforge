@@ -103,7 +103,7 @@
           <img
             src={activeItem.src}
             alt={activeItem.alt}
-            class="block rounded bg-base-100 object-contain shadow-2xl {fitImage ? 'max-h-[calc(100vh-7rem)] max-w-[calc(100vw-4rem)]' : 'max-h-none max-w-none'}"
+            class="block rounded-[var(--of-radius-container)] bg-base-100 object-contain shadow-2xl {fitImage ? 'max-h-[calc(100vh-7rem)] max-w-[calc(100vw-4rem)]' : 'max-h-none max-w-none'}"
           />
         {/if}
       </div>

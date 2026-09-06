@@ -20,7 +20,7 @@
           ? 'text-error hover:bg-error hover:text-error-content cursor-pointer'
           : 'text-base-content hover:bg-primary hover:text-primary-content cursor-pointer'
   )
-  let menuItemClasses = $derived(`context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${variantClasses}`)
+  let menuItemClasses = $derived(`context-item block w-full text-left px-3 py-2 text-sm rounded-[var(--of-radius-container)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${variantClasses}`)
 </script>
 
 {#if description}

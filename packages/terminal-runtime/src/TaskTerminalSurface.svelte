@@ -109,7 +109,7 @@
   <p id={focusDescriptionId} class="sr-only">{TERMINAL_FOCUS_DESCRIPTION_TEXT}</p>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex (terminal regions are intentionally keyboard-focusable landmarks) -->
   <div
-    class="flex-1 overflow-hidden min-h-0 relative rounded focus-within:ring-2 focus-within:ring-primary focus-visible:ring-2 focus-visible:ring-primary focus:outline-none"
+    class="flex-1 overflow-hidden min-h-0 relative rounded-[var(--of-radius-container)] focus-within:ring-2 focus-within:ring-primary focus-visible:ring-2 focus-visible:ring-primary focus:outline-none"
     role="region"
     tabindex="0"
     aria-label={terminalRegionLabel}
@@ -118,7 +118,7 @@
   >
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
     {#if showReadyAffordance}
-      <div class="pointer-events-none absolute bottom-3 left-3 flex items-center gap-3 rounded-box bg-base-200/90 px-3 py-2 shadow-sm z-[1]">
+      <div class="pointer-events-none absolute bottom-3 left-3 flex items-center gap-3 rounded-[var(--of-radius-container)] bg-base-200/90 px-3 py-2 shadow-sm z-[1]">
         <span class="font-mono text-sm text-primary" aria-hidden="true">$</span>
         <div class="flex flex-col leading-tight">
           <span class="text-sm font-medium text-base-content">Shell ready</span>
@@ -127,7 +127,7 @@
       </div>
     {/if}
     {#if lifecycle.shellExited}
-      <div class="absolute bottom-3 right-3 flex items-center gap-2 rounded-box bg-base-200/95 px-3 py-2 shadow z-[1]">
+      <div class="absolute bottom-3 right-3 flex items-center gap-2 rounded-[var(--of-radius-container)] bg-base-200/95 px-3 py-2 shadow z-[1]">
         <span class="text-sm font-mono text-base-content/70">Shell exited</span>
         <Button
           variant="ghost"

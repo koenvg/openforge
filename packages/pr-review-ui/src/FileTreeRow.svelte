@@ -58,7 +58,7 @@
 
 {#if node.isDir}
   <button
-    class="relative flex min-h-9 w-full cursor-pointer items-center gap-2 px-3 text-[13px] font-medium text-base-content/75 transition-colors hover:bg-base-200/70"
+    class="relative flex min-h-[var(--of-control-height)] w-full cursor-pointer items-center gap-2 px-3 text-[13px] font-medium text-base-content/75 transition-colors hover:bg-base-200/70"
     style="padding-left: {12 + depth * 16}px"
     role="treeitem"
     aria-level={depth + 1}
@@ -90,7 +90,7 @@
   >
     {@render treeGuides(depth)}
     {#if canToggleReviewed}
-      <label class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center">
+      <label class="flex h-[var(--of-control-height-touch)] w-[var(--of-control-height-touch)] shrink-0 cursor-pointer items-center justify-center">
         <Checkbox
           size="xs"
           tabindex={-1}
@@ -113,7 +113,7 @@
       <FileTypeIcon filename={node.file.filename} class="h-4 w-4" />
       <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-[13px] {reviewed ? 'line-through text-base-content/50' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined} title={node.file.filename}>{node.name}</span>
       <span
-        class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] font-semibold leading-none {statusPresentation.badgeClass}"
+        class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[var(--of-radius-container)] border px-1 text-[11px] font-semibold leading-none {statusPresentation.badgeClass}"
         aria-label={statusPresentation.label}
         title={statusPresentation.label}
       >{statusPresentation.label.charAt(0)}</span>

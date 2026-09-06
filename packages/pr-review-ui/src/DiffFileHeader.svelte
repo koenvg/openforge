@@ -48,9 +48,9 @@
   }
 </script>
 
-<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
+<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-[var(--of-radius-container)] shadow-sm">
   <button
-    class="flex min-h-10 flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
+    class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
     aria-label={getToggleLabel()}
     aria-expanded={!collapsed}
     onclick={onToggleCollapse}
@@ -89,7 +89,7 @@
     {@render fileHeaderExtra(file)}
   {/if}
   {#if richDiffSupported}
-    <div class="join flex-shrink-0" role="group" aria-label="Diff presentation for {file.filename}">
+    <div class="flex gap-1 flex-shrink-0" role="group" aria-label="Diff presentation for {file.filename}">
       <Button
         variant={!richDiffActive ? 'outline' : 'ghost'}
         size="sm"
@@ -111,7 +111,7 @@
     </div>
   {/if}
   {#if onReviewedChange}
-    <label class="flex min-h-10 flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-base-content/70">
+    <label class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-base-content/70">
       <Checkbox
         aria-label="Mark {file.filename} reviewed"
         checked={reviewed}

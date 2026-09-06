@@ -55,6 +55,23 @@ describe('attention overview interaction', () => {
     interaction.dispose()
   })
 
+  it('keeps the latest selection when navigation occurs during a slow refresh', async () => {
+    const { interaction, source } = setup()
+    await interaction.start()
+    interaction.dispatch({ kind: 'focus', index: 1 })
+    let resolve!: (value: Awaited<ReturnType<AttentionOverviewSource['load']>>) => void
+    vi.mocked(source.load).mockReturnValueOnce(new Promise((done) => { resolve = done }))
+    const refreshing = interaction.refresh()
+    interaction.handleKey({ key: 'ArrowDown', metaKey: false, ctrlKey: false, altKey: false })
+    const pendingView = get(interaction)
+    expect(pendingView.rows[pendingView.focusedIndex]).toMatchObject({ kind: 'task', item: { task: { id: 't2' } } })
+    resolve({ overview: overview(['t2', 't1']), activeId: 'p2' })
+    await refreshing
+    const view = get(interaction)
+    expect(view.rows[view.focusedIndex]).toMatchObject({ kind: 'task', item: { task: { id: 't2' } } })
+    interaction.dispose()
+  })
+
   it('cycles exclusive lanes, skips expanded headers, and round-trips collapsed groups', async () => {
     const { interaction } = setup()
     await interaction.start()

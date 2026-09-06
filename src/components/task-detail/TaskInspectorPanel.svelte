@@ -3,6 +3,8 @@
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import { fromAction } from 'svelte/attachments'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { getTaskTitle } from '../../lib/taskTitle'
@@ -66,14 +68,12 @@
       <div class="mt-2 flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           {#if titleRename.editing && allowRename}
-            <input
-              class="input input-bordered h-8 min-h-8 w-full text-sm font-semibold"
-              aria-label="Task title"
+            <TextField label="Task title" hideLabel size="sm"
               value={titleRename.draft}
               oninput={(e) => titleRename.draft = e.currentTarget.value}
               onkeydown={titleRename.handleKeydown}
               onblur={() => titleRename.finish(true)}
-              use:focusAndSelect
+              {@attach fromAction(focusAndSelect)}
             />
           {:else}
             <div class="flex items-start gap-1">
@@ -136,7 +136,7 @@
   }
 
   .task-inspector :global([data-task-info-card] h3 button) {
-    min-height: 3.5rem;
+    min-height: var(--of-control-height-touch);
     padding-top: 0.875rem;
     padding-bottom: 0.875rem;
   }

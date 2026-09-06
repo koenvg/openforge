@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { branchDivergenceRequest, resolveBranchDivergence } from '../lib/branchDivergenceModalStore'
   import type { CommitSummary } from '../lib/types'
@@ -99,13 +100,13 @@
       {/if}
 
       <div class="flex justify-end gap-2 pt-1">
-        <button class="btn btn-ghost btn-sm" type="button" onclick={cancel}>Cancel</button>
-        <button class="btn btn-error btn-sm" type="button" onclick={resetToRemote}>
+        <Button variant="ghost" size="sm" type="button" onclick={cancel}>Cancel</Button>
+        <Button variant="danger" size="sm" type="button" onclick={resetToRemote}>
           Reset to remote
-        </button>
-        <button class="btn btn-primary btn-sm" type="button" onclick={keepLocal}>
+        </Button>
+        <Button variant="primary" size="sm" type="button" onclick={keepLocal}>
           Keep local
-        </button>
+        </Button>
       </div>
     </div>
   </Modal>

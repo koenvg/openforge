@@ -29,7 +29,7 @@
 
 {#if chip.surface === 'detail'}
   <!-- Detail surface -->
-  <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded {detailClasses[chip.variant]} flex items-center gap-1 w-fit">
+  <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded-[var(--of-radius-container)] {detailClasses[chip.variant]} flex items-center gap-1 w-fit">
     {#if chip.icon === 'check'}<Check class="w-3 h-3" />
     {:else if chip.icon === 'cross'}<X class="w-3 h-3" />
     {:else if chip.icon === 'clock'}<Clock class="w-3 h-3" />
@@ -38,9 +38,9 @@
   </span>
 {:else}
   <!-- Compact surface -->
-  <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 {variantClasses[chip.variant].bg}">
+  <span class="inline-flex items-center gap-1.5 rounded-[var(--of-radius-round)] px-2.5 py-1.5 {variantClasses[chip.variant].bg}">
     {#if chip.variant !== 'muted'}
-      <span class="w-1.5 h-1.5 rounded-full {variantClasses[chip.variant].dot}"></span>
+      <span class="w-1.5 h-1.5 rounded-[var(--of-radius-round)] {variantClasses[chip.variant].dot}"></span>
     {/if}
     <span class="text-[10px] font-medium {variantClasses[chip.variant].text}">{chip.label}</span>
   </span>
