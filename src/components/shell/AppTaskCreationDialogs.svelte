@@ -1,7 +1,7 @@
 <script lang="ts">
   import AddTaskDialog from '../AddTaskDialog.svelte'
   import { activeProjectId } from '../../lib/stores'
-  import { pendingComposeRequest } from '../../lib/taskCompose'
+  import { pendingComposeRequest, type PendingComposeRequest } from '../../lib/taskCompose'
   import type { AppTaskCreationController } from '../../lib/appTaskCreationController.svelte'
 
   interface Props {
@@ -11,6 +11,15 @@
   }
 
   let { controller, projectPath, projectName }: Props = $props()
+  // Reporting a composed task settles its caller before starting. Keep the
+  // dialog mounted until its workflow closes, so a start failure is recoverable.
+  let savedComposeRequest = $state.raw<PendingComposeRequest | null>(null)
+  const composeRequest = $derived($pendingComposeRequest ?? savedComposeRequest)
+  $effect(() => {
+    if ($pendingComposeRequest && $pendingComposeRequest !== savedComposeRequest) {
+      savedComposeRequest = null
+    }
+  })
 </script>
 
 {#if controller.dialog && $activeProjectId}
@@ -25,17 +34,26 @@
   />
 {/if}
 
-{#if $pendingComposeRequest}
-  <AddTaskDialog
-    mode="create"
-    {projectPath}
-    promptSeed={$pendingComposeRequest.request.initialPrompt}
-    sourceTicketUrlSeed={$pendingComposeRequest.request.sourceTicketUrl ?? null}
-    titleSeed={$pendingComposeRequest.request.title ?? null}
-    worktreeSourceSeed={$pendingComposeRequest.request.worktreeSource ?? null}
-    worktreeBranchSeed={$pendingComposeRequest.request.worktreeBranch ?? null}
-    onClose={controller.cancelCompose}
-    onTaskSaved={controller.saveComposedTask}
-    onRunAction={controller.runComposedTask}
-  />
+{#if composeRequest}
+  {@const request = composeRequest}
+  {#key request}
+    <AddTaskDialog
+      mode="create"
+      {projectPath}
+      promptSeed={request.request.initialPrompt}
+      sourceTicketUrlSeed={request.request.sourceTicketUrl ?? null}
+      titleSeed={request.request.title ?? null}
+      worktreeSourceSeed={request.request.worktreeSource ?? null}
+      worktreeBranchSeed={request.request.worktreeBranch ?? null}
+      onClose={() => {
+        if (savedComposeRequest === request) savedComposeRequest = null
+        if (!$pendingComposeRequest || $pendingComposeRequest === request) controller.cancelCompose()
+      }}
+      onTaskSaved={async (task, options) => {
+        savedComposeRequest = request
+        await controller.saveComposedTask(task, options)
+      }}
+      onRunAction={controller.runComposedTask}
+    />
+  {/key}
 {/if}

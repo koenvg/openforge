@@ -98,60 +98,64 @@
       <div class="mb-4 rounded-[var(--of-radius-container)] border border-[var(--of-danger)] bg-[var(--of-danger-subtle)] px-3 py-2 text-sm text-[var(--of-danger)]" role="alert">{view.error}</div>
     {/if}
 
-    <InjectionPointSlot
-      location={injectionLocation}
-      projectId={$activeProjectId}
-      taskId={mode === 'edit' && task ? task.id : null}
-      onInsert={(text) => {
-        injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
-        nextInjectableInsertRequestId += 1
-      }}
-    />
-    <label class="mb-2 block text-sm font-semibold text-[var(--of-text)]" for="create-task-prompt">What should the agent do?</label>
-    <div class="create-task-prompt-frame relative overflow-visible">
-      {#key view.promptRevision}
-        <PromptInput
-          bind:this={promptEditor}
-          projectId={$activeProjectId || ''}
-          value={view.initialPrompt}
-          textareaId="create-task-prompt"
-          ariaLabel="What should the agent do?"
-          rows={8}
-          textareaClass="p-4 pb-9 text-sm leading-relaxed"
-          textareaStyle="height: 12rem; max-height: 12rem; overflow-y: auto; outline: none;"
-          maxLength={10000}
-          placeholder="Describe the outcome you want…"
-          autofocus={false}
-          commandTrigger={view.draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
-          onTextChange={(prompt) => workflow.attachments.syncWithPrompt(prompt)}
-          onPasteImage={(blob) => workflow.attachments.attachImage(blob)}
-          onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
-          imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
-          injectableInsertRequest={injectableInsertRequest}
-          onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
-          onValueChange={(value) => { view.promptDraft = value }}
-          onCancel={() => onClose?.()}
-        />
-      {/key}
-      <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-[var(--of-text-muted)]">{view.promptDraft.length.toLocaleString()} / 10,000</span>
-    </div>
-    <p class="mt-2 text-xs text-[var(--of-text-secondary)]">Be specific about the goal, constraints, and relevant context.</p>
-
-    <div class="flex flex-col gap-2 pb-4">
-      <CreateTaskPromptAttachments
-        attachments={workflow.attachments}
-        onTranscription={(text) => promptEditor?.insertText(text)}
+    {#if view.savedTaskId}
+      <p>Task {view.savedTaskId} is saved. Retrying will continue with this task, not create another.</p>
+    {:else}
+      <InjectionPointSlot
+        location={injectionLocation}
+        projectId={$activeProjectId}
+        taskId={mode === 'edit' && task ? task.id : null}
+        onInsert={(text) => {
+          injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
+          nextInjectableInsertRequestId += 1
+        }}
       />
-      {#if mode === 'create'}
-        <CreateTaskEnvironment
-          bind:draft={view.draft}
-          worktreeAllowed={view.worktreeAllowed}
-          branchList={view.branchList}
-          {aiProviderOptions}
+      <label class="mb-2 block text-sm font-semibold text-[var(--of-text)]" for="create-task-prompt">What should the agent do?</label>
+      <div class="create-task-prompt-frame relative overflow-visible">
+        {#key view.promptRevision}
+          <PromptInput
+            bind:this={promptEditor}
+            projectId={$activeProjectId || ''}
+            value={view.initialPrompt}
+            textareaId="create-task-prompt"
+            ariaLabel="What should the agent do?"
+            rows={8}
+            textareaClass="p-4 pb-9 text-sm leading-relaxed"
+            textareaStyle="height: 12rem; max-height: 12rem; overflow-y: auto; outline: none;"
+            maxLength={10000}
+            placeholder="Describe the outcome you want…"
+            autofocus={false}
+            commandTrigger={view.draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
+            onTextChange={(prompt) => workflow.attachments.syncWithPrompt(prompt)}
+            onPasteImage={(blob) => workflow.attachments.attachImage(blob)}
+            onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
+            imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
+            injectableInsertRequest={injectableInsertRequest}
+            onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
+            onValueChange={(value) => { view.promptDraft = value }}
+            onCancel={() => onClose?.()}
+          />
+        {/key}
+        <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-[var(--of-text-muted)]">{view.promptDraft.length.toLocaleString()} / 10,000</span>
+      </div>
+      <p class="mt-2 text-xs text-[var(--of-text-secondary)]">Be specific about the goal, constraints, and relevant context.</p>
+
+      <div class="flex flex-col gap-2 pb-4">
+        <CreateTaskPromptAttachments
+          attachments={workflow.attachments}
+          onTranscription={(text) => promptEditor?.insertText(text)}
         />
-        <CreateTaskProgressiveSettings bind:draft={view.draft} />
-      {/if}
-    </div>
+        {#if mode === 'create'}
+          <CreateTaskEnvironment
+            bind:draft={view.draft}
+            worktreeAllowed={view.worktreeAllowed}
+            branchList={view.branchList}
+            {aiProviderOptions}
+          />
+          <CreateTaskProgressiveSettings bind:draft={view.draft} />
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <footer class="flex items-center justify-between gap-4 border-t border-[var(--of-border)] bg-[var(--of-surface)] px-6 py-4">
@@ -166,7 +170,11 @@
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
-      {#if mode === 'create'}
+      {#if view.savedTaskId}
+        <Button type="button" disabled={view.isSaving} onclick={() => workflow.submit()}>
+          {view.isSaving ? 'Retrying…' : 'Retry'}
+        </Button>
+      {:else if mode === 'create'}
         <Button
           variant="outline"
           type="button"

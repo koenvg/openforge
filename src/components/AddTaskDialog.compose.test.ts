@@ -2,6 +2,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import { createTask, listGitBranches } from '../lib/ipc'
+import AppTaskCreationDialogs from './shell/AppTaskCreationDialogs.svelte'
+import { useAppTaskCreationController } from '../lib/appTaskCreationController.svelte'
+import { requestTaskCompose, settleTaskCompose } from '../lib/taskCompose'
 
 vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
   default: vi.fn(() => ({ update() {}, destroy() {} })),
@@ -55,6 +58,61 @@ beforeEach(() => {
     { name: 'main', is_current: true, is_remote: false },
     { name: 'feature/open-pr', is_current: false, is_remote: false },
   ])
+})
+
+describe('AddTaskDialog recovery', () => {
+  it('keeps the composed dialog available after reporting the saved task and a start failure', async () => {
+    const events: string[] = []
+    const runAction = vi.fn().mockImplementationOnce(async () => {
+      events.push('start')
+      throw new Error('provider offline')
+    }).mockResolvedValue(undefined)
+    const controller = useAppTaskCreationController({
+      getTasks: () => [], loadTasks: async () => {},
+      resetToBoard: () => {}, navigateToTask: () => {}, runAction,
+    })
+    const pending = requestTaskCompose({ projectId: 'test-project-id', initialPrompt: SEED })
+    void pending.then(() => { events.push('compose settled') })
+    const { unmount } = render(AppTaskCreationDialogs, { props: { controller, projectPath: null, projectName: null } })
+    try {
+      const start = await screen.findByRole('button', { name: /start task/i })
+      await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false))
+      await fireEvent.click(start)
+      expect((await screen.findByRole('alert')).textContent).toContain('provider offline')
+      await expect(pending).resolves.toMatchObject({ task: { id: 'T-1' }, started: true })
+      expect(events).toEqual(['compose settled', 'start'])
+      await fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(createTask).toHaveBeenCalledOnce()
+      expect(runAction).toHaveBeenCalledTimes(2)
+    } finally {
+      unmount()
+      settleTaskCompose(null)
+    }
+  })
+
+  it.each(['notification', 'start'] as const)('keeps a %s error visible and retries the saved task', async (failure) => {
+    const onTaskSaved = vi.fn().mockResolvedValue(undefined)
+    const onRunAction = vi.fn().mockResolvedValue(undefined)
+    const onClose = vi.fn()
+    const failingCallback = failure === 'notification' ? onTaskSaved : onRunAction
+    failingCallback.mockRejectedValueOnce(new Error('offline'))
+    render(AddTaskDialog, { props: { promptSeed: SEED, onTaskSaved, onRunAction, onClose } })
+    const start = await screen.findByRole('button', { name: /start task/i })
+    await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false))
+    await fireEvent.click(start)
+    expect((await screen.findByRole('alert')).textContent).toContain('Task T-1 was saved')
+    expect(screen.getByRole('alert').textContent).toContain('offline')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /add to backlog/i })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'What should the agent do?' })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(createTask).toHaveBeenCalledOnce()
+    expect(onTaskSaved).toHaveBeenCalledTimes(failure === 'notification' ? 2 : 1)
+    expect(onRunAction).toHaveBeenLastCalledWith('T-1', '')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
 })
 
 describe('AddTaskDialog seeding', () => {

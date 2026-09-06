@@ -121,7 +121,7 @@
     loadTasks: appData.loadTasks,
     resetToBoard: () => { router.resetToBoard() },
     navigateToTask: (taskId) => { router.navigateToTask(taskId) },
-    runAction: taskActions.handleRunAction,
+    runAction: taskActions.runActionOrThrow,
   })
   const navigation = createAppNavigationController({
     router,
