@@ -158,6 +158,48 @@ describe('review workspace', () => {
     expect(workspace.detail!.pendingReplies).toEqual([])
   })
 
+  it.each(['comment', 'reply'] as const)('reports immediate %s posting failures to the caller without refreshing', async (kind) => {
+    const { workspace, responses, calls } = await setup()
+    responses.set('getReviewComments', [comment])
+    await workspace.list.onSelectPr(pr)
+    const failure = new Error('GitHub token needs permission to post comments')
+    const method = kind === 'comment' ? 'createReviewComment' : 'replyToReviewComment'
+    responses.set(method, () => { throw failure })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const readsBefore = calls.get('getReviewComments')!.length
+
+    const posting = kind === 'comment'
+      ? workspace.detail!.onCommentNow('login.ts', 2, 'RIGHT', 'Keep my draft')
+      : workspace.detail!.onReplyToExistingComment(12, 'Keep my draft')
+
+    await expect(posting).rejects.toThrow('GitHub token needs permission to post comments')
+    expect(calls.get(method)).toHaveLength(1)
+    expect(calls.get('getReviewComments')).toHaveLength(readsBefore)
+    expect(workspace.detail!.reviewComments).toEqual([comment])
+    expect(workspace.detail!.replyPostingError).toBeNull()
+  })
+
+  it.each(['comment', 'reply'] as const)('keeps immediate %s posting successful when the subsequent refresh fails', async (kind) => {
+    const { workspace, responses, calls } = await setup()
+    responses.set('getReviewComments', [comment])
+    await workspace.list.onSelectPr(pr)
+    const refreshFailure = new Error('Comment refresh offline')
+    responses.set('getReviewComments', () => { throw refreshFailure })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const readsBefore = calls.get('getReviewComments')!.length
+
+    const posting = kind === 'comment'
+      ? workspace.detail!.onCommentNow('login.ts', 2, 'RIGHT', 'Posted once')
+      : workspace.detail!.onReplyToExistingComment(12, 'Posted once')
+
+    await expect(posting).resolves.toBeUndefined()
+    expect(calls.get(kind === 'comment' ? 'createReviewComment' : 'replyToReviewComment')).toHaveLength(1)
+    expect(calls.get('getReviewComments')).toHaveLength(readsBefore + 1)
+    expect(workspace.detail!.reviewComments).toEqual([comment])
+    expect(workspace.detail!.replyPostingError).toBeNull()
+    expect(log).toHaveBeenCalledWith(`Failed to refresh comments after posting ${kind}:`, refreshFailure)
+  })
+
   it('retains failed replies and retries them without submitting the review again', async () => {
     const { workspace, responses, calls } = await setup()
     await workspace.list.onSelectPr(pr)
