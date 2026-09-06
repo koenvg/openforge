@@ -1,0 +1,23 @@
+[
+  {
+    "catalog": "pages",
+    "story": "pages-focus-board--populated",
+    "theme": "openforge-light",
+    "viewport": { "width": 1280, "height": 800 },
+    "ready": "[aria-label=\"Task list\"]",
+    "expectedErrors": [],
+    "tolerance": {
+      "maxPixels": 20,
+      "maxChannelDelta": 1,
+      "reason": "Pinned Linux Chromium varies 19 antialiased border pixels by one channel level across identical captures, including with GPU disabled. Larger or more widespread changes must fail."
+    }
+  },
+  {
+    "catalog": "components",
+    "story": "components-button--primary",
+    "theme": "openforge-light",
+    "viewport": { "width": 480, "height": 240 },
+    "ready": "button:has-text(\"Create task\")",
+    "expectedErrors": []
+  }
+]
