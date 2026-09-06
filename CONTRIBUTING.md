@@ -72,6 +72,7 @@ To reseed or clear worktree-local state, stop `pnpm electron:dev` and delete `.o
 ## Testing
 
 For repository-approved page and component screenshots, see [the visual review guide](docs/storybook-visuals.md). `pnpm storybook:visual:check` uses the same pinned Linux container locally and in CI.
+For missing page and component stories, see [the coverage guide](docs/storybook-coverage.md). Build both catalogs with `pnpm storybook:build`, then run `pnpm storybook:coverage` to validate adopted entries and list uncovered UI.
 
 The frontend and Plugin SDK suites include Chromium checks of core control styles. After installing dependencies, run `pnpm exec playwright install --with-deps chromium` once, and again after Playwright upgrades.
 

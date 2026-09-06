@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["./*.mjs", "../../storybook/coverage-inventory.mjs", "../../storybook/coverage-types.ts"],
+  "exclude": ["./*.test.mjs"]
+}
