@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import { onMount, onDestroy } from 'svelte'
   import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
   import { downloadWhisperModel } from '../../../lib/ipc'
@@ -84,7 +86,7 @@
   })
 </script>
 
-<div class="flex flex-col gap-3 p-4 bg-base-200 rounded-lg w-full">
+<div class="flex flex-col gap-3 p-4 bg-base-200 rounded-[var(--of-radius-container)] w-full">
   <div class="flex items-center gap-2">
     {#if status === 'downloading'}
       <span class="loading loading-spinner loading-xs text-primary"></span>
@@ -99,7 +101,7 @@
       {/if}
     </span>
     {#if status === 'complete'}
-      <span class="badge badge-success badge-sm ml-auto">Ready</span>
+      <Badge variant="success" class="ml-auto">Ready</Badge>
     {/if}
   </div>
 
@@ -123,12 +125,12 @@
   {#if status === 'error' && errorMessage}
     <div class="flex items-center gap-2">
       <span class="text-error text-sm flex-1">{errorMessage}</span>
-      <button
-        class="btn btn-sm btn-ghost"
+      <Button
+        variant="ghost" size="sm"
         onclick={() => startDownload()}
       >
         Retry
-      </button>
+      </Button>
     </div>
   {/if}
 </div>

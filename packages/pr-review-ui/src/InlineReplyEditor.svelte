@@ -1,5 +1,6 @@
 <script lang="ts">
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   interface Props {
     value: string
     ariaLabel: string
@@ -30,9 +31,11 @@
 </script>
 
 <div class="flex gap-2 {className}">
-  <input
-    class="input input-bordered input-xs flex-1"
-    aria-label={ariaLabel}
+  <div class="flex-1">
+  <TextField
+    label={ariaLabel}
+    hideLabel
+    size="sm"
     {placeholder}
     {value}
     oninput={(event) => {
@@ -45,6 +48,7 @@
       onSubmit()
     }}
   />
+  </div>
   {#if secondaryLabel && onSecondarySubmit}
     <Button
       variant="outline"

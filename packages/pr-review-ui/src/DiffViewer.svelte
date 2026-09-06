@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { ChevronDown, ChevronUp, PanelLeftOpen, Search, X } from '@lucide/svelte'
   import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
@@ -368,19 +369,22 @@
       <Search size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
     {#if search.visible}
-      <input
+      <div class="w-48">
+      <TextField label="Search diff text" hideLabel size="sm"
         type="text"
-        class="input input-bordered h-10 min-h-10 w-48 bg-base-100 text-[13px]"
-        aria-label="Search diff text"
         placeholder="Search diff..."
         value={search.query}
         oninput={(e: Event) => {
           if (!(e.currentTarget instanceof HTMLInputElement)) return
           search.setQuery(e.currentTarget.value)
         }}
-        bind:this={search.inputEl}
+        {@attach (node) => {
+          search.inputEl = node as HTMLInputElement
+          return () => { search.inputEl = null }
+        }}
         onkeydown={search.handleKeydown}
       />
+      </div>
       <span class="text-[13px] text-base-content/60 tabular-nums">
         {#if search.query && search.matchCount === 0}
           0 results
@@ -504,11 +508,3 @@
 {#if mediaRequest}
   <MediaViewerDialog request={mediaRequest} onClose={closeMediaPreview} />
 {/if}
-
-<style>
-  .diff-viewer-toolbar > :global(.btn),
-  .diff-viewer-toolbar > :global(.input) {
-    height: 2rem;
-    min-height: 2rem;
-  }
-</style>

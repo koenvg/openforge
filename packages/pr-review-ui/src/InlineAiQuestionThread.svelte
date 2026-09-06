@@ -1,6 +1,7 @@
 <script lang="ts">
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
   import type { AiThreadCommentDisplayData } from './diffComments'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineReplyEditor from './InlineReplyEditor.svelte'
@@ -34,11 +35,10 @@
 <div class="flex items-center gap-2 mb-1.5">
   <Badge variant="info">Ask the AI</Badge>
   {#if comment.thread.status === 'draft'}
-    <Badge
-      variant="warning"
-      class="tooltip tooltip-bottom"
-      data-tip="Not sent yet. Use the 'Send questions to AI' button at the top to get an answer."
-    >Pending</Badge>
+    <Tooltip label="Pending question" side="bottom"
+      content="Not sent yet. Use the 'Send questions to AI' button at the top to get an answer.">
+      {#snippet trigger()}<Badge variant="warning">Pending</Badge>{/snippet}
+    </Tooltip>
   {/if}
   {#if comment.thread.status === 'pending'}
     <span class="loading loading-spinner loading-xs"></span>

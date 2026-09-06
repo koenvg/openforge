@@ -14,7 +14,7 @@
 </script>
 
 <label
-  class="flex min-h-10 cursor-pointer items-center gap-2"
+  class="flex min-h-[var(--of-control-height-touch)] cursor-pointer items-center gap-2"
   title="Non-application files are tests, fixtures, snapshots, docs, and generated files. Deselect this to hide them and focus on the source changes."
 >
   <Checkbox

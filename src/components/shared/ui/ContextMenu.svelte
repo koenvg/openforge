@@ -54,7 +54,7 @@
 {#if visible}
   <div
     bind:this={menuElement}
-    class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1"
+    class="fixed z-[100] bg-base-300 border border-base-300 rounded-[var(--of-radius-container)] shadow-xl min-w-[180px] p-1"
     style="left: {x}px; top: {y}px;"
     role="menu"
     tabindex="-1"

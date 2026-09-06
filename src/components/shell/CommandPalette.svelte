@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import { onMount } from 'svelte'
   import { activeSessions, projects, activeProjectId } from '../../lib/stores'
   import { matchesSearch, sortTasks, filterActiveTasks, navigateToTask } from '../../lib/commandPalette'
@@ -142,14 +143,13 @@
     }
   }
 
-  function statusBadgeClass(sessionStatus: string | null): string {
+  function statusBadgeVariant(sessionStatus: string | null): 'success' | 'info' | 'warning' | 'danger' | 'neutral' {
     switch (sessionStatus) {
-      case 'running': return 'badge-success'
-      case 'completed': return 'badge-info'
-      case 'paused': return 'badge-warning'
-      case 'failed': return 'badge-error'
-      case 'interrupted': return 'badge-ghost'
-      default: return ''
+      case 'running': return 'success'
+      case 'completed': return 'info'
+      case 'paused': return 'warning'
+      case 'failed': return 'danger'
+      default: return 'neutral'
     }
   }
 
@@ -226,14 +226,14 @@
       {#if item.kind === 'task'}
         {@const sessionStatus = getSessionStatus(item.task.id)}
         {@const label = statusLabel(sessionStatus)}
-        {@const badgeClass = statusBadgeClass(sessionStatus)}
+        {@const badgeVariant = statusBadgeVariant(sessionStatus)}
         {@const projectName = getProjectName(item.task.projectId)}
         {@const isOtherProject = item.task.projectId !== $activeProjectId}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="font-mono text-xs font-semibold text-primary shrink-0">{item.task.id}</span>
-            {#if label}<span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>{/if}
-            {#if projectName && isOtherProject}<span class="badge badge-outline badge-xs shrink-0 opacity-60">{projectName}</span>{/if}
+            {#if label}<Badge variant={badgeVariant} class="shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</Badge>{/if}
+            {#if projectName && isOtherProject}<Badge variant="neutral" class="shrink-0 opacity-60">{projectName}</Badge>{/if}
           </div>
           <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.prompt), 80)}</div>
         </div>
@@ -242,8 +242,8 @@
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="font-mono text-xs font-semibold text-primary shrink-0">cmd</span>
-            <span class="badge badge-outline badge-xs shrink-0 opacity-70">{item.pluginName}</span>
-            {#if item.shortcut}<span class="badge badge-ghost badge-xs shrink-0">{item.shortcut}</span>{/if}
+            <Badge variant="neutral" class="shrink-0 opacity-70">{item.pluginName}</Badge>
+            {#if item.shortcut}<Badge variant="neutral" class="shrink-0">{item.shortcut}</Badge>{/if}
           </div>
           <div class="text-xs text-base-content/70 truncate mt-0.5">{item.title}</div>
         </div>

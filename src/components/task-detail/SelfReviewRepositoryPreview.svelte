@@ -221,7 +221,7 @@
           aria-label="{fileName} preview"
           controls
           preload="metadata"
-          class="max-h-full max-w-full rounded bg-black object-contain"
+          class="max-h-full max-w-full rounded-[var(--of-radius-container)] bg-black object-contain"
         >
           Video playback is unavailable for this file.
         </video>

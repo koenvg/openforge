@@ -144,7 +144,7 @@
           {#if draft.useWorktree}
             <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
               <span class="text-xs font-medium text-[var(--of-text-muted)]">Base</span>
-              <div role="radiogroup" aria-label="Worktree source" class="join grid min-w-0 grid-cols-2">
+              <div role="radiogroup" aria-label="Worktree source" class="grid min-w-0 grid-cols-2">
                 <label
                   class="worktree-source-option"
                   data-selected={draft.worktreeSource === 'newBranchFromMain' ? '' : undefined}

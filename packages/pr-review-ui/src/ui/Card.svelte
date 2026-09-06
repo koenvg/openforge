@@ -13,7 +13,7 @@
 
   let { onclick, onmouseenter, onmouseleave, selected = false, featured = false, class: className = '', children }: Props = $props()
 
-  let baseClasses = 'w-full text-left bg-base-100 border rounded-box cursor-pointer transition-all'
+  let baseClasses = 'w-full text-left bg-base-100 border rounded-[var(--of-radius-container)] cursor-pointer transition-all'
 
   let stateClasses = $derived.by(() => {
     if (selected) return 'selected border-2 border-primary bg-primary/10'

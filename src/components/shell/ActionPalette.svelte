@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { tick } from 'svelte'
   import type { TaskDetail, PullRequestInfo, PullRequestMergeMethod } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
@@ -102,8 +104,8 @@
       <h2 id="merge-confirmation-title" class="text-base font-semibold">{pendingConfirmation.label}?</h2>
       <p class="mt-2 text-sm text-base-content/70">GitHub will use this repository's configured commit message.</p>
       <div class="mt-5 flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" type="button" onclick={() => { pendingConfirmation = null }}>Cancel</button>
-        <button bind:this={confirmButton} class="btn btn-primary btn-sm" type="button" onclick={executePendingConfirmation}>Confirm</button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => { pendingConfirmation = null }}>Cancel</Button>
+        <Button bind:element={confirmButton} variant="primary" size="sm" type="button" onclick={executePendingConfirmation}>Confirm</Button>
       </div>
     </section>
     <PaletteFooter actionLabel="confirm" cancelLabel="cancel" />
@@ -131,7 +133,7 @@
     {#snippet item(action)}
       <span class="flex-1">{action.label}</span>
       {#if action.isDefaultMergeMethod}
-        <span class="badge badge-ghost badge-sm">GitHub default</span>
+        <Badge variant="neutral">GitHub default</Badge>
       {/if}
       {#if action.shortcut}
         <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>

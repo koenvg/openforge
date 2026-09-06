@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onDestroy } from 'svelte'
 
   type ToastVariant = 'error' | 'warning' | 'success'
@@ -85,11 +86,11 @@
     {:else}
       <span class="min-w-0 flex-1 whitespace-pre-line break-words">{message}</span>
     {/if}
-    <button
-      class="btn btn-ghost btn-xs shrink-0"
+    <Button
+      variant="ghost" size="xs" class="shrink-0"
       type="button"
       aria-label="Dismiss notification"
       onclick={dismiss}
-    >✕</button>
+    >✕</Button>
   </div>
 </div>

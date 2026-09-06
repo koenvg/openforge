@@ -49,7 +49,7 @@
 </script>
 
 <div class="flex items-center gap-2 mb-1.5">
-  <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
+  <div class="w-5 h-5 rounded-[var(--of-radius-round)] bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
     {comment.author.charAt(0).toUpperCase()}
   </div>
   <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>

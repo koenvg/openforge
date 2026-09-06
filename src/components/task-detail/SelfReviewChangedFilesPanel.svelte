@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+  import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { SelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
   import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'
@@ -63,30 +64,38 @@
         <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
           {#if selectedCommitSha === null}
             <div class="flex flex-col gap-1">
-              <label
-                class="flex min-h-10 items-center gap-2 {committedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
-                data-tip={committedLocked ? lockedScopeTooltip : null}
-              >
-                <Checkbox
-                  aria-label="Include committed changes"
-                  checked={includeCommitted}
-                  disabled={committedLocked}
-                  onchange={(event) => onIncludeCommittedChange(event.currentTarget.checked)}
-                />
-                <span class="text-[13px] text-base-content/75">Committed</span>
-              </label>
-              <label
-                class="flex min-h-10 items-center gap-2 {uncommittedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
-                data-tip={uncommittedLocked ? lockedScopeTooltip : null}
-              >
-                <Checkbox
-                  aria-label="Include uncommitted changes"
-                  checked={includeUncommitted}
-                  disabled={uncommittedLocked}
-                  onchange={(event) => onIncludeUncommittedChange(event.currentTarget.checked)}
-                />
-                <span class="text-[13px] text-base-content/75">Uncommitted</span>
-              </label>
+              <div class="flex items-center gap-2">
+                <label class="flex min-h-[var(--of-control-height-touch)] items-center gap-2 {committedLocked ? 'cursor-not-allowed' : 'cursor-pointer'}">
+                  <Checkbox
+                    aria-label="Include committed changes"
+                    checked={includeCommitted}
+                    disabled={committedLocked}
+                    onchange={(event) => onIncludeCommittedChange(event.currentTarget.checked)}
+                  />
+                  <span class="text-[13px] text-base-content/75">Committed</span>
+                </label>
+                {#if committedLocked}
+                  <Tooltip label="Why committed changes are locked" content={lockedScopeTooltip} side="right">
+                    {#snippet trigger()}<span aria-hidden="true">?</span>{/snippet}
+                  </Tooltip>
+                {/if}
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="flex min-h-[var(--of-control-height-touch)] items-center gap-2 {uncommittedLocked ? 'cursor-not-allowed' : 'cursor-pointer'}">
+                  <Checkbox
+                    aria-label="Include uncommitted changes"
+                    checked={includeUncommitted}
+                    disabled={uncommittedLocked}
+                    onchange={(event) => onIncludeUncommittedChange(event.currentTarget.checked)}
+                  />
+                  <span class="text-[13px] text-base-content/75">Uncommitted</span>
+                </label>
+                {#if uncommittedLocked}
+                  <Tooltip label="Why uncommitted changes are locked" content={lockedScopeTooltip} side="right">
+                    {#snippet trigger()}<span aria-hidden="true">?</span>{/snippet}
+                  </Tooltip>
+                {/if}
+              </div>
             </div>
           {:else}
             <Button

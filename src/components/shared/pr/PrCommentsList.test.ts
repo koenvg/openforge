@@ -38,8 +38,10 @@ describe('PrCommentsList author filter', () => {
     expect(screen.getByText('bob comment')).toBeTruthy()
 
     // Filter to alice → only alice's comment shows.
-    const select = screen.getByLabelText('Filter comments by reviewer') as HTMLSelectElement
-    await fireEvent.change(select, { target: { value: 'alice' } })
+    const trigger = screen.getByRole('button', { name: 'Filter comments by reviewer' })
+    trigger.focus()
+    await fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    await fireEvent.pointerUp(await screen.findByRole('option', { name: 'alice' }), { button: 0 })
     expect(screen.getByText('alice comment')).toBeTruthy()
     expect(screen.queryByText('bob comment')).toBeNull()
 

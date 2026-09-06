@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { ChevronsLeft, Search, X } from '@lucide/svelte'
   import { tick } from 'svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
@@ -179,24 +180,19 @@
         ><ChevronsLeft size={18} strokeWidth={1.8} aria-hidden="true" /></IconButton>
       {/if}
     </div>
-    <label class="input input-bordered flex h-10 min-h-10 w-full items-center gap-2 bg-base-100 px-3 focus-within:outline-2 focus-within:outline-primary focus-within:outline-offset-1">
-      <Search size={17} strokeWidth={1.8} class="text-base-content/45" aria-hidden="true" />
-      <input
-        type="search"
-        class="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-        aria-label="Filter changed files"
-        placeholder="Search files…"
-        bind:value={searchQuery}
-      />
-      {#if searchQuery}
-        <IconButton
-          label="Clear changed file filter"
-          size="sm"
-          type="button"
-          onclick={() => { searchQuery = '' }}
-        ><X size={16} strokeWidth={1.8} aria-hidden="true" /></IconButton>
-      {/if}
-    </label>
+    <TextField label="Filter changed files" hideLabel size="sm"
+      type="search" placeholder="Search files…" bind:value={searchQuery}>
+      {#snippet leading()}
+        <Search size={17} strokeWidth={1.8} aria-hidden="true" />
+      {/snippet}
+      {#snippet trailing()}
+        {#if searchQuery}
+          <IconButton label="Clear changed file filter" size="sm" type="button"
+            onclick={() => { searchQuery = '' }}
+          ><X size={16} strokeWidth={1.8} aria-hidden="true" /></IconButton>
+        {/if}
+      {/snippet}
+    </TextField>
   </div>
 
   {#if onToggleNonApplicationFiles && nonApplicationFileCount > 0}

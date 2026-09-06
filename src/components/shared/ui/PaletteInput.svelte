@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   interface Props {
     listboxId: string
     activeDescendantId?: string
@@ -19,10 +20,12 @@
 </script>
 
 <div class="p-3 border-b border-base-300">
-  <input
+  <TextField
+    label={placeholder}
+    hideLabel
+    size="sm"
     data-palette-initial-focus
     type="text"
-    class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
     {placeholder}
     bind:value
     oninput={onInput}

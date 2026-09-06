@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onMount, onDestroy } from 'svelte'
   import { Bot, CircleDot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
@@ -169,7 +171,7 @@
   <div class="flex flex-col min-h-0 h-full">
     <!-- Header -->
     <div class="flex items-center gap-3.5 px-5 py-4 border-b border-base-300">
-      <div class="w-9 h-9 rounded-xl grid place-items-center shrink-0 bg-primary/15 text-primary">
+      <div class="w-9 h-9 rounded-[var(--of-radius-container)] grid place-items-center shrink-0 bg-primary/15 text-primary">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
           <circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.2" />
           <path d="M12 1.5V4M12 20v2.5M1.5 12H4M20 12h2.5" />
@@ -183,7 +185,7 @@
         <span class="text-[11px] leading-tight flex items-center gap-1.5 min-w-0">
           <span class="flex items-center gap-1 {runningAgents > 0 ? 'text-success' : 'text-base-content/50'}">
             {#if runningAgents > 0}
-              <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
+              <span class="inline-block w-1.5 h-1.5 rounded-[var(--of-radius-round)] bg-success animate-pulse" aria-hidden="true"></span>
             {/if}
             {runningAgentsLabel}
           </span>
@@ -222,7 +224,7 @@
           <button
             type="button"
             aria-pressed={chip.pressed}
-            class="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-lg border text-xs font-medium transition-colors {chip.tone}"
+            class="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-[var(--of-radius-container)] border text-xs font-medium transition-colors {chip.tone}"
             onclick={chip.toggle}
           >
             <kbd class="kbd kbd-xs">{chip.key}</kbd>
@@ -231,7 +233,7 @@
           </button>
         {/each}
       </div>
-      <button class="btn btn-ghost btn-xs shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</button>
+      <Button variant="ghost" size="xs" class="shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</Button>
     </div>
 
     <!-- Body -->
@@ -270,7 +272,7 @@
               tabindex="0"
               data-attn-row={ng.headerIndex}
               aria-expanded={!collapsed}
-              class="flex items-center gap-2.5 px-2 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
+              class="flex items-center gap-2.5 px-2 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
                 {focusedIndex === ng.headerIndex ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
               onclick={() => activate(ng.headerIndex)}
               onkeydown={(e) => rowKeydown(e, ng.headerIndex)}
@@ -280,18 +282,18 @@
               </span>
               <span class="text-sm font-semibold text-base-content">{ng.group.name}</span>
               {#if ng.group.isActive}
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-semibold tracking-wide shrink-0">viewing</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-[var(--of-radius-round)] bg-primary/15 text-primary font-semibold tracking-wide shrink-0">viewing</span>
               {/if}
               <!-- Count badges only when collapsed -->
               {#if collapsed}
                 <span class="ml-auto flex items-center gap-1.5 shrink-0">
                   {#if ng.group.taskItems.length > 0}
-                    <span class="badge badge-ghost badge-sm">
+                    <Badge variant="neutral">
                       {ng.group.taskItems.length} {laneLabel.toLowerCase()}
-                    </span>
+                    </Badge>
                   {/if}
                   {#if ng.group.reviewPrs.length > 0}
-                    <span class="badge badge-error badge-sm">{ng.group.reviewPrs.length} review{ng.group.reviewPrs.length > 1 ? 's' : ''}</span>
+                    <Badge variant="danger">{ng.group.reviewPrs.length} review{ng.group.reviewPrs.length > 1 ? 's' : ''}</Badge>
                   {/if}
                 </span>
               {/if}
@@ -307,7 +309,7 @@
                       role="button"
                       tabindex="0"
                       data-attn-row={it.index}
-                      class="flex items-center gap-3 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
+                      class="flex items-center gap-3 px-2.5 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
                         {focusedIndex === it.index ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
                       onclick={() => activate(it.index)}
                       onkeydown={(e) => rowKeydown(e, it.index)}
@@ -323,7 +325,7 @@
                           <span class="min-w-0 flex-1 truncate text-sm text-base-content">{it.row.item.title}</span>
                           {#if it.row.item.hasUnreadAgentOutput}
                             <span
-                              class="inline-flex shrink-0 items-center gap-1 rounded-full border border-info/25 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info"
+                              class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-info/25 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info"
                               aria-label="Unread agent output"
                             >
                               <CircleDot size={11} aria-hidden="true" />
@@ -360,7 +362,7 @@
                       role="button"
                       tabindex="0"
                       data-attn-row={it.index}
-                      class="flex items-center gap-3 px-2.5 py-2 rounded-lg cursor-pointer border border-transparent transition-colors
+                      class="flex items-center gap-3 px-2.5 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
                         {focusedIndex === it.index ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
                       onclick={() => activate(it.index)}
                       onkeydown={(e) => rowKeydown(e, it.index)}

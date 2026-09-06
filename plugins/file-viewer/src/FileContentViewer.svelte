@@ -283,12 +283,12 @@
             controls
             preload="metadata"
             onerror={() => { videoPlaybackError = true }}
-            class="max-w-full max-h-full rounded bg-black object-contain"
+            class="max-w-full max-h-full rounded-[var(--of-radius-container)] bg-black object-contain"
           >
             Video playback is unavailable for this file.
           </video>
           {#if videoPlaybackError}
-            <div class="absolute bottom-6 rounded bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
+            <div class="absolute bottom-6 rounded-[var(--of-radius-container)] bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
               Video playback unavailable. This file may use a codec that Electron cannot decode.
             </div>
           {/if}
