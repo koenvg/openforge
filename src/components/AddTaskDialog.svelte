@@ -39,7 +39,11 @@
   untrack(() => workflow.configure(workflowInput()))
   $effect(() => {
     const input = workflowInput()
-    untrack(() => workflow.configure(input))
+    untrack(() => {
+      const previousRevision = view.promptRevision
+      workflow.configure(input)
+      if (view.promptRevision !== previousRevision) injectableInsertRequest = null
+    })
   })
 
   onMount(() => {
@@ -105,28 +109,30 @@
     />
     <label class="mb-2 block text-sm font-semibold text-[var(--of-text)]" for="create-task-prompt">What should the agent do?</label>
     <div class="create-task-prompt-frame relative overflow-visible">
-      <PromptInput
-        bind:this={promptEditor}
-        projectId={$activeProjectId || ''}
-        value={view.initialPrompt}
-        textareaId="create-task-prompt"
-        ariaLabel="What should the agent do?"
-        rows={8}
-        textareaClass="p-4 pb-9 text-sm leading-relaxed"
-        textareaStyle="height: 12rem; max-height: 12rem; overflow-y: auto; outline: none;"
-        maxLength={10000}
-        placeholder="Describe the outcome you want…"
-        autofocus={false}
-        commandTrigger={view.draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
-        onTextChange={(prompt) => workflow.attachments.syncWithPrompt(prompt)}
-        onPasteImage={(blob) => workflow.attachments.attachImage(blob)}
-        onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
-        imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
-        injectableInsertRequest={injectableInsertRequest}
-        onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
-        onValueChange={(value) => { view.promptDraft = value }}
-        onCancel={() => onClose?.()}
-      />
+      {#key view.promptRevision}
+        <PromptInput
+          bind:this={promptEditor}
+          projectId={$activeProjectId || ''}
+          value={view.initialPrompt}
+          textareaId="create-task-prompt"
+          ariaLabel="What should the agent do?"
+          rows={8}
+          textareaClass="p-4 pb-9 text-sm leading-relaxed"
+          textareaStyle="height: 12rem; max-height: 12rem; overflow-y: auto; outline: none;"
+          maxLength={10000}
+          placeholder="Describe the outcome you want…"
+          autofocus={false}
+          commandTrigger={view.draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
+          onTextChange={(prompt) => workflow.attachments.syncWithPrompt(prompt)}
+          onPasteImage={(blob) => workflow.attachments.attachImage(blob)}
+          onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
+          imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
+          injectableInsertRequest={injectableInsertRequest}
+          onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
+          onValueChange={(value) => { view.promptDraft = value }}
+          onCancel={() => onClose?.()}
+        />
+      {/key}
       <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-[var(--of-text-muted)]">{view.promptDraft.length.toLocaleString()} / 10,000</span>
     </div>
     <p class="mt-2 text-xs text-[var(--of-text-secondary)]">Be specific about the goal, constraints, and relevant context.</p>

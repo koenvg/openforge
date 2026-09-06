@@ -14,15 +14,11 @@ export function createTaskCreationAttachments(adapter: TaskCreationAdapter) {
     pending: 0,
     insertRequest: null as { id: number, marker: string } | null,
   })
-  let sourceKey: string | null = null
   let nextImageId = 1
   let nextRequestId = 1
   let generation = 0
 
   function reset(mode: 'create' | 'edit', task: TaskDetail | null) {
-    const key = mode === 'edit' && task ? `${task.id}\u0000${task.prompt}` : 'create'
-    if (key === sourceKey) return
-    sourceKey = key
     generation++
     state.preview = null
     state.error = null
