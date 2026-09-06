@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import {
   assertCorrectnessChecks,
@@ -75,12 +76,18 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
   const { region, terminalKey } = await driver.openSeededTerminal(context.fixture.manifest)
 
   async function executeMeasurement(name, command, marker, expectedBytes, typeCommand) {
+    // The receipt is unique to this execution and never appears literally in input.
+    // Adjacent quoted fragments are joined by the shell only after Enter executes it.
+    marker = `${marker}_${randomUUID()}`
+    command = `(${command}) && printf '\\n%s\\n' ${shellQuote(marker.slice(0, 16))}${shellQuote(marker.slice(16))}`
+    expectedBytes += byteLength(`\n${marker}\n`)
     const baseline = await driver.observeTerminal(terminalKey)
     if (!baseline) throw new Error(`Terminal observation is unavailable for ${terminalKey}`)
     const startedAt = now()
     await typeCommand(region, command)
     const drained = await driver.drainTerminal(terminalKey, {
       marker,
+      markerMatch: 'line',
       minimumReceivedBytes: baseline.output.receivedBytes + expectedBytes,
       minimumModelSequence: (baseline.output.modelSequence ?? 0) + 1,
       timeoutMs: drainTimeoutMs,
@@ -89,7 +96,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     const measurementChecks = correctnessChecks(name, baseline, expectedBytes, drained)
     checks.push(...measurementChecks)
     assertCorrectnessChecks(measurementChecks)
-    return { baseline, drained, durationMs }
+    return { baseline, drained, durationMs, marker, inputBytes: byteLength(command) }
   }
 
   const shellReadyMarker = 'OPENFORGE_PERF_SHELL_READY'
@@ -139,7 +146,7 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
     byteLength(`${bulkMarker}\n`),
     driver.typeFocusedTerminalCommand,
   )
-  const bulkInput = calculateThroughput(byteLength(bulkCommand), bulk.durationMs)
+  const bulkInput = calculateThroughput(bulk.inputBytes, bulk.durationMs)
 
   const ptyMarker = 'OPENFORGE_PERF_PTY_OUTPUT_DONE'
   const generatorPath = context.fixture.repository?.outputGeneratorPath
@@ -159,7 +166,8 @@ export async function runTerminalPerformanceScenario(context, options = {}) {
   await driver.selectTaskView('Terminal')
   await region.waitFor({ state: 'visible' })
   const recoveryDrain = await driver.drainTerminal(terminalKey, {
-    marker: ptyMarker,
+    marker: ptyOutput.marker,
+    markerMatch: 'line',
     timeoutMs: drainTimeoutMs,
   })
   const recoveryDurationMs = now() - recoveryStartedAt

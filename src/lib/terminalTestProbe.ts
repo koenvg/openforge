@@ -46,6 +46,8 @@ export interface TerminalProbeObservation {
 
 export interface TerminalProbeDrainExpectation {
   marker?: string
+  /** Execution handshakes use a whole logical line, not a substring of command echo. */
+  markerMatch?: 'line'
   minimumReceivedBytes?: number
   minimumModelSequence?: number
   timeoutMs?: number
@@ -235,8 +237,12 @@ function createTerminalDrain(options: CreateTerminalDrainOptions) {
       }
 
       const presentation = await options.diagnostics.drainPresentation(key)
-      const visibleText = options.diagnostics.capturePresentation(key).lines.map(line => line.text).join('\n')
-      const markerFound = expectation.marker === undefined || visibleText.includes(expectation.marker)
+      const lines = options.diagnostics.capturePresentation(key).lines
+      const visibleText = lines.map(line => line.text).join('\n')
+      const markerFound = expectation.marker === undefined || (expectation.markerMatch === 'line'
+        ? lines.map((line, index) => `${index > 0 && !line.wrapped ? '\n' : ''}${line.text}`)
+          .join('').split('\n').includes(expectation.marker)
+        : visibleText.includes(expectation.marker))
       const receivedEnoughBytes = observation.output.receivedBytes >= (expectation.minimumReceivedBytes ?? 0)
       const reachedModelSequence = expectation.minimumModelSequence === undefined
         || (observation.output.modelSequence ?? -1) >= expectation.minimumModelSequence

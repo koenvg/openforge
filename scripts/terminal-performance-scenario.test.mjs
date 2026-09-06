@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { runTerminalPerformanceScenario } from './desktop-test/terminal-performance-scenario.mjs'
 
 const COMPLETE_PHASE_TIMESTAMPS = {
@@ -103,6 +104,44 @@ const context = {
 }
 
 describe('full-app terminal performance scenario', () => {
+  it('waits for fresh execution-only receipts before typing consecutive commands', async () => {
+    const harness = createScenarioHarness()
+    const originalDrain = harness.driver.drainTerminal.getMockImplementation()
+    const receipts = new Set()
+    let completedCommands = 0
+    harness.driver.drainTerminal.mockImplementation(async (key, expectation) => {
+      if (expectation.minimumModelSequence !== undefined) {
+        expect(harness.commands).toHaveLength(completedCommands + 1)
+        const command = harness.commands.at(-1)
+        expect(command).not.toContain(expectation.marker)
+        expect(expectation.markerMatch).toBe('line')
+        expect(receipts.has(expectation.marker)).toBe(false)
+        receipts.add(expectation.marker)
+        // Delay execution beyond input echo. No next command may be sent yet.
+        await new Promise(resolve => setTimeout(resolve, 5))
+        expect(harness.commands).toHaveLength(completedCommands + 1)
+        // The generator is independently covered; substitute a successful shell builtin.
+        const output = execFileSync('/bin/sh', ['-c', command.replace(/node .*? --bytes=16 --marker=[A-Z_]+/, 'true')], { encoding: 'utf8' })
+        expect(output.split('\n')).toContain(expectation.marker)
+        completedCommands += 1
+      } else {
+        expect(receipts.has(expectation.marker)).toBe(true)
+        expect(expectation.markerMatch).toBe('line')
+      }
+      return originalDrain(key, expectation)
+    })
+
+    await runTerminalPerformanceScenario(context, {
+      driver: harness.driver,
+      now: harness.now,
+      echoSampleCount: 2,
+      echoWarmupCount: 1,
+      bulkInputBytes: 2048,
+      ptyOutputBytes: 16,
+    })
+    expect(completedCommands).toBe(6)
+  })
+
   it('records shell readiness, echo, bulk input, PTY output, and recovery with presentation evidence', async () => {
     const harness = createScenarioHarness()
 
@@ -191,7 +230,8 @@ describe('full-app terminal performance scenario', () => {
     expect(harness.driver.drainTerminal).toHaveBeenCalledWith(
       'T-1-shell-0',
       expect.objectContaining({
-        marker: 'OPENFORGE_PERF_PTY_OUTPUT_DONE',
+        marker: expect.stringMatching(/^OPENFORGE_PERF_PTY_OUTPUT_DONE_[a-f0-9-]+$/),
+        markerMatch: 'line',
         timeoutMs: 120_000,
       }),
     )
