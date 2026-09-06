@@ -63,7 +63,7 @@ describe('daisyUI theme compatibility contract', () => {
     expect(themeAdapterCss).toContain('outline: var(--of-focus-width) solid var(--of-focus-ring);')
     expect(themeAdapterCss).toContain('outline-offset: var(--of-space1);')
     expect(themeAdapterCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(themeAdapterCss).toContain('transition-duration: 0.01ms !important;')
+    expect(themeAdapterCss).toContain('transition-duration: 0ms !important;')
     expect(themeAdapterCss).toContain('animation-duration: 0.01ms !important;')
     expect(appCss).not.toMatch(/:where\([^)]*(?:button|input|select|textarea)[^)]*\):focus-visible/)
     expect(appCss).not.toContain('@media (prefers-reduced-motion: reduce)')
