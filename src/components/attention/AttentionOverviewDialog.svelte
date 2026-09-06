@@ -53,6 +53,15 @@
 
   let bodyEl = $state<HTMLElement | null>(null)
   let loading = $derived($interaction.loading)
+  let error = $derived($interaction.error)
+  let retrying = $state(false)
+
+  async function retry(): Promise<void> {
+    if (retrying) return
+    retrying = true
+    try { await interaction.refresh() } finally { retrying = false }
+  }
+
   let taskLane = $derived($interaction.taskLane)
   let laneLabel = $derived($interaction.laneLabel)
   let taskCount = $derived($interaction.taskCount)
@@ -185,7 +194,7 @@
             {#if runningAgents > 0}
               <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
             {/if}
-            {runningAgentsLabel}
+            {error ? 'Agent status may be out of date' : runningAgentsLabel}
           </span>
           {#if taskLane !== 'focus'}
             <span class="text-base-content/40 truncate">· Showing the {laneLabel} lane</span>
@@ -234,16 +243,38 @@
       <button class="btn btn-ghost btn-xs shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</button>
     </div>
 
+    <div role="status">
+      {#if $interaction.preferenceError}
+        <p class="text-xs text-base-content/70 px-5 py-2 m-0 border-b border-base-300">
+          Couldn't save preferences. Your choices still apply here, but may be lost when you reopen this dialog.
+        </p>
+      {/if}
+    </div>
+
     <!-- Body -->
     <!-- tabindex lets the scroll container hold focus while the list is empty, so the
          dialog keeps receiving E and R instead of losing them to <body>. -->
     <div bind:this={bodyEl} tabindex="-1" class="overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none">
+      {#if error}
+        <div class="rounded-lg border border-error/30 bg-error/5 p-3 mb-2">
+          <div role="alert">
+            <p class="text-sm font-medium m-0">Couldn't load attention overview.</p>
+            <p class="text-xs text-base-content/70 mt-1 mb-0 break-words">{error}</p>
+            {#if navGroups.length > 0}
+              <p class="text-xs text-base-content/70 mt-1 mb-0">Showing the last available results. They may be out of date.</p>
+            {/if}
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost mt-2" disabled={retrying} onclick={retry}>
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      {/if}
       {#if loading}
         <div class="flex flex-col items-center justify-center gap-3 py-16 text-base-content/50 text-sm">
           <span class="loading loading-spinner loading-md text-primary"></span>
           <span>Gathering what needs your attention…</span>
         </div>
-      {:else if navGroups.length === 0}
+      {:else if navGroups.length === 0 && !error}
         <div class="flex flex-col items-center justify-center gap-2 py-16 text-center">
           {#if reviewsHidden}
             <p class="text-sm font-medium text-base-content m-0">Reviews are hidden</p>
