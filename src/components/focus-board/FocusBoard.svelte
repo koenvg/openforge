@@ -137,7 +137,7 @@
 
 <div class="of-board-theme flex h-full flex-col bg-[var(--of-canvas)]">
   <header class="shrink-0 border-b border-[var(--of-border)] bg-[var(--of-surface)] px-8 py-2">
-    <div class="flex min-w-0 flex-wrap items-center gap-4 xl:flex-nowrap">
+    <div class="flex min-w-0 flex-wrap items-center gap-4">
       <div class="w-60 shrink-0">
         <h1 class="truncate text-base font-semibold leading-5 tracking-[-0.01em] text-[var(--of-text)]">{projectName}</h1>
       </div>
