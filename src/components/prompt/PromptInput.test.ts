@@ -191,6 +191,49 @@ describe('PromptInput', () => {
     })
   })
 
+  it('appends a delayed pasted image to the edited draft without replacing either selection', async () => {
+    let resolveMarker!: (marker: string) => void
+    const onPasteImage = vi.fn(() => new Promise<string>((resolve) => {
+      resolveMarker = resolve
+    }))
+    const onValueChange = vi.fn()
+    const onTextChange = vi.fn()
+    const onSubmit = vi.fn()
+
+    render(PromptInput, {
+      props: { ...baseProps, onPasteImage, onValueChange, onTextChange, onSubmit },
+    })
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
+    textarea.value = 'Use this screenshot'
+    textarea.setSelectionRange(4, 8)
+    await fireEvent.input(textarea)
+
+    await fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{
+          kind: 'file',
+          type: 'image/png',
+          getAsFile: () => new File(['image-bytes'], 'screenshot.png', { type: 'image/png' }),
+        }],
+      },
+    })
+    textarea.value = 'Use this updated screenshot please'
+    await fireEvent.input(textarea)
+    textarea.setSelectionRange(0, 3)
+    resolveMarker('[image#1]')
+
+    await waitFor(() => {
+      expect(textarea.value).toBe('Use this updated screenshot please [image#1] ')
+    })
+    expect(onValueChange).toHaveBeenLastCalledWith('Use this updated screenshot please [image#1] ')
+    expect(onTextChange).toHaveBeenLastCalledWith('Use this updated screenshot please [image#1] ')
+    await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(onSubmit).toHaveBeenCalledWith('Use this updated screenshot please [image#1]')
+  })
+
   it('only opens an image marker preview when the caret is inside the marker text', async () => {
     const onImageMarkerClick = vi.fn()
     render(PromptInput, {

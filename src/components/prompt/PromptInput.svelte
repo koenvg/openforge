@@ -163,7 +163,13 @@
     }
     const marker = await onPasteImage(file)
     if (typeof marker === 'string') {
-      insertImageMarkerAtCursor(marker, selectionSnapshot)
+      // A changed draft makes the saved selection unsafe. Append without replacing edits.
+      const insertionSelection = textValue === selectionSnapshot.text ? selectionSnapshot : {
+        text: textValue,
+        selectionStart: textValue.length,
+        selectionEnd: textValue.length,
+      }
+      insertImageMarkerAtCursor(marker, insertionSelection)
     }
   }
 
