@@ -1,18 +1,20 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { writable } from 'svelte/store'
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { tick } from 'svelte'
+import { activeProjectId } from '../../lib/stores'
 import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
+import FileQuickOpen from './FileQuickOpen.svelte'
 
-const mockActiveProjectId = writable<string | null>('test-project-id')
-const mockFsSearchFiles = vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>()
-const mockNavigate = vi.fn()
-const { mockRevealFileInFileViewer } = vi.hoisted(() => ({
+const { mockFsSearchFiles, mockNavigate, mockRevealFileInFileViewer } = vi.hoisted(() => ({
+  mockFsSearchFiles: vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>(),
+  mockNavigate: vi.fn(),
   mockRevealFileInFileViewer: vi.fn<(path: string) => Promise<boolean>>(),
 }))
 
-vi.mock('../../lib/stores', () => ({
-  activeProjectId: mockActiveProjectId,
-}))
+vi.mock('../../lib/stores', async () => {
+  const { writable } = await import('svelte/store')
+  return { activeProjectId: writable<string | null>('test-project-id') }
+})
 
 vi.mock('../../lib/ipc', () => ({
   fsSearchFiles: mockFsSearchFiles,
@@ -28,58 +30,69 @@ vi.mock('../../lib/fileViewerPlugin', () => ({
 
 Element.prototype.scrollIntoView = vi.fn()
 
-async function renderFileQuickOpen(onClose = vi.fn()) {
-  const { default: FileQuickOpen } = await import('./FileQuickOpen.svelte')
+// Load the component before tests start: a timed-out dynamic import can otherwise
+// resume after cleanup and mount a dialog in the following test.
+function renderFileQuickOpen(onClose = vi.fn()) {
   return render(FileQuickOpen, { props: { onClose } })
 }
 
-function getDialogInput(): HTMLInputElement {
-  const input = screen.getByRole('dialog').querySelector('input')
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error('Expected input element in quick-open dialog')
-  }
-  return input
+function getDialogInput() {
+  return within(screen.getByRole('dialog', { name: 'Search files' }))
+    .getByRole('combobox', { name: 'Search files...' })
 }
 
 describe('FileQuickOpen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockActiveProjectId.set('test-project-id')
+    activeProjectId.set('test-project-id')
     mockFsSearchFiles.mockResolvedValue([])
     mockRevealFileInFileViewer.mockResolvedValue(true)
   })
 
+  afterEach(async () => {
+    try {
+      cleanup()
+      await tick()
+      expect(screen.queryAllByRole('dialog', { hidden: true })).toHaveLength(0)
+    } finally {
+      if (vi.isFakeTimers()) vi.clearAllTimers()
+      vi.useRealTimers()
+    }
+  })
+
   it('renders search input and focuses it on mount', async () => {
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
-    const dialog = screen.getByRole('dialog')
-    expect(dialog).toBeTruthy()
-
-    const input = dialog.querySelector('input')
-    expect(input).toBeTruthy()
+    const input = getDialogInput()
 
     await waitFor(() => {
       expect(document.activeElement).toBe(input)
     })
   })
 
-  it('calls fsSearchFiles with debounced query', async () => {
+  it('calls fsSearchFiles only after the latest query has been idle for 150ms', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     mockFsSearchFiles.mockResolvedValue(['src/lib/ipc.ts'])
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
     const input = getDialogInput()
-    await fireEvent.input(input, { target: { value: 'ipc' } })
-
+    await fireEvent.input(input, { target: { value: 'ip' } })
+    await vi.advanceTimersByTimeAsync(100)
     expect(mockFsSearchFiles).not.toHaveBeenCalled()
 
-    await waitFor(() => {
-      expect(mockFsSearchFiles).toHaveBeenCalledWith('test-project-id', 'ipc', 50)
-    }, { timeout: 400 })
+    await fireEvent.input(input, { target: { value: 'ipc' } })
+    await vi.advanceTimersByTimeAsync(149)
+    expect(mockFsSearchFiles).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    await tick()
+    expect(mockFsSearchFiles).toHaveBeenCalledExactlyOnceWith('test-project-id', 'ipc', 50)
+    expect(screen.getByRole('option', { name: /ipc\.ts/ })).toBeTruthy()
   })
 
   it('shows no-match state when search returns empty', async () => {
     mockFsSearchFiles.mockResolvedValue([])
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'zzz' } })
@@ -93,7 +106,7 @@ describe('FileQuickOpen', () => {
 
   it('links the search input to the active file option and clears the active descendant when results empty', async () => {
     mockFsSearchFiles.mockResolvedValue(['src/a.ts', 'src/b.ts'])
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
     const input = getDialogInput()
     expect(input.getAttribute('aria-activedescendant')).toBeNull()
@@ -118,7 +131,7 @@ describe('FileQuickOpen', () => {
 
   it('filters out directory entries from results', async () => {
     mockFsSearchFiles.mockResolvedValue(['src/lib/', 'src/lib/ipc.ts'])
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'lib' } })
@@ -133,7 +146,7 @@ describe('FileQuickOpen', () => {
   it('supports keyboard navigation and select via Enter', async () => {
     mockFsSearchFiles.mockResolvedValue(['a.ts', 'b.ts', 'c.ts'])
     const onClose = vi.fn()
-    await renderFileQuickOpen(onClose)
+    renderFileQuickOpen(onClose)
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'ts' } })
@@ -156,7 +169,7 @@ describe('FileQuickOpen', () => {
 
   it('Escape closes the modal', async () => {
     const onClose = vi.fn()
-    await renderFileQuickOpen(onClose)
+    renderFileQuickOpen(onClose)
 
     const dialog = screen.getByRole('dialog')
     await fireEvent.keyDown(dialog, { key: 'Escape' })
@@ -166,7 +179,7 @@ describe('FileQuickOpen', () => {
 
   it('backdrop click closes modal', async () => {
     const onClose = vi.fn()
-    await renderFileQuickOpen(onClose)
+    renderFileQuickOpen(onClose)
 
     const backdrop = screen.getByTestId('file-quick-open-backdrop')
     await fireEvent.click(backdrop)
@@ -175,29 +188,46 @@ describe('FileQuickOpen', () => {
   })
 
   it('shows project-required state when no active project', async () => {
-    mockActiveProjectId.set(null)
-    await renderFileQuickOpen()
+    activeProjectId.set(null)
+    renderFileQuickOpen()
 
     expect(screen.getByText(/Select a project first/i)).toBeTruthy()
   })
 
   it('clears debounce timer on unmount', async () => {
-    const { unmount } = await renderFileQuickOpen()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { unmount } = renderFileQuickOpen()
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'test' } })
+    expect(mockFsSearchFiles).not.toHaveBeenCalled()
 
     unmount()
+    await vi.advanceTimersByTimeAsync(150)
+    expect(mockFsSearchFiles).not.toHaveBeenCalled()
+    expect(screen.queryAllByRole('dialog', { hidden: true })).toHaveLength(0)
+  })
 
-    const callCount = mockFsSearchFiles.mock.calls.length
-    await new Promise(resolve => setTimeout(resolve, 250))
-    expect(mockFsSearchFiles.mock.calls.length).toBe(callCount)
+  it('can clean up before autofocus settles and focus a fresh dialog', async () => {
+    renderFileQuickOpen()
+    const previousInput = getDialogInput()
+    cleanup()
+    await tick()
+    expect(screen.queryAllByRole('dialog', { hidden: true })).toHaveLength(0)
+
+    renderFileQuickOpen()
+    const input = getDialogInput()
+    expect(input).not.toBe(previousInput)
+    await waitFor(() => {
+      expect(screen.getAllByRole('dialog', { hidden: true })).toHaveLength(1)
+      expect(document.activeElement).toBe(input)
+    })
   })
 
   it('supports Ctrl+J/K for keyboard navigation', async () => {
     mockFsSearchFiles.mockResolvedValue(['a.ts', 'b.ts', 'c.ts'])
     const onClose = vi.fn()
-    await renderFileQuickOpen(onClose)
+    renderFileQuickOpen(onClose)
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'ts' } })
@@ -219,7 +249,7 @@ describe('FileQuickOpen', () => {
 
   it('displays file name and directory path for results', async () => {
     mockFsSearchFiles.mockResolvedValue(['src/components/App.svelte'])
-    await renderFileQuickOpen()
+    renderFileQuickOpen()
 
     const input = getDialogInput()
     await fireEvent.input(input, { target: { value: 'App' } })
