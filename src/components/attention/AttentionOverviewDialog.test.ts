@@ -137,6 +137,107 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     vi.clearAllMocks()
   })
 
+  it('shows an initial read failure and only reports caught up after a successful retry', async () => {
+    ipc.getTaskLanes.mockRejectedValue(new Error('Attention service unavailable'))
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't load attention overview")
+    expect(screen.queryByText(/all caught up/i)).toBeNull()
+    expect(screen.queryByText('No agents running')).toBeNull()
+
+    const retryResult = deferred<TaskLaneRows>()
+    ipc.getTaskLanes.mockImplementationOnce(() => retryResult.promise)
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(screen.getByRole('button', { name: 'Retrying…' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByText(/all caught up/i)).toBeNull()
+
+    retryResult.resolve(laneRows())
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText(/all caught up/i)).toBeTruthy()
+    expect(screen.getByText('No agents running')).toBeTruthy()
+  })
+
+  it.each(['retry', 'live refresh'])('keeps stale rows usable after refresh fails and recovers on %s', async (recovery) => {
+    projects.set([projectRecord('p1', 'Project One')])
+    ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [attentionRow('t1', 'p1', 'Task One')] }))
+    const onOpenTask = vi.fn()
+    renderDialog({ onOpenTask })
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    ipc.getTaskLanes.mockRejectedValue(new Error('Connection lost'))
+    taskAttentionRows.set([attentionRow('t1', 'p1', 'Task One')])
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    expect(screen.getByRole('alert').textContent).toContain('Showing the last available results')
+    await fireEvent.click(screen.getByText('Task One'))
+    expect(onOpenTask).toHaveBeenCalledWith({ id: 't1', projectId: 'p1' })
+
+    // A failed retry leaves the old rows and another retry available.
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByText('Task One')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(false)
+
+    ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [attentionRow('t2', 'p1', 'Task Two')] }))
+    if (recovery === 'retry') {
+      await fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    } else {
+      taskAttentionRows.set([attentionRow('t2', 'p1', 'Task Two')])
+    }
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('Task One')).toBeNull()
+    expect(screen.getByText('Task Two')).toBeTruthy()
+  })
+
+  it.each(['reviews', 'collapsed projects'])('reports a failed %s save without reverting local choices and clears feedback after saving', async (preference) => {
+    projects.set([projectRecord('p1', 'Project One')])
+    ipc.getTaskLanes.mockResolvedValue(laneRows({ focus: [attentionRow('t1', 'p1', 'Task One')] }))
+    reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'Please review my fix')])
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    // Mount the polite live region before its message changes so assistive technology announces it.
+    expect(screen.getByRole('status').textContent?.trim()).toBe('')
+    const toggle = () => fireEvent.click(preference === 'reviews'
+      ? screen.getByRole('button', { name: /^R Reviews/ })
+      : screen.getByText('Project One'))
+    const hiddenTitle = preference === 'reviews' ? 'Please review my fix' : 'Task One'
+    ipc.setConfig.mockRejectedValueOnce(new Error('Disk full'))
+    await toggle()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByRole('status').textContent).toContain("Couldn't save preferences")
+    expect(screen.queryByText(hiddenTitle)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    await toggle()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByRole('status').textContent?.trim()).toBe('')
+    expect(screen.getByText(hiddenTitle)).toBeTruthy()
+  })
+
+  it('does not present an old empty result as caught up when a later read fails', async () => {
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    expect(screen.getByText(/all caught up/i)).toBeTruthy()
+
+    ipc.getTaskLanes.mockRejectedValue(new Error('Connection lost'))
+    reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'New review')])
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.queryByText(/all caught up/i)).toBeNull()
+    expect(screen.queryByText('No agents running')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
   it('adds a newly arrived review request without a close/reopen', async () => {
     renderDialog()
     await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
