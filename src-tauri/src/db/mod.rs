@@ -56,8 +56,8 @@ pub(crate) use pull_request_readiness::{
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use review_threads::{
-    CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadScope,
-    ReviewThreadWrite,
+    CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadRow, ReviewThreadScope,
+    ReviewThreadWrite, SetReviewThreadStatus,
 };
 #[cfg(test)]
 pub use task_creation::TaskWorktreeOptions;

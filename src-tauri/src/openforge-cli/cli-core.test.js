@@ -26,9 +26,16 @@ describe('OpenForge CLI', () => {
       'openforge task labels list',
       'openforge task labels add',
       'openforge task labels remove',
+      'openforge review thread create',
+      'openforge review thread list',
+      'openforge review thread reply',
+      'openforge review thread status',
     ]) {
       expect(skill).toContain(command);
     }
+    expect(skill).toContain('Post each finding as its own `review thread create`');
+    expect(skill).toContain('`--side` selects the side of the diff and defaults to `RIGHT`');
+    expect(skill).toContain('are opaque to OpenForge');
     expect(skill).toContain('openforge task create --help');
     expect(skill).toContain('openforge task update --help');
     expect(skill).toContain('Before creating follow-up Tasks');

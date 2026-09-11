@@ -1,0 +1,29 @@
+{
+  "scope": {
+    "namespace": "github",
+    "targetKey": "gh:acme/web#1421",
+    "revision": "0f1c2d3"
+  },
+  "create": {
+    "namespace": "github",
+    "targetKey": "gh:acme/web#1421",
+    "revision": "0f1c2d3",
+    "origin": "agent",
+    "anchor": {
+      "kind": "line",
+      "filePath": "src/main.rs",
+      "line": 42,
+      "side": "RIGHT"
+    },
+    "body": "Missing null check"
+  },
+  "reply": {
+    "threadId": "rt_9f2",
+    "role": "agent",
+    "body": "Corrected in the next commit"
+  },
+  "status": {
+    "threadId": "rt_9f2",
+    "status": "resolved"
+  }
+}

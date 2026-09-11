@@ -1,9 +1,12 @@
 ## Delivered so far
 
-The tracer bullet delivers list, create, and reply end to end. Deliberate divergences from this plan:
+The tracer bullet delivers list, create, and reply end to end, and the agent CLI writes threads over the transport. Deliberate divergences from this plan:
 
-- The store, host boundary, and SDK carry no `setStatus` or `markSeen`. Reviewer resolve and dismiss is its own ticket, so 1.2 and 3.2 stay open.
+- Set status reaches the store, the host boundary, and the CLI, because the agent CLI group needs it. `awaiting` and mark seen stay with the reviewer ticket, and the SDK gains no `setStatus` here, so 1.2 and 3.2 stay open.
+- `review thread create` has no `--key` flag, so an agent retry after an unclear response is not deduplicated even though the store now is. KVG-2204 adds the flag.
 - `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
+- `ToolPolicy::ReadAndGitHistory` became `ToolPolicy::ReadGitHistoryAndReviewCli` instead of gaining a sibling. Both repo-aware callers are review runs, so a second variant would have had no constructor.
+- The headless review generation has the widened policy but no agent identity: `agent_generate_in_repo` spawns a plain subprocess with no `OPENFORGE_AGENT_CONFIG`, so its CLI writes are refused until plugin-owned agent sessions land. The routes are proven with the task-scoped identity that exists today. KVG-2201 closes the gap.
 - The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1, 5.2, and 5.4 stay open.
 
 ## 1. Core store
@@ -28,10 +31,10 @@ The tracer bullet delivers list, create, and reply end to end. Deliberate diverg
 
 ## 4. Agent CLI and transport
 
-- [ ] 4.1 Add the `review thread list|create|reply|status` command group to the CLI with its usage entries and help text; verify the CLI command tests cover flag validation and a missing required flag
-- [ ] 4.2 Add the matching `POST /review_threads/*` routes to the agent transport allowlist; verify the `agent_routes` unit tests assert each new route is allowed and that an unlisted review route is refused
-- [ ] 4.3 Add a `ToolPolicy` variant that appends `Bash(openforge review:*)` to the read-only tool whitelist while keeping `Write` and `Edit` disallowed; verify a unit test asserts the composed allow and disallow strings
-- [ ] 4.4 Point the repo-aware review generation at the new tool policy; verify a test asserts the spawned generation carries the widened allowlist
+- [x] 4.1 Add the `review thread list|create|reply|status` command group to the CLI with its usage entries and help text; verify the CLI command tests cover flag validation and a missing required flag
+- [x] 4.2 Add the matching `POST /review_threads/*` routes to the agent transport allowlist; verify the `agent_routes` unit tests assert each new route is allowed and that an unlisted review route is refused
+- [x] 4.3 Add a `ToolPolicy` variant that appends `Bash(openforge review:*)` to the read-only tool whitelist while keeping `Write` and `Edit` disallowed; verify a unit test asserts the composed allow and disallow strings
+- [x] 4.4 Point the repo-aware review generation at the new tool policy; verify a test asserts the spawned generation carries the widened allowlist
 
 ## 5. Diff viewer contract
 

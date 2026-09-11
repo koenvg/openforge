@@ -9,6 +9,7 @@ import {
   PROJECT_LABELS_COMMAND_SPEC,
   PROJECT_LIST_COMMAND_SPEC,
 } from './project-commands.js';
+import { REVIEW_THREAD_COMMAND_SPECS } from './review-thread-commands.js';
 import { TASK_COMMAND_SPECS } from './task-commands.js';
 
 const COMMAND_SPECS = [
@@ -18,6 +19,7 @@ const COMMAND_SPECS = [
   PROJECT_LABELS_COMMAND_SPEC,
   ...PLUGIN_COMMAND_SPECS,
   ...PLUGIN_MANAGEMENT_COMMAND_SPECS,
+  ...REVIEW_THREAD_COMMAND_SPECS,
 ];
 
 runCommandLine(process.argv.slice(2), COMMAND_SPECS, { printHelp, printCommandHelp }).catch((error) => {

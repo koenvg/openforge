@@ -31,6 +31,10 @@ pub fn agent_route_allowed(method: &str, path: &str) -> bool {
                 | "/plugin_commands/list"
                 | "/plugin_commands/describe"
                 | "/plugin_commands/invoke"
+                | "/review_threads/list"
+                | "/review_threads/create"
+                | "/review_threads/reply"
+                | "/review_threads/status"
         ),
         "GET" => matches!(
             segments.as_slice(),
@@ -45,5 +49,35 @@ pub fn agent_route_allowed(method: &str, path: &str) -> bool {
                 | ["debug", "process-memory", "history"]
         ),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::agent_route_allowed;
+
+    #[test]
+    fn the_review_thread_write_and_read_routes_are_reachable_by_an_agent() {
+        for path in [
+            "/review_threads/list",
+            "/review_threads/create",
+            "/review_threads/reply",
+            "/review_threads/status",
+        ] {
+            assert!(agent_route_allowed("POST", path), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_review_thread_route_that_is_not_listed_is_refused() {
+        for (method, path) in [
+            ("POST", "/review_threads/delete"),
+            ("POST", "/review_threads"),
+            ("POST", "/review_threads/list/all"),
+            ("GET", "/review_threads/list"),
+            ("DELETE", "/review_threads/create"),
+        ] {
+            assert!(!agent_route_allowed(method, path), "{method} {path}");
+        }
     }
 }

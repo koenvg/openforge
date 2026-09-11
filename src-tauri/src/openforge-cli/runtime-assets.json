@@ -10,6 +10,7 @@
     "plugin-commands.js",
     "plugin-management-commands.js",
     "project-commands.js",
+    "review-thread-commands.js",
     "task-commands.js"
   ]
 }

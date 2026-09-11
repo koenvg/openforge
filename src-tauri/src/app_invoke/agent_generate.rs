@@ -31,16 +31,21 @@ const REPO_GENERATION_TIMEOUT_SECS: u64 = 600;
 pub(super) enum ToolPolicy {
     /// No tool flags — the prompt is fully self-contained (diff-only callers).
     None,
-    /// Read/search files + read-only git history; no edits, no general shell.
-    ReadAndGitHistory,
+    /// Read/search files, read-only git history, and the Review Thread CLI; no
+    /// edits, no general shell.
+    ReadGitHistoryAndReviewCli,
 }
 
-/// The read + git-history whitelist, passed as a single `--allowedTools` value.
+/// The read + git-history + Review Thread CLI whitelist, passed as a single
+/// `--allowedTools` value.
 ///
 /// `Skill` is deliberately absent: the CLI does not gate skill invocation on the
 /// allowlist, so guidance text can name a skill without widening this list.
-const READ_AND_GIT_HISTORY_TOOLS: &str =
-    "Read Grep Glob Bash(git log:*) Bash(git blame:*) Bash(git show:*)";
+///
+/// `Bash(openforge review:*)` is the review agent's only write channel: it reaches
+/// the Review Thread routes on the agent transport and nothing else.
+const READ_GIT_HISTORY_AND_REVIEW_CLI_TOOLS: &str =
+    "Read Grep Glob Bash(git log:*) Bash(git blame:*) Bash(git show:*) Bash(openforge review:*)";
 
 /// Edit tools hard-disabled for the read-only policy, as a single
 /// `--disallowedTools` value. Defense-in-depth on top of the allowlist + `manual`
@@ -255,7 +260,7 @@ pub(super) async fn handle_app_agent_generate_command(
                 model.as_deref(),
                 &session_key,
                 Some(&worktree_path),
-                &ToolPolicy::ReadAndGitHistory,
+                &ToolPolicy::ReadGitHistoryAndReviewCli,
                 output_schema.as_deref(),
                 REPO_GENERATION_TIMEOUT_SECS,
             )
@@ -313,7 +318,7 @@ async fn run_headless_generation(
     // Only the repo-aware policy exposes personal skills; the diff-only path is
     // meant to be self-contained.
     let local_skills = match tool_policy {
-        ToolPolicy::ReadAndGitHistory => super::local_skills::local_skills_plugin_dir(),
+        ToolPolicy::ReadGitHistoryAndReviewCli => super::local_skills::local_skills_plugin_dir(),
         ToolPolicy::None => None,
     };
     let (binary_name, args) = headless_command(
@@ -499,9 +504,10 @@ fn headless_command(
                 args.push("--model".to_string());
                 args.push(model.to_string());
             }
-            if let ToolPolicy::ReadAndGitHistory = tool_policy {
-                // Read + git-history only. The grammar here is load-bearing and was
-                // verified empirically (see the repo-aware read-only design notes):
+            if let ToolPolicy::ReadGitHistoryAndReviewCli = tool_policy {
+                // Read, git history, and the review CLI. The grammar here is
+                // load-bearing and was verified empirically (see the repo-aware
+                // read-only design notes):
                 // - `--setting-sources project`: do NOT inherit the user's global
                 //   `~/.claude/settings.json` `permissions.allow` (often `Bash(*)`,
                 //   `Write`, `Edit`), which would silently defeat the whitelist for
@@ -519,7 +525,7 @@ fn headless_command(
                 args.push("--disallowedTools".to_string());
                 args.push(DISALLOWED_EDIT_TOOLS.to_string());
                 args.push("--allowedTools".to_string());
-                args.push(READ_AND_GIT_HISTORY_TOOLS.to_string());
+                args.push(READ_GIT_HISTORY_AND_REVIEW_CLI_TOOLS.to_string());
                 // The user's own skills, wrapped as a session-only plugin. This is
                 // how guidance text like "follow the /strict-code-review skill"
                 // resolves without `--setting-sources user` handing the run the
@@ -658,11 +664,11 @@ mod tests {
     }
 
     #[test]
-    fn read_and_git_history_policy_whitelists_read_and_git_only() {
+    fn repo_review_policy_whitelists_read_git_history_and_the_review_cli_only() {
         let (_, args) = headless_command(
             "claude-code",
             None,
-            &ToolPolicy::ReadAndGitHistory,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
             None,
         )
@@ -695,6 +701,9 @@ mod tests {
         assert!(allow.contains("Bash(git log:*)"));
         assert!(allow.contains("Bash(git blame:*)"));
         assert!(allow.contains("Bash(git show:*)"));
+        assert!(allow.contains("Bash(openforge review:*)"));
+        assert!(!allow.contains("Bash(openforge:*)"));
+        assert!(!allow.contains("Bash(*)"));
         // No edit/write/general-bash in the whitelist.
         assert!(!allow.contains("Edit"));
         assert!(!allow.contains("Write"));
@@ -711,12 +720,12 @@ mod tests {
     }
 
     #[test]
-    fn read_and_git_history_policy_mounts_personal_skills_as_a_plugin() {
+    fn repo_review_policy_mounts_personal_skills_as_a_plugin() {
         let plugin = std::path::PathBuf::from("/tmp/openforge-local-skills-1");
         let (_, args) = headless_command(
             "claude-code",
             None,
-            &ToolPolicy::ReadAndGitHistory,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
             Some(&plugin),
         )
@@ -742,15 +751,20 @@ mod tests {
     #[test]
     fn every_provider_except_claude_code_is_rejected() {
         for provider in ["opencode", "codex", "grok", "gemini", "pi", ""] {
-            let result =
-                headless_command(provider, None, &ToolPolicy::ReadAndGitHistory, None, None);
+            let result = headless_command(
+                provider,
+                None,
+                &ToolPolicy::ReadGitHistoryAndReviewCli,
+                None,
+                None,
+            );
             let err = result.expect_err("only claude-code is supported");
             assert!(err.contains("claude-code"), "provider {provider}: {err}");
         }
         assert!(headless_command(
             "claude-code",
             None,
-            &ToolPolicy::ReadAndGitHistory,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
             None
         )

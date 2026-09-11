@@ -24,6 +24,7 @@ pub(crate) mod deferred_completion;
 mod internal_transport;
 mod legacy_transport;
 mod plugin_management;
+mod review_threads;
 mod server_lifecycle;
 
 // Keep the pre-split `http_server::*` surface stable for crate callers and tests.

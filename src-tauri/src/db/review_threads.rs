@@ -90,6 +90,13 @@ pub struct ReplyToReviewThread {
     pub body: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SetReviewThreadStatus {
+    pub thread_id: String,
+    pub status: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReviewThreadError {
     #[error("Review Thread field '{field}' {reason}")]
@@ -111,6 +118,7 @@ fn invalid(field: &'static str, reason: &str) -> ReviewThreadError {
 
 const ORIGINS: [&str; 3] = ["agent", "human", "plugin"];
 const ROLES: [&str; 2] = ["agent", "human"];
+const STATUSES: [&str; 3] = ["open", "resolved", "dismissed"];
 
 fn validate_scope(scope: &ReviewThreadScope) -> ReviewThreadResult<()> {
     if scope.namespace.trim().is_empty() {
@@ -432,6 +440,27 @@ impl super::Database {
             rusqlite::params![now, &request.thread_id],
         )?;
         tx.commit()?;
+
+        read_thread(&conn, &request.thread_id)
+    }
+
+    pub fn set_review_thread_status(
+        &self,
+        request: &SetReviewThreadStatus,
+    ) -> ReviewThreadResult<ReviewThreadRow> {
+        if !STATUSES.contains(&request.status.as_str()) {
+            return Err(invalid("status", "must be open, resolved, or dismissed"));
+        }
+
+        let now = super::current_unix_timestamp()?;
+        let conn = self.lock_conn()?;
+        let updated = conn.execute(
+            "UPDATE review_threads SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![&request.status, now, &request.thread_id],
+        )?;
+        if updated == 0 {
+            return Err(ReviewThreadError::ThreadNotFound(request.thread_id.clone()));
+        }
 
         read_thread(&conn, &request.thread_id)
     }
@@ -960,5 +989,85 @@ mod tests {
         assert_eq!(created, 1, "only one retry may store a thread");
         assert_eq!(ids.len(), 1, "every retry must report the same thread");
         assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn a_resolved_thread_keeps_its_messages_and_its_pending_agent_turn() {
+        let (db, _temp) = make_test_db("review_threads_status");
+        let thread = db
+            .create_review_thread(&create_request("Missing null check"))
+            .expect("create")
+            .into_thread();
+
+        let resolved = db
+            .set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: thread.id.clone(),
+                status: "resolved".to_string(),
+            })
+            .expect("set status");
+
+        assert_eq!(resolved.status, "resolved");
+        assert_eq!(resolved.awaiting, thread.awaiting);
+        assert_eq!(resolved.messages, thread.messages);
+        assert_eq!(
+            db.list_review_threads(&scope()).expect("list")[0].status,
+            "resolved"
+        );
+    }
+
+    #[test]
+    fn every_reviewer_decision_round_trips_through_the_store() {
+        let (db, _temp) = make_test_db("review_threads_status_values");
+        let thread = db
+            .create_review_thread(&create_request("body"))
+            .expect("create")
+            .into_thread();
+
+        for status in ["resolved", "dismissed", "open"] {
+            let updated = db
+                .set_review_thread_status(&SetReviewThreadStatus {
+                    thread_id: thread.id.clone(),
+                    status: status.to_string(),
+                })
+                .expect("set status");
+
+            assert_eq!(updated.status, status);
+        }
+    }
+
+    #[test]
+    fn an_unsupported_status_is_rejected_naming_the_field_and_changes_nothing() {
+        let (db, _temp) = make_test_db("review_threads_status_invalid");
+        let thread = db
+            .create_review_thread(&create_request("body"))
+            .expect("create")
+            .into_thread();
+
+        let error = db
+            .set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: thread.id.clone(),
+                status: "archived".to_string(),
+            })
+            .expect_err("an unsupported status should be rejected");
+
+        assert!(error.to_string().contains("status"), "got: {error}");
+        assert_eq!(
+            db.list_review_threads(&scope()).expect("list")[0].status,
+            "open"
+        );
+    }
+
+    #[test]
+    fn setting_the_status_of_an_unknown_thread_is_rejected() {
+        let (db, _temp) = make_test_db("review_threads_status_unknown");
+
+        let error = db
+            .set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: "rt_missing".to_string(),
+                status: "resolved".to_string(),
+            })
+            .expect_err("an unknown thread should be rejected");
+
+        assert!(error.to_string().contains("rt_missing"), "got: {error}");
     }
 }

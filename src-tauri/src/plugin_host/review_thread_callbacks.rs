@@ -76,17 +76,10 @@ impl PluginHost {
         payload: Value,
     ) -> Result<Value, String> {
         let state = self.app_state_for_host_callback()?;
-        let request = crate::http_server::AppInvokeRequest {
-            command: command.to_string(),
-            payload,
-        };
-        crate::app_invoke::handle_review_threads_command(&state, &request)
+        crate::app_invoke::invoke_review_threads_command(&state, command, payload)
             .await
             .map_err(|(status, message)| {
                 format!("plugin host Review Thread callback {command} failed ({status}): {message}")
-            })?
-            .ok_or_else(|| {
-                format!("plugin host Review Thread callback returned no value: {command}")
             })
     }
 }
