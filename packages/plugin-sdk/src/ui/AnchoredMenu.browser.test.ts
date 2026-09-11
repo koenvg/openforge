@@ -262,6 +262,64 @@ it('keeps standalone and split menus within a narrow viewport with readable long
   }
 })
 
+it('reveals the menu panel and items with the anchored motion treatment', async () => {
+  const page = await browser.newPage()
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    await page.getByRole('button', { name: 'Report actions' }).click()
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+
+    const motion = await menu.evaluate((node) => {
+      const panelStyles = getComputedStyle(node)
+      const itemStyles = getComputedStyle(node.querySelector<HTMLElement>('[role="menuitem"]')!)
+      return {
+        state: node.getAttribute('data-state'),
+        panelTransition: panelStyles.transition,
+        panelClipPath: panelStyles.clipPath,
+        itemTransition: itemStyles.transition,
+      }
+    })
+
+    expect(motion.state).toBe('open')
+    expect(motion.panelTransition).toContain('clip-path')
+    expect(motion.panelTransition).toContain('cubic-bezier(0.16, 1, 0.3, 1)')
+    expect(motion.panelClipPath).not.toContain('100%')
+    expect(motion.itemTransition).toContain('opacity')
+    expect(motion.itemTransition).toContain('transform')
+  } finally {
+    await page.close()
+  }
+})
+
+it('settles the menu immediately when reduced motion is preferred', async () => {
+  const page = await browser.newPage({ reducedMotion: 'reduce' })
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    await page.getByRole('button', { name: 'Report actions' }).click()
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+
+    const motion = await menu.evaluate((node) => {
+      const panelStyles = getComputedStyle(node)
+      const itemStyles = getComputedStyle(node.querySelector<HTMLElement>('[role="menuitem"]')!)
+      return {
+        panelTransitionDuration: panelStyles.transitionDuration,
+        panelClipPath: panelStyles.clipPath,
+        itemOpacity: itemStyles.opacity,
+        itemTransform: itemStyles.transform,
+      }
+    })
+
+    expect(motion.panelTransitionDuration).toBe('0s')
+    expect(motion.panelClipPath).not.toContain('100%')
+    expect(motion.itemOpacity).toBe('1')
+    expect(motion.itemTransform).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
+  } finally {
+    await page.close()
+  }
+})
+
 it('renders the built public SplitButton export without source aliases or app imports', async () => {
   const packageServer = await createServer({
     configFile: false,
