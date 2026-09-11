@@ -70,4 +70,34 @@ describe('plugin-sdk Button', () => {
 
     expect(onClick).toHaveBeenCalledTimes(1)
   })
+
+  it('supports the Spectrum-inspired link and destructive variants', () => {
+    const { unmount } = render(Button, { props: { children, variant: 'link' } })
+    expect(getButton('Run review').dataset.variant).toBe('link')
+
+    unmount()
+    render(Button, { props: { children, variant: 'destructive' } })
+    expect(getButton('Run review').dataset.variant).toBe('destructive')
+  })
+
+  it('owns loading semantics while preserving a useful accessible name', async () => {
+    const onclick = vi.fn()
+
+    render(Button, {
+      props: {
+        children,
+        loading: true,
+        loadingLabel: 'Creating task',
+        onclick,
+      },
+    })
+
+    const button = getButton('Creating task')
+    await fireEvent.click(button)
+
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(onclick).not.toHaveBeenCalled()
+  })
 })

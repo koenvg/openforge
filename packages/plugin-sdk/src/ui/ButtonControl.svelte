@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte'
   import type { HTMLButtonAttributes } from 'svelte/elements'
 
-  type ButtonControlVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  type ButtonControlVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'link' | 'destructive'
   type ButtonControlSize = 'xs' | 'sm' | 'md' | 'lg'
   type ButtonControlKind = 'text' | 'icon'
 
@@ -11,6 +11,7 @@
     variant: ButtonControlVariant
     size: ButtonControlSize
     kind: ButtonControlKind
+    loading?: boolean
     onClick?: (event: MouseEvent) => void
     element?: HTMLButtonElement
   }
@@ -20,6 +21,7 @@
     variant,
     size,
     kind,
+    loading = false,
     element = $bindable(),
     class: className,
     disabled = false,
@@ -36,6 +38,7 @@
   data-variant={variant}
   data-size={size}
   data-control-kind={kind}
+  data-loading={loading ? 'true' : undefined}
   {disabled}
   onclick={(event) => {
     if (!disabled) {
@@ -44,7 +47,12 @@
     }
   }}
 >
+  {#if loading}
+    <span class="of-button-spinner" aria-hidden="true"></span>
+  {/if}
+  {#if kind === 'text' || !loading}
   {@render children()}
+  {/if}
 </button>
 
 <style>
@@ -52,7 +60,10 @@
     box-sizing: border-box;
     border: var(--of-border-width) solid transparent;
     border-radius: var(--of-radius-control);
+    appearance: none;
     cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
     transition:
       background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
@@ -64,6 +75,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: var(--of-space2);
     min-height: var(--of-control-height);
     padding: 0 var(--of-space4);
     font-family: var(--of-font-sans);
@@ -73,8 +85,9 @@
   }
 
   button[data-control-kind='icon'] {
-    display: inline-grid;
-    place-content: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: var(--of-control-height);
     height: var(--of-control-height);
     padding: var(--of-space2);
@@ -115,6 +128,12 @@
     color: var(--of-text);
   }
 
+  button[data-variant='link'] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--of-link);
+  }
+
   button[data-control-kind='icon'][data-variant='ghost'] {
     color: var(--of-icon);
   }
@@ -133,17 +152,29 @@
     color: var(--of-text);
   }
 
-  button[data-variant='danger'] {
+  button[data-variant='destructive'] {
     border-color: var(--of-danger);
     background: var(--of-danger);
     color: var(--of-on-danger);
   }
 
-  button[data-variant='danger']:hover:not(:disabled),
-  button[data-variant='danger']:active:not(:disabled) {
+  button[data-variant='destructive']:hover:not(:disabled),
+  button[data-variant='destructive']:active:not(:disabled) {
     border-color: var(--of-status-danger);
     background: var(--of-status-danger);
     color: var(--of-on-danger);
+  }
+
+  button[data-variant='link']:hover:not(:disabled) {
+    background: transparent;
+    color: var(--of-link);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  button[data-variant='link']:active:not(:disabled) {
+    background: transparent;
+    color: var(--of-link);
   }
 
   button[data-control-kind='text'][data-size='xs'],
@@ -186,9 +217,39 @@
     cursor: not-allowed;
   }
 
+  button[data-variant='ghost']:disabled,
+  button[data-variant='link']:disabled {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  button[data-variant='outline']:disabled {
+    background: transparent;
+  }
+
+  .of-button-spinner {
+    box-sizing: border-box;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 1em;
+    height: 1em;
+    border: var(--of-border-width) solid currentColor;
+    border-right-color: transparent;
+    border-radius: var(--of-radius-round);
+    animation: of-button-spin 700ms linear infinite;
+  }
+
+  @keyframes of-button-spin {
+    to { transform: rotate(360deg); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     button {
       transition: none;
+    }
+
+    .of-button-spinner {
+      animation: none;
     }
   }
 </style>
