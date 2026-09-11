@@ -63,6 +63,14 @@ describe('IconRail', () => {
     expect(screen.getByRole('button', { name: /project settings/i }).getAttribute('aria-current')).toBe('page')
   })
 
+  it('uses one shared animated highlight for every page in the rail', () => {
+    const { container } = render(IconRail, { currentView: 'settings' as AppView, onNavigate: vi.fn() })
+
+    expect(container.querySelectorAll('[data-animated-nav-indicator]')).toHaveLength(1)
+    expect([...container.querySelectorAll('[data-animated-nav-item]')].map((item) => item.getAttribute('data-animated-nav-item')))
+      .toEqual(['board', 'settings'])
+  })
+
   it('renders plugin navigation items before Settings', () => {
     const onNavigate = vi.fn()
     render(IconRail, {

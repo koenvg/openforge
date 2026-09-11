@@ -47,6 +47,21 @@ describe('TaskPaneNavigation', () => {
     expect(screen.getByRole('button', { name: /^Activity/ }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('uses one shared animated highlight across core and plugin panes', () => {
+    const { container } = render(TaskPaneNavigation, {
+      props: {
+        activeView: activityTab.namespacedId,
+        tabs: [activityTab],
+        commandHeld: false,
+        onSelect: vi.fn(),
+      },
+    })
+
+    expect(container.querySelectorAll('[data-animated-nav-indicator]')).toHaveLength(1)
+    expect([...container.querySelectorAll('[data-animated-nav-item]')].map((item) => item.getAttribute('data-animated-nav-item')))
+      .toEqual(['agent', 'review', activityTab.namespacedId])
+  })
+
   it('marks the Agent tab visibly and accessibly while another pane is active', () => {
     render(TaskPaneNavigation, {
       props: {
