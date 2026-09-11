@@ -258,7 +258,7 @@
       "width": 1280,
       "height": 800
     },
-    "ready": "button:has-text(\"Agent needs input on OF-42\")",
+    "ready": "button:has-text(\"Open\")",
     "expectedErrors": [],
     "tolerance": {
       "maxPixels": 18,
