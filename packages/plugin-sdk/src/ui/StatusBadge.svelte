@@ -61,6 +61,7 @@
     user-select: none;
   }
 
+  /* Palette values mirror Spectrum UI's documented status-badge source. */
   span[data-status='pending'] {
     --status-badge-background: #fffbeb;
     --status-badge-foreground: #b45309;
