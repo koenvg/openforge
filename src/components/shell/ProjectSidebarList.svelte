@@ -7,6 +7,7 @@
     reviewRequestCountByProject,
   } from '../../lib/stores'
   import { setConfig } from '../../lib/ipc'
+  import { firstGrapheme } from '../../lib/firstGrapheme'
   import {
     partitionProjectsByHidden,
     withProjectHidden,
@@ -131,7 +132,7 @@
                 aria-current={isActive ? 'true' : undefined}
                 onclick={() => onSelectProject(project.id)}
               >
-                <span class="project-avatar" aria-hidden="true">{project.name.charAt(0)}</span>
+                <span class="project-avatar" aria-hidden="true">{firstGrapheme(project.name)}</span>
                 {#if attentionCount > 0}
                   <span
                     class="project-status-indicator project-status-attention"
