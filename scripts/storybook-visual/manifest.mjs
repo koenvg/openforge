@@ -1,6 +1,5 @@
 const themeAppearances = new Map([
   ['openforge-light', 'light'], ['openforge-dark', 'dark'],
-  ['workshop-light', 'light'], ['workshop-dark', 'dark'],
 ])
 
 export function captureAppearance(themeId) {
