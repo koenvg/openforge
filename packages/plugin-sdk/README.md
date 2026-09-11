@@ -219,6 +219,7 @@ Shared Svelte components use explicit imports. The package exports:
 - `@openforge-app/plugin-sdk/ui/Checkbox.svelte`
 - `@openforge-app/plugin-sdk/ui/Switch.svelte`
 - `@openforge-app/plugin-sdk/ui/Badge.svelte`
+- `@openforge-app/plugin-sdk/ui/StatusBadge.svelte`
 - `@openforge-app/plugin-sdk/ui/Panel.svelte`
 - `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte`
 - `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte`

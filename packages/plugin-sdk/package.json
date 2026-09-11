@@ -87,6 +87,7 @@
     "./ui/Checkbox.svelte": "./dist/ui/Checkbox.svelte",
     "./ui/Switch.svelte": "./dist/ui/Switch.svelte",
     "./ui/Badge.svelte": "./dist/ui/Badge.svelte",
+    "./ui/StatusBadge.svelte": "./dist/ui/StatusBadge.svelte",
     "./ui/Panel.svelte": "./dist/ui/Panel.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
@@ -126,6 +127,7 @@
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",
+    "@lucide/svelte": "catalog:",
     "bits-ui": "^2.19.0",
     "dompurify": "catalog:",
     "github-slugger": "catalog:",

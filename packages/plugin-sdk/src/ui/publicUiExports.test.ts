@@ -103,6 +103,7 @@ describe('plugin-sdk public UI exports', () => {
       'Checkbox',
       'Switch',
       'Badge',
+      'StatusBadge',
       'Panel',
       'MarkdownContent',
       'ResizablePanel',

@@ -38,6 +38,7 @@
       "@openforge-app/plugin-sdk/ui/Checkbox.svelte": ["./packages/plugin-sdk/src/ui/Checkbox.svelte"],
       "@openforge-app/plugin-sdk/ui/Switch.svelte": ["./packages/plugin-sdk/src/ui/Switch.svelte"],
       "@openforge-app/plugin-sdk/ui/Badge.svelte": ["./packages/plugin-sdk/src/ui/Badge.svelte"],
+      "@openforge-app/plugin-sdk/ui/StatusBadge.svelte": ["./packages/plugin-sdk/src/ui/StatusBadge.svelte"],
       "@openforge-app/plugin-sdk/ui/Panel.svelte": ["./packages/plugin-sdk/src/ui/Panel.svelte"],
       "@openforge-app/plugin-sdk/ui/MarkdownContent.svelte": ["./packages/plugin-sdk/src/ui/MarkdownContent.svelte"],
       "@openforge-app/plugin-sdk/ui/ResizablePanel.svelte": ["./packages/plugin-sdk/src/ui/ResizablePanel.svelte"],

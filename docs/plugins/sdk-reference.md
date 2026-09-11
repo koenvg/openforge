@@ -459,6 +459,7 @@ Core controls use scoped component CSS and semantic `--of-*` properties supplied
 | `Checkbox` | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | A native checkbox with bindable checked and indeterminate states. |
 | `Switch` | `@openforge-app/plugin-sdk/ui/Switch.svelte` | A labeled native switch with bindable checked state and validation. |
 | `Badge` | `@openforge-app/plugin-sdk/ui/Badge.svelte` | A presentation-only status badge with semantic variants. |
+| `StatusBadge` | `@openforge-app/plugin-sdk/ui/StatusBadge.svelte` | An icon-bearing status badge with semantic status treatments and reduced-motion progress feedback. |
 | `Panel` | `@openforge-app/plugin-sdk/ui/Panel.svelte` | A presentation-only panel with optional caller-owned header and footer. |
 | `Select` | `@openforge-app/plugin-sdk/ui/Select.svelte` | A named single-value select with a portalled listbox. |
 | `SearchableSelect` | `@openforge-app/plugin-sdk/ui/SearchableSelect.svelte` | A searchable single-value picker with optional bounded results and caller keywords. |
@@ -787,6 +788,12 @@ The required visible label owns accessible naming. The native input remains keyb
 Import `Badge` from `@openforge-app/plugin-sdk/ui/Badge.svelte`. `children` is required caller-owned content. `variant` accepts `'neutral'`, `'info'`, `'success'`, `'warning'`, or `'danger'` and defaults to `'neutral'`. Native span attributes such as `role`, `title`, `aria-label`, and `class` pass through.
 
 `Badge` owns only token-driven status presentation. The caller decides whether the content needs `role="status"`, another ARIA role, or no live semantics. Test its caller-visible content and selected semantics. Do not assert classes, data attributes, or nesting.
+
+### `StatusBadge`
+
+Import `StatusBadge` from `@openforge-app/plugin-sdk/ui/StatusBadge.svelte`. `children` is required caller-owned content. `status` accepts `'pending'`, `'failed'`, `'success'`, `'in-progress'`, `'in-review'`, `'submitted'`, or `'expired'`. Native span attributes such as `role`, `title`, `aria-label`, and `class` pass through.
+
+`StatusBadge` owns the status icon, color treatment, and the three-second progress rotation. Icons are decorative because the visible caller-owned label remains the accessible status content. The progress icon stops under reduced-motion preferences. The caller decides whether to add `role="status"` or another ARIA role.
 
 ### `Panel`
 
