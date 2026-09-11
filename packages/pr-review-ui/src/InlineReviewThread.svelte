@@ -7,21 +7,13 @@
 
   interface Props {
     comment: ReviewThreadCommentDisplayData
-    replyDraft: string
-    onReplyDraftChange: (value: string) => void
-    onReplySubmitted: () => void
     onReplyToThread?: (threadId: string, body: string) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let {
-    comment,
-    replyDraft,
-    onReplyDraftChange,
-    onReplySubmitted,
-    onReplyToThread,
-    onOpenUrl,
-  }: Props = $props()
+  let { comment, onReplyToThread, onOpenUrl }: Props = $props()
+
+  let replyDraft = $state('')
 
   const ORIGIN_LABELS = { agent: 'Agent', plugin: 'Plugin', human: 'Reviewer' } as const
   const originLabel = $derived(ORIGIN_LABELS[comment.thread.origin])
@@ -30,7 +22,7 @@
     const body = replyDraft.trim()
     if (!body) return
     onReplyToThread?.(comment.thread.id, body)
-    onReplySubmitted()
+    replyDraft = ''
   }
 </script>
 
@@ -51,7 +43,7 @@
       ariaLabel="Reply to the review thread"
       placeholder="Reply…"
       primaryLabel="Reply"
-      onValueChange={onReplyDraftChange}
+      onValueChange={(value) => { replyDraft = value }}
       onSubmit={submitReply}
     />
   {/if}

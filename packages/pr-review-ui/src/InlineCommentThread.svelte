@@ -131,17 +131,7 @@
           {onOpenUrl}
         />
       {:else if comment.type === 'review-thread'}
-        {@const reviewThreadId = comment.thread.id}
-        <InlineReviewThread
-          {comment}
-          replyDraft={threadReplyDrafts[reviewThreadId] ?? ''}
-          onReplyDraftChange={(value) => {
-            threadReplyDrafts = { ...threadReplyDrafts, [reviewThreadId]: value }
-          }}
-          onReplySubmitted={() => clearThreadReply(reviewThreadId)}
-          {onReplyToThread}
-          {onOpenUrl}
-        />
+        <InlineReviewThread {comment} {onReplyToThread} {onOpenUrl} />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">
           <Badge variant="warning">Pending reply</Badge>
