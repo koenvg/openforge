@@ -34,6 +34,72 @@ describe('plugin-sdk Switch', () => {
     expect(onCheckedChange).not.toHaveBeenCalled()
   })
 
+  it('stretches the knob while pressed without committing until release', async () => {
+    render(Switch, {
+      props: {
+        label: 'Enable notifications',
+      },
+    })
+
+    const control = screen.getByRole('switch', { name: 'Enable notifications' })
+    const track = document.querySelector('.of-switch-track')
+    const knob = document.querySelector('.of-switch-knob') as HTMLElement
+
+    expect(track).toBeTruthy()
+    expect(knob.style.width).toBe('22px')
+
+    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    expect(control).toHaveProperty('checked', false)
+    expect(Number.parseFloat(knob.style.width)).toBeGreaterThan(22)
+
+    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 4, timeStamp: 16 })
+    expect(control).toHaveProperty('checked', false)
+  })
+
+  it('commits a drag to the nearest side and suppresses the follow-up click', async () => {
+    const onCheckedChange = vi.fn()
+    render(Switch, {
+      props: {
+        label: 'Enable notifications',
+        onCheckedChange,
+      },
+    })
+
+    const control = screen.getByRole('switch', { name: 'Enable notifications' })
+    const track = document.querySelector('.of-switch-track')
+
+    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
+    await fireEvent.pointerMove(track!, { pointerId: 1, clientX: 40, timeStamp: 16 })
+    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 40, timeStamp: 16 })
+
+    expect(control).toHaveProperty('checked', true)
+    expect(onCheckedChange).toHaveBeenCalledOnce()
+    expect(onCheckedChange).toHaveBeenCalledWith(true)
+
+    await fireEvent.click(track!)
+    expect(control).toHaveProperty('checked', true)
+    expect(onCheckedChange).toHaveBeenCalledOnce()
+  })
+
+  it('lets a quick flick commit in its travel direction', async () => {
+    render(Switch, {
+      props: {
+        label: 'Enable notifications',
+      },
+    })
+
+    const control = screen.getByRole('switch', { name: 'Enable notifications' })
+    const track = document.querySelector('.of-switch-track')
+
+    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
+    await fireEvent.pointerMove(track!, { pointerId: 1, clientX: 8, timeStamp: 4 })
+    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 8, timeStamp: 8 })
+
+    expect(control).toHaveProperty('checked', true)
+  })
+
   it('links validation text and keeps native focus behavior', () => {
     render(Switch, {
       props: {
