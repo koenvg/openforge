@@ -8,6 +8,7 @@ import { diffHighlighter } from '@openforge-app/pr-review-ui/diffHighlighter'
 import { countMatchesInPatch } from '@openforge-app/pr-review-ui/diffSearch'
 import type { DiffWorkerRequest, DiffWorkerResponse } from '@openforge-app/pr-review-ui/diffWorker'
 import { sortFilesAsTree } from '@openforge-app/pr-review-ui/fileSort'
+import { commentableLines } from '@openforge-app/pr-review-ui/patchLines'
 import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
 import { createDiffSearch } from '@openforge-app/pr-review-ui/useDiffSearch.svelte'
 import { createDiffWorker } from '@openforge-app/pr-review-ui/useDiffWorker.svelte'
@@ -31,6 +32,7 @@ describe('@openforge-app/pr-review-ui diff helper exports', () => {
     expect(diffHighlighter).toBeDefined()
     expect(countMatchesInPatch).toBeTypeOf('function')
     expect(sortFilesAsTree).toBeTypeOf('function')
+    expect(commentableLines).toBeTypeOf('function')
     expect(getReviewFileIdentity).toBeTypeOf('function')
     expect(createDiffSearch).toBeTypeOf('function')
     expect(createDiffWorker).toBeTypeOf('function')

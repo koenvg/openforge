@@ -7,7 +7,8 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 - `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
 - `ToolPolicy::ReadAndGitHistory` became `ToolPolicy::ReadGitHistoryAndReviewCli` instead of gaining a sibling. Both repo-aware callers are review runs, so a second variant would have had no constructor.
 - The headless review generation has the widened policy but no agent identity: `agent_generate_in_repo` spawns a plain subprocess with no `OPENFORGE_AGENT_CONFIG`, so its CLI writes are refused until plugin-owned agent sessions land. The routes are proven with the task-scoped identity that exists today. KVG-2201 closes the gap.
-- The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1, 5.2, and 5.4 stay open.
+- Orphans are reported in one region above the file list, and they render through the same inline thread component as a placed thread. They are readable and repliable now, and gain resolve and dismiss with the rest of the threads when 3.2 and 5.3 land.
+- The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1 and 5.2 stay open.
 
 ## 1. Core store
 
@@ -41,7 +42,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 - [ ] 5.1 Replace `AgentCommentDisplayData` and `AiThreadCommentDisplayData` with one `ThreadCommentDisplayData` in `diffComments.ts`; verify the existing `diffComments` tests pass against the single variant
 - [ ] 5.2 Collapse `InlineAiReviewComment.svelte` and `InlineAiQuestionThread.svelte` into one inline thread component that renders agent-authored and person-authored messages through one presentation; verify the inline thread tests cover both author roles on one line
 - [ ] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes
-- [ ] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
+- [x] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
 
 ## 6. Core self-review migration and legacy removal
 
