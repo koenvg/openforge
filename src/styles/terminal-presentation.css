@@ -26,7 +26,7 @@
 
 .zen-cloud-backdrop {
   position: relative;
-  background-color: #eef4fc;
+  background-color: var(--of-canvas);
 }
 .zen-cloud-backdrop::before {
   content: "";
@@ -34,20 +34,22 @@
   inset: -45%;
   z-index: -1;
   pointer-events: none;
+  /* Blooms are mixed from the active theme's tokens, so the cloud recolors
+     with any theme and stays legible in dark appearances. The accent carries
+     each theme's identity; info and success keep a colored wash even for
+     themes with a near-neutral accent; the surface tint softens the whole. */
   background:
-    radial-gradient(32% 42% at 28% 30%, rgba(176, 206, 255, 0.55), transparent 70%),
-    radial-gradient(30% 38% at 72% 24%, rgba(208, 198, 255, 0.42), transparent 70%),
-    radial-gradient(38% 44% at 66% 76%, rgba(194, 229, 255, 0.5), transparent 72%),
-    radial-gradient(34% 40% at 24% 80%, rgba(255, 226, 214, 0.3), transparent 70%);
+    radial-gradient(32% 42% at 28% 30%, color-mix(in srgb, var(--of-accent) 26%, transparent), transparent 70%),
+    radial-gradient(30% 38% at 72% 24%, color-mix(in srgb, var(--of-info) 22%, transparent), transparent 70%),
+    radial-gradient(38% 44% at 66% 76%, color-mix(in srgb, var(--of-success) 18%, transparent), transparent 72%),
+    radial-gradient(34% 40% at 24% 80%, color-mix(in srgb, var(--of-surface-tint) 85%, transparent), transparent 70%);
   filter: blur(24px);
   animation: zen-cloud-drift 17s ease-in-out infinite alternate;
   will-change: transform;
 }
 /* Lift the terminal card off the cloud so it reads as floating. */
 .zen-cloud-backdrop .agent-terminal-surface {
-  box-shadow:
-    0 22px 55px -22px rgba(37, 62, 120, 0.42),
-    0 8px 22px -14px rgba(37, 62, 120, 0.28);
+  box-shadow: var(--of-shadow-overlay), var(--of-shadow-raised);
   transition: box-shadow 0.5s ease;
 }
 
