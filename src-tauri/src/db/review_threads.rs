@@ -280,28 +280,6 @@ impl super::Database {
         Ok(threads)
     }
 
-    pub fn get_review_thread(&self, thread_id: &str) -> ReviewThreadResult<ReviewThreadRow> {
-        let conn = self.lock_conn()?;
-        read_thread(&conn, thread_id)
-    }
-
-    pub fn review_thread_scope(&self, thread_id: &str) -> ReviewThreadResult<ReviewThreadScope> {
-        self.lock_conn()?
-            .query_row(
-                "SELECT namespace, target_key, revision FROM review_threads WHERE id = ?1",
-                [thread_id],
-                |row| {
-                    Ok(ReviewThreadScope {
-                        namespace: row.get(0)?,
-                        target_key: row.get(1)?,
-                        revision: row.get(2)?,
-                    })
-                },
-            )
-            .optional()?
-            .ok_or_else(|| ReviewThreadError::ThreadNotFound(thread_id.to_string()))
-    }
-
     pub fn create_review_thread(
         &self,
         request: &CreateReviewThread,
@@ -721,8 +699,7 @@ mod tests {
 
         assert!(error.to_string().contains("body"), "got: {error}");
         assert_eq!(
-            db.get_review_thread(&thread.id)
-                .expect("get")
+            db.list_review_threads(&scope()).expect("list")[0]
                 .messages
                 .len(),
             1
@@ -763,15 +740,5 @@ mod tests {
             db.list_review_threads(&scope()).expect("list")[0].anchor,
             anchor
         );
-    }
-
-    #[test]
-    fn the_scope_of_a_stored_thread_is_readable_by_identifier() {
-        let (db, _temp) = make_test_db("review_threads_scope_lookup");
-        let thread = db
-            .create_review_thread(&create_request("body"))
-            .expect("create");
-
-        assert_eq!(db.review_thread_scope(&thread.id).expect("scope"), scope());
     }
 }
