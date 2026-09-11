@@ -8,7 +8,7 @@ For Task Creation, prompt editing, Project Setup, and branch-divergence dialogs,
 
 OpenForge Light and OpenForge Dark use the Studio design: neutral surfaces, rounded controls, and restrained shadows. They retain their names and `openforge-light` / `openforge-dark` identifiers, so saved selections and legacy light/dark preferences receive the redesign without migration. The default and unavailable-theme fallback remain OpenForge Light.
 
-Workshop Light and Workshop Dark are additional choices with warm paper or graphite surfaces, amber actions, and crisp corners. There are no separate Studio choices or accepted `studio-light` / `studio-dark` capture IDs. Theme selection does not override the user's terminal font.
+Workshop Light and Workshop Dark are additional choices with warm paper or graphite surfaces, amber actions, and crisp corners. They remain available for interactive Storybook review but are not part of the canonical screenshot matrix. There are no separate Studio choices or accepted `studio-light` / `studio-dark` capture IDs. Theme selection does not override the user's terminal font.
 
 Glass and in-app frosted layers remain deferred. No native transparency or backdrop blur is included.
 
@@ -65,7 +65,7 @@ Handled failures retain timing evidence for work already attempted. Invalid envi
 
 ## Manifest contract
 
-Each entry declares `catalog`, stable Storybook `story` ID, `theme`, integer `viewport.width` and `viewport.height`, a visible Playwright `ready` selector, and `expectedErrors`. Catalogs are limited to `pages` and `components`. Accepted theme IDs are `openforge-light`, `openforge-dark`, `workshop-light`, and `workshop-dark`. Unknown fields and theme IDs fail rather than being ignored.
+Each entry declares `catalog`, stable Storybook `story` ID, `theme`, integer `viewport.width` and `viewport.height`, a visible Playwright `ready` selector, and `expectedErrors`. Catalogs are limited to `pages` and `components`. Accepted theme IDs are `openforge-light` and `openforge-dark`; Workshop themes are intentionally excluded from canonical screenshot testing. Unknown fields and theme IDs fail rather than being ignored.
 
 Images are named `<catalog>/<story>--<theme>--<width>x<height>.png`. Renaming an identity makes the old PNG obsolete; removing a story from the built index fails with that story's identity. Missing images never become approvals during `check`. Unexpected files in the baseline directories fail both modes.
 

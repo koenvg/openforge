@@ -10,6 +10,10 @@ describe('visual manifest contract', () => {
     const names = entries.map(identity)
     expect(names.filter((name, index) => names.indexOf(name) !== index)).toEqual([])
   })
+  it('keeps Workshop themes out of canonical screenshot captures', () => {
+    const entries = JSON.parse(readFileSync(new URL('../../storybook/visual-manifest.json', import.meta.url), 'utf8'))
+    expect(entries.every(entry => !entry.theme.startsWith('workshop-'))).toBe(true)
+  })
   it('accepts the measured two-level Markdown allowance', () => {
     const measured = { ...entry, tolerance: { maxPixels: 10, maxChannelDelta: 2, reason: 'Measured Markdown code-block border variation' } }
     expect(validateManifest([measured], indexes)).toEqual([measured])
@@ -20,7 +24,6 @@ describe('visual manifest contract', () => {
   })
   it.each([
     ['openforge-light', 'light'], ['openforge-dark', 'dark'],
-    ['workshop-light', 'light'], ['workshop-dark', 'dark'],
   ])('accepts %s for deterministic capture', (theme, appearance) => {
     expect(validateManifest([{ ...entry, theme }], indexes)).toEqual([{ ...entry, theme }])
     expect(captureAppearance(theme)).toBe(appearance)
@@ -46,6 +49,7 @@ describe('visual manifest contract', () => {
   it.each([
     [[{ ...entry, catalog: '../escape' }], /catalog/],
     [[{ ...entry, theme: 'unknown' }], /theme/],
+    [[{ ...entry, theme: 'workshop-light' }], /theme/],
     [[{ ...entry, viewport: { width: 0, height: 800 } }], /viewport/],
     [[{ ...entry, ready: '' }], /ready/],
     [[{ ...entry, typo: true }], /unknown/],

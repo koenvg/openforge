@@ -1,28 +1,16 @@
 [
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-light", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-dark", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--menu", "theme": "workshop-light", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--menu", "theme": "workshop-dark", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "openforge-light", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "openforge-dark", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "workshop-light", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "workshop-dark", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "openforge-light", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "openforge-dark", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "workshop-light", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "workshop-dark", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "openforge-light", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "openforge-dark", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "workshop-light", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "workshop-dark", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
   {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "workshop-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "workshop-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "workshop-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "workshop-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--empty","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--empty\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--project-directory","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--project-directory\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--no-commits","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--no-commits\"]","expectedErrors": []},
@@ -55,7 +43,6 @@
   {"catalog": "components","story": "components-prompt-input--empty","theme": "openforge-light","viewport": {"width": 640,"height": 640},"ready": "body[data-creation-ready=\"components-prompt-input--empty\"]","expectedErrors": []},
   {"catalog": "components","story": "components-prompt-input--commands","theme": "openforge-dark","viewport": {"width": 640,"height": 640},"ready": "body[data-creation-ready=\"components-prompt-input--commands\"]","expectedErrors": []},
   {"catalog": "components","story": "components-prompt-input--file-mention","theme": "openforge-light","viewport": {"width": 640,"height": 640},"ready": "body[data-creation-ready=\"components-prompt-input--file-mention\"]","expectedErrors": []},
-  {"catalog": "components","story": "components-prompt-input--long-content","theme": "workshop-dark","viewport": {"width": 640,"height": 640},"ready": "body[data-creation-ready=\"components-prompt-input--long-content\"]","expectedErrors": []},
   {
     "catalog": "pages",
     "story": "pages-focus-board--populated",
@@ -915,33 +902,6 @@
   },
   {
     "catalog": "pages",
-    "story": "application-shell--dialog-with-feedback",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "body:has([role=\"dialog\"]) [role=\"alert\"]",
-    "expectedErrors": [],
-    "tolerance": {
-      "maxPixels": 15,
-      "maxChannelDelta": 1,
-      "reason": "Repeated pinned Linux captures after the Studio redesign differ at 15 antialiased border pixels by at most 1 channel levels. Larger or more widespread changes remain failures."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "application-shell--dialog-with-feedback",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "body:has([role=\"dialog\"]) [role=\"alert\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-task-detail--review",
     "viewport": {
       "width": 1280,
@@ -1051,251 +1011,6 @@
       "maxPixels": 4,
       "maxChannelDelta": 1,
       "reason": "Pinned Linux CI differs from the approved dark Markdown baseline at four antialiased pixels by one channel level. Larger or stronger changes remain failures."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-focus-board--populated",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": [],
-    "tolerance": {
-      "maxPixels": 12,
-      "maxChannelDelta": 1,
-      "reason": "Repeated pinned Linux captures after the Studio redesign differ at 12 antialiased border pixels by one channel level. Larger or more widespread changes remain failures."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "application-shell--narrow",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 900,
-      "height": 900
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-actions--default",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 800,
-      "height": 500
-    },
-    "ready": "[data-testid=sdk-actions]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-fields--validation",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 800,
-      "height": 750
-    },
-    "ready": "text=Instructions are required.",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-navigation--selected",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 640,
-      "height": 400
-    },
-    "ready": "button[aria-current=page]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-host-controls-context-menu--open",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 480,
-      "height": 320
-    },
-    "ready": "[role=\"menu\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-terminal--ready",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-terminal-ready=true]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-detail--review",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=greet.ts",
-    "expectedErrors": [],
-    "theme": "workshop-light"
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-detail--active",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-task-terminal-ready=true]",
-    "expectedErrors": [],
-    "theme": "workshop-light"
-  },
-  {
-    "catalog": "components",
-    "story": "components-host-controls-markdown--formatted",
-    "viewport": {
-      "width": 800,
-      "height": 900
-    },
-    "ready": ".markdown-body h1",
-    "expectedErrors": [],
-    "theme": "workshop-light",
-    "tolerance": {
-      "maxPixels": 15,
-      "maxChannelDelta": 1,
-      "reason": "Repeated pinned Linux captures after the Studio redesign differ at 15 antialiased border pixels by one channel level. Larger or more widespread changes remain failures."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-focus-board--populated",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": [],
-    "tolerance": {
-      "maxPixels": 17,
-      "maxChannelDelta": 1,
-      "reason": "Repeated pinned Linux captures of the unchanged Workshop palette differ at 17 antialiased border pixels by one channel level. Larger or more widespread changes remain failures."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "application-shell--narrow",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 900,
-      "height": 900
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-actions--default",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 800,
-      "height": 500
-    },
-    "ready": "[data-testid=sdk-actions]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-fields--validation",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 800,
-      "height": 750
-    },
-    "ready": "text=Instructions are required.",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-navigation--selected",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 640,
-      "height": 400
-    },
-    "ready": "button[aria-current=page]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-host-controls-context-menu--open",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 320
-    },
-    "ready": "[role=\"menu\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-terminal--ready",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-terminal-ready=true]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-detail--review",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=greet.ts",
-    "expectedErrors": [],
-    "theme": "workshop-dark",
-    "tolerance": {
-      "maxPixels": 36,
-      "maxChannelDelta": 1,
-      "reason": "Consecutive pinned Linux captures differ at 36 antialiased review-control border pixels by one channel level. This owner-approved measured allowance rejects larger or more widespread changes."
-    }
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-detail--active",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-task-terminal-ready=true]",
-    "expectedErrors": [],
-    "theme": "workshop-dark"
-  },
-  {
-    "catalog": "components",
-    "story": "components-host-controls-markdown--formatted",
-    "viewport": {
-      "width": 800,
-      "height": 900
-    },
-    "ready": ".markdown-body h1",
-    "expectedErrors": [],
-    "theme": "workshop-dark",
-    "tolerance": {
-      "maxPixels": 11,
-      "maxChannelDelta": 1,
-      "reason": "Consecutive pinned Linux captures after the Studio redesign differ at 11 antialiased border pixels by one channel level. Larger or more widespread changes remain failures."
     }
   },
   {
@@ -5045,28 +4760,6 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-task-schedules--populated",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1440,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--populated\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-schedules--populated",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1440,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--populated\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-task-schedules--empty",
     "theme": "openforge-light",
     "viewport": {
@@ -5089,28 +4782,6 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-task-schedules--failure",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--failure\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-schedules--no-project",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--no-project\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-task-schedules--narrow",
     "theme": "openforge-light",
     "viewport": {
@@ -5129,17 +4800,6 @@
       "height": 900
     },
     "ready": "[data-schedule-ready=\"pages-task-schedules--long-content\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-task-schedules--details",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1440,
-      "height": 1000
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--details\"]",
     "expectedErrors": []
   },
   {
@@ -5177,17 +4837,6 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-task-schedules--discard",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"pages-task-schedules--discard\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-task-schedules--delete-confirmation",
     "theme": "openforge-dark",
     "viewport": {
@@ -5210,17 +4859,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-schedules--list-narrow",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 650
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--list-narrow\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-schedules--inspector",
     "theme": "openforge-light",
     "viewport": {
@@ -5228,17 +4866,6 @@
       "height": 800
     },
     "ready": "[data-schedule-ready=\"components-task-schedules--inspector\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-schedules--inspector-paused",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 480,
-      "height": 800
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--inspector-paused\"]",
     "expectedErrors": []
   },
   {
@@ -5254,17 +4881,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-schedules--inspector-cancelled",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 800
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--inspector-cancelled\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-schedules--inspector-history",
     "theme": "openforge-dark",
     "viewport": {
@@ -5276,17 +4892,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-schedules--inspector-long",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 380,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--inspector-long\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-schedules--inspector-running",
     "theme": "openforge-light",
     "viewport": {
@@ -5294,28 +4899,6 @@
       "height": 900
     },
     "ready": "[data-schedule-ready=\"components-task-schedules--inspector-running\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-schedules--inspector-success",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--inspector-success\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-schedules--inspector-warning",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--inspector-warning\"]",
     "expectedErrors": []
   },
   {
@@ -5353,28 +4936,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-schedules--composer-monthly",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--composer-monthly\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-schedules--composer-custom",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--composer-custom\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-schedules--composer-one-off",
     "theme": "openforge-light",
     "viewport": {
@@ -5397,17 +4958,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-schedules--composer-cron-validation",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--composer-cron-validation\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-schedules--composer-date-validation",
     "theme": "openforge-dark",
     "viewport": {
@@ -5415,17 +4965,6 @@
       "height": 900
     },
     "ready": "[data-schedule-ready=\"components-task-schedules--composer-date-validation\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-schedules--composer-saving",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 480,
-      "height": 900
-    },
-    "ready": "[data-schedule-ready=\"components-task-schedules--composer-saving\"]",
     "expectedErrors": []
   },
   {
@@ -5439,5 +4978,4 @@
     "ready": "[data-schedule-ready=\"components-task-schedules--deleting-dialog\"]",
     "expectedErrors": []
   }
-
 ]
