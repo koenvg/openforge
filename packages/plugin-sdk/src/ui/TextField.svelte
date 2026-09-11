@@ -7,7 +7,7 @@
     /** Keep the accessible name when the caller renders the visible caption. */
     hideLabel?: boolean
     labelHidden?: boolean
-    size?: 'sm' | 'md'
+    size?: 'sm' | 'md' | 'lg'
     leading?: Snippet
     trailing?: Snippet
     value?: string
@@ -148,6 +148,15 @@
 
   .of-text-field[data-size='sm'] input {
     min-height: calc(var(--of-control-height-compact) - 2 * var(--of-border-width));
+  }
+
+  .of-text-field[data-size='lg'] .of-field-control {
+    padding-inline: var(--of-space4);
+    font-size: var(--of-text-lg);
+  }
+
+  .of-text-field[data-size='lg'] input {
+    min-height: calc(var(--of-control-height-touch) - 2 * var(--of-border-width));
   }
 
   .of-field-adornment {

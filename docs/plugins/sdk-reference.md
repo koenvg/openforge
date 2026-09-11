@@ -693,7 +693,7 @@ Import `TextField` from `@openforge-app/plugin-sdk/ui/TextField.svelte`. By defa
 | `label` | `string`, required | Input label and accessible name, including when visually hidden. |
 | `labelHidden` | `boolean`, default `false` | Visually hides the label without removing its input association or accessible name. |
 | `hideLabel` | `boolean`, default `false` | Omits the label when the caller renders the caption and names the input through `aria-label`. Takes precedence over `labelHidden` when both are set. |
-| `size` | `'sm' \| 'md'`, default `'md'` | Compact toolbar height or the standard form height, using host control tokens. Not the native input's character-width attribute. |
+| `size` | `'sm' \| 'md' \| 'lg'`, default `'md'` | Compact toolbar, standard form, or touch-sized form height, using host control tokens. Not the native input's character-width attribute. |
 | `leading`, `trailing` | `Snippet`, optional | Caller-owned content before or after the input, inside the field border. |
 | `value` | `string`, bindable, default `''` | Native input value. |
 | `helperText` | `string` | Help text linked through `aria-describedby`. |
@@ -913,10 +913,14 @@ Every modal needs exactly one non-empty accessible-name prop. Use `ariaLabelledb
       <h2 id="repository-dialog-title" class="text-lg font-semibold">Repository settings</h2>
     {/snippet}
 
-    <form class="space-y-4 p-5">
+    <form id="repository-settings-form" class="space-y-4 p-5">
       <label for="repository-name">Repository name</label>
       <input id="repository-name" class="input" />
     </form>
+
+    {#snippet footer()}
+      <button type="submit" form="repository-settings-form">Save changes</button>
+    {/snippet}
   </Modal>
 {/if}
 ```
@@ -927,9 +931,11 @@ Every modal needs exactly one non-empty accessible-name prop. Use `ariaLabelledb
 | `onClose` | `() => void`, required | Called by enabled Escape, backdrop, and header close-button dismissal. The caller unmounts the modal. |
 | `children` | `Snippet`, required | Dialog body. |
 | `header` | `Snippet` | Header content rendered before the built-in close button. |
+| `footer` | `Snippet` | Optional action area rendered after the dialog body with token-driven separation and spacing. |
 | `maxWidth` | `string`, default `'500px'` | CSS maximum width for the modal box. |
 | `overflowVisible` | `boolean`, default `false` | Allows content to extend outside the modal box. |
 | `initialFocus` | `HTMLElement \| string \| (() => HTMLElement \| null \| undefined) \| null` | Initial focus target. A selector is scoped to the dialog. The dialog itself receives focus by default. |
+| `ariaDescribedby` | `string` | Optional space-separated ids for visible dialog description content. |
 | `showHeader` | `boolean`, default `true` | Controls the entire header row, including the built-in close button. |
 | `closeLabel` | `string`, default `'Close dialog'` | Accessible name of the built-in close button. |
 | `closeDisabled` | `boolean`, default `false` | Disables Escape, backdrop, and close-button dismissal. |
@@ -938,7 +944,7 @@ Every modal needs exactly one non-empty accessible-name prop. Use `ariaLabelledb
 | `modalClass` | `string`, default `''` | Additional class on the overlay/dialog element. |
 | `boxClass` | `string`, default `''` | Additional class on the modal box. |
 
-`Modal` renders `role="dialog"` with `aria-modal="true"`. It traps Tab focus, supports caller-selected initial focus, and restores focus to the previously focused element when the caller closes it. Escape, backdrop clicks, and the close button call `onClose` unless `closeDisabled` is true.
+`Modal` renders `role="dialog"` with `aria-modal="true"`. It traps Tab focus, supports caller-selected initial focus, and restores focus to the previously focused element when the caller closes it. Escape, backdrop clicks, and the close button call `onClose` unless `closeDisabled` is true. Use `ariaDescribedby` when the dialog has visible supporting text, and use `footer` for a structured action area such as the primary and secondary controls in a form modal.
 
 In tests, query `getByRole('dialog', { name: 'Repository settings' })`. Assert initial focus, Tab wrapping, each enabled dismissal path, `closeDisabled`, and focus restoration when those behaviors matter. Do not make `testId` or modal classes the primary contract.
 

@@ -18,14 +18,16 @@
     closeLabel?: string
     closeDisabled?: boolean
     onKeydown?: (event: KeyboardEvent) => boolean | void
+    ariaDescribedby?: string
     testId?: string
     modalClass?: string
     boxClass?: string
     header?: Snippet
+    footer?: Snippet
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props & ModalAccessibleName = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, ariaDescribedby, testId, modalClass = '', boxClass = '', header, footer, children }: Props & ModalAccessibleName = $props()
   let modalElement: HTMLDivElement | null = $state(null)
 
   let accessibleNameAttributes = $derived.by(() => {
@@ -119,6 +121,7 @@
       data-testid={testId}
       aria-label={accessibleNameAttributes.ariaLabel}
       aria-labelledby={accessibleNameAttributes.ariaLabelledby}
+      aria-describedby={ariaDescribedby}
       escapeKeydownBehavior={closeDisabled ? 'ignore' : 'close'}
       interactOutsideBehavior="ignore"
       onOpenAutoFocus={focusInitialTarget}
@@ -149,6 +152,9 @@
           </div>
         {/if}
         {@render children()}
+        {#if footer}
+          <div class="of-modal-footer" role="group" aria-label="Dialog actions">{@render footer()}</div>
+        {/if}
       </div>
     </Dialog.Content>
   </Dialog.Portal>
@@ -194,11 +200,23 @@
 
   .of-modal-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    min-height: var(--of-control-height);
-    padding: var(--of-space3) var(--of-space4);
+    gap: var(--of-space4);
+    min-height: var(--of-control-height-touch);
+    padding: var(--of-space5) var(--of-space6);
     border-bottom: var(--of-border-width) solid var(--of-border);
+  }
+
+  .of-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--of-space3);
+    padding: var(--of-space4) var(--of-space6);
+    border-top: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface-raised);
   }
 
   :global(.of-modal-close) {

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { describe, expect, it, vi } from 'vitest'
+import ModalFooterTestWrapper from './ModalFooterTestWrapper.svelte'
 import ModalTestWrapper from './ModalTestWrapper.svelte'
 
 describe('plugin-sdk Modal', () => {
@@ -44,6 +45,23 @@ describe('plugin-sdk Modal', () => {
     await fireEvent.click(closeButton)
 
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders an optional action footer after the dialog content', () => {
+    render(ModalFooterTestWrapper, { props: { onClose: vi.fn() } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Plugin dialog' })
+    const footer = screen.getByRole('group', { name: 'Dialog actions' })
+
+    expect(dialog.contains(footer)).toBe(true)
+    expect(footer.textContent).toContain('Save changes')
+  })
+
+  it('forwards an accessible description reference to the dialog', () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), describedBy: 'plugin-dialog-description' } })
+
+    expect(screen.getByRole('dialog', { name: 'Plugin dialog' }).getAttribute('aria-describedby'))
+      .toBe('plugin-dialog-description')
   })
 
   it.each([

@@ -31,6 +31,17 @@ describe('plugin-sdk TextField', () => {
     expect(input.hasAttribute('size')).toBe(false)
   })
 
+  it('supports a touch-sized field for prominent form inputs without forwarding the size prop', () => {
+    render(TextField, {
+      props: { label: 'Content URL', size: 'lg', type: 'url', placeholder: 'https://example.com' },
+    })
+
+    const input = screen.getByRole('textbox', { name: 'Content URL' }) as HTMLInputElement
+    expect(input.type).toBe('url')
+    expect(input.hasAttribute('size')).toBe(false)
+    expect(input.closest('[data-size="lg"]')).toBeTruthy()
+  })
+
   it('preserves caller-owned captions when compact and hidden-label props are combined', () => {
     render(TextField, {
       props: {
