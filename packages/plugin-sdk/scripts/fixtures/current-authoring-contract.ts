@@ -135,6 +135,7 @@ const createReviewThreadRequest = {
   anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'RIGHT' },
   origin: 'plugin',
   body: 'Needs a null check',
+  idempotencyKey: 'review-1',
 } satisfies CreateReviewThreadRequest
 const reviewThreads = null as unknown as ReviewThreadsAPI
 const createdReviewThread: Promise<ReviewThread> = reviewThreads.create(createReviewThreadRequest)

@@ -166,6 +166,32 @@ async fn a_write_notifies_that_scope_only_and_carries_no_thread_snapshot() {
 }
 
 #[tokio::test]
+async fn a_repeated_idempotency_key_returns_the_stored_thread_and_publishes_nothing() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_idempotent");
+    let mut payload = create_payload();
+    payload["idempotencyKey"] = json!("review-1");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    let created = invoke_ok(&state, "create_review_thread", payload.clone()).await;
+    events.try_recv().expect("the first create must publish");
+
+    let repeated = invoke_ok(&state, "create_review_thread", payload).await;
+
+    assert_eq!(repeated["id"], created["id"]);
+    assert_eq!(repeated["idempotencyKey"], "review-1");
+    assert!(
+        events.try_recv().is_err(),
+        "a repeat stores nothing, so there is nothing to re-list"
+    );
+    let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;
+    assert_eq!(listed.as_array().expect("list").len(), 1);
+}
+
+#[tokio::test]
 async fn a_rejected_write_publishes_no_notification() {
     let (state, _temp_dir) = test_state("app_invoke_review_threads_no_event");
     let mut events = state

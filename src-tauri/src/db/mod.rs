@@ -57,6 +57,7 @@ pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use review_threads::{
     CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadScope,
+    ReviewThreadWrite,
 };
 #[cfg(test)]
 pub use task_creation::TaskWorktreeOptions;

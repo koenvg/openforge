@@ -1,5 +1,8 @@
 use super::*;
-use crate::db::{CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadScope};
+use crate::db::{
+    CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadScope,
+    ReviewThreadWrite,
+};
 
 fn review_thread_error(error: ReviewThreadError) -> (StatusCode, String) {
     let status = match error {
@@ -51,10 +54,16 @@ pub(super) async fn handle_app_review_threads_command(
                         format!("Invalid create_review_thread payload: {error}"),
                     )
                 })?;
-            let thread = db::acquire_db(&state.db)
+            let write = db::acquire_db(&state.db)
                 .create_review_thread(&create)
                 .map_err(review_thread_error)?;
-            publish_review_threads_changed(state, &create.scope);
+            let thread = match write {
+                ReviewThreadWrite::Created(thread) => {
+                    publish_review_threads_changed(state, &create.scope);
+                    thread
+                }
+                ReviewThreadWrite::Deduplicated(thread) => thread,
+            };
             json_value(thread)?
         }
         "reply_to_review_thread" => {

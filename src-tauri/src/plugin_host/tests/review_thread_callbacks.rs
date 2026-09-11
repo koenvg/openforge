@@ -78,6 +78,30 @@ async fn every_enabled_plugin_reaches_the_same_review_thread_store() {
 }
 
 #[tokio::test]
+async fn a_plugin_repeating_an_idempotency_key_gets_the_thread_it_created_first() {
+    let (host, _temp_dir) = build_host();
+    let mut params = create_params("com.example.reviewer");
+    params["idempotencyKey"] = json!("review-1");
+
+    let created = host
+        .handle_host_callback("openforge.reviewThreads.create", &params)
+        .await
+        .expect("create");
+    let repeated = host
+        .handle_host_callback("openforge.reviewThreads.create", &params)
+        .await
+        .expect("repeat");
+
+    assert_eq!(repeated["id"], created["id"]);
+    assert_eq!(repeated["idempotencyKey"], "review-1");
+    let listed = host
+        .handle_host_callback("openforge.reviewThreads.list", &scope_params())
+        .await
+        .expect("list");
+    assert_eq!(listed.as_array().expect("list").len(), 1);
+}
+
+#[tokio::test]
 async fn a_structurally_invalid_create_is_rejected_naming_the_field() {
     let (host, _temp_dir) = build_host();
     let mut params = create_params("com.example.reviewer");

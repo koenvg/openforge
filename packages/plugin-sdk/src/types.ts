@@ -951,6 +951,11 @@ export interface CreateReviewThreadRequest extends ReviewThreadScope {
   /** First message of the thread. Must not be blank. */
   body: string
   runId?: string | null
+  /**
+   * Caller-owned retry key, scoped to the namespace, target key, and revision.
+   * Every plugin writing that scope shares one key space.
+   */
+  idempotencyKey?: string | null
 }
 
 export interface ReplyToReviewThreadRequest {
@@ -971,6 +976,8 @@ export interface ReviewThreadOperationsAPI {
   /**
    * Creates a thread with its first message. Rejects with a message naming the
    * offending field when a structural invariant fails, and stores nothing.
+   * Repeating an `idempotencyKey` returns the stored thread without creating a
+   * second one, so a retry after an unclear response is safe.
    */
   create(request: CreateReviewThreadRequest): Promise<ReviewThread>
   /** Appends a message to an existing thread. Rejects an unknown thread ID. */

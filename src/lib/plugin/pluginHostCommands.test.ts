@@ -233,6 +233,7 @@ describe('plugin host commands', () => {
       origin: 'plugin',
       body: 'Needs a null check',
       runId: undefined,
+      idempotencyKey: undefined,
     })
     expect(invoke).toHaveBeenNthCalledWith(3, 'reply_to_review_thread', {
       threadId: 'rt_1',
