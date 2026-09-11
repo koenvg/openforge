@@ -86,25 +86,49 @@ function createFrontendRuntimeRegistryForPlugin(
   })
 }
 
+async function publishActiveRuntimeRegistry(
+  pluginId: string,
+  runtimeRegistry: RuntimeContributionRegistryInstance,
+): Promise<void> {
+  activeRuntimeRegistries.set(pluginId, runtimeRegistry)
+  try {
+    await applyRuntimeSnapshotContributions(pluginId, runtimeRegistry.getSnapshot())
+  } finally {
+    // A teardown that ran while the snapshot was being applied already released the slot,
+    // so this activation's contributions would outlive their runtime.
+    if (activeRuntimeRegistries.get(pluginId) !== runtimeRegistry) {
+      clearPluginRuntimeContributions(pluginId)
+    }
+  }
+}
+
+function releaseActiveRuntimeRegistry(
+  pluginId: string,
+  runtimeRegistry: RuntimeContributionRegistryInstance,
+): void {
+  clearPluginRuntimeContributions(pluginId)
+  if (activeRuntimeRegistries.get(pluginId) === runtimeRegistry) {
+    activeRuntimeRegistries.delete(pluginId)
+  }
+}
+
 async function discardFrontendRuntimeActivation(
   pluginId: string,
   runtimeRegistry: RuntimeContributionRegistryInstance,
 ): Promise<void> {
   let cleanupError: unknown = null
+  releaseActiveRuntimeRegistry(pluginId, runtimeRegistry)
   try {
     await runtimeRegistry.deactivate()
   } catch (error) {
     cleanupError = error
   }
 
-  activeRuntimeRegistries.delete(pluginId)
   clearPluginRuntimeHostState(pluginId)
   try {
     await stopPluginBackgroundServices(pluginId)
   } catch (error) {
     cleanupError ??= error
-  } finally {
-    clearPluginRuntimeContributions(pluginId)
   }
 
   if (cleanupError !== null) {
@@ -131,7 +155,7 @@ async function activateFrontendRuntimePlugin(
       setPluginRuntimeState(pluginId, 'installed', null)
       return false
     }
-    await applyRuntimeSnapshotContributions(pluginId, runtimeRegistry.getSnapshot())
+    await publishActiveRuntimeRegistry(pluginId, runtimeRegistry)
     if ((pluginFrontendReloadGenerations.get(pluginId) ?? 0) !== activationGeneration) {
       await discardFrontendRuntimeActivation(pluginId, runtimeRegistry)
       setPluginRuntimeState(pluginId, 'installed', null)
@@ -149,7 +173,6 @@ async function activateFrontendRuntimePlugin(
       setPluginRuntimeState(pluginId, 'installed', null)
       return false
     }
-    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
     setPluginRuntimeState(pluginId, 'active', null)
     return true
   } catch (error) {
@@ -268,7 +291,7 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
     try {
       await runtimeRegistry.deactivate()
     } finally {
-      activeRuntimeRegistries.delete(pluginId)
+      releaseActiveRuntimeRegistry(pluginId, runtimeRegistry)
       clearPluginRuntimeHostState(pluginId)
       clearLoadedPlugin(pluginId)
     }
