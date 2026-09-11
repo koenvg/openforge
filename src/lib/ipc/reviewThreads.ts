@@ -23,6 +23,7 @@ export async function createReviewThread(request: CreateReviewThreadRequest): Pr
     origin: request.origin,
     body: request.body,
     runId: request.runId,
+    idempotencyKey: request.idempotencyKey,
   })
 }
 

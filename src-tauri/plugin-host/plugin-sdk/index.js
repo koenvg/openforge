@@ -1749,7 +1749,11 @@ var TestingCommonApiFake = class {
 		assertReviewThreadScope(request);
 		assertReviewThreadAnchor(request.anchor);
 		assertReviewThreadField(request.body?.trim().length > 0, "body", "must not be empty");
+		const idempotencyKey = request.idempotencyKey ?? null;
+		if (idempotencyKey !== null) assertReviewThreadField(idempotencyKey.trim().length > 0, "idempotencyKey", "must not be empty");
 		assertReviewThreadField(REVIEW_THREAD_ORIGINS.has(request.origin), "origin", "must be agent, human, or plugin");
+		const stored = idempotencyKey === null ? void 0 : this.reviewThreads.find((candidate) => candidate.idempotencyKey === idempotencyKey && candidate.namespace === request.namespace && candidate.targetKey === request.targetKey && candidate.revision === request.revision);
+		if (stored) return cloneReviewThread(stored);
 		this.reviewThreadSequence += 1;
 		const createdAt = this.reviewThreadSequence;
 		const thread = {
@@ -1762,7 +1766,7 @@ var TestingCommonApiFake = class {
 			anchor: { ...request.anchor },
 			status: "open",
 			awaiting: "none",
-			idempotencyKey: null,
+			idempotencyKey,
 			seenAt: null,
 			createdAt,
 			updatedAt: createdAt,

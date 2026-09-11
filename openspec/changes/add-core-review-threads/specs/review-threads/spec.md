@@ -86,6 +86,10 @@ A create request MAY carry an idempotency key scoped to its namespace, target ke
 - **WHEN** a caller creates a thread and supplies no idempotency key
 - **THEN** the host creates a thread and does not deduplicate the request
 
+#### Scenario: Repeat of a stored key notifies nobody
+- **WHEN** a create repeats a key already stored for that triple
+- **THEN** the host publishes no change notification, because the repeat stored nothing for subscribers to re-list
+
 ### Requirement: Anchors are validated at write time and rejected with a reason
 The host SHALL reject a create request whose anchor violates a structural invariant, including an empty file path, a line number below one, or a side that is neither the pre-image nor the post-image. A rejection SHALL carry a message naming the invalid field so the caller can correct and retry. The host MUST NOT silently drop an invalid thread.
 

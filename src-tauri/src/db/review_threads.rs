@@ -63,6 +63,23 @@ pub struct CreateReviewThread {
     pub body: String,
     #[serde(default)]
     pub run_id: Option<String>,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum ReviewThreadWrite {
+    Created(ReviewThreadRow),
+    Deduplicated(ReviewThreadRow),
+}
+
+#[cfg(test)]
+impl ReviewThreadWrite {
+    fn into_thread(self) -> ReviewThreadRow {
+        match self {
+            Self::Created(thread) | Self::Deduplicated(thread) => thread,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,6 +150,13 @@ fn validate_anchor(anchor: &ReviewThreadAnchor) -> ReviewThreadResult<()> {
             Ok(())
         }
     }
+}
+
+fn validate_idempotency_key(key: Option<&str>) -> ReviewThreadResult<()> {
+    if key.is_some_and(|key| key.trim().is_empty()) {
+        return Err(invalid("idempotencyKey", "must not be empty"));
+    }
+    Ok(())
 }
 
 fn validate_body(body: &str) -> ReviewThreadResult<()> {
@@ -222,6 +246,28 @@ fn read_thread(conn: &Connection, thread_id: &str) -> ReviewThreadResult<ReviewT
     Ok(thread)
 }
 
+fn stored_thread_id_for_key(
+    tx: &rusqlite::Transaction<'_>,
+    request: &CreateReviewThread,
+) -> SqlResult<Option<String>> {
+    let Some(key) = request.idempotency_key.as_deref() else {
+        return Ok(None);
+    };
+    tx.query_row(
+        "SELECT id
+           FROM review_threads
+          WHERE namespace = ?1 AND target_key = ?2 AND revision = ?3 AND idempotency_key = ?4",
+        rusqlite::params![
+            &request.scope.namespace,
+            &request.scope.target_key,
+            &request.scope.revision,
+            key
+        ],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
 fn insert_message(
     tx: &rusqlite::Transaction<'_>,
     thread_id: &str,
@@ -283,12 +329,19 @@ impl super::Database {
     pub fn create_review_thread(
         &self,
         request: &CreateReviewThread,
-    ) -> ReviewThreadResult<ReviewThreadRow> {
+    ) -> ReviewThreadResult<ReviewThreadWrite> {
         validate_scope(&request.scope)?;
         validate_anchor(&request.anchor)?;
         validate_body(&request.body)?;
+        validate_idempotency_key(request.idempotency_key.as_deref())?;
         if !ORIGINS.contains(&request.origin.as_str()) {
             return Err(invalid("origin", "must be agent, human, or plugin"));
+        }
+
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        if let Some(stored) = stored_thread_id_for_key(&tx, request)? {
+            return Ok(ReviewThreadWrite::Deduplicated(read_thread(&tx, &stored)?));
         }
 
         let now = super::current_unix_timestamp()?;
@@ -312,14 +365,11 @@ impl super::Database {
             ),
             ReviewThreadAnchor::Custom { key } => ("custom", None, None, None, Some(key.as_str())),
         };
-
-        let mut conn = self.lock_conn()?;
-        let tx = conn.transaction()?;
         tx.execute(
             "INSERT INTO review_threads (
                 id, namespace, target_key, revision, run_id, origin, anchor_kind,
-                file_path, line, side, anchor_key, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
+                file_path, line, side, anchor_key, idempotency_key, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)",
             rusqlite::params![
                 &thread_id,
                 &request.scope.namespace,
@@ -332,13 +382,14 @@ impl super::Database {
                 line,
                 side,
                 anchor_key,
+                &request.idempotency_key,
                 now,
             ],
         )?;
         insert_message(&tx, &thread_id, author_role, &request.body, now, 0)?;
         tx.commit()?;
 
-        read_thread(&conn, &thread_id)
+        Ok(ReviewThreadWrite::Created(read_thread(&conn, &thread_id)?))
     }
 
     pub fn reply_to_review_thread(
@@ -414,6 +465,14 @@ mod tests {
             origin: "agent".to_string(),
             body: body.to_string(),
             run_id: None,
+            idempotency_key: None,
+        }
+    }
+
+    fn keyed_request(body: &str, key: &str) -> CreateReviewThread {
+        CreateReviewThread {
+            idempotency_key: Some(key.to_string()),
+            ..create_request(body)
         }
     }
 
@@ -423,7 +482,8 @@ mod tests {
 
         let thread = db
             .create_review_thread(&create_request("Missing null check"))
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         assert_eq!(thread.anchor, line_anchor());
         assert_eq!(thread.origin, "agent");
@@ -439,7 +499,8 @@ mod tests {
         let (db, _temp) = make_test_db("review_threads_reply");
         let thread = db
             .create_review_thread(&create_request("Missing null check"))
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         let replied = db
             .reply_to_review_thread(&ReplyToReviewThread {
@@ -466,7 +527,8 @@ mod tests {
         let (db, _temp) = make_test_db("review_threads_reply_order");
         let thread = db
             .create_review_thread(&create_request("first"))
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         for body in ["second", "third", "fourth"] {
             db.reply_to_review_thread(&ReplyToReviewThread {
@@ -550,7 +612,8 @@ mod tests {
                 scope: unknown.clone(),
                 ..create_request("still stored")
             })
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         assert_eq!(thread.target_key, "nothing-references-this");
         assert_eq!(db.list_review_threads(&unknown).expect("list").len(), 1);
@@ -596,6 +659,11 @@ mod tests {
                 "side",
             ),
             ("empty body", create_request("   "), "body"),
+            (
+                "blank idempotency key",
+                keyed_request("body", "  "),
+                "idempotencyKey",
+            ),
             (
                 "unsupported origin",
                 CreateReviewThread {
@@ -661,7 +729,8 @@ mod tests {
                 anchor: far_anchor.clone(),
                 ..create_request("orphan")
             })
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         assert_eq!(thread.anchor, far_anchor);
     }
@@ -687,7 +756,8 @@ mod tests {
         let (db, _temp) = make_test_db("review_threads_empty_reply");
         let thread = db
             .create_review_thread(&create_request("first"))
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         let error = db
             .reply_to_review_thread(&ReplyToReviewThread {
@@ -715,7 +785,8 @@ mod tests {
                 origin: "human".to_string(),
                 ..create_request("What does this do?")
             })
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         assert_eq!(thread.origin, "human");
         assert_eq!(thread.messages[0].role, "human");
@@ -733,12 +804,161 @@ mod tests {
                 anchor: anchor.clone(),
                 ..create_request("General remark")
             })
-            .expect("create");
+            .expect("create")
+            .into_thread();
 
         assert_eq!(thread.anchor, anchor);
         assert_eq!(
             db.list_review_threads(&scope()).expect("list")[0].anchor,
             anchor
         );
+    }
+
+    #[test]
+    fn repeating_a_key_on_one_target_returns_the_thread_created_first() {
+        let (db, _temp) = make_test_db("review_threads_repeated_key");
+        let first = db
+            .create_review_thread(&keyed_request("Missing null check", "review-1"))
+            .expect("create");
+
+        let repeated = db
+            .create_review_thread(&keyed_request("Missing null check", "review-1"))
+            .expect("repeat");
+
+        assert!(matches!(first, ReviewThreadWrite::Created(_)));
+        assert!(matches!(repeated, ReviewThreadWrite::Deduplicated(_)));
+        let first = first.into_thread();
+        let repeated = repeated.into_thread();
+        assert_eq!(repeated.id, first.id);
+        assert_eq!(repeated.idempotency_key.as_deref(), Some("review-1"));
+        let listed = db.list_review_threads(&scope()).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].messages.len(), 1);
+    }
+
+    #[test]
+    fn a_repeat_that_changes_its_body_still_returns_the_stored_thread() {
+        let (db, _temp) = make_test_db("review_threads_repeated_key_new_body");
+        let first = db
+            .create_review_thread(&keyed_request("Missing null check", "review-1"))
+            .expect("create")
+            .into_thread();
+
+        let repeated = db
+            .create_review_thread(&keyed_request("Rewritten comment", "review-1"))
+            .expect("repeat")
+            .into_thread();
+
+        assert_eq!(repeated.id, first.id);
+        assert_eq!(repeated.messages[0].body, "Missing null check");
+        assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn the_same_key_under_another_revision_creates_a_separate_thread() {
+        let (db, _temp) = make_test_db("review_threads_key_per_revision");
+        let forced_push = ReviewThreadScope {
+            revision: "sha-2".to_string(),
+            ..scope()
+        };
+        let first = db
+            .create_review_thread(&keyed_request("Missing null check", "review-1"))
+            .expect("create")
+            .into_thread();
+
+        let after_force_push = db
+            .create_review_thread(&CreateReviewThread {
+                scope: forced_push.clone(),
+                ..keyed_request("Missing null check", "review-1")
+            })
+            .expect("create")
+            .into_thread();
+
+        assert_ne!(after_force_push.id, first.id);
+        assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 1);
+        assert_eq!(db.list_review_threads(&forced_push).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn the_same_key_under_another_namespace_or_target_key_creates_a_separate_thread() {
+        let (db, _temp) = make_test_db("review_threads_key_per_target");
+        let first = db
+            .create_review_thread(&keyed_request("Missing null check", "review-1"))
+            .expect("create")
+            .into_thread();
+
+        for other in [
+            ReviewThreadScope {
+                namespace: "task".to_string(),
+                ..scope()
+            },
+            ReviewThreadScope {
+                target_key: "gh:acme/web#9".to_string(),
+                ..scope()
+            },
+        ] {
+            let separate = db
+                .create_review_thread(&CreateReviewThread {
+                    scope: other.clone(),
+                    ..keyed_request("Missing null check", "review-1")
+                })
+                .expect("create")
+                .into_thread();
+
+            assert_ne!(separate.id, first.id);
+            assert_eq!(db.list_review_threads(&other).expect("list").len(), 1);
+        }
+
+        assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 1);
+    }
+
+    #[test]
+    fn creates_without_a_key_are_not_deduplicated() {
+        let (db, _temp) = make_test_db("review_threads_unkeyed");
+
+        for _ in 0..2 {
+            let write = db
+                .create_review_thread(&create_request("Missing null check"))
+                .expect("create");
+            assert!(matches!(write, ReviewThreadWrite::Created(_)));
+            assert_eq!(write.into_thread().idempotency_key, None);
+        }
+
+        assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 2);
+    }
+
+    #[test]
+    fn concurrent_retries_of_one_key_store_a_single_thread() {
+        let (db, _temp) = make_test_db("review_threads_concurrent_retry");
+        let db = std::sync::Arc::new(db);
+
+        let writes = std::thread::scope(|spawner| {
+            let handles = (0..8)
+                .map(|_| {
+                    let db = std::sync::Arc::clone(&db);
+                    spawner.spawn(move || {
+                        db.create_review_thread(&keyed_request("Missing null check", "review-1"))
+                            .expect("create")
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("retry thread"))
+                .collect::<Vec<_>>()
+        });
+
+        let created = writes
+            .iter()
+            .filter(|write| matches!(write, ReviewThreadWrite::Created(_)))
+            .count();
+        let ids = writes
+            .into_iter()
+            .map(|write| write.into_thread().id)
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(created, 1, "only one retry may store a thread");
+        assert_eq!(ids.len(), 1, "every retry must report the same thread");
+        assert_eq!(db.list_review_threads(&scope()).expect("list").len(), 1);
     }
 }

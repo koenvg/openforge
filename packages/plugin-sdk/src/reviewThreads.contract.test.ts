@@ -63,11 +63,62 @@ describe('Review Threads public SDK contract', () => {
     [{ ...request, anchor: { kind: 'line', filePath: 'src/main.ts', line: 0, side: 'RIGHT' } }, "'line' must be at least 1"],
     [{ ...request, anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'MIDDLE' } }, "'side' must be LEFT or RIGHT"],
     [{ ...request, body: '   ' }, "'body' must not be empty"],
+    [{ ...request, idempotencyKey: '  ' }, "'idempotencyKey' must not be empty"],
   ] as [CreateReviewThreadRequest, string][])('rejects a create that fails %o naming the offending field', async (invalid, message) => {
     const api = createMockOpenForgeApi()
 
     await expect(api.reviewThreads.create(invalid)).rejects.toThrow(message)
     await expect(api.reviewThreads.list(scope)).resolves.toEqual([])
+  })
+
+  it('returns the stored thread when a create repeats its idempotency key', async () => {
+    const api = createMockOpenForgeApi()
+    const retried = { ...request, idempotencyKey: 'review-1' }
+    const created = await api.reviewThreads.create(retried)
+
+    const repeated = await api.reviewThreads.create({ ...retried, body: 'Rewritten comment' })
+
+    expect(repeated.id).toBe(created.id)
+    expect(repeated.idempotencyKey).toBe('review-1')
+    expect(repeated.messages.map(message => message.body)).toEqual(['Needs a null check'])
+    await expect(api.reviewThreads.list(scope)).resolves.toHaveLength(1)
+  })
+
+  it.each([
+    ['another namespace', { namespace: 'task' }],
+    ['another target key', { targetKey: 'gh:acme/web#9999' }],
+    ['another revision', { revision: 'sha-2' }],
+  ])('creates a separate thread when a key is reused under %s', async (_part, elsewhere) => {
+    const api = createMockOpenForgeApi()
+    const retried = { ...request, idempotencyKey: 'review-1' }
+    const created = await api.reviewThreads.create(retried)
+
+    const separate = await api.reviewThreads.create({ ...retried, ...elsewhere })
+
+    expect(separate.id).not.toBe(created.id)
+    await expect(api.reviewThreads.list(scope)).resolves.toHaveLength(1)
+    await expect(api.reviewThreads.list({ ...scope, ...elsewhere })).resolves.toHaveLength(1)
+  })
+
+  it('does not deduplicate creates that carry no key', async () => {
+    const api = createMockOpenForgeApi()
+
+    await api.reviewThreads.create(request)
+    await api.reviewThreads.create(request)
+
+    await expect(api.reviewThreads.list(scope)).resolves.toHaveLength(2)
+  })
+
+  it('notifies no subscriber when a repeated key stores nothing', async () => {
+    const api = createMockOpenForgeApi()
+    const retried = { ...request, idempotencyKey: 'review-1' }
+    await api.reviewThreads.create(retried)
+    const handler = vi.fn()
+    api.reviewThreads.onDidChange(scope, handler)
+
+    await api.reviewThreads.create(retried)
+
+    expect(handler).not.toHaveBeenCalled()
   })
 
   it('rejects a reply to an unknown thread and creates no thread', async () => {

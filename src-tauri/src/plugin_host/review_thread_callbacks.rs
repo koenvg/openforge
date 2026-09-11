@@ -46,8 +46,10 @@ impl PluginHost {
                 .cloned()
                 .ok_or_else(|| "plugin host callback missing object param: anchor".to_string())?,
         );
-        if let Some(run_id) = params.get("runId") {
-            payload.insert("runId".to_string(), run_id.clone());
+        for optional in ["runId", "idempotencyKey"] {
+            if let Some(value) = params.get(optional) {
+                payload.insert(optional.to_string(), value.clone());
+            }
         }
 
         self.invoke_review_thread_command("create_review_thread", Value::Object(payload))
