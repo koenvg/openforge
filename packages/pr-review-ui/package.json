@@ -24,6 +24,7 @@
     "./diffSearch": "./src/diffSearch.ts",
     "./diffWorker": "./src/diffWorker.ts",
     "./fileSort": "./src/fileSort.ts",
+    "./patchLines": "./src/patchLines.ts",
     "./useDiffSearch.svelte": "./src/useDiffSearch.svelte.ts",
     "./useDiffWorker.svelte": "./src/useDiffWorker.svelte.ts",
     "./useFileContentsFetcher.svelte": "./src/useFileContentsFetcher.svelte.ts",

@@ -5,7 +5,8 @@ The tracer bullet delivers list, create, and reply end to end. Deliberate diverg
 - The store, host boundary, and SDK carry no `setStatus` or `markSeen`. Reviewer resolve and dismiss is its own ticket, so 1.2 and 3.2 stay open.
 - Create is not idempotent. The `idempotency_key` column and its partial unique index exist, but writes always store `NULL`, so 1.4 stays open.
 - `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
-- The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1, 5.2, and 5.4 stay open.
+- Orphans are reported in one region above the file list, and they render through the same inline thread component as a placed thread. They are readable and repliable now, and gain resolve and dismiss with the rest of the threads when 3.2 and 5.3 land.
+- The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1 and 5.2 stay open.
 
 ## 1. Core store
 
@@ -39,7 +40,7 @@ The tracer bullet delivers list, create, and reply end to end. Deliberate diverg
 - [ ] 5.1 Replace `AgentCommentDisplayData` and `AiThreadCommentDisplayData` with one `ThreadCommentDisplayData` in `diffComments.ts`; verify the existing `diffComments` tests pass against the single variant
 - [ ] 5.2 Collapse `InlineAiReviewComment.svelte` and `InlineAiQuestionThread.svelte` into one inline thread component that renders agent-authored and person-authored messages through one presentation; verify the inline thread tests cover both author roles on one line
 - [ ] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes
-- [ ] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
+- [x] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
 
 ## 6. Core self-review migration and legacy removal
 
