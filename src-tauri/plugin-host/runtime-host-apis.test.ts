@@ -192,6 +192,86 @@ describe('plugin-host backend host APIs', () => {
     ])
   })
 
+  it('routes backend Review Thread APIs through ungated host callbacks', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('reviewThreadApis', {
+            async handler() {
+              const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
+              const created = await openforge.reviewThreads.create({
+                ...scope,
+                origin: 'plugin',
+                body: 'Missing null check',
+                anchor: { kind: 'line', filePath: 'src/main.rs', line: 42, side: 'RIGHT' }
+              })
+              const replied = await openforge.reviewThreads.reply({ threadId: created.id, role: 'human', body: 'Why?' })
+              const listed = await openforge.reviewThreads.list(scope)
+              return { created, replied, listed }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const thread = {
+      id: 'rt_1',
+      namespace: 'github',
+      targetKey: 'gh:acme/web#1421',
+      revision: 'sha-1',
+      runId: null,
+      origin: 'plugin',
+      anchor: { kind: 'line', filePath: 'src/main.rs', line: 42, side: 'RIGHT' },
+      status: 'open',
+      awaiting: 'none',
+      idempotencyKey: null,
+      seenAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'rtm_1', role: 'human', body: 'Missing null check', createdAt: 1 }],
+    }
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.reviewThreads.create') return thread
+      if (request.method === 'openforge.reviewThreads.reply') return thread
+      if (request.method === 'openforge.reviewThreads.list') return [thread]
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'com.example.reviewer',
+      backendPath,
+      command: 'reviewThreadApis',
+    })).resolves.toEqual({ created: thread, replied: thread, listed: [thread] })
+    expect(calls).toEqual([
+      {
+        method: 'openforge.reviewThreads.create',
+        params: {
+          namespace: 'github',
+          targetKey: 'gh:acme/web#1421',
+          revision: 'sha-1',
+          origin: 'plugin',
+          body: 'Missing null check',
+          anchor: { kind: 'line', filePath: 'src/main.rs', line: 42, side: 'RIGHT' },
+          pluginId: 'com.example.reviewer',
+        },
+      },
+      {
+        method: 'openforge.reviewThreads.reply',
+        params: { threadId: 'rt_1', role: 'human', body: 'Why?', pluginId: 'com.example.reviewer' },
+      },
+      {
+        method: 'openforge.reviewThreads.list',
+        params: {
+          namespace: 'github',
+          targetKey: 'gh:acme/web#1421',
+          revision: 'sha-1',
+          pluginId: 'com.example.reviewer',
+        },
+      },
+    ])
+  })
+
   it('fails backend host capability calls clearly when the callback bridge is unavailable', async () => {
     const backendPath = await writeBackendModule(`
       export default {

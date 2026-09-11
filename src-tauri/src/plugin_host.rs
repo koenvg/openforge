@@ -6,6 +6,7 @@ mod host_app_event_callbacks;
 mod lifecycle;
 mod process_signals;
 mod project_callbacks;
+mod review_thread_callbacks;
 mod rpc_transport;
 mod runtime_command;
 mod shell_callbacks;

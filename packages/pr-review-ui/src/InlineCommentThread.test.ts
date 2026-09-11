@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import type { ComponentProps } from 'svelte'
 import type { AgentCommentDisplayData, CommentDisplayData } from './diffComments'
 import InlineCommentThread from './InlineCommentThread.svelte'
@@ -292,7 +293,7 @@ describe('InlineCommentThread', () => {
   })
 
   it('replies to an answered AI Q&A thread', async () => {
-    const onReplyToThread = vi.fn()
+    const onReplyToAiThread = vi.fn()
     const data: CommentDisplayData = {
       comments: [{
         type: 'ai-thread',
@@ -307,15 +308,91 @@ describe('InlineCommentThread', () => {
         },
       }],
     }
-    const setup = makeProps({ data, onReplyToThread })
+    const setup = makeProps({ data, onReplyToAiThread })
     render(InlineCommentThread, { props: setup.props })
 
     const editor = screen.getByRole('textbox', { name: 'Reply to the AI author' })
     await fireEvent.input(editor, { target: { value: '  One more question  ' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
 
-    expect(onReplyToThread).toHaveBeenCalledWith('thread-1', 'One more question')
+    expect(onReplyToAiThread).toHaveBeenCalledWith('thread-1', 'One more question')
     expect((editor as HTMLInputElement).value).toBe('')
   })
 
+})
+
+describe('InlineCommentThread Review Threads', () => {
+  function makeReviewThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
+    return {
+      id: 'rt_1',
+      namespace: 'github',
+      targetKey: 'gh:acme/web#1421',
+      revision: 'sha-1',
+      anchor: { kind: 'line', filePath: 'src/example.ts', line: 12, side: 'RIGHT' },
+      origin: 'agent',
+      status: 'open',
+      awaiting: 'none',
+      runId: null,
+      idempotencyKey: null,
+      seenAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [
+        { id: 'rtm_1', role: 'agent', body: 'Needs a null check', createdAt: 1 },
+        { id: 'rtm_2', role: 'human', body: 'Agreed', createdAt: 2 },
+      ],
+      ...overrides,
+    }
+  }
+
+  function makeReviewThreadData(thread: ReviewThread): CommentDisplayData {
+    return { comments: [{ type: 'review-thread', thread }] }
+  }
+
+  it('renders every message of a supplied thread', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Needs a null check')).toBeTruthy()
+    expect(screen.getByText('Agreed')).toBeTruthy()
+  })
+
+  it('hides the reply editor when the embedding surface supplies no reply callback', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.queryByRole('textbox', { name: 'Reply to the review thread' })).toBeNull()
+  })
+
+  it('reports a reply to the embedding surface and clears the draft', async () => {
+    const onReplyToThread = vi.fn()
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()), onReplyToThread })
+    render(InlineCommentThread, { props: setup.props })
+
+    const editor = screen.getByRole('textbox', { name: 'Reply to the review thread' })
+    await fireEvent.input(editor, { target: { value: '  Fixed in the next commit  ' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+    expect(onReplyToThread).toHaveBeenCalledWith('rt_1', 'Fixed in the next commit')
+    expect((editor as HTMLInputElement).value).toBe('')
+  })
+
+  it('badges a plugin-authored thread as written by a plugin', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ origin: 'plugin' })) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Plugin')).toBeTruthy()
+  })
+
+  it('never attributes a stored message to the reading user', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ origin: 'plugin' })) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.queryByText('You')).toBeNull()
+    expect(screen.getByText('Reviewer')).toBeTruthy()
+  })
 })

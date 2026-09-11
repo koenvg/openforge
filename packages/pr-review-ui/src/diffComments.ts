@@ -1,3 +1,4 @@
+import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
 
 /**
@@ -14,6 +15,7 @@ export type InlineCommentDisplayData =
   | AgentCommentDisplayData
   | AiThreadCommentDisplayData
   | PendingReplyCommentDisplayData
+  | ReviewThreadCommentDisplayData
 
 interface ExistingCommentFields {
   body: string
@@ -51,6 +53,11 @@ export interface AiThreadCommentDisplayData {
   type: 'ai-thread'
   thread: AiThread
   isReply: boolean
+}
+
+export interface ReviewThreadCommentDisplayData {
+  type: 'review-thread'
+  thread: ReviewThread
 }
 
 export interface PendingReplyCommentDisplayData {
@@ -113,14 +120,25 @@ function pathMatches(commentPath: string, targetFilename: string): boolean {
   return false
 }
 
-export function buildExtendData(
-  filename: string,
-  existingComments: ReviewComment[],
-  pendingComments: ReviewSubmissionComment[],
-  agentComments: AgentReviewComment[] = [],
-  aiThreads: AiThread[] = [],
-  pendingReplies: PendingReply[] = []
-): {
+export interface BuildExtendDataOptions {
+  filename: string
+  existingComments?: ReviewComment[]
+  pendingComments?: ReviewSubmissionComment[]
+  agentComments?: AgentReviewComment[]
+  aiThreads?: AiThread[]
+  pendingReplies?: PendingReply[]
+  threads?: ReviewThread[]
+}
+
+export function buildExtendData({
+  filename,
+  existingComments = [],
+  pendingComments = [],
+  agentComments = [],
+  aiThreads = [],
+  pendingReplies = [],
+  threads = [],
+}: BuildExtendDataOptions): {
   oldFile: Record<string, { data: CommentDisplayData }>
   newFile: Record<string, { data: CommentDisplayData }>
 } {
@@ -251,6 +269,17 @@ export function buildExtendData(
       type: 'ai-thread',
       thread,
       isReply: thread.anchor.type === 'comment',
+    })
+  }
+
+  for (const thread of threads) {
+    if (thread.anchor.kind !== 'line') continue
+    if (thread.anchor.filePath !== filename) continue
+
+    const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
+    ensureLine(target, String(thread.anchor.line)).comments.push({
+      type: 'review-thread',
+      thread,
     })
   }
 

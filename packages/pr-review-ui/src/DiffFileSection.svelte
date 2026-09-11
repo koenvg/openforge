@@ -63,6 +63,8 @@
     aiThreads,
     onAskAgent,
     onCommentNow,
+    onReplyToAiThread,
+    threads,
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -128,6 +130,8 @@
       {aiThreads}
       {onAskAgent}
       {onCommentNow}
+      {onReplyToAiThread}
+      {threads}
       {onReplyToThread}
       {onAskAboutComment}
       {onReplyToExistingComment}

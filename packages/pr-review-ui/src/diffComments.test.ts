@@ -1,5 +1,6 @@
 import { describe, it, expect, expectTypeOf } from 'vitest'
 import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import { sideToSplitSide, buildExtendData, prCommentsToReviewComments, approvedInlineAgentComments, agentCommentToSubmission, type InlineCommentDisplayData } from './diffComments'
 
 // ============================================================================
@@ -73,6 +74,11 @@ describe('CommentDisplayData', () => {
           // @ts-expect-error Pending replies do not expose pending-comment indexes.
           expectTypeOf(comment.index)
           break
+        case 'review-thread':
+          expectTypeOf(comment.thread).toEqualTypeOf<ReviewThread>()
+          // @ts-expect-error Review Threads do not expose a placeholder body.
+          expectTypeOf(comment.body)
+          break
       }
     }
 
@@ -119,7 +125,7 @@ describe('sideToSplitSide', () => {
 
 describe('buildExtendData', () => {
   it('returns empty objects when no comments provided', () => {
-    const result = buildExtendData('src/main.ts', [], [])
+    const result = buildExtendData({ filename: 'src/main.ts' })
 
     expect(result.oldFile).toEqual({})
     expect(result.newFile).toEqual({})
@@ -128,7 +134,7 @@ describe('buildExtendData', () => {
   it('maps existing comment to correct line in newFile', () => {
     const comments: ReviewComment[] = [baseExistingComment]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
     expect(result.newFile['10'].data.comments).toHaveLength(1)
@@ -149,7 +155,7 @@ describe('buildExtendData', () => {
       line: 5,
     }
 
-    const result = buildExtendData('src/main.ts', [leftComment], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [leftComment] })
 
     expect(result.oldFile['5']).toBeDefined()
     expect(result.oldFile['5'].data.comments).toHaveLength(1)
@@ -159,7 +165,7 @@ describe('buildExtendData', () => {
   it('maps pending comment to correct line in newFile', () => {
     const comments: ReviewSubmissionComment[] = [basePendingComment]
 
-    const result = buildExtendData('src/main.ts', [], comments)
+    const result = buildExtendData({ filename: 'src/main.ts', pendingComments: comments })
 
     expect(result.newFile['15']).toBeDefined()
     expect(result.newFile['15'].data.comments).toHaveLength(1)
@@ -177,7 +183,7 @@ describe('buildExtendData', () => {
       line: 8,
     }
 
-    const result = buildExtendData('src/main.ts', [], [leftPending])
+    const result = buildExtendData({ filename: 'src/main.ts', pendingComments: [leftPending] })
 
     expect(result.oldFile['8']).toBeDefined()
     expect(result.oldFile['8'].data.comments).toHaveLength(1)
@@ -191,7 +197,7 @@ describe('buildExtendData', () => {
       { ...basePendingComment, line: 30 },
     ]
 
-    const result = buildExtendData('src/main.ts', [], pending)
+    const result = buildExtendData({ filename: 'src/main.ts', pendingComments: pending })
 
     expect(commentOfType(result.newFile['10'].data.comments[0], 'pending').index).toBe(0)
     expect(commentOfType(result.newFile['20'].data.comments[0], 'pending').index).toBe(1)
@@ -204,7 +210,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, id: 2, path: 'src/other.ts', line: 20 },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
     expect(result.newFile['20']).toBeUndefined()
@@ -215,7 +221,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, path: 'main.ts' },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
   })
@@ -225,7 +231,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, path: 'src/main.ts' },
     ]
 
-    const result = buildExtendData('main.ts', comments, [])
+    const result = buildExtendData({ filename: 'main.ts', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
   })
@@ -235,7 +241,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, line: null },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.oldFile).toEqual({})
     expect(result.newFile).toEqual({})
@@ -247,7 +253,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, id: 2, body: 'Also good' },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
     expect(commentOfType(result.newFile['10'].data.comments[0], 'existing').body).toBe('This looks good')
@@ -262,7 +268,7 @@ describe('buildExtendData', () => {
       { ...basePendingComment, line: 10 },
     ]
 
-    const result = buildExtendData('src/main.ts', existing, pending)
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: existing, pendingComments: pending })
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
     expect(result.newFile['10'].data.comments[0].type).toBe('existing')
@@ -275,8 +281,8 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, id: 2, path: 'src/other.ts', line: 20 },
     ]
 
-    const result1 = buildExtendData('src/main.ts', comments, [])
-    const result2 = buildExtendData('src/other.ts', comments, [])
+    const result1 = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
+    const result2 = buildExtendData({ filename: 'src/other.ts', existingComments: comments })
 
     expect(result1.newFile['10']).toBeDefined()
     expect(result1.newFile['20']).toBeUndefined()
@@ -291,7 +297,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, id: 2, side: 'RIGHT', line: 10 },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.oldFile['5']).toBeDefined()
     expect(result.newFile['10']).toBeDefined()
@@ -304,7 +310,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, side: null },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
     expect(result.oldFile['10']).toBeUndefined()
@@ -319,7 +325,7 @@ describe('buildExtendData', () => {
       },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     const comment = commentOfType(result.newFile['10'].data.comments[0], 'existing')
     expect(comment.author).toBe('alice')
@@ -329,7 +335,7 @@ describe('buildExtendData', () => {
   it('does not include author or createdAt for pending comments', () => {
     const pending: ReviewSubmissionComment[] = [basePendingComment]
 
-    const result = buildExtendData('src/main.ts', [], pending)
+    const result = buildExtendData({ filename: 'src/main.ts', pendingComments: pending })
 
     const comment = commentOfType(result.newFile['15'].data.comments[0], 'pending')
     expect(comment).not.toHaveProperty('author')
@@ -341,17 +347,13 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, path: 'Button.svelte' },
     ]
 
-    const result = buildExtendData(
-      'src/components/ui/buttons/Button.svelte',
-      comments,
-      []
-    )
+    const result = buildExtendData({ filename: 'src/components/ui/buttons/Button.svelte', existingComments: comments })
 
     expect(result.newFile['10']).toBeDefined()
   })
 
   it('returns correct structure with oldFile and newFile keys', () => {
-    const result = buildExtendData('src/main.ts', [], [])
+    const result = buildExtendData({ filename: 'src/main.ts' })
 
     expect(result).toHaveProperty('oldFile')
     expect(result).toHaveProperty('newFile')
@@ -364,7 +366,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, line: 42 },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(Object.keys(result.newFile)).toContain('42')
     expect(typeof Object.keys(result.newFile)[0]).toBe('string')
@@ -375,7 +377,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, line: 9999 },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['9999']).toBeDefined()
   })
@@ -385,7 +387,7 @@ describe('buildExtendData', () => {
       { ...baseExistingComment, line: 1 },
     ]
 
-    const result = buildExtendData('src/main.ts', comments, [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: comments })
 
     expect(result.newFile['1']).toBeDefined()
   })
@@ -393,7 +395,7 @@ describe('buildExtendData', () => {
   it('agent comments appear in extendData output', () => {
     const agentComments: AgentReviewComment[] = [baseAgentComment]
     
-    const result = buildExtendData('src/main.ts', [], [], agentComments)
+    const result = buildExtendData({ filename: 'src/main.ts', agentComments: agentComments })
     
     expect(result.newFile['20']).toBeDefined()
     expect(result.newFile['20'].data.comments).toHaveLength(1)
@@ -406,7 +408,7 @@ describe('buildExtendData', () => {
       status: 'dismissed',
     }
     
-    const result = buildExtendData('src/main.ts', [], [], [dismissed])
+    const result = buildExtendData({ filename: 'src/main.ts', agentComments: [dismissed] })
     
     expect(result.oldFile).toEqual({})
     expect(result.newFile).toEqual({})
@@ -418,7 +420,7 @@ describe('buildExtendData', () => {
       status: 'approved',
     }
     
-    const result = buildExtendData('src/main.ts', [], [], [approved])
+    const result = buildExtendData({ filename: 'src/main.ts', agentComments: [approved] })
     
     expect(result.newFile['20']).toBeDefined()
     expect(commentOfType(result.newFile['20'].data.comments[0], 'agent').status).toBe('approved')
@@ -430,7 +432,7 @@ describe('buildExtendData', () => {
       comment_type: 'summary',
     }
     
-    const result = buildExtendData('src/main.ts', [], [], [summary])
+    const result = buildExtendData({ filename: 'src/main.ts', agentComments: [summary] })
     
     expect(result.oldFile).toEqual({})
     expect(result.newFile).toEqual({})
@@ -439,7 +441,7 @@ describe('buildExtendData', () => {
   it('agent comment has commentId and status fields', () => {
     const agentComments: AgentReviewComment[] = [baseAgentComment]
     
-    const result = buildExtendData('src/main.ts', [], [], agentComments)
+    const result = buildExtendData({ filename: 'src/main.ts', agentComments: agentComments })
     
     const comment = commentOfType(result.newFile['20'].data.comments[0], 'agent')
     expect(comment.commentId).toBe(100)
@@ -469,7 +471,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 1,
     }
 
-    const result = buildExtendData('src/main.ts', [reply, parent], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [reply, parent] })
 
     const comments = result.newFile['10'].data.comments
     expect(comments).toHaveLength(2)
@@ -498,7 +500,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 1,
     }
 
-    const result = buildExtendData('src/main.ts', [parent, reply], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [parent, reply] })
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
     const replyComment = commentOfType(result.newFile['10'].data.comments[1], 'existing')
@@ -524,7 +526,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 1,
     }
 
-    const result = buildExtendData('src/main.ts', [parent, reply], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [parent, reply] })
 
     expect(result.oldFile['5'].data.comments).toHaveLength(2)
     const replyComment = commentOfType(result.oldFile['5'].data.comments[1], 'existing')
@@ -563,7 +565,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 3,
     }
 
-    const result = buildExtendData('src/main.ts', [parent1, reply1, parent2, reply2], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [parent1, reply1, parent2, reply2] })
 
     expect(result.newFile['10'].data.comments).toHaveLength(2)
     expect(result.newFile['10'].data.comments.map(comment => commentOfType(comment, 'existing').body)).toEqual([
@@ -605,7 +607,7 @@ describe('buildExtendData', () => {
     }
 
     // Pass in reverse order to verify sorting
-    const result = buildExtendData('src/main.ts', [lateReply, parent, earlyReply], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [lateReply, parent, earlyReply] })
 
     expect(result.newFile['10'].data.comments).toHaveLength(3)
     expect(result.newFile['10'].data.comments.map(comment => commentOfType(comment, 'existing').body)).toEqual([
@@ -624,7 +626,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 999,
     }
 
-    const result = buildExtendData('src/main.ts', [orphan], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [orphan] })
 
     expect(result.oldFile).toEqual({})
     expect(result.newFile).toEqual({})
@@ -646,7 +648,7 @@ describe('buildExtendData', () => {
       in_reply_to_id: 1,
     }
 
-    const result = buildExtendData('src/main.ts', [parent, reply], [])
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [parent, reply] })
 
     // Reply should be grouped with parent at line 10, not at its own line 15
     expect(result.newFile['10'].data.comments).toHaveLength(2)
@@ -673,7 +675,7 @@ describe('buildExtendData', () => {
       { ...basePendingComment, line: 10 },
     ]
 
-    const result = buildExtendData('src/main.ts', [parent, reply], pending)
+    const result = buildExtendData({ filename: 'src/main.ts', existingComments: [parent, reply], pendingComments: pending })
 
     expect(result.newFile['10'].data.comments).toHaveLength(3)
     // Thread first (parent, reply), then pending
@@ -819,7 +821,7 @@ describe('prCommentsToReviewComments', () => {
     const prComments: PrComment[] = [basePrComment]
     const reviewComments = prCommentsToReviewComments(prComments)
 
-    const extendData = buildExtendData('src/main.ts', reviewComments, [])
+    const extendData = buildExtendData({ filename: 'src/main.ts', existingComments: reviewComments })
 
     expect(extendData.newFile['10']).toBeDefined()
     expect(extendData.newFile['10'].data.comments).toHaveLength(1)
@@ -837,7 +839,7 @@ describe('buildExtendData with AI threads', () => {
   }
 
   it('places a line-anchored thread on the RIGHT side at its line', () => {
-    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const { newFile } = buildExtendData({ filename: 'a.ts', aiThreads: [thread] })
     const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
     expect(entry?.thread?.id).toBe('t1')
   })
@@ -845,20 +847,24 @@ describe('buildExtendData with AI threads', () => {
   it('ignores step-anchored threads and threads for other files', () => {
     const stepThread: AiThread = { ...thread, id: 't2', anchor: { type: 'step', step_id: 's1' } }
     const otherFile: AiThread = { ...thread, id: 't3', anchor: { type: 'line', filename: 'b.ts', line: 3, side: 'RIGHT' } }
-    const { newFile } = buildExtendData('a.ts', [], [], [], [stepThread, otherFile])
+    const { newFile } = buildExtendData({ filename: 'a.ts', aiThreads: [stepThread, otherFile] })
     expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
   })
 
   it('places a pending reply under its parent comment line', () => {
     const parent = { ...baseExistingComment, id: 1, path: 'src/main.ts', line: 20, side: 'RIGHT' }
-    const { newFile } = buildExtendData('src/main.ts', [parent], [], [], [], [{ commentId: 1, body: 'queued reply' }])
+    const { newFile } = buildExtendData({
+      filename: 'src/main.ts',
+      existingComments: [parent],
+      pendingReplies: [{ commentId: 1, body: 'queued reply' }],
+    })
     const entry = newFile['20'].data.comments.find(c => c.type === 'pending-reply')
     expect(entry?.body).toBe('queued reply')
     expect(entry?.commentId).toBe(1)
   })
 
   it('ignores a pending reply whose parent comment is not on this file', () => {
-    const { newFile } = buildExtendData('src/main.ts', [], [], [], [], [{ commentId: 999, body: 'orphan' }])
+    const { newFile } = buildExtendData({ filename: 'src/main.ts', pendingReplies: [{ commentId: 999, body: 'orphan' }] })
     const hasPendingReply = Object.values(newFile).some(line => line.data.comments.some(c => c.type === 'pending-reply'))
     expect(hasPendingReply).toBe(false)
   })
@@ -869,7 +875,7 @@ describe('buildExtendData with AI threads', () => {
       id: 't4',
       anchor: { type: 'comment', comment_id: 99, filename: 'a.ts', line: 3, side: 'RIGHT' },
     }
-    const { newFile } = buildExtendData('a.ts', [], [], [], [commentThread])
+    const { newFile } = buildExtendData({ filename: 'a.ts', aiThreads: [commentThread] })
     const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
     expect(entry?.thread?.id).toBe('t4')
     // Nested (reply-styled) so it reads as a follow-up to the AI review comment.
@@ -877,7 +883,7 @@ describe('buildExtendData with AI threads', () => {
   })
 
   it('does not nest a line-anchored thread', () => {
-    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const { newFile } = buildExtendData({ filename: 'a.ts', aiThreads: [thread] })
     const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
     expect(entry?.isReply).toBeFalsy()
   })
@@ -911,5 +917,84 @@ describe('agentCommentToSubmission', () => {
   it('defaults a missing side to RIGHT', () => {
     const approved: AgentReviewComment = { ...baseAgentComment, side: null }
     expect(agentCommentToSubmission(approved).side).toBe('RIGHT')
+  })
+})
+
+describe('buildExtendData with Review Threads', () => {
+  function makeThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
+    return {
+      id: 'rt_1',
+      namespace: 'github',
+      targetKey: 'gh:acme/web#1421',
+      revision: 'sha-1',
+      anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'RIGHT' },
+      origin: 'plugin',
+      status: 'open',
+      awaiting: 'none',
+      runId: null,
+      idempotencyKey: null,
+      seenAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'rtm_1', role: 'agent', body: 'Needs a null check', createdAt: 1 }],
+      ...overrides,
+    }
+  }
+
+  it('renders a line-anchored thread on its anchored line', () => {
+    const thread = makeThread()
+
+    const { newFile } = buildExtendData({ filename: 'src/main.ts', threads: [thread] })
+
+    const entry = commentOfType(newFile['12'].data.comments[0], 'review-thread')
+    expect(entry.thread).toBe(thread)
+  })
+
+  it('renders a LEFT-anchored thread on the old file', () => {
+    const thread = makeThread({ anchor: { kind: 'line', filePath: 'src/main.ts', line: 4, side: 'LEFT' } })
+
+    const { oldFile, newFile } = buildExtendData({ filename: 'src/main.ts', threads: [thread] })
+
+    expect(oldFile['4'].data.comments).toHaveLength(1)
+    expect(newFile).toEqual({})
+  })
+
+  it('ignores a thread anchored to another file', () => {
+    const thread = makeThread({ anchor: { kind: 'line', filePath: 'src/other.ts', line: 12, side: 'RIGHT' } })
+
+    const { oldFile, newFile } = buildExtendData({ filename: 'src/main.ts', threads: [thread] })
+
+    expect(oldFile).toEqual({})
+    expect(newFile).toEqual({})
+  })
+
+  it('ignores a thread whose anchor only ends with the reviewed filename', () => {
+    const thread = makeThread({ anchor: { kind: 'line', filePath: 'main.ts', line: 12, side: 'RIGHT' } })
+
+    const { oldFile, newFile } = buildExtendData({ filename: 'src/main.ts', threads: [thread] })
+
+    expect(oldFile).toEqual({})
+    expect(newFile).toEqual({})
+  })
+
+  it('ignores a thread with a custom anchor', () => {
+    const thread = makeThread({ anchor: { kind: 'custom', key: 'summary' } })
+
+    const { oldFile, newFile } = buildExtendData({ filename: 'src/main.ts', threads: [thread] })
+
+    expect(oldFile).toEqual({})
+    expect(newFile).toEqual({})
+  })
+
+  it('keeps a thread beside the existing comment inputs on the same line', () => {
+    const existing: ReviewComment = { ...baseExistingComment, line: 12 }
+
+    const { newFile } = buildExtendData({
+      filename: 'src/main.ts',
+      existingComments: [existing],
+      threads: [makeThread()],
+    })
+
+    expect(newFile['12'].data.comments.map(comment => comment.type)).toEqual(['existing', 'review-thread'])
   })
 })

@@ -11,7 +11,7 @@
     replyDraft: string
     onReplyDraftChange: (value: string) => void
     onReplySubmitted: () => void
-    onReplyToThread?: (threadId: string, body: string) => void
+    onReplyToAiThread?: (threadId: string, body: string) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
@@ -20,14 +20,14 @@
     replyDraft,
     onReplyDraftChange,
     onReplySubmitted,
-    onReplyToThread,
+    onReplyToAiThread,
     onOpenUrl,
   }: Props = $props()
 
   function submitReply() {
     const body = replyDraft.trim()
     if (!body) return
-    onReplyToThread?.(comment.thread.id, body)
+    onReplyToAiThread?.(comment.thread.id, body)
     onReplySubmitted()
   }
 </script>

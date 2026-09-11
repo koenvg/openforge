@@ -76,6 +76,18 @@ _Avoid_: File tree row, reviewed-files group
 A supported **Diff File Section** presentation that previews how the changed file will appear after its changes are applied.
 _Avoid_: Before-and-after preview, rendered source diff
 
+**Review Thread**:
+A core-owned review conversation with an anchor, an origin, and an ordered list of messages, addressed by a **Review Thread Scope**.
+_Avoid_: Inline comment, AI thread, agent review comment
+
+**Review Thread Scope**:
+The namespace, target key, and revision triple that addresses **Review Threads**. The host stores and compares the three strings and never interprets them.
+_Avoid_: Pull request key, PR number, commit scope
+
+**Review Thread Anchor**:
+The location a **Review Thread** is attached to: a file path, line, and side, or an opaque custom key.
+_Avoid_: Comment position, diff hunk, line reference
+
 **Review Feedback Prompt**:
 The compiled bundle of inline and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
 _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
@@ -478,6 +490,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
 - A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
 - A supported **Diff File Section** defaults to its source diff and may switch independently to a **Rich Diff View** of the post-change result.
+- A **Review Thread** belongs to exactly one **Review Thread Scope**; a reply appends a message to that thread rather than creating a second one.
+- A **Review Thread Scope** is opaque to the host, so any review surface can store threads without the host knowing what a pull request is.
+- A **Review Thread Anchor** is stored as given; the host does not check it against the reviewed diff.
 - A **Review Feedback Prompt** instructs the agent to evaluate and fix the feedback only; it never instructs version-control actions (commit, push, PR) — those decisions stay with the user.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, PR title, or PR body rather than in prompt-derived branch text.
 - A direct merge uses an explicitly selected **Pull Request Merge Method**. OpenForge places the authenticated GitHub identity's default first, never substitutes another method after confirmation, and limits choices to methods GitHub permits for the target branch.

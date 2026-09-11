@@ -141,6 +141,12 @@ export interface TaskChangedPayload {
   project_id?: string | null
 }
 
+export interface ReviewThreadsChangedPayload {
+  namespace: string
+  targetKey: string
+  revision: string
+}
+
 export interface AppDesktopEventPayloads {
   'github-sync-complete': PollResult
   'task-pull-request-updated': TaskPullRequestUpdatedPayload
@@ -168,6 +174,7 @@ export interface AppDesktopEventPayloads {
   'project-plugin-enablement-changed': ProjectPluginEnablementChangedPayload
   'plugin-reload-requested': PluginReloadRequestedPayload
   'task-changed': TaskChangedPayload
+  'review-threads-changed': ReviewThreadsChangedPayload
 }
 
 export type AppDesktopEventName = keyof AppDesktopEventPayloads

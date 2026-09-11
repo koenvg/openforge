@@ -236,6 +236,7 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `storage` | `PluginStorage` | Read/write JSON values in global, project, or task storage scopes. |
 | `context` | `{ getSnapshot(): OpenForgeContextSnapshot }` | Read the current plugin/project/task context snapshot. |
 | `tasks` | `TaskOperationsAPI` | Read bounded Task projections, create Tasks, update status, configure start-prompt contributions, start Implementation Runs, and inspect Task workspace/session state. |
+| `reviewThreads` | `ReviewThreadOperationsAPI` | List, create, and reply to Review Threads addressed by namespace, target key, and revision. |
 | `projects` | `ProjectsAPI` | List projects or get one project by id. |
 | `fs` | `FileSystemAPI` | Read directories/files, write files, and search project files. |
 | `shell` | `ShellAPI` | Spawn, write, resize, kill, and read task shell buffers. |
@@ -246,6 +247,20 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `projectConfig` | `KeyValueConfigAPI` | Read/write project-scoped JSON configuration values. |
 
 `FrontendOpenForgeAPI.tasks` is the narrower `TasksAPI`, which also exposes `onDidChange(projectId, handler)` for project-filtered invalidations. Backend plugins receive operation-only `TaskOperationsAPI`.
+
+`FrontendOpenForgeAPI.reviewThreads` is the narrower `ReviewThreadsAPI`, which also exposes `onDidChange(scope, handler)` for scope-filtered invalidations. Backend plugins receive operation-only `ReviewThreadOperationsAPI`.
+
+### Review Threads
+
+A Review Thread is addressed by an opaque `namespace`, `targetKey`, and `revision`. The host stores and compares those three strings and never interprets them, so any review surface can use the store without the host knowing what a pull request is.
+
+- `list(scope)` returns only the threads stored under that exact triple. A revision with no threads returns an empty array.
+- `create(request)` stores a thread with one first message and returns it. The `anchor` is either `{ kind: 'line', filePath, line, side }` with `side` of `LEFT` or `RIGHT`, or `{ kind: 'custom', key }`.
+- `reply(request)` appends a message to an existing thread and returns the whole thread. Replying to an unknown thread identifier is rejected and creates nothing.
+- Writes are validated against structural invariants. A rejection names the offending field, for example `Review Thread field 'filePath' must not be empty`, and stores nothing.
+- `onDidChange(scope, handler)` notifies subscribers of that scope only. The notification carries the scope, never a thread snapshot, so re-list on notification.
+
+The thread operations are available to every enabled plugin. There is no plugin-identity gate.
 
 `SystemAPI` exposes `openUrl(url)` and `writeClipboardText(text)`. Clipboard writes are available to frontend and backend Trusted Plugin runtimes through host-owned bridges. Call `writeClipboardText` only in response to an explicit user copy action; plugin code must not import browser, Electron, preload, or IPC clipboard internals.
 

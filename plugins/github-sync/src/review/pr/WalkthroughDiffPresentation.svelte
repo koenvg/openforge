@@ -147,7 +147,7 @@
       {aiThreads}
       {onAskAgent}
       {onCommentNow}
-      {onReplyToThread}
+      onReplyToAiThread={onReplyToThread}
       {onAskAboutComment}
       {onReplyToExistingComment}
       {pendingReplies}

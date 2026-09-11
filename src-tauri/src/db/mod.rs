@@ -18,6 +18,7 @@ mod projects;
 mod pull_request_readiness;
 mod pull_requests;
 mod review;
+mod review_threads;
 mod settings_reset;
 mod sqlite;
 mod startup_resume_eligibility;
@@ -54,6 +55,9 @@ pub(crate) use pull_request_readiness::{
 };
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
+pub use review_threads::{
+    CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadScope,
+};
 #[cfg(test)]
 pub use task_creation::TaskWorktreeOptions;
 pub use task_creation::{NewTaskOptions, TaskCreationError};
@@ -155,6 +159,7 @@ impl Database {
         migrations::ensure_task_label_tables(&conn)?;
         migrations::ensure_plugin_tables(&conn)?;
         migrations::ensure_browser_session_purge_intents_table(&conn)?;
+        migrations::ensure_review_thread_tables(&conn)?;
         // After ensure_plugin_tables: global_plugins has a foreign key onto plugins.
         migrations::ensure_hierarchy_tables(&conn)?;
 

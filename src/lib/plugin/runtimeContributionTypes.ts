@@ -24,6 +24,7 @@ import type {
   ComposeTaskRequest,
   ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
+  CreateReviewThreadRequest,
   CreateTaskRequest,
   FileContent,
   FileEntry,
@@ -41,6 +42,10 @@ import type {
   Project,
   ProjectAttention,
   PtyBufferState,
+  ReplyToReviewThreadRequest,
+  ReviewThread,
+  ReviewThreadChangeEvent,
+  ReviewThreadScope,
   ShellSpawnRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,
@@ -72,6 +77,10 @@ export type RuntimeHostBridge = {
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
   subscribeTaskChanges?(projectId: string, handler: (event: TaskChangeEvent) => void): Disposable
+  listReviewThreads?(scope: ReviewThreadScope): Promise<ReviewThread[]>
+  createReviewThread?(request: CreateReviewThreadRequest): Promise<ReviewThread>
+  replyToReviewThread?(request: ReplyToReviewThreadRequest): Promise<ReviewThread>
+  subscribeReviewThreadChanges?(scope: ReviewThreadScope, handler: (event: ReviewThreadChangeEvent) => void): Disposable
   getTask?(taskId: string): Promise<Task | null>
   activeTasks?(projectId: string): Promise<ActiveTasks>
   completedTasks?(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>

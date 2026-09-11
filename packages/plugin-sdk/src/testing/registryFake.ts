@@ -5,6 +5,7 @@ import type {
   FrontendPlugin,
   FrontendPluginContext,
   OpenForgePackageMetadata,
+  ReviewThreadChangeEvent,
   TaskChangeEvent,
   PluginStorage,
 } from '../types.js'
@@ -122,6 +123,10 @@ export class TestingOpenForgeRegistryFake {
 
   emitTaskChange(event: TaskChangeEvent): void {
     this.commonApi.emitTaskChange(event)
+  }
+
+  emitReviewThreadChange(event: ReviewThreadChangeEvent): void {
+    this.commonApi.emitReviewThreadChange(event)
   }
 
   setBrowserSurfaceState(taskId: string, id: string, patch: Partial<TaskBrowserSurfaceState>): void {

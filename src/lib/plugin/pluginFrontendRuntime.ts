@@ -109,6 +109,12 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     agentSessions: {
       list: unavailable('agentSessions.list'),
     },
+    reviewThreads: {
+      onDidChange: () => ({ dispose: () => undefined }),
+      list: unavailable('reviewThreads.list'),
+      create: unavailable('reviewThreads.create'),
+      reply: unavailable('reviewThreads.reply'),
+    },
     tasks: {
       onDidChange: () => ({ dispose: () => undefined }),
       list: unavailable('tasks.list'),

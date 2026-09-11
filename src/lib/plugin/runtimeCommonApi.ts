@@ -9,6 +9,7 @@ import type {
   OpenForgeContextChangeHandler,
   OpenForgeContextSnapshot,
   PluginCommandInvocationContext,
+  ReviewThreadScope,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
@@ -27,8 +28,8 @@ import type {
   RuntimeHandler,
 } from './runtimeContributionTypes'
 
-export type RuntimeCommonApi = Omit<OpenForgeCommonAPI, 'tasks'>
-  & Pick<FrontendOpenForgeAPI, 'tasks' | 'navigation'>
+export type RuntimeCommonApi = Omit<OpenForgeCommonAPI, 'tasks' | 'reviewThreads'>
+  & Pick<FrontendOpenForgeAPI, 'tasks' | 'reviewThreads' | 'navigation'>
 export type RuntimeBackendCommonApi = RuntimeCommonApi & Pick<BackendOpenForgeAPI, 'fs'>
 
 const globalCommands = new Map<string, RuntimeCommandContribution>()
@@ -91,6 +92,15 @@ function commandDescriptor(command: RuntimeCommandContribution): CommandDescript
   }
 }
 
+function assertReviewThreadScope(scope: unknown): asserts scope is ReviewThreadScope {
+  const candidate = scope as Partial<ReviewThreadScope> | null
+  for (const field of ['namespace', 'targetKey', 'revision'] as const) {
+    if (!isNonEmptyString(candidate?.[field])) {
+      throw new Error(`Review Thread field '${field}' must not be empty`)
+    }
+  }
+}
+
 function unavailableCapability(name: string): never {
   throw new Error(`OpenForge host capability is unavailable: ${name}`)
 }
@@ -144,6 +154,28 @@ export class RuntimeCommonApiRegistry {
         list: async (request) => this.services.host.listAgentSessions
           ? this.services.host.listAgentSessions(request)
           : unavailableCapability('agentSessions.list'),
+      },
+      reviewThreads: {
+        onDidChange: (scope, handler) => {
+          assertReviewThreadScope(scope)
+          assertHandler('events', handler)
+          const subscription = this.services.host.subscribeReviewThreadChanges
+            ? this.services.host.subscribeReviewThreadChanges(scope, handler)
+            : unavailableCapability('reviewThreads.onDidChange')
+          return this.services.trackDisposable(subscription)
+        },
+        list: async (scope) => {
+          assertReviewThreadScope(scope)
+          return this.services.host.listReviewThreads
+            ? this.services.host.listReviewThreads(scope)
+            : unavailableCapability('reviewThreads.list')
+        },
+        create: async (request) => this.services.host.createReviewThread
+          ? this.services.host.createReviewThread(request)
+          : unavailableCapability('reviewThreads.create'),
+        reply: async (request) => this.services.host.replyToReviewThread
+          ? this.services.host.replyToReviewThread(request)
+          : unavailableCapability('reviewThreads.reply'),
       },
       tasks: {
         onDidChange: (projectId, handler) => {

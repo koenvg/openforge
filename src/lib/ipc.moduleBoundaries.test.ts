@@ -9,6 +9,7 @@ import * as filesystemIpc from './ipc/filesystem'
 import * as githubIpc from './ipc/github'
 import * as pluginManagementIpc from './ipc/pluginManagement'
 import * as processMemoryIpc from './ipc/processMemory'
+import * as reviewThreadsIpc from './ipc/reviewThreads'
 import * as taskIpc from './ipc/tasks'
 import * as terminalIpc from './ipc/terminal'
 
@@ -22,6 +23,7 @@ const domainModules = {
   github: githubIpc,
   pluginManagement: pluginManagementIpc,
   processMemory: processMemoryIpc,
+  reviewThreads: reviewThreadsIpc,
   tasks: taskIpc,
   terminal: terminalIpc,
 }

@@ -5,6 +5,7 @@ import { createFrontendHostRequestEventListener } from './appDesktopEventListene
 import { createPluginEventListeners } from './appDesktopEventListeners/pluginEventListeners'
 import { createPluginSystemEventListeners } from './appDesktopEventListeners/pluginSystemEventListeners'
 import { createPullRequestAttentionEventListeners } from './appDesktopEventListeners/pullRequestAttentionEventListeners'
+import { createReviewThreadEventListeners } from './appDesktopEventListeners/reviewThreadEventListeners'
 import { createTaskSessionEventListeners } from './appDesktopEventListeners/taskSessionEventListeners'
 import type { AppDesktopEventDeps, AppEventListen } from './appDesktopEventListeners/types'
 
@@ -21,6 +22,7 @@ export function createAppDesktopEventListenerRegistrations(deps: AppDesktopEvent
   const taskSessionListeners = createTaskSessionEventListeners(deps)
   const pluginListeners = createPluginEventListeners(deps)
   const pluginSystemListeners = createPluginSystemEventListeners()
+  const reviewThreadListeners = createReviewThreadEventListeners()
 
   return [
     pullRequestAttentionListeners.githubSyncComplete,
@@ -49,6 +51,7 @@ export function createAppDesktopEventListenerRegistrations(deps: AppDesktopEvent
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,
     taskSessionListeners.taskChanged,
+    reviewThreadListeners.reviewThreadsChanged,
   ] as const
 }
 

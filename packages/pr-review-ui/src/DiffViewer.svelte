@@ -4,6 +4,7 @@
   import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
+  import type { ReviewThread } from '@openforge-app/plugin-sdk'
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -70,6 +71,8 @@
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToAiThread?: (threadId: string, body: string) => void
+    threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
@@ -78,7 +81,7 @@
     onRemovePendingReply?: (commentId: number) => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToAiThread, threads = [], onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
@@ -491,6 +494,8 @@
               {aiThreads}
               {onAskAgent}
               {onCommentNow}
+              {onReplyToAiThread}
+              {threads}
               {onReplyToThread}
               {onAskAboutComment}
               {onReplyToExistingComment}

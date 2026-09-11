@@ -895,6 +895,96 @@ export interface TasksAPI extends TaskOperationsAPI {
   onDidChange(projectId: string, handler: (event: TaskChangeEvent) => void): Disposable
 }
 
+/**
+ * Addresses a set of Review Threads. The host stores and compares all three
+ * parts and never interprets them, so any review surface can name its own
+ * target without core knowing what that target is.
+ */
+export interface ReviewThreadScope {
+  /** Review surface that owns the addressing scheme, such as `github`. */
+  namespace: string
+  /** Surface-owned key for the reviewed thing. Matches no other host record. */
+  targetKey: string
+  /** Surface-owned revision of the target, such as a head commit SHA. */
+  revision: string
+}
+
+export type ReviewThreadSide = 'LEFT' | 'RIGHT'
+
+export type ReviewThreadAnchor =
+  | { kind: 'line'; filePath: string; line: number; side: ReviewThreadSide }
+  | { kind: 'custom'; key: string }
+
+export type ReviewThreadOrigin = 'agent' | 'human' | 'plugin'
+
+export type ReviewThreadRole = 'agent' | 'human'
+
+export type ReviewThreadStatus = 'open' | 'resolved' | 'dismissed'
+
+export type ReviewThreadAwaiting = 'none' | 'agent' | 'error'
+
+export interface ReviewThreadMessage {
+  id: string
+  role: ReviewThreadRole
+  body: string
+  createdAt: number
+}
+
+export interface ReviewThread extends ReviewThreadScope {
+  id: string
+  runId: string | null
+  origin: ReviewThreadOrigin
+  anchor: ReviewThreadAnchor
+  status: ReviewThreadStatus
+  awaiting: ReviewThreadAwaiting
+  idempotencyKey: string | null
+  seenAt: number | null
+  createdAt: number
+  updatedAt: number
+  /** Oldest first. A reply appends here rather than creating a second thread. */
+  messages: ReviewThreadMessage[]
+}
+
+export interface CreateReviewThreadRequest extends ReviewThreadScope {
+  anchor: ReviewThreadAnchor
+  origin: ReviewThreadOrigin
+  /** First message of the thread. Must not be blank. */
+  body: string
+  runId?: string | null
+}
+
+export interface ReplyToReviewThreadRequest {
+  threadId: string
+  role: ReviewThreadRole
+  body: string
+}
+
+/**
+ * A coalescible signal that the Review Threads of one scope may now be stale.
+ * It never contains a thread snapshot: re-list the scope instead.
+ */
+export type ReviewThreadChangeEvent = ReviewThreadScope
+
+export interface ReviewThreadOperationsAPI {
+  /** Returns only threads stored under that exact scope, oldest first. */
+  list(scope: ReviewThreadScope): Promise<ReviewThread[]>
+  /**
+   * Creates a thread with its first message. Rejects with a message naming the
+   * offending field when a structural invariant fails, and stores nothing.
+   */
+  create(request: CreateReviewThreadRequest): Promise<ReviewThread>
+  /** Appends a message to an existing thread. Rejects an unknown thread ID. */
+  reply(request: ReplyToReviewThreadRequest): Promise<ReviewThread>
+}
+
+export interface ReviewThreadsAPI extends ReviewThreadOperationsAPI {
+  /**
+   * Subscribes to coalescible Review Thread invalidations for one scope.
+   * Re-list the scope instead of treating events as snapshots.
+   */
+  onDidChange(scope: ReviewThreadScope, handler: (event: ReviewThreadChangeEvent) => void): Disposable
+}
+
 export interface ProjectsAPI {
   list(): Promise<Project[]>
   get(projectId: string): Promise<Project | null>
@@ -933,6 +1023,7 @@ export interface OpenForgeCommonAPI {
   }
   agentSessions: AgentSessionsAPI
   tasks: TaskOperationsAPI
+  reviewThreads: ReviewThreadOperationsAPI
   projects: ProjectsAPI
   fs: FileSystemAPI
   shell: ShellAPI
@@ -945,6 +1036,7 @@ export interface OpenForgeCommonAPI {
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   tasks: TasksAPI
+  reviewThreads: ReviewThreadsAPI
   browserSurfaces: BrowserSurfacesAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry
