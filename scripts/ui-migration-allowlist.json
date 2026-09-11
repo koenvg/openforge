@@ -288,9 +288,13 @@
     {"tag":"img","context":"class=\"max-h-[70vh] w-full rounded-[var(--of-radius-container)] border border-[var(--of-border)] bg-[var(--of-surface-subtle)] object-contain\"","tokens":["max-h-[70vh]"],"count":1,"reason":"Bound the media preview to its available viewport while preserving aspect ratio."}
   ],
   "src/components/feedback/toasts/AppToast.svelte": [
-    {"tag":"div","context":"class=\"alert {variantClass} max-w-[400px] gap-3 text-sm shadow-lg animate-slideIn\"","tokens":["max-w-[400px]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
-    {"tag":"button","context":"class=\"min-w-0 flex-1 cursor-pointer break-words text-left font-semibold\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"min-w-0 flex-1 whitespace-pre-line break-words\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
+    {"tag":"style","context":".app-toast","tokens":["width: 100%","max-width: 24rem"],"count":1,"reason":"Toast cards fill the stack column while matching the upstream Toast Stack's compact maximum width."},
+    {"tag":"style","context":".app-toast-content","tokens":["min-width: 0"],"count":1,"reason":"Let long notification copy shrink and wrap inside the bounded toast card."},
+    {"tag":"style","context":".app-toast-title-action","tokens":["width: 100%"],"count":1,"reason":"The legacy actionable toast title spans the content column so its full label remains clickable."}
+  ],
+  "src/components/feedback/toasts/ToastHost.svelte": [
+    {"tag":"style","context":".toast-stack","tokens":["width: min(calc(100vw - 2 * var(--of-space4)), 24rem)"],"count":1,"reason":"The fixed notification stack is bounded to the upstream Toast Stack width while remaining fluid within the viewport."},
+    {"tag":"style","context":".toast-stack","tokens":["width: calc(100vw - 2 * var(--of-space3))"],"count":1,"reason":"The mobile notification stack leaves a token-sized edge gutter on narrow windows."}
   ],
   "src/components/focus-board/BacklogLabelFilterDropdown.svelte": [
     {"tag":"span","context":"class=\"min-w-0 flex-1 truncate\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}

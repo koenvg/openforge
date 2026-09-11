@@ -30,6 +30,15 @@ describe('AppToast', () => {
     expect(ondismiss).toHaveBeenCalledOnce()
   })
 
+  it('keeps a zero-timeout toast visible until it is dismissed', () => {
+    vi.useFakeTimers()
+    const ondismiss = vi.fn()
+    render(AppToast, { props: { message: 'Persistent message', variant: 'info', timeout: 0, ondismiss } })
+
+    vi.advanceTimersByTime(60_000)
+    expect(ondismiss).not.toHaveBeenCalled()
+  })
+
   it('resets its timeout when the visible message is replaced', async () => {
     vi.useFakeTimers()
     const ondismiss = vi.fn()

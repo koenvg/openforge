@@ -141,4 +141,15 @@ describe('ToastHost', () => {
     expect((await screen.findByText('Bottom message')).closest('[data-position="bottom"]')).not.toBeNull()
     expect((await screen.findByText(/Agent needs input on PROJ-42/)).closest('[data-position="raised"]')).not.toBeNull()
   })
+
+  it('renders simultaneous notifications inside one stack container', async () => {
+    render(ToastHost)
+    error.set('Stacked error')
+    taskSpawned.set({ taskId: 'new-task', promptText: 'Stacked task' })
+
+    await screen.findByText('Stacked error')
+    const notificationStack = document.querySelector('[aria-label="Notifications"]')
+    expect(notificationStack).not.toBeNull()
+    expect(notificationStack?.querySelectorAll('.app-toast')).toHaveLength(2)
+  })
 })
