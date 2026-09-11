@@ -10,6 +10,7 @@ const componentNames = [
   'IconButton',
   'Panel',
   'Switch',
+  'StatusBadge',
   'TextField',
   'Textarea',
 ] as const

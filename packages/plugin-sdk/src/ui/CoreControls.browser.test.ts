@@ -187,6 +187,33 @@ describe.each(['light', 'dark', 'custom'])('core control browser styles in %s th
     }
   })
 
+  it('uses Spectrum progress timing and disables the animation for reduced motion', async () => {
+    const page = await browser.newPage({ reducedMotion: 'no-preference' })
+    try {
+      await openFixture(page, theme)
+      await page.emulateMedia({ reducedMotion: 'no-preference' })
+      const icon = page.locator('[data-status="in-progress"] svg')
+      expect(await icon.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return {
+          animationDuration: style.animationDuration,
+          animationIterationCount: style.animationIterationCount,
+          animationName: style.animationName,
+          animationTimingFunction: style.animationTimingFunction,
+        }
+      })).toMatchObject({
+        animationDuration: '3s',
+        animationIterationCount: 'infinite',
+        animationTimingFunction: 'linear',
+      })
+
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      expect(await icon.evaluate((element) => getComputedStyle(element).animationName)).toBe('none')
+    } finally {
+      await page.close()
+    }
+  })
+
   it.each(['Repository name', 'Review note'])('preserves the %s background while showing its invalid border', async (name) => {
     const page = await browser.newPage({ reducedMotion: 'reduce' })
     try {

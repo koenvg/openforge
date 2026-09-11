@@ -6,6 +6,7 @@
   import IconButton from './IconButton.svelte'
   import Panel from './Panel.svelte'
   import Switch from './Switch.svelte'
+  import StatusBadge from './StatusBadge.svelte'
   import Textarea from './Textarea.svelte'
   import TextField from './TextField.svelte'
 
@@ -45,7 +46,7 @@
   `)
 </script>
 
-<div data-theme-fixture={theme} style={themeStyle}>
+<div data-theme-fixture={theme} data-theme-appearance={theme === 'dark' ? 'dark' : 'light'} style={themeStyle}>
   <div role="group" aria-label="Button"><Button type="button">Run review</Button></div>
   <div role="group" aria-label="IconButton"><IconButton label="Refresh tasks">{@render icons()}</IconButton></div>
   <div role="group" aria-label="TextField"><TextField label="Repository name" value="openforge" {invalid} /></div>
@@ -53,6 +54,8 @@
   <div role="group" aria-label="Checkbox"><label><Checkbox checked /> Include generated files</label></div>
   <div role="group" aria-label="Switch"><Switch label="Enable notifications" checked /></div>
   <Badge role="status" variant="success">Ready</Badge>
+  <StatusBadge status="success">Ready status</StatusBadge>
+  <StatusBadge status="in-progress">Running status</StatusBadge>
   <Panel aria-label="Review summary"><p>Two files changed.</p></Panel>
   {#each ['primary', 'danger'] as const as variant}
     {#each [false, true] as disabled}

@@ -277,6 +277,7 @@ const inventory = {
     { source: 'packages/plugin-sdk/src/ui/Select.svelte', stories: sdkSelectors },
     { source: 'packages/plugin-sdk/src/ui/SearchableSelect.svelte', stories: sdkSelectors },
     { source: 'packages/plugin-sdk/src/ui/Badge.svelte', stories: sdkPresentation },
+    { source: 'packages/plugin-sdk/src/ui/StatusBadge.svelte', stories: sdkPresentation },
     { source: 'packages/plugin-sdk/src/ui/Panel.svelte', stories: sdkPresentation },
     { source: 'packages/plugin-sdk/src/ui/FileTypeIcon.svelte', stories: sdkPresentation },
     { source: 'packages/plugin-sdk/src/ui/PluginSidebarLink.svelte', stories: [...sdkNavigation, 'sdk-sidebar-link--default', 'sdk-sidebar-link--active', 'sdk-sidebar-link--collapsed', 'sdk-sidebar-link--keyboard'] },

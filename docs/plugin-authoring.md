@@ -99,6 +99,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox component |
 | `@openforge-app/plugin-sdk/ui/Switch.svelte` | Shared labeled boolean switch |
 | `@openforge-app/plugin-sdk/ui/Badge.svelte` | Shared semantic status badge |
+| `@openforge-app/plugin-sdk/ui/StatusBadge.svelte` | Shared icon-bearing status badge with Spectrum-inspired status treatments |
 | `@openforge-app/plugin-sdk/ui/Panel.svelte` | Shared token-driven content panel |
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Shared plugin-safe collapsible section with persisted expanded/collapsed state |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Shared file-type icon component |

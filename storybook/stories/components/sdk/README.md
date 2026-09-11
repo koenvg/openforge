@@ -7,7 +7,7 @@ KVG-4691 owns these production controls in the component catalog. The shared `Se
 | Actions | Button, IconButton, internal ButtonControl | Variants, sizes, disabled, caller-composed busy action, narrow overflow, keyboard activation |
 | Fields | TextField, Textarea, Checkbox, Switch | Empty, selected, disabled, validation, mixed checkboxes, input adornments, narrow overflow, keyboard edits |
 | Selectors | Select, SearchableSelect | Placeholder, selected, disabled controls/options, validation, open popup, empty results, filtering, overflow, 5,000 options with 40 visible results, keyword-only search, keyboard selection/dismissal |
-| Presentation | Badge, Panel, FileTypeIcon | All badge/panel variants, panel slots/padding, representative file types and fallback, open/closed folders, narrow overflow |
+| Presentation | Badge, StatusBadge, Panel, FileTypeIcon | All badge variants, all StatusBadge states, panel slots/padding, representative file types and fallback, open/closed folders, narrow overflow |
 | Navigation | PluginSidebarLink | Inactive, current page, collapsed, long label, keyboard activation |
 
 KVG-4692 owns the composite exports: Modal, AnchoredMenu, Tabs, Tooltip, MarkdownContent, ProjectFileTree, ResizablePanel, PluginPageHeader, PluginPageShell, PluginViewState, and CollapsibleSection. No new page contribution belongs to this slice. The original Button primary story and baseline remain valid.

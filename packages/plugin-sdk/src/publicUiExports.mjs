@@ -10,6 +10,7 @@ const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'Checkbox',
   'Switch',
   'Badge',
+  'StatusBadge',
   'Panel',
   'MarkdownContent',
   'ResizablePanel',
