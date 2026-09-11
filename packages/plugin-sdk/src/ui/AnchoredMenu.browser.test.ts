@@ -289,6 +289,7 @@ it('reveals the menu panel and items with the anchored motion treatment', async 
     const opening = await openingStyles
     const menu = page.getByRole('menu', { name: 'Report actions' })
     await menu.waitFor()
+    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
 
     const motion = await menu.evaluate((node) => {
       const panelStyles = getComputedStyle(node)
@@ -310,6 +311,37 @@ it('reveals the menu panel and items with the anchored motion treatment', async 
     expect(motion.panelClipPath).not.toContain('100%')
     expect(motion.itemTransition).toContain('opacity')
     expect(motion.itemTransition).toContain('transform')
+  } finally {
+    await page.close()
+  }
+})
+
+it('fades the menu panel away without leaving a top border on close', async () => {
+  const page = await browser.newPage()
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    const trigger = page.getByRole('button', { name: 'Report actions' })
+    await trigger.click()
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
+
+    await page.keyboard.press('Escape')
+    const endingMenu = page.locator('[role="menu"][data-ending-style]')
+    await endingMenu.waitFor()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const closing = await endingMenu.evaluate((node) => {
+      const styles = getComputedStyle(node)
+      return {
+        panelClipPath: styles.clipPath,
+        panelOpacity: styles.opacity,
+        panelTransition: styles.transition,
+      }
+    })
+    expect(closing.panelClipPath).toContain('100%')
+    expect(Number(closing.panelOpacity)).toBeLessThan(1)
+    expect(closing.panelTransition).toContain('opacity')
+    await menu.waitFor({ state: 'hidden' })
   } finally {
     await page.close()
   }

@@ -229,7 +229,9 @@
     font-family: var(--of-font-sans);
     outline: none;
     clip-path: inset(0 0 100% 0 round var(--of-radius-control, 14px));
-    transition: clip-path 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+      clip-path 500ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1));
   }
 
   :global(.of-menu-content[data-state='open']) {
@@ -238,6 +240,12 @@
 
   :global(.of-menu-content[data-starting-style]) {
     clip-path: inset(0 0 100% 0 round var(--of-radius-control, 14px));
+  }
+
+  :global(.of-menu-content[data-ending-style]) {
+    clip-path: inset(100% 0 0 0 round var(--of-radius-control, 14px));
+    opacity: 0;
+    transition: opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1));
   }
 
   :global(.of-menu-item) {
@@ -295,8 +303,11 @@
       transition: none;
     }
 
-    :global(.of-menu-content[data-starting-style]) {
+    :global(.of-menu-content[data-starting-style]),
+    :global(.of-menu-content[data-ending-style]) {
       clip-path: inset(0 round var(--of-radius-control, 14px));
+      opacity: 1;
+      transition: none;
     }
 
     :global(.of-menu-item) {
