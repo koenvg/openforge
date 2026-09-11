@@ -119,7 +119,7 @@ async function captureStory(browser, url, entry, { prepare, mutate, timeout = 30
     page.on('pageerror', error => errors.push(error.message))
     await page.clock.setFixedTime(new Date('2026-01-02T09:30:00.000Z'))
     if (prepare) await prepare(page)
-    await page.goto(`${url}/${entry.catalog}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:${entry.theme}`, { waitUntil: 'domcontentloaded', timeout })
+    await page.goto(`${url}/${entry.catalog}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:${entry.theme};openforgeMotion:reduced`, { waitUntil: 'domcontentloaded', timeout })
     try {
       await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
       if (await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase === 'errored')) {

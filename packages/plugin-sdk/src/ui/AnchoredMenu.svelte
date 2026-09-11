@@ -236,6 +236,10 @@
     clip-path: inset(0 round var(--of-radius-control, 14px));
   }
 
+  :global(.of-menu-content[data-starting-style]) {
+    clip-path: inset(0 0 100% 0 round var(--of-radius-control, 14px));
+  }
+
   :global(.of-menu-item) {
     display: flex;
     align-items: center;
@@ -248,7 +252,7 @@
     line-height: var(--of-line-height-sm);
     cursor: pointer;
     opacity: 0;
-    transform: translateY(calc(-1 * var(--of-space1)));
+    transform: translateY(calc(-1 * var(--of-space1, 4px)));
     transition:
       opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1)),
       transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -257,6 +261,11 @@
   :global(.of-menu-content[data-state='open'] .of-menu-item) {
     opacity: 1;
     transform: translateY(0);
+  }
+
+  :global(.of-menu-content[data-starting-style] .of-menu-item) {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--of-space1, 4px)));
   }
 
   :global(.of-menu-item > svg) {
@@ -286,10 +295,19 @@
       transition: none;
     }
 
+    :global(.of-menu-content[data-starting-style]) {
+      clip-path: inset(0 round var(--of-radius-control, 14px));
+    }
+
     :global(.of-menu-item) {
       opacity: 1;
       transform: none;
       transition: none;
+    }
+
+    :global(.of-menu-content[data-starting-style] .of-menu-item) {
+      opacity: 1;
+      transform: none;
     }
   }
 </style>

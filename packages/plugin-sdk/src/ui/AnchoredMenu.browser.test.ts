@@ -266,7 +266,27 @@ it('reveals the menu panel and items with the anchored motion treatment', async 
   const page = await browser.newPage()
   try {
     await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    const openingStyles = page.evaluate(() => new Promise<{ panelClipPath: string; itemOpacity: string; itemTransform: string }>((resolve) => {
+      const inspect = () => {
+        const menu = document.querySelector<HTMLElement>('[role="menu"][data-starting-style]')
+        const item = menu?.querySelector<HTMLElement>('[role="menuitem"]')
+        if (!menu || !item) return
+        resolve({
+          panelClipPath: getComputedStyle(menu).clipPath,
+          itemOpacity: getComputedStyle(item).opacity,
+          itemTransform: getComputedStyle(item).transform,
+        })
+      }
+      const observer = new MutationObserver(() => {
+        inspect()
+        if (document.querySelector('[role="menu"][data-starting-style]')) return
+        observer.disconnect()
+      })
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+      inspect()
+    }))
     await page.getByRole('button', { name: 'Report actions' }).click()
+    const opening = await openingStyles
     const menu = page.getByRole('menu', { name: 'Report actions' })
     await menu.waitFor()
 
@@ -281,6 +301,9 @@ it('reveals the menu panel and items with the anchored motion treatment', async 
       }
     })
 
+    expect(opening.panelClipPath).toContain('100%')
+    expect(opening.itemOpacity).toBe('0')
+    expect(opening.itemTransform).not.toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
     expect(motion.state).toBe('open')
     expect(motion.panelTransition).toContain('clip-path')
     expect(motion.panelTransition).toContain('cubic-bezier(0.16, 1, 0.3, 1)')

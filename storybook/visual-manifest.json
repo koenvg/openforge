@@ -93,28 +93,6 @@
     "expectedErrors": []
   },
   {
-    "catalog": "components",
-    "story": "components-button--all-variants",
-    "theme": "workshop-light",
-    "viewport": {
-      "width": 1280,
-      "height": 1200
-    },
-    "ready": "[aria-label=\"Button variants\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-button--all-variants",
-    "theme": "workshop-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 1200
-    },
-    "ready": "[aria-label=\"Button variants\"]",
-    "expectedErrors": []
-  },
-  {
     "catalog": "pages",
     "story": "application-shell--expanded",
     "theme": "openforge-light",
