@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { Component } from 'svelte'
+  import AnimatedNavList from '../shared/ui/AnimatedNavList.svelte'
 
   export interface SettingsCategory {
     id: string
@@ -41,28 +42,32 @@
   class="w-full shrink-0 border-b border-[var(--of-border)] bg-[var(--of-surface)] p-4 lg:w-64 lg:border-b-0 lg:border-r"
 >
   <h2 class="m-0 mb-3 px-3 text-sm font-semibold text-[var(--of-text)]">Settings</h2>
-  <div class="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
-    {#each categories as category, index (category.id)}
-      {@const Icon = category.icon}
-      <Button
-        type="button"
-        data-settings-category
-        variant="ghost"
-        data-danger={category.danger || undefined}
-        class="settings-category-button w-full text-left"
-        size="sm"
-        aria-current={activeId === category.id ? 'page' : undefined}
-        aria-label={category.description ? `${category.label}: ${category.description}` : category.label}
-        onclick={() => onSelect(category.id)}
-        onkeydown={(event) => handleCategoryKeydown(event, index)}
-      >
-        {#if Icon}
-          <Icon size={17} class="shrink-0" aria-hidden="true" />
-        {/if}
-        <span class="truncate text-sm">{category.label}</span>
-      </Button>
-    {/each}
-  </div>
+  <AnimatedNavList activeId={activeId} class="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
+    {#snippet children(registerItem)}
+      {#each categories as category, index (category.id)}
+        {@const Icon = category.icon}
+        <div class="settings-category-row" data-animated-nav-item={category.id} use:registerItem={category.id}>
+          <Button
+            type="button"
+            data-settings-category
+            variant="ghost"
+            data-danger={category.danger || undefined}
+            class="settings-category-button w-full text-left"
+            size="sm"
+            aria-current={activeId === category.id ? 'page' : undefined}
+            aria-label={category.description ? `${category.label}: ${category.description}` : category.label}
+            onclick={() => onSelect(category.id)}
+            onkeydown={(event) => handleCategoryKeydown(event, index)}
+          >
+            {#if Icon}
+              <Icon size={17} class="shrink-0" aria-hidden="true" />
+            {/if}
+            <span class="truncate text-sm">{category.label}</span>
+          </Button>
+        </div>
+      {/each}
+    {/snippet}
+  </AnimatedNavList>
 </nav>
 
 <style>
@@ -74,9 +79,18 @@
     color: var(--of-text-muted);
   }
 
+  nav :global(button.settings-category-button),
+  nav :global(button.settings-category-button:hover),
+  nav :global(button.settings-category-button:active) {
+    background: transparent !important;
+  }
+
+  .settings-category-row {
+    position: relative;
+  }
+
   nav :global(button.settings-category-button[aria-current='page']),
   nav :global(button.settings-category-button[aria-current='page']:hover) {
-    background: var(--of-accent-subtle);
     color: var(--of-text);
     font-weight: var(--of-weight-medium);
   }

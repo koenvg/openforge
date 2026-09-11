@@ -26,6 +26,7 @@
   } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import AnimatedNavList from '../shared/ui/AnimatedNavList.svelte'
 
   interface Props {
     collapsed: boolean
@@ -111,162 +112,168 @@
   </div>
 
   <div class="flex-1 overflow-y-auto">
-    {#each visibleProjects as project, index (project.id)}
-      {@const attentionCount = getAttentionCount(project.id)}
-      {@const isActive = project.id === $activeProjectId && projectContextActive}
-      {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
+    <AnimatedNavList activeId={projectContextActive ? $activeProjectId : null} class="px-2">
+      {#snippet children(registerItem)}
+        {#each visibleProjects as project, index (project.id)}
+          {@const attentionCount = getAttentionCount(project.id)}
+          {@const isActive = project.id === $activeProjectId && projectContextActive}
+          {@const reviewCount = $reviewRequestCountByProject.get(project.id) ?? 0}
 
-      {#if collapsed}
-        <IconButton
-          type="button"
-          size="lg"
-          variant="ghost"
-          class="collapsed-project-button"
-          label={project.name}
-          title={project.name}
-          aria-current={isActive ? 'true' : undefined}
-          onclick={() => onSelectProject(project.id)}
-        >
-          <span class="project-avatar" aria-hidden="true">{project.name.charAt(0)}</span>
-          {#if attentionCount > 0}
-            <span
-              class="project-status-indicator project-status-attention"
-              title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
-            >
-              <Bot size={12} />
-            </span>
-          {/if}
-          {#if reviewCount > 0}
-            <span
-              class="project-status-indicator project-status-review"
-              title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
-            >
-              <GitPullRequest size={12} />
-            </span>
-          {/if}
-        </IconButton>
-      {:else}
-        <div class="project-row group relative flex">
-          <Button
-            type="button"
-            size="lg"
-            variant="ghost"
-            class="expanded-project-button"
-            aria-label={project.name}
-            aria-current={isActive ? 'true' : undefined}
-            onclick={() => onSelectProject(project.id)}
-          >
-            <span class="project-copy">
-              <span class="project-name">{project.name}</span>
-              {#if reviewCount > 0 || attentionCount > 0}
-                <span class="project-statuses">
-                  {#if reviewCount > 0}
-                    <span class="project-status project-review-status" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
-                      <GitPullRequest size={12} />
-                      <span>{reviewCount}</span>
-                    </span>
-                  {/if}
-                  {#if attentionCount > 0}
-                    <span class="project-status project-attention-status" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
-                      <Bot size={12} />
-                      <span>{attentionCount}</span>
-                    </span>
-                  {/if}
-                </span>
-              {/if}
-            </span>
-          </Button>
-          <div class="project-actions">
-            <IconButton
-              type="button"
-              size="xs"
-              variant="ghost"
-              label="Hide {project.name}"
-              disabled={isSavingHidden}
-              onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, true) }}
-            >
-              <EyeOff size={14} />
-            </IconButton>
-            <div class="flex items-center gap-1">
-              {#if index > 0}
-                <IconButton
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  label="Move {project.name} up"
-                  disabled={isSavingProjectOrder}
-                  onclick={(event) => { event.stopPropagation(); moveProject(index, 'up') }}
-                >
-                  <ArrowUp size={14} />
-                </IconButton>
-              {/if}
-              {#if index < visibleProjects.length - 1}
-                <IconButton
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  label="Move {project.name} down"
-                  disabled={isSavingProjectOrder}
-                  onclick={(event) => { event.stopPropagation(); moveProject(index, 'down') }}
-                >
-                  <ArrowDown size={14} />
-                </IconButton>
-              {/if}
+          {#if collapsed}
+            <div class="collapsed-project-row" data-animated-nav-item={project.id} use:registerItem={project.id}>
+              <IconButton
+                type="button"
+                size="lg"
+                variant="ghost"
+                class="collapsed-project-button"
+                label={project.name}
+                title={project.name}
+                aria-current={isActive ? 'true' : undefined}
+                onclick={() => onSelectProject(project.id)}
+              >
+                <span class="project-avatar" aria-hidden="true">{project.name.charAt(0)}</span>
+                {#if attentionCount > 0}
+                  <span
+                    class="project-status-indicator project-status-attention"
+                    title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention"
+                  >
+                    <Bot size={12} />
+                  </span>
+                {/if}
+                {#if reviewCount > 0}
+                  <span
+                    class="project-status-indicator project-status-review"
+                    title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review"
+                  >
+                    <GitPullRequest size={12} />
+                  </span>
+                {/if}
+              </IconButton>
             </div>
-          </div>
-        </div>
-      {/if}
-    {/each}
-
-    {#if !collapsed && hiddenProjects.length > 0}
-      <div class="hidden-projects">
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost"
-          class="hidden-projects-toggle"
-          aria-expanded={hiddenExpanded}
-          onclick={() => (hiddenExpanded = !hiddenExpanded)}
-        >
-          {#if hiddenExpanded}
-            <ChevronDown size={12} />
           {:else}
-            <ChevronRight size={12} />
-          {/if}
-          <span>Hidden ({hiddenProjects.length})</span>
-        </Button>
-        {#if hiddenExpanded}
-          {#each hiddenProjects as project (project.id)}
-            {@const isActive = project.id === $activeProjectId && projectContextActive}
-            <div class="hidden-project-row group relative flex">
+            <div class="project-row group relative flex" data-animated-nav-item={project.id} use:registerItem={project.id}>
               <Button
                 type="button"
-                size="sm"
+                size="lg"
                 variant="ghost"
-                class="hidden-project-button"
+                class="expanded-project-button"
                 aria-label={project.name}
                 aria-current={isActive ? 'true' : undefined}
                 onclick={() => onSelectProject(project.id)}
               >
-                {project.name}
+                <span class="project-copy">
+                  <span class="project-name">{project.name}</span>
+                  {#if reviewCount > 0 || attentionCount > 0}
+                    <span class="project-statuses">
+                      {#if reviewCount > 0}
+                        <span class="project-status project-review-status" title="{reviewCount} PR{reviewCount === 1 ? '' : 's'} awaiting your review">
+                          <GitPullRequest size={12} />
+                          <span>{reviewCount}</span>
+                        </span>
+                      {/if}
+                      {#if attentionCount > 0}
+                        <span class="project-status project-attention-status" title="{attentionCount} item{attentionCount === 1 ? '' : 's'} needing attention">
+                          <Bot size={12} />
+                          <span>{attentionCount}</span>
+                        </span>
+                      {/if}
+                    </span>
+                  {/if}
+                </span>
               </Button>
-              <div class="hidden-project-actions">
+              <div class="project-actions">
                 <IconButton
                   type="button"
                   size="xs"
                   variant="ghost"
-                  label="Unhide {project.name}"
+                  label="Hide {project.name}"
                   disabled={isSavingHidden}
-                  onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, false) }}
+                  onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, true) }}
                 >
-                  <Eye size={12} />
+                  <EyeOff size={14} />
                 </IconButton>
+                <div class="flex items-center gap-1">
+                  {#if index > 0}
+                    <IconButton
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      label="Move {project.name} up"
+                      disabled={isSavingProjectOrder}
+                      onclick={(event) => { event.stopPropagation(); moveProject(index, 'up') }}
+                    >
+                      <ArrowUp size={14} />
+                    </IconButton>
+                  {/if}
+                  {#if index < visibleProjects.length - 1}
+                    <IconButton
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      label="Move {project.name} down"
+                      disabled={isSavingProjectOrder}
+                      onclick={(event) => { event.stopPropagation(); moveProject(index, 'down') }}
+                    >
+                      <ArrowDown size={14} />
+                    </IconButton>
+                  {/if}
+                </div>
               </div>
             </div>
-          {/each}
+          {/if}
+        {/each}
+
+        {#if !collapsed && hiddenProjects.length > 0}
+          <div class="hidden-projects">
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              class="hidden-projects-toggle"
+              aria-expanded={hiddenExpanded}
+              onclick={() => (hiddenExpanded = !hiddenExpanded)}
+            >
+              {#if hiddenExpanded}
+                <ChevronDown size={12} />
+              {:else}
+                <ChevronRight size={12} />
+              {/if}
+              <span>Hidden ({hiddenProjects.length})</span>
+            </Button>
+            {#if hiddenExpanded}
+              {#each hiddenProjects as project (project.id)}
+                {@const isActive = project.id === $activeProjectId && projectContextActive}
+                <div class="hidden-project-row group relative flex" data-animated-nav-item={project.id} use:registerItem={project.id}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    class="hidden-project-button"
+                    aria-label={project.name}
+                    aria-current={isActive ? 'true' : undefined}
+                    onclick={() => onSelectProject(project.id)}
+                  >
+                    {project.name}
+                  </Button>
+                  <div class="hidden-project-actions">
+                    <IconButton
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      label="Unhide {project.name}"
+                      disabled={isSavingHidden}
+                      onclick={(event) => { event.stopPropagation(); setProjectHidden(project.id, false) }}
+                    >
+                      <Eye size={12} />
+                    </IconButton>
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
         {/if}
-      </div>
-    {/if}
+      {/snippet}
+    </AnimatedNavList>
   </div>
 </div>
 
@@ -294,8 +301,19 @@
 
   .project-sidebar-list :global(button.collapsed-project-button[aria-current='true']) {
     border-color: var(--of-border-interactive);
-    background: var(--of-accent-subtle);
     color: var(--of-on-accent-subtle);
+  }
+
+  .project-sidebar-list :global(button.collapsed-project-button),
+  .project-sidebar-list :global(button.collapsed-project-button:hover),
+  .project-sidebar-list :global(button.collapsed-project-button:active),
+  .project-sidebar-list :global(button.expanded-project-button),
+  .project-sidebar-list :global(button.expanded-project-button:hover),
+  .project-sidebar-list :global(button.expanded-project-button:active),
+  .project-sidebar-list :global(button.hidden-project-button),
+  .project-sidebar-list :global(button.hidden-project-button:hover),
+  .project-sidebar-list :global(button.hidden-project-button:active) {
+    background: transparent !important;
   }
 
   .project-avatar {
@@ -335,15 +353,10 @@
     color: var(--of-on-danger);
   }
 
-  .project-row,
-  .hidden-project-row {
-    border-left: calc(var(--of-border-width) * 2) solid transparent;
-  }
-
-  .project-row:has(:global(.expanded-project-button[aria-current='true'])),
-  .hidden-project-row:has(:global(.hidden-project-button[aria-current='true'])) {
-    border-left-color: var(--of-accent);
-    background: var(--of-accent-subtle);
+  .collapsed-project-row {
+    position: relative;
+    display: flex;
+    justify-content: center;
   }
 
   .project-sidebar-list :global(button.expanded-project-button),

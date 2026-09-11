@@ -124,6 +124,15 @@ describe('ProjectSidebarList', () => {
     expect(screen.getByRole('button', { name: /^alpha project$/i }).getAttribute('aria-current')).toBeNull()
   })
 
+  it('uses one shared highlight for project rows without the active left rail', () => {
+    const { container } = renderProjectList()
+
+    expect(container.querySelectorAll('[data-animated-nav-indicator]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-animated-nav-item]')).toHaveLength(3)
+    expect(container.querySelector('.animated-nav-list-items')?.classList.contains('px-2')).toBe(true)
+    expect(container.querySelector('[data-animated-nav-rail]')).toBeNull()
+  })
+
   describe('badges', () => {
     it('shows attention counts and omits zero counts', () => {
       attentionCounts.set(new Map([
