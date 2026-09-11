@@ -71,6 +71,28 @@
     "expectedErrors": []
   },
   {
+    "catalog": "components",
+    "story": "components-button--all-variants",
+    "theme": "openforge-light",
+    "viewport": {
+      "width": 1280,
+      "height": 1200
+    },
+    "ready": "[aria-label=\"Button variants\"]",
+    "expectedErrors": []
+  },
+  {
+    "catalog": "components",
+    "story": "components-button--all-variants",
+    "theme": "openforge-dark",
+    "viewport": {
+      "width": 1280,
+      "height": 1200
+    },
+    "ready": "[aria-label=\"Button variants\"]",
+    "expectedErrors": []
+  },
+  {
     "catalog": "pages",
     "story": "application-shell--expanded",
     "theme": "openforge-light",

@@ -267,7 +267,7 @@ const inventory = {
     { source: 'src/components/shared/ui/ResizableBottomPanel.svelte', stories: ['components-host-controls-bottom-panel--default', 'components-host-controls-bottom-panel--fill-parent', 'components-host-controls-bottom-panel--resize-and-reset'] },
     { source: 'src/components/shared/adapters/MarkdownContent.svelte', stories: ['components-host-controls-markdown--formatted', 'components-host-controls-markdown--long-content', 'components-host-controls-markdown--empty', 'components-host-controls-markdown--open-external-link'] },
     { source: 'src/components/settings/CompanionPairedDevices.svelte', stories: ['components-settings-companion-devices--paired-and-revoked', 'components-settings-companion-devices--updating', 'components-settings-companion-devices--long-names', 'components-settings-companion-devices--actions'] },
-    { source: 'packages/plugin-sdk/src/ui/Button.svelte', stories: ['components-button--primary', ...sdkActions] },
+    { source: 'packages/plugin-sdk/src/ui/Button.svelte', stories: ['components-button--primary', 'components-button--secondary', 'components-button--outline', 'components-button--ghost', 'components-button--destructive', 'components-button--link', 'components-button--disabled', 'components-button--loading', 'components-button--all-variants', ...sdkActions] },
     { source: 'packages/plugin-sdk/src/ui/ButtonControl.svelte', stories: sdkActions },
     { source: 'packages/plugin-sdk/src/ui/IconButton.svelte', stories: sdkActions },
     { source: 'packages/plugin-sdk/src/ui/TextField.svelte', stories: sdkFields },

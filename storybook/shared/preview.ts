@@ -7,7 +7,7 @@ const preview: Preview = {
   beforeEach: storyEnvironmentPreview.beforeEach,
   initialGlobals: {
     openforgeTheme: 'openforge-light',
-    openforgeMotion: 'reduced',
+    openforgeMotion: 'normal',
   },
   globalTypes: {
     openforgeMotion: {

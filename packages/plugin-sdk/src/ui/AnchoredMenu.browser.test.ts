@@ -262,6 +262,119 @@ it('keeps standalone and split menus within a narrow viewport with readable long
   }
 })
 
+it('reveals the menu panel and items with the anchored motion treatment', async () => {
+  const page = await browser.newPage()
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    const openingStyles = page.evaluate(() => new Promise<{ panelClipPath: string; itemOpacity: string; itemTransform: string }>((resolve) => {
+      const inspect = () => {
+        const menu = document.querySelector<HTMLElement>('[role="menu"][data-starting-style]')
+        const item = menu?.querySelector<HTMLElement>('[role="menuitem"]')
+        if (!menu || !item) return
+        resolve({
+          panelClipPath: getComputedStyle(menu).clipPath,
+          itemOpacity: getComputedStyle(item).opacity,
+          itemTransform: getComputedStyle(item).transform,
+        })
+      }
+      const observer = new MutationObserver(() => {
+        inspect()
+        if (document.querySelector('[role="menu"][data-starting-style]')) return
+        observer.disconnect()
+      })
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+      inspect()
+    }))
+    await page.getByRole('button', { name: 'Report actions' }).click()
+    const opening = await openingStyles
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
+
+    const motion = await menu.evaluate((node) => {
+      const panelStyles = getComputedStyle(node)
+      const itemStyles = getComputedStyle(node.querySelector<HTMLElement>('[role="menuitem"]')!)
+      return {
+        state: node.getAttribute('data-state'),
+        panelTransition: panelStyles.transition,
+        panelClipPath: panelStyles.clipPath,
+        itemTransition: itemStyles.transition,
+      }
+    })
+
+    expect(opening.panelClipPath).toContain('100%')
+    expect(opening.itemOpacity).toBe('0')
+    expect(opening.itemTransform).not.toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
+    expect(motion.state).toBe('open')
+    expect(motion.panelTransition).toContain('clip-path')
+    expect(motion.panelTransition).toContain('cubic-bezier(0.16, 1, 0.3, 1)')
+    expect(motion.panelClipPath).not.toContain('100%')
+    expect(motion.itemTransition).toContain('opacity')
+    expect(motion.itemTransition).toContain('transform')
+  } finally {
+    await page.close()
+  }
+})
+
+it('fades the menu panel away without leaving a top border on close', async () => {
+  const page = await browser.newPage()
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    const trigger = page.getByRole('button', { name: 'Report actions' })
+    await trigger.click()
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
+
+    await page.keyboard.press('Escape')
+    const endingMenu = page.locator('[role="menu"][data-ending-style]')
+    await endingMenu.waitFor()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const closing = await endingMenu.evaluate((node) => {
+      const styles = getComputedStyle(node)
+      return {
+        panelClipPath: styles.clipPath,
+        panelOpacity: styles.opacity,
+        panelTransition: styles.transition,
+      }
+    })
+    expect(closing.panelClipPath).toContain('100%')
+    expect(Number(closing.panelOpacity)).toBeLessThan(1)
+    expect(closing.panelTransition).toContain('opacity')
+    await menu.waitFor({ state: 'hidden' })
+  } finally {
+    await page.close()
+  }
+})
+
+it('settles the menu immediately when reduced motion is preferred', async () => {
+  const page = await browser.newPage({ reducedMotion: 'reduce' })
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/anchored-menu.html`)
+    await page.getByRole('button', { name: 'Report actions' }).click()
+    const menu = page.getByRole('menu', { name: 'Report actions' })
+    await menu.waitFor()
+
+    const motion = await menu.evaluate((node) => {
+      const panelStyles = getComputedStyle(node)
+      const itemStyles = getComputedStyle(node.querySelector<HTMLElement>('[role="menuitem"]')!)
+      return {
+        panelTransitionDuration: panelStyles.transitionDuration,
+        panelClipPath: panelStyles.clipPath,
+        itemOpacity: itemStyles.opacity,
+        itemTransform: itemStyles.transform,
+      }
+    })
+
+    expect(motion.panelTransitionDuration).toBe('0s')
+    expect(motion.panelClipPath).not.toContain('100%')
+    expect(motion.itemOpacity).toBe('1')
+    expect(motion.itemTransform).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
+  } finally {
+    await page.close()
+  }
+})
+
 it('renders the built public SplitButton export without source aliases or app imports', async () => {
   const packageServer = await createServer({
     configFile: false,

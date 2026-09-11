@@ -660,20 +660,22 @@ Use `Button` for plugin actions that need the standard OpenForge button treatmen
   }
 </script>
 
-<Button type="button" variant="primary" size="sm" disabled={saving} onclick={saveSettings}>
-  {saving ? 'Saving…' : 'Save settings'}
+<Button type="button" variant="primary" size="sm" loading={saving} loadingLabel="Saving settings" onclick={saveSettings}>
+  Save settings
 </Button>
 ```
 
 | Prop | Type and default | Notes |
 | --- | --- | --- |
 | `children` | `Snippet`, required | Button content. |
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'error'`, default `'primary'` | Use `danger` for destructive actions. `error` remains as a compatible alias. |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'link' \| 'destructive' \| 'danger' \| 'error'`, default `'primary'` | Use `destructive` for risky actions. `danger` and `error` remain compatible aliases. `link` is for button semantics with link-like presentation. |
 | `size` | `'xs' \| 'sm' \| 'md' \| 'lg'`, default `'md'` | Changes the control size. |
+| `loading` | `boolean`, default `false` | Adds a busy indicator, sets `aria-busy="true"`, and disables activation while the action is pending. |
+| `loadingLabel` | `string` | Replaces the accessible name while loading, useful when the visible label stays stable. |
 | `onClick` | `(event: MouseEvent) => void` | Semantic activation callback. |
 | Native button attributes | `HTMLButtonAttributes` | Attributes such as `type`, `disabled`, `aria-label`, `title`, `class`, and `onclick` pass through. |
 
-`Button` renders a native `<button>`. Native focus, keyboard activation, and disabled semantics apply. Supply visible text or an `aria-label`. A disabled button calls neither `onclick` nor `onClick`. Scoped CSS reads only `--of-*` theme tokens and removes transitions when reduced motion is requested.
+`Button` renders a native `<button>`. Native focus, keyboard activation, and disabled semantics apply. Supply visible text or an `aria-label`. A disabled or loading button calls neither `onclick` nor `onClick`. Scoped CSS reads only `--of-*` theme tokens, includes a visible focus ring, and removes transitions and spinner motion when reduced motion is requested.
 
 In tests, query by role and accessible name, click the button, and assert the callback or disabled state. Do not assert variant or size class names.
 
@@ -685,12 +687,14 @@ Import `IconButton` from `@openforge-app/plugin-sdk/ui/IconButton.svelte` for ic
 | --- | --- | --- |
 | `label` | `string`, required | Sets the button's accessible name. |
 | `children` | `Snippet`, required | Icon content. Mark decorative SVG content with `aria-hidden="true"`. |
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger'`, default `'ghost'` | Semantic visual treatment. |
+| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'link' \| 'destructive' \| 'danger' \| 'error'`, default `'ghost'` | Semantic visual treatment. `danger` and `error` remain compatible aliases for `destructive`. |
 | `size` | `'xs' \| 'sm' \| 'md' \| 'lg'`, default `'md'` | Changes the square control size. |
+| `loading` | `boolean`, default `false` | Shows the busy indicator, sets `aria-busy="true"`, and disables activation. |
+| `loadingLabel` | `string` | Accessible name while loading; the original `label` is used otherwise. |
 | `onClick` | `(event: MouseEvent) => void` | Semantic activation callback. |
 | Native button attributes | `HTMLButtonAttributes` except `aria-label` and `children` | `type`, `disabled`, `title`, `class`, and `onclick` pass through. |
 
-The component renders a native button, keeps a visible token-driven focus ring, and disables motion under `prefers-reduced-motion: reduce`. Test it by role and `label`; do not assert icon paths, variant attributes, or classes.
+The component renders a native button, keeps a visible token-driven focus ring, and disables motion under `prefers-reduced-motion: reduce`. While loading, it shows the busy indicator in place of the icon and uses `loadingLabel` when supplied. Test it by role and `label`; do not assert icon paths, variant attributes, or classes.
 
 ### Caller-owned field captions
 

@@ -228,6 +228,24 @@
     box-shadow: var(--of-shadow-raised);
     font-family: var(--of-font-sans);
     outline: none;
+    clip-path: inset(0 0 100% 0 round var(--of-radius-control, 14px));
+    transition:
+      clip-path 500ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1));
+  }
+
+  :global(.of-menu-content[data-state='open']) {
+    clip-path: inset(0 round var(--of-radius-control, 14px));
+  }
+
+  :global(.of-menu-content[data-starting-style]) {
+    clip-path: inset(0 0 100% 0 round var(--of-radius-control, 14px));
+  }
+
+  :global(.of-menu-content[data-ending-style]) {
+    clip-path: inset(100% 0 0 0 round var(--of-radius-control, 14px));
+    opacity: 0;
+    transition: opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1));
   }
 
   :global(.of-menu-item) {
@@ -241,6 +259,21 @@
     font-size: var(--of-text-sm);
     line-height: var(--of-line-height-sm);
     cursor: pointer;
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--of-space1, 4px)));
+    transition:
+      opacity var(--of-duration-fast, 140ms) var(--of-ease-enter, cubic-bezier(0.16, 1, 0.3, 1)),
+      transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.of-menu-content[data-state='open'] .of-menu-item) {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  :global(.of-menu-content[data-starting-style] .of-menu-item) {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--of-space1, 4px)));
   }
 
   :global(.of-menu-item > svg) {
@@ -263,6 +296,29 @@
   @media (prefers-reduced-motion: reduce) {
     .of-anchored-menu :global(.of-menu-trigger) {
       transition: none;
+    }
+
+    :global(.of-menu-content) {
+      clip-path: inset(0 round var(--of-radius-control, 14px));
+      transition: none;
+    }
+
+    :global(.of-menu-content[data-starting-style]),
+    :global(.of-menu-content[data-ending-style]) {
+      clip-path: inset(0 round var(--of-radius-control, 14px));
+      opacity: 1;
+      transition: none;
+    }
+
+    :global(.of-menu-item) {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+
+    :global(.of-menu-content[data-starting-style] .of-menu-item) {
+      opacity: 1;
+      transform: none;
     }
   }
 </style>

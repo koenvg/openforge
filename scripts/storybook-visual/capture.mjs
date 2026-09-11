@@ -119,7 +119,7 @@ async function captureStory(browser, url, entry, { prepare, mutate, timeout = 30
     page.on('pageerror', error => errors.push(error.message))
     await page.clock.setFixedTime(new Date('2026-01-02T09:30:00.000Z'))
     if (prepare) await prepare(page)
-    await page.goto(`${url}/${entry.catalog}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:${entry.theme}`, { waitUntil: 'domcontentloaded', timeout })
+    await page.goto(`${url}/${entry.catalog}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:${entry.theme};openforgeMotion:reduced`, { waitUntil: 'domcontentloaded', timeout })
     try {
       await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
       if (await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase === 'errored')) {
@@ -132,7 +132,10 @@ async function captureStory(browser, url, entry, { prepare, mutate, timeout = 30
       // Keep timers live through play, then preserve transient results during capture.
       await page.clock.pauseAt(new Date('2026-01-02T09:30:00.000Z'))
       await page.evaluate(() => document.fonts.ready)
-      await page.waitForFunction(() => document.fonts.check('14px Inter'))
+      // Stories can legitimately use only a non-default weight (buttons use
+      // Inter 500), so accept any shipped Inter face without requesting a new
+      // face and changing the pixels that the story is about to capture.
+      await page.waitForFunction(() => ['400', '500', '600'].some(weight => document.fonts.check(`${weight} 14px Inter`)))
     } catch (error) {
       const evidence = await collectReadinessEvidence(page)
       throw new Error(`missing readiness for ${entry.story}: ${entry.ready}\n${errors.join('\n')}\n${error.message}\nReadiness evidence: ${JSON.stringify(evidence)}`)
