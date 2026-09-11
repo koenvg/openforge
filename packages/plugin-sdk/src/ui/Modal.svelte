@@ -2,6 +2,7 @@
   import { Dialog } from 'bits-ui'
   import { tick } from 'svelte'
   import type { Snippet } from 'svelte'
+  import IconButton from './IconButton.svelte'
 
   export type ModalInitialFocus = HTMLElement | string | (() => HTMLElement | null | undefined) | null | undefined
 
@@ -18,14 +19,16 @@
     closeLabel?: string
     closeDisabled?: boolean
     onKeydown?: (event: KeyboardEvent) => boolean | void
+    ariaDescribedby?: string
     testId?: string
     modalClass?: string
     boxClass?: string
     header?: Snippet
+    footer?: Snippet
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, testId, modalClass = '', boxClass = '', header, children }: Props & ModalAccessibleName = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, ariaDescribedby, testId, modalClass = '', boxClass = '', header, footer, children }: Props & ModalAccessibleName = $props()
   let modalElement: HTMLDivElement | null = $state(null)
 
   let accessibleNameAttributes = $derived.by(() => {
@@ -119,6 +122,7 @@
       data-testid={testId}
       aria-label={accessibleNameAttributes.ariaLabel}
       aria-labelledby={accessibleNameAttributes.ariaLabelledby}
+      aria-describedby={ariaDescribedby}
       escapeKeydownBehavior={closeDisabled ? 'ignore' : 'close'}
       interactOutsideBehavior="ignore"
       onOpenAutoFocus={focusInitialTarget}
@@ -137,18 +141,23 @@
             {/if}
             <Dialog.Close
               class="of-modal-close"
-              aria-label={closeLabel}
-              type="button"
               disabled={closeDisabled}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
+              {#snippet child({ props })}
+                <IconButton {...props} label={closeLabel} size="lg" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </IconButton>
+              {/snippet}
             </Dialog.Close>
           </div>
         {/if}
         {@render children()}
+        {#if footer}
+          <div class="of-modal-footer" role="group" aria-label="Dialog actions">{@render footer()}</div>
+        {/if}
       </div>
     </Dialog.Content>
   </Dialog.Portal>
@@ -194,58 +203,32 @@
 
   .of-modal-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    min-height: var(--of-control-height);
-    padding: var(--of-space3) var(--of-space4);
+    gap: var(--of-space4);
+    min-height: var(--of-control-height-touch);
+    padding: var(--of-space5) var(--of-space6);
     border-bottom: var(--of-border-width) solid var(--of-border);
   }
 
-  :global(.of-modal-close) {
-    display: inline-flex;
-    flex: 0 0 auto;
+  .of-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    width: var(--of-control-height-touch);
-    height: var(--of-control-height-touch);
-    padding: 0;
-    border: var(--of-border-width) solid transparent;
-    border-radius: var(--of-radius-control);
-    background: transparent;
-    color: var(--of-control-text);
-    cursor: pointer;
-    transition:
-      background-color var(--of-duration-fast) var(--of-ease-standard),
-      border-color var(--of-duration-fast) var(--of-ease-standard);
+    justify-content: flex-end;
+    gap: var(--of-space3);
+    padding: var(--of-space4) var(--of-space6);
+    border-top: var(--of-border-width) solid var(--of-border);
+    background: var(--of-surface-raised);
   }
 
-  :global(.of-modal-close:hover:not(:disabled)) {
-    border-color: var(--of-border-interactive);
-    background: var(--of-control-hover);
-  }
-
-  :global(.of-modal-close:active:not(:disabled)) {
-    background: var(--of-control-pressed);
-  }
-
-  :global(.of-modal-close:focus-visible) {
-    outline: var(--of-focus-width) solid var(--of-focus-ring);
-    outline-offset: var(--of-space1);
-  }
-
-  :global(.of-modal-close:disabled) {
-    color: var(--of-control-text-disabled);
-    cursor: not-allowed;
+  :global(.of-modal-close) {
+    flex: 0 0 auto;
+    margin: calc(var(--of-space1) * -1);
   }
 
   :global(.of-modal-close svg) {
-    width: var(--of-space4);
-    height: var(--of-space4);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.of-modal-close) {
-      transition: none;
-    }
+    width: var(--of-space6);
+    height: var(--of-space6);
   }
 </style>

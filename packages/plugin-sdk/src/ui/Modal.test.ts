@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { describe, expect, it, vi } from 'vitest'
+import ModalFooterTestWrapper from './ModalFooterTestWrapper.svelte'
 import ModalTestWrapper from './ModalTestWrapper.svelte'
 
 describe('plugin-sdk Modal', () => {
@@ -31,19 +32,38 @@ describe('plugin-sdk Modal', () => {
     expect(dialog.hasAttribute('aria-label')).toBe(false)
   })
 
-  it('renders an accessibility-hidden vector icon and preserves close-button dismissal', async () => {
+  it('renders a large accessibility-hidden icon control and preserves close-button dismissal', async () => {
     const onClose = vi.fn()
     render(ModalTestWrapper, { props: { onClose } })
 
     const closeButton = screen.getByRole('button', { name: 'Close plugin dialog' })
     const icon = closeButton.querySelector('svg')
 
+    expect(closeButton.getAttribute('data-control-kind')).toBe('icon')
+    expect(closeButton.getAttribute('data-size')).toBe('lg')
     expect(icon?.getAttribute('aria-hidden')).toBe('true')
     expect(closeButton.textContent?.trim()).toBe('')
 
     await fireEvent.click(closeButton)
 
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders an optional action footer after the dialog content', () => {
+    render(ModalFooterTestWrapper, { props: { onClose: vi.fn() } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Plugin dialog' })
+    const footer = screen.getByRole('group', { name: 'Dialog actions' })
+
+    expect(dialog.contains(footer)).toBe(true)
+    expect(footer.textContent).toContain('Save changes')
+  })
+
+  it('forwards an accessible description reference to the dialog', () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), describedBy: 'plugin-dialog-description' } })
+
+    expect(screen.getByRole('dialog', { name: 'Plugin dialog' }).getAttribute('aria-describedby'))
+      .toBe('plugin-dialog-description')
   })
 
   it.each([

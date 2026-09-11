@@ -28,6 +28,12 @@
     lastAction = value
     onAction(value)
   }
+
+  function saveReport(event: SubmitEvent) {
+    event.preventDefault()
+    act(name)
+    open = false
+  }
 </script>
 
 <section aria-label="Report actions" class="flex flex-col items-start gap-4 p-6">
@@ -35,13 +41,26 @@
   {#if kind === 'modal'}
     <Button onClick={() => { open = true }}>Edit report</Button>
     {#if open}
-      <Modal ariaLabel="Edit report" initialFocus="input" closeDisabled={locked} onClose={() => { open = false }}>
-        {#snippet header()}<h2>Edit report</h2>{/snippet}
-        <div class="flex flex-col gap-4 p-4">
-          <TextField label="Report name" bind:value={name} />
-          <p>Choose the name displayed in the project sidebar.</p>
-          <Button onClick={() => { act(name); open = false }}>Save report</Button>
-        </div>
+      <Modal
+        ariaLabelledby="edit-report-title"
+        ariaDescribedby="edit-report-description"
+        maxWidth="36rem"
+        initialFocus="input"
+        closeDisabled={locked}
+        onClose={() => { open = false }}
+      >
+        {#snippet header()}
+          <div class="min-w-0 flex-1">
+            <h2 id="edit-report-title" class="m-0 text-lg font-semibold tracking-tight">Edit report</h2>
+            <p id="edit-report-description" class="m-0 mt-1 text-sm leading-relaxed text-base-content/65">Update the name shown in the project sidebar.</p>
+          </div>
+        {/snippet}
+        <form id="edit-report-form" class="flex flex-col gap-5 p-5" onsubmit={saveReport}>
+          <TextField label="Report name" size="lg" helperText="Use a short, recognizable name for your team." bind:value={name} />
+        </form>
+        {#snippet footer()}
+          <Button type="submit" form="edit-report-form" size="lg">Save report</Button>
+        {/snippet}
       </Modal>
     {/if}
   {:else if kind === 'menu'}

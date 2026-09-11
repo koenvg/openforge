@@ -236,7 +236,7 @@ For large option lists, import `SearchableSelect` from `@openforge-app/plugin-sd
 
 ## Compact toolbar field
 
-Use `labelHidden` to keep a required `label` available to assistive technology without displaying it. `size="sm"` uses the host's compact control height; the default `size="md"` and visible label suit forms. Optional `leading` and `trailing` Svelte snippets sit beside the input inside the field border.
+Use `labelHidden` to keep a required `label` available to assistive technology without displaying it. `size="sm"` uses the host's compact control height, `size="lg"` uses the touch-sized form height, and the default `size="md"` suits standard forms. Optional `leading` and `trailing` Svelte snippets sit beside the input inside the field border.
 
 `hideLabel` remains available for layouts with a caller-owned visible caption. It omits the component label and uses `label` as the input's `aria-label`. It takes precedence if combined with `labelHidden`.
 

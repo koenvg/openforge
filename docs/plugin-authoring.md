@@ -103,7 +103,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Shared plugin-safe collapsible section with persisted expanded/collapsed state |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Shared file-type icon component |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
-| `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, and close-disabled behavior |
+| `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, description references, action footers, and close-disabled behavior |
 | `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Shared plugin page heading and description component |
 | `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | Full-page plugin View shell with fixed header and constrained body regions |
 | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible control for plugin-owned sidebar navigation |
@@ -123,6 +123,8 @@ Import `Modal` from `@openforge-app/plugin-sdk/ui/Modal.svelte`. Every modal req
 
 - Use `ariaLabelledby` when visible content, usually the header heading, names the dialog. When the modal mounts, the value must resolve to at least one element with text content or an `aria-label`.
 - Use `ariaLabel` when the dialog has no visible title, such as a search palette with `showHeader={false}`. Existing `ariaLabel` callers remain supported.
+- Use `ariaDescribedby` for visible supporting text, such as the explanatory paragraph below a modal heading.
+- Use the optional `footer` snippet for form actions so the modal provides consistent separation and spacing around the action area.
 
 Prefer visible labelled content:
 
