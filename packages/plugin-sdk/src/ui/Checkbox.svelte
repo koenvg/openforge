@@ -183,6 +183,15 @@
     color: var(--of-control-text-disabled);
   }
 
+  input:disabled + .of-checkbox-indicator .of-checkbox-fill {
+    background: var(--of-control-disabled);
+  }
+
+  input:disabled:checked + .of-checkbox-indicator .of-checkbox-fill,
+  input:disabled:indeterminate + .of-checkbox-indicator .of-checkbox-fill {
+    transform: scale(1);
+  }
+
   .of-checkbox[data-size='xs'] {
     width: calc(var(--of-control-height-compact) - var(--of-space2));
     height: calc(var(--of-control-height-compact) - var(--of-space2));
