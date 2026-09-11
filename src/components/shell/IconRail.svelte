@@ -5,6 +5,7 @@
   import type { DashboardNavItem, IconRailPluginNavItem } from '../../lib/iconRailNav'
   import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import PluginNavigationIcon from './PluginNavigationIcon.svelte'
+  import AnimatedNavList from '../shared/ui/AnimatedNavList.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
 
@@ -32,33 +33,39 @@
 </script>
 
 <nav class="of-icon-rail" aria-label="Project tools">
-  {#each navItems as { view, icon, shortcut, label }}
-    <IconButton
-      type="button"
-      size="lg"
-      variant="ghost"
-      class="rail-navigation-button"
-      label={label}
-      title={label}
-      aria-current={currentView === view ? 'page' : undefined}
-      onclick={() => onNavigate(view)}
-    >
-      <PluginNavigationIcon {icon} size={24} />
-      {#if view === 'board' && activeProjectAttentionCount > 0}
-        <Badge
-          class="rail-count-badge"
-          variant="success"
-          title="{activeProjectAttentionCount} task{activeProjectAttentionCount === 1 ? '' : 's'} in focus"
-        >{activeProjectAttentionCount}</Badge>
-      {/if}
-      {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}
-        <Badge class="rail-count-badge" variant="danger">{activeRepoReviewRequestCount}</Badge>
-      {/if}
-      {#if shortcut && $commandHeld && !modalsOpen}
-        <kbd class="rail-shortcut">{shortcut}</kbd>
-      {/if}
-    </IconButton>
-  {/each}
+  <AnimatedNavList activeId={currentView} class="rail-navigation-items">
+    {#snippet children(registerItem)}
+      {#each navItems as { view, icon, shortcut, label }}
+        <div class="rail-navigation-item" data-animated-nav-item={view} use:registerItem={view}>
+          <IconButton
+            type="button"
+            size="lg"
+            variant="ghost"
+            class="rail-navigation-button"
+            label={label}
+            title={label}
+            aria-current={currentView === view ? 'page' : undefined}
+            onclick={() => onNavigate(view)}
+          >
+            <PluginNavigationIcon {icon} size={24} />
+            {#if view === 'board' && activeProjectAttentionCount > 0}
+              <Badge
+                class="rail-count-badge"
+                variant="success"
+                title="{activeProjectAttentionCount} task{activeProjectAttentionCount === 1 ? '' : 's'} in focus"
+              >{activeProjectAttentionCount}</Badge>
+            {/if}
+            {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}
+              <Badge class="rail-count-badge" variant="danger">{activeRepoReviewRequestCount}</Badge>
+            {/if}
+            {#if shortcut && $commandHeld && !modalsOpen}
+              <kbd class="rail-shortcut">{shortcut}</kbd>
+            {/if}
+          </IconButton>
+        </div>
+      {/each}
+    {/snippet}
+  </AnimatedNavList>
 </nav>
 
 <style>
@@ -69,10 +76,28 @@
     flex-direction: column;
     flex-shrink: 0;
     align-items: center;
-    gap: var(--of-space2);
     padding: var(--of-space4) 0;
     border-right: var(--of-border-width) solid var(--of-border);
     background: var(--of-surface);
+  }
+
+  :global(.of-icon-rail > .animated-nav-list) {
+    align-self: stretch;
+    margin-inline: var(--of-space2);
+  }
+
+  :global(.rail-navigation-items) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--of-space2);
+  }
+
+  .rail-navigation-item {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+    justify-content: center;
   }
 
   :global(.rail-navigation-button) {
@@ -80,9 +105,14 @@
     color: var(--of-icon-muted);
   }
 
+  :global(.rail-navigation-button),
+  :global(.rail-navigation-button:hover),
+  :global(.rail-navigation-button:active) {
+    background: transparent !important;
+  }
+
   :global(.rail-navigation-button[aria-current='page']) {
     border-color: var(--of-border-interactive);
-    background: var(--of-accent-subtle);
     color: var(--of-on-accent-subtle);
   }
 

@@ -2,6 +2,7 @@
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
   import { getTaskPaneShortcut } from '../../lib/taskPaneShortcuts'
+  import AnimatedNavList from '../shared/ui/AnimatedNavList.svelte'
 
   interface Props {
     activeView: string
@@ -39,27 +40,33 @@
 </script>
 
 <nav class="task-pane-navigation" aria-label="Task workbench tabs">
-  {#each navigationItems as item (item.id)}
-    <Button
-      type="button"
-      size="md"
-      variant="ghost"
-      class="task-pane-tab {item.capitalize ? 'capitalize' : ''}"
-      aria-pressed={activeView === item.id}
-      onclick={() => onSelect(item.id)}
-    >
-      {item.title}
-      {#if item.id === 'agent' && hasUnreadAgentOutput}
-        <span
-          data-testid="agent-unread-marker"
-          class="agent-unread-marker"
-          aria-hidden="true"
-        ></span>
-        <span class="sr-only">Unread agent output</span>
-      {/if}
-      {#if commandHeld && item.shortcut !== null}<kbd class="task-pane-shortcut">{item.shortcut}</kbd>{/if}
-    </Button>
-  {/each}
+  <AnimatedNavList activeId={activeView} class="task-pane-navigation-items">
+    {#snippet children(registerItem)}
+      {#each navigationItems as item (item.id)}
+        <div class="task-pane-navigation-item" data-animated-nav-item={item.id} use:registerItem={item.id}>
+          <Button
+            type="button"
+            size="md"
+            variant="ghost"
+            class="task-pane-tab {item.capitalize ? 'capitalize' : ''}"
+            aria-pressed={activeView === item.id}
+            onclick={() => onSelect(item.id)}
+          >
+            {item.title}
+            {#if item.id === 'agent' && hasUnreadAgentOutput}
+              <span
+                data-testid="agent-unread-marker"
+                class="agent-unread-marker"
+                aria-hidden="true"
+              ></span>
+              <span class="sr-only">Unread agent output</span>
+            {/if}
+            {#if commandHeld && item.shortcut !== null}<kbd class="task-pane-shortcut">{item.shortcut}</kbd>{/if}
+          </Button>
+        </div>
+      {/each}
+    {/snippet}
+  </AnimatedNavList>
 </nav>
 
 <style>
@@ -71,9 +78,19 @@
     display: flex;
     height: 100%;
     align-items: center;
-    gap: var(--of-space1);
     background: var(--of-surface);
     transform: translateX(-50%);
+  }
+
+  :global(.task-pane-navigation-items) {
+    display: flex;
+    align-items: center;
+    gap: var(--of-space1);
+  }
+
+  .task-pane-navigation-item {
+    position: relative;
+    display: flex;
   }
 
   :global(.task-pane-tab) {
@@ -82,9 +99,14 @@
     color: var(--of-text-secondary);
   }
 
+  :global(.task-pane-tab),
+  :global(.task-pane-tab:hover),
+  :global(.task-pane-tab:active) {
+    background: transparent !important;
+  }
+
   :global(.task-pane-tab[aria-pressed='true']) {
     border-color: var(--of-border-interactive);
-    background: var(--of-accent-subtle);
     color: var(--of-on-accent-subtle);
   }
 
