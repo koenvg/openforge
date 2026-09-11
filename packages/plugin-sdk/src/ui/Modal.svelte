@@ -2,6 +2,7 @@
   import { Dialog } from 'bits-ui'
   import { tick } from 'svelte'
   import type { Snippet } from 'svelte'
+  import IconButton from './IconButton.svelte'
 
   export type ModalInitialFocus = HTMLElement | string | (() => HTMLElement | null | undefined) | null | undefined
 
@@ -140,14 +141,16 @@
             {/if}
             <Dialog.Close
               class="of-modal-close"
-              aria-label={closeLabel}
-              type="button"
               disabled={closeDisabled}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
+              {#snippet child({ props })}
+                <IconButton {...props} label={closeLabel} size="lg" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </IconButton>
+              {/snippet}
             </Dialog.Close>
           </div>
         {/if}
@@ -220,50 +223,12 @@
   }
 
   :global(.of-modal-close) {
-    display: inline-flex;
     flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: var(--of-control-height-touch);
-    height: var(--of-control-height-touch);
-    padding: 0;
-    border: var(--of-border-width) solid transparent;
-    border-radius: var(--of-radius-control);
-    background: transparent;
-    color: var(--of-control-text);
-    cursor: pointer;
-    transition:
-      background-color var(--of-duration-fast) var(--of-ease-standard),
-      border-color var(--of-duration-fast) var(--of-ease-standard);
-  }
-
-  :global(.of-modal-close:hover:not(:disabled)) {
-    border-color: var(--of-border-interactive);
-    background: var(--of-control-hover);
-  }
-
-  :global(.of-modal-close:active:not(:disabled)) {
-    background: var(--of-control-pressed);
-  }
-
-  :global(.of-modal-close:focus-visible) {
-    outline: var(--of-focus-width) solid var(--of-focus-ring);
-    outline-offset: var(--of-space1);
-  }
-
-  :global(.of-modal-close:disabled) {
-    color: var(--of-control-text-disabled);
-    cursor: not-allowed;
+    margin: calc(var(--of-space1) * -1);
   }
 
   :global(.of-modal-close svg) {
-    width: var(--of-space4);
-    height: var(--of-space4);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.of-modal-close) {
-      transition: none;
-    }
+    width: var(--of-space6);
+    height: var(--of-space6);
   }
 </style>
