@@ -1,7 +1,9 @@
 use rusqlite::Result;
 use std::collections::HashSet;
 
-use super::super::{sqlite::sqlite_id_list, Database};
+#[cfg(test)]
+use super::super::sqlite::sqlite_id_list;
+use super::super::Database;
 use super::rows::{read_pr_comment_row, read_pr_row, PrCommentRow, PrRow};
 
 impl Database {
@@ -108,6 +110,7 @@ impl Database {
     }
 
     /// Get the last polled timestamp for a PR, or None if PR doesn't exist
+    #[cfg(test)]
     pub fn get_pr_last_polled(&self, pr_id: i64) -> Result<Option<i64>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT last_polled_at FROM pull_requests WHERE id = ?1")?;
@@ -138,6 +141,7 @@ impl Database {
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn get_pr_comments_by_ids(&self, ids: &[i64]) -> Result<Vec<PrCommentRow>> {
         let Some(id_list) = sqlite_id_list(ids) else {
             return Ok(Vec::new());

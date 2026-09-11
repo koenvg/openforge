@@ -220,6 +220,7 @@ impl super::Database {
     ///
     /// Precedence: `project_plugins.enabled ?? global_plugins.enabled ??
     /// is_builtin`.
+    #[cfg(test)]
     pub fn is_plugin_enabled(&self, project_id: &str, plugin_id: &str) -> Result<bool> {
         let conn = self.lock_conn()?;
         let enabled = conn

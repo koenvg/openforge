@@ -122,6 +122,7 @@ impl super::Database {
         }
     }
 
+    #[cfg(test)]
     pub fn update_task_workspace_runtime(
         &self,
         task_id: &str,
@@ -156,18 +157,6 @@ impl super::Database {
     pub fn get_resumable_task_workspaces(&self) -> Result<Vec<TaskWorkspaceRow>> {
         let conn = self.lock_conn()?;
         query_startup_resumable_rows(&conn)
-    }
-
-    pub fn get_project_for_workspace(&self, workspace_path: &str) -> Result<Option<String>> {
-        let conn = self.lock_conn()?;
-        let mut stmt = conn
-            .prepare("SELECT project_id FROM task_workspaces WHERE workspace_path = ?1 LIMIT 1")?;
-        let mut rows = stmt.query([workspace_path])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(row.get(0)?))
-        } else {
-            Ok(None)
-        }
     }
 }
 

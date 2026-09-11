@@ -48,6 +48,7 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
 }
 
 impl super::Database {
+    #[cfg(test)]
     pub fn create_agent_session(
         &self,
         id: &str,
@@ -372,6 +373,7 @@ impl super::Database {
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn get_running_claude_sessions(&self) -> Result<Vec<AgentSessionRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(
@@ -385,6 +387,7 @@ impl super::Database {
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn mark_running_sessions_interrupted(&self) -> Result<usize> {
         self.mark_running_sessions_interrupted_before(i64::MAX)
     }

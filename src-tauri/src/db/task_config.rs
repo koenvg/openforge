@@ -1,5 +1,4 @@
 use rusqlite::Result;
-use std::collections::HashMap;
 
 impl super::Database {
     /// Get a task-scoped config value.
@@ -23,19 +22,6 @@ impl super::Database {
             [task_id, key, value],
         )?;
         Ok(())
-    }
-
-    /// Get all task-scoped config values for a task.
-    pub fn get_all_task_config(&self, task_id: &str) -> Result<HashMap<String, String>> {
-        let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare("SELECT key, value FROM task_config WHERE task_id = ?1")?;
-        let rows = stmt.query_map([task_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        let mut result = HashMap::new();
-        for row in rows {
-            let (k, v) = row?;
-            result.insert(k, v);
-        }
-        Ok(result)
     }
 
     /// Return the project_id for a task, if any.

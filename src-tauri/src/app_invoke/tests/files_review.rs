@@ -445,8 +445,14 @@ async fn retired_agent_review_commands_are_not_files_review_contracts() {
 
     for (command, payload) in [
         ("start_agent_review", json!({ "reviewPrId": 88 })),
-        ("abort_agent_review", json!({ "reviewSessionKey": "review-88" })),
-        ("dismiss_all_agent_review_comments", json!({ "reviewPrId": 88 })),
+        (
+            "abort_agent_review",
+            json!({ "reviewSessionKey": "review-88" }),
+        ),
+        (
+            "dismiss_all_agent_review_comments",
+            json!({ "reviewPrId": 88 }),
+        ),
         ("get_agent_review_comments", json!({ "reviewPrId": 88 })),
         (
             "update_agent_review_comment_status",
@@ -458,7 +464,8 @@ async fn retired_agent_review_commands_are_not_files_review_contracts() {
         };
         assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED, "{command}");
         assert!(
-            err.1.contains("is not implemented for Electron sidecar slice"),
+            err.1
+                .contains("is not implemented for Electron sidecar slice"),
             "{command}: {}",
             err.1
         );
