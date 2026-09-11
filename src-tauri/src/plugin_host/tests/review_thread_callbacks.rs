@@ -35,7 +35,10 @@ async fn a_plugin_that_is_not_built_into_the_application_can_create_reply_and_li
     let third_party = "com.example.reviewer";
 
     let created = host
-        .handle_host_callback("openforge.reviewThreads.create", &create_params(third_party))
+        .handle_host_callback(
+            "openforge.reviewThreads.create",
+            &create_params(third_party),
+        )
         .await
         .expect("a plugin without a built-in identity must be able to create a Review Thread");
     let thread_id = created["id"].as_str().expect("thread id");

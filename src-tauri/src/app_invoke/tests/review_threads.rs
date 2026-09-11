@@ -105,7 +105,11 @@ async fn a_structurally_invalid_write_is_rejected_naming_the_field_and_stores_no
             .expect_err(&format!("{case} should be rejected"));
 
         assert_eq!(error.0, StatusCode::BAD_REQUEST, "{case}");
-        assert!(error.1.contains(field), "{case} should name '{field}', got: {}", error.1);
+        assert!(
+            error.1.contains(field),
+            "{case} should name '{field}', got: {}",
+            error.1
+        );
     }
 
     let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;

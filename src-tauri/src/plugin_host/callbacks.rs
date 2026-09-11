@@ -36,9 +36,7 @@ impl PluginHost {
             "openforge.tasks.getLatestSession" => self.get_latest_session_for_host(params),
             "openforge.tasks.listSessions" => self.list_task_sessions_for_host(params),
             "openforge.reviewThreads.list" => self.list_review_threads_for_host(params).await,
-            "openforge.reviewThreads.create" => {
-                self.create_review_thread_for_host(params).await
-            }
+            "openforge.reviewThreads.create" => self.create_review_thread_for_host(params).await,
             "openforge.reviewThreads.reply" => self.reply_to_review_thread_for_host(params).await,
             "openforge.projects.list" => self.list_projects_for_host(),
             "openforge.projects.get" => self.get_project_for_host(params),

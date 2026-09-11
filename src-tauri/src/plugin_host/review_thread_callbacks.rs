@@ -83,6 +83,8 @@ impl PluginHost {
             .map_err(|(status, message)| {
                 format!("plugin host Review Thread callback {command} failed ({status}): {message}")
             })?
-            .ok_or_else(|| format!("plugin host Review Thread callback returned no value: {command}"))
+            .ok_or_else(|| {
+                format!("plugin host Review Thread callback returned no value: {command}")
+            })
     }
 }

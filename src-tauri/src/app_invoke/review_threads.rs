@@ -44,8 +44,8 @@ pub(super) async fn handle_app_review_threads_command(
             json_value(threads)?
         }
         "create_review_thread" => {
-            let create: CreateReviewThread =
-                serde_json::from_value(request.payload.clone()).map_err(|error| {
+            let create: CreateReviewThread = serde_json::from_value(request.payload.clone())
+                .map_err(|error| {
                     (
                         StatusCode::BAD_REQUEST,
                         format!("Invalid create_review_thread payload: {error}"),

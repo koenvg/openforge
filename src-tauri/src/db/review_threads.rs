@@ -721,7 +721,10 @@ mod tests {
 
         assert!(error.to_string().contains("body"), "got: {error}");
         assert_eq!(
-            db.get_review_thread(&thread.id).expect("get").messages.len(),
+            db.get_review_thread(&thread.id)
+                .expect("get")
+                .messages
+                .len(),
             1
         );
     }
