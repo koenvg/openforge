@@ -30,6 +30,7 @@ import {
   setProjectConfigMock,
   writeClipboardTextMock,
 } from './pluginRegistryTestSupport'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { publishTaskInvalidation } from './pluginTaskInvalidations'
 import { activeProjectId } from '../stores'
 
@@ -58,6 +59,41 @@ function installRuntimePlugin(activate: Parameters<typeof defineFrontendPlugin>[
   }]]))
   enabledPluginIds.set(new Set([RUNTIME_PLUGIN_ID]))
   loadPluginFrontendMock.mockResolvedValue({ pluginId: RUNTIME_PLUGIN_ID, module: frontendPlugin })
+}
+
+type ContributionVisibilitySamples = {
+  onPublish: FrontendOpenForgeAPI | null
+  onClear: FrontendOpenForgeAPI | null
+}
+
+function sampleRenderApiAtContributionTransitions(pluginId: string): {
+  samples: ContributionVisibilitySamples
+  stop: () => void
+} {
+  const samples: ContributionVisibilitySamples = { onPublish: null, onClear: null }
+  let published = false
+  const stop = runtimeContributionSources.subscribe(sources => {
+    const isPublished = sources.has(pluginId)
+    if (isPublished && !published) {
+      samples.onPublish = getPluginRenderProps(pluginId, { projectId: 'P-1', taskId: 'T-1' }).api
+    }
+    if (!isPublished && published) {
+      samples.onClear = getPluginRenderProps(pluginId, { projectId: 'P-1', taskId: 'T-1' }).api
+    }
+    published = isPublished
+  })
+  return { samples, stop }
+}
+
+function installRuntimePluginWithTaskUISection(): void {
+  const LazySection = vi.fn() as never
+  installRuntimePlugin((openforge, context) => {
+    context.subscriptions.add(openforge.taskUI.registerSection({
+      id: 'issue-link',
+      order: 10,
+      component: LazySection,
+    }))
+  })
 }
 
 describe('pluginRegistry frontend runtime', () => {
@@ -268,5 +304,31 @@ describe('pluginRegistry frontend runtime', () => {
     )
     await props.api.system.openUrl('https://example.com/plugin')
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
+  })
+
+  it('exposes the live runtime API from the moment the contributions become visible', async () => {
+    installRuntimePluginWithTaskUISection()
+    const { samples, stop } = sampleRenderApiAtContributionTransitions(RUNTIME_PLUGIN_ID)
+
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    stop()
+
+    expect(samples.onPublish).toBe(getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' }).api)
+    getPluginStorageMock.mockResolvedValueOnce({ issueKey: 'KVG-1' })
+    await expect(samples.onPublish?.storage.task('T-1').get('link')).resolves.toEqual({ issueKey: 'KVG-1' })
+  })
+
+  it('keeps the live runtime API until the contributions stop being visible', async () => {
+    installRuntimePluginWithTaskUISection()
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    const liveApi = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' }).api
+    const { samples, stop } = sampleRenderApiAtContributionTransitions(RUNTIME_PLUGIN_ID)
+
+    await deactivatePluginById(RUNTIME_PLUGIN_ID)
+    stop()
+
+    expect(samples.onClear).toBe(liveApi)
+    getPluginStorageMock.mockResolvedValueOnce({ issueKey: 'KVG-1' })
+    await expect(samples.onClear?.storage.task('T-1').get('link')).resolves.toEqual({ issueKey: 'KVG-1' })
   })
 })

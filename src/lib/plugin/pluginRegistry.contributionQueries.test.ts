@@ -4,6 +4,7 @@ import {
   applyRuntimeSnapshotContributions,
   deactivatePluginById,
   defineFrontendPlugin,
+  enabledPluginIds,
   executePluginCommand,
   get,
   getPluginCommandHandler,
@@ -35,6 +36,7 @@ describe('pluginRegistry contribution queries', () => {
     })
 
     installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
 
     await expect(activatePlugin('test-plugin')).resolves.toBe(true)
