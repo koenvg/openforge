@@ -1835,6 +1835,9 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    // Agent review comments moved into the GitHub Sync plugin's own storage, leaving this
+    // table without a writer.
+    M::up("DROP TABLE IF EXISTS agent_review_comments;"),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2512,6 +2515,7 @@ mod tests {
         AgentSessionListIndex,
         TaskQueryIndexes,
         AgentSessionOutputRevisions,
+        AgentReviewCommentsRemoval,
     }
 
     impl MigrationBoundary {
@@ -2529,6 +2533,7 @@ mod tests {
                 Self::AgentSessionListIndex => 54,
                 Self::TaskQueryIndexes => 55,
                 Self::AgentSessionOutputRevisions => 57,
+                Self::AgentReviewCommentsRemoval => 59,
             }
         }
     }
@@ -2910,13 +2915,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 18, "All 18 tables should be created");
+        assert_eq!(table_count, 17, "All 17 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -4264,6 +4269,73 @@ mod tests {
         assert!(
             !table_exists,
             "upgrade must delete stored general self-review comments"
+        );
+    }
+
+    #[test]
+    fn fresh_database_omits_agent_review_comments_table() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_review_comments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check agent_review_comments table");
+
+        assert!(
+            !table_exists,
+            "fresh databases must not retain core agent review comment storage"
+        );
+    }
+
+    #[test]
+    fn upgrade_drops_existing_agent_review_comments_table() {
+        let (_temp_dir, path) = temporary_database_path();
+
+        {
+            let conn = Connection::open(&path).expect("open legacy database");
+            conn.execute_batch(
+                "CREATE TABLE agent_review_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_pr_id INTEGER NOT NULL,
+                    review_session_key TEXT NOT NULL,
+                    comment_type TEXT NOT NULL,
+                    file_path TEXT,
+                    line_number INTEGER,
+                    side TEXT,
+                    body TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    opencode_session_id TEXT,
+                    raw_agent_output TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO agent_review_comments (review_pr_id, review_session_key, comment_type, body, created_at, updated_at)
+                VALUES (1, 'review-1', 'general', 'legacy agent comment', 1, 1);",
+            )
+            .expect("create legacy agent review comments table");
+            set_user_version_before(&conn, MigrationBoundary::AgentReviewCommentsRemoval);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_review_comments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check agent_review_comments table");
+
+        assert!(
+            !table_exists,
+            "upgrade must delete stored core agent review comments"
         );
     }
 

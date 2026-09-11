@@ -1,8 +1,8 @@
 use super::*;
 
 #[tokio::test]
-async fn handles_fs_and_agent_review_db_commands() {
-    let (state, _temp_dir) = test_state("app_invoke_files_self_agent_review");
+async fn handles_project_filesystem_commands() {
+    let (state, _temp_dir) = test_state("app_invoke_files_project_filesystem");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     std::fs::write(temp_dir.path().join("README.md"), "hello electron").expect("write file");
     std::fs::create_dir_all(temp_dir.path().join("src")).expect("create src dir");
@@ -21,43 +21,6 @@ async fn handles_fs_and_agent_review_db_commands() {
         let project = db
             .create_project("Open Forge", temp_dir.path().to_str().expect("utf8 path"))
             .expect("create project");
-        db.upsert_review_pr(
-            88,
-            8,
-            "Review PR",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/8",
-            "author",
-            None,
-            "owner",
-            "repo",
-            "feature",
-            "main",
-            "sha-8",
-            0,
-            0,
-            0,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert review pr");
-        let agent_comment_id = db
-            .insert_agent_review_comment(
-                88,
-                "review-session",
-                "file_specific",
-                Some("src/main.rs"),
-                Some(1),
-                Some("RIGHT"),
-                "Agent says fix this",
-                None,
-                None,
-            )
-            .expect("insert agent comment");
-        assert!(agent_comment_id > 0);
         project.id
     };
 
@@ -101,21 +64,6 @@ async fn handles_fs_and_agent_review_db_commands() {
     .expect("search")
     .iter()
     .any(|value| value == "src/main.rs"));
-
-    let agent_comment_id = invoke_ok(
-        &state,
-        "get_agent_review_comments",
-        json!({ "reviewPrId": 88 }),
-    )
-    .await[0]["id"]
-        .as_i64()
-        .expect("agent comment id");
-    invoke_ok(
-        &state,
-        "update_agent_review_comment_status",
-        json!({ "commentId": agent_comment_id, "status": "addressed" }),
-    )
-    .await;
 }
 
 #[tokio::test]
@@ -492,40 +440,32 @@ async fn handles_git_workspace_extraction_commands() {
 }
 
 #[tokio::test]
-async fn live_agent_review_commands_are_not_files_review_contracts() {
-    let (state, _temp_dir) = test_state("app_invoke_files_review_removed_live_agent_review");
+async fn retired_agent_review_commands_are_not_files_review_contracts() {
+    let (state, _temp_dir) = test_state("app_invoke_files_review_retired_agent_review");
 
-    let err = invoke(&state, "start_agent_review", json!({ "reviewPrId": 88 }))
-        .await
-        .expect_err("removed live review command should be unmatched");
-    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err
-        .1
-        .contains("is not implemented for Electron sidecar slice"));
-    assert!(!err.1.contains("requires provider runtime state"));
-
-    let err = invoke(
-        &state,
-        "abort_agent_review",
-        json!({ "reviewSessionKey": "review-88" }),
-    )
-    .await
-    .expect_err("removed live review abort command should be unmatched");
-    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err
-        .1
-        .contains("is not implemented for Electron sidecar slice"));
-    assert!(!err.1.contains("requires provider runtime state"));
-
-    let err = invoke(
-        &state,
-        "dismiss_all_agent_review_comments",
-        json!({ "reviewPrId": 88 }),
-    )
-    .await
-    .expect_err("removed bulk dismiss command should be unmatched");
-    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err
-        .1
-        .contains("is not implemented for Electron sidecar slice"));
+    for (command, payload) in [
+        ("start_agent_review", json!({ "reviewPrId": 88 })),
+        ("abort_agent_review", json!({ "reviewSessionKey": "review-88" })),
+        ("dismiss_all_agent_review_comments", json!({ "reviewPrId": 88 })),
+        ("get_agent_review_comments", json!({ "reviewPrId": 88 })),
+        (
+            "update_agent_review_comment_status",
+            json!({ "commentId": 1, "status": "approved" }),
+        ),
+    ] {
+        let Err(err) = invoke(&state, command, payload).await else {
+            panic!("{command} should be unmatched");
+        };
+        assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED, "{command}");
+        assert!(
+            err.1.contains("is not implemented for Electron sidecar slice"),
+            "{command}: {}",
+            err.1
+        );
+        assert!(
+            !err.1.contains("requires provider runtime state"),
+            "{command}: {}",
+            err.1
+        );
+    }
 }

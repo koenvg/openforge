@@ -15,6 +15,8 @@ describe('Electron backend bridge routing contracts', () => {
     'save_skill_content',
     'dismiss_all_agent_review_comments',
     'abort_agent_review',
+    'get_agent_review_comments',
+    'update_agent_review_comment_status',
   ])('keeps retired command %s off the sidecar route', (command) => {
     expect(isSidecarBackedCommand(command)).toBe(false)
   })

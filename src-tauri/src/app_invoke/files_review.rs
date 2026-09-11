@@ -144,32 +144,6 @@ pub(super) async fn handle_app_files_review_command(
                 .map_err(app_project_fs_error)?,
             )?
         }
-        "get_agent_review_comments" => {
-            let review_pr_id = payload_i64(&request.payload, "reviewPrId")?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(
-                db.get_agent_review_comments_for_pr(review_pr_id)
-                    .map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to get agent review comments: {e}"),
-                        )
-                    })?,
-            )?
-        }
-        "update_agent_review_comment_status" => {
-            let comment_id = payload_i64(&request.payload, "commentId")?;
-            let status = payload_string(&request.payload, "status")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_agent_review_comment_status(comment_id, &status)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update agent review comment status: {e}"),
-                    )
-                })?;
-            serde_json::Value::Null
-        }
         "get_task_diff" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let include_committed = payload_bool(&request.payload, "includeCommitted")?;

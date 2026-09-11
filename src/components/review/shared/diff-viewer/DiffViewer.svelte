@@ -3,7 +3,7 @@
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
-  import { updateAgentReviewCommentStatus, openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
+  import { openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { selectedTheme } from '../../../../lib/theme'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
@@ -150,7 +150,6 @@
   pendingComments={visiblePendingComments}
   onPendingCommentsChange={setVisiblePendingComments}
   onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
-  onUpdateAgentCommentStatus={updateAgentReviewCommentStatus}
   {onOpenUrl}
   {onOpenImage}
   {onScrollTopChange}
