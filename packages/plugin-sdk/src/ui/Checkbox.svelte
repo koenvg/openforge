@@ -41,7 +41,13 @@
       onCheckedChange?.(event.currentTarget.checked)
     }}
   />
-  <span class="of-checkbox-indicator" aria-hidden="true"></span>
+  <span class="of-checkbox-indicator" aria-hidden="true">
+    <span class="of-checkbox-fill"></span>
+    <svg class="of-checkbox-mark" viewBox="0 0 24 24" focusable="false">
+      <path class="of-checkbox-check-mark" pathLength="1" d="M6.5 12.5 10.5 16.5 17.5 8.5"></path>
+      <path class="of-checkbox-mixed-mark" d="M6 12h12"></path>
+    </svg>
+  </span>
 </span>
 
 <style>
@@ -74,49 +80,92 @@
     border: var(--of-border-width) solid var(--of-border-interactive);
     border-radius: var(--of-radius-control);
     background: var(--of-field);
+    overflow: hidden;
     pointer-events: none;
     transition:
-      background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
-      box-shadow var(--of-duration-fast) var(--of-ease-standard);
+      transform var(--of-duration-fast) var(--of-ease-standard);
   }
 
-  .of-checkbox-indicator::before {
+  .of-checkbox-fill {
     position: absolute;
-    top: 20%;
-    left: 20%;
-    width: 60%;
-    height: 60%;
-    background: currentColor;
-    clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 19%, 84% 4%, 39% 73%);
-    content: '';
+    inset: 0;
+    border-radius: inherit;
+    background: var(--of-accent);
     transform: scale(0);
     transform-origin: center;
-    transition: transform var(--of-duration-press) var(--of-ease-enter);
+    transition: transform 150ms var(--of-ease-enter);
+  }
+
+  .of-checkbox-mark {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    z-index: 1;
+  }
+
+  .of-checkbox-check-mark,
+  .of-checkbox-mixed-mark {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2.25;
+  }
+
+  .of-checkbox-check-mark {
+    opacity: 0;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition:
+      stroke-dashoffset 100ms var(--of-ease-enter),
+      opacity 100ms var(--of-ease-enter);
+  }
+
+  .of-checkbox-mixed-mark {
+    stroke-dasharray: 12;
+    stroke-dashoffset: 12;
+    transition: stroke-dashoffset 150ms var(--of-ease-enter);
   }
 
   input:hover:not(:disabled) + .of-checkbox-indicator {
-    border-color: var(--of-accent);
-    background: var(--of-field-hover);
+    border-color: var(--of-border-strong);
+  }
+
+  input:active:not(:disabled) + .of-checkbox-indicator {
+    transform: scale(0.9);
   }
 
   input:checked + .of-checkbox-indicator,
   input:indeterminate + .of-checkbox-indicator {
     border-color: var(--of-accent);
-    background: var(--of-accent);
   }
 
-  input:checked + .of-checkbox-indicator::before {
+  input:checked + .of-checkbox-indicator .of-checkbox-fill,
+  input:indeterminate + .of-checkbox-indicator .of-checkbox-fill {
     transform: scale(1);
   }
 
-  input:indeterminate + .of-checkbox-indicator::before {
-    top: 50%;
-    left: 22.5%;
-    width: 55%;
-    height: var(--of-border-width);
-    clip-path: none;
-    transform: translateY(-50%) scale(1);
+  input:checked + .of-checkbox-indicator .of-checkbox-fill {
+    animation: of-checkbox-fill-in 400ms var(--of-ease-enter) both;
+  }
+
+  input:checked + .of-checkbox-indicator {
+    animation: of-checkbox-pop 400ms var(--of-ease-enter);
+  }
+
+  input:checked + .of-checkbox-indicator .of-checkbox-check-mark {
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transition:
+      stroke-dashoffset 200ms var(--of-ease-enter) 60ms,
+      opacity 10ms linear 60ms;
+  }
+
+  input:indeterminate + .of-checkbox-indicator .of-checkbox-mixed-mark {
+    stroke-dashoffset: 0;
   }
 
   input:focus-visible + .of-checkbox-indicator {
@@ -134,6 +183,15 @@
     color: var(--of-control-text-disabled);
   }
 
+  input:disabled + .of-checkbox-indicator .of-checkbox-fill {
+    background: var(--of-control-disabled);
+  }
+
+  input:disabled:checked + .of-checkbox-indicator .of-checkbox-fill,
+  input:disabled:indeterminate + .of-checkbox-indicator .of-checkbox-fill {
+    transform: scale(1);
+  }
+
   .of-checkbox[data-size='xs'] {
     width: calc(var(--of-control-height-compact) - var(--of-space2));
     height: calc(var(--of-control-height-compact) - var(--of-space2));
@@ -146,9 +204,36 @@
 
   @media (prefers-reduced-motion: reduce) {
     .of-checkbox-indicator,
-    .of-checkbox-indicator::before {
+    .of-checkbox-fill,
+    .of-checkbox-check-mark,
+    .of-checkbox-mixed-mark {
       transition: none;
     }
+
+    input:checked + .of-checkbox-indicator {
+      animation: none;
+    }
+
+    input:checked + .of-checkbox-indicator .of-checkbox-fill {
+      animation: none;
+    }
+
+    input:checked + .of-checkbox-indicator .of-checkbox-check-mark {
+      transition: none;
+    }
+  }
+
+  @keyframes of-checkbox-fill-in {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes of-checkbox-pop {
+    0% { transform: scale(1); }
+    30% { transform: scale(0.9); }
+    70% { transform: scale(1.05); }
+    100% { transform: scale(1); }
   }
 
   @media (forced-colors: active) {

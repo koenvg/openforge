@@ -47,6 +47,9 @@ describe('plugin-sdk Checkbox', () => {
     const visualControl = checkbox.parentElement
     expect(visualControl?.getAttribute('data-size')).toBe('sm')
     expect(visualControl?.querySelector('[aria-hidden="true"]')).toBeTruthy()
+    expect(visualControl?.querySelector('.of-checkbox-fill')).toBeTruthy()
+    expect(visualControl?.querySelector('.of-checkbox-check-mark')).toBeTruthy()
+    expect(visualControl?.querySelector('.of-checkbox-mixed-mark')).toBeTruthy()
   })
 
   it('exposes a mixed state for partially selected groups', () => {
