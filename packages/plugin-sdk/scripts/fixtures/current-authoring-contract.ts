@@ -20,6 +20,11 @@ import {
   type TaskChangeReason,
   type Task,
   type TasksAPI,
+  type CreateReviewThreadRequest,
+  type ReviewThread,
+  type ReviewThreadChangeEvent,
+  type ReviewThreadScope,
+  type ReviewThreadsAPI,
 } from '@openforge-app/plugin-sdk'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import {
@@ -120,6 +125,37 @@ void agentSessionPage
 // @ts-expect-error Compact Agent Session summaries never expose Task prompts.
 void agentSessionSummary.prompt
 
+const reviewThreadScope = {
+  namespace: 'github',
+  targetKey: 'gh:acme/web#1421',
+  revision: 'sha-1',
+} satisfies ReviewThreadScope
+const createReviewThreadRequest = {
+  ...reviewThreadScope,
+  anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'RIGHT' },
+  origin: 'plugin',
+  body: 'Needs a null check',
+} satisfies CreateReviewThreadRequest
+const reviewThreads = null as unknown as ReviewThreadsAPI
+const createdReviewThread: Promise<ReviewThread> = reviewThreads.create(createReviewThreadRequest)
+const listedReviewThreads: Promise<ReviewThread[]> = reviewThreads.list(reviewThreadScope)
+const repliedReviewThread: Promise<ReviewThread> = reviewThreads.reply({
+  threadId: 'rt_1',
+  role: 'human',
+  body: 'Fixed',
+})
+const reviewThreadSubscription = reviewThreads.onDidChange(reviewThreadScope, (event: ReviewThreadChangeEvent) => {
+  void event.namespace
+  void event.targetKey
+  void event.revision
+  // @ts-expect-error Review Thread notifications never carry a thread snapshot.
+  void event.messages
+})
+void createdReviewThread
+void listedReviewThreads
+void repliedReviewThread
+void reviewThreadSubscription.dispose()
+
 const appPackageMetadata = {
   id: 'contract-fixture',
   apiVersion: 1,
@@ -147,6 +183,8 @@ const themeRegistration = registry.frontendApi.themes.register(themeDefinition)
 void themeRegistration.dispose()
 void registry.frontendApi.agentSessions.list(listAgentSessionsRequest)
 void registry.backendApi.agentSessions.list(listAgentSessionsRequest)
+void registry.frontendApi.reviewThreads.list(reviewThreadScope)
+void registry.backendApi.reviewThreads.create(createReviewThreadRequest)
 void registry.backendApi.commands.register(registration)
 void registry.backendApi.fs.external.stat({ root: '/collector', path: 'events.jsonl' })
 void registry.backendApi.fs.external.readTextFileChunks({

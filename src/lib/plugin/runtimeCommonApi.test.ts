@@ -76,6 +76,76 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('forwards Review Thread reads and writes through the runtime host', async () => {
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
+    const thread = { id: 'rt_1', ...scope }
+    const listReviewThreads = vi.fn().mockResolvedValue([thread])
+    const createReviewThread = vi.fn().mockResolvedValue(thread)
+    const replyToReviewThread = vi.fn().mockResolvedValue(thread)
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'reviewer',
+      projectId: null,
+      host: { listReviewThreads, createReviewThread, replyToReviewThread },
+    }))
+    const api = registry.createApi()
+    const request = {
+      ...scope,
+      anchor: { kind: 'line' as const, filePath: 'src/main.ts', line: 12, side: 'RIGHT' as const },
+      origin: 'plugin' as const,
+      body: 'Needs a null check',
+    }
+
+    await expect(api.reviewThreads.list(scope)).resolves.toEqual([thread])
+    await expect(api.reviewThreads.create(request)).resolves.toEqual(thread)
+    await expect(api.reviewThreads.reply({ threadId: 'rt_1', role: 'human', body: 'Fixed' })).resolves.toEqual(thread)
+
+    expect(listReviewThreads).toHaveBeenCalledWith(scope)
+    expect(createReviewThread).toHaveBeenCalledWith(request)
+    expect(replyToReviewThread).toHaveBeenCalledWith({ threadId: 'rt_1', role: 'human', body: 'Fixed' })
+  })
+
+  it('forwards scoped Review Thread subscriptions through the runtime host', async () => {
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
+    const dispose = vi.fn()
+    let hostHandler: ((event: typeof scope) => void) | null = null
+    const subscribeReviewThreadChanges = vi.fn((_scope, handler) => {
+      hostHandler = handler
+      return { dispose }
+    })
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'reviewer',
+      projectId: null,
+      host: { subscribeReviewThreadChanges },
+    }))
+    const handler = vi.fn()
+
+    const subscription = registry.createApi().reviewThreads.onDidChange(scope, handler)
+    const observedHostHandler = hostHandler as ((event: typeof scope) => void) | null
+    observedHostHandler?.(scope)
+
+    expect(subscribeReviewThreadChanges).toHaveBeenCalledWith(scope, expect.any(Function))
+    expect(handler).toHaveBeenCalledWith(scope)
+
+    await subscription.dispose()
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    [{ namespace: '', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }, "'namespace' must not be empty"],
+    [{ namespace: 'github', targetKey: '  ', revision: 'sha-1' }, "'targetKey' must not be empty"],
+    [{ namespace: 'github', targetKey: 'gh:acme/web#1421', revision: '' }, "'revision' must not be empty"],
+  ])('rejects the Review Thread scope %o naming the offending field', async (scope, message) => {
+    const listReviewThreads = vi.fn()
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'reviewer',
+      projectId: null,
+      host: { listReviewThreads },
+    }))
+
+    await expect(registry.createApi().reviewThreads.list(scope)).rejects.toThrow(message)
+    expect(listReviewThreads).not.toHaveBeenCalled()
+  })
+
   it('forwards Agent Session page requests through the frontend runtime host', async () => {
     const page = {
       items: [{

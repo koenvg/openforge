@@ -14,6 +14,7 @@ import {
   navigationCommandHandlers,
 } from './pluginHostNavigation'
 import { createPluginProjectHostCapabilities, projectCommandHandlers } from './pluginHostProjects'
+import { createPluginReviewThreadHostCapabilities } from './pluginHostReviewThreads'
 import { createPluginShellHostCapabilities, shellCommandHandlers } from './pluginHostShell'
 import { createPluginTaskHostCapabilities, taskCommandHandlers } from './pluginHostTasks'
 
@@ -37,6 +38,7 @@ export const invokePluginHostCommand = createPluginHostCommandDispatcher(
 export function createPluginRuntimeHost(pluginId: string) {
   return {
     ...createPluginTaskHostCapabilities(pluginId),
+    ...createPluginReviewThreadHostCapabilities(pluginId),
     ...createPluginProjectHostCapabilities(),
     ...createPluginConfigHostCapabilities(),
     ...createPluginShellHostCapabilities(),

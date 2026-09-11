@@ -95,7 +95,9 @@ describe('DiffViewer pending comments source', () => {
     const lastCall = mockDiffView.mock.calls.at(-1)
     void lastCall?.[1]?.extendData
 
-    expect(buildExtendData).toHaveBeenCalledWith('src/test.ts', [], pendingComments, [], [], [])
+    expect(buildExtendData).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: 'src/test.ts', pendingComments })
+    )
   })
 })
 

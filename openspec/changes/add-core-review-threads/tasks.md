@@ -1,21 +1,30 @@
+## Delivered so far
+
+The tracer bullet delivers list, create, and reply end to end. Deliberate divergences from this plan:
+
+- The store, host boundary, and SDK carry no `setStatus` or `markSeen`. Reviewer resolve and dismiss is its own ticket, so 1.2 and 3.2 stay open.
+- Create is not idempotent. The `idempotency_key` column and its partial unique index exist, but writes always store `NULL`, so 1.4 stays open.
+- `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
+- The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1, 5.2, and 5.4 stay open.
+
 ## 1. Core store
 
-- [ ] 1.1 Add the `review_threads` and `review_thread_messages` migration, with the lookup index on `(namespace, target_key, revision)` and the partial unique index on that triple plus `idempotency_key`; verify the migration test asserting expected tables in `db/migrations.rs` includes both new tables and that `cargo test migrations` passes
+- [x] 1.1 Add the `review_threads` and `review_thread_messages` migration, with the lookup index on `(namespace, target_key, revision)` and the partial unique index on that triple plus `idempotency_key`; verify the migration test asserting expected tables in `db/migrations.rs` includes both new tables and that `cargo test migrations` passes
 - [ ] 1.2 Add the thread store module with list, create, reply, set status, and mark seen, returning `Result<T, String>` at the boundary; verify unit tests cover ordered message read-back and per-revision scoping
-- [ ] 1.3 Enforce the write-time invariants (non-empty file path, line at least 1, side `LEFT` or `RIGHT`, non-empty body) with a message naming the offending field; verify a unit test per invariant asserts the rejection text and that nothing is stored
+- [x] 1.3 Enforce the write-time invariants (non-empty file path, line at least 1, side `LEFT` or `RIGHT`, non-empty body) with a message naming the offending field; verify a unit test per invariant asserts the rejection text and that nothing is stored
 - [ ] 1.4 Implement idempotent create: a repeated key on the same triple returns the stored thread as a success, and the same key on another revision creates a new thread; verify both paths with store tests
 
 ## 2. Host boundary
 
-- [ ] 2.1 Add the app-invoke commands for the thread operations with camelCase payload keys; verify request-level tests cover a rejected anchor and a successful create
-- [ ] 2.2 Emit a coalescible thread-change event scoped to `(namespace, targetKey, revision)` on every write; verify a test asserts one event per write and that an unrelated scope receives none
-- [ ] 2.3 Wire the commands into the plugin host callbacks **outside** the `plugin_may_invoke_private_host_commands` gate; verify a test asserts a non-GitHub-Sync plugin id is authorized for every thread operation
+- [x] 2.1 Add the app-invoke commands for the thread operations with camelCase payload keys; verify request-level tests cover a rejected anchor and a successful create
+- [x] 2.2 Emit a coalescible thread-change event scoped to `(namespace, targetKey, revision)` on every write; verify a test asserts one event per write and that an unrelated scope receives none
+- [x] 2.3 Wire the commands into the plugin host callbacks **outside** the `plugin_may_invoke_private_host_commands` gate; verify a test asserts a non-GitHub-Sync plugin id is authorized for every thread operation
 
 ## 3. Public SDK surface
 
-- [ ] 3.1 Add the unified `ReviewThread`, anchor, scope, and request types to the SDK domain types; verify `pnpm exec tsc --noEmit` passes
+- [x] 3.1 Add the unified `ReviewThread`, anchor, scope, and request types to the SDK domain types; verify `pnpm exec tsc --noEmit` passes
 - [ ] 3.2 Add `reviewThreads` to `OpenForgeCommonAPI` with list, create, reply, setStatus, markSeen, and onDidChange; verify the SDK contract test asserts the operation set on both the frontend and backend surfaces
-- [ ] 3.3 Add testing fakes for `reviewThreads` alongside the existing SDK fakes; verify a fake-backed test creates and lists a thread without a host
+- [x] 3.3 Add testing fakes for `reviewThreads` alongside the existing SDK fakes; verify a fake-backed test creates and lists a thread without a host
 - [ ] 3.4 Mark `AgentReviewComment`, `AiThread`, and `AiThreadAnchor` removed from the SDK domain; verify no first-party workspace still imports them
 
 ## 4. Agent CLI and transport

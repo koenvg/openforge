@@ -8,6 +8,12 @@ import type {
   JsonValue,
   TaskChangeEvent,
   OpenForgeCommonAPI,
+  CreateReviewThreadRequest,
+  ReplyToReviewThreadRequest,
+  ReviewThread,
+  ReviewThreadAnchor,
+  ReviewThreadChangeEvent,
+  ReviewThreadScope,
 } from '../types.js'
 import type { ActiveTasks, CompletedTaskPage, CompletedTaskQuery, Task, TaskDetail, TaskLabel, TaskRead, TaskReference, TaskSummary } from '../domain.js'
 import {
@@ -363,14 +369,54 @@ function listTestingCompletedTasks(
 }
 
 
-export type TestingCommonApi = Omit<OpenForgeCommonAPI, 'tasks'>
-  & Pick<FrontendOpenForgeAPI, 'tasks' | 'navigation'>
+
+function cloneReviewThread(thread: ReviewThread): ReviewThread {
+  return { ...thread, anchor: { ...thread.anchor }, messages: thread.messages.map(message => ({ ...message })) }
+}
+
+const REVIEW_THREAD_ORIGINS = new Set(['agent', 'human', 'plugin'])
+const REVIEW_THREAD_ROLES = new Set(['agent', 'human'])
+
+function reviewThreadScope(thread: ReviewThread): ReviewThreadScope {
+  return { namespace: thread.namespace, targetKey: thread.targetKey, revision: thread.revision }
+}
+
+function reviewThreadScopeKey(scope: ReviewThreadScope): string {
+  return JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
+}
+
+function assertReviewThreadField(condition: boolean, field: string, reason: string): void {
+  if (!condition) throw new TypeError(`Review Thread field '${field}' ${reason}`)
+}
+
+function assertReviewThreadScope(scope: ReviewThreadScope): void {
+  assertReviewThreadField(scope?.namespace?.trim().length > 0, 'namespace', 'must not be empty')
+  assertReviewThreadField(scope?.targetKey?.trim().length > 0, 'targetKey', 'must not be empty')
+  assertReviewThreadField(scope?.revision?.trim().length > 0, 'revision', 'must not be empty')
+}
+
+function assertReviewThreadAnchor(anchor: ReviewThreadAnchor): void {
+  if (anchor?.kind === 'custom') {
+    assertReviewThreadField(anchor.key?.trim().length > 0, 'anchor.key', 'must not be empty')
+    return
+  }
+  assertReviewThreadField(anchor?.kind === 'line', 'anchor.kind', 'must be line or custom')
+  assertReviewThreadField(anchor.filePath?.trim().length > 0, 'filePath', 'must not be empty')
+  assertReviewThreadField(Number.isSafeInteger(anchor.line) && anchor.line >= 1, 'line', 'must be at least 1')
+  assertReviewThreadField(anchor.side === 'LEFT' || anchor.side === 'RIGHT', 'side', 'must be LEFT or RIGHT')
+}
+
+export type TestingCommonApi = Omit<OpenForgeCommonAPI, 'tasks' | 'reviewThreads'>
+  & Pick<FrontendOpenForgeAPI, 'tasks' | 'reviewThreads' | 'navigation'>
 
 export class TestingCommonApiFake {
   private readonly commands = new Map<string, TestingCommandContribution>()
   private readonly eventListeners = new Map<string, TestingEventListenerContribution>()
   private readonly eventHandlers = new Map<string, Set<TestingEventHandler>>()
   private readonly taskChangeHandlers = new Map<string, Set<(event: TaskChangeEvent) => void>>()
+  private readonly reviewThreads: ReviewThread[] = []
+  private readonly reviewThreadChangeHandlers = new Map<string, Set<(event: ReviewThreadChangeEvent) => void>>()
+  private reviewThreadSequence = 0
   private eventListenerSequence = 0
 
   constructor(private readonly services: TestingRegistryServices) {}
@@ -378,6 +424,12 @@ export class TestingCommonApiFake {
   emitTaskChange(event: TaskChangeEvent): void {
     for (const handler of this.taskChangeHandlers.get(event.projectId) ?? []) {
       handler(event)
+    }
+  }
+
+  emitReviewThreadChange(event: ReviewThreadChangeEvent): void {
+    for (const handler of this.reviewThreadChangeHandlers.get(reviewThreadScopeKey(event)) ?? []) {
+      handler({ namespace: event.namespace, targetKey: event.targetKey, revision: event.revision })
     }
   }
   createApi(): TestingCommonApi {
@@ -493,6 +545,28 @@ export class TestingCommonApiFake {
               : null,
           }
         },
+      },
+      reviewThreads: {
+        onDidChange: (scope, handler) => {
+          assertReviewThreadScope(scope)
+          const key = reviewThreadScopeKey(scope)
+          const handlers = this.reviewThreadChangeHandlers.get(key) ?? new Set<(event: ReviewThreadChangeEvent) => void>()
+          handlers.add(handler)
+          this.reviewThreadChangeHandlers.set(key, handlers)
+          return createDisposable(() => {
+            handlers.delete(handler)
+            if (handlers.size === 0) this.reviewThreadChangeHandlers.delete(key)
+          })
+        },
+        list: async (scope) => {
+          assertReviewThreadScope(scope)
+          const key = reviewThreadScopeKey(scope)
+          return this.reviewThreads
+            .filter(thread => reviewThreadScopeKey(thread) === key)
+            .map(cloneReviewThread)
+        },
+        create: async (request) => this.createReviewThread(request),
+        reply: async (request) => this.replyToReviewThread(request),
       },
       tasks: {
         onDidChange: (projectId, handler) => {
@@ -835,6 +909,58 @@ export class TestingCommonApiFake {
       commands: Array.from(this.commands.values()),
       eventListeners: Array.from(this.eventListeners.values()),
     }
+  }
+
+  private createReviewThread(request: CreateReviewThreadRequest): ReviewThread {
+    assertReviewThreadScope(request)
+    assertReviewThreadAnchor(request.anchor)
+    assertReviewThreadField(request.body?.trim().length > 0, 'body', 'must not be empty')
+    assertReviewThreadField(REVIEW_THREAD_ORIGINS.has(request.origin), 'origin', 'must be agent, human, or plugin')
+
+    this.reviewThreadSequence += 1
+    const createdAt = this.reviewThreadSequence
+    const thread: ReviewThread = {
+      id: `rt_${this.reviewThreadSequence}`,
+      namespace: request.namespace,
+      targetKey: request.targetKey,
+      revision: request.revision,
+      runId: request.runId ?? null,
+      origin: request.origin,
+      anchor: { ...request.anchor },
+      status: 'open',
+      awaiting: 'none',
+      idempotencyKey: null,
+      seenAt: null,
+      createdAt,
+      updatedAt: createdAt,
+      messages: [{
+        id: `rtm_${this.reviewThreadSequence}_1`,
+        role: request.origin === 'agent' ? 'agent' : 'human',
+        body: request.body,
+        createdAt,
+      }],
+    }
+    this.reviewThreads.push(thread)
+    this.emitReviewThreadChange(reviewThreadScope(thread))
+    return cloneReviewThread(thread)
+  }
+
+  private replyToReviewThread(request: ReplyToReviewThreadRequest): ReviewThread {
+    assertReviewThreadField(request.body?.trim().length > 0, 'body', 'must not be empty')
+    assertReviewThreadField(REVIEW_THREAD_ROLES.has(request.role), 'role', 'must be agent or human')
+    const thread = this.reviewThreads.find(candidate => candidate.id === request.threadId)
+    if (!thread) throw new Error(`Review Thread '${request.threadId}' does not exist`)
+
+    this.reviewThreadSequence += 1
+    thread.messages.push({
+      id: `rtm_${thread.id}_${thread.messages.length + 1}`,
+      role: request.role,
+      body: request.body,
+      createdAt: this.reviewThreadSequence,
+    })
+    thread.updatedAt = this.reviewThreadSequence
+    this.emitReviewThreadChange(reviewThreadScope(thread))
+    return cloneReviewThread(thread)
   }
 
   private registerCommand(registration: CommandRegistration): Disposable {

@@ -385,7 +385,7 @@
               aiThreads={aiThreads}
               onAskAgent={onAskAgent}
               onCommentNow={onCommentNow}
-              onReplyToThread={onReplyToThread}
+              onReplyToAiThread={onReplyToThread}
               onAskAboutComment={onAskAboutComment}
               onReplyToExistingComment={onReplyToExistingComment}
               pendingReplies={pendingReplies}

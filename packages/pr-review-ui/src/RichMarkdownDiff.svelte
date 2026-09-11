@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MessageSquarePlus } from '@lucide/svelte'
   import { SplitSide } from '@git-diff-view/svelte'
+  import type { ReviewThread } from '@openforge-app/plugin-sdk'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -37,6 +38,8 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
+    onReplyToAiThread?: (threadId: string, body: string) => void
+    threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
@@ -67,6 +70,8 @@
     onPendingCommentsChange,
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
+    onReplyToAiThread,
+    threads = [],
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -79,14 +84,15 @@
   let openCommentLine = $state<number | null>(null)
   const document = $derived(parseRichMarkdownDiff(content, file.patch ?? ''))
   const side = SplitSide.new
-  const commentLines = $derived(buildExtendData(
-    file.filename,
+  const commentLines = $derived(buildExtendData({
+    filename: file.filename,
     existingComments,
     pendingComments,
     agentComments,
     aiThreads,
     pendingReplies,
-  ).newFile)
+    threads,
+  }).newFile)
 
   function commentsForRange(startLine: number, endLine: number): CommentDisplayData | null {
     const comments: CommentDisplayData['comments'] = []
@@ -145,6 +151,7 @@
       {onAgentCommentsChange}
       {onUpdateAgentCommentStatus}
       {onOpenUrl}
+      {onReplyToAiThread}
       {onReplyToThread}
       {onAskAboutComment}
       {onReplyToExistingComment}

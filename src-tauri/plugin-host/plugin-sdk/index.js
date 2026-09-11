@@ -1274,18 +1274,73 @@ function listTestingCompletedTasks(allTasks, projectId, query = {}, labelsByTask
 		}) : null
 	};
 }
+function cloneReviewThread(thread) {
+	return {
+		...thread,
+		anchor: { ...thread.anchor },
+		messages: thread.messages.map((message) => ({ ...message }))
+	};
+}
+var REVIEW_THREAD_ORIGINS = /* @__PURE__ */ new Set([
+	"agent",
+	"human",
+	"plugin"
+]);
+var REVIEW_THREAD_ROLES = /* @__PURE__ */ new Set(["agent", "human"]);
+function reviewThreadScope(thread) {
+	return {
+		namespace: thread.namespace,
+		targetKey: thread.targetKey,
+		revision: thread.revision
+	};
+}
+function reviewThreadScopeKey(scope) {
+	return JSON.stringify([
+		scope.namespace,
+		scope.targetKey,
+		scope.revision
+	]);
+}
+function assertReviewThreadField(condition, field, reason) {
+	if (!condition) throw new TypeError(`Review Thread field '${field}' ${reason}`);
+}
+function assertReviewThreadScope(scope) {
+	assertReviewThreadField(scope?.namespace?.trim().length > 0, "namespace", "must not be empty");
+	assertReviewThreadField(scope?.targetKey?.trim().length > 0, "targetKey", "must not be empty");
+	assertReviewThreadField(scope?.revision?.trim().length > 0, "revision", "must not be empty");
+}
+function assertReviewThreadAnchor(anchor) {
+	if (anchor?.kind === "custom") {
+		assertReviewThreadField(anchor.key?.trim().length > 0, "anchor.key", "must not be empty");
+		return;
+	}
+	assertReviewThreadField(anchor?.kind === "line", "anchor.kind", "must be line or custom");
+	assertReviewThreadField(anchor.filePath?.trim().length > 0, "filePath", "must not be empty");
+	assertReviewThreadField(Number.isSafeInteger(anchor.line) && anchor.line >= 1, "line", "must be at least 1");
+	assertReviewThreadField(anchor.side === "LEFT" || anchor.side === "RIGHT", "side", "must be LEFT or RIGHT");
+}
 var TestingCommonApiFake = class {
 	services;
 	commands = /* @__PURE__ */ new Map();
 	eventListeners = /* @__PURE__ */ new Map();
 	eventHandlers = /* @__PURE__ */ new Map();
 	taskChangeHandlers = /* @__PURE__ */ new Map();
+	reviewThreads = [];
+	reviewThreadChangeHandlers = /* @__PURE__ */ new Map();
+	reviewThreadSequence = 0;
 	eventListenerSequence = 0;
 	constructor(services) {
 		this.services = services;
 	}
 	emitTaskChange(event) {
 		for (const handler of this.taskChangeHandlers.get(event.projectId) ?? []) handler(event);
+	}
+	emitReviewThreadChange(event) {
+		for (const handler of this.reviewThreadChangeHandlers.get(reviewThreadScopeKey(event)) ?? []) handler({
+			namespace: event.namespace,
+			targetKey: event.targetKey,
+			revision: event.revision
+		});
 	}
 	createApi() {
 		const api = {
@@ -1362,6 +1417,26 @@ var TestingCommonApiFake = class {
 					}) : null
 				};
 			} },
+			reviewThreads: {
+				onDidChange: (scope, handler) => {
+					assertReviewThreadScope(scope);
+					const key = reviewThreadScopeKey(scope);
+					const handlers = this.reviewThreadChangeHandlers.get(key) ?? /* @__PURE__ */ new Set();
+					handlers.add(handler);
+					this.reviewThreadChangeHandlers.set(key, handlers);
+					return createDisposable(() => {
+						handlers.delete(handler);
+						if (handlers.size === 0) this.reviewThreadChangeHandlers.delete(key);
+					});
+				},
+				list: async (scope) => {
+					assertReviewThreadScope(scope);
+					const key = reviewThreadScopeKey(scope);
+					return this.reviewThreads.filter((thread) => reviewThreadScopeKey(thread) === key).map(cloneReviewThread);
+				},
+				create: async (request) => this.createReviewThread(request),
+				reply: async (request) => this.replyToReviewThread(request)
+			},
 			tasks: {
 				onDidChange: (projectId, handler) => {
 					const handlers = this.taskChangeHandlers.get(projectId) ?? /* @__PURE__ */ new Set();
@@ -1669,6 +1744,54 @@ var TestingCommonApiFake = class {
 			commands: Array.from(this.commands.values()),
 			eventListeners: Array.from(this.eventListeners.values())
 		};
+	}
+	createReviewThread(request) {
+		assertReviewThreadScope(request);
+		assertReviewThreadAnchor(request.anchor);
+		assertReviewThreadField(request.body?.trim().length > 0, "body", "must not be empty");
+		assertReviewThreadField(REVIEW_THREAD_ORIGINS.has(request.origin), "origin", "must be agent, human, or plugin");
+		this.reviewThreadSequence += 1;
+		const createdAt = this.reviewThreadSequence;
+		const thread = {
+			id: `rt_${this.reviewThreadSequence}`,
+			namespace: request.namespace,
+			targetKey: request.targetKey,
+			revision: request.revision,
+			runId: request.runId ?? null,
+			origin: request.origin,
+			anchor: { ...request.anchor },
+			status: "open",
+			awaiting: "none",
+			idempotencyKey: null,
+			seenAt: null,
+			createdAt,
+			updatedAt: createdAt,
+			messages: [{
+				id: `rtm_${this.reviewThreadSequence}_1`,
+				role: request.origin === "agent" ? "agent" : "human",
+				body: request.body,
+				createdAt
+			}]
+		};
+		this.reviewThreads.push(thread);
+		this.emitReviewThreadChange(reviewThreadScope(thread));
+		return cloneReviewThread(thread);
+	}
+	replyToReviewThread(request) {
+		assertReviewThreadField(request.body?.trim().length > 0, "body", "must not be empty");
+		assertReviewThreadField(REVIEW_THREAD_ROLES.has(request.role), "role", "must be agent or human");
+		const thread = this.reviewThreads.find((candidate) => candidate.id === request.threadId);
+		if (!thread) throw new Error(`Review Thread '${request.threadId}' does not exist`);
+		this.reviewThreadSequence += 1;
+		thread.messages.push({
+			id: `rtm_${thread.id}_${thread.messages.length + 1}`,
+			role: request.role,
+			body: request.body,
+			createdAt: this.reviewThreadSequence
+		});
+		thread.updatedAt = this.reviewThreadSequence;
+		this.emitReviewThreadChange(reviewThreadScope(thread));
+		return cloneReviewThread(thread);
 	}
 	registerCommand(registration) {
 		const qualifiedId = this.services.localQualifiedId("commands", registration.id);
@@ -4874,6 +4997,9 @@ var TestingOpenForgeRegistryFake = class {
 	}
 	emitTaskChange(event) {
 		this.commonApi.emitTaskChange(event);
+	}
+	emitReviewThreadChange(event) {
+		this.commonApi.emitReviewThreadChange(event);
 	}
 	setBrowserSurfaceState(taskId, id, patch) {
 		this.frontendContributions.setBrowserSurfaceState(taskId, id, patch);

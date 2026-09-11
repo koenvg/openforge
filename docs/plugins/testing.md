@@ -318,6 +318,29 @@ it('records task creation, status updates, and implementation starts', async () 
 By default, `tasks.active(projectId)` returns empty `tasks` and `related` arrays, `tasks.completed(projectId)` returns an empty fixed page, and `tasks.detail(projectId, taskId)` resolves to `null`. The deprecated version 1 `tasks.list()` and `tasks.get()` fakes preserve their old empty-array and null behavior until version 2. Workspace and session lookups also return `null`. Seed the registry or wrap the API behind a plugin-owned test double when a test needs richer fixtures.
 Use `registry.emitTaskChange({ projectId, taskId, reason })` to test `tasks.onDidChange` handlers. The fake applies the same Project filter as the host. Call `subscription.dispose()` or `registry.disposeAll()` to test explicit and lifecycle cleanup.
 
+## Review Threads
+
+The fake stores Review Threads in memory, so a test can create and list a thread without a running host. It applies the same structural checks as the host and rejects a bad write with a message naming the offending field.
+
+```ts
+it('creates and lists a line-anchored Review Thread', async () => {
+  const api = createMockOpenForgeApi({ pluginId: 'reviewer' })
+  const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
+
+  const thread = await api.reviewThreads.create({
+    ...scope,
+    anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'RIGHT' },
+    origin: 'plugin',
+    body: 'Needs a null check',
+  })
+  await api.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Fixed' })
+
+  await expect(api.reviewThreads.list(scope)).resolves.toHaveLength(1)
+})
+```
+
+Use `registry.emitReviewThreadChange(scope)` to test `reviewThreads.onDidChange` handlers. The fake applies the same scope filter as the host and the notification carries no thread snapshot.
+
 ## Backend RPC
 
 Backend methods registered through `openforge.backend.registerMethod()` are callable through the matching frontend fake's `openforge.backend.invoke()` when both runtimes use the same registry.

@@ -1838,6 +1838,11 @@ INSERT OR IGNORE INTO config (key, value)
     // Agent review comments moved into the GitHub Sync plugin's own storage, leaving this
     // table without a writer.
     M::up("DROP TABLE IF EXISTS agent_review_comments;"),
+    // No foreign key backs target_key by design, so a thread can outlive whatever
+    // its target named; anchors are resolved when a surface renders them.
+    M::up_with_hook("", |tx| {
+        ensure_review_thread_tables(tx).map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2483,6 +2488,52 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
     Ok(())
 }
 
+/// Recreate the Review Thread tables. Kept here as well as in the appended migration
+/// so a database whose user_version already covers that migration, but which never ran
+/// it because another branch appended its own migrations first, still gets the tables.
+pub(super) fn ensure_review_thread_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS review_threads (
+    id TEXT PRIMARY KEY,
+    namespace TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    run_id TEXT,
+    origin TEXT NOT NULL CHECK (origin IN ('agent', 'human', 'plugin')),
+    anchor_kind TEXT NOT NULL CHECK (anchor_kind IN ('line', 'custom')),
+    file_path TEXT,
+    line INTEGER,
+    side TEXT CHECK (side IS NULL OR side IN ('LEFT', 'RIGHT')),
+    anchor_key TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
+    awaiting TEXT NOT NULL DEFAULT 'none' CHECK (awaiting IN ('none', 'agent', 'error')),
+    idempotency_key TEXT,
+    seen_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_threads_scope
+    ON review_threads(namespace, target_key, revision, created_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_review_threads_idempotency
+    ON review_threads(namespace, target_key, revision, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS review_thread_messages (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL REFERENCES review_threads(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('agent', 'human')),
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    sequence INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_thread_messages_thread
+    ON review_thread_messages(thread_id, sequence);
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(super) fn ensure_browser_session_purge_intents_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2915,13 +2966,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage', 'review_threads', 'review_thread_messages')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 17, "All 17 tables should be created");
+        assert_eq!(table_count, 19, "All 19 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))

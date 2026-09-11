@@ -629,6 +629,29 @@ Behavior and limits:
 - Starting an Implementation Run can fail when dependencies are unmet, an active Agent Session already exists, the Task/Project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
 - `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state. `tasks.listSessions(...)` returns an empty array when no Agent Sessions match.
 
+## Review Threads
+
+`openforge.reviewThreads` stores review conversations for any review surface. A thread is addressed by an opaque `namespace`, `targetKey`, and `revision`. The host stores and compares those three strings and never interprets them.
+
+```ts
+const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: headSha }
+
+const thread = await openforge.reviewThreads.create({
+  ...scope,
+  anchor: { kind: 'line', filePath: 'src/main.ts', line: 12, side: 'RIGHT' },
+  origin: 'plugin',
+  body: 'Needs a null check',
+})
+await openforge.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Fixed' })
+const threads = await openforge.reviewThreads.list(scope)
+```
+
+- A thread carries an anchor, an origin, and an ordered list of messages. `reply` appends a message to that thread instead of creating a second one.
+- `list(scope)` returns only the threads stored under that exact triple. A revision with no threads returns an empty array.
+- A write is validated against structural invariants. A rejection names the offending field and stores nothing, so a bad comment is diagnosable instead of missing.
+- Frontend plugins can subscribe with `openforge.reviewThreads.onDidChange(scope, handler)`. The notification carries the scope only, so re-list on notification. A thread written elsewhere then reaches an open review without a reload.
+- The thread operations are available to every enabled plugin. There is no plugin-identity gate.
+
 ## Files, shell, notifications, and links
 
 Project file methods are available to frontend and backend plugins:

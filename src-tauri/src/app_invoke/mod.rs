@@ -13,6 +13,7 @@ mod local_skills;
 mod plugins;
 mod pty;
 mod pty_payload;
+mod review_threads;
 mod runtime;
 mod whisper;
 
@@ -198,6 +199,13 @@ pub(crate) async fn handle_jira_command(
     jira::handle_app_jira_command(state, request).await
 }
 
+pub(crate) async fn handle_review_threads_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<Option<serde_json::Value>> {
+    review_threads::handle_app_review_threads_command(state, request).await
+}
+
 pub(crate) async fn handle_runtime_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -247,6 +255,9 @@ pub(crate) async fn handle_command(
         return Ok(value);
     }
     if let Some(value) = handle_jira_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_review_threads_command(state, request).await? {
         return Ok(value);
     }
     if let Some(value) = handle_runtime_command(state, request).await? {

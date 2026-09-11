@@ -215,6 +215,32 @@ describe('plugin host commands', () => {
     })
   })
 
+  it('routes Review Thread reads and writes through the typed desktop bridge', async () => {
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
+    const thread = { id: 'rt_1', ...scope }
+    const { invoke } = installDesktopBridge(thread)
+    const host = createPluginRuntimeHost('com.example.reviewer')
+    const anchorPayload = { kind: 'line' as const, filePath: 'src/main.ts', line: 12, side: 'RIGHT' as const }
+
+    await host.listReviewThreads?.(scope)
+    await host.createReviewThread?.({ ...scope, anchor: anchorPayload, origin: 'plugin', body: 'Needs a null check' })
+    await host.replyToReviewThread?.({ threadId: 'rt_1', role: 'human', body: 'Fixed' })
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'list_review_threads', scope)
+    expect(invoke).toHaveBeenNthCalledWith(2, 'create_review_thread', {
+      ...scope,
+      anchor: anchorPayload,
+      origin: 'plugin',
+      body: 'Needs a null check',
+      runId: undefined,
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'reply_to_review_thread', {
+      threadId: 'rt_1',
+      role: 'human',
+      body: 'Fixed',
+    })
+  })
+
   it('preserves typed retryable Task follow-up failures', async () => {
     const { invoke } = installDesktopBridge()
     invoke

@@ -16,6 +16,7 @@ mod github_review;
 mod lifecycle;
 mod plugins;
 mod pty;
+mod review_threads;
 mod runtime;
 mod task_labels;
 mod whisper;

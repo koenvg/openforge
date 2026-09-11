@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
+  import type { ReviewThread } from '@openforge-app/plugin-sdk'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
@@ -44,6 +45,8 @@
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToAiThread?: (threadId: string, body: string) => void
+    threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
@@ -83,6 +86,8 @@
     aiThreads = [],
     onAskAgent,
     onCommentNow,
+    onReplyToAiThread,
+    threads = [],
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -186,6 +191,8 @@
         {onPendingCommentsChange}
         {onAgentCommentsChange}
         {onUpdateAgentCommentStatus}
+        {onReplyToAiThread}
+        {threads}
         {onReplyToThread}
         {onAskAboutComment}
         {onReplyToExistingComment}
@@ -289,7 +296,7 @@
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
-    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments, aiThreads, pendingReplies)}
+    extendData={buildExtendData({ filename: file.filename, existingComments, pendingComments, agentComments, aiThreads, pendingReplies, threads })}
     {diffViewMode}
     {diffViewWrap}
     {diffViewTheme}
@@ -309,6 +316,7 @@
         {onAgentCommentsChange}
         {onUpdateAgentCommentStatus}
         {onOpenUrl}
+        {onReplyToAiThread}
         {onReplyToThread}
         {onAskAboutComment}
         {onReplyToExistingComment}
