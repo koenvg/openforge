@@ -1,6 +1,6 @@
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { ResolvedMarkdownMedia } from '../markdown'
-import type { AgentReviewComment, AuthoredPullRequest, PollResult, PrComment, PrFileDiff, PrOverviewComment, PullRequestInfo, PullRequestMergeMethod, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '../types'
+import type { AuthoredPullRequest, PollResult, PrComment, PrFileDiff, PrOverviewComment, PullRequestInfo, PullRequestMergeMethod, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '../types'
 
 export async function forceGithubSync(): Promise<PollResult> {
   return invoke<PollResult>("force_github_sync");
@@ -122,14 +122,6 @@ export async function getPrOverviewComments(owner: string, repo: string, prNumbe
 
 export async function submitPrReview(owner: string, repo: string, prNumber: number, event: string, body: string, comments: ReviewSubmissionComment[], commitId: string): Promise<void> {
   return invoke<void>("submit_pr_review", { owner, repo, prNumber, event, body, comments, commitId });
-}
-
-export async function getAgentReviewComments(reviewPrId: number): Promise<AgentReviewComment[]> {
-  return invoke<AgentReviewComment[]>("get_agent_review_comments", { reviewPrId });
-}
-
-export async function updateAgentReviewCommentStatus(commentId: number, status: string): Promise<void> {
-  return invoke<void>("update_agent_review_comment_status", { commentId, status });
 }
 
 export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {

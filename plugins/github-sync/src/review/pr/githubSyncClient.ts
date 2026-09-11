@@ -88,8 +88,6 @@ export interface GithubSyncPrReviewClient {
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
   replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<void>
   createReviewComment(request: CreateReviewCommentRequest): Promise<void>
-  listAgentReviewComments(request: { reviewPrId: number }): Promise<AgentReviewComment[]>
-  updateAgentReviewCommentStatus(request: { commentId: number; status: string }): Promise<void>
   getPrAiReviewComments(request: { reviewPrId: number; headSha: string }): Promise<AgentReviewComment[]>
   updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: string }): Promise<void>
   getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<PrWalkthrough | null>
@@ -198,8 +196,6 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
       side,
       body,
     }),
-    listAgentReviewComments: ({ reviewPrId }) => invokeBackend<AgentReviewComment[]>(api, 'getAgentReviewComments', { reviewPrId }),
-    updateAgentReviewCommentStatus: ({ commentId, status }) => invokeBackend<void>(api, 'updateAgentReviewCommentStatus', { commentId, status }),
     getPrAiReviewComments: ({ reviewPrId, headSha }) => invokeBackend<AgentReviewComment[]>(api, 'getPrAiReviewComments', { reviewPrId, headSha }),
     updatePrAiReviewCommentStatus: ({ reviewPrId, headSha, commentId, status }) => invokeBackend<void>(api, 'updatePrAiReviewCommentStatus', { reviewPrId, headSha, commentId, status }),
     getPrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<PrWalkthrough | null>(api, 'getPrWalkthrough', { reviewPrId, headSha }),

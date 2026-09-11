@@ -164,14 +164,6 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<void>(openforge, 'createReviewComment', request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number }, AgentReviewComment[]>('getAgentReviewComments', {
-      handler: (request) => invokeHostCommand<AgentReviewComment[]>(openforge, 'getAgentReviewComments', request),
-    }))
-
-    context.subscriptions.add(openforge.backend.registerMethod<{ commentId: number; status: string }, void>('updateAgentReviewCommentStatus', {
-      handler: (request) => invokeHostCommand<void>(openforge, 'updateAgentReviewCommentStatus', request),
-    }))
-
     // The walkthrough feature is owned entirely by this plugin: the cache lives
     // in plugin storage and generation runs via the generic core `agentGenerate`
     // primitive. No walkthrough-specific code exists in the core sidecar.

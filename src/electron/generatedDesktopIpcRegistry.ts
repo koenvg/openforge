@@ -97,8 +97,6 @@ export const desktopCommandContracts = [
   {"functionName":"getReviewComments","moduleName":"github","ipcCommand":"get_review_comments","payloadKeys":["owner","repo","prNumber"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"getPrOverviewComments","moduleName":"github","ipcCommand":"get_pr_overview_comments","payloadKeys":["owner","repo","prNumber"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"submitPrReview","moduleName":"github","ipcCommand":"submit_pr_review","payloadKeys":["owner","repo","prNumber","event","body","comments","commitId"],"owner":"rust-sidecar","domain":"github-review"},
-  {"functionName":"getAgentReviewComments","moduleName":"github","ipcCommand":"get_agent_review_comments","payloadKeys":["reviewPrId"],"owner":"rust-sidecar","domain":"github-review"},
-  {"functionName":"updateAgentReviewCommentStatus","moduleName":"github","ipcCommand":"update_agent_review_comment_status","payloadKeys":["commentId","status"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"fetchAuthoredPrs","moduleName":"github","ipcCommand":"fetch_authored_prs","payloadKeys":[],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"getAuthoredPrs","moduleName":"github","ipcCommand":"get_authored_prs","payloadKeys":[],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"configureStartPromptContribution","moduleName":"pluginManagement","ipcCommand":"configure_start_prompt_contribution","payloadKeys":["ownerPluginId","projectId","id","enabled","content","order"],"owner":"rust-sidecar","domain":"plugins"},

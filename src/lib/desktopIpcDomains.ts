@@ -123,8 +123,6 @@ export const desktopIpcFunctionDomains = {
   getCommitDiff: 'files-review',
   getCommitFileContents: 'files-review',
   getCommitBatchFileContents: 'files-review',
-  getAgentReviewComments: 'github-review',
-  updateAgentReviewCommentStatus: 'github-review',
   listOpenCodeCommands: 'agent-session-pty',
   searchOpenCodeFiles: 'files-review',
   listOpenCodeAgents: 'agent-session-pty',

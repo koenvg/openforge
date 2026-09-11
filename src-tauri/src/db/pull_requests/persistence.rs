@@ -1,7 +1,9 @@
 use rusqlite::Result;
 
 use super::super::pull_request_readiness::terminal_readiness_blockers_json;
-use super::super::{current_unix_timestamp, sqlite::sqlite_id_list, Database};
+#[cfg(test)]
+use super::super::sqlite::sqlite_id_list;
+use super::super::{current_unix_timestamp, Database};
 
 impl Database {
     /// Insert a PR comment into the database
@@ -40,6 +42,7 @@ impl Database {
     /// Insert or update a pull request in the database.
     /// Legacy callers use the repository-local PR number as the row id.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub fn insert_pull_request(
         &self,
         id: i64,
@@ -321,6 +324,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
         let Some(id_list) = sqlite_id_list(ids) else {
             return Ok(());

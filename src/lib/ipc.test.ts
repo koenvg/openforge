@@ -540,12 +540,12 @@ describe("ipc spawnShellPty", () => {
 		});
 	});
 
-	it("does not export removed live GitHub agent review controls", () => {
+	it("does not export removed GitHub agent review controls", () => {
 		expect(ipcModule).not.toHaveProperty("startAgentReview");
 		expect(ipcModule).not.toHaveProperty("abortAgentReview");
 		expect(ipcModule).not.toHaveProperty("dismissAllAgentReviewComments");
-		expect(ipcModule).toHaveProperty("getAgentReviewComments");
-		expect(ipcModule).toHaveProperty("updateAgentReviewCommentStatus");
+		expect(ipcModule).not.toHaveProperty("getAgentReviewComments");
+		expect(ipcModule).not.toHaveProperty("updateAgentReviewCommentStatus");
 		expect(ipcModule).not.toHaveProperty("resumeImplementation");
 	});
 

@@ -1,5 +1,4 @@
 use rusqlite::Result;
-use std::collections::HashMap;
 
 impl super::Database {
     fn project_config_value(
@@ -70,21 +69,6 @@ impl super::Database {
             [project_id, key],
         )?;
         Ok(())
-    }
-
-    /// Get all config values for a project
-    pub fn get_all_project_config(&self, project_id: &str) -> Result<HashMap<String, String>> {
-        let conn = self.lock_conn()?;
-        let mut stmt =
-            conn.prepare("SELECT key, value FROM project_config WHERE project_id = ?1")?;
-        let rows = stmt.query_map([project_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
-
-        let mut result = HashMap::new();
-        for row in rows {
-            let (key, value) = row?;
-            result.insert(key, value);
-        }
-        Ok(result)
     }
 
     /// Resolve the AI provider for a project.

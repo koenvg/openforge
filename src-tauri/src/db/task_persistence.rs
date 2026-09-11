@@ -48,6 +48,7 @@ const COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL: &str =
 const ALL_TASKS_SQL: &str = task_row_query!("ORDER BY updated_at DESC");
 const TASK_BY_ID_SQL: &str = task_row_query!("WHERE id = ?1");
 
+#[cfg(test)]
 const TASK_RELATIONSHIP_REFERENCES_FOR_PROJECT_SQL: &str = r#"
 WITH active_tasks AS (
     SELECT id
@@ -321,6 +322,7 @@ impl Database {
         Ok(tasks.iter().map(TaskDetail::from).collect())
     }
 
+    #[cfg(test)]
     pub fn get_task_relationship_references_for_project(
         &self,
         project_id: &str,

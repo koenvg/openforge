@@ -219,6 +219,7 @@ impl super::Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn get_authored_pr_count(&self) -> Result<i64> {
         let conn = self.lock_conn()?;
         conn.query_row(

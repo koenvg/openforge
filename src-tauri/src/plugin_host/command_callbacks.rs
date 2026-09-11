@@ -7,7 +7,6 @@ const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GlobalCommandHandler {
     GithubReview,
-    FilesReview,
     AgentGenerate,
     Jira,
 }
@@ -23,13 +22,6 @@ impl ResolvedGlobalCommand {
         Self {
             app_command,
             handler: GlobalCommandHandler::GithubReview,
-        }
-    }
-
-    const fn files_review(app_command: &'static str) -> Self {
-        Self {
-            app_command,
-            handler: GlobalCommandHandler::FilesReview,
         }
     }
 
@@ -102,12 +94,6 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "createReviewComment" => Ok(ResolvedGlobalCommand::github_review(
             "create_review_comment",
         )),
-        "getAgentReviewComments" => Ok(ResolvedGlobalCommand::files_review(
-            "get_agent_review_comments",
-        )),
-        "updateAgentReviewCommentStatus" => Ok(ResolvedGlobalCommand::files_review(
-            "update_agent_review_comment_status",
-        )),
         "agentGenerate" => Ok(ResolvedGlobalCommand::agent_generate("agent_generate")),
         "abortAgentGenerate" => Ok(ResolvedGlobalCommand::agent_generate(
             "abort_agent_generate",
@@ -179,9 +165,6 @@ impl PluginHost {
             GlobalCommandHandler::GithubReview => {
                 crate::app_invoke::handle_github_review_command(&state, &request).await
             }
-            GlobalCommandHandler::FilesReview => {
-                crate::app_invoke::handle_files_review_command(&state, &request).await
-            }
             GlobalCommandHandler::AgentGenerate => {
                 crate::app_invoke::handle_agent_generate_command(&state, &request).await
             }
@@ -209,11 +192,6 @@ mod tests {
                 "openforge.fetchReviewPrs",
                 "fetch_review_prs",
                 GlobalCommandHandler::GithubReview,
-            ),
-            (
-                "openforge.getAgentReviewComments",
-                "get_agent_review_comments",
-                GlobalCommandHandler::FilesReview,
             ),
             (
                 "openforge.agentGenerateInRepo",
@@ -268,6 +246,19 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{qualified_id} should resolve: {error}"));
             assert_eq!(resolved.app_command, expected_app_command);
             assert_eq!(resolved.handler, GlobalCommandHandler::Jira);
+        }
+    }
+
+    #[test]
+    fn agent_review_comment_commands_no_longer_resolve() {
+        for qualified_id in [
+            "openforge.getAgentReviewComments",
+            "openforge.updateAgentReviewCommentStatus",
+        ] {
+            assert_eq!(
+                resolve_openforge_global_command(qualified_id).unwrap_err(),
+                format!("unsupported plugin host global command id: {qualified_id}")
+            );
         }
     }
 

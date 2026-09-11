@@ -1,10 +1,13 @@
+#[cfg(test)]
 use rusqlite::types::ToSql;
 
+#[cfg(test)]
 pub(super) struct SqliteIdList<'a> {
     pub(super) placeholders: String,
     pub(super) params: Vec<&'a dyn ToSql>,
 }
 
+#[cfg(test)]
 pub(super) fn sqlite_id_list(ids: &[i64]) -> Option<SqliteIdList<'_>> {
     if ids.is_empty() {
         return None;

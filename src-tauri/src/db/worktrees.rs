@@ -145,35 +145,6 @@ impl super::Database {
         Ok(())
     }
 
-    /// Get all active worktrees
-    pub fn get_active_worktrees(&self) -> Result<Vec<WorktreeRow>> {
-        let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at
-             FROM worktrees WHERE status = 'active' ORDER BY updated_at DESC",
-        )?;
-
-        let worktrees = stmt.query_map([], |row| {
-            Ok(WorktreeRow {
-                id: row.get(0)?,
-                task_id: row.get(1)?,
-                project_id: row.get(2)?,
-                repo_path: row.get(3)?,
-                worktree_path: row.get(4)?,
-                branch_name: row.get(5)?,
-                status: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-            })
-        })?;
-
-        let mut result = Vec::new();
-        for worktree in worktrees {
-            result.push(worktree?);
-        }
-        Ok(result)
-    }
-
     /// Returns active legacy worktrees whose latest Agent Session needs startup reattachment.
     /// Completed Agent Sessions remain eligible while their Task is still doing so desktop and
     /// Companion Terminal surfaces can reattach to a live provider process after restart.

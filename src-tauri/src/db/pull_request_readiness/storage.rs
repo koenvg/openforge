@@ -18,6 +18,7 @@ pub struct PrMergeReadinessFacts {
 }
 
 impl PrMergeReadinessFacts {
+    #[cfg(test)]
     pub fn merge_readiness_warnings_or_default(&self) -> String {
         self.warnings_json.clone().unwrap_or_default()
     }
