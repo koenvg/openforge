@@ -240,6 +240,168 @@ describe('createTaskTerminalController', () => {
     expect(firstLease.cancel).toHaveBeenCalledOnce()
   })
 
+  it('preserves an exited terminal and reports a retryable failure when termination fails', async () => {
+    const exited = { ...inactiveLifecycle, shellExited: true, currentPtyInstance: 12, hasOutput: true }
+    const adapter = createAdapter({
+      getShellLifecycleState: vi.fn(() => exited),
+      beginPtySpawn: vi.fn(() => createSpawnLease()),
+    })
+    vi.mocked(adapter.killPty).mockRejectedValueOnce(new Error('daemon unavailable'))
+    const onRestartStateChange = vi.fn()
+    const controller = createTaskTerminalController({
+      adapter, terminalHost: document.createElement('div'), onLifecycleChange: vi.fn(),
+      onRestartStateChange,
+    })
+    controller.mount(binding('T-1-shell-0'))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
+
+    await controller.restart()
+
+    expect(adapter.runtime.resetPresentation).not.toHaveBeenCalled()
+    expect(adapter.spawnShellPty).not.toHaveBeenCalled()
+    expect(controller.getSnapshot().lifecycle).toEqual(exited)
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({
+      pending: false,
+      error: 'Could not confirm shell termination. Terminal output was kept. Retry restarting the shell. Details: daemon unavailable',
+    })
+
+    await controller.restart()
+    expect(adapter.runtime.resetPresentation).toHaveBeenCalledOnce()
+    expect(adapter.spawnShellPty).toHaveBeenCalledOnce()
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: false, error: null })
+    controller.destroy()
+  })
+
+  it('keeps output while termination is delayed and ignores repeated restart requests', async () => {
+    const termination = deferred<void>()
+    const adapter = createAdapter({
+      getShellLifecycleState: vi.fn(() => ({ ...inactiveLifecycle, shellExited: true, hasOutput: true })),
+      beginPtySpawn: vi.fn(() => createSpawnLease()),
+    })
+    vi.mocked(adapter.killPty).mockReturnValue(termination.promise)
+    const onRestartStateChange = vi.fn()
+    const controller = createTaskTerminalController({
+      adapter, terminalHost: document.createElement('div'), onLifecycleChange: vi.fn(), onRestartStateChange,
+    })
+    controller.mount(binding('T-1-shell-0'))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
+
+    const restarting = controller.restart()
+    const repeated = controller.restart()
+    await Promise.resolve()
+    expect(adapter.killPty).toHaveBeenCalledOnce()
+    expect(adapter.runtime.resetPresentation).not.toHaveBeenCalled()
+    expect(adapter.spawnShellPty).not.toHaveBeenCalled()
+    expect(controller.getSnapshot().lifecycle.hasOutput).toBe(true)
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: true, error: null })
+
+    termination.resolve()
+    await Promise.all([restarting, repeated])
+    expect(adapter.runtime.resetPresentation).toHaveBeenCalledOnce()
+    expect(adapter.spawnShellPty).toHaveBeenCalledOnce()
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: false, error: null })
+    controller.destroy()
+  })
+
+  it.each(['terminated', 'failed'] as const)('ignores a stale restart after rebinding when termination %s', async (outcome) => {
+    const termination = deferred<void>()
+    const adapter = createAdapter({
+      getShellLifecycleState: vi.fn(() => ({ ...inactiveLifecycle, shellExited: true })),
+      beginPtySpawn: vi.fn(() => createSpawnLease()),
+    })
+    vi.mocked(adapter.killPty).mockImplementationOnce(async () => {
+      await termination.promise
+      if (outcome === 'failed') throw new Error('old termination failed')
+    })
+    const onRestartStateChange = vi.fn()
+    const controller = createTaskTerminalController({
+      adapter, terminalHost: document.createElement('div'), onLifecycleChange: vi.fn(), onRestartStateChange,
+    })
+    controller.mount(binding('T-1-shell-0'))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
+    const restarting = controller.restart()
+
+    controller.sync(binding('T-1-shell-1', { terminalIndex: 1 }))
+    await vi.waitFor(() => expect(controller.getSnapshot().boundTerminalKey).toBe('T-1-shell-1'))
+    termination.resolve()
+    await restarting
+
+    expect(adapter.runtime.resetPresentation).not.toHaveBeenCalled()
+    expect(adapter.spawnShellPty).not.toHaveBeenCalled()
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: false, error: null })
+    await controller.restart()
+    expect(adapter.killPty).toHaveBeenLastCalledWith('T-1-shell-1')
+    expect(adapter.spawnShellPty).toHaveBeenCalledOnce()
+    controller.destroy()
+  })
+
+  it.each(['rebound', 'returned', 'destroyed'] as const)('does not spawn after the presentation reset finishes for a %s binding', async (change) => {
+    const reset = deferred<void>()
+    const session = createSession('T-1-shell-0')
+    const adapter = createAdapter({
+      acquire: vi.fn(async () => session),
+      resetPresentation: vi.fn(() => reset.promise),
+      getShellLifecycleState: vi.fn(() => ({ ...inactiveLifecycle, shellExited: true })),
+      beginPtySpawn: vi.fn(() => createSpawnLease()),
+    })
+    const onRestartStateChange = vi.fn()
+    const controller = createTaskTerminalController({
+      adapter, terminalHost: document.createElement('div'), onLifecycleChange: vi.fn(), onRestartStateChange,
+    })
+    controller.mount(binding('T-1-shell-0'))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalled())
+    const restarting = controller.restart()
+    await vi.waitFor(() => expect(adapter.runtime.resetPresentation).toHaveBeenCalled())
+
+    if (change === 'destroyed') {
+      controller.destroy()
+    } else {
+      controller.sync(binding('T-1-shell-0', { workspacePath: '/different-workspace' }))
+      if (change === 'returned') controller.sync(binding('T-1-shell-0'))
+    }
+    onRestartStateChange.mockClear()
+    reset.resolve()
+    await restarting
+
+    expect(adapter.spawnShellPty).not.toHaveBeenCalled()
+    expect(onRestartStateChange).not.toHaveBeenCalled()
+    controller.destroy()
+  })
+
+  it('does not let an old termination completion unlock a newer restart', async () => {
+    const oldTermination = deferred<void>()
+    const newTermination = deferred<void>()
+    const adapter = createAdapter({
+      getShellLifecycleState: vi.fn(() => ({ ...inactiveLifecycle, shellExited: true })),
+      beginPtySpawn: vi.fn(() => createSpawnLease()),
+    })
+    vi.mocked(adapter.killPty).mockReturnValueOnce(oldTermination.promise).mockReturnValue(newTermination.promise)
+    const onRestartStateChange = vi.fn()
+    const controller = createTaskTerminalController({
+      adapter, terminalHost: document.createElement('div'), onLifecycleChange: vi.fn(), onRestartStateChange,
+    })
+    controller.mount(binding('T-1-shell-0'))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalledTimes(1))
+    const oldRestart = controller.restart()
+    controller.sync(binding('T-1-shell-1', { terminalIndex: 1 }))
+    await vi.waitFor(() => expect(adapter.runtime.subscribeShellLifecycle).toHaveBeenCalledTimes(2))
+    const newRestart = controller.restart()
+
+    oldTermination.resolve()
+    await oldRestart
+    await controller.restart()
+    expect(adapter.killPty).toHaveBeenCalledTimes(2)
+    expect(adapter.runtime.resetPresentation).not.toHaveBeenCalled()
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: true, error: null })
+
+    newTermination.resolve()
+    await newRestart
+    expect(adapter.spawnShellPty).toHaveBeenCalledOnce()
+    expect(adapter.spawnShellPty).toHaveBeenCalledWith('T-1', '/worktrees/T-1', 80, 24, 1, null)
+    expect(onRestartStateChange).toHaveBeenLastCalledWith({ pending: false, error: null })
+    controller.destroy()
+  })
+
   it('restarts an exited shell with a new spawn lease', async () => {
     const exitedLifecycle: ShellLifecycleState = {
       ptyActive: false,

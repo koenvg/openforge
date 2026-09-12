@@ -409,14 +409,13 @@ describe('TaskTerminal', () => {
       spawnPending: false,
       currentPtyInstance: null,
     }
-    let resolveKill!: () => void
-    const killPromise = new Promise<void>((resolve) => {
-      resolveKill = resolve
+    let resolveSpawn!: (instanceId: number) => void
+    const spawnPromise = new Promise<number>((resolve) => {
+      resolveSpawn = resolve
     })
 
     vi.mocked(acquire).mockResolvedValueOnce(mockPoolEntry as unknown as TerminalSession).mockResolvedValueOnce(nextEntry as unknown as TerminalSession)
-    vi.mocked(killPty).mockReturnValueOnce(killPromise)
-    vi.mocked(spawnShellPty).mockResolvedValueOnce(9)
+    vi.mocked(spawnShellPty).mockReturnValueOnce(spawnPromise)
 
     const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
 
@@ -427,14 +426,15 @@ describe('TaskTerminal', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Restart Shell/ }))
     await vi.waitFor(() => {
       expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
+      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0, 'iterm2')
     })
     await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
-    resolveKill()
+    resolveSpawn(9)
 
     await vi.waitFor(() => {
       expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
       expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0, 'iterm2')
-      expect(spawnStarted).toHaveBeenCalledWith(expect.any(Object), 9)
+      expect(spawnStarted).toHaveBeenCalledWith(mockPoolEntry, 9)
     })
   })
 

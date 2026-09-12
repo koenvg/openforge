@@ -26,10 +26,16 @@ export interface TaskTerminalController {
   getSnapshot(): TaskTerminalControllerSnapshot
 }
 
+export interface TaskTerminalRestartState {
+  pending: boolean
+  error: string | null
+}
+
 export interface TaskTerminalControllerOptions {
   adapter: TerminalSurfaceAdapter
   terminalHost: HTMLDivElement
   onLifecycleChange(state: ShellLifecycleState): void
+  onRestartStateChange?(state: TaskTerminalRestartState): void
 }
 
 const initialLifecycle: ShellLifecycleState = {
@@ -47,6 +53,7 @@ export function createTaskTerminalController({
   adapter,
   terminalHost,
   onLifecycleChange,
+  onRestartStateChange,
 }: TaskTerminalControllerOptions): TaskTerminalController {
   let mounted = false
   let currentBinding: TaskTerminalBinding | null = null
@@ -58,6 +65,7 @@ export function createTaskTerminalController({
   let bindRun = 0
   let previousIsActive: boolean | null = null
   let activatingSession: TerminalSession | null = null
+  let restarting = false
 
   function isCurrentBinding(binding: TaskTerminalBinding): boolean {
     return mounted
@@ -79,6 +87,8 @@ export function createTaskTerminalController({
     terminalSession = null
     previousIsActive = null
     activatingSession = null
+    restarting = false
+    onRestartStateChange?.({ pending: false, error: null })
   }
 
   async function spawnShellPty(
@@ -191,16 +201,32 @@ export function createTaskTerminalController({
   async function restart(): Promise<void> {
     const session = terminalSession
     const binding = currentBinding
-    if (!session || !binding || lifecycle.ptyActive) return
+    if (!session || !binding || lifecycle.ptyActive || restarting) return
+    restarting = true
+    const currentRun = bindRun
+    const isCurrentRestart = () => bindRun === currentRun
+      && terminalSession === session && isCurrentBinding(binding)
 
+    onRestartStateChange?.({ pending: true, error: null })
+    let terminated = false
     try {
-      await adapter.killPty(binding.terminalKey).catch((error: unknown) => {
-        console.error('[TaskTerminal] Failed to kill PTY on restart:', error)
-      })
+      await adapter.killPty(binding.terminalKey)
+      if (!isCurrentRestart()) return
+      terminated = true
       await adapter.runtime.resetPresentation(session)
-      await spawnShellPty(session, binding)
+      if (!isCurrentRestart()) return
+      await spawnShellPty(session, binding, isCurrentRestart)
+      if (isCurrentRestart()) onRestartStateChange?.({ pending: false, error: null })
     } catch (error) {
+      if (!isCurrentRestart()) return
+      const details = error instanceof Error ? error.message : String(error)
+      const message = terminated
+        ? 'Could not restart the shell. Retry restarting the shell.'
+        : 'Could not confirm shell termination. Terminal output was kept. Retry restarting the shell.'
+      onRestartStateChange?.({ pending: false, error: `${message} Details: ${details}` })
       console.error('[TaskTerminal] Failed to restart shell:', error)
+    } finally {
+      if (isCurrentRestart()) restarting = false
     }
   }
 
