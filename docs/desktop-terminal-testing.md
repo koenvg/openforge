@@ -26,6 +26,20 @@ pnpm electron:test-app -- --retain --output=artifacts/desktop-test/manual
 
 `--retain` applies to runtime data. Artifacts in the output directory are retained regardless.
 
+## Rapid input ordering regression
+
+Run the isolated Electron-to-PTY input check on macOS or Linux with Python 3 installed:
+
+```bash
+node scripts/terminal-input-order.mjs /tmp/openforge-input-order
+```
+
+The scenario types `after4` 100 times with no per-key delay, then ten times at 50 ms per key. It uses a raw-mode Python reader, without Pi or board navigation. A file readiness barrier prevents shell echo from being mistaken for reader readiness.
+
+Each run creates an `input-order-*` artifact directory containing `trace.json`, the child's `received.bin`, and `terminal.png`. It compares renderer key order, Electron request initiation order, and bytes read by the PTY child. Any mismatch or missing input fails the command. Captures contain only synthetic test input from the isolated app.
+
+For KVG-4969, temporary Rust tracing showed requests already reordered at decoded command dispatch, with PTY writes and child input matching that order. The typed `writePty` wrapper now keeps one request in flight per shell. Other shells remain independent, errors are not retried, and queued input retains its original restart fence. Cursor recovery is outside this regression.
+
 ## Automated terminal performance scenario
 
 Run the full application path through Electron, preload, desktop IPC, the Rust sidecar, a real PTY, the terminal runtime, and the renderer:

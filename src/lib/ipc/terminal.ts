@@ -25,9 +25,25 @@ export async function spawnShellPty(
   });
 }
 
+// HTTP command dispatch can reorder concurrent requests, even when IPC sends them
+// in order. Keep one write in flight per shell, without blocking other terminals.
+const pendingWrites = new Map<string, Promise<void>>()
+
 export async function writePty(shellSessionKey: string, data: string, fence?: RestartTerminalFence): Promise<void> {
-  if (fence) return invoke('pty_write', { shellSessionKey, data, fence })
-  return invoke("pty_write", { shellSessionKey, data });
+  const identity = fence ? { ...fence, controller: { ...fence.controller } } : undefined
+  const send = () => identity
+    ? invoke<void>('pty_write', { shellSessionKey, data, fence: identity })
+    : invoke<void>('pty_write', { shellSessionKey, data })
+  const previous = pendingWrites.get(shellSessionKey)
+  const write = previous ? previous.then(send) : send()
+  // A failed write is reported to its caller, never retried, and does not poison
+  // later input. Retain the enqueue-time fence so a restart cannot retarget it.
+  const settled = write.then(() => {}, () => {})
+  pendingWrites.set(shellSessionKey, settled)
+  void settled.then(() => {
+    if (pendingWrites.get(shellSessionKey) === settled) pendingWrites.delete(shellSessionKey)
+  })
+  await write
 }
 
 
