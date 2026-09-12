@@ -1,7 +1,19 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { createEvent, fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import Switch from './Switch.svelte'
 import SwitchTestWrapper from './SwitchTestWrapper.svelte'
+
+function firePointer(
+  target: Element,
+  type: 'pointerDown' | 'pointerMove' | 'pointerUp',
+  clientX: number,
+  timeStamp: number,
+): Promise<boolean> {
+  const event = createEvent[type](target, { pointerId: 1, clientX, isPrimary: true })
+  // timeStamp is read-only and ignored in event init. Set the clock on the dispatched event.
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+  return fireEvent(target, event)
+}
 
 describe('plugin-sdk Switch', () => {
   it('binds its native checked state and reports changes', async () => {
@@ -48,13 +60,13 @@ describe('plugin-sdk Switch', () => {
     expect(track).toBeTruthy()
     expect(knob.style.width).toBe('22px')
 
-    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
+    await firePointer(track!, 'pointerDown', 4, 0)
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
     expect(control).toHaveProperty('checked', false)
     expect(Number.parseFloat(knob.style.width)).toBeGreaterThan(22)
 
-    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 4, timeStamp: 16 })
+    await firePointer(track!, 'pointerUp', 4, 16)
     expect(control).toHaveProperty('checked', false)
   })
 
@@ -70,9 +82,9 @@ describe('plugin-sdk Switch', () => {
     const control = screen.getByRole('switch', { name: 'Enable notifications' })
     const track = document.querySelector('.of-switch-track')
 
-    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
-    await fireEvent.pointerMove(track!, { pointerId: 1, clientX: 40, timeStamp: 16 })
-    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 40, timeStamp: 16 })
+    await firePointer(track!, 'pointerDown', 4, 0)
+    await firePointer(track!, 'pointerMove', 40, 16)
+    await firePointer(track!, 'pointerUp', 40, 16)
 
     expect(control).toHaveProperty('checked', true)
     expect(onCheckedChange).toHaveBeenCalledOnce()
@@ -83,7 +95,10 @@ describe('plugin-sdk Switch', () => {
     expect(onCheckedChange).toHaveBeenCalledOnce()
   })
 
-  it('lets a quick flick commit in its travel direction', async () => {
+  it.each([
+    { name: 'lets a quick flick commit in its travel direction', duration: 8, checked: true },
+    { name: 'keeps the same short travel off when it is slow', duration: 80, checked: false },
+  ])('$name', async ({ duration, checked }) => {
     render(Switch, {
       props: {
         label: 'Enable notifications',
@@ -93,11 +108,17 @@ describe('plugin-sdk Switch', () => {
     const control = screen.getByRole('switch', { name: 'Enable notifications' })
     const track = document.querySelector('.of-switch-track')
 
-    await fireEvent.pointerDown(track!, { pointerId: 1, clientX: 4, isPrimary: true, timeStamp: 0 })
-    await fireEvent.pointerMove(track!, { pointerId: 1, clientX: 8, timeStamp: 4 })
-    await fireEvent.pointerUp(track!, { pointerId: 1, clientX: 8, timeStamp: 8 })
+    const timestamps: number[] = []
+    for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+      track!.addEventListener(type, (event) => timestamps.push(event.timeStamp))
+    }
+    // Four pixels stays before the midpoint: only the fast gesture should commit.
+    await firePointer(track!, 'pointerDown', 4, 0)
+    await firePointer(track!, 'pointerMove', 8, duration / 2)
+    await firePointer(track!, 'pointerUp', 8, duration)
 
-    expect(control).toHaveProperty('checked', true)
+    expect(timestamps).toEqual([0, duration / 2, duration])
+    expect(control).toHaveProperty('checked', checked)
   })
 
   it('links validation text and keeps native focus behavior', () => {
