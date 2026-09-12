@@ -211,6 +211,11 @@
 </Modal>
 
 <style>
+  footer {
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
+
   .create-task-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 20rem;
