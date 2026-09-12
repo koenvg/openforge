@@ -12,7 +12,7 @@ SDK publication and canonical root aliases require SDK tests/build/entrypoint/pa
 
 ## Baseline and browser evidence
 
-Before changing PluginViewState, Chromium measured the original host-styled loading/error/empty views under all four built-ins. Setup: 1000 × 1200 viewport, 16px root font, loaded Inter 400/500/600, reduced motion, and a 320 × 300 plugin viewport. The retained geometry regression uses the same setup without host CSS and a maximum one CSS-pixel tolerance.
+Before changing PluginViewState, Chromium measured the original host-styled loading/error/empty views under all four built-ins. Setup: 1000 × 1200 viewport, 16px root font, loaded Inter 400/500/600, reduced motion, and a 320 × 300 plugin viewport. The table records the macOS measurements. The retained geometry regression uses the same setup without host CSS and a maximum one CSS-pixel tolerance. Independent text probes with the original font sizes and weights supply platform-local text widths; the original padding, borders, vertical positions, and heights remain fixed. This avoids treating Linux glyph advances as layout regressions.
 
 | Error view element | Relative x / y | Width / height |
 | --- | --- | --- |
@@ -37,9 +37,15 @@ The SDK fixture owns only theme selection for its isolated page; it does not cla
 - Initial `pnpm test`: 798 files passed, 2 failed, 9 skipped. One Task Schedules assertion required the status-message update in this diff. Native media capture timed out and left dependent assertions failing; the capture suite passed in a targeted rerun. Two bounded full reruns exceeded their execution windows under host load, so they are not passing evidence.
 - Before opening the draft PR, the final focused run passed: `pnpm --filter @openforge-app/plugin-sdk test src/ui/LoadingIndicator.test.ts src/ui/Alert.test.ts src/ui/Progress.test.ts src/ui/PluginViewState.test.ts src/ui/Feedback.browser.test.ts src/ui/publicUiExports.test.ts src/vite.test.ts`, 7 files and 31 tests. This includes fill-pixel and action-snippet assertions. `pnpm --filter @openforge-app/plugin-sdk check:contract` passed again against the final controls.
 - The later `pnpm test --maxWorkers=2` ended unsuccessfully without a complete summary; its log includes inventory/coverage test failures under resource contention. It is not a passing full run.
-- `pnpm storybook:visual:check` built both catalogs and passed manifest validation, then ended unsuccessfully during the baseline phase. Screenshot comparison remains unverified; no baselines were changed.
-- `node scripts/check-settings-themes.mjs` and standalone Task Schedules test/build validation remain outstanding. Final full affected validation is incomplete.
+- The initial `pnpm storybook:visual:check` built both catalogs and passed manifest validation, then ended unsuccessfully during the baseline phase. The later canonical update and reviewed changes are recorded below.
+- CI-fix verification: `node scripts/check-settings-themes.mjs` passed all 6 theme/viewport combinations. Standalone Task Schedules tests passed (11 files, 108 tests), and its frontend/backend build passed.
 - The attempted fresh review did not launch: `Host runtime does not provide required tool 'read' for agent 'delegate' for lazy skill loading.` No review run or verdict exists. The PR is draft, not a completion claim.
+
+### CI failure repair
+
+The first PR CI run failed only the new geometry test in Frontend Tests (801 other files passed) and NPM Package Readiness. The same 1.984375px Issue-badge width mismatch reproduced in the pinned Linux image: Inter text measured 38px there versus 39.984375px on macOS. The test now measures independent, original-typography text probes on the current platform; it does not widen the one-pixel tolerance or derive expected styles from the controls under test. The focused test passes on both platforms. Full Linux SDK tests pass (69 files, 536 tests, plus 3 expected failures), as do the SDK build, root lint, and root TypeScript check.
+
+`pnpm storybook:visual:update` completed all 460 captures in the pinned Linux ARM64 image with no readiness or diagnostic failures. Exactly six baselines changed, byte-identical to the reviewed CI captures: SDK loading/error; File Viewer loading/failure/task-unavailable; Task Schedules loading. The changes reflect the scoped ring artwork and SDK badge/Retry edge paint, with geometry retained. All 454 other baselines are unchanged. No tolerances, manifest entries, or capture settings changed. The packed npm/Bun SDK contract passed again. A fresh CI run will verify the updated baselines and full host suite.
 
 Local run logs and original measurements are under ignored `test-results/feedback/`. Canonical screenshot reports are under `artifacts/storybook-visual/`.
 

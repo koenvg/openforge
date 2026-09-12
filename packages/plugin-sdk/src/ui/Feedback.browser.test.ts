@@ -37,16 +37,30 @@ it('renders public feedback with only tokens and retains mounted state across th
     const view = page.getByRole('region', { name: 'Plugin view', exact: true })
     await view.getByRole('button', { name: 'Retry', exact: true }).waitFor()
     await page.evaluate(() => document.fonts.ready)
-    // Captured before migration with these fonts/viewport, all four built-ins.
-    // Values are CSS pixels relative to the 320 x 300 plugin viewport; tolerance <= 1px.
+    // Preserve pre-migration geometry, but measure the baseline typography here:
+    // Linux hints glyph advances to whole pixels even with the same loaded Inter files.
+    // These independent text probes use the original font sizes/weights, not control styles.
+    const textWidths = await page.locator('main').evaluate(root => {
+      return [['Issue', 16, 400], ['Unable to load', 20, 600], ['Network unavailable', 14, 400], ['Retry', 12, 600]].map(([text, size, weight]) => {
+        const probe = document.createElement('span')
+        probe.textContent = String(text)
+        probe.style.cssText = `display:inline-block;font-family:var(--of-font-sans);font-size:${size}px;font-weight:${weight};`
+        root.append(probe)
+        const width = probe.getBoundingClientRect().width
+        probe.remove()
+        return width
+      })
+    })
+    const [badgeWidth, headingWidth, messageWidth, retryWidth] = textWidths.map((width, index) => width + [24.5, 0, 0, 26][index])
+    // Bounds are relative to the 320 x 300 viewport; tolerance remains <= 1 CSS pixel.
     for (const theme of themes.slice(0, 4)) {
       await page.getByLabel('Theme', { exact: true }).selectOption(theme.id)
       const frame = (await view.boundingBox())!
       const cases = [
-        [view.getByText('Issue', { exact: true }), { x: 127.75, y: 81.75, width: 64.484375, height: 24.5 }],
-        [view.getByRole('heading'), { x: 90.65625, y: 118.25, width: 138.671875, height: 28 }],
-        [view.getByText('Network unavailable', { exact: true }), { x: 92.578125, y: 158.25, width: 134.84375, height: 20 }],
-        [view.getByRole('button', { name: 'Retry', exact: true }), { x: 131.484375, y: 190.25, width: 57.03125, height: 28 }],
+        [view.getByText('Issue', { exact: true }), { x: (320 - badgeWidth) / 2, y: 81.75, width: badgeWidth, height: 24.5 }],
+        [view.getByRole('heading'), { x: (320 - headingWidth) / 2, y: 118.25, width: headingWidth, height: 28 }],
+        [view.getByText('Network unavailable', { exact: true }), { x: (320 - messageWidth) / 2, y: 158.25, width: messageWidth, height: 20 }],
+        [view.getByRole('button', { name: 'Retry', exact: true }), { x: (320 - retryWidth) / 2, y: 190.25, width: retryWidth, height: 28 }],
       ] as const
       for (const [control, expected] of cases) {
         const actual = (await control.boundingBox())!
