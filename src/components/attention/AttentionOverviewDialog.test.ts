@@ -438,12 +438,11 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
           reason: 'Agent is running — no action needed right now.',
           activity_at: NOW_SECONDS - 2 * 3600,
         }),
+        // Work started from Out of Focus is still pending, so it belongs in In Flight.
+        attentionRow('t3', 'p2', 'Parked two', { state: 'active' }),
       ],
       out_of_focus: [
         attentionRow('t2', 'p1', 'Parked one'),
-        // Parked, but its agent is still running: the lane is a manual choice, so this one
-        // counts toward the running total while never appearing in the focus lane.
-        attentionRow('t3', 'p2', 'Parked two', { state: 'active' }),
       ],
       backlog: [attentionRow('t5', 'p2', 'Queued task', { state: 'backlog' })],
     }))
@@ -490,12 +489,12 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
 
     await press(dialog, 't')
     expect(visible()).toEqual(['Flying task'])
+    expect(screen.getByText('Parked two')).toBeTruthy()
+    expect(screen.getByText('Project Two')).toBeTruthy()
 
     await press(dialog, 't')
     expect(visible()).toEqual(['Parked one'])
-    // The set-aside lane is the only place to see every parked task at once.
-    expect(screen.getByText('Parked two')).toBeTruthy()
-    expect(screen.getByText('Project Two')).toBeTruthy()
+    expect(screen.queryByText('Parked two')).toBeNull()
 
     await press(dialog, 't')
     expect(visible()).toEqual(['Queued task'])
@@ -581,8 +580,8 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
   it('keeps the running-agent count on screen in every lane and with reviews hidden', async () => {
     const dialog = await renderLoaded()
 
-    // One running agent is in flight (t4) and one is parked (t6), so the header counts both
-    // even though neither is ever visible in the focus lane the dialog opens on.
+    // Both running agents are in In Flight, including the one started from Out of Focus,
+    // and the header still counts them on every other lane.
     expect(screen.getByText('2 agents running')).toBeTruthy()
 
     for (const lane of ['In Flight', 'Out of Focus', 'Backlog', 'Focus']) {
@@ -625,10 +624,10 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     expect(chips()).toEqual(['T Focus 1', 'R Reviews 1'])
 
     await press(dialog, 't')
-    expect(chips()).toEqual(['T In Flight 1', 'R Reviews 1'])
+    expect(chips()).toEqual(['T In Flight 2', 'R Reviews 1'])
 
     await press(dialog, 't')
-    expect(chips()).toEqual(['T Out of Focus 2', 'R Reviews 1'])
+    expect(chips()).toEqual(['T Out of Focus 1', 'R Reviews 1'])
 
     await press(dialog, 't')
     expect(chips()).toEqual(['T Backlog 1', 'R Reviews 1'])
@@ -643,7 +642,7 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     expect(screen.getByText('Flying task')).toBeTruthy()
     expect(screen.queryByText('Focus task')).toBeNull()
     // A four-lane cycler is not a toggle, so the chip states its lane instead of a pressed bit.
-    const laneChip = screen.getByRole('button', { name: /^T In Flight 1$/ })
+    const laneChip = screen.getByRole('button', { name: /^T In Flight 2$/ })
     expect(laneChip.hasAttribute('aria-pressed')).toBe(false)
     expect(screen.getByRole('button', { name: /^R Reviews 1$/ }).getAttribute('aria-pressed')).toBe('true')
   })

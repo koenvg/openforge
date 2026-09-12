@@ -238,6 +238,45 @@ fn has_unread_agent_output(session: Option<&TaskAttentionSession>) -> bool {
     })
 }
 
+fn project_focus_config<'a>(
+    input: &'a TaskAttentionInput,
+    project_id: &str,
+) -> (bool, HashSet<&'a str>) {
+    let uses_default_focus_states = !input.focus_states_by_project.contains_key(project_id);
+    let focus_states = input
+        .focus_states_by_project
+        .get(project_id)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(String::as_str)
+        .collect();
+    (uses_default_focus_states, focus_states)
+}
+
+/// True when the Task would sit in Focus if it were not set aside.
+pub(crate) fn task_needs_attention(
+    session: Option<&TaskAttentionSession>,
+    prs: &[&TaskAttentionPullRequest],
+    state: &str,
+    uses_default_focus_states: bool,
+    focus_states: &HashSet<&str>,
+) -> bool {
+    if has_unread_agent_output(session) {
+        return true;
+    }
+    if matches!(state, "active" | "done") {
+        return false;
+    }
+    let is_focus_state = if uses_default_focus_states {
+        DEFAULT_FOCUS_STATES.contains(&state)
+    } else {
+        focus_states.contains(state)
+    };
+    let has_unaddressed_comments = prs.iter().any(|pr| pr.unaddressed_comment_count > 0);
+    is_focus_state || has_unaddressed_comments
+}
+
 pub(crate) fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     if state == "unaddressed-comments" {
         let count = driving_pr(prs)
@@ -298,15 +337,7 @@ pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAtten
             .flatten()
             .map(String::as_str)
             .collect();
-        let focus_states: HashSet<&str> = input
-            .focus_states_by_project
-            .get(&project.id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .collect();
-        let uses_default_focus_states = !input.focus_states_by_project.contains_key(&project.id);
+        let (uses_default_focus_states, focus_states) = project_focus_config(&input, &project.id);
         let project_row_start = rows.len();
 
         for task in &input.tasks {
@@ -323,17 +354,13 @@ pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAtten
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let state = task_state(session, prs);
-            let has_unread_agent_output = has_unread_agent_output(session);
-            let has_unaddressed_comments = prs.iter().any(|pr| pr.unaddressed_comment_count > 0);
-            let is_focus_state = if uses_default_focus_states {
-                DEFAULT_FOCUS_STATES.contains(&state)
-            } else {
-                focus_states.contains(state)
-            };
-            if !has_unread_agent_output
-                && (matches!(state, "active" | "done")
-                    || (!is_focus_state && !has_unaddressed_comments))
-            {
+            if !task_needs_attention(
+                session,
+                prs,
+                state,
+                uses_default_focus_states,
+                &focus_states,
+            ) {
                 continue;
             }
 
@@ -380,10 +407,9 @@ pub(crate) struct TaskLaneRows {
 /// Partition every startable Task across all Projects into the Board's four lanes.
 ///
 /// `focus` is the attention projection itself. The other three lanes cover what it leaves
-/// behind, using the Board's rules (see `project_board`): a parked Task is Out of Focus
-/// whatever its state, an unstarted Task is Backlog, and everything else is In Flight —
-/// running agents included, which is why In Flight applies no focus-state filter. A Task
-/// lands in exactly one lane.
+/// behind, using the Board's rules (see `project_board`): pending work is In Flight even
+/// when the Task is still set aside, an unstarted Task is Backlog, and parked work that
+/// still needs the user is Out of Focus. A Task lands in exactly one lane.
 pub(crate) fn project_task_lanes(input: TaskAttentionInput) -> TaskLaneRows {
     let focus = project_task_attention(input.clone());
     let focus_ids: HashSet<&str> = focus.iter().map(|row| row.task_id.as_str()).collect();
@@ -413,6 +439,7 @@ pub(crate) fn project_task_lanes(input: TaskAttentionInput) -> TaskLaneRows {
             .flatten()
             .map(String::as_str)
             .collect();
+        let (uses_default_focus_states, focus_states) = project_focus_config(&input, &project.id);
         let lane_starts = [in_flight.len(), out_of_focus.len(), backlog.len()];
 
         for task in &input.tasks {
@@ -429,13 +456,27 @@ pub(crate) fn project_task_lanes(input: TaskAttentionInput) -> TaskLaneRows {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             // An unstarted Task has no agent and no pull request to read a state from, so
-            // "backlog" is its state, matching the Board.
-            let (state, lane) = if task.status == "backlog" {
-                ("backlog", &mut backlog)
-            } else if set_aside.contains(task.id.as_str()) {
-                (task_state(session, prs), &mut out_of_focus)
+            // "backlog" is its state, matching the Board. Pending parked work joins In
+            // Flight; only parked work that still needs the user stays Out of Focus.
+            let state = if task.status == "backlog" {
+                "backlog"
             } else {
-                (task_state(session, prs), &mut in_flight)
+                task_state(session, prs)
+            };
+            let lane = if task.status == "backlog" {
+                &mut backlog
+            } else if set_aside.contains(task.id.as_str())
+                && task_needs_attention(
+                    session,
+                    prs,
+                    state,
+                    uses_default_focus_states,
+                    &focus_states,
+                )
+            {
+                &mut out_of_focus
+            } else {
+                &mut in_flight
             };
             lane.push(attention_row(project, task, session, prs, state));
         }
@@ -563,8 +604,9 @@ mod tests {
 
     #[test]
     fn lane_projection_keeps_parked_and_in_flight_tasks_out_of_the_focus_state_filter() {
-        // Neither lane applies the focus-state rule: a parked Task stays where the user put
-        // it, and a Task the filter rejected is exactly what In Flight is for.
+        // In Flight is every pending Task, including one the user set aside and then let
+        // run. Out of Focus keeps parked work that still needs the user. Custom focus
+        // states still decide Focus membership; they do not hide pending work.
         let lanes = project_task_lanes(TaskAttentionInput {
             projects: vec![TaskAttentionProject {
                 id: "p1".to_string(),
@@ -595,12 +637,49 @@ mod tests {
         });
 
         assert!(lanes.focus.is_empty());
-        assert_eq!(lane_ids(&lanes.in_flight), vec!["t-idle"]);
-        assert_eq!(lane_ids(&lanes.out_of_focus), vec!["t-parked-running"]);
-        assert_eq!(lanes.out_of_focus[0].state, "active");
+        assert_eq!(
+            lane_ids(&lanes.in_flight),
+            vec!["t-parked-running", "t-idle"]
+        );
+        assert_eq!(lanes.in_flight[0].state, "active");
         // The row ages off the last recorded state change, so the dialog can show how long
         // a Task has been sitting in its lane.
-        assert_eq!(lanes.out_of_focus[0].activity_at, 50);
+        assert_eq!(lanes.in_flight[0].activity_at, 50);
+        assert!(lanes.out_of_focus.is_empty());
+    }
+
+    #[test]
+    fn lane_projection_sends_parked_pending_work_to_in_flight() {
+        let lanes = project_task_lanes(TaskAttentionInput {
+            projects: vec![TaskAttentionProject {
+                id: "p1".to_string(),
+                name: "Project One".to_string(),
+            }],
+            tasks: vec![
+                set_aside_task("t-parked-running", "p1", 20),
+                set_aside_task("t-parked-idle", "p1", 10),
+            ],
+            sessions: vec![TaskAttentionSession {
+                ticket_id: "t-parked-running".to_string(),
+                status: "running".to_string(),
+                checkpoint_data: None,
+                updated_at: 50,
+                output_revision: 0,
+                viewed_output_revision: 0,
+            }],
+            pull_requests: Vec::new(),
+            out_of_focus_by_project: HashMap::from([(
+                "p1".to_string(),
+                vec!["t-parked-running".to_string(), "t-parked-idle".to_string()],
+            )]),
+            focus_states_by_project: HashMap::new(),
+        });
+
+        assert!(lanes.focus.is_empty());
+        assert_eq!(lane_ids(&lanes.in_flight), vec!["t-parked-running"]);
+        assert_eq!(lanes.in_flight[0].state, "active");
+        assert_eq!(lane_ids(&lanes.out_of_focus), vec!["t-parked-idle"]);
+        assert_eq!(lanes.out_of_focus[0].state, "idle");
     }
 
     #[test]

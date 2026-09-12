@@ -77,35 +77,55 @@ export function taskMatchesTextFilter(task: TaskDetail, query: string): boolean 
 }
 
 /**
+ * True when parked work is pending and belongs in In Flight rather than Out of Focus.
+ * The Focus projection omits set-aside Tasks, so the board passes this set separately.
+ */
+export function taskNeedsAttention(
+  state: TaskState,
+  hasUnreadAgentOutput: boolean,
+  hasUnaddressedComments: boolean,
+  focusStates: readonly TaskState[] = DEFAULT_FOCUS_STATES,
+): boolean {
+  if (hasUnreadAgentOutput) return true
+  if (state === 'active' || state === 'done') return false
+  return focusStates.includes(state) || hasUnaddressedComments
+}
+
+function boardLane(
+  task: TaskDetail,
+  attentionTaskIds: ReadonlySet<string>,
+  outOfFocusTaskIds: ReadonlySet<string>,
+  pendingParkedTaskIds: ReadonlySet<string>,
+): BoardFilter | null {
+  if (task.status === 'backlog') return 'backlog'
+  if (task.status !== 'doing') return null
+  if (outOfFocusTaskIds.has(task.id)) {
+    return pendingParkedTaskIds.has(task.id) ? 'in-flight' : 'out-of-focus'
+  }
+  if (attentionTaskIds.has(task.id)) return 'focus'
+  return 'in-flight'
+}
+
+/**
  * Partition Tasks using the backend-authoritative attention membership. The renderer still
  * owns the non-attention lanes, but it no longer derives whether a Task needs user action.
+ * Parked pending work is In Flight: the parked set only keeps work that still needs the user.
  */
 export function filterTasks(
   tasks: TaskDetail[],
   filter: BoardFilter,
   attentionTaskIds: ReadonlySet<string>,
   outOfFocusTaskIds: ReadonlySet<string> = new Set(),
+  pendingParkedTaskIds: ReadonlySet<string> = new Set(),
 ): TaskDetail[] {
-  if (filter === 'backlog') {
-    return tasks.filter((task) => task.status === 'backlog')
-  }
-
-  return tasks.filter((task) => {
-    if (task.status !== 'doing') return false
-
-    const isManuallyOutOfFocus = outOfFocusTaskIds.has(task.id)
-    if (filter === 'out-of-focus') return isManuallyOutOfFocus
-    if (isManuallyOutOfFocus) return false
-    if (filter === 'focus') return attentionTaskIds.has(task.id)
-    if (filter === 'in-flight') return !attentionTaskIds.has(task.id)
-    return false
-  })
+  return tasks.filter((task) => boardLane(task, attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds) === filter)
 }
 
 export function getFilterCounts(
   tasks: TaskDetail[],
   attentionTaskIds: ReadonlySet<string>,
   outOfFocusTaskIds: ReadonlySet<string> = new Set(),
+  pendingParkedTaskIds: ReadonlySet<string> = new Set(),
 ): Record<BoardFilter, number> {
   const counts: Record<BoardFilter, number> = {
     focus: 0,
@@ -115,18 +135,8 @@ export function getFilterCounts(
   }
 
   for (const task of tasks) {
-    if (task.status === 'backlog') {
-      counts.backlog++
-      continue
-    }
-    if (task.status !== 'doing') continue
-    if (outOfFocusTaskIds.has(task.id)) {
-      counts['out-of-focus']++
-    } else if (attentionTaskIds.has(task.id)) {
-      counts.focus++
-    } else {
-      counts['in-flight']++
-    }
+    const lane = boardLane(task, attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds)
+    if (lane) counts[lane]++
   }
 
   return counts

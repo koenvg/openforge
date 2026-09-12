@@ -64,24 +64,32 @@ describe('plain-text Task filtering', () => {
 })
 
 describe('backend-authoritative board partitioning', () => {
-  const tasks = [task('focus'), task('running'), task('aside'), task('backlog', 'backlog'), task('done', 'done')]
+  const tasks = [
+    task('focus'),
+    task('running'),
+    task('aside'),
+    task('parked-running'),
+    task('backlog', 'backlog'),
+    task('done', 'done'),
+  ]
   const attentionTaskIds = new Set(['focus'])
-  const outOfFocusTaskIds = new Set(['aside'])
+  const outOfFocusTaskIds = new Set(['aside', 'parked-running'])
+  const pendingParkedTaskIds = new Set(['parked-running'])
 
   it('uses backend membership for Focus and its inverse for In Flight', () => {
-    expect(filterTasks(tasks, 'focus', attentionTaskIds, outOfFocusTaskIds).map((item) => item.id)).toEqual(['focus'])
-    expect(filterTasks(tasks, 'in-flight', attentionTaskIds, outOfFocusTaskIds).map((item) => item.id)).toEqual(['running'])
+    expect(filterTasks(tasks, 'focus', attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds).map((item) => item.id)).toEqual(['focus'])
+    expect(filterTasks(tasks, 'in-flight', attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds).map((item) => item.id)).toEqual(['running', 'parked-running'])
   })
 
-  it('keeps manually set-aside and backlog lanes independent', () => {
-    expect(filterTasks(tasks, 'out-of-focus', attentionTaskIds, outOfFocusTaskIds).map((item) => item.id)).toEqual(['aside'])
-    expect(filterTasks(tasks, 'backlog', attentionTaskIds, outOfFocusTaskIds).map((item) => item.id)).toEqual(['backlog'])
+  it('keeps parked attention-needing work in Out of Focus and sends parked pending work to In Flight', () => {
+    expect(filterTasks(tasks, 'out-of-focus', attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds).map((item) => item.id)).toEqual(['aside'])
+    expect(filterTasks(tasks, 'backlog', attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds).map((item) => item.id)).toEqual(['backlog'])
   })
 
   it('counts each Task in exactly one visible lane and hides legacy done rows', () => {
-    expect(getFilterCounts(tasks, attentionTaskIds, outOfFocusTaskIds)).toEqual({
+    expect(getFilterCounts(tasks, attentionTaskIds, outOfFocusTaskIds, pendingParkedTaskIds)).toEqual({
       focus: 1,
-      'in-flight': 1,
+      'in-flight': 2,
       'out-of-focus': 1,
       backlog: 1,
     })

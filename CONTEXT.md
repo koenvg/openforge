@@ -21,7 +21,7 @@ A manual holding place for **Tasks** the user intentionally removes from **Focus
 _Avoid_: Low-Fire, done, archive, low-priority status
 
 **Out of Focus**:
-The board tab for **Tasks** the user intentionally removed from the normal **Focus** and **In-Flight Task** flow.
+The board tab for **Tasks** the user intentionally removed from **Focus**. It holds set-aside work that still needs the user. Pending set-aside work belongs in **In-Flight Tasks**.
 _Avoid_: Low-Fire, archive, backlog
 
 **Task Display Title**:
@@ -41,7 +41,7 @@ The provider-specific conversation or PTY process attached to an **Implementatio
 _Avoid_: Run, task
 
 **In-Flight Task**:
-A **Task** with active agent work that does not currently need user attention.
+A **Task** with pending work that does not currently need user attention, including work started from **Out of Focus**.
 _Avoid_: In-flight session, running session
 
 **Session Reattachment**:
@@ -392,8 +392,9 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Starting a backlog **Task** puts it into the normal board flow; a started/current **Task** may then be **Set Aside** when the user wants it moved **Out of Focus** until they explicitly bring it back.
 - **Set Aside** and **Return to Board** are the user-facing action labels; they do not need to repeat the **Out of Focus** tab name.
 - **Return to Board** moves an **Out of Focus** **Task** back into the normal board flow, where the user's focus settings decide whether it appears in **Focus** or with **In-Flight Tasks**.
-- **Out of Focus** can contain both attention-needing **Tasks** and **In-Flight Tasks**, grouped by their current state when shown.
-- An **Out of Focus** **In-Flight Task** stays **Out of Focus** when it later needs user attention; only the user can bring it back into **Focus**.
+- **In-Flight Tasks** hold every pending **Task**, including one the user starts from **Out of Focus**. There is no point looking at pending work, so it does not stay hidden in **Out of Focus**.
+- **Out of Focus** holds set-aside **Tasks** that still need the user. Pending set-aside work appears in **In-Flight Tasks** instead.
+- When pending set-aside work later needs the user, it returns to **Out of Focus**, not **Focus**; only the user can bring it back into **Focus**.
 - Board tab counts for **Focus**, **In-Flight Tasks**, and **Out of Focus** count **Tasks** that need user attention, not total visible Tasks.
 - **Out of Focus** uses the same board-tab styling as **Focus**, **In-Flight Tasks**, and backlog; its meaning comes from placement and action language, not special visual treatment.
 - **Out of Focus** is part of the core **Task** board because it protects the default attention-only **Focus** promise; custom board workflows may later belong to **Trusted Plugins** when OpenForge exposes explicit capabilities for them.
@@ -576,6 +577,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Low-Fire" implied priority or a special status — resolved: use **Set Aside** for the manual action and **Out of Focus** for the board tab that holds intentionally removed **Tasks**.
 - **Out of Focus** was considered as plugin-only customization — resolved: keep the attention-protection behavior in core, while leaving richer custom board workflows for future **Trusted Plugin** capabilities.
 - **Out of Focus** Tasks that later become urgent could have been auto-returned to **Focus** — resolved: manual removal is a promise, so they stay **Out of Focus** until the user brings them back, even when passive work turns into review or intervention work.
+- Pending set-aside work could have stayed in **Out of Focus** — resolved: **In-Flight Tasks** show every pending **Task**, including work started from **Out of Focus**, because that lane is the place you do not need to look. The **Needs your attention** dialog made the old split visible: running-agent count and In Flight count disagreed.
 - "In-flight session" was used for running work in board lists — resolved: use **In-Flight Task** because the board groups **Tasks**, not raw **Agent Sessions**.
 - **Set Aside** and **In-Flight Task** were conflated as competing board tabs — resolved: **Set Aside** is the action that moves a **Task** **Out of Focus**, while **In-Flight Tasks** also have their own normal board tab.
 - **Out of Focus** tab counts could have shown total parked work — resolved: counts stay consistent with the current board convention and show only **Tasks** needing attention.
