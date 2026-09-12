@@ -97,7 +97,7 @@
 <div class="flex min-w-0 flex-wrap items-center gap-2">
   <div class="flex min-w-0 flex-wrap items-center gap-2.5">
     {#if successMessage}
-      <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-success" aria-live="polite">
+      <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-of-success" aria-live="polite">
         <CheckCircle2 size={16} strokeWidth={1.8} aria-hidden="true" />
         {successMessage}
       </span>
@@ -137,7 +137,7 @@
       <h2 class="text-base font-semibold m-0">Review prompt before sending</h2>
     {/snippet}
     <div class="flex flex-col gap-3 px-5 py-4">
-      <p class="m-0 text-[13px] text-base-content/60">
+      <p class="m-0 text-[13px] text-of-text/60">
         Edit the prompt below if you like — the agent receives exactly this text.
         Switching mode regenerates it.
       </p>

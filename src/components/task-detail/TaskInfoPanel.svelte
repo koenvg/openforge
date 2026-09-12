@@ -49,8 +49,8 @@
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, relationshipTaskList))
   let dependents = $derived(getTaskDependentSummaries(task, relationshipTaskList, relationshipTaskList, projectNames))
   let panelClass = $derived(density === 'inspector'
-    ? 'gap-0 p-0 bg-base-100'
-    : `gap-3 p-3 ${surface === 'transparent' ? 'bg-transparent' : 'bg-base-200'}`)
+    ? 'gap-0 p-0 bg-of-surface'
+    : `gap-3 p-3 ${surface === 'transparent' ? 'bg-transparent' : 'bg-of-surface-subtle'}`)
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
@@ -142,7 +142,7 @@
 
   <CollapsibleSection sectionKey="details" title="Details" cardId="details">
     {#snippet icon()}<Info size={14} />{/snippet}
-    <div class="py-2 border-b border-base-300/70">
+    <div class="py-2 border-b border-of-border/70">
       <TaskLabelEditor
         projectId={task.projectId}
         selectedLabels={labels}
@@ -152,17 +152,17 @@
     </div>
 
     {#if workspacePath}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Workspace">
-        <div class="text-xs text-base-content/55">Workspace</div>
-        <span class="text-xs font-mono text-base-content/70 truncate" title={workspacePath}>{workspacePath}</span>
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-of-border/70" aria-label="Workspace">
+        <div class="text-xs text-of-text/55">Workspace</div>
+        <span class="text-xs font-mono text-of-text/70 truncate" title={workspacePath}>{workspacePath}</span>
         <CopyButton text={workspacePath} label="Copy workspace path" />
       </div>
     {/if}
 
     {#if resumeCommand}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Resume command">
-        <div class="text-xs text-base-content/55">Resume command</div>
-        <code class="text-xs font-mono text-base-content/70 truncate" title={resumeCommand}>{resumeCommand}</code>
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-of-border/70" aria-label="Resume command">
+        <div class="text-xs text-of-text/55">Resume command</div>
+        <code class="text-xs font-mono text-of-text/70 truncate" title={resumeCommand}>{resumeCommand}</code>
         <CopyButton text={resumeCommand} label="Copy resume command" />
       </div>
     {/if}

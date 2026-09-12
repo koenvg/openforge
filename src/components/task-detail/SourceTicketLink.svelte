@@ -76,17 +76,17 @@
     data-task-info-card="source-ticket"
     data-card-sizing="natural"
     data-card-layout="row"
-    class="flex flex-col gap-1.5 rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 px-3 py-2 shrink-0"
+    class="flex flex-col gap-1.5 rounded-[var(--of-radius-container)] border border-of-border/70 bg-of-surface px-3 py-2 shrink-0"
     aria-label="Source ticket"
   >
     <div class="flex items-center gap-2">
       <!-- Blank stand-in for the collapsible sections' caret column, so this row's icon
            and title sit in the same columns as theirs. -->
       <span class="w-3 shrink-0" aria-hidden="true"></span>
-      <Ticket size={14} class="shrink-0 text-base-content/50" aria-hidden="true" />
+      <Ticket size={14} class="shrink-0 text-of-text/50" aria-hidden="true" />
       <!-- Same heading treatment as the collapsible sections below it (Initial Prompt,
            Details, Changes) so the whole panel reads as one column of sections. -->
-      <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Ticket</h3>
+      <h3 class="m-0 shrink-0 text-sm font-semibold text-of-text">Ticket</h3>
 
       {#if isEditing}
         <div class="flex-1 min-w-0">
@@ -114,7 +114,7 @@
             <ExternalLink size={12} class="shrink-0" aria-hidden="true" />
           </Button>
         {:else}
-          <span class="truncate text-xs text-base-content/70" title={link.url}>{link.label}</span>
+          <span class="truncate text-xs text-of-text/70" title={link.url}>{link.label}</span>
         {/if}
         {#if editable}
           <IconButton
@@ -143,7 +143,7 @@
 
     {#if isEditing}
       {#if error}
-        <p class="m-0 text-xs text-error" role="alert">{error}</p>
+        <p class="m-0 text-xs text-of-danger" role="alert">{error}</p>
       {/if}
       <div class="flex items-center justify-end gap-2">
         <Button variant="ghost" size="xs" type="button" disabled={isSaving} onclick={cancelEditing}>Cancel</Button>

@@ -37,7 +37,7 @@
       id={promptContentId}
       role="region"
       aria-label="Initial Prompt content"
-      class="text-xs text-base-content/65 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1"
+      class="text-xs text-of-text/65 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1"
     >
       <MarkdownContent content={initialPromptText} />
     </div>

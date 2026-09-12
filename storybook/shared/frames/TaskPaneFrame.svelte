@@ -12,8 +12,8 @@
 </script>
 
 <section aria-label="Task {taskId}" class="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-  <header class="relative flex h-12 shrink-0 items-center border-b border-base-300 px-4">
-    <span class="font-mono text-sm text-primary">{taskId}</span>
+  <header class="relative flex h-12 shrink-0 items-center border-b border-of-border px-4">
+    <span class="font-mono text-sm text-of-accent">{taskId}</span>
     <TaskPaneNavigation activeView={tab.namespacedId} tabs={[tab]} commandHeld={false} {onSelect} />
   </header>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">

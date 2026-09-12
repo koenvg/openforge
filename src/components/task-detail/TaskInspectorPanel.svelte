@@ -45,19 +45,19 @@
 </script>
 
 {#if task === null}
-  <aside data-testid="task-inspector-panel" class="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto border-l border-base-300 bg-base-100 p-6" aria-label="Task inspector">
-    <p class="text-sm font-medium text-base-content/60">Select a task to see details</p>
-    <p class="max-w-52 text-center text-xs text-base-content/45">Ticket, pull requests, prompt, and labels stay visible here.</p>
+  <aside data-testid="task-inspector-panel" class="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto border-l border-of-border bg-of-surface p-6" aria-label="Task inspector">
+    <p class="text-sm font-medium text-of-text/60">Select a task to see details</p>
+    <p class="max-w-52 text-center text-xs text-of-text/45">Ticket, pull requests, prompt, and labels stay visible here.</p>
   </aside>
 {:else}
-  <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Task inspector for {task.id}">
+  <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-of-border bg-of-surface" aria-label="Task inspector for {task.id}">
     <!-- No "Task" label and no chevron: the panel can only ever hold a task, and a caret
          that never collapses anything is a lie. The id and the title carry the header. -->
-    <header class="task-inspector-header shrink-0 border-b border-base-300 py-4">
+    <header class="task-inspector-header shrink-0 border-b border-of-border py-4">
       <div class="flex min-h-10 items-center justify-between gap-3">
         <!-- Same treatment the task card gives the id, so the same task reads the same
              on the board and in this panel. -->
-        <div class="font-mono text-sm font-semibold text-primary">{task.id}</div>
+        <div class="font-mono text-sm font-semibold text-of-accent">{task.id}</div>
         {#if onOpenFullView}
           <Button variant="outline" size="sm" class="shrink-0" type="button" onclick={onOpenFullView}>
             Open full view
@@ -77,7 +77,7 @@
             />
           {:else}
             <div class="flex items-start gap-1">
-              <h2 class="m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-base-content" title={taskTitle}>{taskTitle}</h2>
+              <h2 class="m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-of-text" title={taskTitle}>{taskTitle}</h2>
               {#if allowRename}
                 <IconButton label="Rename task" size="xs" type="button" onclick={() => titleRename.start()}>
                   <Pencil size={12} aria-hidden="true" />
@@ -121,9 +121,9 @@
   .task-inspector :global([data-task-info-card]) {
     --section-inset: var(--panel-inset);
     border-width: 0 0 1px;
-    border-color: var(--color-base-300);
+    border-color: var(--of-border);
     border-radius: 0;
-    background: var(--color-base-100);
+    background: var(--of-surface);
     box-shadow: none;
   }
 

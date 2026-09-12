@@ -122,7 +122,7 @@
   let agentMainClass = $derived(
     zenActive
       ? 'relative flex min-w-0 px-8 w-full max-w-[1400px]'
-      : 'relative flex min-w-0 flex-1 overflow-hidden bg-base-200/50 p-3',
+      : 'relative flex min-w-0 flex-1 overflow-hidden bg-of-surface-subtle/50 p-3',
   )
 
   $effect(() => {
@@ -277,7 +277,7 @@
 />
 {/if}
 
-<div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
+<div class="flex flex-col flex-1 h-full bg-of-surface overflow-hidden">
   {#if !zenActive}
     <TaskDetailToolbar
       {task}
@@ -314,7 +314,7 @@
           {/key}
         </div>
         {#if $commandHeld}
-          <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
+          <kbd class="task-editor-shortcut absolute top-2 right-2 bg-of-text/10 text-of-text/40 border-of-text/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
         {/if}
       </main>
       {#if !panelHidden && !zenActive}
@@ -368,3 +368,15 @@
     {/each}
   </div>
 </div>
+
+<style>
+  .task-editor-shortcut {
+    border-radius: var(--of-radius-control);
+    border-style: solid;
+    border-width: var(--of-border-width);
+    border-bottom-width: calc(var(--of-border-width) + 1px);
+    padding-inline: 0.5em;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+</style>

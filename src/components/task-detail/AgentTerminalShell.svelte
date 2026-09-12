@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
@@ -135,9 +136,9 @@
 
 <div class="flex flex-col gap-3 h-full" data-testid={rootTestId}>
   {#if checkpointQuestion}
-    <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-[var(--of-radius-container)]">
-      <span class="flex items-center justify-center w-5 h-5 rounded-[var(--of-radius-round)] bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>
-      <span class="text-[0.8125rem] text-base-content leading-relaxed line-clamp-3">{checkpointQuestion}</span>
+    <div class="flex items-start gap-3 px-5 py-3 bg-of-warning/10 border border-of-warning/30 rounded-[var(--of-radius-container)]">
+      <span class="flex items-center justify-center w-5 h-5 rounded-[var(--of-radius-round)] bg-of-warning/20 text-of-warning text-xs font-bold shrink-0 mt-0.5">?</span>
+      <span class="text-[0.8125rem] text-of-text leading-relaxed line-clamp-3">{checkpointQuestion}</span>
     </div>
   {/if}
 
@@ -146,7 +147,7 @@
     {#if !session && !terminalActive}
       <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4 p-16 pointer-events-none" style="background: var(--of-agent-terminal-bg); color: var(--of-agent-terminal-text)">
         {#if isStarting}
-          <span class="loading loading-spinner loading-lg text-primary"></span>
+          <LoadingIndicator size="lg" decorative class="text-of-accent" />
           <div class="text-base font-semibold" style="animation: badge-pulse 2s ease-in-out infinite;">Starting agent session...</div>
           <div class="max-w-[320px] text-center text-sm leading-relaxed" style="color: var(--of-agent-terminal-muted)">Preparing workspace and launching agent</div>
         {:else}

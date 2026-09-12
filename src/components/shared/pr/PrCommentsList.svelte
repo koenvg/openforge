@@ -104,8 +104,8 @@
 
   let cardBaseClass = $derived(
     density === 'compact'
-      ? 'rounded-[var(--of-radius-container)] bg-base-200/50 border border-base-300/40 p-3 flex items-start gap-2 min-w-0'
-      : 'rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 p-2.5 flex items-start gap-2 min-w-0'
+      ? 'rounded-[var(--of-radius-container)] bg-of-surface-subtle/50 border border-of-border/40 p-3 flex items-start gap-2 min-w-0'
+      : 'rounded-[var(--of-radius-container)] border border-of-border/70 bg-of-surface p-2.5 flex items-start gap-2 min-w-0'
   )
 </script>
 
@@ -123,9 +123,9 @@
     />
   {/if}
   <div class="min-w-0 flex-1 flex flex-col gap-1.5">
-    <div class={showMarkAddressed ? 'flex items-start gap-2 min-w-0' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50 min-w-0'}>
-      <div class={showMarkAddressed ? 'min-w-0 flex-1 flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50' : 'contents'}>
-        <span class={showMarkAddressed ? 'text-[0.65rem] font-semibold text-base-content/60 shrink-0' : 'font-semibold text-base-content/80'}>{comment.author}</span>
+    <div class={showMarkAddressed ? 'flex items-start gap-2 min-w-0' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-of-text/50 min-w-0'}>
+      <div class={showMarkAddressed ? 'min-w-0 flex-1 flex flex-wrap items-center gap-1.5 text-[0.7rem] text-of-text/50' : 'contents'}>
+        <span class={showMarkAddressed ? 'text-[0.65rem] font-semibold text-of-text/60 shrink-0' : 'font-semibold text-of-text/80'}>{comment.author}</span>
         {#if showLocation && comment.file_path}
           <span class="shrink-0">·</span>
           <span class="min-w-0 break-all" title={comment.file_path}>{comment.file_path}{comment.line_number ? `:${comment.line_number}` : ''}</span>
@@ -138,19 +138,19 @@
         {/if}
         {#if commentHref}
           <button
-            class="text-[0.7rem] text-primary hover:underline shrink-0"
+            class="text-[0.7rem] text-of-accent hover:underline shrink-0"
             onclick={(e) => { e.stopPropagation(); void openUrl(commentHref) }}
           >GitHub ↗</button>
         {/if}
         {#if showTimestamp}
-          <span class="text-[0.65rem] text-base-content/40 ml-auto shrink-0">{timeAgo(comment.created_at * 1000)}</span>
+          <span class="text-[0.65rem] text-of-text/40 ml-auto shrink-0">{timeAgo(comment.created_at * 1000)}</span>
         {/if}
       </div>
       {#if showMarkAddressed && onMarkAddressed && comment.addressed === 0}
         {@const addressError = addressingError(comment.id)}
         {@const busy = addressingBusy(comment.id)}
         <Button
-          variant="ghost" size="xs" class="text-success text-[0.65rem] shrink-0"
+          variant="ghost" size="xs" class="text-of-success text-[0.65rem] shrink-0"
           disabled={busy}
           onclick={(e) => { e.stopPropagation(); handleMarkClick(comment.id) }}
         >
@@ -165,12 +165,12 @@
       {/if}
     </div>
     <div class={density === 'compact'
-      ? 'text-xs text-base-content/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0'
-      : 'text-xs text-base-content/75 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1'}>
+      ? 'text-xs text-of-text/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0'
+      : 'text-xs text-of-text/75 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1'}>
       <MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrlForComment(comment)} {resolveRemoteMedia} />
     </div>
     {#if addressingError(comment.id)}
-      <p class="m-0 text-xs text-error" role="alert">{addressingError(comment.id)}</p>
+      <p class="m-0 text-xs text-of-danger" role="alert">{addressingError(comment.id)}</p>
     {/if}
   </div>
 {/snippet}
@@ -187,7 +187,7 @@
   {#each displayedComments as comment (comment.id)}
     {#if onCommentClick}
       <div
-        class="{cardBaseClass} cursor-pointer hover:border-primary/50 transition-colors{comment.addressed === 1 ? ' opacity-60' : ''}"
+        class="{cardBaseClass} cursor-pointer hover:border-of-accent/50 transition-colors{comment.addressed === 1 ? ' opacity-60' : ''}"
         role="button"
         tabindex="0"
         aria-label={`Comment by ${comment.author}`}

@@ -128,3 +128,13 @@ The inventoried loading sizes are `xs` in inline actions/settings, `sm` in diff 
 The machine-readable ledger above is the KVG-4863 snapshot, not a refreshed completion count. Its former `PluginViewState` loading, button, badge, color, and layout utility occurrences are superseded by this bounded migration. New public components and token-only fixtures contain no legacy style consumers. Historical browser measurements remain evidence, not executable host-CSS requirements.
 
 See [feedback validation](ui-feedback-validation.md) for public test boundaries, baseline geometry, publication checks, and remaining validation gaps.
+
+## Host task detail and self-review, KVG-4872
+
+The task-detail consumer group is migrated to semantic color utilities and SDK feedback controls. This includes `src/components/task-detail`, host `PrCommentsList`, `PrPipelineChecks`, `TaskRelationshipDetailSection`, and the `StatusFrame` and `TaskPaneFrame` stories. Terminal-runtime and shared review package internals, settings behavior, plugin-owned CSS, and compatibility styles remain unchanged.
+
+`scripts/task-detail-ui-migration.test.mjs` checks this bounded group through the existing inventory parser. It rejects legacy colors and feedback controls, including script-held class strings. Its explicit reviewed-expression list accounts for Svelte-derived class bindings and terminal/plugin prop spreads; new unresolved expressions fail rather than disappearing from the report.
+
+This checkout predates the routed `src/styles/keyboard-hints.css` and scanner `kbd` support. The task editor keeps its native `kbd` with scoped token-based border/radius styling. The browser check compares it with the retained legacy hint under all six themes, including native bounds, padding, fonts, and opacity.
+
+See [task-detail migration validation](task-detail-ui-migration-validation.md) for commands, baseline changes, and coverage gaps.

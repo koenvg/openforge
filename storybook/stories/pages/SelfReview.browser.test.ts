@@ -93,7 +93,7 @@ describe.skipIf(!storybookUrl)('Self Review in the production task workspace', (
         for (const [tab, label] of [[filesTab, 'Changed files'], [githubTab, 'GitHub comments']] as const) {
           await expectReachable(tab)
           expect(await tab.getAttribute('title')).toBe(label)
-          expect((await tab.textContent()).trim()).toBe('')
+          expect((await tab.textContent())?.trim()).toBe('')
           expect(await tab.locator('svg').count()).toBe(1)
         }
         const toolbar = diff.getByRole('toolbar', { name: 'Diff controls', exact: true })

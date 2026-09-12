@@ -1,6 +1,8 @@
 <script lang="ts">
   import { AlertTriangle, ArrowLeft, FileText, FolderOpen } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import {
     getMarkdownRepositoryLinkFragment,
     type MarkdownRepositoryLinkTarget,
@@ -128,11 +130,11 @@
 </script>
 
 <section
-  class="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-base-100"
+  class="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-of-surface"
   aria-label="{target.repositoryPath} repository preview"
   bind:this={root}
 >
-  <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-base-300 px-4 py-2">
+  <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-of-border px-4 py-2">
     <Button
       variant="ghost"
       size="sm"
@@ -148,16 +150,16 @@
     </Button>
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
-        <FileText size={16} class="shrink-0 text-base-content/60" aria-hidden="true" />
+        <FileText size={16} class="shrink-0 text-of-text/60" aria-hidden="true" />
         <h2 class="truncate text-sm font-semibold" title={target.repositoryPath}>{fileName}</h2>
       </div>
-      <p class="truncate text-xs text-base-content/55" title={target.repositoryPath}>
+      <p class="truncate text-xs text-of-text/55" title={target.repositoryPath}>
         {target.repositoryPath} · {revisionLabel}
       </p>
     </div>
     {#if onOpenInFiles}
       <div class="flex shrink-0 flex-col items-end gap-0.5">
-        <span class="text-xs font-medium text-base-content/60">Live worktree</span>
+        <span class="text-xs font-medium text-of-text/60">Live worktree</span>
         <Button
           variant="outline"
           size="sm"
@@ -168,7 +170,7 @@
           onclick={() => void handleOpenInFiles()}
         >
           {#if openingInFiles}
-            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            <LoadingIndicator size="xs" decorative />
           {:else}
             <FolderOpen size={16} aria-hidden="true" />
           {/if}
@@ -178,23 +180,23 @@
     {/if}
   </header>
   {#if openInFilesError}
-    <div class="alert alert-error shrink-0 rounded-none border-x-0 border-t-0 py-2 text-sm" role="alert">
+    <Alert variant="danger" class="shrink-0" style="border-radius: 0; border-width: 0 0 var(--of-border-width); padding-block: 0.5rem" role="alert">
       <AlertTriangle size={16} aria-hidden="true" />
       <span>{openInFilesError}</span>
-    </div>
+    </Alert>
   {/if}
 
   {#if content === null && error === null}
     <div class="flex flex-1 flex-col items-center justify-center gap-3" role="status" aria-live="polite">
-      <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
-      <span class="text-sm text-base-content/65">Loading {target.repositoryPath}...</span>
+      <LoadingIndicator size="md" decorative class="text-of-accent" />
+      <span class="text-sm text-of-text/65">Loading {target.repositoryPath}...</span>
     </div>
   {:else if error !== null}
     <div class="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
-      <AlertTriangle size={36} class="text-error" aria-hidden="true" />
+      <AlertTriangle size={36} class="text-of-danger" aria-hidden="true" />
       <h3 class="text-base font-semibold">Unable to load file</h3>
-      <p class="max-w-xl break-all text-sm text-base-content/65">{target.repositoryPath}</p>
-      <p class="max-w-xl text-sm text-error">{error}</p>
+      <p class="max-w-xl break-all text-sm text-of-text/65">{target.repositoryPath}</p>
+      <p class="max-w-xl text-sm text-of-danger">{error}</p>
       <div class="flex flex-wrap justify-center gap-2">
         <Button
           variant="outline"

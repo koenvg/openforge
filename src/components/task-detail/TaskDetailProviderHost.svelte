@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { Project, TaskDetail, TaskReference } from '../../lib/types'
   import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
   import { createViewReplacementHostState } from '../../lib/plugin/viewReplacementHostState.svelte'
@@ -127,8 +128,8 @@
               </svelte:boundary>
             {/key}
           {:else if selectedProvider}
-            <div class="flex h-full flex-1 items-center justify-center text-base-content/50" aria-label="Loading task workspace">
-              <span class="loading loading-spinner loading-md text-primary"></span>
+            <div class="flex h-full flex-1 items-center justify-center text-of-text/50" aria-label="Loading task workspace">
+              <LoadingIndicator size="md" decorative class="text-of-accent" />
             </div>
           {:else}
             {@render coreTaskDetail(hostLifecycle)}
