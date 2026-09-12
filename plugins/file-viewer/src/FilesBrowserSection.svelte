@@ -44,7 +44,7 @@
         onRetry={actions.onRetryRootLoad}
       />
     {:else}
-      <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
+      <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left" label="files">
         <div class="flex h-full min-h-0 flex-col">
           <FileTreeToolbar model={view.toolbar} actions={actions.toolbar} />
           <FileTreeStates model={view.tree} actions={actions.tree} />

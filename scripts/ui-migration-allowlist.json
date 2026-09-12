@@ -453,7 +453,6 @@
     {"tag":"div","context":"class=\"flex flex-col flex-1 min-w-0 relative\"","tokens":["min-w-0"],"count":1,"reason":"Allow the application content column to shrink beside project navigation without overflowing the shell; not shared control sizing."}
   ],
   "src/components/shell/AppSidebar.svelte": [
-    {"tag":"aside","context":"class=\"of-app-sidebar {collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full flex flex-col\"","tokens":["w-16","w-[17rem]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}\"","tokens":["h-12"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"of-sidebar-header h-12 px-2 flex items-center {collapsed ? 'justify-center' : 'justify-end'}\"","tokens":["h-12"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
