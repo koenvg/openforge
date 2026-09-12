@@ -31,6 +31,9 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox. |
 | `@openforge-app/plugin-sdk/ui/Switch.svelte` | Labeled native boolean switch. |
 | `@openforge-app/plugin-sdk/ui/Badge.svelte` | Semantic status badge with caller-owned content. |
+| `@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte` | Decorative or named loading feedback with inherited color and reduced motion. |
+| `@openforge-app/plugin-sdk/ui/Alert.svelte` | Semantic feedback with caller-owned announcement policy. |
+| `@openforge-app/plugin-sdk/ui/Progress.svelte` | Named native progress with determinate and indeterminate states. |
 | `@openforge-app/plugin-sdk/ui/Panel.svelte` | Token-driven content panel with optional header and footer. |
 | `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Disclosure section with shared, persisted collapse state. |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Decorative file and folder icon. |
@@ -460,6 +463,9 @@ Core controls use scoped component CSS and semantic `--of-*` properties supplied
 | `Switch` | `@openforge-app/plugin-sdk/ui/Switch.svelte` | A labeled native switch with bindable checked state and validation. |
 | `Badge` | `@openforge-app/plugin-sdk/ui/Badge.svelte` | A presentation-only status badge with semantic variants. |
 | `StatusBadge` | `@openforge-app/plugin-sdk/ui/StatusBadge.svelte` | An icon-bearing status badge with semantic status treatments and reduced-motion progress feedback. |
+| `LoadingIndicator` | `@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte` | A decorative or named spinner with inventoried compact sizes. |
+| `Alert` | `@openforge-app/plugin-sdk/ui/Alert.svelte` | Feedback color and layout without inferred announcement urgency. |
+| `Progress` | `@openforge-app/plugin-sdk/ui/Progress.svelte` | A native progress bar that preserves range normalization. |
 | `Panel` | `@openforge-app/plugin-sdk/ui/Panel.svelte` | A presentation-only panel with optional caller-owned header and footer. |
 | `Select` | `@openforge-app/plugin-sdk/ui/Select.svelte` | A named single-value select with a portalled listbox. |
 | `SearchableSelect` | `@openforge-app/plugin-sdk/ui/SearchableSelect.svelte` | A searchable single-value picker with optional bounded results and caller keywords. |
@@ -786,6 +792,12 @@ Import `Switch` from `@openforge-app/plugin-sdk/ui/Switch.svelte`. It renders a 
 | Native input attributes | `HTMLInputAttributes` except `checked`, `children`, `size`, and `type` | `disabled`, `required`, `name`, `class`, and native handlers pass through. |
 
 The required visible label owns accessible naming. The native input remains keyboard focusable and disabled switches stay inert. Token-driven focus and state transitions respect reduced motion. Test the switch by role and label, then assert checked binding, callback delivery, disabled state, focus, and linked errors.
+
+### Feedback controls
+
+Import `LoadingIndicator`, `Alert`, and `Progress` from their explicit `@openforge-app/plugin-sdk/ui/<Name>.svelte` paths. Their complete properties, defaults, native naming rules, variants, sizes, motion behavior, and runnable example are documented in the [packed SDK README](../../packages/plugin-sdk/README.md#theme-aware-feedback). They render with theme tokens alone, without host utility CSS. Publish the CSS emitted by your plugin build through `frontendStyles`.
+
+Use decorative loading beside an existing message, and a named indicator for standalone loading. Alert color does not choose `alert`, `status`, or live-region policy. Progress uses the native `value` and `max` contract; omitted value remains indeterminate. All three update while mounted when theme tokens change. Native `class` and `style` are supported; private selectors are not an API.
 
 ### `Badge`
 

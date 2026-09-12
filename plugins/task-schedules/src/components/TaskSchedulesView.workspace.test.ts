@@ -196,7 +196,7 @@ describe('TaskSchedulesView workspace', () => {
     invoke.mockReturnValueOnce(firstLoad.promise).mockResolvedValueOnce([enabledSchedule])
     renderView()
 
-    expect(screen.getByLabelText('Loading Task Schedules')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Task Schedules list' })).getByRole('status').textContent).toContain('Loading Task Schedules')
     firstLoad.reject(new Error('Schedules are temporarily unavailable'))
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Schedules are temporarily unavailable')

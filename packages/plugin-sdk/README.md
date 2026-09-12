@@ -220,6 +220,9 @@ Shared Svelte components use explicit imports. The package exports:
 - `@openforge-app/plugin-sdk/ui/Switch.svelte`
 - `@openforge-app/plugin-sdk/ui/Badge.svelte`
 - `@openforge-app/plugin-sdk/ui/StatusBadge.svelte`
+- `@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte`
+- `@openforge-app/plugin-sdk/ui/Alert.svelte`
+- `@openforge-app/plugin-sdk/ui/Progress.svelte`
 - `@openforge-app/plugin-sdk/ui/Panel.svelte`
 - `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte`
 - `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte`
@@ -234,6 +237,33 @@ Shared Svelte components use explicit imports. The package exports:
 Use only documented package exports. Do not import OpenForge renderer stores, Electron or preload APIs, Rust internals, app IPC wrappers, or files under this package's `src/` directory.
 
 For large option lists, import `SearchableSelect` from `@openforge-app/plugin-sdk/ui/SearchableSelect.svelte`. Set `maxResults={40}` to bound rendered matches, add per-option `keywords: [project.id]` for ID search, and use `disabled={!inOpenForge}` for unavailable filters. Omit `maxResults` to keep unlimited results. The picker announces result counts and keeps the selected label even when it is outside the visible results. See the [SearchableSelect contract and example](https://github.com/koenvg/openforge/blob/main/docs/plugins/sdk-reference.md#searchableselect).
+
+## Theme-aware feedback
+
+These controls ship scoped CSS and need only the documented `--of-*` theme tokens, not Tailwind or daisyUI. Include your build's emitted CSS in the plugin's `frontendStyles`. Token changes update mounted controls. Your own `class` and `style` remain caller-owned.
+
+```svelte
+<script lang="ts">
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
+  import Progress from '@openforge-app/plugin-sdk/ui/Progress.svelte'
+
+  let downloaded = $state<number | undefined>(25)
+</script>
+
+<div role="status" aria-live="polite">
+  <LoadingIndicator decorative size="sm" /> Loading records…
+</div>
+<Alert variant="warning" aria-live="off">Connection interrupted. Retry when ready.</Alert>
+<label for="download-progress">Download</label>
+<Progress id="download-progress" value={downloaded} max={100} />
+```
+
+- `LoadingIndicator` forwards native span attributes. With `aria-label` or `aria-labelledby` it defaults to `role="status"`; without a name it is decorative. Set `decorative` explicitly beside an existing message. Decorative indicators omit role, name, and live-region attributes. Named indicators may override `role` and `aria-live`. Supply a name when using `decorative={false}`. Sizes `xs`, `sm`, `md` and `lg` use 0.5, 0.625, 0.75 and 0.875 times `--of-control-height-compact`; the default is `md`. Color is inherited. Rotation stops under reduced motion.
+- `Alert` requires a `children` snippet and forwards native div attributes. Variants are `neutral`, `info`, `success`, `warning` and `danger`, defaulting to `neutral`. Color never assigns urgency: the caller chooses `role="alert"`, `role="status"`, `aria-live`, or no announcement. Icons and messages belong to the caller. Its single padding/typography size retains existing feedback density; border and radius follow theme tokens.
+- `Progress` forwards native progress attributes, including `value`, `max`, `id`, `aria-label` and `aria-labelledby`. Use an associated label or an ARIA name. Native HTML normalizes the range; omit `value` for indeterminate progress, with no generated percentage or `aria-valuenow`. Variants are `primary`, `neutral`, `info`, `success`, `warning` and `danger`, defaulting to `primary`. The bar is 0.5rem high and fills its container. Indeterminate motion stops under reduced motion while a static mark remains visible.
+
+`PluginViewState` uses these controls internally while retaining its existing props, state precedence, action snippets, and `onRetry` callback. Loading has one polite message; errors retain assertive announcements. No settings or plugin business logic changes are required.
 
 ## Compact toolbar field
 
