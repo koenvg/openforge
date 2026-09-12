@@ -96,29 +96,38 @@ describe('plugin-sdk Switch', () => {
   })
 
   it.each([
-    { name: 'lets a quick flick commit in its travel direction', duration: 8, checked: true },
-    { name: 'keeps the same short travel off when it is slow', duration: 80, checked: false },
-  ])('$name', async ({ duration, checked }) => {
-    render(Switch, {
-      props: {
-        label: 'Enable notifications',
-      },
-    })
+    { name: 'quick flick on', checked: false, endX: 8, duration: 8, expected: true },
+    { name: 'quick flick off', checked: true, endX: 0, duration: 8, expected: false },
+    { name: 'slow short drag stays off', checked: false, endX: 8, duration: 80, expected: false },
+    { name: 'slow short drag stays on', checked: true, endX: 0, duration: 80, expected: true },
+  ])('$name', async ({ checked, endX, duration, expected }) => {
+    const onCheckedChange = vi.fn()
+    render(Switch, { props: { label: 'Enable notifications', checked, onCheckedChange } })
 
     const control = screen.getByRole('switch', { name: 'Enable notifications' })
-    const track = document.querySelector('.of-switch-track')
-
+    const track = document.querySelector('.of-switch-track')!
     const timestamps: number[] = []
     for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
-      track!.addEventListener(type, (event) => timestamps.push(event.timeStamp))
+      track.addEventListener(type, (event) => timestamps.push(event.timeStamp))
     }
-    // Four pixels stays before the midpoint: only the fast gesture should commit.
-    await firePointer(track!, 'pointerDown', 4, 0)
-    await firePointer(track!, 'pointerMove', 8, duration / 2)
-    await firePointer(track!, 'pointerUp', 8, duration)
+
+    // Four pixels does not cross the midpoint: only the fast gesture should commit.
+    await firePointer(track, 'pointerDown', 4, 0)
+    // A busy event loop must not turn the explicit 8ms flick into a slow drag.
+    const stallUntil = performance.now() + 32
+    while (performance.now() < stallUntil) { /* busy main thread */ }
+    await firePointer(track, 'pointerMove', endX, duration / 2)
+    expect(control).toHaveProperty('checked', checked)
+    expect(onCheckedChange).not.toHaveBeenCalled()
+    await firePointer(track, 'pointerUp', endX, duration)
 
     expect(timestamps).toEqual([0, duration / 2, duration])
-    expect(control).toHaveProperty('checked', checked)
+    expect(control).toHaveProperty('checked', expected)
+    if (expected !== checked) {
+      expect(onCheckedChange).toHaveBeenCalledExactlyOnceWith(expected)
+    } else {
+      expect(onCheckedChange).not.toHaveBeenCalled()
+    }
   })
 
   it('links validation text and keeps native focus behavior', () => {
