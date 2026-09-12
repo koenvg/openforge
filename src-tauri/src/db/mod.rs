@@ -3,6 +3,12 @@ use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+mod agent_completions;
+#[cfg(test)]
+mod agent_completions_tests;
+mod agent_notifications;
+#[cfg(test)]
+mod agent_notifications_tests;
 mod agent_session_list;
 mod agent_terminal_replay;
 mod agents;

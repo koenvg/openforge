@@ -51,15 +51,15 @@ fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
 /// block the user's tool call. Forcing exit 0 keeps this purely a
 /// best-effort status ping, never a decision signal.
 fn lifecycle_hook_command(port: u16, event_type: &str) -> String {
-    let Some(_kind) = grok_lifecycle_kind_from_event(event_type) else {
+    let Some(kind) = grok_lifecycle_kind_from_event(event_type) else {
         return String::new();
     };
     let Some(endpoint) = lifecycle_hook_endpoint(event_type) else {
         return String::new();
     };
+    let stable = crate::notification_hooks::shell_command("grok", kind, event_type);
     format!(
-        "[ -z \"$OPENFORGE_TASK_ID\" ] || curl -s -o /dev/null -X POST 'http://127.0.0.1:{}/hooks/grok-{}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$GROK_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @- ; exit 0",
-        port, endpoint
+        "[ -z \"$OPENFORGE_TASK_ID\" ] || {{ if [ -n \"$OPENFORGE_AGENT_CONFIG\" ]; then {stable}; else curl -s -o /dev/null -X POST 'http://127.0.0.1:{port}/hooks/grok-{endpoint}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$GROK_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @-; fi; }}; exit 0"
     )
 }
 

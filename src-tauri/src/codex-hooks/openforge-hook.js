@@ -29,7 +29,7 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hook
   if (
     !taskId ||
     !Number.isFinite(ptyInstanceId) ||
-    !port ||
+    (!port && !process.env.OPENFORGE_AGENT_CONFIG) ||
     !SUPPORTED_OPENFORGE_LIFECYCLE_KINDS.has(kind) ||
     !rawEventType
   ) {
@@ -57,44 +57,9 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hook
     payload.activity_snapshot = activitySnapshot;
   }
 
-  await postJson(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, payload);
+  await sendOpenForgeNotification(payload, `http://127.0.0.1:${port}/hooks/agent-lifecycle`);
 }
 
-async function postJson(url, payload) {
-  const body = JSON.stringify(payload);
-  if (typeof fetch === "function") {
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    return;
-  }
-
-  const http = await import("node:http");
-  await new Promise((resolve) => {
-    const endpoint = new URL(url);
-    const request = http.request(
-      {
-        hostname: endpoint.hostname,
-        port: endpoint.port,
-        path: endpoint.pathname,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-      },
-      (response) => {
-        response.resume();
-        response.on("end", resolve);
-      },
-    );
-    request.on("error", resolve);
-    request.write(body);
-    request.end();
-  });
-}
 
 async function readStdinJson() {
   const chunks = [];
@@ -266,7 +231,7 @@ async function main() {
     await postLifecycleEvent(kind, rawEventType, null, hookInput);
     await maybeStartTurnCompletionMonitor(kind, rawEventType, hookInput);
   } catch (_error) {
-    // Lifecycle reporting must never block the provider command.
+    console.error("[openforge] Codex notification acceptance failed");
   }
 }
 

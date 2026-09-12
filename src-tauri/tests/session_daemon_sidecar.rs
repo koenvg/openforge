@@ -301,3 +301,127 @@ readline.createInterface({input:process.stdin}).on('line', stage => {
     );
     assert_eq!(replay["instanceId"], instance);
 }
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn notification_during_backend_outage_updates_the_existing_agent_session() {
+    use openforge_session_protocol::{PreparedCommand, ShellCommand, TerminalOwner};
+    for (provider, kind, expected) in [
+        ("pi", "ended", "completed"),
+        ("pi", "requested_permission", "paused"),
+        ("claude-code", "ended", "completed"),
+    ] {
+        let mut fixture = Fixture::new();
+        fixture.start("first");
+        let task = fixture.invoke(
+            "create_task",
+            json!({"initialPrompt":"Notification outage", "status":"doing"}),
+        );
+        let task_id = task["id"].as_str().unwrap();
+        fixture.invoke("pty_spawn_shell", json!({"taskId":"T-proof", "terminalIndex":3, "cwd":fixture.root.path(), "cols":80, "rows":24}));
+        let client = openforge_session_client::Client::connect(fixture.root.path()).unwrap();
+        let session = client.spawn("notification-agent", &ShellCommand {
+            owner: TerminalOwner::Agent { task_id: task_id.into() },
+            command: PreparedCommand {
+                program: "/bin/sh".into(),
+                args: vec!["-c".into(), "printf '%s' \"$OPENFORGE_AGENT_CONFIG\" > agent-config.tmp; mv agent-config.tmp agent-config; exec sleep 120".into()],
+                cwd: fixture.root.path().into(), env: Default::default(),
+            }, columns:80, rows:24, image_protocol:None,
+        }).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let config: Value = loop {
+            if let Ok(path) = fs::read_to_string(fixture.root.path().join("agent-config")) {
+                break serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let identity: Value =
+            serde_json::from_str(include_str!("../../openforge-data-identity.json")).unwrap();
+        let filename = identity["dataIdentity"]["databaseFilenames"][if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }]
+        .as_str()
+        .unwrap();
+        let conn = rusqlite::Connection::open(fixture.root.path().join(filename)).unwrap();
+        conn.execute("INSERT INTO agent_sessions(id,ticket_id,stage,status,provider,pty_instance_id,created_at,updated_at) VALUES ('outage-session',?1,'implementing','running',?3,?2,1,1)", rusqlite::params![task_id, i64::try_from(session.pty.instance.value()).unwrap(), provider]).unwrap();
+        conn.execute("INSERT OR REPLACE INTO config(key,value) VALUES ('claude_background_work_grace_seconds','5')", []).unwrap();
+        let before = fixture.invoke("get_latest_session", json!({"taskId":task_id}));
+        assert_eq!(before["status"], "running");
+        let mut old = fixture.child.take().unwrap();
+        old.kill().unwrap();
+        old.wait().unwrap();
+        let envelope = json!({"id":"during-outage", "payload":{"provider":provider, "task_id":task_id, "pty_instance_id":session.pty.instance.value(), "kind":kind,
+            "raw_event_type": (provider == "claude-code").then_some("stop"),
+            "background_tasks": (provider == "claude-code").then(|| json!([{"id":"shell","type":"shell","status":"running"}]))
+        }});
+        let url = format!(
+            "http://127.0.0.1:{}/notifications/agent-lifecycle",
+            config["port"].as_u64().unwrap()
+        );
+        let accepted = fixture
+            .http
+            .post(&url)
+            .bearer_auth(config["token"].as_str().unwrap())
+            .json(&envelope)
+            .send()
+            .unwrap();
+        assert_eq!(accepted.status(), 202);
+        fixture.start("second");
+        fixture.invoke(
+            "get_pty_buffer",
+            json!({"shellSessionKey":fixture.shell_key}),
+        );
+        if provider == "claude-code" {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                let pending: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM agent_deferred_completions", [], |r| {
+                        r.get(0)
+                    })
+                    .unwrap();
+                if pending == 1 {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "Stop was not committed as a deferred obligation"
+                );
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let mut second = fixture.child.take().unwrap();
+            second.kill().unwrap();
+            second.wait().unwrap();
+            fixture.start("third");
+        }
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let restored = loop {
+            let restored = fixture.invoke("get_latest_session", json!({"taskId":task_id}));
+            if restored["status"] == expected {
+                break restored;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "notification did not restore {expected}: {restored}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        assert_eq!(restored["id"], "outage-session");
+        assert_eq!(restored["pty_instance_id"], session.pty.instance.value());
+        let revision = restored["output_revision"].clone();
+        let duplicate = fixture
+            .http
+            .post(&url)
+            .bearer_auth(config["token"].as_str().unwrap())
+            .json(&envelope)
+            .send()
+            .unwrap();
+        assert_eq!(duplicate.status(), 202);
+        assert_eq!(
+            fixture.invoke("get_latest_session", json!({"taskId":task_id}))["output_revision"],
+            revision
+        );
+    }
+}

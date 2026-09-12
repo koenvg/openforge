@@ -1,4 +1,4 @@
-mod events;
+pub(in crate::http_server) mod events;
 mod hook_routes;
 mod models;
 mod task_read_routes;
@@ -10,7 +10,6 @@ use axum::{
     Router,
 };
 
-pub(in crate::http_server) use events::handle_agent_lifecycle_notification;
 pub use hook_routes::{
     agent_lifecycle_handler, grok_hook_notification_permission_handler,
     grok_hook_post_tool_use_handler, grok_hook_pre_tool_use_handler, grok_hook_session_end_handler,
@@ -82,6 +81,10 @@ pub(super) fn router() -> Router<AppState> {
             get(task_read_routes::task_detail_handler),
         )
         .route("/project/:id/attention", get(get_project_attention_handler))
+        .route(
+            openforge_session_protocol::NOTIFICATION_DELIVERY_PATH,
+            post(super::notifications::receive),
+        )
         .route("/hooks/agent-lifecycle", post(agent_lifecycle_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))
         .route("/hooks/pi-agent-end", post(pi_agent_end_handler))

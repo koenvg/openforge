@@ -6,7 +6,7 @@ KVG-4718 adds an authenticated CLI gateway to the Session Daemon. A daemon-hoste
 
 This uses the controlled daemon-hosted path described in [the shell proof](session-daemon-shell.md). It does not migrate other production agent, shell, plugin, or Companion callers to the daemon. It adds neither a user Restart action nor live daemon replacement. Existing non-daemon callers keep their legacy HTTP discovery behavior.
 
-Lifecycle hook routes are deliberately absent from this gateway. Durable notification acceptance, delivery, acknowledgement, and deduplication belong to the next slice. No command is silently queued, redirected, or automatically retried.
+Lifecycle hook routes remain absent from the command allowlist. [KVG-4719's separate notification ingress](session-daemon-notifications.md) adds durable lifecycle acceptance and replay. No request-response command is silently queued, redirected, or automatically retried.
 
 ## Credentials and ownership
 

@@ -1,7 +1,7 @@
 use rusqlite::Result;
 use serde::Serialize;
 
-const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id, grok_session_id, output_revision, viewed_output_revision";
+pub(super) const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id, grok_session_id, output_revision, viewed_output_revision";
 
 /// Agent session row from database
 #[derive(Debug, Clone, Serialize)]
@@ -24,7 +24,26 @@ pub struct AgentSessionRow {
     pub viewed_output_revision: i64,
 }
 
-fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
+pub(super) fn update_session_on_connection(
+    conn: &rusqlite::Connection,
+    id: &str,
+    stage: &str,
+    status: &str,
+    checkpoint_data: Option<&str>,
+    error_message: Option<&str>,
+) -> Result<()> {
+    let now = super::current_unix_timestamp()?;
+    conn.execute(
+        "UPDATE agent_sessions SET stage=?1,
+         output_revision=output_revision + CASE WHEN status<>?2 AND ?2 IN ('completed','paused','failed','interrupted') THEN 1 ELSE 0 END,
+         status=?2, checkpoint_data=?3, error_message=?4, updated_at=?5 WHERE id=?6",
+        rusqlite::params![stage, status, checkpoint_data, error_message, now, id],
+    )?;
+    super::agent_completions::clear_inactive(conn, id)?;
+    Ok(())
+}
+
+pub(super) fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
     Ok(AgentSessionRow {
         id: row.get(0)?,
         ticket_id: row.get(1)?,
@@ -95,25 +114,10 @@ impl super::Database {
         checkpoint_data: Option<&str>,
         error_message: Option<&str>,
     ) -> Result<()> {
-        let conn = self.lock_conn()?;
-        let now = super::current_unix_timestamp()?;
-        conn.execute(
-            "UPDATE agent_sessions
-                SET stage = ?1,
-                    output_revision = output_revision + CASE
-                        WHEN status <> ?2
-                         AND ?2 IN ('completed', 'paused', 'failed', 'interrupted')
-                        THEN 1
-                        ELSE 0
-                    END,
-                    status = ?2,
-                    checkpoint_data = ?3,
-                    error_message = ?4,
-                    updated_at = ?5
-              WHERE id = ?6",
-            rusqlite::params![stage, status, checkpoint_data, error_message, now, id],
-        )?;
-        Ok(())
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        update_session_on_connection(&tx, id, stage, status, checkpoint_data, error_message)?;
+        tx.commit()
     }
 
     pub fn mark_agent_output_viewed(
@@ -136,6 +140,7 @@ impl super::Database {
         Ok(changed > 0)
     }
 
+    #[cfg(test)]
     pub fn set_agent_session_opencode_id(&self, id: &str, opencode_session_id: &str) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute(
@@ -145,6 +150,7 @@ impl super::Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn set_agent_session_claude_id(&self, id: &str, claude_session_id: &str) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute(
@@ -163,6 +169,7 @@ impl super::Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn set_agent_session_grok_id(&self, id: &str, grok_session_id: &str) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute(
@@ -175,12 +182,14 @@ impl super::Database {
     pub fn set_agent_session_pty_instance_id(&self, id: &str, pty_instance_id: u64) -> Result<()> {
         let pty_instance_id = i64::try_from(pty_instance_id)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        let conn = self.lock_conn()?;
-        conn.execute(
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        super::agent_completions::clear_for_new_allocation(&tx, id, pty_instance_id)?;
+        tx.execute(
             "UPDATE agent_sessions SET pty_instance_id = ?1 WHERE id = ?2",
             rusqlite::params![pty_instance_id, id],
         )?;
-        Ok(())
+        tx.commit()
     }
 
     pub fn reactivate_agent_session_runtime(
@@ -191,9 +200,11 @@ impl super::Database {
     ) -> Result<()> {
         let pty_instance_id = i64::try_from(pty_instance_id)
             .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-        let conn = self.lock_conn()?;
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
         let now = super::current_unix_timestamp()?;
-        let changed = conn.execute(
+        super::agent_completions::clear_for_new_allocation(&tx, id, pty_instance_id)?;
+        let changed = tx.execute(
             "UPDATE agent_sessions
                 SET status = 'running',
                     pty_instance_id = ?1,
@@ -213,9 +224,10 @@ impl super::Database {
         if changed == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        Ok(())
+        tx.commit()
     }
 
+    #[cfg(test)]
     pub fn set_agent_session_provider_id(
         &self,
         id: &str,
@@ -360,6 +372,7 @@ impl super::Database {
         Ok(result)
     }
 
+    #[cfg(test)]
     pub fn get_sessions_by_provider(&self, provider: &str) -> Result<Vec<AgentSessionRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(

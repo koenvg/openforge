@@ -238,20 +238,12 @@ async function reportPiLifecycle(
 
   const port = process.env.OPENFORGE_HTTP_PORT ?? DEFAULT_OPENFORGE_HTTP_PORT;
   try {
-    await fetch(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: "pi",
-        task_id: taskId,
-        pty_instance_id: Number(ptyInstanceId),
-        kind: openForgeLifecycleKind(eventType),
-        raw_event_type: eventType,
-        ...metadata,
-      }),
-    });
-  } catch (error) {
-    console.error(`[openforge] Failed to report Pi lifecycle event ${eventType}:`, error);
+    await sendOpenForgeNotification({
+      provider: "pi", task_id: taskId, pty_instance_id: Number(ptyInstanceId),
+      kind: openForgeLifecycleKind(eventType), raw_event_type: eventType, ...metadata,
+    }, `http://127.0.0.1:${port}/hooks/agent-lifecycle`);
+  } catch {
+    console.error("[openforge] Pi notification acceptance failed");
   }
 }
 

@@ -20,11 +20,7 @@ const MAX_BACKGROUND_WORK_GRACE_SECONDS: u64 = 24 * 60 * 60;
 /// beyond this even when it declares days.
 const MAX_DEFERRAL: Duration = Duration::from_secs(MAX_BACKGROUND_WORK_GRACE_SECONDS);
 
-pub(crate) struct DeferredCompletion {
-    pub(crate) task_id: String,
-    pub(crate) pty_instance_id: Option<u64>,
-    pub(crate) transcript_path: Option<String>,
-}
+use crate::agent_lifecycle::{CompletionPlan, PendingCompletion as DeferredCompletion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Deadlines {
@@ -69,40 +65,31 @@ impl DeferredCompletionWatcher {
         task_lock.lock_owned().await
     }
 
-    pub(crate) async fn deferred(
-        &self,
-        state: &AppState,
-        deferral: DeferredCompletion,
-        outstanding: &OutstandingWork,
-    ) {
+    pub(crate) async fn recover(&self, state: &AppState) -> Result<(), String> {
+        let db = state.db.clone();
+        let pending = tokio::task::spawn_blocking(move || {
+            crate::db::acquire_db(&db).pending_agent_completions()
+        })
+        .await
+        .map_err(|_| "completion recovery worker failed")??;
+        for completion in pending {
+            let _guard = self.task_guard(&completion.task_id).await;
+            self.schedule(state, completion).await;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn schedule(&self, state: &AppState, deferral: DeferredCompletion) {
         let mut scheduled = self.scheduled.lock().await;
         if let Some(previous) = scheduled.remove(&deferral.task_id) {
             previous.task.abort();
         }
-
-        let Some(now_ms) = current_ms() else {
-            warn!(
-                "[deferred_completion] could not read the clock, task {} keeps its deferral unwatched",
-                deferral.task_id
-            );
-            return;
-        };
         let deadlines = Deadlines {
-            grace_ms: now_ms.saturating_add(grace_period(state).as_millis() as u64),
-            ceiling_ms: now_ms.saturating_add(MAX_DEFERRAL.as_millis() as u64),
+            grace_ms: deferral.plan.grace_ms,
+            ceiling_ms: deferral.plan.ceiling_ms,
         };
-        let wake_at_ms = match next_wake(expiries(outstanding.tasks()), now_ms, deadlines) {
-            Next::WakeAt(wake_at_ms) => wake_at_ms,
-            Next::CompleteNow => now_ms,
-        };
-
-        let reported = match outstanding {
-            OutstandingWork::Reported(tasks) => {
-                Some(crate::claude_background_work::describe_tasks(tasks))
-            }
-            OutstandingWork::Replayed(_) => None,
-        };
-
+        let wake_at_ms = deferral.plan.wake_at_ms;
+        let reported = deferral.plan.reported.clone();
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
         let task_id = deferral.task_id.clone();
         let watcher = self.clone();
@@ -121,8 +108,6 @@ impl DeferredCompletionWatcher {
         }
     }
 
-    /// Claude's own inventory is a complete account of its in-flight work, so a deferral it
-    /// sourced is not re-checked: replaying the transcript at the deadline would let work the
     /// Claude's own inventory is a complete account of its in-flight work, so a deferral it
     /// sourced is not re-checked: replaying the transcript at the deadline would let work the
     /// inventory omitted extend a deferral it never authorised. Replayed work is re-polled,
@@ -149,7 +134,7 @@ impl DeferredCompletionWatcher {
                 state.pty_manager.as_ref(),
                 &deferral.task_id,
                 deferral.pty_instance_id,
-                deferral.transcript_path.as_deref(),
+                deferral.plan.transcript_path.as_deref(),
             )
             .await;
             let Some(now_ms) = current_ms() else { break };
@@ -188,44 +173,67 @@ impl DeferredCompletionWatcher {
         generation: u64,
         reason: &str,
     ) {
-        let _task_guard = self.task_guard(&deferral.task_id).await;
-        {
-            let mut scheduled = self.scheduled.lock().await;
-            let is_current = scheduled
+        loop {
+            let guard = self.task_guard(&deferral.task_id).await;
+            let is_current = self
+                .scheduled
+                .lock()
+                .await
                 .get(&deferral.task_id)
                 .is_some_and(|scheduled| scheduled.generation == generation);
             if !is_current {
                 return;
             }
-            scheduled.remove(&deferral.task_id);
-        }
-
-        info!(
-            "[deferred_completion] completing task {} because {}",
-            deferral.task_id, reason
-        );
-        let notification = crate::agent_lifecycle::AgentLifecycleNotification {
-            provider: "claude-code".to_string(),
-            task_id: deferral.task_id.clone(),
-            pty_instance_id: deferral.pty_instance_id,
-            provider_session_id: None,
-            kind: crate::agent_lifecycle::AgentLifecycleEventKind::Ended,
-            raw_event_type: Some("stop".to_string()),
-            raw_status_type: None,
-        };
-        if super::legacy_transport::handle_agent_lifecycle_notification(
-            state.clone(),
-            notification,
-            deferral.transcript_path.clone(),
-            None,
-        )
-        .await
-        .is_err()
-        {
-            warn!(
-                "[deferred_completion] task {} could not be recorded as completed",
-                deferral.task_id
+            let db = state.db.clone();
+            let pending = deferral.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::db::acquire_db(&db).complete_agent_completion(&pending)
+            })
+            .await;
+            let change = match result {
+                Ok(Ok(change)) => change,
+                _ => {
+                    warn!(
+                        "[deferred_completion] domain commit failed; obligation retained for retry"
+                    );
+                    drop(guard);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            self.scheduled.lock().await.remove(&deferral.task_id);
+            info!(
+                "[deferred_completion] completing task {} because {}",
+                deferral.task_id, reason
             );
+            let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+                provider: "claude-code".into(),
+                task_id: deferral.task_id.clone(),
+                pty_instance_id: deferral.pty_instance_id,
+                provider_session_id: None,
+                kind: crate::agent_lifecycle::AgentLifecycleEventKind::Ended,
+                raw_event_type: Some("stop".into()),
+                raw_status_type: None,
+            };
+            if super::legacy_transport::events::publish_recorded_lifecycle(
+                state.clone(),
+                notification,
+                deferral.plan.transcript_path.clone(),
+                None,
+                change,
+                |db, refresh| async move {
+                    crate::task_metadata_refresh::refresh_queued_task_display_title_with_ai_once(
+                        db, refresh,
+                    )
+                    .await
+                },
+            )
+            .await
+            .is_err()
+            {
+                warn!("[deferred_completion] completion committed; presentation follow-up failed");
+            }
+            return;
         }
     }
 }
@@ -234,6 +242,39 @@ impl Default for DeferredCompletionWatcher {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Resolve timing before the transaction; the transaction decides session eligibility.
+pub(crate) fn completion_plan(
+    state: &AppState,
+    transcript_path: Option<String>,
+    outstanding: &OutstandingWork,
+) -> Result<Option<CompletionPlan>, String> {
+    if outstanding.is_empty() {
+        return Ok(None);
+    }
+    let now_ms = current_ms().ok_or("completion clock unavailable")?;
+    let deadlines = Deadlines {
+        grace_ms: now_ms.saturating_add(grace_period(state).as_millis() as u64),
+        ceiling_ms: now_ms.saturating_add(MAX_DEFERRAL.as_millis() as u64),
+    };
+    let wake_at_ms = match next_wake(expiries(outstanding.tasks()), now_ms, deadlines) {
+        Next::WakeAt(at) => at,
+        Next::CompleteNow => now_ms,
+    };
+    let reported = match outstanding {
+        OutstandingWork::Reported(tasks) => {
+            Some(crate::claude_background_work::describe_tasks(tasks))
+        }
+        OutstandingWork::Replayed(_) => None,
+    };
+    Ok(Some(CompletionPlan {
+        grace_ms: deadlines.grace_ms,
+        ceiling_ms: deadlines.ceiling_ms,
+        wake_at_ms,
+        transcript_path,
+        reported,
+    }))
 }
 
 fn expiries(live: &[PendingBackgroundTask]) -> impl Iterator<Item = Option<u64>> + '_ {

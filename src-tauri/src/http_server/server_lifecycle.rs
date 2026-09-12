@@ -366,6 +366,10 @@ async fn start_http_server_with_app_state(
             )
             .await?;
     }
+    shutdown_state
+        .deferred_completion_watcher
+        .recover(&shutdown_state)
+        .await?;
     // Signal that the core loopback bridge is listening before independently
     // restoring the optional Companion Gateway.
     let _ = ready_tx.send(());
