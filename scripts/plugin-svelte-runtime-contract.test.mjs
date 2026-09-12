@@ -8,11 +8,13 @@ import { OPENFORGE_HOST_SHARED_SVELTE_IMPORTS, OPENFORGE_HOST_SHARED_TERMINAL_RU
 import {
   OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS,
   SVELTE_HOST_RUNTIME_MODULES,
+  pinnedSvelteVersionFromWorkspaceYaml,
   rendererImportMapHtml,
   rendererImportMapScriptBody,
   rendererImportMapScriptHashSource,
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
+  svelteHostRuntimeInstallMismatchError,
   terminalRuntimeImportMapEntries,
 } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
@@ -44,6 +46,16 @@ function resolveAliasReplacement(alias, specifier) {
 }
 
 describe('OpenForge plugin Svelte runtime contract', () => {
+  it('reads the exact pinned Svelte version from the workspace catalogs block', async () => {
+    const workspace = await readFile(join(process.cwd(), 'pnpm-workspace.yaml'), 'utf8')
+    const installed = JSON.parse(await readFile(join(process.cwd(), 'node_modules/svelte/package.json'), 'utf8'))
+
+    expect(pinnedSvelteVersionFromWorkspaceYaml(workspace)).toBe('5.57.0')
+    expect(pinnedSvelteVersionFromWorkspaceYaml(workspace)).not.toBe('^5.57.0')
+    expect(installed.version).toBe(pinnedSvelteVersionFromWorkspaceYaml(workspace))
+    expect(svelteHostRuntimeInstallMismatchError('5.56.10', '5.57.0')).toContain('only_child')
+  })
+
   it('keeps the plugin SDK Vite helper package-self-contained', async () => {
     const viteHelper = await readFile(join(process.cwd(), 'packages/plugin-sdk/src/vite.ts'), 'utf8')
 
