@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
-  import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
-  import { getPrStatusChips, getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import { canEnqueuePullRequest, canMergePullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
+  import { getPrStatusChips, getPullRequestMergeActionLabel, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import StatusBadge, { type StatusBadgeStatus } from '@openforge-app/plugin-sdk/ui/StatusBadge.svelte'
   import { collapsedSections, isSectionCollapsed, toggleSection } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import PrStatusChip from '@openforge-app/pr-review-ui/PrStatusChip.svelte'
   import { getGitHubMarkdownImageBaseUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
@@ -44,7 +45,6 @@
   let chips = $derived(getPrStatusChips(pr, 'detail'))
   let mergeActionLabel = $derived(pr.default_merge_method ? getPullRequestMergeActionLabel(pr.default_merge_method) : 'Merge')
   let canMerge = $derived(canMergePullRequest(pr) && pr.default_merge_method !== null && pr.default_merge_method !== undefined)
-  let detail = $derived(readinessText(pr))
   let unaddressedComments = $derived(comments.filter((comment) => comment.addressed === 0))
   let checkSummary = $derived(splitCheckRuns(parseCheckRuns(pr.ci_check_runs)))
 
@@ -66,13 +66,38 @@
     return `Pull request #${prNumber(value)}`
   }
 
-  function readinessText(value: PullRequestInfo): string | null {
-    if (isMergedPullRequest(value)) return null
-    const readiness = getMergeReadiness(value)
-    if (readiness.status === 'ready_to_enqueue') return 'Ready to enqueue in the merge queue.'
-    if (readiness.status === 'queued_pull_request') return 'Queued pull request — waiting for merge queue validation.'
-    if (readiness.status === 'readiness_unknown') return readiness.warnings[0]?.message ?? 'Readiness unknown — waiting for GitHub to report definitive mergeability.'
-    if (readiness.status === 'blocked') return readiness.blockers[0]?.message ?? null
+  function checkStatus(check: { status: string; conclusion: string | null }): StatusBadgeStatus {
+    if (check.conclusion === 'failure') return 'failed'
+    if (check.status !== 'completed') return 'in-progress'
+    if (check.conclusion === 'success') return 'success'
+    return 'expired'
+  }
+
+  function checkStatusLabel(check: { status: string; conclusion: string | null }): string {
+    if (check.conclusion === 'failure') return 'Failed'
+    if (check.status !== 'completed') return 'Running'
+    if (check.conclusion === 'success') return 'Passed'
+    return 'Skipped'
+  }
+
+  function chipStatus(chip: PrStatusChipSpec): StatusBadgeStatus | null {
+    if (chip.type === 'ci') {
+      if (chip.variant === 'success') return 'success'
+      if (chip.variant === 'error') return 'failed'
+      if (chip.variant === 'pending') return 'in-progress'
+      return 'expired'
+    }
+    if (chip.type === 'review') {
+      if (chip.variant === 'success') return 'success'
+      if (chip.variant === 'pending') return 'pending'
+      if (chip.variant === 'neutral') return 'in-review'
+    }
+    if (chip.type === 'merge') {
+      if (chip.variant === 'done' || chip.variant === 'merged') return 'success'
+      if (chip.variant === 'error') return 'failed'
+      if (chip.variant === 'neutral') return 'in-review'
+      if (chip.variant === 'closed') return 'expired'
+    }
     return null
   }
 </script>
@@ -82,11 +107,11 @@
        of them stack up taller than the task panel. Collapsing leaves the identity row:
        number, title, state. The caret column matches CollapsibleSection's so a card
        toggle lines up with the section toggle above it. -->
-  <div class="flex items-center gap-2 pr-2.5">
+  <div class="flex items-center gap-3 px-3.5">
     <h4 class="m-0 min-w-0 flex-1">
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-[var(--of-radius-container)] px-2.5 pt-2.5 text-left hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary {collapsed ? 'pb-2.5' : 'pb-1'}"
+        class="flex w-full items-center gap-2 rounded-[var(--of-radius-container)] px-1.5 pt-2.5 text-left hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary {collapsed ? 'pb-2.5' : 'pb-1'}"
         aria-expanded={!collapsed}
         aria-controls={bodyId}
         aria-label={`#${prNumber(pr)} ${pr.title}`}
@@ -100,16 +125,17 @@
         <span class="text-sm font-medium truncate" title={pr.title}>{pr.title}</span>
       </button>
     </h4>
-    <Badge
-      variant={pr.state === 'open' ? 'success' : 'neutral'}
-      class="shrink-0 capitalize"
-    >{displayState(pr)}</Badge>
+    <StatusBadge
+      status={pr.state === 'open' ? 'success' : 'expired'}
+      aria-label={displayState(pr)}
+      title={displayState(pr)}
+      class="shrink-0 capitalize github-sync-compact-chip github-sync-state-chip"
+    >{displayState(pr)}</StatusBadge>
   </div>
 
   {#if !collapsed}
     <div id={bodyId}>
       <div class="flex flex-col gap-1 px-2.5 pb-2.5">
-        <span class="text-[0.7rem] text-base-content/55">{pr.repo_owner}/{pr.repo_name}</span>
         <Button
           variant="ghost"
           size="xs"
@@ -118,10 +144,17 @@
         >{pr.url}</Button>
       </div>
 
-      <div class="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5" aria-label="Pull request signals">
-        {#each chips as chip (`${pr.id}-${chip.type}-${chip.label}`)}<PrStatusChip {chip} />{/each}
+      <div class="flex flex-wrap items-center gap-1.5 px-2.5 pb-5" aria-label="Pull request signals">
+        {#each chips as chip (`${pr.id}-${chip.type}-${chip.label}`)}
+          {@const status = chipStatus(chip)}
+          {#if status}
+            <StatusBadge status={status} aria-label={chip.label} title={chip.label} class="github-sync-compact-chip github-sync-signal-status">{chip.label}</StatusBadge>
+          {:else}
+            <PrStatusChip {chip} />
+          {/if}
+        {/each}
         {#if pr.unaddressed_comment_count > 0}
-          <Badge>{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</Badge>
+          <Badge class="github-sync-compact-chip github-sync-signal-count">{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</Badge>
         {/if}
       </div>
 
@@ -129,15 +162,32 @@
         <div class="border-t border-base-300/70 px-2.5 py-2 flex flex-col gap-1" aria-label="Pipeline checks">
           <div class="text-[0.7rem] font-medium text-base-content/55">Pipeline checks</div>
           {#each checkSummary.visible as check (check.id)}
-            <div class="flex items-center gap-2 text-xs"><span class="font-semibold {check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/50'}">{check.conclusion === 'failure' ? 'Failed' : check.status !== 'completed' ? 'Running' : 'Skipped'}</span><span class="text-base-content/70">{check.name}</span></div>
+            <div class="flex items-center gap-2 text-xs">
+              <StatusBadge
+                status={checkStatus(check)}
+                role="img"
+                aria-label={checkStatusLabel(check)}
+                title={checkStatusLabel(check)}
+                class="github-sync-status-icon shrink-0"
+              >
+                <span class="sr-only">{checkStatusLabel(check)}</span>
+              </StatusBadge>
+              <span class="text-base-content/70">{check.name}</span>
+            </div>
           {/each}
-          {#if checkSummary.passingCount > 0}<div class="flex items-center gap-2 text-xs"><span class="font-semibold text-success">Passed</span><span class="text-base-content/50">{checkSummary.passingCount} passing</span></div>{/if}
+          {#if checkSummary.passingCount > 0}
+            <div class="flex items-center gap-2 text-xs">
+              <StatusBadge status="success" role="img" aria-label="Passed" title="Passed" class="github-sync-status-icon shrink-0">
+                <span class="sr-only">Passed</span>
+              </StatusBadge>
+              <span class="text-base-content/50">{checkSummary.passingCount} passing</span>
+            </div>
+          {/if}
         </div>
       {/if}
 
-      {#if detail || canMerge || canEnqueuePullRequest(pr) || feedback}
+      {#if canMerge || canEnqueuePullRequest(pr) || feedback}
         <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
-          {#if detail}<div class="text-[0.7rem] text-base-content/60">{detail}</div>{/if}
           <div class="flex items-center gap-2">
             {#if canEnqueuePullRequest(pr)}
               <Button size="xs" aria-label={pendingPrId === pr.id || taskActionPending ? 'Enqueueing…' : 'Enqueue'} disabled={pendingPrId !== null || taskActionPending} onclick={() => onRequestAction(pr, 'enqueue')}>
@@ -186,3 +236,45 @@
     </div>
   {/if}
 </article>
+
+<style>
+  :global([data-status-badge].github-sync-status-icon) {
+    gap: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :global(span.github-sync-compact-chip) {
+    min-height: auto;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  :global(span[data-status-badge].github-sync-signal-status) {
+    gap: 0.25rem;
+  }
+
+  :global(span[data-status-badge].github-sync-state-chip) {
+    gap: 0;
+  }
+
+  :global(span[data-status-badge].github-sync-state-chip [data-status-icon]) {
+    display: none;
+  }
+
+  :global(span[data-status-badge].github-sync-signal-status [data-status-icon]) {
+    width: var(--of-space3);
+    height: var(--of-space3);
+  }
+
+  :global(span.github-sync-signal-count) {
+    min-height: auto;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+</style>

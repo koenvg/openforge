@@ -130,8 +130,43 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('Second PR')).toBeTruthy()
     expect(api.backend.whenReady).toHaveBeenCalledOnce()
     expect(api.backend.invoke).toHaveBeenCalledWith('listTaskPullRequests', { taskId: 'T-42' })
-    expect(screen.getByText('owner/repo')).toBeTruthy()
-    expect(screen.getByText('owner/other')).toBeTruthy()
+    expect(screen.queryByText('owner/repo')).toBeNull()
+    expect(screen.queryByText('owner/other')).toBeNull()
+  })
+
+  it('uses compact accessible icons for failed, running, and passing checks', async () => {
+    const pullRequest = createPullRequest({
+      ci_status: 'failure',
+      ci_check_runs: JSON.stringify([
+        { id: 1, name: 'Live Electron Terminal Invariants', status: 'completed', conclusion: 'failure', html_url: 'https://example.com/1' },
+        { id: 2, name: 'Typecheck', status: 'in_progress', conclusion: null, html_url: 'https://example.com/2' },
+        { id: 3, name: 'Unit tests', status: 'completed', conclusion: 'success', html_url: 'https://example.com/3' },
+        { id: 4, name: 'Lint', status: 'completed', conclusion: 'success', html_url: 'https://example.com/4' },
+      ]),
+    })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pullRequest]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    const pipelineChecks = await screen.findByLabelText('Pipeline checks')
+    expect(screen.getByText('Failing').closest('[data-status-badge]')?.getAttribute('data-status')).toBe('failed')
+    expect(screen.getByText('Approved').closest('[data-status-badge]')?.getAttribute('data-status')).toBe('success')
+    expect(screen.getByText('Failing').closest('[data-status-badge]')?.classList.contains('github-sync-signal-status')).toBe(true)
+    expect(screen.getByText('Approved').closest('[data-status-badge]')?.classList.contains('github-sync-signal-status')).toBe(true)
+    expect(screen.getByText('open').closest('[data-status-badge]')?.classList.contains('github-sync-state-chip')).toBe(true)
+    expect(screen.getByText('open').closest('[data-status-badge]')?.getAttribute('data-status')).toBe('success')
+    expect(screen.queryByLabelText('Pull request merge status')).toBeNull()
+    expect(within(pipelineChecks).getByText('Live Electron Terminal Invariants')).toBeTruthy()
+    expect(within(pipelineChecks).getByText('Typecheck')).toBeTruthy()
+    expect(within(pipelineChecks).getByText('2 passing')).toBeTruthy()
+    expect(within(pipelineChecks).getByRole('img', { name: 'Failed' }).getAttribute('data-status')).toBe('failed')
+    expect(within(pipelineChecks).getByRole('img', { name: 'Failed' }).classList.contains('github-sync-status-icon')).toBe(true)
+    expect(within(pipelineChecks).getByRole('img', { name: 'Running' }).getAttribute('data-status')).toBe('in-progress')
+    expect(within(pipelineChecks).getByRole('img', { name: 'Passed' }).getAttribute('data-status')).toBe('success')
   })
 
   it('removes a comment after it is marked addressed', async () => {
@@ -661,7 +696,7 @@ describe('GitHub Sync individual pull request collapsing', () => {
 
     expect((await screen.findByRole('button', { name: '#42 Test PR' })).getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('button', { name: '#99 Second PR' }).getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByText('owner/repo')).toBeTruthy()
+    expect(screen.getByText('https://github.com/owner/repo/pull/42')).toBeTruthy()
   })
 
   it('collapses one pull request without touching its sibling', async () => {
@@ -671,8 +706,8 @@ describe('GitHub Sync individual pull request collapsing', () => {
 
     // The identity row survives: collapsing hides the body, not the pull request.
     expect(screen.getByRole('button', { name: '#42 Test PR' }).getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByText('owner/repo')).toBeNull()
-    expect(screen.getByText('owner/other')).toBeTruthy()
+    expect(screen.queryByText('https://github.com/owner/repo/pull/42')).toBeNull()
+    expect(screen.getByText('https://github.com/owner/other/pull/99')).toBeTruthy()
   })
 
   it('hides the long body of a collapsed pull request', async () => {
@@ -708,7 +743,7 @@ describe('GitHub Sync individual pull request collapsing', () => {
     renderTwoPullRequests()
 
     await waitFor(() => expect(screen.getByText('Test PR')).toBeTruthy())
-    expect(screen.queryByText('owner/repo')).toBeNull()
-    expect(screen.getByText('owner/other')).toBeTruthy()
+    expect(screen.queryByText('https://github.com/owner/repo/pull/42')).toBeNull()
+    expect(screen.getByText('https://github.com/owner/other/pull/99')).toBeTruthy()
   })
 })
