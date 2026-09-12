@@ -3152,7 +3152,7 @@
     "story": "pages-self-review--linked-pull-request",
     "theme": "openforge-light",
     "viewport": { "width": 1280, "height": 800 },
-    "ready": "text=GitHub comments (1)",
+    "ready": "[role='tab'][aria-label='GitHub comments (1)']",
     "expectedErrors": []
   },
   {
@@ -3160,7 +3160,7 @@
     "story": "pages-self-review--linked-pull-request",
     "theme": "openforge-dark",
     "viewport": { "width": 1280, "height": 800 },
-    "ready": "text=GitHub comments (1)",
+    "ready": "[role='tab'][aria-label='GitHub comments (1)']",
     "expectedErrors": []
   },
   {

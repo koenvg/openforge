@@ -19,8 +19,8 @@ describe("SelfReviewView review workspace", () => {
 		expect(screen.getByRole("region", { name: "Code diff panel" })).toBeTruthy();
 		expect(screen.queryByRole("region", { name: "Feedback panel" })).toBeNull();
 		expect(screen.getByRole("button", { name: "Collapse Changed files panel" })).toBeTruthy();
-		const filesTab = screen.getByRole("tab", { name: "Changed files", exact: true });
-		const commentsTab = screen.getByRole("tab", { name: "GitHub comments", exact: true });
+		const filesTab = screen.getByRole("tab", { name: "Changed files" });
+		const commentsTab = screen.getByRole("tab", { name: "GitHub comments" });
 		expect(filesTab.getAttribute("title")).toBe("Changed files");
 		expect(commentsTab.getAttribute("title")).toBe("GitHub comments");
 		expect(filesTab.textContent?.trim()).toBe("");
