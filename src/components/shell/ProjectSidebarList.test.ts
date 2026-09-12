@@ -97,6 +97,29 @@ describe('ProjectSidebarList', () => {
     expect(screen.getByText('B')).toBeTruthy()
   })
 
+  it('uppercases a lowercase letter monogram when collapsed', () => {
+    projects.set([
+      { id: 'proj-lower', name: 'alpha', path: '/users/alice/alpha', created_at: 0, updated_at: 0 },
+    ])
+    renderProjectList({ collapsed: true })
+
+    expect(screen.getByText('A')).toBeTruthy()
+    expect(screen.queryByText('a')).toBeNull()
+  })
+
+  it('keeps a leading supplementary-plane emoji as the collapsed monogram', () => {
+    projects.set([
+      { id: 'proj-red', name: '🔴 spelly', path: '/users/alice/spelly', created_at: 0, updated_at: 0 },
+      { id: 'proj-check', name: '✅ inbox', path: '/users/bob/inbox', created_at: 0, updated_at: 0 },
+    ])
+    renderProjectList({ collapsed: true })
+
+    expect(screen.getByRole('button', { name: '🔴 spelly' }).textContent).toContain('🔴')
+    expect(screen.getByRole('button', { name: '✅ inbox' }).textContent).toContain('✅')
+    expect(screen.getByText('🔴')).toBeTruthy()
+    expect(screen.getByText('✅')).toBeTruthy()
+  })
+
   it('delegates project selection', async () => {
     const onSelectProject = vi.fn()
     renderProjectList({ onSelectProject })
