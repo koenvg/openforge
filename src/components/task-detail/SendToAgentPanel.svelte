@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { CheckCircle2, RefreshCw, Send } from '@lucide/svelte'
   import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
@@ -21,6 +22,7 @@
   const isMac = navigator.platform.startsWith('Mac')
 
   let successMessage = $state<string | null>(null)
+  let successTimer: ReturnType<typeof setTimeout> | undefined
   let showPromptDialog = $state(false)
   let promptDraft = $state('')
   let promptMode = $state<ReviewPromptMode>('address')
@@ -32,6 +34,8 @@
   let hasComments = $derived(inlineCount > 0 || prCommentCount > 0)
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
   let canSend = $derived(hasComments && !isAgentBusy)
+
+  onDestroy(() => clearTimeout(successTimer))
 
   function openPromptDialog() {
     if (!canSend) return
@@ -59,7 +63,9 @@
     }))
     showPromptDialog = false
     successMessage = 'Feedback sent to agent!'
-    setTimeout(() => {
+    clearTimeout(successTimer)
+    successTimer = setTimeout(() => {
+      successTimer = undefined
       successMessage = null
     }, 3000)
     onSendComplete?.(selectedPrComments.filter(comment => capturedPr.some(sent =>
