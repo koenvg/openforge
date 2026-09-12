@@ -13,7 +13,7 @@
     {"tag":"div","context":"class=\"rounded-[var(--of-radius-container)] border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col\"","tokens":["min-h-48"],"count":2,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
   "packages/pr-review-ui/src/DiffFileHeader.svelte": [
-    {"tag":"div","context":"class=\"sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm\"","tokens":["rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))]"],"count":1,"reason":"Diff headers share their section radius; attached workspaces can flatten it without changing buttons or comment cards."},
+    {"tag":"div","context":"class=\"sticky top-0 z-20 w-full flex cursor-pointer items-center gap-2 px-4 py-1 bg-base-100 border-b border-base-300 rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm\"","tokens":["rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))]"],"count":1,"reason":"Diff headers share their section radius; attached workspaces can flatten it without changing buttons or comment cards."},
     {"tag":"div","context":"class=\"flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap font-mono text-[13px] text-base-content\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"span","context":"class=\"max-w-[40%] min-w-0 overflow-hidden text-ellipsis text-base-content/50 line-through\"","tokens":["max-w-[40%]","min-w-0"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
     {"tag":"span","context":"class=\"min-w-0 overflow-hidden text-ellipsis\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
@@ -24,13 +24,13 @@
   ],
   "packages/pr-review-ui/src/DiffViewer.svelte": [
     {"tag":"div","context":"class=\"flex flex-col flex-1 min-w-0 min-h-0 h-full overflow-hidden\"","tokens":["min-w-0","min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-200 px-2 py-1\"","tokens":["min-h-[var(--of-diff-toolbar-height,2.5rem)]"],"count":1,"reason":"Align the attached diff toolbar with the adjacent tab strip, retaining the existing standalone height and narrow-host wrapping."},
+    {"tag":"div","context":"class=\"diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 px-2 py-1\"","tokens":["min-h-[var(--of-diff-toolbar-height,2.5rem)]"],"count":1,"reason":"Align the attached diff toolbar with the adjacent tab strip, retaining the existing standalone height and narrow-host wrapping."},
     {"tag":"div","context":"class=\"w-px h-5 bg-base-300 mx-1 self-center\"","tokens":["h-5","w-px"],"count":3,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing. One-pixel separator between diff toolbar action groups; not a control hit area."},
     {"tag":"div","context":"class=\"w-48\"","tokens":["w-48"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100 pr-2 focus:outline-none focus-visible:ring-2 focus:ring-2 focus:ring-primary focus:ring-inset\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"alert alert-warning py-2 px-4 rounded-none border-x-0 border-t-0 text-sm\"","tokens":["rounded-none"],"count":1,"reason":"Square shared edges between connected diff rows, inspector sections or inline messages."},
     {"tag":"div","context":"style=\"height: {virtualizer.totalSize}px; width: 100%; position: relative;\"","tokens":["width: 100%"],"count":1,"reason":"Virtual diff canvas fills its scroll viewport; width follows the parent rather than fixing a control size."},
-    {"tag":"div","context":"style=\"position: absolute; top: {row.start}px; width: 100%; padding: 0 0 12px 0;\"","tokens":["width: 100%"],"count":1,"reason":"Absolutely positioned virtual diff rows span their parent canvas."}
+    {"tag":"div","context":"style=\"position: absolute; top: {row.start}px; width: 100%;\"","tokens":["width: 100%"],"count":1,"reason":"Absolutely positioned virtual diff rows span their parent canvas."}
   ],
   "packages/pr-review-ui/src/FileContentsError.svelte": [
     {"tag":"div","context":"class=\"min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
@@ -46,9 +46,6 @@
   ],
   "packages/pr-review-ui/src/InlineCommentForm.svelte": [
     {"tag":"div","context":"class=\"flex min-w-0 items-center gap-2 text-base-content\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
-  ],
-  "packages/pr-review-ui/src/InlineCommentThread.svelte": [
-    {"tag":"div","context":"class=\"{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-[var(--of-radius-container)] text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' || comment.type === 'review-thread' ? 'border-l-4 border-l-info' : ''}\"","tokens":["rounded-t-none"],"count":1,"reason":"Square shared edges between connected diff rows, inspector sections or inline messages."}
   ],
   "packages/pr-review-ui/src/InlineExistingComment.svelte": [
     {"tag":"div","context":"class=\"w-5 h-5 rounded-[var(--of-radius-round)] bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0\"","tokens":["w-5","h-5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."}
@@ -514,7 +511,8 @@
   "src/components/task-detail/SelfReviewWorkspace.svelte": [
     {"tag":"div","context":"class=\"flex h-full w-full min-w-0 flex-col overflow-hidden\"","tokens":["min-w-0"],"count":1,"reason":"Keep horizontal overflow inside the review workspace rather than widening the task host."},
     {"tag":"div","context":"class=\"flex min-h-0 min-w-0 flex-1 overflow-hidden\"","tokens":["min-h-0","min-w-0"],"count":1,"reason":"Fit the diff and shared panel below the review bar without workspace-level scrolling."},
-    {"tag":"div","context":"class=\"relative flex min-w-0 flex-1 overflow-hidden\"","tokens":["min-w-0"],"count":1,"reason":"The diff flexes beside the bounded panel; horizontal code scrolling stays inside the diff."}
+    {"tag":"div","context":"class=\"relative flex min-w-0 flex-1 overflow-hidden\"","tokens":["min-w-0"],"count":1,"reason":"The diff flexes beside the bounded panel; horizontal code scrolling stays inside the diff."},
+    {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center justify-end gap-1\"","tokens":["min-w-0"],"count":1,"reason":"Keep the relocated review actions shrinkable so they wrap within the diff toolbar."}
   ],
   "src/components/task-detail/SendToAgentPanel.svelte": [
     {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-2\"","tokens":["min-w-0"],"count":1,"reason":"Allow review actions to wrap within the workspace."},

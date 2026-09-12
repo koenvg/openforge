@@ -7,17 +7,16 @@ import { setPendingSelfReviewComments, getPendingSelfReviewComments } from '../.
 setupSelfReviewViewTestSuite()
 
 describe('Self Review shared panel', () => {
-  it('restores the selected tab after collapse and starts a new task with changed files', async () => {
+  it('reopens the changed-files panel after collapse and starts a new task with changed files', async () => {
     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
     const view = renderSelfReviewView()
     const files = await screen.findByRole('tab', { name: 'Changed files' })
+    await screen.findByRole('button', { name: 'Hide file tree' })
     expect(files.getAttribute('aria-selected')).toBe('true')
-    await fireEvent.click(screen.getByRole('tab', { name: 'GitHub comments' }))
-    expect(screen.getByText('No linked PR found')).toBeTruthy()
-    await fireEvent.click(screen.getByRole('button', { name: 'Collapse review panel' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide file tree' }))
     expect(screen.queryByRole('tablist', { name: 'Review navigation' })).toBeNull()
-    await fireEvent.click(screen.getByRole('button', { name: 'Show review panel' }))
-    expect(screen.getByRole('tab', { name: 'GitHub comments' }).getAttribute('aria-selected')).toBe('true')
+    await fireEvent.click(screen.getByRole('button', { name: 'Show file tree' }))
+    expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true')
     await view.rerender({ task: { ...baseTask, id: 'task-2' } })
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true')
@@ -45,7 +44,7 @@ describe('Self Review shared panel', () => {
     expect((screen.getByRole('searchbox', { name: 'Filter changed files' }) as HTMLInputElement).value).toBe('main.rs')
   })
 
-  it.each(['loading', 'empty', 'failure', 'populated'])('sends from the collapsed panel with a %s diff without losing newer feedback', async (state) => {
+  it.each(['loading', 'empty', 'failure', 'populated'])('keeps feedback available with a %s diff without losing newer feedback', async (state) => {
     if (state === 'loading') vi.mocked(getTaskDiff).mockReturnValue(new Promise(() => {}))
     else if (state === 'failure') vi.mocked(getTaskDiff).mockRejectedValue(new Error('Diff unavailable'))
     else vi.mocked(getTaskDiff).mockResolvedValue(state === 'empty' ? [] : [baseDiff])
@@ -54,23 +53,26 @@ describe('Self Review shared panel', () => {
     setPendingSelfReviewComments(baseTask.id, [original])
     const onSendToAgent = vi.fn()
     renderSelfReviewView({ onSendToAgent })
-    await fireEvent.click(await screen.findByRole('button', { name: 'Collapse review panel' }))
-    const send = await screen.findByRole('button', { name: /Send feedback/ })
+    if (state === 'populated') {
+      await screen.findByRole('button', { name: /Collapse diff for src\/main\.rs/ })
+      await fireEvent.click(await screen.findByRole('button', { name: 'Hide file tree' }))
+    }
+    const send = await screen.findByRole('button', { name: 'Send feedback (1)' })
     await fireEvent.click(send)
     await screen.findByRole('dialog', { name: 'Review the prompt before sending to the agent' })
     setPendingSelfReviewComments(baseTask.id, [original, added])
     await fireEvent.click(screen.getByRole('button', { name: 'Send to agent' }))
     expect(onSendToAgent).toHaveBeenCalledWith(expect.stringContaining(original.body))
     expect(getPendingSelfReviewComments(baseTask.id)).toEqual([added])
-    expect(screen.getByRole('button', { name: 'Show review panel' })).toBeTruthy()
+    if (state === 'populated') expect(screen.getByRole('button', { name: 'Show file tree' })).toBeTruthy()
   })
 
   it.each([false, true])('opens and focuses changed files from the diff, collapsed=%s', async (collapsed) => {
     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
     renderSelfReviewView()
     const scrollArea = await screen.findByRole('region', { name: 'Diff scroll area' })
-    await fireEvent.click(screen.getByRole('tab', { name: 'GitHub comments' }))
-    if (collapsed) await fireEvent.click(screen.getByRole('button', { name: 'Collapse review panel' }))
+    if (collapsed) await fireEvent.click(screen.getByRole('button', { name: 'Hide file tree' }))
+    else await fireEvent.click(screen.getByRole('tab', { name: 'GitHub comments' }))
     await fireEvent.keyDown(scrollArea, { key: 'Tab', shiftKey: true })
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true')

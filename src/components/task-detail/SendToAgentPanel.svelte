@@ -4,6 +4,7 @@
   import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
 
@@ -102,15 +103,15 @@
       </span>
     {/if}
 
-    <Button
+    <IconButton
+      label="Refresh diff"
       variant="secondary"
       size="sm"
       onclick={onRefresh}
       title="Refresh diff"
     >
       <RefreshCw size={17} strokeWidth={1.8} aria-hidden="true" />
-      Refresh diff
-    </Button>
+    </IconButton>
 
     <Button
       size="sm"

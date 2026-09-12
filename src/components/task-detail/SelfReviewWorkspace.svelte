@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { tick } from 'svelte'
-  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
-  import SendToAgentPanel from './SendToAgentPanel.svelte'
+import { tick } from 'svelte'
+import SendToAgentPanel from './SendToAgentPanel.svelte'
   import SelfReviewSidePanel from './SelfReviewSidePanel.svelte'
   import SelfReviewDiffPanel from './SelfReviewDiffPanel.svelte'
   import SelfReviewRepositoryPreview from './SelfReviewRepositoryPreview.svelte'
@@ -33,22 +32,6 @@
 <div class="flex h-full w-full min-w-0 flex-col overflow-hidden"
   style="background: var(--of-review-canvas); --of-diff-toolbar-height: calc(var(--of-control-height) + 2 * var(--of-space1) + var(--of-border-width)); --of-diff-section-radius: 0px; --of-diff-section-top-border-width: 0px"
 >
-  <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 p-1" role="group" aria-label="Review bar">
-    <Button size="sm" variant="ghost" aria-expanded={controller.sidePanelVisible} onclick={controller.toggleSidePanel}>
-      {controller.sidePanelVisible ? 'Collapse review panel' : 'Show review panel'}
-    </Button>
-    {#key controller.taskId}
-      <SendToAgentPanel
-        {agentStatus}
-        {onSendToAgent}
-        onRefresh={controller.refresh}
-        pendingInlineComments={controller.feedbackPane.composer.pendingInlineComments}
-        selectedPrComments={controller.feedbackPane.pullRequest.selection.selectedPrComments}
-        onPendingInlineCommentsChange={controller.feedbackPane.composer.onPendingInlineCommentsChange}
-        onSendComplete={controller.feedbackPane.composer.onSendComplete}
-      />
-    {/key}
-  </div>
   <div bind:clientWidth={workspaceWidth} class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
     {#if controller.sidePanelVisible}
       {#key controller.taskId}
@@ -59,7 +42,23 @@
       <SelfReviewDiffPanel
         {controller}
         onRequestFocusFileTree={focusFileTree}
-      />
+      >
+        {#snippet toolbarExtra()}
+          <div class="flex min-w-0 flex-wrap items-center justify-end gap-1">
+            {#key controller.taskId}
+              <SendToAgentPanel
+                {agentStatus}
+                {onSendToAgent}
+                onRefresh={controller.refresh}
+                pendingInlineComments={controller.feedbackPane.composer.pendingInlineComments}
+                selectedPrComments={controller.feedbackPane.pullRequest.selection.selectedPrComments}
+                onPendingInlineCommentsChange={controller.feedbackPane.composer.onPendingInlineCommentsChange}
+                onSendComplete={controller.feedbackPane.composer.onSendComplete}
+              />
+            {/key}
+          </div>
+        {/snippet}
+      </SelfReviewDiffPanel>
       {#if controller.repositoryPreview}
         <SelfReviewRepositoryPreview
           target={controller.repositoryPreview}

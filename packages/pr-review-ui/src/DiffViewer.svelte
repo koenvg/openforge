@@ -1,13 +1,12 @@
 <script lang="ts">
   import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
-  import { ChevronDown, ChevronUp, PanelLeftOpen, Search, X } from '@lucide/svelte'
+  import { ChevronDown, ChevronUp, Columns2, PanelLeftOpen, Rows3, Search, TextWrap, X } from '@lucide/svelte'
   import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { ReviewThread } from '@openforge-app/plugin-sdk'
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
-  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
   import type { OpenReviewImage } from './reviewImages'
@@ -326,7 +325,11 @@
   tabindex="-1"
   onkeydown={search.handleRootKeydown}
 >
-  <div class="diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-200 px-2 py-1">
+  <div
+      class="diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 px-2 py-1"
+    role="toolbar"
+    aria-label="Diff controls"
+  >
     {#if onToggleFileTree}
       <IconButton
         label={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
@@ -340,35 +343,37 @@
       </IconButton>
       <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
-    <Button
+    <IconButton
+      label="Split diff view"
       variant={diffViewMode === DiffModeEnum.Split ? 'outline' : 'ghost'}
       size="sm"
-      aria-label="Split diff view"
+      title="Split diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Split}
       onclick={() => (diffViewMode = DiffModeEnum.Split)}
     >
-      Split
-    </Button>
-    <Button
+      <Columns2 size={18} strokeWidth={1.8} aria-hidden="true" />
+    </IconButton>
+    <IconButton
+      label="Unified diff view"
       variant={diffViewMode === DiffModeEnum.Unified ? 'outline' : 'ghost'}
       size="sm"
-      aria-label="Unified diff view"
+      title="Unified diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Unified}
       onclick={() => (diffViewMode = DiffModeEnum.Unified)}
     >
-      Unified
-    </Button>
+      <Rows3 size={18} strokeWidth={1.8} aria-hidden="true" />
+    </IconButton>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-    <Button
+    <IconButton
+      label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       variant={diffViewWrap ? 'outline' : 'ghost'}
       size="sm"
       onclick={() => { diffViewWrap = !diffViewWrap; saveDiffViewWrap(diffViewWrap) }}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
-      aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-pressed={diffViewWrap}
     >
-      Wrap
-    </Button>
+      <TextWrap size={18} strokeWidth={1.8} aria-hidden="true" />
+    </IconButton>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     <IconButton label="Search diff" size="sm" onclick={search.open} title="Search (⌘F)">
       <Search size={18} strokeWidth={1.8} aria-hidden="true" />
@@ -451,7 +456,7 @@
           <div
             data-diff-file={file.filename}
             data-index={row.index}
-            style="position: absolute; top: {row.start}px; width: 100%; padding: 0 0 12px 0;"
+            style="position: absolute; top: {row.start}px; width: 100%;"
             use:virtualizer.measureAction
           >
             <DiffFileSection
