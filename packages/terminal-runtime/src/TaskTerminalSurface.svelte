@@ -16,6 +16,7 @@
     createTaskTerminalController,
     type TaskTerminalBinding,
     type TaskTerminalController,
+    type TaskTerminalRestartState,
   } from './taskTerminalController'
   import type { ShellLifecycleState } from './terminalRuntime'
   import type { TerminalSurfaceAdapter } from './terminalSurfaceAdapter'
@@ -50,6 +51,7 @@
     currentPtyInstance: null,
     hasOutput: false,
   })
+  let restartState = $state<TaskTerminalRestartState>({ pending: false, error: null })
   let showReadyAffordance = $derived(showShellReadyAffordance && shouldShowShellReadyAffordance(isActive, lifecycle))
 
   const shellLabel = $derived(getShellLabel(terminalIndex))
@@ -69,6 +71,7 @@
       adapter: nextAdapter,
       terminalHost: terminalEl,
       onLifecycleChange: (state) => { lifecycle = state },
+      onRestartStateChange: (state) => { restartState = state },
     })
   }
 
@@ -135,12 +138,24 @@
           class="font-mono"
           type="button"
           onclick={handleRestart}
+          disabled={restartState.pending}
           aria-label={restartShellLabel}
           title={restartShellTitle}
         >
-          Restart shell
+          {restartState.pending ? 'Restarting...' : 'Restart shell'}
         </Button>
       </div>
     {/if}
   </div>
+  {#if restartState.error}
+    <p role="alert" class="restart-error shrink-0 overflow-auto break-words px-3 py-2 text-sm text-error">
+      {restartState.error}
+    </p>
+  {/if}
 </div>
+
+<style>
+  .restart-error {
+    max-height: calc(var(--of-control-height) * 4);
+  }
+</style>
