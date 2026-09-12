@@ -1,4 +1,6 @@
 const interestingEvents = new Set([
+  "permission.asked",
+  "question.asked",
   "session.created",
   "session.status",
   "session.idle",
@@ -69,6 +71,9 @@ function transcriptPathFromEvent(event) {
 
 function openForgeLifecycleKind(event) {
   switch (event?.type) {
+    case "permission.asked":
+    case "question.asked":
+      return "requested_permission"
     case "session.created":
       return "started"
     case "session.idle":
@@ -97,7 +102,7 @@ async function postOpenForgeEvent(event) {
   const taskId = process.env.OPENFORGE_TASK_ID
   const ptyInstanceId = Number(process.env.OPENFORGE_PTY_INSTANCE_ID ?? "0")
   const port = process.env.OPENFORGE_HTTP_PORT
-  if (!taskId || !ptyInstanceId || !port || !event?.type) return
+  if (!taskId || !ptyInstanceId || (!port && !process.env.OPENFORGE_AGENT_CONFIG) || !event?.type) return
   if (!interestingEvents.has(event.type)) return
   const kind = openForgeLifecycleKind(event)
   if (!kind) return
@@ -106,10 +111,7 @@ async function postOpenForgeEvent(event) {
   if (kind === "ended" && providerSessionId) endedSessionIds.add(providerSessionId)
 
   try {
-    await fetch(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    await sendOpenForgeNotification({
         provider: "opencode",
         task_id: taskId,
         pty_instance_id: ptyInstanceId,
@@ -119,10 +121,9 @@ async function postOpenForgeEvent(event) {
         raw_status_type: statusTypeFromEvent(event),
         transcript_path: transcriptPathFromEvent(event),
         activity_snapshot: boundedActivitySnapshot(event),
-      }),
-    })
+    }, `http://127.0.0.1:${port}/hooks/agent-lifecycle`)
   } catch {
-    // Keep OpenCode responsive if OpenForge is not listening.
+    console.error("[openforge] OpenCode notification acceptance failed")
   }
 }
 

@@ -1,7 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-const OPENCODE_PLUGIN_SOURCE: &str = include_str!("opencode-plugin/openforge.ts");
+const OPENCODE_PLUGIN_SOURCE: &str = concat!(
+    include_str!("agent-notifications/client.js"),
+    "\n",
+    include_str!("opencode-plugin/openforge.ts")
+);
 
 fn opencode_config_dir() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
@@ -28,6 +32,18 @@ pub fn ensure_opencode_plugin_installed() -> Result<PathBuf, Box<dyn std::error:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opencode_permission_and_question_events_report_waiting() {
+        let payloads = evaluate_posted_payloads_for_events(
+            r#"[
+            { type: 'permission.asked', properties: { sessionID: 'ses_waiting' } },
+            { type: 'question.asked', properties: { sessionID: 'ses_waiting' } }
+        ]"#,
+        );
+        assert_eq!(payloads.len(), 2);
+        assert!(payloads.iter().all(|p| p["kind"] == "requested_permission"));
+    }
 
     #[test]
     fn opencode_plugin_reports_lifecycle_events_to_openforge_hook() {

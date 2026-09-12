@@ -111,15 +111,15 @@ fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
 }
 
 fn lifecycle_hook_command(port: u16, event_type: &str, _include_tool_name: bool) -> String {
-    let Some(_kind) = claude_lifecycle_kind_from_event(event_type) else {
+    let Some(kind) = claude_lifecycle_kind_from_event(event_type) else {
         return String::new();
     };
     let Some(endpoint) = lifecycle_hook_endpoint(event_type) else {
         return String::new();
     };
+    let stable = crate::notification_hooks::shell_command("claude-code", kind, event_type);
     format!(
-        "curl -s -o /dev/null -X POST 'http://127.0.0.1:{}/hooks/{}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$CLAUDE_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @- ",
-        port, endpoint
+        "if [ -n \"$OPENFORGE_AGENT_CONFIG\" ]; then {stable}; else curl -s -o /dev/null -X POST 'http://127.0.0.1:{port}/hooks/{endpoint}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$CLAUDE_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @-; fi "
     )
 }
 

@@ -1,7 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-const PI_EXTENSION_SOURCE: &str = include_str!("pi-extension/openforge.ts");
+const PI_EXTENSION_SOURCE: &str = concat!(
+    include_str!("agent-notifications/client.js"),
+    "\n",
+    include_str!("pi-extension/openforge.ts")
+);
 
 pub fn get_pi_extension_install_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|config| config.join("openforge").join("pi-extension"))

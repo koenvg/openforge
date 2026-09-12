@@ -134,7 +134,34 @@ where
     Fut: std::future::Future<Output = Result<bool, String>> + Send + 'static,
 {
     let status_change = record_agent_lifecycle_notification(&state, &notification);
+    publish_recorded_lifecycle(
+        state,
+        notification,
+        transcript_path,
+        activity_snapshot,
+        status_change,
+        title_refresh,
+    )
+    .await
+}
 
+pub(in crate::http_server) async fn publish_recorded_lifecycle<F, Fut>(
+    state: AppState,
+    notification: crate::agent_lifecycle::AgentLifecycleNotification,
+    transcript_path: Option<String>,
+    activity_snapshot: Option<String>,
+    status_change: Option<crate::agent_lifecycle::AgentLifecycleStatusChange>,
+    title_refresh: F,
+) -> Result<Json<serde_json::Value>, StatusCode>
+where
+    F: FnOnce(
+            Arc<std::sync::Mutex<crate::db::Database>>,
+            crate::task_metadata_refresh::QueuedTaskDisplayTitleRefresh,
+        ) -> Fut
+        + Send
+        + 'static,
+    Fut: std::future::Future<Output = Result<bool, String>> + Send + 'static,
+{
     if let Some(change) = status_change {
         emit_agent_status_changed(&state, &change);
         if change.status == "completed" {

@@ -7,6 +7,8 @@ mod agent_routes;
 pub use agent::*;
 pub use agent_routes::agent_route_allowed;
 mod host_error;
+mod notification;
+pub use notification::*;
 mod messages;
 pub use messages::*;
 

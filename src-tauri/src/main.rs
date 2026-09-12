@@ -33,6 +33,7 @@ mod http_server;
 mod idle_resource;
 mod jira_runtime;
 mod migration;
+mod notification_hooks;
 mod opencode_client;
 mod opencode_plugin;
 mod pi_extension;

@@ -2,6 +2,7 @@ use self::support::{create_agent_session_fixture, AgentSessionFixture};
 use super::*;
 
 mod claude_code;
+mod durable;
 mod grok;
 mod opencode;
 mod pi;

@@ -4,6 +4,10 @@ mod agent_gateway;
 mod backend;
 mod host;
 mod journal;
+mod notification_delivery;
+mod notification_journal;
+#[cfg(test)]
+mod notification_journal_tests;
 mod output;
 mod process;
 mod server;

@@ -1843,6 +1843,21 @@ INSERT OR IGNORE INTO config (key, value)
     M::up_with_hook("", |tx| {
         ensure_review_thread_tables(tx).map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up_with_hook(
+        "CREATE TABLE IF NOT EXISTS agent_notification_receipts (journal_id TEXT PRIMARY KEY, position INTEGER NOT NULL CHECK(position > 0));
+         CREATE TABLE IF NOT EXISTS agent_deferred_completions (
+             session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id) ON DELETE CASCADE,
+             obligation_id TEXT NOT NULL,
+             plan TEXT NOT NULL CHECK(length(CAST(plan AS BLOB)) <= 16384)
+         );",
+        |tx| {
+            tx.prepare("SELECT journal_id, position FROM agent_notification_receipts LIMIT 0")
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            tx.prepare("SELECT session_id, obligation_id, plan FROM agent_deferred_completions LIMIT 0")
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            Ok(())
+        },
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets

@@ -1,4 +1,4 @@
-//! Bounded, authenticated HTTP forwarding. No domain handlers and no retry queue.
+//! Authenticated command forwarding and separately journaled lifecycle notifications.
 use crate::backend::Backend;
 use axum::{
     body::{to_bytes, Body},
@@ -25,12 +25,14 @@ const DEADLINE: Duration = Duration::from_secs(30);
 struct GatewayState {
     backend: Backend,
     registration: Registration,
+    notifications: Arc<std::sync::Mutex<crate::notification_journal::NotificationJournal>>,
 }
 
 pub(crate) fn start(
     listener: std::net::TcpListener,
     backend: Backend,
     registration: Registration,
+    notifications: crate::notification_journal::NotificationJournal,
 ) -> Result<(), openforge_session_protocol::Error> {
     listener
         .set_nonblocking(true)
@@ -46,11 +48,18 @@ pub(crate) fn start(
                 let Ok(listener) = tokio::net::TcpListener::from_std(listener) else {
                     return;
                 };
+                let notifications = Arc::new(std::sync::Mutex::new(notifications));
+                tokio::spawn(crate::notification_delivery::run(
+                    Arc::clone(&notifications),
+                    Arc::clone(&registration),
+                    backend.clone(),
+                ));
                 let router = Router::new()
                     .fallback(any(forward))
                     .with_state(GatewayState {
                         backend,
                         registration,
+                        notifications,
                     });
                 let permits = Arc::new(Semaphore::new(32));
                 loop {
@@ -136,6 +145,60 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
             StatusCode::FORBIDDEN,
             "caller-supplied ownership is forbidden",
         );
+    }
+    if request.uri().path() == openforge_session_protocol::NOTIFICATION_PATH {
+        if request.method() != "POST" || request.uri().query().is_some() {
+            return rejected(StatusCode::BAD_REQUEST, "invalid notification request");
+        }
+        let bytes = match tokio::time::timeout(
+            Duration::from_secs(2),
+            to_bytes(
+                request.into_body(),
+                openforge_session_protocol::MAX_NOTIFICATION_BYTES,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(bytes)) => bytes,
+            _ => {
+                return rejected(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "notification body exceeds limit or is incomplete",
+                )
+            }
+        };
+        let envelope = match serde_json::from_slice::<
+            openforge_session_protocol::NotificationEnvelope,
+        >(&bytes)
+        {
+            Ok(envelope) => envelope,
+            Err(_) => return rejected(StatusCode::BAD_REQUEST, "invalid notification envelope"),
+        };
+        return match tokio::task::spawn_blocking(move || {
+            state
+                .notifications
+                .lock()
+                .map_err(|_| openforge_session_protocol::Error::OutcomeUnknown)?
+                .accept(&agent, envelope)
+        })
+        .await
+        {
+            Ok(Ok(receipt)) => (StatusCode::ACCEPTED, Json(receipt)).into_response(),
+            Ok(Err(openforge_session_protocol::Error::InvalidRequest)) => {
+                rejected(StatusCode::BAD_REQUEST, "invalid notification envelope")
+            }
+            Ok(Err(openforge_session_protocol::Error::Unauthorized)) => {
+                rejected(StatusCode::FORBIDDEN, "notification ownership rejected")
+            }
+            Ok(Err(openforge_session_protocol::Error::OperationConflict)) => rejected(
+                StatusCode::CONFLICT,
+                "notification ID reused with different payload",
+            ),
+            _ => rejected(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "notification journal full or unavailable; acceptance not confirmed",
+            ),
+        };
     }
     if !openforge_session_protocol::agent_route_allowed(
         request.method().as_str(),

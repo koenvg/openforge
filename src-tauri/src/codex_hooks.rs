@@ -4,7 +4,11 @@ use std::path::{Path, PathBuf};
 pub(crate) const OPENFORGE_CODEX_PROFILE_NAME: &str = "openforge-lifecycle";
 const OPENFORGE_CODEX_SANDBOX_MODE: &str = "danger-full-access";
 const OPENFORGE_CODEX_APPROVAL_POLICY: &str = "never";
-const CODEX_HOOK_SOURCE: &str = include_str!("codex-hooks/openforge-hook.js");
+const CODEX_HOOK_SOURCE: &str = concat!(
+    include_str!("agent-notifications/client.js"),
+    "\n",
+    include_str!("codex-hooks/openforge-hook.js")
+);
 
 pub(crate) fn codex_home_from(
     codex_home: Option<&Path>,

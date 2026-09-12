@@ -125,6 +125,31 @@ pub(crate) fn materialize_task_prompt_images(
     Ok(materialized)
 }
 
+/// A completion obligation's absolute deadlines survive Sidecar replacement.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct CompletionPlan {
+    pub(crate) grace_ms: u64,
+    pub(crate) ceiling_ms: u64,
+    pub(crate) wake_at_ms: u64,
+    pub(crate) transcript_path: Option<String>,
+    pub(crate) reported: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PendingCompletion {
+    pub(crate) id: String,
+    pub(crate) session_id: String,
+    pub(crate) task_id: String,
+    pub(crate) pty_instance_id: Option<u64>,
+    pub(crate) plan: CompletionPlan,
+}
+
+#[derive(Default)]
+pub(crate) struct LifecycleApplication {
+    pub(crate) change: Option<AgentLifecycleStatusChange>,
+    pub(crate) completion: Option<PendingCompletion>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentLifecycleEventKind {
@@ -214,129 +239,11 @@ pub(crate) fn lifecycle_status_transition(
     }
 }
 
-fn provider_session_id_is_persistable(provider: &str, provider_session_id: &str) -> bool {
-    provider != "opencode" || provider_session_id.starts_with("ses")
-}
-
-fn session_provider_id<'a>(session: &'a AgentSessionRow, provider: &str) -> Option<&'a str> {
-    match provider {
-        "opencode" => session.opencode_session_id.as_deref(),
-        "claude-code" => session.claude_session_id.as_deref(),
-        "pi" => session.pi_session_id.as_deref(),
-        "grok" => session.grok_session_id.as_deref(),
-        _ => None,
-    }
-}
-
-fn provider_session_id_is_claimed_elsewhere(
-    db: &db::Database,
-    current_session: &AgentSessionRow,
-    provider: &str,
-    provider_session_id: &str,
-) -> Result<bool, String> {
-    if !matches!(provider, "claude-code" | "pi") {
-        return Ok(false);
-    }
-
-    let sessions = db
-        .get_sessions_by_provider(provider)
-        .map_err(|e| format!("failed to load provider sessions: {e}"))?;
-
-    for session in sessions {
-        if session.id == current_session.id
-            || session_provider_id(&session, provider) != Some(provider_session_id)
-        {
-            continue;
-        }
-
-        let claimed_elsewhere = match provider {
-            "claude-code" => matches!(session.status.as_str(), "running" | "paused"),
-            "pi" => session.ticket_id != current_session.ticket_id,
-            _ => false,
-        };
-        if claimed_elsewhere {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
 pub fn apply_agent_lifecycle_notification(
     db: &db::Database,
     notification: &AgentLifecycleNotification,
 ) -> Result<Option<AgentLifecycleStatusChange>, String> {
-    let Some(session) = db
-        .get_latest_session_for_ticket(&notification.task_id)
-        .map_err(|e| format!("failed to load latest agent session: {e}"))?
-    else {
-        return Ok(None);
-    };
-
-    if session.provider != notification.provider {
-        return Ok(None);
-    }
-
-    if provider_requires_pty_instance(&notification.provider) {
-        let Some(pty_instance_id) = notification.pty_instance_id else {
-            return Ok(None);
-        };
-        if !session_matches_pty_instance(&session, pty_instance_id) {
-            return Ok(None);
-        }
-    }
-
-    if let Some(provider_session_id) = notification
-        .provider_session_id
-        .as_deref()
-        .filter(|id| !id.is_empty())
-        .filter(|id| provider_session_id_is_persistable(&notification.provider, id))
-    {
-        let may_persist = notification.provider != "pi" || session.pi_session_id.is_none();
-        if may_persist {
-            let claimed_elsewhere = provider_session_id_is_claimed_elsewhere(
-                db,
-                &session,
-                &notification.provider,
-                provider_session_id,
-            )?;
-            if !claimed_elsewhere {
-                db.set_agent_session_provider_id(
-                    &session.id,
-                    &notification.provider,
-                    provider_session_id,
-                )
-                .map_err(|e| format!("failed to persist provider session id: {e}"))?;
-            }
-        }
-    }
-
-    let (target_status, eligible_statuses) = lifecycle_status_transition(notification.kind);
-
-    if !eligible_statuses.is_empty() && !eligible_statuses.contains(&session.status.as_str()) {
-        return Ok(None);
-    }
-
-    if session.status != target_status {
-        db.update_agent_session(
-            &session.id,
-            &session.stage,
-            target_status,
-            session.checkpoint_data.as_deref(),
-            None,
-        )
-        .map_err(|e| format!("failed to update agent session status: {e}"))?;
-    }
-
-    Ok(Some(AgentLifecycleStatusChange {
-        task_id: notification.task_id.clone(),
-        status: target_status.to_string(),
-        provider: notification.provider.clone(),
-        kind: notification.kind,
-        pty_instance_id: notification.pty_instance_id,
-        raw_event_type: notification.raw_event_type.clone(),
-        raw_status_type: notification.raw_status_type.clone(),
-    }))
+    db.apply_lifecycle_notification(notification)
 }
 
 pub(crate) fn build_start_response(
@@ -881,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    fn session_provider_id_returns_grok_session_id() {
+    fn grok_session_id_round_trips_through_database() {
         use crate::db::test_helpers::*;
         let (db, _temp_dir) = make_test_db("session_provider_id_returns_grok_session_id");
         let task = db
@@ -903,7 +810,7 @@ mod tests {
             .get_agent_session("ses-grok-provider-id")
             .expect("get session")
             .expect("session exists");
-        assert_eq!(session_provider_id(&session, "grok"), Some("grok-abc"));
+        assert_eq!(session.grok_session_id.as_deref(), Some("grok-abc"));
     }
 
     #[test]

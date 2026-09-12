@@ -23,6 +23,7 @@ mod authentication;
 pub(crate) mod deferred_completion;
 mod internal_transport;
 mod legacy_transport;
+mod notifications;
 mod plugin_management;
 mod review_threads;
 mod server_lifecycle;

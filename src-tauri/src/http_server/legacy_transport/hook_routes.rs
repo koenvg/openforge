@@ -41,14 +41,6 @@ pub(in crate::http_server) fn map_hook_to_status(
     Some(target_status.to_string())
 }
 
-fn agent_session_is_running(state: &AppState, task_id: &str) -> bool {
-    crate::db::acquire_db(&state.db)
-        .get_latest_session_for_ticket(task_id)
-        .ok()
-        .flatten()
-        .is_some_and(|session| session.status == "running")
-}
-
 /// Claude's `Stop` hook fires at the end of every turn, including turns that leave a
 /// backgrounded shell, an armed `Monitor` or a subagent running. The session resumes on its
 /// own when that work notifies, so reporting `Ended` there marks the task as needing
@@ -62,7 +54,7 @@ async fn deferrable_background_work(
     transcript_path: Option<&str>,
     background_tasks: Option<&serde_json::Value>,
 ) -> crate::claude_background_work::OutstandingWork {
-    if event_type != "stop" || !agent_session_is_running(state, task_id) {
+    if event_type != "stop" {
         return crate::claude_background_work::OutstandingWork::Replayed(Vec::new());
     }
 
@@ -76,7 +68,7 @@ async fn deferrable_background_work(
     .await;
     if !outstanding.is_empty() {
         info!(
-            "[http_server] task {} still has background work running per {}, deferring completion: {}",
+            "[http_server] task {} has background work per {}: {}",
             task_id,
             outstanding.source(),
             crate::claude_background_work::describe_tasks(outstanding.tasks())
@@ -183,12 +175,13 @@ async fn handle_hook(
                 payload.background_tasks.as_ref(),
             )
             .await;
-            let kind = if outstanding.is_empty() {
-                kind
-            } else {
-                crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy
-            };
-            let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+            let completion = crate::http_server::deferred_completion::completion_plan(
+                &state,
+                payload.transcript_path.clone(),
+                &outstanding,
+            )
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+            let mut notification = crate::agent_lifecycle::AgentLifecycleNotification {
                 provider: "claude-code".to_string(),
                 task_id: task_id.clone(),
                 pty_instance_id,
@@ -197,34 +190,45 @@ async fn handle_hook(
                 raw_event_type: Some(event_type.to_string()),
                 raw_status_type: None,
             };
-            let response = handle_agent_lifecycle_notification(
-                state.clone(),
+            let db = state.db.clone();
+            let recorded = notification.clone();
+            let application = tokio::task::spawn_blocking(move || {
+                crate::db::acquire_db(&db)
+                    .apply_lifecycle_with_completion(&recorded, completion.as_ref())
+            })
+            .await
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+            if let Some(change) = application.change.as_ref() {
+                notification.kind = change.kind;
+                if let Some(completion) = application.completion {
+                    state
+                        .deferred_completion_watcher
+                        .schedule(&state, completion)
+                        .await;
+                } else {
+                    state.deferred_completion_watcher.resumed(&task_id).await;
+                }
+            }
+            let snapshot = bounded_claude_activity_snapshot(
+                event_type,
+                &payload,
+                provider_session_id.as_deref(),
+            );
+            return super::events::publish_recorded_lifecycle(
+                state,
                 notification,
                 payload.transcript_path.clone(),
-                bounded_claude_activity_snapshot(
-                    event_type,
-                    &payload,
-                    provider_session_id.as_deref(),
-                ),
+                snapshot,
+                application.change,
+                |db, refresh| async move {
+                    crate::task_metadata_refresh::refresh_queued_task_display_title_with_ai_once(
+                        db, refresh,
+                    )
+                    .await
+                },
             )
             .await;
-            if outstanding.is_empty() {
-                state.deferred_completion_watcher.resumed(&task_id).await;
-            } else {
-                state
-                    .deferred_completion_watcher
-                    .deferred(
-                        &state,
-                        crate::http_server::deferred_completion::DeferredCompletion {
-                            task_id,
-                            pty_instance_id,
-                            transcript_path: payload.transcript_path.clone(),
-                        },
-                        &outstanding,
-                    )
-                    .await;
-            }
-            return response;
         }
     } else {
         warn!(

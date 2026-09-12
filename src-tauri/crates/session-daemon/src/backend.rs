@@ -109,6 +109,15 @@ impl Backend {
             .values()
             .all(|record| record.process.is_none()))
     }
+    pub fn live_agent_identities(&self) -> Result<Vec<PtyIdentity>, Error> {
+        Ok(self
+            .table()?
+            .records
+            .values()
+            .filter(|record| record.agent.is_some())
+            .map(|record| record.metadata.pty.clone())
+            .collect())
+    }
     pub fn authenticate_agent(
         &self,
         token: &str,

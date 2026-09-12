@@ -24,7 +24,15 @@ pub fn run() -> Result<(), Error> {
         port: agent_listener.local_addr().map_err(io_error)?.port(),
     };
     let mut host = Host::new(runtime.credentials().installation.clone(), agent_runtime)?;
-    crate::agent_gateway::start(agent_listener, host.backend.clone(), host.sidecar.clone())?;
+    let notifications = crate::notification_journal::NotificationJournal::open(
+        &runtime.path().join("notifications.sqlite"),
+    )?;
+    crate::agent_gateway::start(
+        agent_listener,
+        host.backend.clone(),
+        host.sidecar.clone(),
+        notifications,
+    )?;
     eprintln!("session daemon ready");
     loop {
         host.poll()?;
