@@ -1,4 +1,7 @@
 [
+  { "catalog": "pages", "story": "pages-command-palette--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-command-palette--theme-override\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-project-switching--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-project-switching--theme-override\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-action-palette--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-action-palette--theme-override\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-light", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-dark", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "openforge-light", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },

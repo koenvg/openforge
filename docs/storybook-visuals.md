@@ -10,7 +10,7 @@ OpenForge Light and OpenForge Dark use the Studio design: neutral surfaces, roun
 
 Workshop Light and Workshop Dark are additional choices with warm paper or graphite surfaces, amber actions, and crisp corners. They remain available for interactive Storybook review but are not part of the canonical screenshot matrix. There are no separate Studio choices or accepted `studio-light` / `studio-dark` capture IDs. Theme selection does not override the user's terminal font.
 
-Glass and in-app frosted layers remain deferred. No native transparency or backdrop blur is included.
+Built-in themes remain opaque. Plugin themes can opt into in-app palette translucency and backdrop blur through the [SDK search palette hooks](sdk-search-palette.md). Native desktop transparency remains out of scope.
 
 ## Commands
 

@@ -10,6 +10,7 @@ const meta = { ...navigationMeta('commands', 'Pages/Command palette'), title: 'P
 export default meta
 
 export const Populated: Story = {}
+export const ThemeOverride: Story = { args: { paletteTheme: true } }
 export const Empty: Story = navigationState('commands', 'empty')
 export const Loading: Story = navigationState('commands', 'loading')
 export const Failure: Story = navigationState('commands', 'failure')

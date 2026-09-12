@@ -6,6 +6,7 @@ const meta = { ...navigationMeta('actions', 'Pages/Action palette'), title: 'Pag
 export default meta
 
 export const Populated: Story = {}
+export const ThemeOverride: Story = { args: { paletteTheme: true } }
 export const Backlog: Story = navigationState('actions', 'backlog')
 export const Unavailable: Story = {
   ...navigationState('actions', 'unavailable'),

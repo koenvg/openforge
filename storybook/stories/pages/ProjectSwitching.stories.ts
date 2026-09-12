@@ -8,6 +8,7 @@ const meta = { ...navigationMeta('projects', 'Pages/Project switching'), title: 
 export default meta
 
 export const Populated: Story = {}
+export const ThemeOverride: Story = { args: { paletteTheme: true } }
 export const Empty: Story = navigationState('projects', 'empty')
 export const Attention: Story = navigationState('projects', 'attention')
 export const Narrow: Story = { globals: { viewport: { value: 'narrow', isRotated: false } } }

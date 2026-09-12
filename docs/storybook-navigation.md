@@ -1,6 +1,6 @@
 # Navigation and search catalog
 
-KVG-4695 covers Project switching, the command palette, the action palette, and file quick-open in the production board shell. The component catalog separately owns PaletteModal, PaletteInput, PaletteListbox, and PaletteFooter. File Viewer destinations, application-wide shortcut orchestration, SDK controls, and the remaining shell catalog belong to other slices.
+The project switcher, command palette, and action palette use the public SDK [search palette](sdk-search-palette.md). The component catalog covers that same SDK dialog. File quick-open remains a separate production workflow; File Viewer destinations and application-wide shortcut orchestration are unchanged.
 
 ## Browse and verify
 
@@ -16,7 +16,7 @@ pnpm storybook:coverage
 pnpm storybook:visual:check
 ```
 
-The browser test requires freshly built catalogs and the workspace Playwright Chromium installation. It runs all 41 navigation/control stories twice in the same document, checks declared diagnostics exactly, rejects unexpected warnings and errors, and verifies persisted fixture storage resets. It is opt-in because ordinary unit tests do not build static catalogs. The production-component tests and local adapter tests run in the ordinary renderer suite.
+The browser test requires freshly built catalogs and the workspace Playwright Chromium installation. It runs all registered navigation/control stories twice in the same document, checks declared diagnostics exactly, rejects unexpected warnings and errors, and verifies persisted fixture storage resets. It is opt-in because ordinary unit tests do not build static catalogs. The production-component tests and local adapter tests run in the ordinary renderer suite.
 
 The screenshot manifest selects 29 design-significant navigation/control cases across light and dark themes, desktop and narrow page sizes, and component-sized viewports. These supplement the two existing foundation baselines. Use the canonical Linux commands in [the visual review guide](storybook-visuals.md), not native screenshots, to update approvals. Coverage remains incremental as described in [the coverage guide](storybook-coverage.md).
 

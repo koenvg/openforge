@@ -26,6 +26,9 @@ export function navigationMeta(workflow: NavigationWorkflowKind, title: string) 
         else if (context.args.state === 'empty' || context.args.state === 'failure') await body.findByText('No tasks or commands match your search')
         else await body.findByRole('listbox')
       }
+      if (context.args.paletteTheme) {
+        await waitFor(() => expect(getComputedStyle(body.getByRole('dialog').querySelector('.of-search-palette-panel')!).backdropFilter).toBe('blur(12px)'))
+      }
       markNavigationReady(context)
     },
     args: {

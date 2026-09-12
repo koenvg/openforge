@@ -301,25 +301,19 @@ const inventory = {
     { source: 'packages/plugin-sdk/src/ui/PluginViewState.svelte', stories: ['sdk-view-states--content', 'sdk-view-states--empty', 'sdk-view-states--loading', 'sdk-view-states--error'] },
     { source: 'packages/plugin-sdk/src/ui/CollapsibleSection.svelte', stories: ['sdk-view-states--content', 'sdk-view-states--collapsed', 'sdk-view-states--overflow'] },
     {
-      source: 'src/components/shell/PaletteModal.svelte',
-      stories: ['components-palette-controls--populated', 'components-palette-controls--narrow', 'components-palette-controls--keyboard-selection'],
-    },
-    {
-      source: 'src/components/shared/ui/PaletteInput.svelte',
-      stories: ['components-palette-controls--populated', 'components-palette-controls--keyboard-selection'],
-    },
-    {
-      source: 'src/components/shared/ui/PaletteListbox.svelte',
+      source: 'packages/plugin-sdk/src/ui/SearchPalette.svelte',
       stories: [
         'components-palette-controls--populated', 'components-palette-controls--empty',
         'components-palette-controls--loading', 'components-palette-controls--overflow',
-        'components-palette-controls--keyboard-selection',
+        'components-palette-controls--narrow', 'components-palette-controls--keyboard-selection',
+        'components-palette-controls--grouped', 'components-palette-controls--confirmation',
+        'components-palette-controls--theme-override',
       ],
     },
-    {
-      source: 'src/components/shared/ui/PaletteFooter.svelte',
-      stories: ['components-palette-controls--populated', 'components-palette-controls--narrow'],
-    },
+    { source: 'src/components/shell/PaletteModal.svelte', stories: ['components-legacy-palette-controls--populated'] },
+    { source: 'src/components/shared/ui/PaletteInput.svelte', stories: ['components-legacy-palette-controls--populated', 'components-legacy-palette-controls--filtered'] },
+    { source: 'src/components/shared/ui/PaletteListbox.svelte', stories: ['components-legacy-palette-controls--populated', 'components-legacy-palette-controls--filtered'] },
+    { source: 'src/components/shared/ui/PaletteFooter.svelte', stories: ['components-legacy-palette-controls--populated'] },
     { source: 'plugins/file-viewer/src/FilesBrowserSection.svelte', stories: [
       'components-file-viewer--browser', 'components-file-viewer--browser-empty',
       'components-file-viewer--browser-loading', 'components-file-viewer--browser-failure',

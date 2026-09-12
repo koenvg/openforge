@@ -148,6 +148,8 @@ describe('CommandPalette component', () => {
 
     await waitFor(() => expect(screen.getByText('T-active')).toBeTruthy())
     expect(screen.queryByText('T-completed')).toBeNull()
+    expect(screen.getByLabelText('Ctrl+N/P')).toBeTruthy()
+    expect(screen.getByText(/open or run/)).toBeTruthy()
     expect(mockReadActiveTasks).toHaveBeenCalledOnce()
     expect(mockGetLatestSessions).toHaveBeenCalledWith(['T-active'])
   })

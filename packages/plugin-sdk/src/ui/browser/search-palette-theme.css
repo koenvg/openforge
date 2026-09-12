@@ -1,0 +1,14 @@
+.of-search-palette {
+  --of-palette-background: #f1f4f8;
+  --of-palette-border: #7a8599;
+  --of-palette-selection: #c9d5e8;
+  --of-palette-radius: 22px;
+  --of-palette-shadow: 0 16px 48px rgb(0 0 0 / 20%);
+}
+
+@supports (backdrop-filter: blur(12px)) {
+  .of-search-palette {
+    --of-palette-background: rgb(241 244 248 / 85%);
+    --of-palette-backdrop-filter: blur(12px);
+  }
+}
