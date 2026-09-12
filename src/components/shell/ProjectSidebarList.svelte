@@ -81,6 +81,12 @@
     }
   }
 
+  function collapsedMonogram(name: string): string {
+    // Uppercase in JS. CSS text-transform: uppercase splits supplementary-plane
+    // emoji (🔴) into lone surrogates, which render as the replacement glyph.
+    return firstGrapheme(name).toUpperCase()
+  }
+
   async function setProjectHidden(projectId: string, shouldHide: boolean) {
     if (isSavingHidden) {
       return
@@ -132,7 +138,7 @@
                 aria-current={isActive ? 'true' : undefined}
                 onclick={() => onSelectProject(project.id)}
               >
-                <span class="project-avatar" aria-hidden="true">{firstGrapheme(project.name)}</span>
+                <span class="project-avatar" aria-hidden="true">{collapsedMonogram(project.name)}</span>
                 {#if attentionCount > 0}
                   <span
                     class="project-status-indicator project-status-attention"
@@ -327,7 +333,6 @@
     color: currentColor;
     font-size: var(--of-text-xs);
     font-weight: var(--of-weight-semibold);
-    text-transform: uppercase;
   }
 
   .project-status-indicator {
