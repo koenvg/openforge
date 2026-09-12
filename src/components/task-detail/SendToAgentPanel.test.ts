@@ -13,6 +13,57 @@ describe('SendToAgentPanel', () => {
     vi.clearAllMocks()
   })
 
+  describe('success confirmation timer', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    })
+
+    it('keeps the latest confirmation visible for its full three seconds', async () => {
+      render(SendToAgentPanel, {
+        agentStatus: null, onSendToAgent: vi.fn(), onRefresh: vi.fn(),
+        pendingInlineComments: inlineComments,
+      })
+      await fireEvent.click(screen.getByRole('button', { name: /Send feedback/ }))
+      await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+      expect(screen.queryByText('Feedback sent to agent!')).not.toBeNull()
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await fireEvent.click(screen.getByRole('button', { name: /Send feedback/ }))
+      await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(screen.queryByText('Feedback sent to agent!')).not.toBeNull()
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(screen.queryByText('Feedback sent to agent!')).not.toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(screen.queryByText('Feedback sent to agent!')).toBeNull()
+    })
+
+    it('cancels the pending confirmation timer on destruction', async () => {
+      const view = render(SendToAgentPanel, {
+        agentStatus: null, onSendToAgent: vi.fn(), onRefresh: vi.fn(),
+        pendingInlineComments: inlineComments,
+      })
+      const initialTimerCount = vi.getTimerCount()
+      await fireEvent.click(screen.getByRole('button', { name: /Send feedback/ }))
+      await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+      expect(screen.queryByText('Feedback sent to agent!')).not.toBeNull()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(vi.getTimerCount()).toBe(initialTimerCount + 1)
+
+      view.unmount()
+
+      expect(vi.getTimerCount()).toBe(initialTimerCount)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(screen.queryByText('Feedback sent to agent!')).toBeNull()
+    })
+  })
+
   it('uses task-scoped pending inline comments for the send affordance', () => {
     render(SendToAgentPanel, {
       props: {
