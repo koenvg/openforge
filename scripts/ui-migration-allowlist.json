@@ -348,7 +348,6 @@
     {"tag":"Icon","context":"class=\"size-4 text-base-content/70\"","tokens":["size-4"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."}
   ],
   "src/components/project/ProjectSwitcherModal.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"max-h-[300px] overflow-y-auto\" optionClass={(project, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'} ${project.id === $activeProjectId ? 'text-primary' : ''}`}","tokens":["max-h-[300px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-warning\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
     {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-success animate-pulse\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
@@ -446,9 +445,6 @@
   "src/components/shared/ui/ResizableBottomPanel.svelte": [
     {"tag":"div","context":"class=\"absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none\"","tokens":["h-1"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
-  "src/components/shell/ActionPalette.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"max-h-[400px] overflow-y-auto\" optionClass={(_action, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}","tokens":["max-h-[400px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."}
-  ],
   "src/components/shell/ApplicationShell.svelte": [
     {"tag":"div","context":"class=\"flex flex-col flex-1 min-w-0 relative\"","tokens":["min-w-0"],"count":1,"reason":"Allow the application content column to shrink beside project navigation without overflowing the shell; not shared control sizing."}
   ],
@@ -458,7 +454,6 @@
     {"tag":"div","context":"class=\"of-sidebar-header h-12 px-2 flex items-center {collapsed ? 'justify-center' : 'justify-end'}\"","tokens":["h-12"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
   "src/components/shell/CommandPalette.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"max-h-[400px] overflow-y-auto\" optionClass={(_item, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}","tokens":["max-h-[400px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":2,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/shell/FileQuickOpen.svelte": [

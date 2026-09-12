@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>Search palette browser tests</title></head>
+  <body>
+    <script type="module">
+      import { mount } from 'svelte'
+      import Fixture from '../SearchPaletteBrowserFixture.svelte'
+      import { createThemeRegistry } from '/src/lib/themeRegistry.ts'
+      import { prepareThemeStylesheets } from '/src/lib/themeStylesheetLoader.ts'
+      import { createThemeDocumentAdapter } from '/src/lib/themeDocumentAdapter.ts'
+      import { BUILTIN_THEMES } from '/src/lib/themeContract.ts'
+      const adapter = createThemeDocumentAdapter(document.documentElement)
+      const registry = createThemeRegistry({
+        applyTheme: adapter.apply,
+        prepareTheme: (theme, signal) => prepareThemeStylesheets(document, theme, signal),
+      })
+      registry.registerContributedThemes([
+        { ...BUILTIN_THEMES[0], id: 'palette-test:glass', label: 'Palette test', stylesheets: ['palette.css'] },
+      ], { pluginId: 'palette-test', generation: 1 })
+      window.selectPaletteTheme = registry.selectTheme
+      mount(Fixture, { target: document.body })
+    </script>
+  </body>
+</html>

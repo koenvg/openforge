@@ -8,10 +8,7 @@
   import { executePluginCommand } from '../../lib/plugin/pluginRegistry'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import type { TaskDetail } from '../../lib/types'
-  import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
-  import PaletteInput from '../shared/ui/PaletteInput.svelte'
-  import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
-  import PaletteModal from './PaletteModal.svelte'
+  import SearchPalette from '@openforge-app/plugin-sdk/ui/SearchPalette.svelte'
 
   interface Props {
     onClose: () => void
@@ -163,15 +160,9 @@
     onClose()
   }
 
-  let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
-
   function selectPaletteItem(item: PaletteItem) {
     if (item.kind === 'task') selectTask(item.task)
     else void selectPluginCommand(item.pluginId, item.commandId)
-  }
-
-  function handleKeyDown(e: KeyboardEvent): boolean {
-    return paletteListbox?.handleKeydown(e) ?? false
   }
 
   function getProjectName(projectId: string | null): string | null {
@@ -193,29 +184,23 @@
 
 </script>
 
-<PaletteModal
+<SearchPalette
   ariaLabel="Search tasks or commands"
   testId="command-palette-backdrop"
   {onClose}
-  onKeydown={handleKeyDown}
->
-  <PaletteListbox
-    bind:this={paletteListbox}
-    items={paletteItems}
-    {selectedIndex}
-    onSelectedIndexChange={(index) => { selectedTaskKey = paletteItems[index]?.key ?? null }}
-    onSelect={selectPaletteItem}
-    getKey={(item) => item.key}
-    idPrefix="command-palette"
-    listboxLabel="Tasks and commands"
-    {loading}
-    onCancel={onClose}
-    listClass="max-h-[400px] overflow-y-auto"
-    optionClass={(_item, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}
-  >
-    {#snippet input(listboxId, activeDescendantId)}
-      <PaletteInput {listboxId} {activeDescendantId} bind:value={searchQuery} placeholder="Search tasks or commands..." />
-    {/snippet}
+  items={paletteItems}
+  {selectedIndex}
+  onSelectedIndexChange={(index) => { selectedTaskKey = paletteItems[index]?.key ?? null }}
+  onSelect={selectPaletteItem}
+  getKey={(item) => item.key}
+  listboxLabel="Tasks and commands"
+  {loading}
+  query={searchQuery}
+  onQueryChange={(value) => { searchQuery = value }}
+  placeholder="Search tasks or commands..."
+  actionLabel="open or run" trailingKey="Ctrl+N/P"
+  groupLabel={(item, index) => index === 0 || paletteItems[index - 1].kind !== item.kind ? item.kind === 'task' ? 'Tasks' : 'Commands' : null}
+ >
     {#snippet loadingContent()}
       <div class="px-4 py-6 text-center text-base-content/50 text-sm">Loading tasks...</div>
     {/snippet}
@@ -237,7 +222,6 @@
           </div>
           <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.prompt), 80)}</div>
         </div>
-        <span class="text-[10px] text-base-content/30 shrink-0">{item.task.status}</span>
       {:else}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
@@ -247,9 +231,9 @@
           </div>
           <div class="text-xs text-base-content/70 truncate mt-0.5">{item.title}</div>
         </div>
-        <span class="text-[10px] text-base-content/30 shrink-0">command</span>
       {/if}
     {/snippet}
-  </PaletteListbox>
-  <PaletteFooter actionLabel="open or run" trailingKey="Ctrl+N/P" />
-</PaletteModal>
+    {#snippet trailing(item)}
+      <span class="text-xs">{item.kind === 'task' ? item.task.status : 'command'}</span>
+    {/snippet}
+</SearchPalette>

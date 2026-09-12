@@ -9,10 +9,12 @@
   import type { PullRequestMergeMethod } from '../../../src/lib/types'
   import type { NavigationWorkflowKind } from '../fixtures/navigationScenario'
   import BoardPage from './BoardPage.svelte'
+  import paletteThemeStylesheet from '../../../packages/plugin-sdk/src/ui/browser/search-palette-theme.css?url'
 
-  let { workflow, state: scenarioState = 'populated', reset, onClose = () => {}, onSelectProject = () => {}, onExecute = () => {} }: {
+  let { workflow, state: scenarioState = 'populated', paletteTheme = false, reset, onClose = () => {}, onSelectProject = () => {}, onExecute = () => {} }: {
     workflow: NavigationWorkflowKind
     state?: string
+    paletteTheme?: boolean
     reset: () => Promise<void>
     onClose?: () => void
     onSelectProject?: (id: string) => void
@@ -31,6 +33,10 @@
     open = true
   }
 </script>
+
+<svelte:head>
+  {#if paletteTheme}<link rel="stylesheet" href={paletteThemeStylesheet} />{/if}
+</svelte:head>
 
 {#key generation}
 <BoardPage>

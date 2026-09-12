@@ -54,6 +54,8 @@ describe('ProjectSwitcherModal', () => {
       const dialog = screen.getByRole('dialog')
       expect(dialog).toBeTruthy()
 
+      expect(screen.getByLabelText('Ctrl+N/P')).toBeTruthy()
+      expect(screen.getByLabelText('Enter').parentElement?.textContent).toContain('select')
       const input = screen.getByPlaceholderText('Switch project...')
       expect(input).toBeTruthy()
     })

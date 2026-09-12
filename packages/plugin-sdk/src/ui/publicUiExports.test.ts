@@ -110,6 +110,7 @@ describe('plugin-sdk public UI exports', () => {
       'Modal',
       'Select',
       'SearchableSelect',
+      'SearchPalette',
       'Tabs',
       'AnchoredMenu',
       'SplitButton',

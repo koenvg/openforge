@@ -82,6 +82,8 @@ export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugi
   return plugin as MarkedFrontendPlugin<TPlugin>
 }
 
+export { useListNavigation, type ListNavigationConfig } from './listNavigation.js'
+
 export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces.js'
 
 export type {
