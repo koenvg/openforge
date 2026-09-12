@@ -1,6 +1,63 @@
 import { createHash } from 'node:crypto'
 
 const HOST_RUNTIME_SVELTE_BASE_URL = 'plugin://host-runtime/svelte/'
+const EXACT_SVELTE_VERSION = /^\d+\.\d+\.\d+$/
+
+/**
+ * Exact Svelte version the host runtime must ship. Plugin frontend artifacts
+ * externalize `svelte/internal/*` and call private compiler helpers on that
+ * shared instance, so the version a plugin compiles against must equal the
+ * version OpenForge packages. `catalogs.pinned.svelte` is the source of truth.
+ */
+export function pinnedSvelteVersionFromWorkspaceYaml(text) {
+  const lines = String(text).split(/\r?\n/)
+  let inCatalogs = false
+  let inPinned = false
+  let catalogsIndent = -1
+  let pinnedIndent = -1
+
+  for (const line of lines) {
+    if (/^\s*(#|$)/.test(line)) continue
+
+    const indent = line.match(/^(\s*)/)[1].length
+    const trimmed = line.trim()
+
+    if (!inCatalogs) {
+      if (trimmed === 'catalogs:') {
+        inCatalogs = true
+        catalogsIndent = indent
+      }
+      continue
+    }
+
+    if (indent <= catalogsIndent) break
+
+    if (!inPinned) {
+      if (trimmed === 'pinned:') {
+        inPinned = true
+        pinnedIndent = indent
+      }
+      continue
+    }
+
+    if (indent <= pinnedIndent) break
+
+    const match = trimmed.match(/^svelte:\s+(.+)$/)
+    if (!match) continue
+
+    const version = match[1].trim().replace(/^['"]|['"]$/g, '')
+    if (!EXACT_SVELTE_VERSION.test(version)) {
+      throw new Error(`pnpm-workspace.yaml catalogs.pinned.svelte must be an exact x.y.z version, found ${version}`)
+    }
+    return version
+  }
+
+  throw new Error('pnpm-workspace.yaml catalogs.pinned.svelte is missing')
+}
+
+export function svelteHostRuntimeInstallMismatchError(installedVersion, pinnedVersion) {
+  return `Svelte host runtime must be built from pinned svelte ${pinnedVersion}, but node_modules/svelte is ${installedVersion}. Run pnpm install before packaging. Plugin frontend artifacts compile against the pinned version and call private compiler helpers such as only_child on plugin://host-runtime/svelte.`
+}
 
 export const SVELTE_HOST_RUNTIME_MODULES = Object.freeze([
   { specifier: 'svelte', sourcePath: 'index-client.js', assetPath: 'index.js' },

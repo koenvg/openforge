@@ -1,6 +1,7 @@
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { compile } from 'svelte/compiler'
 import { build as viteBuild } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { get } from 'svelte/store'
@@ -91,6 +92,27 @@ function dataModule(code) {
 
 function isAbsoluteModuleUrl(specifier) {
   return /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(specifier)
+}
+
+function svelteCompilerHelpersFromClientCode(code) {
+  return [...new Set([...code.matchAll(/\$\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)].map(match => match[1]))]
+}
+
+function javascriptExportNames(code) {
+  const names = new Set()
+  for (const block of code.matchAll(/export\s*\{([^}]+)\}/g)) {
+    for (const specifier of block[1].split(',')) {
+      const exported = specifier.trim().split(/\s+as\s+/).pop()?.replace(/[;\s]/g, '')
+      if (exported) names.add(exported)
+    }
+  }
+  for (const match of code.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)/g)) {
+    names.add(match[1])
+  }
+  for (const match of code.matchAll(/export\s+(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)/g)) {
+    names.add(match[1])
+  }
+  return names
 }
 
 function svelteHostRuntimeTestStub(url) {
@@ -184,6 +206,40 @@ describe('Electron build Svelte host-runtime integration', () => {
     const internalClient = await readFile(join(outDir, 'internal', 'client', 'index.js'), 'utf8')
     expect(internalClient).not.toMatch(/^\s*import\s+.*from\s+['"](?:#|esm-env|clsx|svelte)/m)
     expect(internalClient).not.toMatch(/^\s*export\s+.*from\s+['"](?:#|esm-env|clsx|svelte)/m)
+  })
+
+  it('refuses to package a Svelte host runtime that does not match the pinned compiler version', async () => {
+    const fixtureRoot = temporaryTestPath('stale-svelte-host-runtime')
+    await writeMinimalHostRuntimeInputs(fixtureRoot)
+    await writeFile(join(fixtureRoot, 'pnpm-workspace.yaml'), `catalogs:\n  pinned:\n    svelte: 5.57.0\n`)
+    await writeFile(join(fixtureRoot, 'node_modules', 'svelte', 'package.json'), JSON.stringify({
+      name: 'svelte',
+      version: '5.56.10',
+    }))
+
+    await expect(copyHostRuntimeAssets(fixtureRoot, join(fixtureRoot, 'dist-electron'))).rejects.toThrow(
+      /pinned svelte 5\.57\.0[\s\S]*5\.56\.10[\s\S]*only_child/,
+    )
+  })
+
+  it('exports every Svelte compiler helper a typical plugin view calls on the shared host runtime', async () => {
+    const compiled = compile(
+      `<script>\n  let { title } = $props()\n</script>\n<p>{title}</p>\n`,
+      { filename: 'PluginView.svelte', generate: 'client', dev: false },
+    )
+    const helpers = svelteCompilerHelpersFromClientCode(compiled.js.code)
+    const outDir = temporaryTestPath('svelte-runtime-helpers')
+
+    await buildSvelteHostRuntimeAssets(repoRoot, outDir)
+
+    const internalClient = await readFile(join(outDir, 'internal', 'client', 'index.js'), 'utf8')
+    const exported = javascriptExportNames(internalClient)
+
+    expect(helpers.length).toBeGreaterThan(0)
+    expect(helpers).toContain('only_child')
+    for (const helper of helpers) {
+      expect(exported.has(helper), `${helper} must be exported by svelte/internal/client`).toBe(true)
+    }
   })
 
   it('builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {

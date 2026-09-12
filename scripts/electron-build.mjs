@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,8 +8,10 @@ import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 import { buildTerminalRuntime } from './build-terminal-runtime.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 import {
+  pinnedSvelteVersionFromWorkspaceYaml,
   svelteHostRuntimeBuildEntries,
   svelteHostRuntimeImportMapEntries,
+  svelteHostRuntimeInstallMismatchError,
 } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 
 function repoRoot() {
@@ -22,6 +24,32 @@ function backendPluginHostBanner(rustSidecarLayout) {
 }
 export const SVELTE_HOST_RUNTIME_ENTRIES = Object.freeze(svelteHostRuntimeBuildEntries())
 export { svelteHostRuntimeImportMapEntries }
+
+export async function assertSvelteHostRuntimeInstall(root = repoRoot()) {
+  const workspacePath = resolve(root, 'pnpm-workspace.yaml')
+  try {
+    await stat(workspacePath)
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return
+    throw error
+  }
+
+  const pinnedVersion = pinnedSvelteVersionFromWorkspaceYaml(await readFile(workspacePath, 'utf8'))
+  const sveltePackagePath = resolve(root, 'node_modules', 'svelte', 'package.json')
+  let installedVersion
+  try {
+    installedVersion = JSON.parse(await readFile(sveltePackagePath, 'utf8')).version
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      throw new Error(svelteHostRuntimeInstallMismatchError('missing', pinnedVersion))
+    }
+    throw error
+  }
+
+  if (installedVersion !== pinnedVersion) {
+    throw new Error(svelteHostRuntimeInstallMismatchError(installedVersion, pinnedVersion))
+  }
+}
 
 export async function buildBackendPluginHostRuntime(root = repoRoot(), outDir = resolve(root, 'dist-electron', HOST_RUNTIME_RESOURCE_DIR), rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: root })) {
   await viteBuild({
@@ -109,6 +137,7 @@ export async function buildPreloadBundle(root = repoRoot(), electronDist = resol
 }
 
 export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = resolve(root, 'dist-electron')) {
+  await assertSvelteHostRuntimeInstall(root)
   const hostRuntimeDir = resolve(electronDist, HOST_RUNTIME_RESOURCE_DIR)
   await rm(hostRuntimeDir, { recursive: true, force: true })
   await mkdir(hostRuntimeDir, { recursive: true })
@@ -125,6 +154,7 @@ export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = re
 }
 
 export async function buildSvelteHostRuntimeAssets(root = repoRoot(), outDir = resolve(root, 'dist-electron', HOST_RUNTIME_RESOURCE_DIR, 'svelte')) {
+  await assertSvelteHostRuntimeInstall(root)
   const svelteSrcDir = resolve(root, 'node_modules', 'svelte', 'src')
   const entry = Object.fromEntries(
     Object.entries(SVELTE_HOST_RUNTIME_ENTRIES).map(([name, relPath]) => [name, resolve(svelteSrcDir, relPath)]),
