@@ -11,6 +11,7 @@
     availableWidth?: number
     side?: 'left' | 'right'
     label?: string
+    resizable?: boolean
     children?: Snippet
   }
 
@@ -22,6 +23,7 @@
     availableWidth = Infinity,
     side = 'left',
     label = side === 'left' ? 'left' : 'right',
+    resizable = true,
     children,
   }: Props = $props()
 
@@ -131,7 +133,7 @@
   style="width: {effectiveWidth}px"
   bind:this={panelEl}
 >
-  {#if side === 'right'}
+  {#if resizable && side === 'right'}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -153,7 +155,7 @@
   <div class="flex-1 overflow-hidden">
     {@render children?.()}
   </div>
-  {#if side === 'left'}
+  {#if resizable && side === 'left'}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div

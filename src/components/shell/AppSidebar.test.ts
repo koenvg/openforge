@@ -126,6 +126,7 @@ describe('AppSidebar', () => {
     vi.clearAllMocks()
     projects.set(sampleProjects)
     activeProjectId.set('proj-1')
+    localStorage.removeItem('resizable-panel:app-sidebar')
   })
 
   it('does not render the decorative >_ logo', () => {
@@ -223,6 +224,42 @@ describe('AppSidebar', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }))
     expect(onToggleCollapse).toHaveBeenCalledOnce()
+  })
+
+  it('resizes while expanded and remembers the expanded width through collapse', async () => {
+    const view = renderSidebar({ collapsed: false })
+    const panel = view.container.querySelector<HTMLElement>('[data-testid="resizable-panel"]')
+    const handle = screen.getByRole('separator', { name: /resize sidebar panel/i })
+
+    expect(panel?.style.width).toBe('272px')
+    expect(handle.getAttribute('aria-valuenow')).toBe('272')
+
+    vi.spyOn(panel!, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 272,
+      top: 0,
+      bottom: 600,
+      width: 272,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    })
+
+    await fireEvent.mouseDown(handle, { clientX: 272 })
+    await fireEvent.mouseMove(document, { clientX: 352 })
+    await fireEvent.mouseUp(document)
+
+    expect(panel?.style.width).toBe('352px')
+    expect(localStorage.getItem('resizable-panel:app-sidebar')).toBe('352')
+
+    await view.rerender({ collapsed: true })
+    expect(panel?.style.width).toBe('64px')
+    expect(screen.queryByRole('separator', { name: /resize sidebar panel/i })).toBeNull()
+
+    await view.rerender({ collapsed: false })
+    expect(panel?.style.width).toBe('352px')
+    expect(screen.getByRole('separator', { name: /resize sidebar panel/i }).getAttribute('aria-valuenow')).toBe('352')
   })
 
   it('calls onNewProject when add project button is clicked', async () => {
