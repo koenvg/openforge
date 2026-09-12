@@ -1,6 +1,8 @@
 <script lang="ts">
   import { AlertTriangle, FolderOpen, PanelLeftOpen } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import DiffViewerComponent from '../review/shared/diff-viewer/DiffViewer.svelte'
@@ -23,10 +25,10 @@
   })
 </script>
 
-<section class="flex min-w-0 flex-1 flex-col overflow-hidden bg-base-100" aria-label="Code diff panel">
+<section class="flex min-w-0 flex-1 flex-col overflow-hidden bg-of-surface" aria-label="Code diff panel">
   {#if controller.isLoading || controller.error || controller.visibleDiffFiles.length === 0}
     {#if toolbarExtra}
-      <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 px-2 py-1" role="toolbar" aria-label="Diff controls">
+      <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-of-border bg-of-surface px-2 py-1" role="toolbar" aria-label="Diff controls">
         {#if controller.isLoading || controller.error}
           <IconButton
             label={controller.fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
@@ -44,27 +46,27 @@
     {/if}
   {/if}
   {#if controller.reviewedBaselineError}
-    <div class="alert alert-error rounded-none border-x-0 border-t-0 py-2 text-sm" role="alert">
+    <Alert variant="danger" style="border-radius: 0; border-width: 0 0 var(--of-border-width); padding-block: 0.5rem" role="alert">
       <AlertTriangle size={18} aria-hidden="true" />
       <span>{controller.reviewedBaselineError}</span>
-    </div>
+    </Alert>
   {/if}
   {#if controller.isLoading}
-    <div class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-base-content/60" role="status" aria-live="polite">
-      <span class="loading loading-spinner loading-md text-primary"></span>
+    <div class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-of-text/60" role="status" aria-live="polite">
+      <LoadingIndicator size="md" decorative class="text-of-accent" />
       <span>Loading diff...</span>
     </div>
   {:else if controller.error}
-    <div class="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center text-sm text-error" role="alert">
+    <div class="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center text-sm text-of-danger" role="alert">
       <AlertTriangle size={40} strokeWidth={1.6} aria-hidden="true" />
       <span>{controller.error}</span>
       <Button size="sm" onclick={controller.refresh}>Retry loading diff</Button>
     </div>
   {:else if controller.visibleDiffFiles.length === 0}
     {#if !controller.includeNonApplicationFiles && controller.selfReviewDiffFiles.length > 0}
-      <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
+      <div class="flex flex-col items-center justify-center flex-1 gap-4 text-of-text/50 text-center p-10">
         <FolderOpen size={48} strokeWidth={1.4} aria-hidden="true" />
-        <h3 class="text-xl font-semibold text-base-content m-0">Only non-application files changed</h3>
+        <h3 class="text-xl font-semibold text-of-text m-0">Only non-application files changed</h3>
         <p class="text-sm m-0 max-w-md">
           All {controller.nonApplicationFileCount} changed {controller.nonApplicationFileCount === 1 ? 'file is a non-application file' : 'files are non-application files'} (tests, fixtures, snapshots, docs, or generated files), which are hidden by default.
         </p>
@@ -77,9 +79,9 @@
         </Button>
       </div>
     {:else}
-      <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
+      <div class="flex flex-col items-center justify-center flex-1 gap-4 text-of-text/50 text-center p-10">
         <FolderOpen size={48} strokeWidth={1.4} aria-hidden="true" />
-        <h3 class="text-xl font-semibold text-base-content m-0">No changes for current selection</h3>
+        <h3 class="text-xl font-semibold text-of-text m-0">No changes for current selection</h3>
         <p class="text-sm m-0">
           {#if controller.selectedCommitSha === null}
             Make changes or enable uncommitted changes from the commit history pane.

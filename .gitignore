@@ -24,6 +24,7 @@ __pycache__/
 /artifacts/storybook-visual/
 /artifacts/file-viewer/
 /artifacts/task-schedules/
+/artifacts/task-detail-themes/
 /playwright-report/
 /test-results/
 /openforge-desktop-test-*/

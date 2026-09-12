@@ -424,11 +424,11 @@
   ],
   "src/components/shared/pr/PrCommentsList.svelte": [
     {"tag":"div","context":"class=\"min-w-0 flex-1 flex flex-col gap-1.5\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class={showMarkAddressed ? 'flex items-start gap-2 min-w-0' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50 min-w-0'}","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class={showMarkAddressed ? 'min-w-0 flex-1 flex flex-wrap items-center gap-1.5 text-[0.7rem] text-base-content/50' : 'contents'}","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class={showMarkAddressed ? 'flex items-start gap-2 min-w-0' : 'flex flex-wrap items-center gap-1.5 text-[0.7rem] text-of-text/50 min-w-0'}","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class={showMarkAddressed ? 'min-w-0 flex-1 flex flex-wrap items-center gap-1.5 text-[0.7rem] text-of-text/50' : 'contents'}","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"span","context":"class=\"min-w-0 break-all\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex flex-col gap-2 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"{cardBaseClass} cursor-pointer hover:border-primary/50 transition-colors{comment.addressed === 1 ? ' opacity-60' : ''}\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class=\"{cardBaseClass} cursor-pointer hover:border-of-accent/50 transition-colors{comment.addressed === 1 ? ' opacity-60' : ''}\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"article","context":"class=\"{cardBaseClass}{comment.addressed === 1 ? ' opacity-60' : ''}\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/shared/tasks/TaskRelationshipDetailSection.svelte": [
@@ -471,37 +471,37 @@
     {"tag":"style","context":".project-sidebar-list :global(button.hidden-projects-toggle)","tokens":["width: 100%"],"count":1,"reason":"Hidden-project navigation toggle spans the sidebar row."}
   ],
   "src/components/task-detail/AgentTerminalShell.svelte": [
-    {"tag":"span","context":"class=\"flex items-center justify-center w-5 h-5 rounded-[var(--of-radius-round)] bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5\"","tokens":["w-5","h-5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
+    {"tag":"span","context":"class=\"flex items-center justify-center w-5 h-5 rounded-[var(--of-radius-round)] bg-of-warning/20 text-of-warning text-xs font-bold shrink-0 mt-0.5\"","tokens":["w-5","h-5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
     {"tag":"div","context":"class=\"agent-terminal-surface relative min-h-0 flex-1 overflow-hidden rounded-[var(--of-radius-container)] border\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"max-w-[320px] text-center text-sm leading-relaxed\"","tokens":["max-w-[320px]"],"count":2,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"svg","context":"class=\"h-16 w-16 opacity-40\"","tokens":["h-16","w-16"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."}
   ],
   "src/components/task-detail/SelfReviewChangedFilesPanel.svelte": [
-    {"tag":"div","context":"class=\"flex min-h-10 items-center justify-between border-b border-base-300 bg-base-100 px-3 text-[13px] font-semibold text-base-content\"","tokens":["min-h-10"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
+    {"tag":"div","context":"class=\"flex min-h-10 items-center justify-between border-b border-of-border bg-of-surface px-3 text-[13px] font-semibold text-of-text\"","tokens":["min-h-10"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
   "src/components/task-detail/SelfReviewDiffPanel.svelte": [
-    {"tag":"section","context":"class=\"flex min-w-0 flex-1 flex-col overflow-hidden bg-base-100\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"alert alert-error rounded-none border-x-0 border-t-0 py-2 text-sm\"","tokens":["rounded-none"],"count":1,"reason":"Square shared edges between connected diff rows, inspector sections or inline messages."},
+    {"tag":"Alert","context":"style=\"border-radius: 0; border-width: 0 0 var(--of-border-width); padding-block: 0.5rem\"","tokens":["border-radius: 0"],"count":1,"reason":"Preserve the square shared edge of the inline review message."},
+    {"tag":"section","context":"class=\"flex min-w-0 flex-1 flex-col overflow-hidden bg-of-surface\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"p","context":"class=\"text-sm m-0 max-w-md\"","tokens":["max-w-md"],"count":1,"reason":"Self-review empty-state explanation uses a bounded reading column."}
   ],
   "src/components/task-detail/SelfReviewFeedbackPanel.svelte": [
-    {"tag":"div","context":"class=\"flex min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))] shrink-0 flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-1\"","tokens":["min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))]"],"count":1,"reason":"Align GitHub selection controls with the adjacent diff file header while retaining touch-target height and allowing wrapping."},
-    {"tag":"section","context":"class=\"flex h-full min-w-0 flex-col overflow-hidden bg-base-100\"","tokens":["min-w-0"],"count":1,"reason":"GitHub comment content shrinks inside the shared review panel without widening the workspace."},
+    {"tag":"div","context":"class=\"flex min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))] shrink-0 flex-wrap items-center gap-2 border-b border-of-border bg-of-surface-subtle px-3 py-1\"","tokens":["min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))]"],"count":1,"reason":"Align GitHub selection controls with the adjacent diff file header while retaining touch-target height and allowing wrapping."},
+    {"tag":"section","context":"class=\"flex h-full min-w-0 flex-col overflow-hidden bg-of-surface\"","tokens":["min-w-0"],"count":1,"reason":"GitHub comment content shrinks inside the shared review panel without widening the workspace."},
     {"tag":"div","context":"class=\"min-h-0 flex-1 overflow-y-auto p-3\"","tokens":["min-h-0"],"count":1,"reason":"Scroll the comment list within the space below its selection controls."}
   ],
   "src/components/task-detail/SelfReviewRepositoryPreview.svelte": [
-    {"tag":"section","context":"class=\"absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-base-100\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"header","context":"class=\"flex min-h-14 shrink-0 items-center gap-3 border-b border-base-300 px-4 py-2\"","tokens":["min-h-14"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
+    {"tag":"Alert","context":"style=\"border-radius: 0; border-width: 0 0 var(--of-border-width); padding-block: 0.5rem\"","tokens":["border-radius: 0"],"count":1,"reason":"Preserve the square shared edge of the inline repository preview message."},
+    {"tag":"section","context":"class=\"absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-of-surface\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"header","context":"class=\"flex min-h-14 shrink-0 items-center gap-3 border-b border-of-border px-4 py-2\"","tokens":["min-h-14"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"alert alert-error shrink-0 rounded-none border-x-0 border-t-0 py-2 text-sm\"","tokens":["rounded-none"],"count":1,"reason":"Square shared edges between connected diff rows, inspector sections or inline messages."},
     {"tag":"div","context":"class=\"flex min-h-0 flex-1 items-center justify-center overflow-auto p-4\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"min-h-0 flex-1 overflow-auto p-6\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"min-h-0 flex-1 overflow-auto p-4\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"p","context":"class=\"max-w-xl break-all text-sm text-base-content/65\"","tokens":["max-w-xl"],"count":1,"reason":"Repository preview path is bounded for readable wrapping."},
-    {"tag":"p","context":"class=\"max-w-xl text-sm text-error\"","tokens":["max-w-xl"],"count":1,"reason":"Repository preview error is bounded for readable wrapping."}
+    {"tag":"p","context":"class=\"max-w-xl break-all text-sm text-of-text/65\"","tokens":["max-w-xl"],"count":1,"reason":"Repository preview path is bounded for readable wrapping."},
+    {"tag":"p","context":"class=\"max-w-xl text-sm text-of-danger\"","tokens":["max-w-xl"],"count":1,"reason":"Repository preview error is bounded for readable wrapping."}
   ],
   "src/components/task-detail/SelfReviewSidePanel.svelte": [
-    {"tag":"div","context":"class=\"flex h-full min-w-0 flex-col overflow-hidden border-r border-base-300 bg-base-100\"","tokens":["min-w-0"],"count":1,"reason":"Shared review tab content stays within the host-bounded resizable panel."}
+    {"tag":"div","context":"class=\"flex h-full min-w-0 flex-col overflow-hidden border-r border-of-border bg-of-surface\"","tokens":["min-w-0"],"count":1,"reason":"Shared review tab content stays within the host-bounded resizable panel."}
   ],
   "src/components/task-detail/SelfReviewWorkspace.svelte": [
     {"tag":"div","context":"class=\"flex h-full w-full min-w-0 flex-col overflow-hidden\"","tokens":["min-w-0"],"count":1,"reason":"Keep horizontal overflow inside the review workspace rather than widening the task host."},
@@ -529,7 +529,7 @@
     {"tag":"div","context":"class=\"min-h-0 overflow-hidden {agentWorkbenchClass}\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"main","context":"class={agentMainClass}","tokens":["min-w-0","max-w-[1400px]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"min-h-0 min-w-0 flex-1\"","tokens":["min-h-0","min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"kbd","context":"class=\"kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10\"","tokens":["min-w-4","h-4"],"count":1,"reason":"Compact keyboard-shortcut notation, not an interactive control."},
+    {"tag":"kbd","context":"class=\"task-editor-shortcut absolute top-2 right-2 bg-of-text/10 text-of-text/40 border-of-text/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10\"","tokens":["min-w-4","h-4"],"count":1,"reason":"Compact keyboard-shortcut notation, not an interactive control."},
     {"tag":"div","context":"class=\"h-full min-h-0\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"min-h-0 overflow-hidden {activeView === 'review' ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"min-h-0 overflow-hidden {activeView === tab.namespacedId ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
@@ -537,10 +537,10 @@
   "src/components/task-detail/TaskInspectorPanel.svelte": [
     {"tag":"style","context":".task-inspector :global([data-task-info-card])","tokens":["border-radius: 0"],"count":1,"reason":"Square shared edges between connected diff rows, inspector sections or inline messages."},
     {"tag":"style","context":".task-inspector :global([data-card-layout=\"row\"])","tokens":["min-height: 3.5rem"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
-    {"tag":"p","context":"class=\"max-w-52 text-center text-xs text-base-content/45\"","tokens":["max-w-52"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
+    {"tag":"p","context":"class=\"max-w-52 text-center text-xs text-of-text/45\"","tokens":["max-w-52"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex min-h-10 items-center justify-between gap-3\"","tokens":["min-h-10"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"h2","context":"class=\"m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-base-content\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
+    {"tag":"h2","context":"class=\"m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-of-text\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/task-detail/TaskPaneNavigation.svelte": [
     {"tag":"style","context":".task-pane-navigation","tokens":["height: 100%"],"count":1,"reason":"Task pane navigation fills its parent height."}

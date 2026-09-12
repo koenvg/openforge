@@ -28,21 +28,21 @@
   let sectionLabel = $derived(isDependencies ? 'Dependencies' : 'Dependent tasks')
   let sectionElementClass = $derived(isFull ? 'flex flex-col gap-2.5 shrink-0' : 'flex flex-col gap-2 shrink-0')
   let headingElementClass = $derived(isFull
-    ? 'text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0'
-    : 'font-mono text-[10px] font-bold text-primary'
+    ? 'text-[10px] font-bold text-of-accent font-mono tracking-[1.2px] m-0'
+    : 'font-mono text-[10px] font-bold text-of-accent'
   )
   let itemListClass = $derived(isFull ? 'flex flex-wrap gap-2' : 'flex flex-wrap gap-1.5')
   let statusItemClass = $derived(isFull
     ? 'gap-1.5 max-w-full min-w-0'
     : 'gap-1'
   )
-  let footerClass = $derived(isFull ? 'text-[11px] text-base-content/50' : 'text-xs text-base-content/40')
+  let footerClass = $derived(isFull ? 'text-[11px] text-of-text/50' : 'text-xs text-of-text/40')
   let titleSpanClass = $derived(isFull ? 'truncate min-w-0' : 'hidden')
   let idSpanClass = $derived(isFull ? 'font-mono shrink-0' : 'font-mono')
   let statusSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let projectSpanClass = $derived(isDependencies
     ? 'inline-flex shrink-0 items-center gap-1 border-l border-current/20 pl-1.5 font-semibold'
-    : 'inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-container)] border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
+    : 'inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-container)] border border-of-accent/20 bg-of-accent/10 px-1.5 py-px font-semibold text-of-accent'
   )
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')

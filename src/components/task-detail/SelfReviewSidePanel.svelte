@@ -28,7 +28,7 @@
 {/snippet}
 
 <ResizablePanel storageKey="self-review-side-panel" defaultWidth={320} minWidth={240} maxWidth={520} {availableWidth} side="left" label="Review">
-  <div class="flex h-full min-w-0 flex-col overflow-hidden border-r border-base-300 bg-base-100">
+  <div class="flex h-full min-w-0 flex-col overflow-hidden border-r border-of-border bg-of-surface">
     <Tabs
       label="Review navigation"
       tabs={[

@@ -29,7 +29,7 @@
   }
 </script>
 
-  <section class="flex h-full flex-col border-r border-base-300 bg-base-100" aria-label="Changed files panel">
+  <section class="flex h-full flex-col border-r border-of-border bg-of-surface" aria-label="Changed files panel">
     <div class="flex-1 overflow-hidden">
       <FileTree
         bind:this={fileTree}
@@ -54,12 +54,12 @@
       panelTestId="self-review-commit-history-panel"
       handleTestId="self-review-commit-history-handle"
     >
-      <div class="h-full flex flex-col border-t border-base-300 bg-base-200/70">
-        <div class="flex min-h-10 items-center justify-between border-b border-base-300 bg-base-100 px-3 text-[13px] font-semibold text-base-content">
+      <div class="h-full flex flex-col border-t border-of-border bg-of-surface-subtle/70">
+        <div class="flex min-h-10 items-center justify-between border-b border-of-border bg-of-surface px-3 text-[13px] font-semibold text-of-text">
           <span>Scope</span>
-          <span class="font-mono font-normal text-primary">merge-base...HEAD</span>
+          <span class="font-mono font-normal text-of-accent">merge-base...HEAD</span>
         </div>
-        <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
+        <div class="px-2 py-1.5 border-b border-of-border bg-of-surface/50">
           {#if selectedCommitSha === null}
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -71,7 +71,7 @@
                     disabled={committedLocked}
                     onchange={(event) => onIncludeCommittedChange(event.currentTarget.checked)}
                   />
-                  <span class="text-[13px] text-base-content/75">Committed</span>
+                  <span class="text-[13px] text-of-text/75">Committed</span>
                 </label>
                 {#if committedLocked}
                   <Tooltip label="Why committed changes are locked" content={lockedScopeTooltip} side="right">
@@ -88,7 +88,7 @@
                     disabled={uncommittedLocked}
                     onchange={(event) => onIncludeUncommittedChange(event.currentTarget.checked)}
                   />
-                  <span class="text-[13px] text-base-content/75">Uncommitted</span>
+                  <span class="text-[13px] text-of-text/75">Uncommitted</span>
                 </label>
                 {#if uncommittedLocked}
                   <Tooltip label="Why uncommitted changes are locked" content={lockedScopeTooltip} side="right">
@@ -110,7 +110,7 @@
         </div>
         <div class="flex-1 overflow-y-auto py-1">
           <button
-            class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {selectedCommitSha === null ? 'bg-primary/5 text-primary' : 'text-base-content'}"
+            class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-of-surface-subtle last:border-b-0 hover:bg-of-border/50 transition-colors {selectedCommitSha === null ? 'bg-of-accent/5 text-of-accent' : 'text-of-text'}"
             onclick={() => onSelectCommit(null)}
           >
             <div class="text-[13px] font-semibold leading-snug">All changes</div>
@@ -118,7 +118,7 @@
           </button>
           {#each commits as commit (commit.sha)}
             <button
-              class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {selectedCommitSha === commit.sha ? 'bg-primary/5 text-primary' : 'text-base-content'}"
+              class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-of-surface-subtle last:border-b-0 hover:bg-of-border/50 transition-colors {selectedCommitSha === commit.sha ? 'bg-of-accent/5 text-of-accent' : 'text-of-text'}"
               onclick={() => onSelectCommit(commit.sha)}
               title={commit.message}
             >

@@ -18,11 +18,11 @@
   let onShowAddressedChange = $derived(pane.pullRequest.onShowAddressedChange)
 </script>
 
-<section class="flex h-full min-w-0 flex-col overflow-hidden bg-base-100" aria-label="Feedback panel">
+<section class="flex h-full min-w-0 flex-col overflow-hidden bg-of-surface" aria-label="Feedback panel">
   {#if linkedPr}
-    <div class="flex min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))] shrink-0 flex-wrap items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-1">
+    <div class="flex min-h-[calc(var(--of-control-height-touch)+0.5rem+var(--of-border-width))] shrink-0 flex-wrap items-center gap-2 border-b border-of-border bg-of-surface-subtle px-3 py-1">
       {#if commentSelection.selectedCount > 0}
-        <span class="text-[13px] font-semibold text-primary">{commentSelection.selectedCount} selected</span>
+        <span class="text-[13px] font-semibold text-of-accent">{commentSelection.selectedCount} selected</span>
         <Button variant="ghost" size="sm" onclick={commentSelection.deselectAll}>Clear</Button>
       {:else if commentSelection.unaddressedCount > 0}
         <Button variant="ghost" size="sm" onclick={commentSelection.selectAll}>Select all</Button>
@@ -37,12 +37,12 @@
     {#if prComments.length === 0}
       <div class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
         <MessageSquare size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
-        <p class="m-0 text-[13px] text-base-content/60">No review comments on this PR yet</p>
+        <p class="m-0 text-[13px] text-of-text/60">No review comments on this PR yet</p>
       </div>
     {:else if visibleComments.length === 0 && commentSelection.addressedCount > 0}
       <div class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
         <CheckCircle2 size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
-        <p class="m-0 text-[13px] text-base-content/60">All comments addressed</p>
+        <p class="m-0 text-[13px] text-of-text/60">All comments addressed</p>
       </div>
     {:else}
       <div class="min-h-0 flex-1 overflow-y-auto p-3">
@@ -68,7 +68,7 @@
     {/if}
   {:else}
     <div class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-      <p class="m-0 text-[13px] text-base-content/60">No linked PR found</p>
+      <p class="m-0 text-[13px] text-of-text/60">No linked PR found</p>
     </div>
   {/if}
 </section>
