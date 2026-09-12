@@ -21,7 +21,7 @@ async function expectUnclipped(control: Locator) {
     }
     return rect.left < left || rect.top < top || rect.right > right || rect.bottom > bottom
   })
-  expect(clipped, await control.textContent()).toBe(false)
+  expect(clipped, (await control.textContent()) ?? undefined).toBe(false)
 }
 
 describe.skipIf(!storybookUrl)('branch divergence long commit list', () => {
