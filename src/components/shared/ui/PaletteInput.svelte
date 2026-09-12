@@ -19,7 +19,7 @@
   }: Props = $props()
 </script>
 
-<div class="p-3 border-b border-base-300">
+<div class="p-3 border-b border-of-border">
   <TextField
     label={placeholder}
     hideLabel

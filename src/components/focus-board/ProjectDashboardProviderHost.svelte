@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { AgentSession, Project, PullRequestInfo, TaskAttentionRow, TaskDetail, TaskReference } from '../../lib/types'
   import { getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
   import { createViewReplacementHostState } from '../../lib/plugin/viewReplacementHostState.svelte'
@@ -83,8 +84,8 @@
 {#snippet coreDashboard()}
   <div class="flex-1 overflow-hidden">
     {#if isLoading && tasks.length === 0}
-      <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-        <span class="loading loading-spinner loading-md text-primary"></span>
+      <div class="flex flex-col items-center justify-center h-full gap-3 text-of-text/50 text-sm">
+        <LoadingIndicator size="md" decorative class="text-of-accent" />
         <span>Loading tasks...</span>
       </div>
     {:else}

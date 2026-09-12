@@ -270,8 +270,8 @@
     visible={ac.popoverVisible && ac.autocompleteItems.length > 0}
     wrap={false}
     onCancel={ac.closePopover}
-    listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto"
-    optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 ${highlighted ? 'bg-primary/10 text-primary' : ''}`}
+    listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-of-surface border border-of-border shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto"
+    optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-of-surface-subtle ${highlighted ? 'bg-of-accent/10 text-of-accent' : ''}`}
   >
     {#snippet input(listboxId, activeDescendantId)}
       <textarea
@@ -299,10 +299,10 @@
       <span class="shrink-0 text-base leading-none" aria-hidden="true">{typeIcon(item.type)}</span>
       <span class="flex-1 min-w-0 flex items-baseline gap-2">
         <span class="text-sm font-medium truncate">{item.label}</span>
-        {#if item.description}<span class="text-xs text-base-content/50 truncate flex-1">{item.description}</span>{/if}
+        {#if item.description}<span class="text-xs text-of-text/50 truncate flex-1">{item.description}</span>{/if}
       </span>
       {#if item.type === 'command' && item.source}
-        <span class="shrink-0 text-[0.6rem] bg-base-200 px-1 rounded-[var(--of-radius-container)] text-base-content/50">{item.source}</span>
+        <span class="shrink-0 text-[0.6rem] bg-of-surface-subtle px-1 rounded-[var(--of-radius-container)] text-of-text/50">{item.source}</span>
       {/if}
     {/snippet}
   </PaletteListbox>

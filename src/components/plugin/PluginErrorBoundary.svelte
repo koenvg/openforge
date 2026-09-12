@@ -14,9 +14,9 @@
 </script>
 
 {#if errorMessage}
-  <div class="rounded-[var(--of-radius-container)] border border-error/20 bg-error/10 p-4" role="alert" data-plugin-id={pluginId}>
-    <p class="text-sm font-medium text-error">Plugin Error: {pluginName}</p>
-    <p class="mt-1 text-xs text-error/70">{errorMessage}</p>
+  <div class="rounded-[var(--of-radius-container)] border border-of-danger/20 bg-of-danger/10 p-4" role="alert" data-plugin-id={pluginId}>
+    <p class="text-sm font-medium text-of-danger">Plugin Error: {pluginName}</p>
+    <p class="mt-1 text-xs text-of-danger/70">{errorMessage}</p>
     {#if onDisable}
       <Button variant="danger" size="xs" class="mt-2" onclick={onDisable}>
         Disable Plugin

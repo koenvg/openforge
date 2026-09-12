@@ -147,6 +147,9 @@ function classifyLegacyToken(token) {
     return { kind: 'arbitrary-variable', replacement: token.replace(/--[\w-]+/g, name => LEGACY_VARIABLES[name] ?? name) }
   }
   const base = token.split(/:(?![^\[]*\])/).at(-1).replace(/^!|!$/g, '')
+  if (/^kbd(?:-|$)/.test(base)) {
+    return { kind: 'component', replacement: 'Preserve native kbd semantics with token-driven keyboard hints; shared packages use scoped styles' }
+  }
   if (/^(?:loading|alert|progress)(?:-|$)/.test(base) || classRule(token) === 'daisyui') {
     return { kind: 'component', replacement: 'Use the corresponding SDK control; preserve caller semantics and bounds' }
   }

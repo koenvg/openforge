@@ -40,7 +40,7 @@
     visible = true,
     loading = false,
     listClass = '',
-    optionClass = (_item: T, _index: number, highlighted: boolean) => highlighted ? 'bg-base-300' : 'hover:bg-base-300/60',
+    optionClass = (_item: T, _index: number, highlighted: boolean) => highlighted ? 'bg-of-border' : 'hover:bg-of-border/60',
     groupLabel,
     input,
     item,
@@ -111,7 +111,7 @@
       {#each items as option, index (getKey(option))}
         {@const label = groupLabel?.(option, index)}
         {#if label}
-          <div role="presentation" class="text-[10px] text-base-content/40 uppercase tracking-wider px-4 pt-3 pb-1">{label}</div>
+          <div role="presentation" class="text-[10px] text-of-text/40 uppercase tracking-wider px-4 pt-3 pb-1">{label}</div>
         {/if}
         <div
           id={optionId(option)}

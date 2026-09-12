@@ -285,6 +285,7 @@
     {"tag":"img","context":"class=\"max-h-[70vh] w-full rounded-[var(--of-radius-container)] border border-[var(--of-border)] bg-[var(--of-surface-subtle)] object-contain\"","tokens":["max-h-[70vh]"],"count":1,"reason":"Bound the media preview to its available viewport while preserving aspect ratio."}
   ],
   "src/components/feedback/toasts/AppToast.svelte": [
+    {"tag":"LoadingIndicator","context":"style=\"width: 17px; height: 17px\"","tokens":["width: 17px","height: 17px"],"count":1,"reason":"Match the existing 17px toast glyph bounds without resizing the notification icon or card."},
     {"tag":"style","context":".app-toast","tokens":["width: 100%","max-width: 24rem"],"count":1,"reason":"Toast cards fill the stack column while matching the upstream Toast Stack's compact maximum width."},
     {"tag":"style","context":".app-toast-content","tokens":["min-width: 0"],"count":1,"reason":"Let long notification copy shrink and wrap inside the bounded toast card."},
     {"tag":"style","context":".app-toast-title-action","tokens":["width: 100%"],"count":1,"reason":"The legacy actionable toast title spans the content column so its full label remains clickable."}
@@ -346,13 +347,13 @@
   ],
   "src/components/project/ProjectSwitcherModal.svelte": [
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-warning\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
-    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-success animate-pulse\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
-    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-info\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
-    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-error\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."}
+    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-of-warning\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
+    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-of-success animate-pulse\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
+    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-of-info\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
+    {"tag":"span","context":"class=\"w-2 h-2 rounded-[var(--of-radius-round)] bg-of-danger\"","tokens":["w-2","h-2"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."}
   ],
   "src/components/prompt/PromptInput.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto\" optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 ${highlighted ? 'bg-primary/10 text-primary' : ''}`}","tokens":["max-h-[320px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
+    {"tag":"PaletteListbox","context":"listClass=\"absolute top-full left-0 right-0 z-50 mt-1 bg-of-surface border border-of-border shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto\" optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-of-surface-subtle ${highlighted ? 'bg-of-accent/10 text-of-accent' : ''}`}","tokens":["max-h-[320px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
     {"tag":"span","context":"class=\"flex-1 min-w-0 flex items-baseline gap-2\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/settings/CompanionPairedDevices.svelte": [
@@ -437,10 +438,10 @@
     {"tag":"Badge","context":"class={statusItemClass}","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/shared/ui/ContextMenu.svelte": [
-    {"tag":"div","context":"class=\"fixed z-[100] bg-base-300 border border-base-300 rounded-[var(--of-radius-container)] shadow-xl min-w-[180px] p-1\"","tokens":["min-w-[180px]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
+    {"tag":"div","context":"class=\"fixed z-[100] bg-of-border border border-of-border rounded-[var(--of-radius-container)] shadow-xl min-w-[180px] p-1\"","tokens":["min-w-[180px]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
   "src/components/shared/ui/ResizableBottomPanel.svelte": [
-    {"tag":"div","context":"class=\"absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none\"","tokens":["h-1"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
+    {"tag":"div","context":"class=\"absolute top-0 left-0 right-0 z-10 h-1 hover:bg-of-accent/30 transition-colors {isDragging ? 'bg-of-accent/40' : ''} focus-visible:bg-of-accent/40 focus-visible:outline-none\"","tokens":["h-1"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."}
   ],
   "src/components/shell/ApplicationShell.svelte": [
     {"tag":"div","context":"class=\"flex flex-col flex-1 min-w-0 relative\"","tokens":["min-w-0"],"count":1,"reason":"Allow the application content column to shrink beside project navigation without overflowing the shell; not shared control sizing."}
@@ -453,7 +454,7 @@
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":2,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/shell/FileQuickOpen.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"max-h-[400px] overflow-y-auto\" optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}","tokens":["max-h-[400px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
+    {"tag":"PaletteListbox","context":"listClass=\"max-h-[400px] overflow-y-auto\" optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-of-text transition-colors ${highlighted ? 'bg-of-border' : 'hover:bg-of-border/60'}`}","tokens":["max-h-[400px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/shell/IconRail.svelte": [

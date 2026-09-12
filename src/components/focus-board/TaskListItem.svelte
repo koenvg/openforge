@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import CircleAlert from '@lucide/svelte/icons/circle-alert'
   import CircleCheck from '@lucide/svelte/icons/circle-check'
   import CircleDot from '@lucide/svelte/icons/circle-dot'
@@ -122,7 +123,7 @@
         <span class="font-mono text-sm font-semibold text-[var(--of-accent)]">{task.id}</span>
         <Badge variant={presentation.badgeVariant} class="gap-1">
           {#if isMerging}
-            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            <LoadingIndicator size="xs" decorative />
           {:else}
             <StatusIcon size={14} aria-hidden="true" />
           {/if}
@@ -211,7 +212,7 @@
 
     {#if hasUnreadAgentOutput}
       <span
-        class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-info/25 bg-info/10 px-2 py-1 font-medium text-info"
+        class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-of-info/25 bg-of-info/10 px-2 py-1 font-medium text-of-info"
         aria-label="Unread agent output"
       >
         <CircleDot size={13} aria-hidden="true" />

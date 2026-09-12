@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
   import Select from '@openforge-app/plugin-sdk/ui/Select.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
@@ -145,7 +146,7 @@
   <Panel padding="none" variant="subtle">
     <div class="settings-layout flex min-h-14 items-center gap-3 px-3 py-2" role="status" aria-live="polite">
     {#if installationStatusLoading}
-      <span class="loading loading-spinner loading-sm shrink-0" aria-hidden="true"></span>
+      <LoadingIndicator size="sm" decorative class="shrink-0" />
       <div class="settings-layout min-w-0 flex-1">
         <p class="m-0 text-sm font-medium text-[var(--of-text)]">Checking provider health…</p>
         <p class="m-0 mt-0.5 text-xs text-[var(--of-text-muted)]">Detecting installed provider CLIs and authentication.</p>
@@ -265,7 +266,7 @@
     </div>
     {#if installationStatusLoading}
       <div class="flex items-center gap-2 text-[var(--of-text-muted)]">
-        <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+        <LoadingIndicator size="xs" decorative />
         <span>Checking provider installs…</span>
       </div>
     {/if}

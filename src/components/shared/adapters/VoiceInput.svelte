@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import { createAudioRecorder } from '../../../lib/audioRecorder'
   import type { AudioRecorder } from '../../../lib/audioRecorder'
   import { transcribeAudio, getWhisperModelStatus } from '../../../lib/ipc'
@@ -166,7 +167,7 @@
     title={voiceState === 'recording' ? 'Stop recording (⌘D)' : 'Voice input (⌘D)'}
   >
     {#if voiceState === 'transcribing'}
-      <span class="loading loading-spinner loading-xs"></span>
+      <LoadingIndicator size="xs" decorative />
     {:else if voiceState === 'recording'}
       <span class="recording-pulse inline-block w-2 h-2 rounded-[var(--of-radius-round)] bg-current"></span>
       <span class="text-xs tabular-nums">{formatDuration(recordingDuration)}</span>
