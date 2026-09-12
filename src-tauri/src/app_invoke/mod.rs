@@ -13,7 +13,7 @@ mod local_skills;
 mod plugins;
 mod pty;
 mod pty_payload;
-mod review_threads;
+pub(crate) mod review_threads;
 mod runtime;
 mod whisper;
 
@@ -30,6 +30,7 @@ use crate::{
 };
 use axum::http::StatusCode;
 pub(crate) use lifecycle::start_task;
+pub(crate) use review_threads::invoke_review_threads_command;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

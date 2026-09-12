@@ -1,11 +1,11 @@
 ---
 name: openforge
-description: Manage OpenForge tasks from AI providers using the installed OpenForge CLI client.
+description: Manage OpenForge tasks and post review threads from AI providers using the installed OpenForge CLI client.
 ---
 
-# OpenForge task management
+# OpenForge task and review management
 
-Use this skill when you need to create follow-up work, inspect task context, or correct a task prompt before execution starts.
+Use this skill when you need to create follow-up work, inspect task context, correct a task prompt before execution starts, or post review comments while you review code.
 
 `openforge task update --initial-prompt` atomically replaces both `initial_prompt` and the effective `prompt`, but only while the task has never started. Started or completed tasks require a replacement task.
 
@@ -92,6 +92,24 @@ Prompt repair workflow: use `task update --initial-prompt` only for a never-star
 openforge task update --task-id T-123 --initial-prompt "Corrected prompt"
 openforge task create --help
 openforge task update --help
+```
+
+## Review Threads
+
+Use these commands during a review run to post findings while you work. Do not collect findings and print them in your final answer; a thread is only stored when the command runs.
+
+`--namespace`, `--target` and `--revision` are opaque to OpenForge. Use the exact values the review surface gave you.
+
+Post each finding as its own `review thread create`. Every create is stored on its own, so one rejected create leaves the rest of the run's threads in place. A rejection names the field to correct; fix that field and retry.
+
+`--side` selects the side of the diff and defaults to `RIGHT`, the post-image. Use `LEFT` to comment on a removed line.
+
+```bash
+openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 88 --body "This call bypasses the typed wrapper."
+openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 12 --side LEFT --body "Why was this guard removed?"
+openforge review thread list --namespace pr --target owner/repo#42 --revision abc123
+openforge review thread reply --thread-id RT-7 --body "Confirmed against the migration."
+openforge review thread status --thread-id RT-7 --status resolved
 ```
 
 ## Guidance

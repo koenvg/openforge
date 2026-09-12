@@ -227,3 +227,70 @@ async fn a_target_key_that_matches_no_other_host_record_is_accepted() {
     let listed = invoke_ok(&state, "list_review_threads", scope).await;
     assert_eq!(listed.as_array().expect("list").len(), 1);
 }
+
+#[tokio::test]
+async fn a_status_change_is_listed_back_and_notifies_the_scope() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_status");
+    let created = invoke_ok(&state, "create_review_thread", create_payload()).await;
+    let thread_id = created["id"].as_str().expect("thread id").to_string();
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    let resolved = invoke_ok(
+        &state,
+        "set_review_thread_status",
+        json!({ "threadId": thread_id, "status": "resolved" }),
+    )
+    .await;
+
+    assert_eq!(resolved["status"], "resolved");
+    assert_eq!(resolved["awaiting"], created["awaiting"]);
+    let envelope = events
+        .try_recv()
+        .expect("a status change must publish an event");
+    assert_eq!(envelope.event_name, "review-threads-changed");
+    assert_eq!(
+        envelope.payload,
+        json!({ "namespace": "github", "targetKey": "gh:acme/web#1421", "revision": "sha-1" })
+    );
+    let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;
+    assert_eq!(listed[0]["status"], "resolved");
+}
+
+#[tokio::test]
+async fn an_unsupported_status_is_rejected_naming_the_field_and_changes_nothing() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_status_invalid");
+    let created = invoke_ok(&state, "create_review_thread", create_payload()).await;
+
+    let error = invoke(
+        &state,
+        "set_review_thread_status",
+        json!({ "threadId": created["id"], "status": "archived" }),
+    )
+    .await
+    .expect_err("an unsupported status should be rejected");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert!(error.1.contains("status"), "got: {}", error.1);
+    let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;
+    assert_eq!(listed[0]["status"], "open");
+}
+
+#[tokio::test]
+async fn setting_the_status_of_an_unknown_thread_is_rejected() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_status_unknown");
+
+    let error = invoke(
+        &state,
+        "set_review_thread_status",
+        json!({ "threadId": "rt_missing", "status": "resolved" }),
+    )
+    .await
+    .expect_err("an unknown thread should be rejected");
+
+    assert_eq!(error.0, StatusCode::NOT_FOUND);
+    assert!(error.1.contains("rt_missing"), "got: {}", error.1);
+}

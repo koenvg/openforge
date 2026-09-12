@@ -26,6 +26,13 @@ Task listing:
   Repeat task completed with --cursor <nextCursor>; cursors are opaque and bound to the project and filters.
   task detail requires --project-id and --task-id and returns the TaskDetail plus immediate relationship references.
   task list and task get are deprecated version 1 compatibility commands and will be removed in version 2.
+
+Review Threads:
+  review thread create anchors one comment to a file and line and stores it immediately; a rejection names the field to correct.
+  Post each finding as its own create; one rejected create leaves the rest of the run's threads stored.
+  --side defaults to RIGHT, the post-image of the diff. Use LEFT to comment on a removed line.
+  --namespace, --target and --revision are opaque to OpenForge: use the ones the review surface gave you.
+
 Diagnostics:
   debug process-memory prints read-only Rust sidecar, plugin host V8 heap and bounded lifecycle metrics, and PTY process-tree RSS attribution.
   debug process-memory-history prints the opt-in, totals-only one-hour RSS history.
@@ -49,6 +56,10 @@ Examples:
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
   openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
   openforge task plan apply --file follow-up-plan.json
+  openforge review thread list --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3
+  openforge review thread create --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3 --file src/main.rs --line 42 --body "Missing null check"
+  openforge review thread reply --thread-id rt_9f2 --body "Corrected in the next commit"
+  openforge review thread status --thread-id rt_9f2 --status resolved
 
 Environment:
   OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: 17422)
