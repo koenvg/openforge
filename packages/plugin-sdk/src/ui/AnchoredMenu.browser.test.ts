@@ -285,22 +285,40 @@ it('reveals the menu panel and items with the anchored motion treatment', async 
       observer.observe(document.body, { childList: true, subtree: true, attributes: true })
       inspect()
     }))
+    const openedMotion = page.evaluate(() => new Promise<{
+      state: string | null
+      panelTransition: string
+      panelClipPath: string
+      itemTransition: string
+    }>((resolve, reject) => {
+      const deadline = performance.now() + 1_000
+      const inspect = () => {
+        const menu = document.querySelector<HTMLElement>('[role="menu"][data-state="open"]:not([data-starting-style])')
+        const item = menu?.querySelector<HTMLElement>('[role="menuitem"]')
+        if (menu && item) {
+          const panelStyles = getComputedStyle(menu)
+          if (!panelStyles.clipPath.includes('100%')) {
+            const itemStyles = getComputedStyle(item)
+            resolve({
+              state: menu.getAttribute('data-state'),
+              panelTransition: panelStyles.transition,
+              panelClipPath: panelStyles.clipPath,
+              itemTransition: itemStyles.transition,
+            })
+            return
+          }
+        }
+        if (performance.now() >= deadline) {
+          reject(new Error('Menu did not enter its visible open state'))
+          return
+        }
+        requestAnimationFrame(inspect)
+      }
+      inspect()
+    }))
     await page.getByRole('button', { name: 'Report actions' }).click()
     const opening = await openingStyles
-    const menu = page.getByRole('menu', { name: 'Report actions' })
-    await menu.waitFor()
-    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
-
-    const motion = await menu.evaluate((node) => {
-      const panelStyles = getComputedStyle(node)
-      const itemStyles = getComputedStyle(node.querySelector<HTMLElement>('[role="menuitem"]')!)
-      return {
-        state: node.getAttribute('data-state'),
-        panelTransition: panelStyles.transition,
-        panelClipPath: panelStyles.clipPath,
-        itemTransition: itemStyles.transition,
-      }
-    })
+    const motion = await openedMotion
 
     expect(opening.panelClipPath).toContain('100%')
     expect(opening.itemOpacity).toBe('0')
@@ -326,18 +344,42 @@ it('fades the menu panel away without leaving a top border on close', async () =
     await menu.waitFor()
     await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
 
-    await page.keyboard.press('Escape')
-    const endingMenu = page.locator('[role="menu"][data-ending-style]')
-    await endingMenu.waitFor()
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    const closing = await endingMenu.evaluate((node) => {
-      const styles = getComputedStyle(node)
-      return {
-        panelClipPath: styles.clipPath,
-        panelOpacity: styles.opacity,
-        panelTransition: styles.transition,
+    // Observe the actual close state before Escape. The ending marker is applied
+    // one frame before opacity changes, while a fixed delay can sample after the
+    // portal has been torn down on a busy CI runner.
+    const closingStyles = page.evaluate(() => new Promise<{
+      panelClipPath: string
+      panelOpacity: string
+      panelTransition: string
+    }>((resolve, reject) => {
+      const deadline = performance.now() + 1_000
+      const inspect = () => {
+        const endingMenu = document.querySelector<HTMLElement>('[role="menu"][data-ending-style]')
+        if (endingMenu) {
+          const styles = getComputedStyle(endingMenu)
+          const closing = {
+            panelClipPath: styles.clipPath,
+            panelOpacity: styles.opacity,
+            panelTransition: styles.transition,
+          }
+          if (closing.panelClipPath.includes('100%')
+            && Number(closing.panelOpacity) < 1
+            && closing.panelTransition.includes('opacity')) {
+            resolve(closing)
+            return
+          }
+        }
+        if (performance.now() >= deadline) {
+          reject(new Error('Menu did not enter its visible closing transition'))
+          return
+        }
+        requestAnimationFrame(inspect)
       }
-    })
+      inspect()
+    }))
+
+    await page.keyboard.press('Escape')
+    const closing = await closingStyles
     expect(closing.panelClipPath).toContain('100%')
     expect(Number(closing.panelOpacity)).toBeLessThan(1)
     expect(closing.panelTransition).toContain('opacity')
