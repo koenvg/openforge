@@ -58,7 +58,7 @@
   z-index: 0;
   overflow: hidden;
   border-color: transparent !important;
-  border-left: 3px solid var(--color-success) !important;
+  border-left: 3px solid var(--of-success) !important;
 }
 .running::before {
   content: '';
@@ -66,12 +66,12 @@
   inset: -200%;
   background: conic-gradient(
     from 0deg,
-    var(--color-success),
-    color-mix(in oklch, var(--color-success) 50%, transparent) 10%,
+    var(--of-success),
+    color-mix(in oklch, var(--of-success) 50%, transparent) 10%,
     transparent 25%,
     transparent 75%,
-    color-mix(in oklch, var(--color-success) 50%, transparent) 90%,
-    var(--color-success)
+    color-mix(in oklch, var(--of-success) 50%, transparent) 90%,
+    var(--of-success)
   );
   animation: border-glow-spin 4s linear infinite;
   z-index: -1;
@@ -84,38 +84,38 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background: var(--color-base-100);
+  background: var(--of-surface);
   z-index: -1;
 }
 .completed {
-  border-left: 3px solid var(--color-info);
+  border-left: 3px solid var(--of-info);
 }
 .paused {
-  border-left: 3px solid var(--color-warning);
+  border-left: 3px solid var(--of-warning);
 }
 .failed {
-  border-left: 3px solid var(--color-error);
+  border-left: 3px solid var(--of-danger);
 }
 .interrupted {
-  border-left: 3px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  border-left: 3px solid color-mix(in oklch, var(--of-text) 30%, transparent);
 }
 .needs-input {
-  border: 2px solid var(--color-warning);
+  border: 2px solid var(--of-warning);
 }
 .ci-failed {
-  border: 2px solid var(--color-error);
+  border: 2px solid var(--of-danger);
 }
 .unaddressed-comments {
-  border: 2px solid var(--color-warning);
+  border: 2px solid var(--of-warning);
 }
 .ci-running {
-  border-left: 3px solid var(--color-info);
+  border-left: 3px solid var(--of-info);
 }
 .review-pending {
-  border-left: 3px solid var(--color-info);
+  border-left: 3px solid var(--of-info);
 }
 .ready-to-merge {
-  border-left: 3px solid var(--color-info);
+  border-left: 3px solid var(--of-info);
 }
 /* Vim navigation focus highlight */
 .vim-focus {
@@ -127,7 +127,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  border: 2px solid var(--color-primary);
+  border: 2px solid var(--of-accent);
   border-radius: inherit;
   pointer-events: none;
 }

@@ -29,6 +29,20 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ProviderSelectField', () => {
+  it('keeps provider health loading in its existing polite announcement and retains focus when ready', async () => {
+    const view = render(ProviderSelectField, { props: defaultProps({ installationStatusLoading: true }) })
+    const status = screen.getByRole('status')
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(status.textContent).toContain('Checking provider health…')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    const select = screen.getByRole('button', { name: 'AI Provider' })
+    select.focus()
+    await view.rerender(defaultProps({ installationStatusLoading: false }))
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status.textContent).not.toContain('Checking provider health…')
+    expect(document.activeElement).toBe(select)
+  })
+
   it('renders provider options', async () => {
     render(ProviderSelectField, { props: defaultProps() })
 

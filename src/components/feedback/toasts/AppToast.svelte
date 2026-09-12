@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AlertCircle, CheckCircle2, Info, LoaderCircle, TriangleAlert, X } from '@lucide/svelte'
+  import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from '@lucide/svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { onDestroy } from 'svelte'
@@ -91,7 +92,7 @@
     {:else if variant === 'success'}
       <CheckCircle2 size={17} strokeWidth={2.2} />
     {:else if variant === 'loading'}
-      <LoaderCircle class="app-toast-spinner" size={17} strokeWidth={2.2} />
+      <LoadingIndicator decorative style="width: 17px; height: 17px" />
     {:else}
       <Info size={17} strokeWidth={2.2} />
     {/if}
@@ -189,10 +190,6 @@
     background: color-mix(in srgb, var(--of-accent) 12%, var(--of-surface));
   }
 
-  .app-toast-spinner {
-    animation: toast-spin 0.9s linear infinite;
-  }
-
   .app-toast-content {
     min-width: 0;
     flex: 1 1 auto;
@@ -254,13 +251,8 @@
     }
   }
 
-  @keyframes toast-spin {
-    to { transform: rotate(360deg); }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .app-toast,
-    .app-toast-spinner {
+    .app-toast {
       animation: none;
     }
   }

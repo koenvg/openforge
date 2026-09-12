@@ -143,7 +143,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-testid={handleTestId}
-      class="absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
+      class="absolute top-0 left-0 right-0 z-10 h-1 hover:bg-of-accent/30 transition-colors {isDragging ? 'bg-of-accent/40' : ''} focus-visible:bg-of-accent/40 focus-visible:outline-none"
       style="cursor: row-resize"
       role="separator"
       aria-orientation="horizontal"

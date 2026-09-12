@@ -23,6 +23,7 @@
 @import "tailwindcss";
 @import "./styles/theme-adapter.css";
 @import "./styles/semantic-utilities.css";
+@import "./styles/keyboard-hints.css";
 @import "./styles/markdown-and-file-previews.css";
 @import "./styles/terminal-presentation.css";
 @import "./styles/task-status-states.css";
@@ -59,7 +60,7 @@
 
 .of-field {
   border: 1px solid var(--of-divider);
-  border-radius: var(--radius-field);
+  border-radius: var(--of-radius-control);
   background: var(--of-surface);
   box-shadow: var(--of-shadow-surface);
   transition: border-color var(--of-motion-fast) ease, box-shadow var(--of-motion-fast) ease;

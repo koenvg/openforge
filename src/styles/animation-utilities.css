@@ -34,10 +34,10 @@
 .dev-badge-gradient {
   background: linear-gradient(
     270deg,
-    var(--color-primary),
+    var(--of-accent),
     var(--color-blue-500),
     var(--color-purple-500),
-    var(--color-primary)
+    var(--of-accent)
   );
   background-size: 300% 300%;
   animation: gradient-shift 4s ease infinite;

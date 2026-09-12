@@ -1,7 +1,7 @@
 .markdown-body {
   font-size: 0.875rem;
   line-height: 1.6;
-  color: var(--color-base-content);
+  color: var(--of-text);
   word-wrap: break-word;
 }
 
@@ -15,11 +15,11 @@
   margin-bottom: 0.5em;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--color-base-content);
+  color: var(--of-text);
 }
 
-.markdown-body h1 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--color-base-300); }
-.markdown-body h2 { font-size: 1.25em; padding-bottom: 0.3em; border-bottom: 1px solid var(--color-base-300); }
+.markdown-body h1 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--of-border); }
+.markdown-body h2 { font-size: 1.25em; padding-bottom: 0.3em; border-bottom: 1px solid var(--of-border); }
 .markdown-body h3 { font-size: 1.1em; }
 .markdown-body h4 { font-size: 1em; }
 
@@ -29,7 +29,7 @@
 }
 
 .markdown-body a {
-  color: var(--color-primary);
+  color: var(--of-accent);
   text-decoration: none;
 }
 .markdown-body a:hover {
@@ -39,7 +39,7 @@
 .markdown-body code {
   padding: 0.2em 0.4em;
   font-size: 85%;
-  background-color: var(--color-base-200);
+  background-color: var(--of-surface-subtle);
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }
@@ -49,9 +49,9 @@
   overflow-x: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: var(--color-base-200);
+  background-color: var(--of-surface-subtle);
   border-radius: 6px;
-  border: 1px solid var(--color-base-300);
+  border: 1px solid var(--of-border);
   margin-top: 0;
   margin-bottom: 0.75em;
 }
@@ -66,8 +66,8 @@
 .markdown-body blockquote {
   margin: 0 0 0.75em;
   padding: 0 1em;
-  color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
-  border-left: 3px solid var(--color-base-300);
+  color: color-mix(in oklch, var(--of-text) 60%, transparent);
+  border-left: 3px solid var(--of-border);
 }
 
 .markdown-body ul,
@@ -98,23 +98,23 @@
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 12px;
-  border: 1px solid var(--color-base-300);
+  border: 1px solid var(--of-border);
   text-align: left;
 }
 
 .markdown-body table th {
   font-weight: 600;
-  background-color: var(--color-base-200);
+  background-color: var(--of-surface-subtle);
 }
 
 .markdown-body table tr:nth-child(even) {
-  background-color: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+  background-color: color-mix(in oklch, var(--of-surface-subtle) 50%, transparent);
 }
 
 .markdown-body hr {
   height: 1px;
   border: 0;
-  background-color: var(--color-base-300);
+  background-color: var(--of-border);
   margin: 1em 0;
 }
 
@@ -126,9 +126,9 @@
 .markdown-body .mermaid-diagram {
   margin: 0 0 0.75em;
   overflow-x: auto;
-  border: 1px solid var(--color-base-300);
+  border: 1px solid var(--of-border);
   border-radius: 6px;
-  background-color: var(--color-base-100);
+  background-color: var(--of-surface);
   padding: 1rem;
   position: relative;
 }
@@ -140,23 +140,23 @@
   z-index: 1;
   min-height: 2.75rem;
   padding: 0 0.75rem;
-  border: 1px solid var(--color-base-300);
+  border: 1px solid var(--of-border);
   border-radius: 6px;
-  background: color-mix(in oklch, var(--color-base-100) 92%, transparent);
-  color: var(--color-base-content);
+  background: color-mix(in oklch, var(--of-surface) 92%, transparent);
+  color: var(--of-text);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 1px 3px color-mix(in oklch, var(--color-base-content) 15%, transparent);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--of-text) 15%, transparent);
 }
 
 .markdown-body .mermaid-diagram-expand:hover {
-  background: var(--color-base-200);
+  background: var(--of-surface-subtle);
 }
 
 .markdown-body .mermaid-diagram-expand:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--of-accent);
   outline-offset: 2px;
 }
 
@@ -178,7 +178,7 @@
 
 .markdown-body .mermaid-diagram-error {
   margin-bottom: 0.75rem;
-  color: var(--color-error);
+  color: var(--of-danger);
   font-weight: 500;
 }
 
@@ -186,7 +186,7 @@
   flex-wrap: nowrap;
 }
 .mermaid-diagram-preview-toolbar button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--of-accent);
   outline-offset: 2px;
 }
 .mermaid-diagram-preview-viewport {
@@ -225,7 +225,7 @@
 }
 
 .markdown-body del {
-  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+  color: color-mix(in oklch, var(--of-text) 50%, transparent);
 }
 
 .markdown-body > :first-child {
@@ -237,12 +237,12 @@
 }
 
 .file-preview-code {
-  color: var(--color-base-content);
+  color: var(--of-text);
 }
 
 .file-preview-code .hljs-comment,
 .file-preview-code .hljs-quote {
-  color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+  color: color-mix(in oklch, var(--of-text) 55%, transparent);
   font-style: italic;
 }
 
@@ -251,7 +251,7 @@
 .file-preview-code .hljs-literal,
 .file-preview-code .hljs-section,
 .file-preview-code .hljs-link {
-  color: var(--color-primary);
+  color: var(--of-accent);
 }
 
 .file-preview-code .hljs-string,
@@ -259,7 +259,7 @@
 .file-preview-code .hljs-attribute,
 .file-preview-code .hljs-regexp,
 .file-preview-code .hljs-template-tag {
-  color: color-mix(in oklch, var(--color-success) 75%, var(--color-base-content));
+  color: color-mix(in oklch, var(--of-success) 75%, var(--of-text));
 }
 
 .file-preview-code .hljs-number,
@@ -268,16 +268,16 @@
 .file-preview-code .hljs-meta,
 .file-preview-code .hljs-variable,
 .file-preview-code .hljs-template-variable {
-  color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
+  color: color-mix(in oklch, var(--of-warning) 80%, var(--of-text));
 }
 
 .file-preview-code .hljs-title,
 .file-preview-code .hljs-type,
 .file-preview-code .hljs-built_in,
 .file-preview-code .hljs-function {
-  color: color-mix(in oklch, var(--color-info) 80%, var(--color-base-content));
+  color: color-mix(in oklch, var(--of-info) 80%, var(--of-text));
 }
 
 .file-preview-code .hljs-deletion {
-  color: var(--color-error);
+  color: var(--of-danger);
 }

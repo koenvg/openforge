@@ -1,0 +1,30 @@
+/* Non-interactive key labels. Keep native <kbd> semantics and allow utility
+   overrides at call sites, as with the previous host keyboard-hint styling. */
+@layer components {
+  .of-key-hint {
+    --key-hint-size: calc(var(--of-control-height-compact) * .75);
+    display: inline-flex;
+    height: var(--key-hint-size);
+    min-width: var(--key-hint-size);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    padding-inline: .5em;
+    border: var(--of-border-width) solid color-mix(in srgb, var(--of-text) 20%, transparent);
+    border-bottom-width: calc(var(--of-border-width) + 1px);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface-subtle);
+    color: var(--of-text);
+    font-size: .875rem;
+    box-shadow: none;
+  }
+  .of-key-hint-xs {
+    --key-hint-size: calc(var(--of-control-height-compact) * .5);
+    font-size: .625rem;
+  }
+  .of-key-hint-sm {
+    --key-hint-size: calc(var(--of-control-height-compact) * .625);
+    font-size: .75rem;
+  }
+}

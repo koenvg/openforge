@@ -92,7 +92,7 @@
   {#if pendingConfirmation}
     <section class="p-5" aria-labelledby="merge-confirmation-title">
       <h2 id="merge-confirmation-title" class="text-base font-semibold">{pendingConfirmation.label}?</h2>
-      <p class="mt-2 text-sm text-base-content/70">GitHub will use this repository's configured commit message.</p>
+      <p class="mt-2 text-sm text-of-text/70">GitHub will use this repository's configured commit message.</p>
       <div class="mt-5 flex justify-end gap-2">
         <Button variant="ghost" size="sm" type="button" onclick={() => { pendingConfirmation = null }}>Cancel</Button>
         <Button data-palette-confirm variant="primary" size="sm" type="button" onclick={executePendingConfirmation}>Confirm</Button>
@@ -117,7 +117,7 @@
   trailingKey={pendingConfirmation ? undefined : '⌘K'} trailingLabel="toggle"
  >
     {#snippet emptyContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">No actions match your search</div>
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">No actions match your search</div>
     {/snippet}
     {#snippet item(action)}
       <span class="flex-1">{action.label}</span>
@@ -128,7 +128,7 @@
         <Badge variant="neutral">GitHub default</Badge>
       {/if}
       {#if action.shortcut}
-        <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
+        <kbd class="of-key-hint of-key-hint-xs bg-of-text/5 text-of-text/40 border-of-text/10">{action.shortcut}</kbd>
       {/if}
       </span>
     {/snippet}

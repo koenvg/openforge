@@ -13,14 +13,14 @@
 
   let variantClasses = $derived(
     disabled
-      ? 'text-base-content/40 cursor-not-allowed'
+      ? 'text-of-text/40 cursor-not-allowed'
       : variant === 'primary'
-        ? 'text-base-content font-semibold hover:bg-primary hover:text-primary-content cursor-pointer'
+        ? 'text-of-text font-semibold hover:bg-of-accent hover:text-of-on-accent cursor-pointer'
         : variant === 'danger'
-          ? 'text-error hover:bg-error hover:text-error-content cursor-pointer'
-          : 'text-base-content hover:bg-primary hover:text-primary-content cursor-pointer'
+          ? 'text-of-danger hover:bg-of-danger hover:text-of-on-danger cursor-pointer'
+          : 'text-of-text hover:bg-of-accent hover:text-of-on-accent cursor-pointer'
   )
-  let menuItemClasses = $derived(`context-item block w-full text-left px-3 py-2 text-sm rounded-[var(--of-radius-container)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${variantClasses}`)
+  let menuItemClasses = $derived(`context-item block w-full text-left px-3 py-2 text-sm rounded-[var(--of-radius-container)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-of-accent ${variantClasses}`)
 </script>
 
 {#if description}

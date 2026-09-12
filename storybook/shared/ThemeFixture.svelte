@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   let { catalog }: { catalog: string } = $props()
 </script>
 
@@ -9,6 +10,6 @@
     <p class="mt-2 text-sm text-[var(--of-text-secondary)]">
       Production fonts, tokens, controls, and layout utilities are active.
     </p>
-    <button class="btn btn-primary btn-sm mt-5">Theme ready</button>
+    <Button variant="primary" size="sm" class="mt-5">Theme ready</Button>
   </div>
 </section>

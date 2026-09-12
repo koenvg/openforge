@@ -18,10 +18,10 @@
     ariaLabel="Agents still running"
   >
     {#snippet header()}
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Agents still running</h2>
+      <h2 class="text-[0.95rem] font-semibold text-of-text m-0">Agents still running</h2>
     {/snippet}
     <div class="p-5 flex flex-col gap-4">
-      <p class="text-sm text-base-content/70 m-0">One or more agents are still running or waiting for your input. Quitting now will stop them. Are you sure you want to quit?</p>
+      <p class="text-sm text-of-text/70 m-0">One or more agents are still running or waiting for your input. Quitting now will stop them. Are you sure you want to quit?</p>
       <div class="flex justify-end gap-2">
         <Button variant="ghost" size="sm" type="button" onclick={controller.cancelClose}>Cancel</Button>
         <Button data-close-confirm-action="quit" variant="danger" size="sm" type="button" onclick={controller.confirmClose}>Quit</Button>

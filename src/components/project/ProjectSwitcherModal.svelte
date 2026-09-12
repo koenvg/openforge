@@ -53,12 +53,12 @@
   actionLabel="select" trailingKey="Ctrl+N/P"
  >
     {#snippet emptyContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">No projects match your search</div>
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">No projects match your search</div>
     {/snippet}
     {#snippet item(project)}
       <div class="flex-1 min-w-0">
         <div class="font-medium leading-tight truncate">{project.name}</div>
-        <div class="font-mono text-xs text-base-content/50 truncate mt-0.5">{project.path}</div>
+        <div class="font-mono text-xs text-of-text/50 truncate mt-0.5">{project.path}</div>
       </div>
     {/snippet}
     {#snippet trailing(project)}
@@ -67,18 +67,18 @@
       <span class="flex items-center gap-1.5 shrink-0">
         {#if attn}
           {#if attn.needs_input > 0}
-            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-warning" title="{attn.needs_input} agent{attn.needs_input > 1 ? 's' : ''} need{attn.needs_input === 1 ? 's' : ''} input"></span>
+            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-of-warning" title="{attn.needs_input} agent{attn.needs_input > 1 ? 's' : ''} need{attn.needs_input === 1 ? 's' : ''} input"></span>
           {:else if attn.running_agents > 0}
-            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-success animate-pulse" title="{attn.running_agents} agent{attn.running_agents > 1 ? 's' : ''} running"></span>
+            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-of-success animate-pulse" title="{attn.running_agents} agent{attn.running_agents > 1 ? 's' : ''} running"></span>
           {:else if attn.completed_agents > 0}
-            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-info" title="{attn.completed_agents} agent{attn.completed_agents > 1 ? 's' : ''} completed"></span>
+            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-of-info" title="{attn.completed_agents} agent{attn.completed_agents > 1 ? 's' : ''} completed"></span>
           {:else if attn.ci_failures > 0}
-            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-error" title="{attn.ci_failures} CI failure{attn.ci_failures > 1 ? 's' : ''}"></span>
+            <span class="w-2 h-2 rounded-[var(--of-radius-round)] bg-of-danger" title="{attn.ci_failures} CI failure{attn.ci_failures > 1 ? 's' : ''}"></span>
           {:else if attn.unaddressed_comments > 0}
             <Badge variant="danger" class="text-[0.6rem]" title="{attn.unaddressed_comments} unaddressed comment{attn.unaddressed_comments > 1 ? 's' : ''}">{attn.unaddressed_comments}</Badge>
           {/if}
         {/if}
-        {#if isActive}<span class="text-primary text-[0.9rem] font-bold leading-none">✓</span>{/if}
+        {#if isActive}<span class="text-of-accent text-[0.9rem] font-bold leading-none">✓</span>{/if}
       </span>
     {/snippet}
 </SearchPalette>
