@@ -68,10 +68,10 @@ describe('DiffViewer Search', () => {
       expect(screen.getByTitle('Close search (Escape)')).toBeTruthy()
     })
 
-    it('toolbar always renders Split and Unified mode buttons', () => {
+    it('toolbar always renders accessible Split and Unified mode buttons', () => {
       render(DiffViewer, { props: { files: [] } })
-      expect(screen.getByText('Split')).toBeTruthy()
-      expect(screen.getByText('Unified')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Split diff view' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Unified diff view' })).toBeTruthy()
     })
   })
 

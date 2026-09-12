@@ -50,7 +50,13 @@ export function taskDetailScenario(kind: TaskDetailScenario = 'active', reviewSt
   }
   const diffs = reviewState === 'empty' || reviewState === 'loading' ? [] : reviewState === 'long-content'
     ? Array.from({ length: 18 }, (_, index) => createReviewDiff(`src/integrations/provider-${index}/greeting-normalization.ts`))
-    : [createReviewDiff()]
+    : [
+      createReviewDiff(),
+      createReviewDiff('src/formatting/name-normalizer.ts'),
+      createReviewDiff('src/formatting/greeting-message.ts'),
+      createReviewDiff('src/ui/greeting-card.ts'),
+      createReviewDiff('tests/greet.test.ts'),
+    ]
   const linkedPr = reviewState === 'github-comments' ? createPullRequest({ ticket_id: task.id }) : null
   const prComments: PrComment[] = linkedPr ? [{
     id: 101, pr_id: linkedPr.id, author: 'alex', body: 'Please handle whitespace-only names.',
@@ -97,7 +103,11 @@ export function taskDetailScenario(kind: TaskDetailScenario = 'active', reviewSt
       seed(stores.outOfFocusTaskIdsByProject, new Map()),
       seed(selfReviewStateByTask, new Map([[task.id, {
         ...emptySelfReviewTaskState,
-        pendingInlineComments: kind === 'review' && ['populated', 'github-comments'].includes(reviewState) ? [{ path: 'src/greet.ts', line: 2, side: 'RIGHT', body: 'Please cover the empty-name case too.' }] : [],
+        pendingInlineComments: kind === 'review' && ['populated', 'github-comments'].includes(reviewState) ? [
+          { path: 'src/greet.ts', line: 2, side: 'RIGHT', body: 'Please cover the empty-name case too.' },
+          { path: 'src/formatting/name-normalizer.ts', line: 2, side: 'RIGHT', body: 'Trim whitespace before validating names.' },
+          { path: 'src/ui/greeting-card.ts', line: 2, side: 'RIGHT', body: 'Keep the punctuation in the rendered greeting.' },
+        ] : [],
       }]])),
       {
         install() { clearTaskReviewPaneState(task.id) },

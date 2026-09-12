@@ -102,7 +102,6 @@ export function createSelfReviewWorkspaceController(
     get sidePanelVisible() { return navigationController.sidePanelVisible },
     get sidePanelTab() { return navigationController.sidePanelTab },
     selectSidePanelTab: navigationController.selectSidePanelTab,
-    toggleSidePanel: navigationController.toggleSidePanel,
     get includeCommitted() { return diffController.includeCommitted },
     get includeUncommitted() { return diffController.includeUncommitted },
     get includeNonApplicationFiles() { return fileStateController.includeNonApplicationFiles },

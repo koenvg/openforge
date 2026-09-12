@@ -65,6 +65,7 @@
               <div class="flex items-center gap-2">
                 <label class="flex min-h-[var(--of-control-height-touch)] items-center gap-2 {committedLocked ? 'cursor-not-allowed' : 'cursor-pointer'}">
                   <Checkbox
+                    size="xs"
                     aria-label="Include committed changes"
                     checked={includeCommitted}
                     disabled={committedLocked}
@@ -81,6 +82,7 @@
               <div class="flex items-center gap-2">
                 <label class="flex min-h-[var(--of-control-height-touch)] items-center gap-2 {uncommittedLocked ? 'cursor-not-allowed' : 'cursor-pointer'}">
                   <Checkbox
+                    size="xs"
                     aria-label="Include uncommitted changes"
                     checked={includeUncommitted}
                     disabled={uncommittedLocked}

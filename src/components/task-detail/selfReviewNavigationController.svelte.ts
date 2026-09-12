@@ -134,7 +134,6 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
     get sidePanelVisible() { return sidePanelVisible },
     get sidePanelTab() { return sidePanelTab },
     selectSidePanelTab,
-    toggleSidePanel: () => { sidePanelVisible = !sidePanelVisible },
     setShowAddressed: (value: boolean) => { showAddressed = value },
     openRepositoryPath,
     closeRepositoryPreview,

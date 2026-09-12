@@ -26,6 +26,8 @@ describe("SelfReviewView uncommitted toggle", () => {
 			const uncommitted = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
 			expect(committed.checked).toBe(true);
 			expect(uncommitted.checked).toBe(true);
+			expect(committed.parentElement?.getAttribute("data-size")).toBe("xs");
+			expect(uncommitted.parentElement?.getAttribute("data-size")).toBe("xs");
 		});
 	});
 

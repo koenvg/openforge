@@ -46,9 +46,32 @@
     const baseLabel = `${action} diff for ${file.filename}`
     return pendingCommentCount === 0 ? baseLabel : `${baseLabel}, ${getPendingCommentLabel()}`
   }
+
+  function handleHeaderClick(event: MouseEvent): void {
+    const target = event.target
+    if (target instanceof Element && target.closest('button, a, input, select, textarea, label, [role="button"], [role="checkbox"]')) {
+      return
+    }
+
+    onToggleCollapse()
+  }
+
+  function handleHeaderKeydown(event: KeyboardEvent): void {
+    if (event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+
+    event.preventDefault()
+    onToggleCollapse()
+  }
 </script>
 
-<div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-1 bg-base-200 border-b border-base-300 rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm">
+<div
+      class="sticky top-0 z-20 w-full flex cursor-pointer items-center gap-2 px-4 py-1 bg-base-100 border-b border-base-300 rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm"
+  data-diff-file-header={file.filename}
+  role="presentation"
+  onclick={handleHeaderClick}
+  onkeydown={handleHeaderKeydown}
+>
   <button
     class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
     aria-label={getToggleLabel()}
@@ -113,6 +136,7 @@
   {#if onReviewedChange}
     <label class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-base-content/70">
       <Checkbox
+        size="xs"
         aria-label="Mark {file.filename} reviewed"
         checked={reviewed}
         onchange={(event) => {

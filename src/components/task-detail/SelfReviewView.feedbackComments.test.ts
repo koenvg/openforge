@@ -109,11 +109,12 @@ describe("SelfReviewView — hide addressed comments", () => {
     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
     vi.mocked(getPrComments).mockReturnValue(comments);
     renderSelfReviewView();
-    await fireEvent.click(screen.getByRole('button', { name: 'Collapse review panel' }));
+    await screen.findByRole('button', { name: 'Hide file tree' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide file tree' }));
     resolveComments([makeComment(1, 0)]);
     await screen.findByRole('region', { name: 'Diff scroll area' });
-    expect(screen.getByRole('button', { name: 'Show review panel' })).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Show review panel' }));
+    expect(screen.getByRole('button', { name: 'Show file tree' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Show file tree' }));
     expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true');
     await fireEvent.click(screen.getByRole('tab', { name: /^GitHub comments/ }));
     expect(await screen.findByText('Comment 1')).toBeTruthy();

@@ -6,6 +6,8 @@
     value: string
     label: string
     disabled?: boolean
+    icon?: Snippet
+    title?: string
   }>
 
   export type TabsOrientation = 'horizontal' | 'vertical'
@@ -49,8 +51,18 @@
   <Tabs.Root class="of-tabs-root" bind:value {orientation} {activationMode} {loop} {disabled} {onValueChange}>
     <Tabs.List class="of-tabs-list" aria-label={label}>
       {#each tabs as tab (tab.value)}
-        <Tabs.Trigger class="of-tabs-trigger" value={tab.value} disabled={tab.disabled}>
-          {tab.label}
+        <Tabs.Trigger
+          class="of-tabs-trigger"
+          value={tab.value}
+          disabled={tab.disabled}
+          aria-label={tab.icon ? tab.label : undefined}
+          title={tab.title}
+        >
+          {#if tab.icon}
+            <span class="of-tabs-icon" aria-hidden="true">{@render tab.icon()}</span>
+          {:else}
+            {tab.label}
+          {/if}
         </Tabs.Trigger>
       {/each}
     </Tabs.List>
@@ -103,6 +115,7 @@
   .of-tabs[data-attached] :global(.of-tabs-list) {
     border-width: 0 0 var(--of-border-width);
     border-radius: 0;
+    background: var(--of-surface);
   }
 
   .of-tabs :global(.of-tabs-list[data-orientation='vertical']) {
@@ -124,6 +137,12 @@
       background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
       color var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  .of-tabs :global(.of-tabs-icon) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .of-tabs :global(.of-tabs-trigger:hover:not(:disabled)) {

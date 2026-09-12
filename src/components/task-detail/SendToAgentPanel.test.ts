@@ -347,12 +347,20 @@ describe('SendToAgentPanel', () => {
     { inline: 1, pr: 1, status: null, label: 'Send feedback (2)', disabled: false, reason: 'Review and send feedback to agent' },
     { inline: 1, pr: 1, status: 'running', label: 'Send feedback (2)', disabled: true, reason: 'Agent is currently running' },
     { inline: 1, pr: 1, status: 'paused', label: 'Send feedback (2)', disabled: true, reason: 'Agent is currently paused' },
-  ])('reports review-bar eligibility for $label with agent $status', ({ inline, pr, status, label, disabled, reason }) => {
+  ])('reports feedback eligibility for $label with agent $status', ({ inline, pr, status, label, disabled, reason }) => {
     const comment: PrComment = { id: 1, pr_id: 1, author: 'alice', body: 'review', comment_type: 'review_comment', file_path: 'src/task.ts', line_number: 12, addressed: 0, outdated: 0, created_at: 1000 }
     render(SendToAgentPanel, { agentStatus: status, onSendToAgent: vi.fn(), onRefresh: vi.fn(), pendingInlineComments: inline ? inlineComments : [], selectedPrComments: pr ? [comment] : [] })
     const button = screen.getByRole('button', { name: label }) as HTMLButtonElement
     expect(button.disabled).toBe(disabled)
     expect(button.title).toBe(reason)
+  })
+
+  it('presents refresh as an icon-only button with a tooltip', () => {
+    render(SendToAgentPanel, { agentStatus: null, onSendToAgent: vi.fn(), onRefresh: vi.fn() })
+
+    const refresh = screen.getByRole('button', { name: 'Refresh diff' })
+    expect(refresh.getAttribute('title')).toBe('Refresh diff')
+    expect(refresh.textContent?.trim()).toBe('')
   })
 
   it('does not confirm a preview if the agent becomes busy', async () => {

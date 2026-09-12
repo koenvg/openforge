@@ -1,16 +1,19 @@
 <script lang="ts">
-  import { AlertTriangle, FolderOpen } from '@lucide/svelte'
+  import { AlertTriangle, FolderOpen, PanelLeftOpen } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import DiffViewerComponent from '../review/shared/diff-viewer/DiffViewer.svelte'
   import type { SelfReviewWorkspaceController } from './selfReviewWorkspaceController.svelte'
+  import type { Snippet } from 'svelte'
 
   interface Props {
     controller: SelfReviewWorkspaceController
     onRequestFocusFileTree: () => void
+    toolbarExtra?: Snippet
   }
 
-  let { controller, onRequestFocusFileTree }: Props = $props()
+  let { controller, onRequestFocusFileTree, toolbarExtra }: Props = $props()
   let diffViewer = $state<DiffViewer>()
 
   $effect(() => {
@@ -21,6 +24,25 @@
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col overflow-hidden bg-base-100" aria-label="Code diff panel">
+  {#if controller.isLoading || controller.error || controller.visibleDiffFiles.length === 0}
+    {#if toolbarExtra}
+      <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 px-2 py-1" role="toolbar" aria-label="Diff controls">
+        {#if controller.isLoading || controller.error}
+          <IconButton
+            label={controller.fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
+            variant={controller.fileTreeVisible ? 'outline' : 'ghost'}
+            size="sm"
+            title={controller.fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
+            aria-expanded={controller.fileTreeVisible}
+            onclick={() => controller.setFileTreeVisible(!controller.fileTreeVisible)}
+          >
+            <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" />
+          </IconButton>
+        {/if}
+        {@render toolbarExtra()}
+      </div>
+    {/if}
+  {/if}
   {#if controller.reviewedBaselineError}
     <div class="alert alert-error rounded-none border-x-0 border-t-0 py-2 text-sm" role="alert">
       <AlertTriangle size={18} aria-hidden="true" />
@@ -80,6 +102,7 @@
   {:else}
     <DiffViewerComponent
       bind:this={diffViewer}
+      {toolbarExtra}
       files={controller.visibleDiffFiles}
       existingComments={controller.visibleInlineReviewComments}
       pendingComments={controller.visiblePendingInlineComments}

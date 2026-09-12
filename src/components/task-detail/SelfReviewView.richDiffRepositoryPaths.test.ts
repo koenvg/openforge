@@ -81,7 +81,7 @@ describe('SelfReviewView Rich Diff repository paths', () => {
     const diffScrollArea = screen.getByRole('region', { name: 'Diff scroll area' });
     const changedFilesTree = screen.getByRole('tree', { name: 'Changed files' });
     const committedScope = screen.getByLabelText('Include committed changes');
-    const reviewBar = screen.getByRole('group', { name: 'Review bar' });
+    const diffToolbar = screen.getByRole('toolbar', { name: 'Diff controls' });
     Object.defineProperty(diffScrollArea, 'scrollTop', { value: 196, writable: true, configurable: true });
 
     await fireEvent.click(screen.getByRole('link', { name: 'Setup' }));
@@ -114,7 +114,7 @@ describe('SelfReviewView Rich Diff repository paths', () => {
     expect(diffScrollArea.scrollTop).toBe(196);
     expect(screen.getByRole('tree', { name: 'Changed files' })).toBe(changedFilesTree);
     expect(screen.getByLabelText('Include committed changes')).toBe(committedScope);
-    expect(screen.getByRole('group', { name: 'Review bar' })).toBe(reviewBar);
+    expect(screen.getByRole('toolbar', { name: 'Diff controls' })).toBe(diffToolbar);
   });
 
   it('can open a missing Review link target in live Files for recovery', async () => {

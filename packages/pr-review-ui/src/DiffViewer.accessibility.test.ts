@@ -63,6 +63,10 @@ describe('DiffViewer accessibility', () => {
 
     const splitButton = screen.getByRole('button', { name: 'Split diff view' })
     const unifiedButton = screen.getByRole('button', { name: 'Unified diff view' })
+    expect(splitButton.getAttribute('title')).toBe('Split diff view')
+    expect(unifiedButton.getAttribute('title')).toBe('Unified diff view')
+    expect(splitButton.textContent?.trim()).toBe('')
+    expect(unifiedButton.textContent?.trim()).toBe('')
     expect(splitButton.getAttribute('aria-pressed')).toBe('true')
     expect(unifiedButton.getAttribute('aria-pressed')).toBe('false')
 
@@ -72,6 +76,8 @@ describe('DiffViewer accessibility', () => {
 
     // Line wrapping defaults to off, so the button starts in the "Enable" (unpressed) state.
     const wrapButton = screen.getByRole('button', { name: 'Enable line wrapping' })
+    expect(wrapButton.getAttribute('title')).toBe('Enable line wrapping')
+    expect(wrapButton.textContent?.trim()).toBe('')
     expect(wrapButton.getAttribute('aria-pressed')).toBe('false')
     await fireEvent.click(wrapButton)
     expect(screen.getByRole('button', { name: 'Disable line wrapping' }).getAttribute('aria-pressed')).toBe('true')
@@ -122,6 +128,32 @@ describe('DiffViewer accessibility', () => {
     await fireEvent.click(collapseButton)
 
     expect(screen.getByRole('button', { name: 'Expand diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('uses compact checkboxes for reviewed file controls', () => {
+    render(DiffViewer, { props: { files, onToggleFileReviewed: vi.fn() } })
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Mark src/main.ts reviewed' })
+    expect(checkbox.parentElement?.getAttribute('data-size')).toBe('xs')
+  })
+
+  it('collapses a file when clicking the non-control area of its header row', async () => {
+    render(DiffViewer, { props: { files } })
+
+    const header = document.querySelector('[data-diff-file-header="src/main.ts"]')
+    expect(header).not.toBeNull()
+
+    await fireEvent.click(header!)
+
+    expect(screen.getByRole('button', { name: 'Expand diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('does not add a trailing gap below a diff section', () => {
+    render(DiffViewer, { props: { files } })
+
+    const row = document.querySelector('[data-diff-file="src/main.ts"]') as HTMLElement | null
+    expect(row).not.toBeNull()
+    expect(row?.style.paddingBottom).toBe('')
   })
 
   it('shows each file pending comment count while expanded and collapsed', async () => {
