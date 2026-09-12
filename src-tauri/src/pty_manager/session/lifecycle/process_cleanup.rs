@@ -243,6 +243,17 @@ impl PtyManager {
     /// # Arguments
     /// * `session_key` - Stable identifier for the current terminal session
     pub async fn kill_pty(&self, session_key: &str) -> Result<(), PtyError> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(session_key))
+        {
+            return bridge
+                .for_key(session_key)
+                .terminate(bridge.publisher())
+                .await
+                .map_err(PtyError::CleanupFailed);
+        }
         self.terminal_sessions
             .agent_spawn_generations
             .lock()

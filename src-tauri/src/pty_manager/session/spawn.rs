@@ -2,6 +2,7 @@
 
 mod agent;
 mod arbitration;
+mod daemon_pi;
 mod process;
 mod registration;
 mod shell;

@@ -1,4 +1,4 @@
-//! Routes only the explicitly selected indexed shell. All other callers retain the old adapter.
+//! Routes selected daemon-backed terminals. Unselected callers retain the old adapter.
 use super::{pty_payload::*, *};
 use crate::app_events::RuntimeEventPublisher;
 

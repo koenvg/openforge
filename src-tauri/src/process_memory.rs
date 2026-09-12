@@ -142,7 +142,28 @@ pub async fn collect_process_memory_diagnostics(
     };
 
     let pty_sessions = match pty_manager {
-        Some(manager) => manager.process_diagnostic_sessions().await,
+        Some(manager) => {
+            let mut sessions = manager.process_diagnostic_sessions().await;
+            if let Some(bridge) = &manager.daemon_shells {
+                if let Some(session) = bridge
+                    .pi_session()
+                    .await?
+                    .filter(|session| session.exit_code.is_none())
+                {
+                    sessions.push(crate::pty_manager::PtyProcessDiagnosticSession {
+                        task_id: session.session_key.clone(),
+                        session_key: session.session_key,
+                        session_kind: "agent".into(),
+                        lifecycle_state: crate::pty_manager::TerminalSessionLifecycleState::Live,
+                        pid: Some(session.pid),
+                        pty_instance_id: session.pty.instance.value(),
+                        // Daemon allocations deliberately have no Sidecar-owned PID file.
+                        pid_file_name: String::new(),
+                    });
+                }
+            }
+            sessions
+        }
         None => Vec::new(),
     };
     let task_ids: Vec<String> = pty_sessions

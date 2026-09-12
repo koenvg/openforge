@@ -1,4 +1,4 @@
-//! Controlled indexed-shell migration. The bridge owns no PTY and never stops one on drop.
+//! Controlled terminal bridge. Owns no PTY and never stops one on drop.
 #[cfg(test)]
 use super::PtyManager;
 use super::{PtyBufferState, TerminalViewSnapshot};
@@ -22,6 +22,7 @@ struct Shared {
     root: PathBuf,
     executable: PathBuf,
     key: String,
+    pi_key: Option<String>,
     connection: Mutex<Option<Connection>>,
 }
 struct Connection {
@@ -35,15 +36,34 @@ impl PtyManager {
     pub(crate) fn enable_daemon_shell(&mut self, root: PathBuf, executable: PathBuf, key: String) {
         self.daemon_shells = Some(DaemonShells::new(root, executable, key));
     }
+    pub(crate) fn enable_daemon_pi(&mut self, root: PathBuf, executable: PathBuf, key: String) {
+        self.daemon_shells = Some(DaemonShells::with_selection(
+            root,
+            executable,
+            String::new(),
+            Some(key),
+        ));
+    }
 }
 
 impl DaemonShells {
+    #[cfg(test)]
     pub(crate) fn new(root: PathBuf, executable: PathBuf, key: String) -> Self {
+        Self::with_selection(root, executable, key, None)
+    }
+
+    fn with_selection(
+        root: PathBuf,
+        executable: PathBuf,
+        key: String,
+        pi_key: Option<String>,
+    ) -> Self {
         Self(
             Arc::new(Shared {
                 root,
                 executable,
                 key,
+                pi_key,
                 connection: Mutex::new(None),
             }),
             None,
@@ -55,16 +75,37 @@ impl DaemonShells {
         if !cfg!(debug_assertions) || std::env::var("OPENFORGE_E2E").as_deref() != Ok("1") {
             return None;
         }
-        Some(Self::new(
+        let key = std::env::var("OPENFORGE_SESSION_DAEMON_SHELL_KEY").unwrap_or_default();
+        let pi_key = std::env::var("OPENFORGE_SESSION_DAEMON_PI_KEY")
+            .ok()
+            .filter(|key| !key.is_empty() && key != "*");
+        if key.is_empty() && pi_key.is_none() {
+            return None;
+        }
+        Some(Self::with_selection(
             std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")?.into(),
             std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH")?.into(),
-            std::env::var("OPENFORGE_SESSION_DAEMON_SHELL_KEY").ok()?,
+            key,
+            pi_key,
         ))
     }
 
-    pub(crate) fn owns(&self, key: &str) -> bool {
-        selected_shell(&self.0.key, key)
+    pub(crate) fn publisher(&self) -> RuntimeEventPublisher {
+        self.0
+            .connection
+            .lock()
+            .ok()
+            .and_then(|slot| slot.as_ref().map(|connection| connection.publisher.clone()))
+            .unwrap_or_else(|| RuntimeEventPublisher::new(None, None))
     }
+
+    pub(crate) fn owns(&self, key: &str) -> bool {
+        selected_shell(&self.0.key, key) || self.owns_pi(key)
+    }
+    pub(crate) fn owns_pi(&self, key: &str) -> bool {
+        self.0.pi_key.as_deref() == Some(key)
+    }
+
     pub(crate) async fn terminate_for_task(
         &self,
         task_id: String,
@@ -141,12 +182,16 @@ impl DaemonShells {
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<serde_json::Value, String> {
-        self.run(publisher, |connection, key| {
+        let pi_key = self.0.pi_key.clone();
+        self.run(publisher, move |connection, key| {
             let inventory = connection.client.inventory()?;
             let sessions: Vec<_> = inventory
                 .sessions
                 .into_iter()
-                .filter(|session| selected_shell(key, &session.session_key))
+                .filter(|session| {
+                    selected_shell(key, &session.session_key)
+                        || pi_key.as_deref() == Some(&session.session_key)
+                })
                 .map(|session| {
                     serde_json::json!({
                         "key": session.session_key,
@@ -182,6 +227,20 @@ impl DaemonShells {
                 .pty
                 .instance
                 .value())
+        })
+        .await
+    }
+
+    pub(crate) async fn pi_session(&self) -> Result<Option<Session>, String> {
+        match &self.0.pi_key {
+            Some(key) => self.for_key(key).session().await,
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) async fn session(&self) -> Result<Option<Session>, String> {
+        self.run(self.publisher(), |connection, key| {
+            find(&connection.client, key)
         })
         .await
     }
@@ -417,7 +476,10 @@ fn pump(shared: &Shared) -> Result<(), Error> {
         .inventory()?
         .sessions
         .into_iter()
-        .filter(|session| selected_shell(&shared.key, &session.session_key))
+        .filter(|session| {
+            selected_shell(&shared.key, &session.session_key)
+                || shared.pi_key.as_deref() == Some(&session.session_key)
+        })
         .collect();
     if batch.gap {
         // Existing transport reconciliation requests fresh authority snapshots, not raw replay.

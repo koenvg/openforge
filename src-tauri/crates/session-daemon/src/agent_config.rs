@@ -54,6 +54,10 @@ impl AgentRuntime {
             .command
             .env
             .insert("OPENFORGE_TASK_ID".into(), request.owner.task_id().into());
+        request.command.env.insert(
+            "OPENFORGE_PTY_INSTANCE_ID".into(),
+            credential.config.pty.instance.value().to_string(),
+        );
         Ok(credential)
     }
 }

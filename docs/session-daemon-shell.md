@@ -14,7 +14,7 @@ Only debug Sidecars with `OPENFORGE_E2E=1` and all three settings below select t
 - `OPENFORGE_SESSION_DAEMON_PATH`: the built daemon executable.
 - `OPENFORGE_SESSION_DAEMON_SHELL_KEY`: one indexed Shell Session Key, such as `T-proof-shell-3`.
 
-All other callers retain the existing adapter. Use an isolated HOME and app-data directory for testing. Never point the fixture at the installed app or its data. No normal-Quit policy or packaged installation/update enablement is added here.
+Indexed shell callers outside this selection retain the existing adapter. KVG-4720 adds a separate [controlled Pi selection](session-daemon-pi.md) through the same daemon connection. Use an isolated HOME and app-data directory for testing. Never point the fixture at the installed app or its data. No normal-Quit policy or packaged installation/update enablement is added here.
 
 ## Local protocol
 

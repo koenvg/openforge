@@ -243,6 +243,17 @@ impl PtyManager {
     }
 
     pub async fn write_pty(&self, session_key: &str, data: &[u8]) -> Result<(), PtyError> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(session_key))
+        {
+            return bridge
+                .for_key(session_key)
+                .write(data.to_vec(), bridge.publisher())
+                .await
+                .map_err(PtyError::WriteFailed);
+        }
         self.terminal_sessions
             .operate(
                 SessionTarget::Current(session_key),
@@ -266,6 +277,17 @@ impl PtyManager {
         cols: u16,
         rows: u16,
     ) -> Result<(), PtyError> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(session_key))
+        {
+            return bridge
+                .for_key(session_key)
+                .resize(cols, rows, bridge.publisher())
+                .await
+                .map_err(|error| PtyError::IoError(std::io::Error::other(error)));
+        }
         self.terminal_sessions
             .operate(
                 SessionTarget::Current(session_key),

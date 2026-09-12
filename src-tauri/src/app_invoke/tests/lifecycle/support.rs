@@ -143,7 +143,7 @@ const PROVIDER_LOG_READY: &str = "openforge-provider-log=ready";
 #[cfg(unix)]
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let script = format!(
-        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\nprintf '{PROVIDER_LOG_READY}\\n'\n# Keep the fake provider alive until the test tears down its PTY. This prevents\n# an immediate child exit from racing PTY session registration on macOS.\nIFS= read -r _\nexit 0\n",
+        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\nprintf 'pty-instance=%s\\n' \"$OPENFORGE_PTY_INSTANCE_ID\"\nprintf '{PROVIDER_LOG_READY}\\n'\n# Keep the fake provider alive until the test tears down its PTY. This prevents\n# an immediate child exit from racing PTY session registration on macOS.\nIFS= read -r _\nexit 0\n",
         log_path.display()
     );
     let path = bin_dir.join(command);
