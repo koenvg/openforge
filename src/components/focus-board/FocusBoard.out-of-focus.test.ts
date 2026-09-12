@@ -19,23 +19,23 @@ describe('FocusBoard out-of-focus behavior', () => {
     const onProjectAttentionChanged = vi.fn(async () => undefined)
     renderBoard({ onProjectAttentionChanged })
 
-    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
-    await fireEvent.contextMenu((await screen.findAllByText('Doing task'))[0])
+    await fireEvent.click(await screen.findByRole('button', { name: /Focus 1/i }))
+    await fireEvent.contextMenu((await screen.findAllByText('Focus task'))[0])
     await fireEvent.click(screen.getByText('Set aside'))
 
     await waitFor(() => {
-      expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
+      expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-1']))
     })
-    expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
+    expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-1']))
     await waitFor(() => {
       expect(onProjectAttentionChanged).toHaveBeenCalledOnce()
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /Out of Focus 1/i }))
-    expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Focus task')).toBeNull()
+    expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Doing task')).toBeNull()
 
-    await fireEvent.contextMenu(screen.getAllByText('Doing task')[0])
+    await fireEvent.contextMenu(screen.getAllByText('Focus task')[0])
     await fireEvent.click(screen.getByText('Return to Board'))
 
     await waitFor(() => {
@@ -45,8 +45,26 @@ describe('FocusBoard out-of-focus behavior', () => {
       expect(onProjectAttentionChanged).toHaveBeenCalledTimes(2)
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: /In Flight 1/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /Focus 1/i }))
+    expect(screen.getAllByText('Focus task').length).toBeGreaterThan(0)
+  })
+
+  it('keeps a set-aside running agent in In Flight instead of Out of Focus', async () => {
+    const ipc = await import('../../lib/ipc')
+    renderBoard()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
+    await fireEvent.contextMenu((await screen.findAllByText('Doing task'))[0])
+    await fireEvent.click(screen.getByText('Set aside'))
+
+    await waitFor(() => {
+      expect(get(outOfFocusTaskIdsByProject).get('proj-1')).toEqual(new Set(['T-2']))
+    })
+    expect(ipc.setProjectConfig).toHaveBeenCalledWith('proj-1', 'low_fire_task_ids', JSON.stringify(['T-2']))
+
+    expect(screen.getByRole('button', { name: /In Flight 1/i }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Out of Focus 0/i })).toBeTruthy()
   })
 
   it('shows empty state when no tasks match the Out of Focus filter', async () => {

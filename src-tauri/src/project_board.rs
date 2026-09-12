@@ -1,6 +1,6 @@
 use crate::task_attention::{
-    driving_pr, project_task_attention, task_reason, task_state, TaskAttentionInput,
-    TaskAttentionPullRequest, TaskAttentionSession, TaskAttentionTask,
+    driving_pr, project_task_attention, task_needs_attention, task_reason, task_state,
+    TaskAttentionInput, TaskAttentionPullRequest, TaskAttentionSession, TaskAttentionTask,
 };
 use crate::task_prompt::task_display_title;
 use serde::{Deserialize, Serialize};
@@ -146,6 +146,15 @@ pub(crate) fn project_task_board(
         .flatten()
         .map(String::as_str)
         .collect::<HashSet<_>>();
+    let uses_default_focus_states = !input.focus_states_by_project.contains_key(project_id);
+    let focus_states = input
+        .focus_states_by_project
+        .get(project_id)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
     let mut in_flight = Vec::new();
     let mut out_of_focus_rows = Vec::new();
     let mut backlog = Vec::new();
@@ -172,7 +181,15 @@ pub(crate) fn project_task_board(
         };
         let lane = if task.status == "backlog" {
             ProjectBoardLane::Backlog
-        } else if out_of_focus.contains(task.id.as_str()) {
+        } else if out_of_focus.contains(task.id.as_str())
+            && task_needs_attention(
+                session,
+                task_pull_requests,
+                state,
+                uses_default_focus_states,
+                &focus_states,
+            )
+        {
             ProjectBoardLane::OutOfFocus
         } else {
             ProjectBoardLane::InFlight
@@ -299,6 +316,75 @@ mod tests {
         .expect("beta project should exist");
 
         assert_eq!(&actual, expected);
+    }
+
+    #[test]
+    fn parked_pending_work_joins_in_flight_instead_of_out_of_focus() {
+        let actual = project_task_board(
+            TaskAttentionInput {
+                projects: vec![TaskAttentionProject {
+                    id: "p1".to_string(),
+                    name: "Project One".to_string(),
+                }],
+                tasks: vec![
+                    TaskAttentionTask {
+                        id: "t-parked-running".to_string(),
+                        project_id: Some("p1".to_string()),
+                        status: "doing".to_string(),
+                        title: Some("Parked running".to_string()),
+                        initial_prompt: String::new(),
+                        updated_at: 20,
+                        depends_on: Vec::new(),
+                        labels: Vec::new(),
+                    },
+                    TaskAttentionTask {
+                        id: "t-parked-idle".to_string(),
+                        project_id: Some("p1".to_string()),
+                        status: "doing".to_string(),
+                        title: Some("Parked idle".to_string()),
+                        initial_prompt: String::new(),
+                        updated_at: 10,
+                        depends_on: Vec::new(),
+                        labels: Vec::new(),
+                    },
+                ],
+                sessions: vec![TaskAttentionSession {
+                    ticket_id: "t-parked-running".to_string(),
+                    status: "running".to_string(),
+                    checkpoint_data: None,
+                    updated_at: 50,
+                    output_revision: 0,
+                    viewed_output_revision: 0,
+                }],
+                pull_requests: Vec::new(),
+                out_of_focus_by_project: HashMap::from([(
+                    "p1".to_string(),
+                    vec!["t-parked-running".to_string(), "t-parked-idle".to_string()],
+                )]),
+                focus_states_by_project: HashMap::new(),
+            },
+            "p1",
+        )
+        .expect("project should exist");
+
+        assert!(actual.focus.is_empty());
+        assert_eq!(
+            actual
+                .in_flight
+                .iter()
+                .map(|task| task.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["t-parked-running"]
+        );
+        assert_eq!(actual.in_flight[0].state, "active");
+        assert_eq!(
+            actual
+                .out_of_focus
+                .iter()
+                .map(|task| task.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["t-parked-idle"]
+        );
     }
 
     #[test]

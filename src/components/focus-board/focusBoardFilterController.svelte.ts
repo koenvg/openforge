@@ -23,6 +23,7 @@ export interface FocusBoardFilterControllerOptions {
   getAttentionTaskIds: () => ReadonlySet<string>
   getAttentionOrder: () => ReadonlyMap<string, number>
   getOutOfFocusTaskIds: () => ReadonlySet<string>
+  getPendingParkedTaskIds: () => ReadonlySet<string>
 }
 
 export function createFocusBoardFilterController(options: FocusBoardFilterControllerOptions) {
@@ -69,6 +70,7 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
       activeFilter,
       options.getAttentionTaskIds(),
       options.getOutOfFocusTaskIds(),
+      options.getPendingParkedTaskIds(),
     )
     const readinessFiltered = activeFilter === 'backlog' && readyOnly
       ? filtered.filter((task) => readyTaskIds.has(task.id))
@@ -92,6 +94,7 @@ export function createFocusBoardFilterController(options: FocusBoardFilterContro
     options.getTasksWithReadyAttentionMetadata(),
     options.getAttentionTaskIds(),
     options.getOutOfFocusTaskIds(),
+    options.getPendingParkedTaskIds(),
   ))
 
   const readyCount = $derived(readyTaskIds.size)

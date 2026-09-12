@@ -201,9 +201,10 @@ describe('buildAttentionOverview — running agents', () => {
         // The focus lane never holds a running agent (a running agent needs nothing from
         // you), so an idle row here must not be counted.
         focus: [attentionRow('idle', 'p1', { state: 'idle' })],
-        'in-flight': [attentionRow('flying', 'p1', { state: 'active' })],
-        // A parked task whose agent is running still counts: it is running.
-        'out-of-focus': [attentionRow('parked', 'p1', { state: 'active' })],
+        'in-flight': [
+          attentionRow('flying', 'p1', { state: 'active' }),
+          attentionRow('parked', 'p1', { state: 'active' }),
+        ],
         backlog: [attentionRow('other', 'p2', { state: 'backlog' })],
       }),
     }))

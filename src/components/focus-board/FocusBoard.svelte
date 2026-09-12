@@ -3,7 +3,7 @@
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { commandHeld, mergingTaskIds } from '../../lib/stores'
-  import type { BoardFilter } from '../../lib/boardFilters'
+  import { taskNeedsAttention, type BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
@@ -85,6 +85,22 @@
     projectId ? attentionRows.filter((row) => row.project_id === projectId) : [],
   )
   let attentionTaskIds = $derived(new Set(projectAttentionRows.map((row) => row.task_id)))
+  let pendingParkedTaskIds = $derived.by(() => {
+    const ids = new Set<string>()
+    for (const task of tasks) {
+      if (task.status !== 'doing' || !outOfFocusTaskIds.has(task.id)) continue
+      const session = activeSessions.get(task.id) ?? null
+      const prs = ticketPrs.get(task.id) ?? []
+      const unread = session
+        ? isAgentOutputUnread(session.status, session.output_revision, session.viewed_output_revision)
+        : false
+      const unaddressed = prs.some((pr) => pr.unaddressed_comment_count > 0)
+      if (!taskNeedsAttention(computeTaskState(task, session, prs), unread, unaddressed)) {
+        ids.add(task.id)
+      }
+    }
+    return ids
+  })
   let attentionByTaskId = $derived(new Map(projectAttentionRows.map((row) => [row.task_id, row])))
   let attentionOrder = $derived(new Map(projectAttentionRows.map((row, index) => [row.task_id, index])))
   let boardMetadataReady = $derived(outOfFocusController.isReadyFor(projectId) && attentionRowsLoaded)
@@ -101,6 +117,7 @@
     getAttentionTaskIds: () => attentionTaskIds,
     getAttentionOrder: () => attentionOrder,
     getOutOfFocusTaskIds: () => outOfFocusTaskIds,
+    getPendingParkedTaskIds: () => pendingParkedTaskIds,
   })
 
   let activeFilter = $derived(filterController.activeFilter)
