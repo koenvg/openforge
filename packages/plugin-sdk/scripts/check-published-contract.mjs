@@ -12,6 +12,7 @@ import { assertPublicUiDeclarationsHideBitsUi } from './public-ui-declaration-co
 import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../src/publicUiExports.mjs'
 import { assertPackedTextFieldDocumentation } from './text-field-documentation-contract.mjs'
 import { buildReplacementAuthoringContract } from './view-replacement-authoring-contract.mjs'
+import { checkPackedFeedback } from './feedback-publication-contract.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -285,6 +286,7 @@ try {
   const packedReadme = readFileSync(packedReadmePath, 'utf8')
   if (packedReadme !== sourceReadme) fail('Packed Plugin SDK README.md does not match the package README.')
   await assertPackedTextFieldDocumentation(consumerRoot, packedReadme)
+  const feedbackAuthoringFiles = await checkPackedFeedback({ packageRoot, consumerRoot, installedPackageRoot, readme: packedReadme })
 
   assertPublicUiDeclarationsHideBitsUi(
     OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ componentName, distPath }) => ({
@@ -360,7 +362,7 @@ if (typeof vite?.createOpenForgePluginSdkSourceAliases !== 'function') {
       noEmit: true,
       types: ['svelte'],
     },
-    files: ['./authoring-contract.ts', ...replacementAuthoringFiles],
+    files: ['./authoring-contract.ts', ...replacementAuthoringFiles, ...feedbackAuthoringFiles],
   }, null, 2)}\n`)
 
   run('pnpm', ['exec', 'tsc', '--project', join(consumerRoot, 'tsconfig.json')], { cwd: consumerRoot })

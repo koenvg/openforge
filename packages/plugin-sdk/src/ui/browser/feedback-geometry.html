@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SDK feedback geometry</title></head>
+<body><script type="module">
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import { mount } from 'svelte'
+import App from '../../../scripts/fixtures/feedback/App.svelte'
+mount(App, { target: document.body, props: { themes: window.feedbackThemes } })
+</script></body></html>

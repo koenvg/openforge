@@ -118,3 +118,13 @@ These utilities exist where the host stylesheet is compiled. Production discover
 The retained adapter's unlayered global `:focus-visible` outline rule takes precedence over layered outline utilities on focusable controls. The compiled-family matrix isolates the semantic definitions to verify their paint; host integration tests retain and exercise the adapter separately. No global focus rule was moved or weakened here.
 
 See [validation and browser evidence](ui-migration-validation.md), [host computed baselines](ui-migration-baseline.json), and [token-only SDK baselines](ui-migration-sdk-baseline.json).
+
+## Feedback controls, KVG-4864
+
+The SDK now exports `LoadingIndicator`, `Alert`, and `Progress` through its canonical registry. `PluginViewState` no longer needs host utility CSS: it uses the feedback controls, SDK Button/Badge, and scoped styles. Its loading message has one polite announcement; errors and retry callbacks retain their existing policy.
+
+The inventoried loading sizes are `xs` in inline actions/settings, `sm` in diff and provider loading, `md` in whole-view loading, and `lg` in `AgentTerminalShell`. Their bounds scale with `--of-control-height-compact`. Alerts retain one feedback density and progress one 0.5rem bar height. Other caller migrations, including `MermaidDiagramPreview`, remain with their owning tasks.
+
+The machine-readable ledger above is the KVG-4863 snapshot, not a refreshed completion count. Its former `PluginViewState` loading, button, badge, color, and layout utility occurrences are superseded by this bounded migration. New public components and token-only fixtures contain no legacy style consumers. Historical browser measurements remain evidence, not executable host-CSS requirements.
+
+See [feedback validation](ui-feedback-validation.md) for public test boundaries, baseline geometry, publication checks, and remaining validation gaps.

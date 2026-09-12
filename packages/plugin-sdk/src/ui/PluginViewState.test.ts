@@ -1,8 +1,25 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import PluginViewStateTestWrapper from './PluginViewStateTestWrapper.svelte'
+import { createRawSnippet } from 'svelte'
+import PluginViewState from './PluginViewState.svelte'
 
 describe('plugin-sdk PluginViewState', () => {
+  it('retains state precedence and caller-owned action snippets', async () => {
+    const errorActions = createRawSnippet(() => ({ render: () => '<button type="button">Inspect connection</button>' }))
+    const emptyActions = createRawSnippet(() => ({ render: () => '<button type="button">Create record</button>' }))
+    const { rerender } = render(PluginViewState, { loading: true, error: '', empty: true, onRetry: vi.fn(), errorActions, emptyActions })
+    expect(screen.getByRole('status').textContent).toContain('Loading…')
+    expect(screen.queryByRole('alert')).toBeNull()
+    await rerender({ loading: false })
+    expect(screen.getByRole('alert').textContent).toContain('Unable to load')
+    expect(screen.getByRole('button', { name: 'Inspect connection' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    await rerender({ error: null })
+    expect(screen.getByRole('status').textContent).toContain('Nothing to show')
+    expect(screen.getByRole('button', { name: 'Create record' })).toBeTruthy()
+  })
+
   it('renders slotted plugin content when no view state is active', () => {
     render(PluginViewStateTestWrapper, { props: { mode: 'content' } })
 
@@ -18,6 +35,8 @@ describe('plugin-sdk PluginViewState', () => {
     const status = screen.getByRole('status')
     expect(status.getAttribute('aria-live')).toBe('polite')
     expect(status.textContent).toContain('Loading plugin records…')
+    expect(status.querySelectorAll('[aria-label="Loading plugin records…"]')).toHaveLength(0)
+    expect(screen.getAllByRole('status')).toHaveLength(1)
     expect(screen.queryByRole('article', { name: 'Plugin records' })).toBeNull()
   })
 
