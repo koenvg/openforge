@@ -147,6 +147,31 @@ pub(crate) async fn resume_task_sessions(
         }
     }
 
+    // A retained allocation, including an exit, is authoritative before any provider resume.
+    let preserved_pi = match app.try_state::<PtyManager>() {
+        Some(manager) => match manager.daemon_shells.as_ref() {
+            Some(bridge) => match bridge.pi_session().await {
+                Ok(session) => session,
+                Err(error) => {
+                    sidecar_readiness.mark_startup_resume_degraded(format!(
+                        "Pi inventory reconciliation failed: {error}"
+                    ));
+                    let _ = app.emit("startup-resume-complete", ());
+                    return;
+                }
+            },
+            None => None,
+        },
+        None => None,
+    };
+    let preserved_task = preserved_pi
+        .as_ref()
+        .map(|session| session.session_key.as_str());
+    let live_task = preserved_pi
+        .as_ref()
+        .filter(|session| session.exit_code.is_none())
+        .map(|session| (session.session_key.as_str(), session.pty.instance.value()));
+
     let resume_targets = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
         let db_lock = match db.lock() {
@@ -176,7 +201,7 @@ pub(crate) async fn resume_task_sessions(
     };
 
     if resume_targets.is_empty() {
-        mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff);
+        mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, live_task);
         sidecar_readiness.mark_startup_resume_complete();
         let _ = app.emit("startup-resume-complete", ());
         return;
@@ -190,6 +215,10 @@ pub(crate) async fn resume_task_sessions(
     );
 
     for target in resume_targets {
+        if preserved_task == Some(target.task_id.as_str()) {
+            sidecar_readiness.record_startup_resume_success();
+            continue;
+        }
         let workspace_path = std::path::Path::new(&target.workspace_path);
         if !workspace_path.exists() {
             warn!(
@@ -374,7 +403,7 @@ pub(crate) async fn resume_task_sessions(
         }
     }
 
-    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff);
+    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, live_task);
     sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
@@ -383,6 +412,7 @@ pub(crate) async fn resume_task_sessions(
 fn mark_unresumed_running_sessions_interrupted(
     app: &crate::backend_runtime::AppHandle,
     stale_running_session_cutoff: i64,
+    live_pi_task: Option<(&str, u64)>,
 ) {
     let db = app.state::<Arc<Mutex<db::Database>>>();
     let db_lock = match db.lock() {
@@ -396,7 +426,10 @@ fn mark_unresumed_running_sessions_interrupted(
         }
     };
 
-    match db_lock.mark_running_sessions_interrupted_before(stale_running_session_cutoff) {
+    match db_lock.mark_running_sessions_interrupted_except_live_pi(
+        stale_running_session_cutoff,
+        live_pi_task,
+    ) {
         Ok(count) if count > 0 => {
             info!(
                 "[startup] Marked {} unresumed running sessions as interrupted",

@@ -7,6 +7,24 @@ use super::super::super::{PtyBufferState, PtyManager, TerminalViewSnapshot};
 
 impl PtyManager {
     pub async fn pty_buffer_state(&self, session_key: &str) -> PtyBufferState {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(session_key))
+        {
+            return match bridge.for_key(session_key).buffer(bridge.publisher()).await {
+                Ok(buffer) => buffer,
+                Err(error) => {
+                    warn!("daemon terminal recovery unavailable for {session_key}: {error}");
+                    PtyBufferState {
+                        buffer: None,
+                        snapshot: None,
+                        is_live: false,
+                        instance_id: None,
+                    }
+                }
+            };
+        }
         let live_session = self
             .terminal_sessions
             .sessions
@@ -72,6 +90,24 @@ impl PtyManager {
     }
 
     pub async fn get_pty_buffer(&self, session_key: &str) -> Option<String> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(session_key))
+        {
+            let buffer = match bridge.for_key(session_key).buffer(bridge.publisher()).await {
+                Ok(buffer) => buffer,
+                Err(error) => {
+                    warn!("daemon terminal replay unavailable for {session_key}: {error}");
+                    return None;
+                }
+            };
+            let snapshot = buffer.snapshot?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(snapshot.compatibility_data)
+                .ok()?;
+            return Some(String::from_utf8_lossy(&bytes).into_owned());
+        }
         let buffers = self.terminal_sessions.output_buffers.lock().await;
         let buffer = buffers.get(session_key)?;
         let buf = match buffer.lock() {

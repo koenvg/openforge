@@ -1,4 +1,8 @@
 //! Isolated real-process contract. Never launches or stops the installed desktop app.
+#[path = "session_daemon_sidecar/pi.rs"]
+mod pi;
+#[path = "session_daemon_sidecar/pi-live.rs"]
+mod pi_live;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::{
@@ -13,6 +17,8 @@ struct Fixture {
     child: Option<Child>,
     port: u16,
     shell_key: String,
+    pi_key: Option<String>,
+    provider_bin: Option<PathBuf>,
     token: String,
     http: reqwest::blocking::Client,
 }
@@ -28,6 +34,8 @@ impl Fixture {
             child: None,
             port: 0,
             shell_key: "T-proof-shell-3".into(),
+            pi_key: None,
+            provider_bin: None,
             token: String::new(),
             http: reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(10))
@@ -65,6 +73,16 @@ impl Fixture {
                 .env("OPENFORGE_SESSION_DAEMON_ROOT", self.root.path())
                 .env("OPENFORGE_SESSION_DAEMON_PATH", daemon)
                 .env("OPENFORGE_SESSION_DAEMON_SHELL_KEY", &self.shell_key);
+        }
+        if let Some(key) = &self.pi_key {
+            command.env("OPENFORGE_SESSION_DAEMON_PI_KEY", key);
+        }
+        if let Some(bin) = &self.provider_bin {
+            let path = std::env::join_paths(std::iter::once(bin.clone()).chain(
+                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+            ))
+            .unwrap();
+            command.env("PATH", path);
         }
         self.child = Some(command.spawn().unwrap());
         let deadline = Instant::now() + Duration::from_secs(30);

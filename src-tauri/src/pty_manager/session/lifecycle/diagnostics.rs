@@ -62,6 +62,17 @@ impl PtyManager {
     }
 
     pub async fn agent_pty_pid(&self, task_id: &str, pty_instance_id: Option<u64>) -> Option<u32> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns_pi(task_id))
+        {
+            let session = bridge.for_key(task_id).session().await.ok()??;
+            return (session.exit_code.is_none()
+                && pty_instance_id
+                    .is_none_or(|instance| instance == session.pty.instance.value()))
+            .then_some(session.pid);
+        }
         let sessions = self.terminal_sessions.sessions.lock().await;
         let session = sessions.get(task_id)?;
         if !matches!(session.kind, PtySessionKind::Agent) {

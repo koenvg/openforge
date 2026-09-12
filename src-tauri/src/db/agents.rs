@@ -405,10 +405,23 @@ impl super::Database {
         self.mark_running_sessions_interrupted_before(i64::MAX)
     }
 
+    #[cfg(test)]
     pub fn mark_running_sessions_interrupted_before(
         &self,
         cutoff_updated_at: i64,
     ) -> Result<usize> {
+        self.mark_running_sessions_interrupted_except_live_pi(cutoff_updated_at, None)
+    }
+
+    pub(crate) fn mark_running_sessions_interrupted_except_live_pi(
+        &self,
+        cutoff_updated_at: i64,
+        live_pi_task: Option<(&str, u64)>,
+    ) -> Result<usize> {
+        let live_instance = live_pi_task
+            .map(|(_, instance)| i64::try_from(instance))
+            .transpose()
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
@@ -417,8 +430,9 @@ impl super::Database {
                     status = 'interrupted',
                     error_message = 'Session interrupted by app restart',
                     updated_at = ?1
-              WHERE status = 'running' AND updated_at < ?2",
-            rusqlite::params![now, cutoff_updated_at],
+              WHERE status = 'running' AND updated_at < ?2
+                AND NOT (provider = 'pi' AND ticket_id = COALESCE(?3, '') AND pty_instance_id IS ?4)",
+            rusqlite::params![now, cutoff_updated_at, live_pi_task.map(|(task, _)| task), live_instance],
         )?;
         Ok(conn.changes() as usize)
     }
