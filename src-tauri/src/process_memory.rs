@@ -145,9 +145,10 @@ pub async fn collect_process_memory_diagnostics(
         Some(manager) => {
             let mut sessions = manager.process_diagnostic_sessions().await;
             if let Some(bridge) = &manager.daemon_shells {
-                if let Some(session) = bridge
-                    .pi_session()
+                for session in bridge
+                    .agent_sessions()
                     .await?
+                    .into_iter()
                     .filter(|session| session.exit_code.is_none())
                 {
                     sessions.push(crate::pty_manager::PtyProcessDiagnosticSession {

@@ -1,6 +1,6 @@
 # Controlled live Pi preservation
 
-KVG-4720 extends the [controlled daemon path](session-daemon-shell.md) to one Pi Task. The owner approved keeping this debug/E2E-only. Normal production launches and other providers retain their existing adapters. This does not enable Restart, packaged updates, or live daemon replacement.
+KVG-4720 extends the [controlled daemon path](session-daemon-shell.md) to one Pi Task. The owner approved keeping this debug/E2E-only. Normal production launches retain their existing adapters. KVG-4721 adds separate opt-in selectors for [Claude Code and Codex](session-daemon-claude-codex.md). This does not enable Restart, packaged updates, or live daemon replacement.
 
 ## Activation and ownership
 

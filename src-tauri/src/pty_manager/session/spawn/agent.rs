@@ -140,26 +140,6 @@ impl PtyManager {
         event_publisher: RuntimeEventPublisher,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
-        if let Some(bridge) = self
-            .daemon_shells
-            .as_ref()
-            .filter(|bridge| bridge.owns_pi(task_id))
-        {
-            return self
-                .spawn_daemon_pi(
-                    bridge.for_key(task_id),
-                    PiPtyAdapter::new(prompt, session_target, None),
-                    PtySpawnContext {
-                        task_id,
-                        cwd,
-                        cols,
-                        rows,
-                        event_publisher,
-                    },
-                    terminal_image_protocol,
-                )
-                .await;
-        }
         self.spawn_agent_pty(
             PiPtyAdapter::new(prompt, session_target, None),
             PtySpawnContext {
@@ -236,6 +216,25 @@ impl PtyManager {
         context: PtySpawnContext<'_>,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns_agent(context.task_id))
+        {
+            if !bridge.selects_provider(context.task_id, adapter.command_name()) {
+                return Err(PtyError::SpawnFailed(
+                    "task is selected for another daemon provider".into(),
+                ));
+            }
+            return self
+                .spawn_daemon_agent(
+                    bridge.for_key(context.task_id),
+                    adapter,
+                    context,
+                    terminal_image_protocol,
+                )
+                .await;
+        }
         let PtySpawnContext {
             task_id,
             cwd,
