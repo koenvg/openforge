@@ -5,14 +5,20 @@
 @import "../../src/xterm.css";
 
 :root {
+  /* Standalone conformance defaults retain the established raster palette. */
+  --of-canvas: #101216;
+  --of-surface: #171a20;
+  --of-text: #d9dde7;
   color-scheme: dark;
   font-family: Inter, system-ui, sans-serif;
-  background: #101216;
+  background: var(--of-canvas);
 }
 
 :root[data-theme='light'] {
+  --of-canvas: #f5f6f8;
+  --of-surface: #ffffff;
+  --of-text: #252a34;
   color-scheme: light;
-  background: #f5f6f8;
 }
 
 * {
@@ -39,13 +45,8 @@ main {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 8px;
-  background: #171a20;
-  color: #d9dde7;
-}
-
-:root[data-theme='light'] main {
-  background: #ffffff;
-  color: #252a34;
+  background: var(--of-surface);
+  color: var(--of-text);
 }
 
 header {
@@ -62,7 +63,7 @@ header {
   width: 960px;
   height: 540px;
   padding: 10px;
-  background: var(--terminal-background, #171a20);
+  background: var(--of-terminal-background, var(--of-surface));
 }
 
 #terminal-host > div {

@@ -65,14 +65,14 @@
 }
 
 .shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-track {
-  background: var(--color-base-200);
+  background: var(--of-surface-subtle);
 }
 
 .shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--color-base-300);
+  background: var(--of-border);
   border-radius: 3px;
 }
 
 .shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+  background: color-mix(in oklch, var(--of-text) 40%, transparent);
 }

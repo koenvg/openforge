@@ -155,7 +155,7 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
 
   const fontReadiness = await preloadTerminalFonts()
   const theme = getTerminalTheme(options.theme)
-  host.style.setProperty('--terminal-background', theme.background ?? 'transparent')
+  host.style.setProperty('--of-terminal-background', theme.background ?? 'transparent')
   const terminalKey = options.surface === 'agent' ? 'KVG-4002' : 'KVG-4002-shell-0'
   const nextView = renderer.createView({
     terminalKey,
