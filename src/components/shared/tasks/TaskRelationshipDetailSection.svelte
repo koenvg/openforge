@@ -8,6 +8,8 @@
   import ListChecks from '@lucide/svelte/icons/list-checks'
   import Network from '@lucide/svelte/icons/network'
   import FolderKanban from '@lucide/svelte/icons/folder-kanban'
+  import TaskDependencyActions from './TaskDependencyActions.svelte'
+  import { collapsedSections, isSectionCollapsed } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 
   type RelationshipKind = 'dependencies' | 'dependents'
   type SectionDensity = 'full' | 'compact'
@@ -19,9 +21,37 @@
     waitingDependencyCount?: number
     density?: SectionDensity
     onOpenRelatedTask?: (taskId: string, projectId: string | null) => void
+    taskId?: string
+    onRemoveDependency?: (dependencyId: string) => void
+    pendingRemovalId?: string | null
   }
 
-  let { kind, items, waitingDependencyCount = 0, density = 'full', onOpenRelatedTask }: Props = $props()
+  let { kind, items, waitingDependencyCount = 0, density = 'full', onOpenRelatedTask, taskId, onRemoveDependency, pendingRemovalId = null }: Props = $props()
+
+  let managing = $state(false)
+  let confirmingId = $state<string | null>(null)
+  let canManage = $derived(kind === 'dependencies' && density === 'full' && !!taskId && !!onRemoveDependency)
+  let previousTaskId: string | undefined
+
+  $effect(() => {
+    if (taskId !== previousTaskId || !canManage || isSectionCollapsed($collapsedSections, kind)) {
+      previousTaskId = taskId
+      managing = false
+      confirmingId = null
+    }
+    if (confirmingId && !items.some(item => item.id === confirmingId)) confirmingId = null
+  })
+
+  function toggleManaging() {
+    managing = !managing
+    confirmingId = null
+  }
+
+  function confirmRemoval(dependencyId: string) {
+    if (pendingRemovalId || confirmingId !== dependencyId) return
+    confirmingId = null
+    onRemoveDependency?.(dependencyId)
+  }
 
   let isFull = $derived(density === 'full')
   let isDependencies = $derived(kind === 'dependencies')
@@ -99,6 +129,23 @@
   <div class={itemListClass}>
     {#each items as item (item.id)}
       {@const statusPresentation = getDependencyStatusPresentation(item.status)}
+      {#if canManage && managing && taskId}
+        <div class="inline-flex max-w-full overflow-hidden items-center rounded-[var(--of-radius-round)] border" style={getRelationshipButtonStyle(statusPresentation.tone)}>
+          <Button variant="ghost" size="xs" type="button" class="overflow-hidden" title={item.tooltipTitle} disabled={!onOpenRelatedTask} onclick={() => onOpenRelatedTask?.(item.id, item.projectId)}>
+            {@render itemContent(item, statusPresentation.label)}
+          </Button>
+          <TaskDependencyActions
+            {taskId}
+            dependencyId={item.id}
+            confirming={confirmingId === item.id}
+            disabled={pendingRemovalId !== null}
+            removing={pendingRemovalId === item.id}
+            onRequest={() => { if (!pendingRemovalId) confirmingId = item.id }}
+            onConfirm={() => confirmRemoval(item.id)}
+            onCancel={() => { confirmingId = null }}
+          />
+        </div>
+      {:else}
       {#if canOpenRelatedTask()}
         <Button
           variant="outline"
@@ -115,6 +162,7 @@
         <Badge variant={statusPresentation.badgeVariant} class={statusItemClass} title={item.tooltipTitle}>
           {@render itemContent(item, statusPresentation.label)}
         </Badge>
+      {/if}
       {/if}
     {/each}
   </div>
@@ -135,6 +183,11 @@
         {#if isDependencies}<ListChecks size={14} />{:else}<Network size={14} />{/if}
       {/snippet}
       <div class="flex flex-col gap-2.5 py-2">
+        {#if canManage}
+          <Button variant="ghost" size="xs" type="button" class="self-start" aria-pressed={managing} disabled={pendingRemovalId !== null} onclick={toggleManaging}>
+            {managing ? 'Done managing dependencies' : 'Manage dependencies'}
+          </Button>
+        {/if}
         {@render itemList()}
         <div class={footerClass}>{@render footerText()}</div>
       </div>

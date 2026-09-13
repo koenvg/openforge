@@ -15,4 +15,5 @@ vi.mock('../../lib/stores', () => ({
 
 vi.mock('../../lib/tasksState', () => ({
   updateTaskDetail: vi.fn(),
+  refreshTaskRelationships: vi.fn().mockResolvedValue(undefined),
 }))

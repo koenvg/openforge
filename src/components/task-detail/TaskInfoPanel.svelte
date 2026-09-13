@@ -12,6 +12,7 @@
   import TaskGitStatus from './TaskGitStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
+  import TaskDependenciesSection from './TaskDependenciesSection.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import Info from '@lucide/svelte/icons/info'
@@ -125,11 +126,10 @@
     minOrder={CHANGES_SECTION_ORDER}
   />
 
-  <TaskRelationshipDetailSection
-    kind="dependencies"
+  <TaskDependenciesSection
+    taskId={task.id}
     items={dependencies}
     {waitingDependencyCount}
-    density="full"
     {onOpenRelatedTask}
   />
 

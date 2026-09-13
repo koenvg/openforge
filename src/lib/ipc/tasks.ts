@@ -93,6 +93,10 @@ export async function updateTaskSourceTicketUrl(id: string, sourceTicketUrl: str
   return invoke("update_task_source_ticket_url", { id, sourceTicketUrl });
 }
 
+export async function removeTaskDependency(taskId: string, dependencyTaskId: string): Promise<void> {
+  return invoke('remove_task_dependency', { taskId, dependencyTaskId })
+}
+
 export async function updateTaskStatus(id: string, status: WritableBoardStatus): Promise<void> {
   return invoke("update_task_status", { id, status });
 }
