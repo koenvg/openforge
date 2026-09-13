@@ -34,7 +34,7 @@ describe('TerminalTaskPaneSurface', () => {
     expect(indicator?.getAttribute('role')).toBeNull()
   })
 
-  it.each(['unavailable', 'error'] as const)('announces loading-to-%s once and preserves recovery controls', async (outcome) => {
+  it.each(['unavailable', 'error'] as const)('announces %s once after workspace lookup and preserves recovery controls', async (outcome) => {
     const adapter = createAdapter()
     let resolveLookup!: (value: null) => void
     let rejectLookup!: (error: Error) => void
