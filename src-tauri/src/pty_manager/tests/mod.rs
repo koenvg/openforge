@@ -3,7 +3,7 @@ use crate::user_environment::user_environment;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 async fn write_test_session_metadata(manager: &PtyManager, session_key: &str, pid_file: &Path) {

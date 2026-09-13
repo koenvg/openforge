@@ -1,66 +1,7 @@
-use std::sync::atomic::Ordering;
-
-use super::super::super::{
-    PtyError, PtyManager, PtyProcessDiagnosticSession, TerminalSessionLifecycleState,
-};
+use super::super::super::{PtyManager, PtyProcessDiagnosticSession, TerminalSessionLifecycleState};
 use super::PtySessionKind;
 
 impl PtyManager {
-    pub async fn interrupt_claude(&self, task_id: &str) -> Result<(), PtyError> {
-        let sessions = self.terminal_sessions.sessions.lock().await;
-
-        let session = sessions
-            .get(task_id)
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
-
-        let pid = session
-            .child
-            .process_id()
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
-        let pid = i32::try_from(pid)
-            .ok()
-            .filter(|pid| *pid > 0)
-            .ok_or_else(|| {
-                PtyError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("PTY process ID for task {task_id} is not a positive Unix pid_t"),
-                ))
-            })?;
-
-        // SAFETY: portable_pty supplied this child PID, and the validation above proved it is
-        // positive and fits pid_t, so kill targets one process. SIGINT is a valid Unix signal.
-        let signal_result = unsafe { libc::kill(pid, libc::SIGINT) };
-        if signal_result == -1 {
-            return Err(PtyError::IoError(std::io::Error::last_os_error()));
-        }
-
-        Ok(())
-    }
-
-    pub async fn check_claude_frozen(&self, task_id: &str) -> Option<u64> {
-        let pid = {
-            let sessions = self.terminal_sessions.sessions.lock().await;
-            let session = sessions.get(task_id)?;
-            session.child.process_id()?
-        };
-
-        let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
-        // SAFETY: portable_pty supplied this child PID, and the validation above proved it is
-        // positive and fits pid_t, so kill targets one process. Signal 0 is the Unix existence
-        // check and does not deliver a signal.
-        let is_alive = unsafe { libc::kill(pid, 0) == 0 };
-        if !is_alive {
-            return None;
-        }
-
-        let times = self.terminal_sessions.last_output.lock().await;
-        let last_output_ms = times.get(task_id)?.load(Ordering::Relaxed);
-
-        let now_ms = crate::unix_timestamp::milliseconds(std::time::SystemTime::now()).ok()?;
-
-        frozen_seconds(last_output_ms, now_ms)
-    }
-
     pub async fn agent_pty_pid(&self, task_id: &str, pty_instance_id: Option<u64>) -> Option<u32> {
         if let Some(bridge) = self
             .daemon_shells
@@ -148,17 +89,5 @@ impl PtyManager {
                 .then_with(|| left.pty_instance_id.cmp(&right.pty_instance_id))
         });
         diagnostics
-    }
-}
-
-pub(in super::super::super) fn frozen_seconds(last_output_ms: u64, now_ms: u64) -> Option<u64> {
-    if last_output_ms == 0 {
-        return None;
-    }
-    let elapsed_secs = now_ms.saturating_sub(last_output_ms) / 1000;
-    if elapsed_secs >= 15 {
-        Some(elapsed_secs)
-    } else {
-        None
     }
 }

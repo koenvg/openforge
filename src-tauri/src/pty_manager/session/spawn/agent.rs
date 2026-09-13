@@ -295,7 +295,7 @@ impl PtyManager {
         self.persist_session_identity(task_id, &pid_file, &managed_process)
             .await?;
 
-        let stream_state = AgentStreamState::new(instance_id, adapter.track_last_output());
+        let stream_state = AgentStreamState::new(instance_id);
         let output = self
             .start_agent_output_reader(task_id, reader, terminal_model_feeder, &stream_state)
             .await?;

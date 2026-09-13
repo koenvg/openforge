@@ -14,18 +14,16 @@ mod lifecycle;
 mod provider_adapter;
 mod spawn;
 
-#[cfg(test)]
-pub(super) use lifecycle::{frozen_seconds, PtySession, NEXT_INSTANCE_ID};
 pub(super) use lifecycle::{
-    AgentSpawnGenerations, LastOutputTimes, LifecycleLockLease, LifecycleLockRegistry,
-    PtyOutputBuffers, PtySessions,
+    AgentSpawnGenerations, LifecycleLockLease, LifecycleLockRegistry, PtyOutputBuffers, PtySessions,
 };
 pub(super) use lifecycle::{PassiveExitOutcome, PtySessionKind};
+#[cfg(test)]
+pub(super) use lifecycle::{PtySession, NEXT_INSTANCE_ID};
 
 #[derive(Clone)]
 pub(super) struct TerminalSessions {
     sessions: PtySessions,
-    last_output: LastOutputTimes,
     output_buffers: PtyOutputBuffers,
     attachment_hubs: super::attachment::PtyAttachmentHubs,
     agent_spawn_generations: AgentSpawnGenerations,
@@ -60,7 +58,6 @@ pub(super) struct CleaningSession {
 #[cfg(test)]
 pub(super) struct TerminalSessionTestHandles {
     pub(super) sessions: PtySessions,
-    pub(super) last_output: LastOutputTimes,
     pub(super) output_buffers: PtyOutputBuffers,
     pub(super) attachment_hubs: super::attachment::PtyAttachmentHubs,
     pub(super) agent_spawn_generations: AgentSpawnGenerations,
@@ -116,9 +113,6 @@ impl TerminalSessions {
             sessions: std::sync::Arc::new(
                 tokio::sync::Mutex::new(std::collections::HashMap::new()),
             ),
-            last_output: std::sync::Arc::new(tokio::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
             output_buffers: std::sync::Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
@@ -150,7 +144,6 @@ impl TerminalSessions {
     pub(super) fn test_handles(&self) -> TerminalSessionTestHandles {
         TerminalSessionTestHandles {
             sessions: std::sync::Arc::clone(&self.sessions),
-            last_output: std::sync::Arc::clone(&self.last_output),
             output_buffers: std::sync::Arc::clone(&self.output_buffers),
             attachment_hubs: std::sync::Arc::clone(&self.attachment_hubs),
             agent_spawn_generations: std::sync::Arc::clone(&self.agent_spawn_generations),

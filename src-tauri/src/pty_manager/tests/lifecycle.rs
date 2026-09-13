@@ -110,73 +110,6 @@ async fn test_kill_pty_removes_actual_provider_pid_file_name() {
     );
 }
 
-#[test]
-fn test_freeze_detection_with_ring_buffer() {
-    let mut ring_buf = RingBuffer::new(512);
-    ring_buf.push(b"Claude is processing...\n");
-    ring_buf.push(b"Tool call: bash\n");
-
-    let now_ms: u64 = 200_000_000;
-    let last_output_ms = now_ms - 20_000;
-
-    let frozen = frozen_seconds(last_output_ms, now_ms);
-    assert_eq!(frozen, Some(20));
-
-    let buffered = ring_buf.snapshot();
-    assert!(buffered.contains("Claude is processing"));
-    assert!(buffered.contains("Tool call: bash"));
-
-    let still_frozen = frozen_seconds(last_output_ms, now_ms);
-    assert_eq!(
-        still_frozen,
-        Some(20),
-        "Freeze detection unaffected by ring buffer snapshot"
-    );
-
-    let recent_output = now_ms - 5_000;
-    assert!(frozen_seconds(recent_output, now_ms).is_none());
-}
-
-#[tokio::test]
-async fn test_interrupt_claude_reports_missing_process() {
-    let manager = PtyManager::new();
-    let result = manager.interrupt_claude("nonexistent-task").await;
-    assert!(
-        matches!(result, Err(PtyError::ProcessNotFound(ref task_id)) if task_id == "nonexistent-task"),
-        "missing process should report its task ID, got {result:?}"
-    );
-}
-
-#[tokio::test]
-async fn test_interrupt_claude_propagates_signal_delivery_failure() {
-    let manager = PtyManager::new();
-    let task_id = "exited-agent-session";
-    let mut session = test_agent_pty_session(task_id);
-    session
-        .child
-        .kill()
-        .expect("test child should accept termination");
-    session
-        .child
-        .wait()
-        .expect("test child should exit before interrupt");
-    manager
-        .sessions
-        .lock()
-        .await
-        .insert(task_id.to_string(), session);
-
-    let error = manager
-        .interrupt_claude(task_id)
-        .await
-        .expect_err("interrupting an exited process should fail");
-
-    assert!(
-        matches!(error, PtyError::IoError(ref source) if source.raw_os_error() == Some(libc::ESRCH)),
-        "expected the OS missing-process error, got {error}"
-    );
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn write_pty_keeps_session_lookup_available_during_io() {
     struct BlockingWriter {
@@ -307,36 +240,6 @@ async fn resize_pty_keeps_session_lookup_available_during_io() {
 }
 
 #[tokio::test]
-async fn test_check_claude_frozen_not_found() {
-    let manager = PtyManager::new();
-    let result = manager.check_claude_frozen("nonexistent-task").await;
-    assert!(result.is_none());
-}
-
-#[test]
-fn test_frozen_seconds_no_output_yet() {
-    assert!(frozen_seconds(0, 100_000_000).is_none());
-}
-
-#[test]
-fn test_frozen_seconds_below_threshold() {
-    let now_ms: u64 = 100_000_000;
-    assert!(frozen_seconds(now_ms - 14_999, now_ms).is_none());
-}
-
-#[test]
-fn test_frozen_seconds_at_threshold() {
-    let now_ms: u64 = 100_000_000;
-    assert_eq!(frozen_seconds(now_ms - 15_000, now_ms), Some(15));
-}
-
-#[test]
-fn test_frozen_seconds_above_threshold() {
-    let now_ms: u64 = 100_000_000;
-    assert_eq!(frozen_seconds(now_ms - 60_000, now_ms), Some(60));
-}
-
-#[tokio::test]
 async fn test_get_pty_buffer_returns_snapshot() {
     let manager = PtyManager::new();
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(1024)));
@@ -372,23 +275,12 @@ async fn test_kill_pty_cleans_output_buffers() {
         let mut buffers = manager.output_buffers.lock().await;
         buffers.insert(task_id.to_string(), Arc::clone(&ring));
     }
-    {
-        let mut times = manager.last_output.lock().await;
-        times.insert(task_id.to_string(), Arc::new(AtomicU64::new(12345)));
-    }
 
     {
         let buffers = manager.output_buffers.lock().await;
         assert!(
             buffers.contains_key(task_id),
             "buffer entry should exist before kill"
-        );
-    }
-    {
-        let times = manager.last_output.lock().await;
-        assert!(
-            times.contains_key(task_id),
-            "last_output entry should exist before kill"
         );
     }
 
@@ -399,13 +291,6 @@ async fn test_kill_pty_cleans_output_buffers() {
         assert!(
             !buffers.contains_key(task_id),
             "output_buffers should be cleaned up after kill_pty"
-        );
-    }
-    {
-        let times = manager.last_output.lock().await;
-        assert!(
-            !times.contains_key(task_id),
-            "last_output should be cleaned up after kill_pty"
         );
     }
 
@@ -451,12 +336,6 @@ async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
         buffers.insert(shell1_key.clone(), Arc::clone(&ring));
         buffers.insert(unrelated_key.clone(), Arc::clone(&ring));
     }
-    {
-        let mut times = manager.last_output.lock().await;
-        times.insert(shell0_key.clone(), Arc::new(AtomicU64::new(123)));
-        times.insert(shell1_key.clone(), Arc::new(AtomicU64::new(456)));
-        times.insert(unrelated_key.clone(), Arc::new(AtomicU64::new(789)));
-    }
 
     manager
         .kill_shells_for_task(task_id)
@@ -487,11 +366,6 @@ async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
     assert!(!buffers.contains_key(&shell1_key));
     assert!(buffers.contains_key(&unrelated_key));
     drop(buffers);
-
-    let times = manager.last_output.lock().await;
-    assert!(!times.contains_key(&shell0_key));
-    assert!(!times.contains_key(&shell1_key));
-    assert!(times.contains_key(&unrelated_key));
 }
 
 #[tokio::test]

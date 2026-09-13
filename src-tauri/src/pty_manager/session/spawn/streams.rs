@@ -4,7 +4,6 @@ use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::TerminalModelFeeder;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use super::super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
@@ -17,15 +16,13 @@ use super::super::lifecycle::LifecycleLockLease;
 use super::arbitration::AgentSpawnToken;
 
 pub(super) struct AgentStreamState {
-    pub(super) last_output_time: Option<Arc<AtomicU64>>,
     pub(super) ring_buffer: SharedRingBuffer,
     pub(super) attachment_hub: Arc<PtyAttachmentHub>,
 }
 
 impl AgentStreamState {
-    pub(super) fn new(instance_id: u64, track_last_output: bool) -> Self {
+    pub(super) fn new(instance_id: u64) -> Self {
         Self {
-            last_output_time: track_last_output.then(|| Arc::new(AtomicU64::new(0))),
             ring_buffer: Arc::new(std::sync::Mutex::new(RingBuffer::new(
                 CLAUDE_BUFFER_CAPACITY,
             ))),
@@ -49,7 +46,6 @@ pub(super) struct AgentEventStreamRequest<'a> {
 }
 
 pub(super) struct ShellStreamState {
-    last_output_time: Arc<AtomicU64>,
     ring_buffer: SharedRingBuffer,
 }
 
@@ -93,24 +89,6 @@ impl PtyManager {
         }
     }
 
-    async fn remove_agent_last_output_if_registered(
-        &self,
-        task_id: &str,
-        registered_last_output: Option<&Arc<AtomicU64>>,
-    ) {
-        let Some(registered_last_output) = registered_last_output else {
-            return;
-        };
-
-        let mut times = self.terminal_sessions.last_output.lock().await;
-        if times
-            .get(task_id)
-            .is_some_and(|stored| Arc::ptr_eq(stored, registered_last_output))
-        {
-            times.remove(task_id);
-        }
-    }
-
     pub(super) async fn start_agent_output_reader(
         &self,
         task_id: &str,
@@ -127,7 +105,6 @@ impl PtyManager {
         spawn_pty_output_reader(
             reader,
             task_id.to_string(),
-            stream_state.last_output_time.as_ref().map(Arc::clone),
             Some(Arc::clone(&stream_state.attachment_hub)),
             terminal_model_feeder,
             #[cfg(test)]
@@ -156,13 +133,6 @@ impl PtyManager {
             self.remove_agent_stream_state_if_registered(task_id, stream_state)
                 .await;
             return Err(error);
-        }
-        if let Some(last_output_time) = &stream_state.last_output_time {
-            self.terminal_sessions
-                .last_output
-                .lock()
-                .await
-                .insert(task_id.to_string(), Arc::clone(last_output_time));
         }
         self.terminal_sessions
             .output_buffers
@@ -213,11 +183,6 @@ impl PtyManager {
         task_id: &str,
         stream_state: &AgentStreamState,
     ) {
-        self.remove_agent_last_output_if_registered(
-            task_id,
-            stream_state.last_output_time.as_ref(),
-        )
-        .await;
         self.remove_output_buffer_if_registered(task_id, &stream_state.ring_buffer)
             .await;
         self.remove_attachment_hub_if_registered(task_id, &stream_state.attachment_hub)
@@ -272,12 +237,6 @@ impl PtyManager {
     }
 
     pub(super) async fn register_shell_stream_state(&self, session_key: &str) -> ShellStreamState {
-        let last_output_time = Arc::new(AtomicU64::new(0));
-        self.terminal_sessions
-            .last_output
-            .lock()
-            .await
-            .insert(session_key.to_string(), Arc::clone(&last_output_time));
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
@@ -286,10 +245,7 @@ impl PtyManager {
             .lock()
             .await
             .insert(session_key.to_string(), Arc::clone(&ring_buffer));
-        ShellStreamState {
-            last_output_time,
-            ring_buffer,
-        }
+        ShellStreamState { ring_buffer }
     }
 
     pub(super) async fn start_shell_event_stream(
@@ -315,7 +271,6 @@ impl PtyManager {
         let rx = spawn_pty_output_reader(
             reader,
             session_key.clone(),
-            Some(Arc::clone(&stream_state.last_output_time)),
             None,
             terminal_model_feeder,
             #[cfg(test)]

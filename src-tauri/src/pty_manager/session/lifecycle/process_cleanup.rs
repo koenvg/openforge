@@ -186,11 +186,6 @@ impl PtyManager {
 
     pub(in super::super) async fn clear_session_tracking(&self, session_key: &str) {
         self.terminal_sessions
-            .last_output
-            .lock()
-            .await
-            .remove(session_key);
-        self.terminal_sessions
             .output_buffers
             .lock()
             .await

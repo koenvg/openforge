@@ -5,7 +5,6 @@ use std::io::Read;
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use super::attachment::PtyAttachmentHub;
@@ -105,10 +104,6 @@ pub(super) fn pty_output_channel() -> (PtyOutputSender, PtyOutputReceiver) {
 }
 type PtyEmitResult = Result<(), String>;
 
-fn now_ms() -> u64 {
-    crate::unix_timestamp::milliseconds(std::time::SystemTime::now()).unwrap_or_default()
-}
-
 fn decode_pty_output(bytes: &[u8], incomplete_utf8: &mut Vec<u8>) -> String {
     let mut combined = std::mem::take(incomplete_utf8);
     combined.extend_from_slice(bytes);
@@ -156,7 +151,6 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
     reader: &mut R,
     tx: PtyOutputSender,
     session_key: &str,
-    last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
     terminal_model_feeder: Option<TerminalModelFeeder>,
 ) {
@@ -176,9 +170,6 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
                 }
                 if let Some(hub) = &attachment_hub {
                     hub.publish_output(&buffer[..n]);
-                }
-                if let Some(last_output) = &last_output {
-                    last_output.store(now_ms(), Ordering::Relaxed);
                 }
 
                 let text = decode_pty_output(&buffer[..n], &mut incomplete_utf8);
@@ -231,7 +222,6 @@ impl ReadyPtyOutputReader {
 pub(super) fn spawn_pty_output_reader(
     mut reader: Box<dyn Read + Send>,
     session_key: String,
-    last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
     terminal_model_feeder: Option<TerminalModelFeeder>,
     #[cfg(test)] ready_gate: Option<super::PtyOutputReaderReadyGate>,
@@ -257,7 +247,6 @@ pub(super) fn spawn_pty_output_reader(
             &mut reader,
             tx,
             &session_key,
-            last_output,
             attachment_hub,
             terminal_model_feeder,
         );

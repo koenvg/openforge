@@ -103,7 +103,7 @@ fn spawn_repeating_reader(
             remaining_reads: read_count,
             byte,
         };
-        read_pty_output_loop(&mut reader, tx, session_key, None, None, None);
+        read_pty_output_loop(&mut reader, tx, session_key, None, None);
         finished.store(true, Ordering::Release);
     });
 
@@ -191,7 +191,7 @@ fn test_read_pty_output_loop_preserves_utf8_split_across_reads() {
     let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, None);
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
 
     assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
     assert_eq!(rx.blocking_recv(), Some(Some("é world".to_string())));
@@ -203,7 +203,7 @@ fn test_read_pty_output_loop_flushes_incomplete_utf8_before_exit() {
     let mut reader = ChunkedReader::new(vec![b"hello \xC3"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, None);
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
 
     assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
     assert_eq!(
@@ -220,14 +220,7 @@ fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
     let mut reader = ChunkedReader::new(vec![b"desktop", &[0xff], b"tail"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(
-        &mut reader,
-        tx,
-        "task-reader",
-        None,
-        Some(Arc::clone(&hub)),
-        None,
-    );
+    read_pty_output_loop(&mut reader, tx, "task-reader", Some(Arc::clone(&hub)), None);
 
     assert_eq!(rx.blocking_recv(), Some(Some("desktop".to_string())));
     assert_eq!(
@@ -246,25 +239,6 @@ fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
     );
     assert_eq!(rx.blocking_recv(), Some(Some("tail".to_string())));
     assert_eq!(rx.blocking_recv(), Some(None));
-}
-
-#[test]
-fn test_read_pty_output_loop_updates_last_output_time() {
-    let mut reader = ChunkedReader::new(vec![b"output"]);
-    let (tx, mut rx) = pty_output_channel();
-    let last_output = Arc::new(AtomicU64::new(0));
-
-    read_pty_output_loop(
-        &mut reader,
-        tx,
-        "task-reader",
-        Some(Arc::clone(&last_output)),
-        None,
-        None,
-    );
-
-    assert_eq!(rx.blocking_recv(), Some(Some("output".to_string())));
-    assert!(last_output.load(Ordering::Relaxed) > 0);
 }
 
 #[test]
@@ -462,7 +436,7 @@ fn shadow_mode_observes_raw_bytes_without_changing_desktop_output() {
     let mut reader = ChunkedReader::new(vec![b"before \xF0\x9F", b"\x98\x80\r\n\x1b[6n"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, Some(feeder));
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, Some(feeder));
 
     let mut desktop_output = String::new();
     while let Some(message) = rx.blocking_recv() {
@@ -501,7 +475,7 @@ fn shadow_creation_failure_does_not_change_desktop_output() {
 
     let mut reader = ChunkedReader::new(vec![b"renderer-output"]);
     let (tx, mut rx) = pty_output_channel();
-    read_pty_output_loop(&mut reader, tx, "failed-shadow", None, None, Some(feeder));
+    read_pty_output_loop(&mut reader, tx, "failed-shadow", None, Some(feeder));
 
     assert_eq!(
         rx.blocking_recv(),
@@ -532,7 +506,6 @@ fn measure_sustained_output(
         &mut reader,
         tx,
         "throughput-guard",
-        None,
         None,
         terminal_model_feeder,
     );

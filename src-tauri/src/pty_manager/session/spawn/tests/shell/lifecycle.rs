@@ -64,12 +64,6 @@ async fn shell_spawn_waits_for_output_reader_readiness_before_returning() {
         .lock()
         .await
         .contains_key(&session_key));
-    assert!(harness
-        .manager
-        .last_output
-        .lock()
-        .await
-        .contains_key(&session_key));
 
     release_reader_tx
         .send(())
@@ -120,12 +114,6 @@ async fn shell_spawn_persists_identity_and_owns_lifecycle_state_until_cleanup() 
         .lock()
         .await
         .contains_key(&session_key));
-    assert!(harness
-        .manager
-        .last_output
-        .lock()
-        .await
-        .contains_key(&session_key));
     assert!(harness.manager.lifecycle_locks.contains_key(&session_key));
     assert!(!harness
         .manager
@@ -147,12 +135,6 @@ async fn shell_spawn_persists_identity_and_owns_lifecycle_state_until_cleanup() 
     assert!(!harness
         .manager
         .output_buffers
-        .lock()
-        .await
-        .contains_key(&session_key));
-    assert!(!harness
-        .manager
-        .last_output
         .lock()
         .await
         .contains_key(&session_key));

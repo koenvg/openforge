@@ -69,10 +69,6 @@ impl AgentPtyProviderAdapter for LockCheckingAgentAdapter {
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
     }
-
-    fn track_last_output(&self) -> bool {
-        true
-    }
 }
 
 fn join_thread_with_timeout<T: Send + 'static>(
@@ -133,10 +129,6 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
         manager.output_buffers.lock().await.contains_key(task_id),
         "output buffer should still be registered for replay"
     );
-    assert!(
-        manager.last_output.lock().await.contains_key(task_id),
-        "last-output tracking should still be registered for frozen detection"
-    );
 
     manager
         .kill_pty(task_id)
@@ -149,10 +141,6 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
     assert!(
         !manager.output_buffers.lock().await.contains_key(task_id),
         "output buffer should be removed on explicit kill"
-    );
-    assert!(
-        !manager.last_output.lock().await.contains_key(task_id),
-        "last-output tracking should be removed on explicit kill"
     );
 }
 
@@ -218,10 +206,6 @@ async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream
         "the spawned process should be registered before output-reader readiness"
     );
     assert!(
-        !manager.last_output.lock().await.contains_key(task_id),
-        "last-output tracking must wait for output-reader readiness"
-    );
-    assert!(
         !manager.output_buffers.lock().await.contains_key(task_id),
         "replay buffer registration must wait for output-reader readiness"
     );
@@ -240,7 +224,6 @@ async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream
     stream_start_rx
         .recv_timeout(CONCURRENT_SPAWN_TIMEOUT)
         .expect("event stream should register after output-reader readiness");
-    assert!(manager.last_output.lock().await.contains_key(task_id));
     assert!(manager.output_buffers.lock().await.contains_key(task_id));
     assert!(manager.attachment_hubs.lock().await.contains_key(task_id));
     release_stream_tx
@@ -570,10 +553,6 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
         manager.output_buffers.lock().await.contains_key(task_id),
         "newer spawn should keep output buffer registration"
     );
-    assert!(
-        manager.last_output.lock().await.contains_key(task_id),
-        "newer spawn should keep last-output registration"
-    );
 
     manager
         .kill_pty(task_id)
@@ -772,13 +751,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
         .get(task_id)
         .cloned()
         .expect("stale replay buffer should be registered before startup");
-    let stale_last_output = manager
-        .last_output
-        .lock()
-        .await
-        .get(task_id)
-        .cloned()
-        .expect("stale output tracking should be registered before startup");
     let stale_hub = manager
         .attachment_hubs
         .lock()
@@ -799,10 +771,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
     assert!(
         !manager.output_buffers.lock().await.contains_key(task_id),
         "superseded setup must remove its replay buffer"
-    );
-    assert!(
-        !manager.last_output.lock().await.contains_key(task_id),
-        "superseded setup must remove its output tracking"
     );
     assert!(
         !manager.attachment_hubs.lock().await.contains_key(task_id),
@@ -836,13 +804,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
         .get(task_id)
         .cloned()
         .expect("newer replay buffer should remain registered");
-    let newer_last_output = manager
-        .last_output
-        .lock()
-        .await
-        .get(task_id)
-        .cloned()
-        .expect("newer output tracking should remain registered");
     let newer_hub = manager
         .attachment_hubs
         .lock()
@@ -854,7 +815,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
         .remove_agent_stream_state_if_registered(
             task_id,
             &AgentStreamState {
-                last_output_time: Some(Arc::clone(&stale_last_output)),
                 ring_buffer: Arc::clone(&stale_buffer),
                 attachment_hub: Arc::clone(&stale_hub),
             },
@@ -871,15 +831,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
     );
     assert!(
         manager
-            .last_output
-            .lock()
-            .await
-            .get(task_id)
-            .is_some_and(|stored| Arc::ptr_eq(stored, &newer_last_output)),
-        "delayed stale cleanup must preserve newer output tracking"
-    );
-    assert!(
-        manager
             .attachment_hubs
             .lock()
             .await
@@ -888,7 +839,6 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
         "delayed stale cleanup must preserve the newer attachment hub"
     );
     assert!(!Arc::ptr_eq(&stale_buffer, &newer_buffer));
-    assert!(!Arc::ptr_eq(&stale_last_output, &newer_last_output));
     assert!(!Arc::ptr_eq(&stale_hub, &newer_hub));
     assert_eq!(newer_hub.instance_id(), newer_instance_id);
 
@@ -977,10 +927,6 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
         !manager.output_buffers.lock().await.contains_key(task_id),
         "killed pending spawn must not register an output buffer"
     );
-    assert!(
-        !manager.last_output.lock().await.contains_key(task_id),
-        "killed pending spawn must not register last-output tracking"
-    );
 }
 
 const CWD_OUTPUT_READY: &str = "openforge-cwd-output=ready";
@@ -1016,10 +962,6 @@ impl AgentPtyProviderAdapter for CwdPrintingAgentAdapter {
 
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
-    }
-
-    fn track_last_output(&self) -> bool {
-        true
     }
 }
 
