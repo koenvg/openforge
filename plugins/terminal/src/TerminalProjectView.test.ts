@@ -120,6 +120,39 @@ describe('TerminalProjectView', () => {
     expect(screen.getByText(/Terminal workspace unavailable/)).toBeTruthy()
   })
 
+  it('announces project selection changes once without making recovery guidance live', async () => {
+    const { container, rerender } = render(TerminalProjectView, {
+      props: { projectId: null, projectName: '', projectPath: '' },
+    })
+    const liveRegions = () => Array.from(container.querySelectorAll(
+      '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
+    ))
+    expect(liveRegions()).toHaveLength(1)
+    const announcement = liveRegions()[0]
+    expect(announcement.textContent).toBe('Select a project to open a terminal.')
+
+    await rerender({ projectId: 'P-123', projectName: 'Demo', projectPath: '' })
+    const unavailable = 'Project path unavailable. Terminal shells require a project path.'
+    expect(liveRegions()).toEqual([announcement])
+    expect(announcement.textContent).toBe(unavailable)
+    expect(screen.getAllByText(unavailable).some((node) => node !== announcement)).toBe(true)
+    expect(screen.getByText(/choose a project with a path first/)).toBeTruthy()
+
+    await rerender({ projectId: 'P-456', projectName: 'Other', projectPath: '/tmp/other' })
+    expect(liveRegions()).toEqual([announcement])
+    expect(announcement.textContent).toBe('')
+    expect(screen.queryByText(unavailable)).toBeNull()
+    const event = makeKeyEvent({ key: 't', code: 'KeyT', metaKey: true })
+    window.dispatchEvent(event)
+    expect(terminalTabsApi.addTab).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(true)
+
+    await rerender({ projectId: null, projectName: '', projectPath: '' })
+    expect(liveRegions()).toEqual([announcement])
+    expect(announcement.textContent).toBe('Select a project to open a terminal.')
+    expect(screen.getAllByText('Select a project to open a terminal.').some((node) => node !== announcement)).toBe(true)
+  })
+
   it('documents the keyboard focus path for project terminals', () => {
     renderProjectTerminalView()
 

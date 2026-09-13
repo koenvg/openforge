@@ -110,7 +110,7 @@
       </div>
     </div>
   {:else}
-    <div class="flex flex-1 items-center justify-center p-6 text-center" role="status" aria-live="polite">
+    <div class="flex flex-1 items-center justify-center p-6 text-center">
       <div class="max-w-sm space-y-3">
         <p class="font-medium">{workspaceStatusText}</p>
         {#if workspaceLookupState === 'error' && workspaceLookupError !== null}

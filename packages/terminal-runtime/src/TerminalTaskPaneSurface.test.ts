@@ -34,6 +34,41 @@ describe('TerminalTaskPaneSurface', () => {
     expect(indicator?.getAttribute('role')).toBeNull()
   })
 
+  it.each(['unavailable', 'error'] as const)('announces loading-to-%s once and preserves recovery controls', async (outcome) => {
+    const adapter = createAdapter()
+    let resolveLookup!: (value: null) => void
+    let rejectLookup!: (error: Error) => void
+    adapter.getTaskWorkspace = vi.fn(() => new Promise<null>((resolve, reject) => {
+      resolveLookup = resolve
+      rejectLookup = reject
+    }))
+    const { container } = render(TerminalTaskPaneSurface, {
+      props: { adapter, taskId: 'T-transition', shortcutHintsVisible: false },
+    })
+    const announcement = screen.getByRole('status')
+    expect(announcement.textContent).toBe('Loading terminal workspace…')
+    if (outcome === 'error') rejectLookup(new Error('Workspace service offline'))
+    else resolveLookup(null)
+
+    const message = outcome === 'error'
+      ? 'Terminal workspace lookup failed.'
+      : 'Terminal workspace unavailable for this task.'
+    await vi.waitFor(() => expect(announcement.textContent).toBe(message))
+    expect(screen.getAllByRole('status')).toEqual([announcement])
+    expect(container.querySelectorAll('[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]')).toHaveLength(1)
+    expect(screen.getAllByText(message).some((node) => node !== announcement)).toBe(true)
+    expect(screen.getByText(/Keyboard focus path:/)).toBeTruthy()
+    if (outcome === 'error') expect(screen.getByText('Workspace service offline')).toBeTruthy()
+
+    const retry = screen.getByRole('button', { name: 'Retry workspace lookup' })
+    retry.focus()
+    expect(document.activeElement).toBe(retry)
+    await fireEvent.click(retry)
+    await vi.waitFor(() => expect(announcement.textContent).toBe('Loading terminal workspace…'))
+    expect(adapter.getTaskWorkspace).toHaveBeenCalledTimes(2)
+    expect(screen.getAllByRole('status')).toEqual([announcement])
+  })
+
   it('uses the host adapter to retry an unavailable workspace lookup', async () => {
     const adapter = createAdapter()
     render(TerminalTaskPaneSurface, {
