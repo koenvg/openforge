@@ -191,6 +191,7 @@
       <div class="toolbar-secondary-actions">
         <AgentStatusPill taskId={task.id} />
         <Button
+          tooltip
           type="button"
           size="md"
           variant="ghost"
@@ -209,6 +210,7 @@
         </Button>
         {#if vsCodeProtocolAvailable}
           <Button
+            tooltip
             type="button"
             size="md"
             variant="ghost"
@@ -272,6 +274,7 @@
 
     {#if activeView === 'agent' && workspacePath !== null}
       <Button
+        tooltip
         type="button"
         size="md"
         variant="ghost"

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import TooltipControl from './TooltipControl.svelte'
 
   interface Props {
     accessibleName: string
@@ -25,16 +26,20 @@
 
 </script>
 
-<button
-  type="button"
-  class={['of-plugin-sidebar-link', className]}
-  data-active={active}
-  data-collapsed={collapsed}
-  title={collapsed ? accessibleName : undefined}
-  aria-label={accessibleName}
-  aria-current={active ? 'page' : undefined}
-  onclick={onActivate}
+<TooltipControl
+  content={accessibleName}
+  disabled={!collapsed}
+  side="right"
+  triggerAttributes={{
+    type: 'button',
+    class: ['of-plugin-sidebar-link', className],
+    'aria-label': accessibleName,
+    'aria-current': active ? 'page' : undefined,
+    onclick: onActivate,
+  }}
 >
+  {#snippet trigger(props)}
+  <button {...props} data-active={active} data-collapsed={collapsed}>
   {#if leading}
     <span class="of-plugin-sidebar-link-leading">{@render leading()}</span>
   {/if}
@@ -42,7 +47,9 @@
     {#if label}<span class="of-plugin-sidebar-link-label">{@render label()}</span>{/if}
     {#if trailing}<span class="of-plugin-sidebar-link-trailing">{@render trailing()}</span>{/if}
   {/if}
-</button>
+  </button>
+  {/snippet}
+</TooltipControl>
 
 <style>
   button {

@@ -16,6 +16,27 @@ function getButton(name: string): HTMLButtonElement {
 }
 
 describe('plugin-sdk Button', () => {
+  it('opts into label tooltips without replacing the button when toggled', async () => {
+    const view = render(Button, { props: { children, 'aria-label': 'Run review', title: 'Native help' } })
+    const button = getButton('Run review')
+    const matches = button.matches.bind(button)
+    vi.spyOn(button, 'matches').mockImplementation(selector => selector === ':focus-visible' || matches(selector))
+    button.focus()
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(button.title).toBe('Native help')
+    await view.rerender({ tooltip: true })
+    expect(getButton('Run review')).toBe(button)
+    expect(document.activeElement).toBe(button)
+    button.blur()
+    button.focus()
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Run review')
+    expect(button.hasAttribute('title')).toBe(false)
+    await view.rerender({ tooltip: false })
+    expect(getButton('Run review')).toBe(button)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(button.title).toBe('Native help')
+  })
+
   it('renders child content and forwards click events', async () => {
     const onclick = vi.fn()
 
@@ -23,6 +44,7 @@ describe('plugin-sdk Button', () => {
     await fireEvent.click(getButton('Run review'))
 
     expect(onclick).toHaveBeenCalledTimes(1)
+    expect(getButton('Run review').type).toBe('submit')
   })
 
   it('honors native disabled behavior', async () => {

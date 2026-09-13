@@ -238,6 +238,34 @@ Use only documented package exports. Do not import OpenForge renderer stores, El
 
 For large option lists, import `SearchableSelect` from `@openforge-app/plugin-sdk/ui/SearchableSelect.svelte`. Set `maxResults={40}` to bound rendered matches, add per-option `keywords: [project.id]` for ID search, and use `disabled={!inOpenForge}` for unavailable filters. Omit `maxResults` to keep unlimited results. The picker announces result counts and keeps the selected label even when it is outside the visible results. See the [SearchableSelect contract and example](https://github.com/koenvg/openforge/blob/main/docs/plugins/sdk-reference.md#searchableselect).
 
+## Icon-button tooltips
+
+`IconButton` shows its `label` on hover after 300 ms and on keyboard focus. Set `tooltip={false}` to opt out while keeping the accessible name. Disabled and loading buttons do not open tooltips. Escape dismisses the tooltip before a containing dialog or menu.
+
+Use `tooltipSide="top|right|bottom|left"`, `tooltipAlign="start|center|end"`, and `tooltipSideOffset={6}` to choose a preferred position. Defaults are top, center, and 6 pixels. Placement adjusts at window edges; long labels wrap. The overshoot entrance respects reduced motion.
+
+```svelte
+<script lang="ts">
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import { RefreshCw } from '@lucide/svelte'
+</script>
+
+<IconButton label="Refresh tasks" tooltipSide="right" tooltipAlign="start" tooltipSideOffset={8}>
+  <RefreshCw size={16} aria-hidden="true" />
+</IconButton>
+```
+
+While automatic tooltips are enabled, `title` is suppressed to avoid a second browser tooltip. Put useful action or shortcut text in `label`. With `tooltip={false}`, an explicit `title` is forwarded normally. The existing standalone `Tooltip` component retains its button-content trigger API; do not place another button inside that snippet.
+
+For a `Button` that alternates between text and icon-only content, opt in with `tooltip` and supply an `aria-label`. The same placement props are supported. Ordinary Buttons default to `tooltip={false}`; an empty accessible label also leaves tooltip behavior disabled. Toggling tooltips preserves the native button and its focus, and does not change text-button sizing.
+
+```svelte
+<Button aria-label="Run app locally" tooltip tooltipSide="bottom">
+  <Play size={16} aria-hidden="true" />
+  <span class="responsive-label">Run app</span>
+</Button>
+```
+
 ## Theme-aware feedback
 
 These controls ship scoped CSS and need only the documented `--of-*` theme tokens, not Tailwind or daisyUI. Include your build's emitted CSS in the plugin's `frontendStyles`. Token changes update mounted controls. Your own `class` and `style` remain caller-owned.

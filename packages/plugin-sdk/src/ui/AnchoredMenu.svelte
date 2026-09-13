@@ -3,6 +3,7 @@
   import { tick, type Snippet } from 'svelte'
   import type { ComponentProps } from 'svelte'
   import Button from './Button.svelte'
+  import TooltipControl from './TooltipControl.svelte'
 
   export type AnchoredMenuItem = Readonly<{
     value: string
@@ -50,7 +51,7 @@
     onSelect,
     item: renderItem,
     triggerButton,
-    trigger,
+    trigger: renderTrigger,
   }: Props = $props()
 
   let triggerElement: HTMLButtonElement | null = $state(null)
@@ -121,11 +122,15 @@
     <DropdownMenu.Trigger bind:ref={triggerElement} aria-label={label} aria-describedby={ariaDescribedby} {disabled}>
       {#snippet child({ props })}
         {#if triggerButton}
-          <Button {...props} {...triggerButton} class="of-menu-button-trigger">
-            {@render trigger()}
-          </Button>
+          <TooltipControl content={label} disabled={disabled || open} triggerAttributes={props}>
+            {#snippet trigger(tooltipProps)}
+              <Button {...tooltipProps} {...triggerButton} class="of-menu-button-trigger">
+                {@render renderTrigger()}
+              </Button>
+            {/snippet}
+          </TooltipControl>
         {:else}
-          <button {...props} class="of-menu-trigger">{@render trigger()}</button>
+          <button {...props} class="of-menu-trigger">{@render renderTrigger()}</button>
         {/if}
       {/snippet}
     </DropdownMenu.Trigger>

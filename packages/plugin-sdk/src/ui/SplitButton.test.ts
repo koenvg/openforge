@@ -15,6 +15,16 @@ describe('SplitButton', () => {
     }
   })
 
+  it('labels the icon-only menu trigger without opening the menu on focus', async () => {
+    render(SplitButtonTestWrapper)
+    const trigger = screen.getByRole('button', { name: 'More actions' })
+    trigger.focus()
+    await tick()
+    expect(screen.getByRole('tooltip', { hidden: true }).textContent).toBe('More actions')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('keeps primary and menu actions independent without changing the primary label', async () => {
     const onClick = vi.fn()
     const onSelect = vi.fn()

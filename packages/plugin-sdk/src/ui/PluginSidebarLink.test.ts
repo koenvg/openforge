@@ -1,6 +1,6 @@
 import { createRawSnippet } from 'svelte'
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PluginSidebarLink from './PluginSidebarLink.svelte'
 
 const leading = createRawSnippet(() => ({ render: () => '<span data-testid="leading">L</span>' }))
@@ -25,6 +25,7 @@ function renderLink(overrides: Record<string, unknown> = {}) {
 }
 
 describe('PluginSidebarLink', () => {
+  beforeEach(() => fireEvent.keyDown(document.body, { key: 'Tab' }))
   it.each([
     { key: 'Enter', label: 'Enter' },
     { key: ' ', label: 'Space' },
@@ -54,10 +55,11 @@ describe('PluginSidebarLink', () => {
     expect(document.activeElement).toBe(link)
   })
 
-  it('uses its accessible name as the collapsed tooltip and hides label and trailing content', () => {
+  it('uses its accessible name as the collapsed tooltip and hides label and trailing content', async () => {
     const { link } = renderLink({ collapsed: true })
-
-    expect(link.getAttribute('title')).toBe('Codex usage')
+    link.focus()
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Codex usage')
+    expect(link.getAttribute('title')).toBeNull()
     expect(screen.getByTestId('leading')).toBeTruthy()
     expect(screen.queryByText('Usage')).toBeNull()
     expect(screen.queryByTestId('trailing')).toBeNull()

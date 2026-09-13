@@ -14,7 +14,8 @@ interface MockResizeObserverInstance {
 let resizeObservers: MockResizeObserverInstance[]
 
 function resizePreview(width: number, height: number) {
-  const observer = resizeObservers.at(-1)
+  const viewport = screen.getByTestId('mermaid-preview-viewport')
+  const observer = resizeObservers.find(instance => instance.observe.mock.calls.some(([target]) => target === viewport))
   if (!observer) throw new Error('Preview did not create a ResizeObserver')
 
   observer.callback([{
@@ -48,12 +49,24 @@ afterEach(async () => {
 })
 
 describe('MermaidDiagramPreview', () => {
+  it('labels the close icon with the shared tooltip', async () => {
+    render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
+    screen.getByRole('button', { name: 'Close diagram preview' }).focus()
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Close diagram preview')
+  })
+
+  it('includes zoom shortcuts in the shared icon labels', async () => {
+    render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
+    screen.getByRole('button', { name: 'Zoom in (+)' }).focus()
+    expect((await screen.findByRole('tooltip', { name: 'Zoom in (+)' })).textContent).toBe('Zoom in (+)')
+  })
+
   it('opens fitted and sizes the vector diagram to the available viewport', async () => {
     render(MermaidDiagramPreview, { props: { svg: SVG, onClose: vi.fn() } })
 
     expect(screen.getByRole('dialog', { name: 'Mermaid diagram preview' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Zoom out (-)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Zoom in (+)' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reset zoom to 100%' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Fit diagram to window' }).getAttribute('aria-pressed')).toBe('true')
 
@@ -71,7 +84,7 @@ describe('MermaidDiagramPreview', () => {
     resizePreview(200, 100)
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Fit (100%)'))
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Zoom in (+)' }))
     expect(screen.getByRole('status').textContent).toBe('125%')
     expect((screen.getByTestId('mermaid-preview-canvas').querySelector('svg') as SVGSVGElement).style.width).toBe('250px')
 
@@ -79,10 +92,10 @@ describe('MermaidDiagramPreview', () => {
     expect(screen.getByRole('status').textContent).toBe('100%')
 
     for (let index = 0; index < 20; index++) {
-      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in (+)' }))
     }
     expect(screen.getByRole('status').textContent).toBe('400%')
-    expect((screen.getByRole('button', { name: 'Zoom in' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Zoom in (+)' }) as HTMLButtonElement).disabled).toBe(true)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Fit diagram to window' }))
     expect(screen.getByRole('status').textContent).toBe('Fit (100%)')

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Tooltip } from 'bits-ui'
+  import TooltipControl from './TooltipControl.svelte'
   import type { Snippet } from 'svelte'
   import type { HTMLButtonAttributes } from 'svelte/elements'
 
@@ -28,11 +28,6 @@
     trigger: Snippet
   }
 
-
-  const generatedId = $props.id()
-  const triggerId = `of-tooltip-trigger-${generatedId}`
-  const contentId = `of-tooltip-content-${generatedId}`
-  let activeTriggerId = $state<string | null>(triggerId)
   let {
     label,
     content,
@@ -52,68 +47,38 @@
     onTriggerClick,
     onTriggerKeydown,
     onOpenChange,
-    trigger,
+    trigger: renderTrigger,
   }: Props = $props()
-
-  let triggerDescriptionIds = $derived(
-    [triggerAriaDescribedby?.trim(), open ? contentId : undefined].filter(Boolean).join(' ') || undefined,
-  )
-
-  function invokeEventHandler(handler: unknown, event: MouseEvent | KeyboardEvent) {
-    if (typeof handler === 'function') handler(event)
-  }
-
-  function handleTriggerClick(event: MouseEvent, internalHandler: unknown) {
-    invokeEventHandler(internalHandler, event)
-    if (!event.defaultPrevented) onTriggerClick?.(event)
-  }
-
-  function handleTriggerKeydown(event: KeyboardEvent, internalHandler: unknown) {
-    invokeEventHandler(internalHandler, event)
-    onTriggerKeydown?.(event)
-    if (event.key !== 'Escape' || !open || event.defaultPrevented) return
-    event.preventDefault()
-    event.stopPropagation()
-    open = false
-    onOpenChange?.(false)
-  }
 </script>
 
 <div class="of-tooltip {className ?? ''}" data-testid={testId}>
-  <Tooltip.Provider {delayDuration}>
-    <Tooltip.Root bind:open bind:triggerId={activeTriggerId} {disabled} {delayDuration} {onOpenChange}>
-      <Tooltip.Trigger id={triggerId} {disabled}>
-        {#snippet child({ props })}
-          <button
-            {...props}
-            type="button"
-            class="of-tooltip-trigger {triggerClass}"
-            aria-label={label}
-            aria-describedby={triggerDescriptionIds}
-            role={triggerRole}
-            tabindex={triggerTabindex}
-            title={triggerTitle}
-            {disabled}
-            onclick={(event) => handleTriggerClick(event, props.onclick)}
-            onkeydown={(event) => handleTriggerKeydown(event, props.onkeydown)}
-          >
-            {@render trigger()}
-          </button>
-        {/snippet}
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content {side} {align} {sideOffset}>
-          {#snippet child({ props, wrapperProps })}
-            <div {...wrapperProps}>
-              <div {...props} id={contentId} role="tooltip" class="of-tooltip-content">
-                {content}
-              </div>
-            </div>
-          {/snippet}
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  </Tooltip.Provider>
+  <TooltipControl
+    ignoreNonKeyboardFocus={false}
+    {content}
+    bind:open
+    {disabled}
+    {delayDuration}
+    {side}
+    {align}
+    {sideOffset}
+    {onOpenChange}
+    triggerAttributes={{
+      type: 'button',
+      class: `of-tooltip-trigger ${triggerClass}`,
+      'aria-label': label,
+      'aria-describedby': triggerAriaDescribedby,
+      role: triggerRole,
+      tabindex: triggerTabindex,
+      title: triggerTitle,
+      disabled,
+      onclick: onTriggerClick,
+      onkeydown: onTriggerKeydown,
+    }}
+  >
+    {#snippet trigger(props)}
+      <button {...props}>{@render renderTrigger()}</button>
+    {/snippet}
+  </TooltipControl>
 </div>
 
 <style>
@@ -153,20 +118,6 @@
     background: var(--of-control-disabled);
     color: var(--of-control-text-disabled);
     cursor: not-allowed;
-  }
-
-  :global(.of-tooltip-content) {
-    z-index: 1200;
-    max-width: 20rem;
-    padding: var(--of-space2) var(--of-space3);
-    border: var(--of-border-width) solid var(--of-border-strong);
-    border-radius: var(--of-radius-overlay);
-    background: var(--of-surface-raised);
-    color: var(--of-text);
-    box-shadow: var(--of-shadow-raised);
-    font-family: var(--of-font-sans);
-    font-size: var(--of-text-xs);
-    line-height: var(--of-line-height-xs);
   }
 
   @media (prefers-reduced-motion: reduce) {
