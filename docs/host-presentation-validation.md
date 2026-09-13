@@ -63,7 +63,7 @@ The download naming test failed before implementation because the native progres
 
 - The first complete `pnpm test` run finished with 804 passing suites and two failures. One was a stale geometry exception, since fixed and verified. The other was `packages/plugin-sdk/src/ui/Switch.test.ts`, `lets a quick flick commit in its travel direction`. That failure reproduced in isolation and already has tasks KVG-4983 and KVG-4990. No SDK code was changed or duplicate task created.
 - Later whole-workspace retries exceeded their execution windows. A reduced-worker retry and broad renderer retries also timed out. These are not counted as passes. The final explicit host-source run and separate Node run completed successfully.
-- The opt-in `InteractionOverlays.visual.test.ts` raster suite was not enabled. The new browser measurements and screenshots passed, but the Docker-pinned Storybook raster comparison was not run.
+- The opt-in `InteractionOverlays.visual.test.ts` raster suite was not enabled. The new browser measurements and screenshots passed. Docker-pinned Storybook validation was completed during the CI follow-up below.
 - Package-specific publication/conformance suites and individual plugin test/static-check scripts were not rerun separately. No package implementation changed; the initial workspace run exercised their first-level suites, and final host/plugin builds and production-CSS browser checks passed. Final dependency removal and its repository-wide validation remain KVG-4874.
 - The production feedback check uses production CSS on real host components in the Storybook browser, not an installed Electron end-to-end session.
 
@@ -74,3 +74,14 @@ Logs are in `artifacts/storybook-visual/host-checks/`. Measurements and screensh
 Start the pages catalog for this worktree with `pnpm exec storybook dev -p 6143 -c storybook/pages --ci --no-open`. For a future presentation change, run `check-host-presentation.mjs --capture` before editing, then run without `--capture` after editing. Set `HOST_PRESENTATION_BASELINE` to keep a separate baseline for an additional batch. The original KVG-4873 color baseline is `before.json`; the keyboard baseline is `keyboard-before.json`.
 
 No new cleanup tasks were needed. Existing Switch timing tasks remain the outstanding whole-workspace test issue.
+
+## CI visual follow-up
+
+PR #2447's visual run `34711208901` reported 23 image mismatches among 463 captures; its additional failing result was the runner summary. All other CI checks passed.
+
+- Seven cases contain the migrated SDK loading indicator: settings loading/saving, focus-board loading, and merging task cards.
+- Sixteen review cases contain host-rendered Markdown inside the diff widget's nested `data-theme="light"`/`"dark"` scope. The old content rule picked up daisyUI's nested foreground; the migrated rule follows `--of-text`. For example, the light comment changes from `oklch(21% 0.006 285.885)` to OpenForge's `#202020`. The text layout is unchanged. Retaining the old foreground would reintroduce the legacy dependency.
+
+Reviewed the comparison images and regenerated through `pnpm storybook:visual:update` in the pinned Linux ARM64 container. All 463 captures completed without diagnostic errors; exactly the 23 affected PNGs changed. No comparison tolerance, readiness selector, capture flag, or animation policy was relaxed.
+
+`check-host-feedback.mjs` now also checks real inline review content across the theme matrix, including the nested legacy diff scope. The feedback browser checks pass at both existing widths, and the visual unit suite passes all 98 tests.

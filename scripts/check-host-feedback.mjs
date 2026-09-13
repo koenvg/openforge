@@ -104,4 +104,24 @@ try {
     await page.close()
     console.log(`Host feedback paint, progress, loading, content, interactions and mounted tokens passed at ${width}px`)
   }
+  const review = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' })
+  await review.goto(`${url}/iframe.html?id=pages-self-review--populated&viewMode=story`)
+  await review.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
+  assert.equal(await review.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase), 'finished')
+  await installBaselineThemes(review)
+  const comment = review.getByText('Trim whitespace before validating names.', { exact: true })
+  for (const theme of baselineThemeIds) {
+    await selectBaselineTheme(review, theme)
+    const paint = await comment.evaluate(node => {
+      const reference = document.createElement('span')
+      reference.style.color = 'var(--of-text)'
+      node.append(reference)
+      const expected = getComputedStyle(reference).color
+      reference.remove()
+      return { actual: getComputedStyle(node).color, expected }
+    })
+    assert.equal(paint.actual, paint.expected, `Inline review content must follow ${theme}, not the diff widget's legacy theme`)
+  }
+  await review.close()
+  console.log('Inline review content follows active tokens across nested legacy diff themes')
 } finally { await browser.close() }
