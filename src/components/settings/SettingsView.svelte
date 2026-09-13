@@ -1,5 +1,6 @@
 <script lang="ts">
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import {
     AudioLines,
@@ -96,11 +97,11 @@
             {#if controller.projectSettingsLoadError || controller.globalSettingsLoadError}
               <span class="font-medium text-[var(--of-danger)]">Failed to load settings: {controller.projectSettingsLoadError ?? controller.globalSettingsLoadError}</span>
             {:else if controller.settingsLoading}
-              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Loading settings…</span>
+              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><LoadingIndicator size="xs" decorative />Loading settings…</span>
             {:else if controller.saveStatus === 'dirty'}
               <span class="font-medium text-[var(--of-warning)]">Unsaved changes — autosaving soon…</span>
             {:else if controller.isSaving || controller.saveStatus === 'saving'}
-              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Saving changes…</span>
+              <span class="inline-flex items-center gap-2 text-[var(--of-text-muted)]"><LoadingIndicator size="xs" decorative />Saving changes…</span>
             {:else if controller.saved || controller.saveStatus === 'saved'}
               <span class="font-medium text-[var(--of-success)]">All changes saved</span>
             {:else if controller.saveStatus === 'error'}

@@ -138,3 +138,11 @@ The task-detail consumer group is migrated to semantic color utilities and SDK f
 This checkout predates the routed `src/styles/keyboard-hints.css` and scanner `kbd` support. The task editor keeps its native `kbd` with scoped token-based border/radius styling. The browser check compares it with the retained legacy hint under all six themes, including native bounds, padding, fonts, and opacity.
 
 See [task-detail migration validation](task-detail-ui-migration-validation.md) for commands, baseline changes, and coverage gaps.
+
+## Remaining host presentation, KVG-4873
+
+Board, shell, shared feedback and content styling now use semantic utilities, direct tokens, and SDK loading/progress controls. Settings edits cover loading indicators only. Host keyboard hints use native `<kbd>` elements with `of-key-hint` styling; the legacy scanner now detects daisyUI `kbd` classes.
+
+The scoped host inventory is clear. The adapter and transitional settings probes remain for KVG-4874. Consumers belonging to still-open project/attention, task-detail/review, terminal and package/plugin batches remain explicitly owned; newly found paths were routed through their native task prompts.
+
+See [host validation and ownership](host-presentation-validation.md) for exact exclusions, dynamic-expression review, commands, browser evidence, and the existing SDK Switch test failure. The earlier machine-readable ledger is historical and is not a current remaining-consumer count.

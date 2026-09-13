@@ -202,10 +202,10 @@
   groupLabel={(item, index) => index === 0 || paletteItems[index - 1].kind !== item.kind ? item.kind === 'task' ? 'Tasks' : 'Commands' : null}
  >
     {#snippet loadingContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">Loading tasks...</div>
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">Loading tasks...</div>
     {/snippet}
     {#snippet emptyContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">No tasks or commands match your search</div>
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">No tasks or commands match your search</div>
     {/snippet}
     {#snippet item(item)}
       {#if item.kind === 'task'}
@@ -216,20 +216,20 @@
         {@const isOtherProject = item.task.projectId !== $activeProjectId}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="font-mono text-xs font-semibold text-primary shrink-0">{item.task.id}</span>
+            <span class="font-mono text-xs font-semibold text-of-accent shrink-0">{item.task.id}</span>
             {#if label}<Badge variant={badgeVariant} class="shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</Badge>{/if}
             {#if projectName && isOtherProject}<Badge variant="neutral" class="shrink-0 opacity-60">{projectName}</Badge>{/if}
           </div>
-          <div class="text-xs text-base-content/70 truncate mt-0.5">{truncate(firstLine(item.task.prompt), 80)}</div>
+          <div class="text-xs text-of-text/70 truncate mt-0.5">{truncate(firstLine(item.task.prompt), 80)}</div>
         </div>
       {:else}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="font-mono text-xs font-semibold text-primary shrink-0">cmd</span>
+            <span class="font-mono text-xs font-semibold text-of-accent shrink-0">cmd</span>
             <Badge variant="neutral" class="shrink-0 opacity-70">{item.pluginName}</Badge>
             {#if item.shortcut}<Badge variant="neutral" class="shrink-0">{item.shortcut}</Badge>{/if}
           </div>
-          <div class="text-xs text-base-content/70 truncate mt-0.5">{item.title}</div>
+          <div class="text-xs text-of-text/70 truncate mt-0.5">{item.title}</div>
         </div>
       {/if}
     {/snippet}

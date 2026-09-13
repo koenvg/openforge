@@ -16,23 +16,23 @@
 {#if controller.isOpen}
   <Modal onClose={controller.close} maxWidth="420px" ariaLabel="Keyboard Shortcuts">
     {#snippet header()}
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Keyboard Shortcuts</h2>
+      <h2 class="text-[0.95rem] font-semibold text-of-text m-0">Keyboard Shortcuts</h2>
     {/snippet}
     <div class="p-5 flex flex-col gap-4">
       <div>
-        <div class="font-mono text-xs text-secondary mb-3">Global</div>
+        <div class="font-mono text-xs text-of-control mb-3">Global</div>
         <div class="flex flex-col gap-2">
           {#each globalShortcutHelpEntries as shortcut}
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">{shortcut.label}</span>
+              <span class="text-sm text-of-text">{shortcut.label}</span>
               <div class="flex items-center gap-1.5">
                 {#each shortcut.keys as keySequence, sequenceIndex}
                   {#if sequenceIndex > 0}
-                    <span class="text-xs text-base-content/50">or</span>
+                    <span class="text-xs text-of-text/50">or</span>
                   {/if}
                   <span class="flex gap-0.5">
                     {#each keySequence as key}
-                      <kbd class="kbd kbd-sm">{key}</kbd>
+                      <kbd class="of-key-hint of-key-hint-sm">{key}</kbd>
                     {/each}
                   </span>
                 {/each}
@@ -43,46 +43,46 @@
       </div>
 
       <div>
-        <div class="font-mono text-xs text-secondary mb-3">Vim navigation</div>
+        <div class="font-mono text-xs text-of-control mb-3">Vim navigation</div>
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Move down / up</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd><kbd class="kbd kbd-sm">↓</kbd><kbd class="kbd kbd-sm">↑</kbd></div>
+            <span class="text-sm text-of-text">Move down / up</span>
+            <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">j</kbd><kbd class="of-key-hint of-key-hint-sm">k</kbd><kbd class="of-key-hint of-key-hint-sm">↓</kbd><kbd class="of-key-hint of-key-hint-sm">↑</kbd></div>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Select / open</span>
-            <kbd class="kbd kbd-sm">Enter</kbd>
+            <span class="text-sm text-of-text">Select / open</span>
+            <kbd class="of-key-hint of-key-hint-sm">Enter</kbd>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Action on task</span>
-            <kbd class="kbd kbd-sm">x</kbd>
+            <span class="text-sm text-of-text">Action on task</span>
+            <kbd class="of-key-hint of-key-hint-sm">x</kbd>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">First / last item</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">gg</kbd><kbd class="kbd kbd-sm">G</kbd></div>
+            <span class="text-sm text-of-text">First / last item</span>
+            <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">gg</kbd><kbd class="of-key-hint of-key-hint-sm">G</kbd></div>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Back</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">Esc</kbd><kbd class="kbd kbd-sm">q</kbd></div>
+            <span class="text-sm text-of-text">Back</span>
+            <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">Esc</kbd><kbd class="of-key-hint of-key-hint-sm">q</kbd></div>
           </div>
         </div>
       </div>
 
       {#if taskSelected}
         <div>
-          <div class="font-mono text-xs text-secondary mb-3">Task view</div>
+          <div class="font-mono text-xs text-of-control mb-3">Task view</div>
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Info panel</span>
-              <kbd class="kbd kbd-sm">⌘/</kbd>
+              <span class="text-sm text-of-text">Info panel</span>
+              <kbd class="of-key-hint of-key-hint-sm">⌘/</kbd>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Agent / Review / Terminal (if available)</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
+              <span class="text-sm text-of-text">Agent / Review / Terminal (if available)</span>
+              <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">⌘1</kbd><kbd class="of-key-hint of-key-hint-sm">⌘2</kbd><kbd class="of-key-hint of-key-hint-sm">⌘3</kbd></div>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Zen mode</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘.</kbd><kbd class="kbd kbd-sm">⌘Z</kbd></div>
+              <span class="text-sm text-of-text">Zen mode</span>
+              <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">⌘.</kbd><kbd class="of-key-hint of-key-hint-sm">⌘Z</kbd></div>
             </div>
           </div>
         </div>
@@ -90,11 +90,11 @@
 
       {#if boardVisible}
         <div>
-          <div class="font-mono text-xs text-secondary mb-3">Board</div>
+          <div class="font-mono text-xs text-of-control mb-3">Board</div>
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Board filters</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
+              <span class="text-sm text-of-text">Board filters</span>
+              <div class="flex gap-0.5"><kbd class="of-key-hint of-key-hint-sm">⌘1</kbd><kbd class="of-key-hint of-key-hint-sm">⌘2</kbd><kbd class="of-key-hint of-key-hint-sm">⌘3</kbd></div>
             </div>
           </div>
         </div>

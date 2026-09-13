@@ -11,6 +11,9 @@ describe('AppToast', () => {
     { variant: 'error' as const, role: 'alert', live: 'assertive' },
     { variant: 'warning' as const, role: 'status', live: 'polite' },
     { variant: 'success' as const, role: 'status', live: 'polite' },
+    { variant: 'loading' as const, role: 'status', live: 'polite' },
+    { variant: 'info' as const, role: 'status', live: 'polite' },
+    { variant: 'neutral' as const, role: 'status', live: 'polite' },
   ])('exposes $variant messages with the appropriate live-region semantics', ({ variant, role, live }) => {
     render(AppToast, { props: { message: `${variant} message`, variant, ondismiss: vi.fn() } })
 

@@ -103,28 +103,28 @@
     onCancel={closeModal}
     {loading}
     listClass="max-h-[400px] overflow-y-auto"
-    optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors ${highlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}`}
+    optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-of-text transition-colors ${highlighted ? 'bg-of-border' : 'hover:bg-of-border/60'}`}
   >
     {#snippet input(listboxId, activeDescendantId)}
       <PaletteInput {listboxId} {activeDescendantId} bind:value={searchQuery} placeholder="Search files..." onInput={handleInput} />
     {/snippet}
     {#snippet loadingContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">Searching...</div>
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">Searching...</div>
     {/snippet}
     {#snippet emptyContent()}
-      <div class="px-4 py-6 text-center text-base-content/50 text-sm">
+      <div class="px-4 py-6 text-center text-of-text/50 text-sm">
         {#if !$activeProjectId}Select a project first{:else if searchQuery.trim()}No files match your search{:else}Type to search files...{/if}
       </div>
     {/snippet}
     {#snippet item(filePath)}
       <div class="flex-1 min-w-0">
         <div class="font-medium truncate">{getFileName(filePath)}</div>
-        <div class="text-xs text-base-content/50 truncate">{getDirectory(filePath)}</div>
+        <div class="text-xs text-of-text/50 truncate">{getDirectory(filePath)}</div>
       </div>
     {/snippet}
   </PaletteListbox>
   {#if filteredResults.length === 50}
-    <div class="px-4 py-1.5 border-t border-base-300 text-xs text-base-content/40 text-center">Showing top 50 results</div>
+    <div class="px-4 py-1.5 border-t border-of-border text-xs text-of-text/40 text-center">Showing top 50 results</div>
   {/if}
   <PaletteFooter actionLabel="open file" />
 </PaletteModal>

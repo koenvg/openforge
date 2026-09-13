@@ -1,6 +1,8 @@
 <script lang="ts">
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
+  import Progress from '@openforge-app/plugin-sdk/ui/Progress.svelte'
   import { onMount, onDestroy } from 'svelte'
   import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
   import { downloadWhisperModel } from '../../../lib/ipc'
@@ -86,12 +88,12 @@
   })
 </script>
 
-<div class="flex flex-col gap-3 p-4 bg-base-200 rounded-[var(--of-radius-container)] w-full">
+<div class="flex flex-col gap-3 p-4 bg-of-surface-subtle rounded-[var(--of-radius-container)] w-full">
   <div class="flex items-center gap-2">
     {#if status === 'downloading'}
-      <span class="loading loading-spinner loading-xs text-primary"></span>
+      <LoadingIndicator size="xs" decorative class="text-of-accent" />
     {/if}
-    <span class="text-sm font-medium text-base-content">
+    <span class="text-sm font-medium text-of-text">
       {#if status === 'complete'}
         {modelDisplayName} downloaded
       {:else if status === 'error'}
@@ -107,12 +109,14 @@
 
   {#if status === 'downloading'}
     <div class="flex flex-col gap-1">
-      <progress
-        class="progress progress-primary w-full"
+      <Progress
+        variant="primary"
+        class="w-full"
+        aria-label={`Downloading Whisper ${modelDisplayName}`}
         value={progress}
-        max="100"
-      ></progress>
-      <span class="text-xs text-base-content/50">
+        max={100}
+      />
+      <span class="text-xs text-of-text/50">
         {#if totalBytes > 0}
           {progress.toFixed(0)}% — {formatMB(bytesDownloaded)} / {formatMB(totalBytes)}
         {:else}
@@ -124,7 +128,7 @@
 
   {#if status === 'error' && errorMessage}
     <div class="flex items-center gap-2">
-      <span class="text-error text-sm flex-1">{errorMessage}</span>
+      <span class="text-of-danger text-sm flex-1">{errorMessage}</span>
       <Button
         variant="ghost" size="sm"
         onclick={() => startDownload()}

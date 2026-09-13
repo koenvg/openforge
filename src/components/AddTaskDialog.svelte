@@ -169,7 +169,7 @@
   <footer class="flex items-center justify-between gap-4 border-t border-[var(--of-border)] bg-[var(--of-surface)] px-6 py-4">
     <div class="flex min-w-0 items-center gap-3">
       <Button type="button" variant="ghost" class="gap-2" aria-label="Close" onclick={() => onClose?.()}>
-        <kbd class="kbd kbd-sm border-[var(--of-border)] bg-[var(--of-surface)]">Esc</kbd>
+        <kbd class="of-key-hint of-key-hint-sm border-[var(--of-border)] bg-[var(--of-surface)]">Esc</kbd>
         Close
       </Button>
       {#if mode === 'create' && view.taskDefaultsLoading}
@@ -194,7 +194,7 @@
         >
           {view.submissionIntent === 'start' ? 'Starting…' : 'Start Task'}
           {#if view.submissionIntent !== 'start'}
-            <kbd class="kbd kbd-xs ml-1 border-[var(--of-on-accent)] bg-[var(--of-on-accent)] text-[var(--of-accent)]">⌘↵</kbd>
+            <kbd class="of-key-hint of-key-hint-xs ml-1 border-[var(--of-on-accent)] bg-[var(--of-on-accent)] text-[var(--of-accent)]">⌘↵</kbd>
           {/if}
         </Button>
       {:else}

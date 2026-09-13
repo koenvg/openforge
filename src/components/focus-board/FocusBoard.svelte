@@ -168,13 +168,13 @@
       >
         <Search size={16} aria-hidden="true" />
         <span class="min-w-0 flex-1 truncate">Search tasks or use a command</span>
-        <kbd class="kbd kbd-xs shrink-0 border-[var(--of-border)] bg-[var(--of-surface-subtle)] text-[var(--of-text-secondary)]">⌘K</kbd>
+        <kbd class="of-key-hint of-key-hint-xs shrink-0 border-[var(--of-border)] bg-[var(--of-surface-subtle)] text-[var(--of-text-secondary)]">⌘K</kbd>
       </Button>
       <Button type="button" class="shrink-0 gap-2" onclick={() => onNewTask?.()}>
         <Plus size={16} aria-hidden="true" />
         New task
         {#if $commandHeld}
-          <kbd aria-hidden="true" class="kbd kbd-xs border-[var(--of-on-accent)] bg-transparent text-[var(--of-on-accent)] opacity-75">⌘N</kbd>
+          <kbd aria-hidden="true" class="of-key-hint of-key-hint-xs border-[var(--of-on-accent)] bg-transparent text-[var(--of-on-accent)] opacity-75">⌘N</kbd>
         {/if}
       </Button>
 
@@ -191,7 +191,7 @@
             >
               <span class="board-filter-content">{opt.label} <span class="ml-1 text-[10px] opacity-60">{filterCounts[opt.value]}</span></span>
               {#if $commandHeld}
-                <kbd class="kbd kbd-xs ml-1 opacity-60">{opt.shortcut}</kbd>
+                <kbd class="of-key-hint of-key-hint-xs ml-1 opacity-60">{opt.shortcut}</kbd>
               {/if}
             </Button>
           {/each}
