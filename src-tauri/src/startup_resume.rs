@@ -148,29 +148,31 @@ pub(crate) async fn resume_task_sessions(
     }
 
     // A retained allocation, including an exit, is authoritative before any provider resume.
-    let preserved_pi = match app.try_state::<PtyManager>() {
+    let preserved_agents = match app.try_state::<PtyManager>() {
         Some(manager) => match manager.daemon_shells.as_ref() {
-            Some(bridge) => match bridge.pi_session().await {
-                Ok(session) => session,
+            Some(bridge) => match bridge.agent_sessions().await {
+                Ok(sessions) => sessions,
                 Err(error) => {
                     sidecar_readiness.mark_startup_resume_degraded(format!(
-                        "Pi inventory reconciliation failed: {error}"
+                        "Agent inventory reconciliation failed: {error}"
                     ));
                     let _ = app.emit("startup-resume-complete", ());
                     return;
                 }
             },
-            None => None,
+            None => Vec::new(),
         },
-        None => None,
+        None => Vec::new(),
     };
-    let preserved_task = preserved_pi
-        .as_ref()
-        .map(|session| session.session_key.as_str());
-    let live_task = preserved_pi
-        .as_ref()
+    let preserved_tasks: HashSet<_> = preserved_agents
+        .iter()
+        .map(|session| session.session_key.as_str())
+        .collect();
+    let live_tasks: Vec<_> = preserved_agents
+        .iter()
         .filter(|session| session.exit_code.is_none())
-        .map(|session| (session.session_key.as_str(), session.pty.instance.value()));
+        .map(|session| (session.session_key.as_str(), session.pty.instance.value()))
+        .collect();
 
     let resume_targets = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
@@ -201,7 +203,11 @@ pub(crate) async fn resume_task_sessions(
     };
 
     if resume_targets.is_empty() {
-        mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, live_task);
+        mark_unresumed_running_sessions_interrupted(
+            &app,
+            stale_running_session_cutoff,
+            &live_tasks,
+        );
         sidecar_readiness.mark_startup_resume_complete();
         let _ = app.emit("startup-resume-complete", ());
         return;
@@ -215,7 +221,7 @@ pub(crate) async fn resume_task_sessions(
     );
 
     for target in resume_targets {
-        if preserved_task == Some(target.task_id.as_str()) {
+        if preserved_tasks.contains(target.task_id.as_str()) {
             sidecar_readiness.record_startup_resume_success();
             continue;
         }
@@ -403,7 +409,7 @@ pub(crate) async fn resume_task_sessions(
         }
     }
 
-    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, live_task);
+    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, &live_tasks);
     sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
@@ -412,7 +418,7 @@ pub(crate) async fn resume_task_sessions(
 fn mark_unresumed_running_sessions_interrupted(
     app: &crate::backend_runtime::AppHandle,
     stale_running_session_cutoff: i64,
-    live_pi_task: Option<(&str, u64)>,
+    live_tasks: &[(&str, u64)],
 ) {
     let db = app.state::<Arc<Mutex<db::Database>>>();
     let db_lock = match db.lock() {
@@ -426,9 +432,9 @@ fn mark_unresumed_running_sessions_interrupted(
         }
     };
 
-    match db_lock.mark_running_sessions_interrupted_except_live_pi(
+    match db_lock.mark_running_sessions_interrupted_except_live_agents(
         stale_running_session_cutoff,
-        live_pi_task,
+        live_tasks,
     ) {
         Ok(count) if count > 0 => {
             info!(

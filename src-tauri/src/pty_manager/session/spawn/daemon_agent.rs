@@ -1,5 +1,5 @@
-//! Pi command preparation stays in the Sidecar; no PTY handles cross this boundary.
-use super::super::provider_adapter::{AgentPtyProviderAdapter, PiPtyAdapter};
+//! Provider preparation stays in the Sidecar; no PTY handles cross this boundary.
+use super::super::provider_adapter::AgentPtyProviderAdapter;
 use super::process::resolve_pty_cwd;
 use crate::pty_manager::{
     daemon_shells::DaemonShells, terminal_environment, PtyError, PtyManager, PtySpawnContext,
@@ -8,10 +8,10 @@ use crate::pty_manager::{
 use openforge_session_protocol::{PreparedCommand, ShellCommand, TerminalOwner};
 
 impl PtyManager {
-    pub(super) async fn spawn_daemon_pi(
+    pub(super) async fn spawn_daemon_agent<A: AgentPtyProviderAdapter>(
         &self,
         bridge: DaemonShells,
-        mut adapter: PiPtyAdapter,
+        mut adapter: A,
         context: PtySpawnContext<'_>,
         image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {

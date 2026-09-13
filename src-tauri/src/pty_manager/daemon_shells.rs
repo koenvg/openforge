@@ -22,7 +22,7 @@ struct Shared {
     root: PathBuf,
     executable: PathBuf,
     key: String,
-    pi_key: Option<String>,
+    agent_keys: std::collections::BTreeMap<String, String>,
     connection: Mutex<Option<Connection>>,
 }
 struct Connection {
@@ -41,7 +41,7 @@ impl PtyManager {
             root,
             executable,
             String::new(),
-            Some(key),
+            [(key, "pi".into())].into(),
         ));
     }
 }
@@ -49,21 +49,21 @@ impl PtyManager {
 impl DaemonShells {
     #[cfg(test)]
     pub(crate) fn new(root: PathBuf, executable: PathBuf, key: String) -> Self {
-        Self::with_selection(root, executable, key, None)
+        Self::with_selection(root, executable, key, Default::default())
     }
 
     fn with_selection(
         root: PathBuf,
         executable: PathBuf,
         key: String,
-        pi_key: Option<String>,
+        agent_keys: std::collections::BTreeMap<String, String>,
     ) -> Self {
         Self(
             Arc::new(Shared {
                 root,
                 executable,
                 key,
-                pi_key,
+                agent_keys,
                 connection: Mutex::new(None),
             }),
             None,
@@ -76,17 +76,26 @@ impl DaemonShells {
             return None;
         }
         let key = std::env::var("OPENFORGE_SESSION_DAEMON_SHELL_KEY").unwrap_or_default();
-        let pi_key = std::env::var("OPENFORGE_SESSION_DAEMON_PI_KEY")
-            .ok()
-            .filter(|key| !key.is_empty() && key != "*");
-        if key.is_empty() && pi_key.is_none() {
+        let agent_keys = ["pi", "claude", "codex"]
+            .into_iter()
+            .filter_map(|provider| {
+                std::env::var(format!(
+                    "OPENFORGE_SESSION_DAEMON_{}_KEY",
+                    provider.to_uppercase()
+                ))
+                .ok()
+                .filter(|key| !key.is_empty() && key != "*")
+                .map(|key| (key, provider.to_string()))
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        if key.is_empty() && agent_keys.is_empty() {
             return None;
         }
         Some(Self::with_selection(
             std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")?.into(),
             std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH")?.into(),
             key,
-            pi_key,
+            agent_keys,
         ))
     }
 
@@ -100,10 +109,16 @@ impl DaemonShells {
     }
 
     pub(crate) fn owns(&self, key: &str) -> bool {
-        selected_shell(&self.0.key, key) || self.owns_pi(key)
+        selected_shell(&self.0.key, key) || self.owns_agent(key)
     }
-    pub(crate) fn owns_pi(&self, key: &str) -> bool {
-        self.0.pi_key.as_deref() == Some(key)
+    pub(crate) fn owns_agent(&self, key: &str) -> bool {
+        self.0.agent_keys.contains_key(key)
+    }
+    pub(crate) fn selects_provider(&self, key: &str, command: &str) -> bool {
+        self.0
+            .agent_keys
+            .get(key)
+            .is_some_and(|provider| provider == command)
     }
 
     pub(crate) async fn terminate_for_task(
@@ -182,7 +197,7 @@ impl DaemonShells {
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<serde_json::Value, String> {
-        let pi_key = self.0.pi_key.clone();
+        let agent_keys = self.0.agent_keys.clone();
         self.run(publisher, move |connection, key| {
             let inventory = connection.client.inventory()?;
             let sessions: Vec<_> = inventory
@@ -190,7 +205,7 @@ impl DaemonShells {
                 .into_iter()
                 .filter(|session| {
                     selected_shell(key, &session.session_key)
-                        || pi_key.as_deref() == Some(&session.session_key)
+                        || agent_keys.contains_key(&session.session_key)
                 })
                 .map(|session| {
                     serde_json::json!({
@@ -231,11 +246,18 @@ impl DaemonShells {
         .await
     }
 
-    pub(crate) async fn pi_session(&self) -> Result<Option<Session>, String> {
-        match &self.0.pi_key {
-            Some(key) => self.for_key(key).session().await,
-            None => Ok(None),
-        }
+    pub(crate) async fn agent_sessions(&self) -> Result<Vec<Session>, String> {
+        let agent_keys = self.0.agent_keys.clone();
+        self.run(self.publisher(), move |connection, _| {
+            Ok(connection
+                .client
+                .inventory()?
+                .sessions
+                .into_iter()
+                .filter(|session| agent_keys.contains_key(&session.session_key))
+                .collect())
+        })
+        .await
     }
 
     pub(crate) async fn session(&self) -> Result<Option<Session>, String> {
@@ -478,7 +500,7 @@ fn pump(shared: &Shared) -> Result<(), Error> {
         .into_iter()
         .filter(|session| {
             selected_shell(&shared.key, &session.session_key)
-                || shared.pi_key.as_deref() == Some(&session.session_key)
+                || shared.agent_keys.contains_key(&session.session_key)
         })
         .collect();
     if batch.gap {

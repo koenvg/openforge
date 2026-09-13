@@ -65,7 +65,7 @@ impl PtyManager {
         if let Some(bridge) = self
             .daemon_shells
             .as_ref()
-            .filter(|bridge| bridge.owns_pi(task_id))
+            .filter(|bridge| bridge.owns_agent(task_id))
         {
             let session = bridge.for_key(task_id).session().await.ok()??;
             return (session.exit_code.is_none()

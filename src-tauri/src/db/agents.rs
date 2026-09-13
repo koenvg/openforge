@@ -410,17 +410,20 @@ impl super::Database {
         &self,
         cutoff_updated_at: i64,
     ) -> Result<usize> {
-        self.mark_running_sessions_interrupted_except_live_pi(cutoff_updated_at, None)
+        self.mark_running_sessions_interrupted_except_live_agents(cutoff_updated_at, &[])
     }
 
-    pub(crate) fn mark_running_sessions_interrupted_except_live_pi(
+    pub(crate) fn mark_running_sessions_interrupted_except_live_agents(
         &self,
         cutoff_updated_at: i64,
-        live_pi_task: Option<(&str, u64)>,
+        live_agents: &[(&str, u64)],
     ) -> Result<usize> {
-        let live_instance = live_pi_task
-            .map(|(_, instance)| i64::try_from(instance))
-            .transpose()
+        let live_agents = live_agents
+            .iter()
+            .map(|(task, instance)| i64::try_from(*instance).map(|instance| (*task, instance)))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        let live_agents = serde_json::to_string(&live_agents)
             .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
@@ -431,8 +434,10 @@ impl super::Database {
                     error_message = 'Session interrupted by app restart',
                     updated_at = ?1
               WHERE status = 'running' AND updated_at < ?2
-                AND NOT (provider = 'pi' AND ticket_id = COALESCE(?3, '') AND pty_instance_id IS ?4)",
-            rusqlite::params![now, cutoff_updated_at, live_pi_task.map(|(task, _)| task), live_instance],
+                AND NOT EXISTS (SELECT 1 FROM json_each(?3) AS live
+                    WHERE ticket_id = json_extract(live.value, '$[0]')
+                      AND pty_instance_id = json_extract(live.value, '$[1]'))",
+            rusqlite::params![now, cutoff_updated_at, live_agents],
         )?;
         Ok(conn.changes() as usize)
     }

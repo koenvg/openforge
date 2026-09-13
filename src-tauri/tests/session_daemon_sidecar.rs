@@ -3,6 +3,12 @@
 mod pi;
 #[path = "session_daemon_sidecar/pi-live.rs"]
 mod pi_live;
+#[path = "session_daemon_sidecar/provider-live.rs"]
+mod provider_live;
+#[path = "session_daemon_sidecar/provider-scoping.rs"]
+mod provider_scoping;
+#[path = "session_daemon_sidecar/providers.rs"]
+mod providers;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::{
@@ -18,6 +24,7 @@ struct Fixture {
     port: u16,
     shell_key: String,
     pi_key: Option<String>,
+    agent_selection: Vec<(String, String)>,
     provider_bin: Option<PathBuf>,
     token: String,
     http: reqwest::blocking::Client,
@@ -35,6 +42,7 @@ impl Fixture {
             port: 0,
             shell_key: "T-proof-shell-3".into(),
             pi_key: None,
+            agent_selection: Vec::new(),
             provider_bin: None,
             token: String::new(),
             http: reqwest::blocking::Client::builder()
@@ -76,6 +84,12 @@ impl Fixture {
         }
         if let Some(key) = &self.pi_key {
             command.env("OPENFORGE_SESSION_DAEMON_PI_KEY", key);
+        }
+        for (provider, key) in &self.agent_selection {
+            command.env(
+                format!("OPENFORGE_SESSION_DAEMON_{}_KEY", provider.to_uppercase()),
+                key,
+            );
         }
         if let Some(bin) = &self.provider_bin {
             let path = std::env::join_paths(std::iter::once(bin.clone()).chain(
