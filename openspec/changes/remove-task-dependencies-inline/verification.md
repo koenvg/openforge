@@ -38,6 +38,14 @@ Inspected the narrow-panel screenshot with production theme tokens. The confirm 
 
 Default parallel `cargo test` had one failure in the existing `start_implementation_injects_plugin_configured_review_workflow` test. Its fake provider log was empty at `src-tauri/src/app_invoke/tests/lifecycle/support.rs:198`. It passed in isolation, then the entire Rust suite passed serially. No provider-start code was changed or tests disabled. Follow-up KVG-5029 records the intermittent parallel failure and depends on KVG-5026.
 
+## PR visual CI follow-up
+
+PR #2455's initial main CI workflow passed, including parallel Rust tests, packaged Electron smoke, and live Electron terminal invariants. Storybook visual smoke failed only three baseline comparisons: Task Detail Dependency in light/dark and the light Dependency workspace inspector. Their changes were the intentional Manage dependencies button and the resulting vertical layout shift.
+
+Reviewed baseline/current/difference images from run 34754347340, then regenerated the baselines with `pnpm storybook:visual:update` in the pinned Linux container. Exactly those three PNGs changed, and all three match the reviewed CI captures byte-for-byte. No product code, stories, readiness requirements, or pixel tolerances changed.
+
+`pnpm storybook:visual:test` then passed all 463 branch-local cases, the full repeatability pass, terminal/cursor/readiness/capture stability checks, and all runner regression probes. The initial CI run captured 468 cases. This baseline-only follow-up does not require rerunning unchanged product tests locally; the full PR workflows will rerun on push.
+
 ## Remaining gaps
 
-Existing skipped frontend and ignored Rust tests were not forced on. No packaged Electron end-to-end session was run; renderer browser interaction and the backend/desktop contract were validated separately. The default-parallel Rust failure remains a follow-up, not a change to this feature's acceptance criteria.
+Existing skipped frontend and ignored Rust tests were not forced on. No packaged Electron end-to-end session was run locally; packaged smoke and live terminal invariant checks passed in CI. The default-parallel local Rust failure remains a follow-up, not a change to this feature's acceptance criteria.
