@@ -93,12 +93,6 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
         .lock()
         .await
         .contains_key(&session_key));
-    assert!(!harness
-        .manager
-        .last_output
-        .lock()
-        .await
-        .contains_key(&session_key));
     tokio::time::timeout(Duration::from_secs(1), async {
         while harness.manager.lifecycle_locks.contains_key(&session_key) {
             tokio::task::yield_now().await;

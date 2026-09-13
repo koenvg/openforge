@@ -393,10 +393,6 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
         let mut buffers = manager.output_buffers.lock().await;
         buffers.insert(key.to_string(), Arc::clone(&ring));
     }
-    {
-        let mut times = manager.last_output.lock().await;
-        times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
-    }
 
     let pid_file = tmp_dir.path().join("task-1-shell-0.pid");
     write_test_session_metadata(&manager, key, &pid_file).await;
@@ -446,10 +442,6 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
     assert!(
         !manager.output_buffers.lock().await.contains_key(key),
         "output buffer should be removed after EOF cleanup"
-    );
-    assert!(
-        !manager.last_output.lock().await.contains_key(key),
-        "last_output should be removed after EOF cleanup"
     );
     assert!(
         !pid_file.exists(),
@@ -521,10 +513,6 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
         let mut buffers = manager.output_buffers.lock().await;
         buffers.insert(key.to_string(), Arc::clone(&ring));
     }
-    {
-        let mut times = manager.last_output.lock().await;
-        times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
-    }
 
     let pid_file = tmp_dir.path().join("agent-task-1-pty.pid");
     write_test_session_metadata(&manager, key, &pid_file).await;
@@ -547,10 +535,6 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
         manager.get_pty_buffer(key).await,
         Some("previous opencode tty output".to_string()),
         "agent PTY output should remain replayable after process exit"
-    );
-    assert!(
-        !manager.last_output.lock().await.contains_key(key),
-        "liveness timestamps should still be cleaned up after exit"
     );
 }
 
@@ -652,10 +636,6 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
         let mut buffers = manager.output_buffers.lock().await;
         buffers.insert("task-1".to_string(), Arc::clone(&ring));
     }
-    {
-        let mut times = manager.last_output.lock().await;
-        times.insert("task-1".to_string(), Arc::new(AtomicU64::new(123)));
-    }
 
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
     let pid_file = tmp_dir.path().join("task-1-pty.pid");
@@ -688,13 +668,6 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
         assert!(
             buffers.contains_key("task-1"),
             "buffer should remain for active instance"
-        );
-    }
-    {
-        let times = manager.last_output.lock().await;
-        assert!(
-            times.contains_key("task-1"),
-            "last_output should remain for active instance"
         );
     }
     assert!(

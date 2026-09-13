@@ -17,7 +17,6 @@ pub(super) trait AgentPtyProviderAdapter {
     fn prepare(&mut self, cwd: &Path) -> Result<(), PtyError>;
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String>;
     fn pid_file_name(&self, task_id: &str) -> String;
-    fn track_last_output(&self) -> bool;
 }
 
 pub(super) struct ClaudeCodePtyAdapter {
@@ -91,10 +90,6 @@ impl AgentPtyProviderAdapter for ClaudeCodePtyAdapter {
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-claude.pid", task_id)
     }
-
-    fn track_last_output(&self) -> bool {
-        true
-    }
 }
 
 pub(super) struct OpenCodePtyAdapter {
@@ -155,10 +150,6 @@ impl AgentPtyProviderAdapter for OpenCodePtyAdapter {
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
     }
-
-    fn track_last_output(&self) -> bool {
-        true
-    }
 }
 
 pub(super) struct CodexPtyAdapter {
@@ -215,10 +206,6 @@ impl AgentPtyProviderAdapter for CodexPtyAdapter {
 
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
-    }
-
-    fn track_last_output(&self) -> bool {
-        true
     }
 }
 
@@ -282,10 +269,6 @@ impl AgentPtyProviderAdapter for PiPtyAdapter {
 
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
-    }
-
-    fn track_last_output(&self) -> bool {
-        false
     }
 }
 
@@ -354,10 +337,6 @@ impl AgentPtyProviderAdapter for GrokPtyAdapter {
 
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-pty.pid", task_id)
-    }
-
-    fn track_last_output(&self) -> bool {
-        true
     }
 }
 
@@ -501,7 +480,6 @@ mod tests {
             ]
         );
         assert_eq!(adapter.pid_file_name("task-1"), "task-1-claude.pid");
-        assert!(adapter.track_last_output());
 
         let env = adapter.extra_env("task-1", 42);
         assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
@@ -539,7 +517,6 @@ mod tests {
             ]
         );
         assert_eq!(adapter.pid_file_name("task-1"), "task-1-pty.pid");
-        assert!(adapter.track_last_output());
 
         let env = adapter.extra_env("task-1", 7);
         assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
@@ -565,7 +542,6 @@ mod tests {
             ]
         );
         assert_eq!(adapter.pid_file_name("task-1"), "task-1-pty.pid");
-        assert!(adapter.track_last_output());
 
         let env = adapter.extra_env("task-1", 8);
         assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));
@@ -596,7 +572,6 @@ mod tests {
             ]
         );
         assert_eq!(adapter.pid_file_name("task-1"), "task-1-pty.pid");
-        assert!(!adapter.track_last_output());
 
         let env = adapter.extra_env("task-1", 9);
         assert_eq!(env.get("OPENFORGE_TASK_ID"), Some(&"task-1".to_string()));

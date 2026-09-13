@@ -71,11 +71,9 @@ pub(crate) use pids::shell_session_key;
 use pids::{is_shell_session_key_for_task, shell_pid_file_name, write_managed_process_identity};
 use session::TerminalSessions;
 #[cfg(test)]
-use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};
+use session::{AgentSpawnGenerations, LifecycleLockRegistry, PtyOutputBuffers, PtySessions};
 #[cfg(test)]
-use session::{
-    AgentSpawnGenerations, LastOutputTimes, LifecycleLockRegistry, PtyOutputBuffers, PtySessions,
-};
+use session::{PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 
 // ============================================================================
 // Error Types
@@ -129,8 +127,6 @@ pub struct PtyManager {
     #[cfg(test)]
     sessions: PtySessions,
     pid_dir_override: Option<PathBuf>,
-    #[cfg(test)]
-    last_output: LastOutputTimes,
     #[cfg(test)]
     output_buffers: PtyOutputBuffers,
     #[cfg(test)]
@@ -215,8 +211,6 @@ impl PtyManager {
         Self {
             #[cfg(test)]
             sessions: test_handles.sessions,
-            #[cfg(test)]
-            last_output: test_handles.last_output,
             #[cfg(test)]
             output_buffers: test_handles.output_buffers,
             #[cfg(test)]

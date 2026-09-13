@@ -188,7 +188,4 @@ impl AgentPtyProviderAdapter for PreparedAgent<'_> {
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{task_id}-pty.pid")
     }
-    fn track_last_output(&self) -> bool {
-        true
-    }
 }

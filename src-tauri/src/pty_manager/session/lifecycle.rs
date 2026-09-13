@@ -18,11 +18,7 @@ use super::super::pids::terminate_and_remove_managed_process;
 use super::super::{PtyError, PtyManager};
 use super::{ManagedRecovery, SessionOperation, SessionTarget, TerminalSessions};
 
-#[cfg(test)]
-pub(in super::super) use diagnostics::frozen_seconds;
-
 pub(in super::super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
-pub(in super::super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
 pub(in super::super) type PtyOutputBuffers = Arc<Mutex<HashMap<String, SharedRingBuffer>>>;
 pub(in super::super) type AgentSpawnGenerations = Arc<Mutex<HashMap<String, u64>>>;
 
@@ -198,7 +194,6 @@ impl TerminalSessions {
                 },
             )
             .await;
-            self.last_output.lock().await.remove(session_key);
             if remove_output_buffer {
                 self.output_buffers.lock().await.remove(session_key);
             }
@@ -218,7 +213,6 @@ impl TerminalSessions {
             .flatten()
             .is_some_and(|status| status.success());
 
-        self.last_output.lock().await.remove(session_key);
         if remove_output_buffer {
             self.output_buffers.lock().await.remove(session_key);
         }

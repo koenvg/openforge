@@ -33,10 +33,6 @@ impl AgentPtyProviderAdapter for RegistrationTestAdapter {
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{task_id}-pty.pid")
     }
-
-    fn track_last_output(&self) -> bool {
-        false
-    }
 }
 
 #[tokio::test]

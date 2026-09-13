@@ -47,12 +47,6 @@ async fn unresolved_shell_recovery_metadata_blocks_spawn_without_clobbering_reco
         .lock()
         .await
         .contains_key(&session_key));
-    assert!(!harness
-        .manager
-        .last_output
-        .lock()
-        .await
-        .contains_key(&session_key));
 }
 
 #[tokio::test]
