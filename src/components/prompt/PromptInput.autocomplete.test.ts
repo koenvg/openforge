@@ -19,14 +19,15 @@ function deferred<T>() {
 
 function mount() {
   const onCancel = vi.fn()
-  const view = render(PromptInput, { projectId: 'project', onSubmit: vi.fn(), onCancel })
+  const onSubmit = vi.fn()
+  const view = render(PromptInput, { projectId: 'project', onSubmit, onCancel })
   const input = screen.getByRole('textbox') as HTMLTextAreaElement
   async function type(value: string) {
     input.value = value
     input.setSelectionRange(value.length, value.length)
     await fireEvent.input(input)
   }
-  return { ...view, input, type, onCancel }
+  return { ...view, input, type, onCancel, onSubmit }
 }
 
 async function settle() {
@@ -143,5 +144,48 @@ describe('PromptInput autocomplete ownership', () => {
     await tick()
     expect(screen.getByRole('option').textContent).toContain('beta')
     expect(searchOpenCodeFiles).not.toHaveBeenCalled()
+  })
+
+  it('keeps completion inline, clamps selection, and submits only after accepting a suggestion', async () => {
+    const { type, input, onSubmit } = mount()
+    input.focus()
+    await type('/')
+    await settle()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(input.getAttribute('aria-controls')).toBe(screen.getByRole('listbox').id)
+    await fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('alpha')
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    await fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('beta')
+    await fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    await settle()
+    expect(input.value).toBe('/beta ')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+    expect(document.activeElement).toBe(input)
+    await fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('/beta')
+  })
+
+  it('dismisses suggestions before cancelling the prompt and preserves focus on pointer acceptance', async () => {
+    const { type, input, onCancel } = mount()
+    input.focus()
+    await type('/')
+    await settle()
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(onCancel).not.toHaveBeenCalled()
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledOnce()
+    await type('/a')
+    await settle()
+    const option = screen.getByRole('option', { name: 'alpha' })
+    expect(await fireEvent.mouseDown(option)).toBe(false)
+    await fireEvent.click(option)
+    expect(input.value).toBe('/alpha ')
+    expect(document.activeElement).toBe(input)
+    expect(screen.queryByRole('listbox')).toBeNull()
   })
 })

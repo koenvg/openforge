@@ -29,4 +29,5 @@
   {#snippet item(entry)}{entry}{/snippet}
   {#snippet emptyContent()}No matching results{/snippet}
   {#snippet loadingContent()}Loading results{/snippet}
+  {#snippet resultsFooter()}Showing top 3 results{/snippet}
 </SearchPalette>

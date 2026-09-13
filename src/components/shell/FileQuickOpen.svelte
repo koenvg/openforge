@@ -5,10 +5,7 @@
   import { revealFileInFileViewer } from '../../lib/fileViewerPlugin'
   import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
   import { useAppRouter } from '../../lib/router.svelte'
-  import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
-  import PaletteInput from '../shared/ui/PaletteInput.svelte'
-  import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
-  import PaletteModal from './PaletteModal.svelte'
+  import SearchPalette from '@openforge-app/plugin-sdk/ui/SearchPalette.svelte'
 
   interface Props { onClose: () => void }
 
@@ -19,7 +16,6 @@
   let loading = $state(false)
   let selectedIndex = $state(0)
   let searchTimer: ReturnType<typeof setTimeout> | null = null
-  let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
   let filteredResults = $derived(results.filter(path => !path.endsWith('/')))
 
   function closeModal() {
@@ -28,10 +24,6 @@
       searchTimer = null
     }
     onClose()
-  }
-
-  function handleKeyDown(event: KeyboardEvent): boolean {
-    return paletteListbox?.handleKeydown(event) ?? false
   }
 
   async function searchFiles(query: string) {
@@ -90,41 +82,25 @@
   })
 </script>
 
-<PaletteModal ariaLabel="Search files" testId="file-quick-open-backdrop" onClose={closeModal} onKeydown={handleKeyDown}>
-  <PaletteListbox
-    bind:this={paletteListbox}
-    items={filteredResults}
-    {selectedIndex}
-    onSelectedIndexChange={(index) => { selectedIndex = index }}
-    onSelect={(path) => void handleSelectFile(path)}
-    getKey={(path) => path}
-    idPrefix="file-quick-open"
-    listboxLabel="Files"
-    onCancel={closeModal}
-    {loading}
-    listClass="max-h-[400px] overflow-y-auto"
-    optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-of-text transition-colors ${highlighted ? 'bg-of-border' : 'hover:bg-of-border/60'}`}
-  >
-    {#snippet input(listboxId, activeDescendantId)}
-      <PaletteInput {listboxId} {activeDescendantId} bind:value={searchQuery} placeholder="Search files..." onInput={handleInput} />
-    {/snippet}
-    {#snippet loadingContent()}
-      <div class="px-4 py-6 text-center text-of-text/50 text-sm">Searching...</div>
-    {/snippet}
-    {#snippet emptyContent()}
-      <div class="px-4 py-6 text-center text-of-text/50 text-sm">
-        {#if !$activeProjectId}Select a project first{:else if searchQuery.trim()}No files match your search{:else}Type to search files...{/if}
-      </div>
-    {/snippet}
-    {#snippet item(filePath)}
-      <div class="flex-1 min-w-0">
-        <div class="font-medium truncate">{getFileName(filePath)}</div>
-        <div class="text-xs text-of-text/50 truncate">{getDirectory(filePath)}</div>
-      </div>
-    {/snippet}
-  </PaletteListbox>
-  {#if filteredResults.length === 50}
-    <div class="px-4 py-1.5 border-t border-of-border text-xs text-of-text/40 text-center">Showing top 50 results</div>
-  {/if}
-  <PaletteFooter actionLabel="open file" />
-</PaletteModal>
+<SearchPalette
+  ariaLabel="Search files" testId="file-quick-open-backdrop" onClose={closeModal}
+  items={filteredResults} query={searchQuery}
+  onQueryChange={(query) => { searchQuery = query; handleInput() }}
+  {selectedIndex} onSelectedIndexChange={(index) => { selectedIndex = index }}
+  onSelect={(path) => void handleSelectFile(path)} getKey={(path) => path}
+  listboxLabel="Files" placeholder="Search files..." {loading} maxResultsHeight="400px" actionLabel="open file"
+ >
+  {#snippet loadingContent()}Searching...{/snippet}
+  {#snippet emptyContent()}
+    {#if !$activeProjectId}Select a project first{:else if searchQuery.trim()}No files match your search{:else}Type to search files...{/if}
+  {/snippet}
+  {#snippet item(filePath)}
+    <div class="font-medium truncate">{getFileName(filePath)}</div>
+    <div class="text-xs text-of-text/50 truncate">{getDirectory(filePath)}</div>
+  {/snippet}
+  {#snippet resultsFooter()}
+    {#if filteredResults.length === 50}
+      <div class="px-4 py-1.5 border-t border-of-border text-xs text-of-text/40 text-center">Showing top 50 results</div>
+    {/if}
+  {/snippet}
+</SearchPalette>

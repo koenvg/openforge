@@ -453,10 +453,6 @@
   "src/components/shell/CommandPalette.svelte": [
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":2,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
-  "src/components/shell/FileQuickOpen.svelte": [
-    {"tag":"PaletteListbox","context":"listClass=\"max-h-[400px] overflow-y-auto\" optionClass={(_path, _index, highlighted) => `flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-of-text transition-colors ${highlighted ? 'bg-of-border' : 'hover:bg-of-border/60'}`}","tokens":["max-h-[400px]"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
-    {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
-  ],
   "src/components/shell/IconRail.svelte": [
     {"tag":"style","context":".of-icon-rail","tokens":["width: 4.5rem","height: 100%"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing. Icon rail fills the shell height."}
   ],

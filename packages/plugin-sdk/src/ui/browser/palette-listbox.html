@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Inline palette listbox</title></head>
+  <body>
+    <div id="app" style="max-width: 300px"></div>
+    <button>After prompt</button>
+    <script type="module">
+      import { mount } from 'svelte'
+      import Fixture from '../PaletteListboxTestWrapper.svelte'
+      mount(Fixture, { target: document.getElementById('app'), props: { items: Array.from({ length: 30 }, (_, index) => `Suggestion ${index + 1}`) } })
+    </script>
+  </body>
+</html>
