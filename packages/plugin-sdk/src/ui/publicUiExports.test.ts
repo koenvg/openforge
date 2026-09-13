@@ -114,6 +114,7 @@ describe('plugin-sdk public UI exports', () => {
       'Select',
       'SearchableSelect',
       'SearchPalette',
+      'PaletteListbox',
       'Tabs',
       'AnchoredMenu',
       'SplitButton',

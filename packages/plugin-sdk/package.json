@@ -98,6 +98,7 @@
     "./ui/Select.svelte": "./dist/ui/Select.svelte",
     "./ui/SearchableSelect.svelte": "./dist/ui/SearchableSelect.svelte",
     "./ui/SearchPalette.svelte": "./dist/ui/SearchPalette.svelte",
+    "./ui/PaletteListbox.svelte": "./dist/ui/PaletteListbox.svelte",
     "./ui/Tabs.svelte": "./dist/ui/Tabs.svelte",
     "./ui/AnchoredMenu.svelte": "./dist/ui/AnchoredMenu.svelte",
     "./ui/SplitButton.svelte": "./dist/ui/SplitButton.svelte",

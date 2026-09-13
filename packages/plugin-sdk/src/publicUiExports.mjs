@@ -21,6 +21,7 @@ const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'Select',
   'SearchableSelect',
   'SearchPalette',
+  'PaletteListbox',
   'Tabs',
   'AnchoredMenu',
   'SplitButton',

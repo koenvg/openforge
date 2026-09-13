@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import type { AutocompleteItem } from '../../lib/types'
-  import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
+  import PaletteListbox from '@openforge-app/plugin-sdk/ui/PaletteListbox.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
   import { findImageMarkerAtPosition, insertImageMarker } from './imageMarkerEditing'
@@ -265,7 +265,6 @@
     onSelectedIndexChange={ac.setSelectedIndex}
     onSelect={handleSelect}
     getKey={(item) => `${item.type}-${item.label}`}
-    idPrefix="prompt-autocomplete"
     listboxLabel="Autocomplete suggestions"
     visible={ac.popoverVisible && ac.autocompleteItems.length > 0}
     wrap={false}

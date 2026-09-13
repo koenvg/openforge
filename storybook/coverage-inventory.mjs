@@ -310,10 +310,15 @@ const inventory = {
         'components-palette-controls--theme-override',
       ],
     },
-    { source: 'src/components/shell/PaletteModal.svelte', stories: ['components-legacy-palette-controls--populated'] },
-    { source: 'src/components/shared/ui/PaletteInput.svelte', stories: ['components-legacy-palette-controls--populated', 'components-legacy-palette-controls--filtered'] },
-    { source: 'src/components/shared/ui/PaletteListbox.svelte', stories: ['components-legacy-palette-controls--populated', 'components-legacy-palette-controls--filtered'] },
-    { source: 'src/components/shared/ui/PaletteFooter.svelte', stories: ['components-legacy-palette-controls--populated'] },
+    {
+      source: 'packages/plugin-sdk/src/ui/PaletteListbox.svelte',
+      stories: [
+        'components-inline-palette-controls--populated', 'components-inline-palette-controls--filtered',
+        'components-inline-palette-controls--empty', 'components-inline-palette-controls--loading',
+        'components-inline-palette-controls--overflow', 'components-inline-palette-controls--narrow',
+        'components-inline-palette-controls--keyboard-selection', 'components-palette-controls--grouped',
+      ],
+    },
     { source: 'plugins/file-viewer/src/FilesBrowserSection.svelte', stories: [
       'components-file-viewer--browser', 'components-file-viewer--browser-empty',
       'components-file-viewer--browser-loading', 'components-file-viewer--browser-failure',

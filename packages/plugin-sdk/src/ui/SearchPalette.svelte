@@ -2,8 +2,7 @@
   import type { Snippet } from 'svelte'
   import { tick } from 'svelte'
   import Modal from './Modal.svelte'
-  import { useListNavigation } from '../listNavigation.js'
-  import { paletteSelection } from './paletteSelection.js'
+  import PaletteListbox from './PaletteListbox.svelte'
 
   interface Props {
     items: T[]
@@ -24,6 +23,8 @@
     trailing?: Snippet<[T]>
     loadingContent?: Snippet
     emptyContent?: Snippet
+    resultsFooter?: Snippet
+    maxResultsHeight?: string
     actionLabel: string
     cancelLabel?: string
     trailingKey?: string
@@ -38,37 +39,12 @@
     items, query, onQueryChange, selectedIndex, onSelectedIndexChange, getKey,
     onSelect, onClose, ariaLabel, listboxLabel, placeholder, loading = false,
     groupLabel, item, leading, trailing, loadingContent, emptyContent,
+    resultsFooter, maxResultsHeight,
     actionLabel, cancelLabel = 'close', trailingKey, trailingLabel = 'navigate', testId,
     alternateContent, alternateInitialFocus, onKeydown,
   }: Props = $props()
 
-  const instanceId = $props.id()
-  const listboxId = `${instanceId}-results`
-  let listElement: HTMLDivElement | undefined = $state()
-  let activeDescendantId = $derived(!alternateContent && !loading && selectedIndex >= 0 && selectedIndex < items.length
-    ? optionId(items[selectedIndex]) : undefined)
-
-  function optionId(value: T): string {
-    return `${listboxId}-${encodeURIComponent(getKey(value))}`
-  }
-
-  const navigation = useListNavigation({
-    get itemCount() { return loading ? 0 : items.length },
-    get selectedIndex() { return selectedIndex },
-    set selectedIndex(index: number) { onSelectedIndexChange(index) },
-    wrap: true,
-    onSelect() {
-      if (activeDescendantId) onSelect(items[selectedIndex])
-    },
-    onCancel: () => onClose(),
-  })
-
-  $effect(() => {
-    if (!activeDescendantId || !listElement) return
-    const option = Array.from(listElement.querySelectorAll<HTMLElement>('[role="option"]'))
-      .find(element => element.id === activeDescendantId)
-    option?.scrollIntoView?.({ block: 'nearest' })
-  })
+  let listbox: { handleKeydown: (event: KeyboardEvent) => boolean } | undefined = $state()
 
   let alternateElement: HTMLDivElement | undefined = $state()
   let inputElement: HTMLInputElement | undefined = $state()
@@ -91,7 +67,7 @@
   function handleKeydown(event: KeyboardEvent): boolean {
     if (onKeydown?.(event)) return true
     if (alternateContent) return false
-    return navigation.handleKeydown(event)
+    return listbox?.handleKeydown(event) ?? false
   }
 </script>
 
@@ -104,52 +80,27 @@
   {#if alternateContent}
     <div bind:this={alternateElement} class="alternate" data-palette-part="alternate" tabindex="-1">{@render alternateContent()}</div>
   {:else}
-  <div class="search" data-palette-part="input">
-    <input
-      bind:this={inputElement}
-      data-palette-initial-focus
-      aria-label={placeholder} {placeholder} value={query}
-      oninput={(event) => onQueryChange(event.currentTarget.value)}
-      role="combobox" aria-autocomplete="list" aria-expanded="true"
-      aria-controls={listboxId} aria-activedescendant={activeDescendantId}
-      autocomplete="off" spellcheck="false"
-    />
-  </div>
-  {#if loading || items.length === 0}
-    <div id={listboxId} class="state" data-palette-part="list" role="status" aria-live="polite" aria-atomic="true">
-      {#if loading}
-        {#if loadingContent}{@render loadingContent()}{/if}
-      {:else}
-        {#if emptyContent}{@render emptyContent()}{/if}
-      {/if}
-    </div>
-  {:else}
-    <div bind:this={listElement} use:paletteSelection={activeDescendantId} id={listboxId} class="results" data-palette-part="list" role="listbox" aria-label={listboxLabel}>
-      <span class="selection" data-palette-part="selection" aria-hidden="true"></span>
-      {#each items as entry, index (getKey(entry))}
-        {@const heading = groupLabel?.(entry, index)}
-        {#if heading}<div class="heading" data-palette-part="group" role="presentation">{heading}</div>{/if}
-        <div
-          id={optionId(entry)} role="option" aria-selected={index === selectedIndex}
-          tabindex="-1" data-palette-item data-palette-part="option"
-          data-selected={index === selectedIndex ? '' : undefined}
-          class="option"
-          onmousedown={(event) => event.preventDefault()}
-          onclick={() => onSelect(entry)}
-          onkeydown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            event.stopPropagation()
-            onSelect(entry)
-          }}
-        >
-          {#if leading}<span class="leading" aria-hidden="true">{@render leading(entry)}</span>{/if}
-          <div class="content">{@render item(entry, index, index === selectedIndex)}</div>
-          {#if trailing}<div class="trailing">{@render trailing(entry)}</div>{/if}
+    <PaletteListbox bind:this={listbox} {items} {selectedIndex} {onSelectedIndexChange} {getKey} {onSelect}
+      {listboxLabel} {loading} {groupLabel} {loadingContent} {emptyContent} onCancel={onClose} presentation="palette" maxHeight={maxResultsHeight}>
+      {#snippet input(listboxId, activeDescendantId)}
+        <div class="search" data-palette-part="input">
+          <input
+            bind:this={inputElement} data-palette-initial-focus
+            aria-label={placeholder} {placeholder} value={query}
+            oninput={(event) => onQueryChange(event.currentTarget.value)}
+            role="combobox" aria-autocomplete="list" aria-expanded="true"
+            aria-controls={listboxId} aria-activedescendant={activeDescendantId}
+            autocomplete="off" spellcheck="false"
+          />
         </div>
-      {/each}
-    </div>
-  {/if}
+      {/snippet}
+      {#snippet item(entry, index, highlighted)}
+        {#if leading}<span class="leading" aria-hidden="true">{@render leading(entry)}</span>{/if}
+        <div class="content">{@render item(entry, index, highlighted)}</div>
+        {#if trailing}<div class="trailing">{@render trailing(entry)}</div>{/if}
+      {/snippet}
+    </PaletteListbox>
+    {#if resultsFooter}{@render resultsFooter()}{/if}
   {/if}
   <div class="footer" data-palette-part="footer">
     <span><kbd>↑↓</kbd> navigate</span>
@@ -190,16 +141,6 @@
   }
   input::placeholder { color: var(--of-text-muted); }
   input:focus, input:focus-visible { outline: none; box-shadow: none; }
-  .results { position: relative; isolation: isolate; min-height: 0; overflow-y: auto; padding: var(--of-space4) var(--of-space2); }
-  .selection { position: absolute; top: 0; z-index: -1; pointer-events: none; opacity: 0; border-radius: var(--of-radius-control); background: var(--of-palette-selection, var(--of-accent-subtle)); }
-  .state { min-height: 0; overflow-y: auto; padding: var(--of-space6); color: var(--of-text-muted); text-align: center; }
-  .heading { padding: var(--of-space4) var(--of-space3) var(--of-space3); color: var(--of-text); font-size: var(--of-text-sm); font-weight: var(--of-weight-semibold); }
-  .option {
-    display: flex; align-items: center; gap: var(--of-space3);
-    padding: var(--of-space3); border-radius: var(--of-radius-control);
-    font-size: var(--of-text-md); line-height: var(--of-line-height-md); cursor: pointer;
-  }
-  .option:not([data-selected]):hover { background: var(--of-control-hover); }
   .content { flex: 1; min-width: 0; overflow: hidden; overflow-wrap: anywhere; }
   .leading { flex: none; display: flex; align-items: center; color: var(--of-icon); }
   .trailing { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow-wrap: anywhere; color: var(--of-text-secondary); }

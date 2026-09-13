@@ -1,4 +1,9 @@
 [
+  { "catalog": "components", "story": "components-inline-palette-controls--populated", "theme": "openforge-light", "viewport": { "width": 600, "height": 400 }, "ready": "[role=listbox] [role=option][aria-selected=true]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-inline-palette-controls--populated", "theme": "openforge-dark", "viewport": { "width": 600, "height": 400 }, "ready": "[role=listbox] [role=option][aria-selected=true]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-inline-palette-controls--overflow", "theme": "openforge-light", "viewport": { "width": 320, "height": 480 }, "ready": "[role=listbox] [role=option][aria-selected=true]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-inline-palette-controls--empty", "theme": "openforge-dark", "viewport": { "width": 400, "height": 360 }, "ready": "[role=status].inline-suggestions", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-inline-palette-controls--loading", "theme": "openforge-light", "viewport": { "width": 400, "height": 360 }, "ready": "[role=status].inline-suggestions", "expectedErrors": [] },
   { "catalog": "pages", "story": "pages-command-palette--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-command-palette--theme-override\"]", "expectedErrors": [] },
   { "catalog": "pages", "story": "pages-project-switching--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-project-switching--theme-override\"]", "expectedErrors": [] },
   { "catalog": "pages", "story": "pages-action-palette--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-action-palette--theme-override\"]", "expectedErrors": [] },

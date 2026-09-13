@@ -47,6 +47,27 @@ async function openPalette(page: Page, themeId = 'openforge-light') {
   await page.getByRole('button', { name: 'Open palette' }).click()
   await page.getByRole('combobox').waitFor()
 }
+it('scrolls inline suggestions while preserving textarea focus and normal Tab navigation', async () => {
+  const page = await browser.newPage({ viewport: { width: 320, height: 480 } })
+  try {
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/palette-listbox.html`)
+    const input = page.getByRole('combobox')
+    await input.waitFor()
+    await input.focus()
+    expect(await page.getByRole('dialog').count()).toBe(0)
+    for (let index = 0; index < 35; index++) await page.keyboard.press('ArrowDown')
+    const selected = page.getByRole('option', { selected: true })
+    expect(await selected.textContent()).toBe('Suggestion 30')
+    const listBounds = await page.getByRole('listbox').boundingBox()
+    const selectedBounds = await selected.boundingBox()
+    expect(selectedBounds!.y).toBeGreaterThanOrEqual(listBounds!.y)
+    expect(selectedBounds!.y + selectedBounds!.height).toBeLessThanOrEqual(listBounds!.y + listBounds!.height + 1)
+    expect(await input.evaluate(element => element === document.activeElement)).toBe(true)
+    await page.keyboard.press('Tab')
+    expect(await page.getByRole('button', { name: 'After prompt' }).evaluate(element => element === document.activeElement)).toBe(true)
+  } finally { await page.close() }
+}, 60_000)
+
 
 it('contains focus, restores search after confirmation, and returns focus on dismissal', async () => {
   const page = await browser.newPage()

@@ -126,6 +126,7 @@ mount(App, { target: document.body })
   import AnchoredMenu from '@openforge-app/plugin-sdk/ui/AnchoredMenu.svelte'
   import SplitButton from '@openforge-app/plugin-sdk/ui/SplitButton.svelte'
   import SearchPalette from '@openforge-app/plugin-sdk/ui/SearchPalette.svelte'
+  import PaletteListbox from '@openforge-app/plugin-sdk/ui/PaletteListbox.svelte'
   import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
 
   let showModal = $state(true)
@@ -142,6 +143,9 @@ mount(App, { target: document.body })
 <SearchPalette items={options} getKey={(item) => item.value} query="" onQueryChange={() => {}} selectedIndex={0} onSelectedIndexChange={() => {}} onSelect={() => {}} onClose={() => {}} ariaLabel="Packed palette" listboxLabel="Choices" placeholder="Search choices" actionLabel="select">
   {#snippet item(option)}{option.label}{/snippet}
 </SearchPalette>
+<PaletteListbox items={options} getKey={(item) => item.value} selectedIndex={0} onSelectedIndexChange={() => {}} onSelect={() => {}} listboxLabel="Inline choices" wrap={false}>
+  {#snippet item(entry)}{entry.label}{/snippet}
+</PaletteListbox>
 <Select label="Status" {options} bind:value={selected} />
 <Tabs label="Plugin sections" {tabs} bind:value={tab} />
 <AnchoredMenu label="Plugin actions" items={menuItems}>

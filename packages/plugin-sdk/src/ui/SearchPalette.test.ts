@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from 'vitest'
 import SearchPaletteTestWrapper from './SearchPaletteTestWrapper.svelte'
 
 describe('SDK search palette', () => {
+  it('renders caller result information outside the selectable options', () => {
+    render(SearchPaletteTestWrapper)
+    const summary = screen.getByText('Showing top 3 results')
+    expect(summary.closest('[role="option"]')).toBeNull()
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+  })
+
   it('filters through caller-owned query state and selects a result rather than its heading', async () => {
     const onSelect = vi.fn()
     render(SearchPaletteTestWrapper, { onSelect })

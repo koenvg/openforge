@@ -1,6 +1,6 @@
 # SDK search palette
 
-Import `SearchPalette` from `@openforge-app/plugin-sdk/ui/SearchPalette.svelte`. OpenForge uses this same dialog for command search, project switching, and task actions.
+Import `SearchPalette` from `@openforge-app/plugin-sdk/ui/SearchPalette.svelte`. OpenForge uses this same dialog for command search, project switching, task actions, and file quick-open. Inline prompt completion uses the SDK `PaletteListbox` without a modal.
 
 ```svelte
 <script lang="ts">
@@ -47,9 +47,24 @@ The palette owns search focus, dialog focus containment and return, Arrow Up/Dow
 - Optional `leading` and `trailing` snippets receive the result. Leading content is decorative and hidden from assistive technology; put meaningful information in the main content or trailing text.
 - `groupLabel` receives a result and index. Return a heading at the start of a group and `null` for subsequent rows. Headings are not selectable.
 - `loading`, `loadingContent`, and `emptyContent` provide the list's announced state.
+- `maxResultsHeight` optionally bounds the scrollable results. `resultsFooter` renders caller-owned information below results, outside selectable options. File quick-open uses these for its 400px list and top-50 notice.
 - `actionLabel` describes Enter. `cancelLabel` defaults to `close`. `trailingKey` adds an optional hint, with `trailingLabel` defaulting to `navigate`. Arrow navigation remains visible in the footer.
 - `alternateContent` replaces search/results inside the same dialog. `alternateInitialFocus` is a selector scoped to that content. Supply `onKeydown` for alternate-mode behavior; returning `true` consumes the event before normal palette or dialog handling. Removing alternate content restores search focus. The caller still owns confirmation and execution.
 - `testId` identifies the dialog layer when a test needs a specific backdrop.
+
+## Inline completion
+
+Import `PaletteListbox` from `@openforge-app/plugin-sdk/ui/PaletteListbox.svelte`. It owns the same option IDs, navigation, pointer activation, and selected-row scrolling used by `SearchPalette`. It does not create a dialog, move focus, trap Tab, or filter results.
+
+Supply `items`, `selectedIndex`, `onSelectedIndexChange`, `getKey`, `onSelect`, `listboxLabel`, and an `item` snippet. The optional `input(listboxId, activeDescendantId)` snippet lets you connect your input or textarea to the list. Forward its keyboard events to the bound instance's `handleKeydown(event)` method. A `true` return means the event was consumed; otherwise continue the caller's normal keyboard handling.
+
+Set `wrap={false}` for clamped completion navigation. `visible={false}` removes suggestions and clears the active descendant while leaving the input snippet mounted. Hidden, loading, and empty results cannot be activated. Escape is consumed only when visible and an `onCancel` callback is supplied. Pointer activation preserves input focus; option snippets must not contain interactive controls.
+
+The caller owns `aria-expanded`, `aria-controls`, and the input's combobox role, because only the caller knows when completion is open. Bind `aria-activedescendant` to the snippet argument. Use `loadingContent`, `emptyContent`, and `groupLabel` as with `SearchPalette`. Keys must be unique and stable within the results; IDs remain distinct across mounted instances.
+
+Default rows use SDK theme tokens. `listClass`, `maxHeight`, and `optionClass` support embedding in an existing completion layout. `presentation="palette"` enables the animated selection used by `SearchPalette`; the default inline presentation uses a static selection. Neither presentation adds a modal.
+
+The component catalog owns the reusable inline control states under `Components/Inline palette controls`. Production prompt completion remains covered by `Components/Prompt input`; file-search workflows remain in `Pages/File quick-open`. Superseded app-local palette controls and their duplicate stories have been removed.
 
 ## Theme customization
 
