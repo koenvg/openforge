@@ -56,7 +56,7 @@ describe("SelfReviewView integration performance", () => {
 		renderSelfReviewView();
 
 		await waitFor(() => {
-			expect(screen.getByTitle("Search (⌘F)")).toBeTruthy();
+			expect(screen.getByRole('button', { name: 'Search diff (⌘F)' })).toBeTruthy();
 		});
 
 		const cb = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
@@ -65,7 +65,7 @@ describe("SelfReviewView integration performance", () => {
 
 		await waitFor(
 			() => {
-				expect(screen.getByTitle("Search (⌘F)")).toBeTruthy();
+				expect(screen.getByRole('button', { name: 'Search diff (⌘F)' })).toBeTruthy();
 			},
 			{ timeout: 2000 },
 		);

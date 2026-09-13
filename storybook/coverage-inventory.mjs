@@ -1,5 +1,6 @@
 // Basic SDK controls belong to KVG-4691; composite exports belong to KVG-4692.
 const sdkActions = ['default', 'disabled', 'loading', 'narrow-overflow', 'keyboard'].map(state => `components-plugin-sdk-actions--${state}`)
+const sdkTooltips = ['default', 'edge', 'unavailable', 'opt-out', 'dialog', 'menu'].map(state => `components-plugin-sdk-tooltips--${state}`)
 const sdkFields = ['default', 'selected', 'disabled', 'validation', 'narrow-overflow', 'keyboard'].map(state => `components-plugin-sdk-fields--${state}`)
 const sdkSelectors = ['default', 'selected', 'disabled', 'validation', 'open', 'narrow-overflow', 'empty', 'no-matches', 'bounded-results', 'keyword-search', 'keyboard'].map(state => `components-plugin-sdk-selectors--${state}`)
 const sdkPresentation = ['default', 'narrow-overflow'].map(state => `components-plugin-sdk-presentation--${state}`)
@@ -268,9 +269,10 @@ const inventory = {
     { source: 'src/components/shared/ui/ResizableBottomPanel.svelte', stories: ['components-host-controls-bottom-panel--default', 'components-host-controls-bottom-panel--fill-parent', 'components-host-controls-bottom-panel--resize-and-reset'] },
     { source: 'src/components/shared/adapters/MarkdownContent.svelte', stories: ['components-host-controls-markdown--formatted', 'components-host-controls-markdown--long-content', 'components-host-controls-markdown--empty', 'components-host-controls-markdown--open-external-link'] },
     { source: 'src/components/settings/CompanionPairedDevices.svelte', stories: ['components-settings-companion-devices--paired-and-revoked', 'components-settings-companion-devices--updating', 'components-settings-companion-devices--long-names', 'components-settings-companion-devices--actions'] },
-    { source: 'packages/plugin-sdk/src/ui/Button.svelte', stories: ['components-button--primary', 'components-button--secondary', 'components-button--outline', 'components-button--ghost', 'components-button--destructive', 'components-button--link', 'components-button--disabled', 'components-button--loading', 'components-button--all-variants', ...sdkActions] },
+    { source: 'packages/plugin-sdk/src/ui/Button.svelte', stories: ['components-button--primary', 'components-button--secondary', 'components-button--outline', 'components-button--ghost', 'components-button--destructive', 'components-button--link', 'components-button--disabled', 'components-button--loading', 'components-button--all-variants', ...sdkActions, 'components-plugin-sdk-tooltips--default'] },
     { source: 'packages/plugin-sdk/src/ui/ButtonControl.svelte', stories: sdkActions },
-    { source: 'packages/plugin-sdk/src/ui/IconButton.svelte', stories: sdkActions },
+    { source: 'packages/plugin-sdk/src/ui/IconButton.svelte', stories: [...sdkActions, ...sdkTooltips] },
+    { source: 'packages/plugin-sdk/src/ui/TooltipControl.svelte', stories: sdkTooltips },
     { source: 'packages/plugin-sdk/src/ui/TextField.svelte', stories: sdkFields },
     { source: 'packages/plugin-sdk/src/ui/Textarea.svelte', stories: sdkFields },
     { source: 'packages/plugin-sdk/src/ui/Checkbox.svelte', stories: sdkFields },
@@ -340,7 +342,11 @@ const inventory = {
     { source: 'plugins/file-viewer/src/MarkdownFilePreview.svelte', stories: ['components-file-viewer--markdown'] },
   ],
   // Unadopted UI is reported by discovery, never parked here to silence coverage.
-  exclusions: [],
+  exclusions: [{
+    source: 'packages/plugin-sdk/src/ui/TooltipBrowserTestWrapper.svelte',
+    kind: 'test-only-wrapper',
+    reason: 'Mounts public controls for isolated Chromium interaction and positioning tests; production tooltip coverage uses the Tooltips stories.',
+  }],
 }
 
 export default inventory

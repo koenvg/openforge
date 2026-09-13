@@ -50,7 +50,7 @@ describe('TaskInfoPanel details', () => {
 
     expect(screen.getByText('Resume command')).toBeTruthy()
     expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
-    expect(screen.getByTitle('Copy resume command')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy resume command' })).toBeTruthy()
   })
 
   it('hides the resume command row when no active session command is available', () => {
@@ -72,7 +72,7 @@ describe('TaskInfoPanel details', () => {
   it('copies the workspace path through the typed IPC clipboard wrapper', async () => {
     renderTaskInfoPanel({ workspacePath: '/repo/T-42' })
 
-    await fireEvent.click(screen.getByTitle('Copy workspace path'))
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy workspace path' }))
 
     await waitFor(() => {
       expect(writeClipboardText).toHaveBeenCalledWith('/repo/T-42')

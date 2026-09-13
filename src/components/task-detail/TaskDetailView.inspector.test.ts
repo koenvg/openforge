@@ -216,7 +216,7 @@ describe('TaskDetailView — inspector', () => {
         render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
         await waitFor(() => expect(hasVsCodeProtocolHandler).toHaveBeenCalledTimes(1))
-        await screen.findByRole('button', { name: 'Run app locally' })
+        await screen.findByRole('button', { name: /^Run app locally/ })
         expect(screen.queryByRole('button', { name: /open in vs code/i })).toBeNull()
 
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)

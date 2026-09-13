@@ -331,7 +331,7 @@ describe('DiffViewer Rich Diff View', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
     expect(onCommentNow).toHaveBeenCalledWith('README.md', 2, 'RIGHT', 'Ship this now.')
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment on GitHub' }))
     await fireEvent.input(screen.getByRole('textbox', { name: 'Reply to this comment' }), {
       target: { value: 'Reply body' },
     })

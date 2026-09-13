@@ -98,7 +98,7 @@ describe.skipIf(!storybookUrl)('Self Review in the production task workspace', (
         }
         const toolbar = diff.getByRole('toolbar', { name: 'Diff controls', exact: true })
         for (const button of await toolbar.getByRole('button').all()) await expectReachable(button)
-        for (const label of ['Unified diff view', 'Split diff view', 'Search diff']) {
+        for (const label of ['Unified diff view', 'Split diff view', 'Search diff (⌘F)']) {
           await expectReachable(diff.getByRole('button', { name: label, exact: true }))
         }
         await diff.getByRole('button', { name: 'Unified diff view', exact: true }).click()
@@ -111,7 +111,7 @@ describe.skipIf(!storybookUrl)('Self Review in the production task workspace', (
         const wrapBefore = await wrap.getAttribute('aria-pressed')
         await wrap.click()
         expect(await diff.getByRole('button', { name: /line wrapping/ }).getAttribute('aria-pressed')).not.toBe(wrapBefore)
-        await diff.getByRole('button', { name: 'Search diff', exact: true }).click()
+        await diff.getByRole('button', { name: 'Search diff (⌘F)', exact: true }).click()
         const search = diff.getByRole('textbox', { name: 'Search diff text', exact: true })
         await expectReachable(search)
         await search.fill('greet')

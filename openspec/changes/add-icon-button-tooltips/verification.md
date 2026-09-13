@@ -1,51 +1,85 @@
-# Partial implementation evidence
+# Implementation verification
 
-Implementation is not complete: 10/18 tasks are checked. Public test seams remain IconButton/Tooltip, published SDK imports, and browser-visible behavior.
+The implementation and consumer audit are complete. Public test boundaries are SDK controls, packed SDK imports, rendered host/plugin behavior, and real browser interaction. No private tooltip-helper unit tests were added.
 
-## Delivered at this checkpoint
+## Delivered behavior
 
-- Private TooltipControl shares trigger composition, portal positioning, dismissal, motion, and theme tokens without nesting buttons or adding layout wrappers.
-- IconButton uses its effective accessible label by default, supports opt-out and side/alignment/offset, suppresses duplicate native titles, and disables tooltip interaction while disabled/loading.
-- Standalone Tooltip retains its existing public trigger and controlled-state contract, including programmatic focus behavior.
-- Automatic tooltips ignore non-keyboard focus to prevent first-touch activation from leaving an open bubble. Browser tests verify touch, Enter, Space, retained focus, and action counts.
-- Tab closes an open tooltip synchronously during capture so Bits UI releases its non-trapping focus scope before the containing dialog handles Tab. A full SDK test run exposed this regression; a real Chromium Shift+Tab/Tab test reproduced it before the fix. Both native browser and existing Modal focus-loop tests now pass.
-- Shared behavior adopted by collapsed PluginSidebarLink, AnchoredMenu's icon-only triggerButton branch (including SplitButton), and Mermaid preview zoom/close buttons. Native geometry and the preview close-button focus reference are preserved; zoom labels retain shortcuts.
-- Private runtime asset packaging and packed-consumer fixtures include TooltipControl and additive IconButton configuration. README documents behavior and positioning.
+- IconButton shows its effective accessible label by default; Button offers the user-approved opt-in API, defaulting off. Both accept side, alignment, and gap preferences.
+- Shared composition retains native button identity, callbacks, accessible names/descriptions, disabled/loading semantics, and native submit defaults. Enabled tooltips suppress duplicate native titles.
+- Tooltips portal outside clipping containers, wrap within the viewport, follow collision-adjusted placement, animate with a small overshoot, and respect reduced motion and theme tokens.
+- Keyboard, pointer, and first-touch activation work without extra actions. Escape closes focused or hovered tooltips before their dialog. Tab releases the tooltip focus scope before dialog focus wrapping.
+- Trigger attributes are captured while mounted, including initial server rendering, so tooltip teardown does not evaluate getters on disposed controllers. Renderer regressions reproduced and verified this fix.
+- Initially controlled-open standalone tooltips retain their active trigger identity and correct placement.
+- Host/plugin adoption, placement, retained shortcut information, and non-icon classifications are recorded in migration-inventory.md.
 
-## Latest validation
+## Final affected-system checks
 
-All commands below passed against the current SDK source, after the touch and dialog focus fixes:
-
-| Command | Result / evidence |
+| Command / scope | Result |
 | --- | --- |
-| `pnpm --filter @openforge-app/plugin-sdk test` | 72 files passed; 591 tests passed and 3 expected failures. `/tmp/KVG-5005-sdk-tests.log` |
-| `pnpm --filter @openforge-app/plugin-sdk build` | Passed, including entrypoint validation and copied runtime assets. `/tmp/KVG-5005-sdk-build.log` |
-| `pnpm --filter @openforge-app/plugin-sdk check:entrypoints` | Passed explicitly after the build. |
-| `pnpm --filter @openforge-app/plugin-sdk check:contract` | Passed, including clean npm/Bun packed consumers and mounted rendering contracts. `/tmp/KVG-5005-sdk-contract.log` |
-| `pnpm exec tsc --noEmit` | Passed. `/tmp/KVG-5005-types.log` |
-| `git diff --check` | Passed before final documentation updates. |
+| `pnpm exec vitest run --project renderer` | 640 files passed, 9 skipped; 5,455 tests passed, 35 skipped |
+| `pnpm --filter @openforge-app/plugin-sdk test` | 72 files passed; 593 tests passed, 3 expected failures |
+| `pnpm --filter @openforge-app/plugin-sdk build` | Passed, including runtime assets and entrypoint checks |
+| `pnpm --filter @openforge-app/plugin-sdk check:entrypoints` | Passed explicitly |
+| `pnpm --filter @openforge-app/plugin-sdk check:contract` | Passed: clean npm/Bun consumers, public declarations, SSR documentation and mounted rendering contracts |
+| `pnpm exec tsc --noEmit` | Passed |
+| `pnpm lint` | Passed: unused Svelte imports, plugin boundaries, UI migration inventory |
+| `pnpm --filter @openforge-app/pr-review-ui check` | Passed |
+| `pnpm --filter @openforge-app/terminal-runtime test` | 56 files passed; 250 tests passed, 1 skipped |
+| `pnpm --filter @openforge-app/terminal-runtime build` | Passed |
+| File viewer plugin tests | 17 files, 97 tests passed |
+| GitHub sync plugin tests | 39 files, 398 tests passed |
+| Task browser plugin tests | 5 files, 63 tests passed |
+| Task schedules plugin tests | 11 files, 108 tests passed |
+| Terminal plugin tests | 11 files, 47 tests passed |
+| GitHub sync and task browser `typecheck` scripts | Passed |
+| All five affected plugin `build:bundle` scripts | Passed |
 
-The SDK total includes 24 Tooltip browser tests: four preferred sides, alignment/gap, edge collision and collision-flipped entry direction, overflow clipping and wrapping, overshoot/settle, short exit and rapid reopen, hover delay and hoverable content, Enter/Space/touch, nested Escape, dialog Tab wrapping, reduced motion, and all four built-in themes' portaled colors.
+Plugin tests and builds were serialized with:
 
-Focused ContextMenu compatibility tests also passed. Mermaid preview has six passing tests; PluginSidebarLink has six; SplitButton and AnchoredMenu passed their focused suites and the full SDK run.
+```sh
+pnpm --filter @openforge-app/plugin-file-viewer --filter @openforge-app/plugin-github-sync --filter @openforge-app/plugin-task-browser --filter @openforge-app/plugin-task-schedules --filter @openforge-app/plugin-terminal --workspace-concurrency=1 -r test
+pnpm --filter @openforge-app/plugin-file-viewer --filter @openforge-app/plugin-github-sync --filter @openforge-app/plugin-task-browser --filter @openforge-app/plugin-task-schedules --filter @openforge-app/plugin-terminal --workspace-concurrency=1 -r build:bundle
+pnpm --filter @openforge-app/plugin-github-sync --filter @openforge-app/plugin-task-browser --workspace-concurrency=1 -r typecheck
+```
 
-The earlier publication timeout is resolved. The first full SDK run's Modal Tab-loop failure is also resolved; it was caused by tooltip integration, not waived as an unrelated test failure.
+## Browser, stories, and visual evidence
 
-## Test environment notes
+- SDK suite includes 24 Chromium tooltip cases: preferred sides, alignment/gap, collision-flipped motion, clipping/wrapping, overshoot/settle, exit/reopen, delay/hoverable content, keyboard/touch dispatch, nested Escape, dialog Tab wrapping, reduced motion, and four built-in themes.
+- `pnpm storybook:build` passed for both catalogs.
+- `node scripts/storybook-tooltip-check.mjs` passed 25 checks with the built Storybook server active: six states in four themes plus first-touch activation. It checks narrow scrolling toolbars, keyboard/click counts, reduced motion, window edges, dialog/menu dismissal, and diagnostics. Native screenshots and results are in `artifacts/tooltips/browser/`.
+- `STORYBOOK_URL=<served-pages-url> pnpm exec vitest run storybook/stories/pages/SelfReview.browser.test.ts` passed all eight tests against the built page catalog. This suite was run explicitly rather than treating its default skipped state as success.
+- `pnpm storybook:coverage`, `pnpm storybook:coverage:test`, and `pnpm storybook:coverage:check` passed. Incremental inventory: 139 covered, one validated test-only exclusion, 129 uncovered, zero errors. The new visual module is covered; unrelated existing catalog gaps were not hidden.
+- `pnpm storybook:visual:unit`: 13 files, 98 tests passed.
+- Canonical Linux `pnpm storybook:visual:check` passed all 463 cases against the final production source. Evidence: `artifacts/storybook-visual/index.html`, `results.json`, `environment.json`, and `timings.json`.
 
-- Hover delay uses a paused Playwright clock before pointer entry; simply installing a running clock introduces elapsed wall time into the 299 ms assertion.
-- jsdom cannot reliably model `:focus-visible` after synthetic pointer input. IconButton unit tests simulate that browser selector boundary; real keyboard/touch modality is tested in Chromium.
-- The earlier synthetic parent-Escape wrapper was removed in favor of the real Modal browser test, which verifies first Escape dismisses only the tooltip and second Escape dismisses the dialog.
-- Mermaid's ResizeObserver test fixture now selects the observer registered for the preview viewport, not whichever observer was created last; tooltips legitimately add another observer.
+### Reviewed visual differences
 
-## Reference and visual status
+Three baseline images were intentionally updated through `pnpm storybook:visual:update`, then the full check passed:
 
-The TypeUI reference is now accessible through Chromium. Its Overshoot card was opened and captured at `/tmp/KVG-5005-typeui-overshoot.png`; the screenshot was inspected. The reference-access blocker is resolved, but a motion comparison with the component stories and final visual approval remain pending. The implemented motion remains the approved tuning target, not a claimed pixel-for-pixel reproduction.
+1. Light split-button keyboard story now shows the menu trigger's tooltip.
+2. Dark split-button keyboard story shows the same new tooltip.
+3. Dark standalone-tooltip story retains its open tooltip with the new eight-pixel viewport collision gutter.
 
-## Decision and remaining work
+The before/after images were inspected. Control geometry and focus rings are unchanged. An earlier capture missing the standalone tooltip was rejected and the controlled-trigger initialization was fixed before approval. Native story review also caught a heading overlap in the new demonstration layout; spacing was corrected.
 
-The user approved opt-in SDK Button tooltips. Implemented `tooltip=false` by default with the same placement props, using the effective aria-label and retaining the native button across toggles. VoiceInput's icon-only idle state and toolbar Run app, VS Code, and details actions opt in. Ordinary Button native submit defaults and explicit type forwarding are preserved. A public Button test first reproduced missing opt-in behavior and then verifies focus/element identity and opt-out closure.
+### TypeUI comparison
 
-After this approved extension, full SDK validation passed again: 72 files, 592 passing tests plus 3 expected failures; SDK build/entrypoints, packed npm/Bun contract, root TypeScript, and root lint passed. Logs: `/tmp/KVG-5005-button-sdk-tests.log`, `button-sdk-build.log`, `button-sdk-contract.log`, `button-types.log`, and `button-lint.log` under the same `/tmp/KVG-5005-` prefix. Focused VoiceInput and toolbar suites passed 29 tests (`/tmp/KVG-5005-mixed-consumers.log`). Broader renderer/plugin and Storybook checks are still pending.
+The TypeUI Overshoot card was opened in Chromium and its screenshot inspected. Its observed entrance uses a longer spring-like movement (roughly eight pixels, with a roughly 900 ms opacity animation). The implementation deliberately retains the approved restrained desktop tuning: 200 ms entry, 0.96 → 1.02 → 1 scale, a three-pixel directional start with small overshoot, and 100 ms exit. This is an adaptation of the reference, not a claim of identical spring timing. Native story review confirms readable labels, a small overshoot, and no trigger movement across all four themes.
 
-Still pending: complete consumer inventory, meaningful native-title information migration into labels, host/plugin adoption and placement, component stories and coverage, Storybook integration/visual review, complete affected renderer/PR-review/terminal/plugin checks, and final reconciliation. The current SDK validation must be rerun if subsequent SDK/API edits affect it. No skipped broader validation is claimed to have passed.
+## Scenario reconciliation
+
+| Specification area | Evidence |
+| --- | --- |
+| Automatic labels, opt-out, live labels, descriptions | IconButton and Tooltip public component tests |
+| Opt-in Button, unchanged identity/focus, native defaults | Button/IconButton public component tests and mixed-control renderer regressions |
+| Placement, clipping, long labels | Tooltip Chromium suite; narrow/edge Storybook checks |
+| Activation, Escape, focus wrapping, touch | Tooltip Chromium suite, ContextMenu compatibility, Storybook dialog/menu/keyboard/touch checks |
+| Disabled/loading and removal | Public control tests, dialog teardown and PR review/host lifecycle regressions |
+| Overshoot, exit/reopen, reduced motion, themes | Chromium animation assertions and four-theme Storybook review |
+| Shared adoption and standalone/packed compatibility | Completed inventory, renderer/plugin suites, publication checks, standalone canonical capture |
+
+## Scope and disclosed skips
+
+Validation covers the SDK, renderer, PR review UI, terminal runtime, affected plugins, and Storybook. Backend/Rust, mobile, and website validation were not run because their code and contracts are unchanged. Existing optional renderer skips, the terminal-runtime skip, and SDK expected-failure cases are reported above, not counted as passes. The eight Self Review browser cases were subsequently exercised explicitly.
+
+The full visual-runner self-test/repeated-capture command was not rerun: the runner itself is unchanged; its 98 unit tests and the complete canonical screenshot check passed. No baseline tolerance, runtime delay, or production behavior was weakened to obtain a pass. No independent cleanup task was needed; integration failures found here were fixed within this change.

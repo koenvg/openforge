@@ -63,8 +63,8 @@ describe('DiffViewer accessibility', () => {
 
     const splitButton = screen.getByRole('button', { name: 'Split diff view' })
     const unifiedButton = screen.getByRole('button', { name: 'Unified diff view' })
-    expect(splitButton.getAttribute('title')).toBe('Split diff view')
-    expect(unifiedButton.getAttribute('title')).toBe('Unified diff view')
+    expect(splitButton.hasAttribute('title')).toBe(false)
+    expect(unifiedButton.hasAttribute('title')).toBe(false)
     expect(splitButton.textContent?.trim()).toBe('')
     expect(unifiedButton.textContent?.trim()).toBe('')
     expect(splitButton.getAttribute('aria-pressed')).toBe('true')
@@ -76,17 +76,17 @@ describe('DiffViewer accessibility', () => {
 
     // Line wrapping defaults to off, so the button starts in the "Enable" (unpressed) state.
     const wrapButton = screen.getByRole('button', { name: 'Enable line wrapping' })
-    expect(wrapButton.getAttribute('title')).toBe('Enable line wrapping')
+    expect(wrapButton.hasAttribute('title')).toBe(false)
     expect(wrapButton.textContent?.trim()).toBe('')
     expect(wrapButton.getAttribute('aria-pressed')).toBe('false')
     await fireEvent.click(wrapButton)
     expect(screen.getByRole('button', { name: 'Disable line wrapping' }).getAttribute('aria-pressed')).toBe('true')
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Search diff' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Search diff (⌘F)' }))
     expect(screen.getByRole('textbox', { name: 'Search diff text' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Previous search match' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Next search match' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close diff search' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Previous search match (Shift+Enter)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Next search match (Enter)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close diff search (Escape)' })).toBeTruthy()
   })
 
   it('uses explicit appearance instead of theme identifier text without recreating its worker', async () => {

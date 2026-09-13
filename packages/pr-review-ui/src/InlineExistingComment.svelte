@@ -62,7 +62,7 @@
   {/if}
   {#if onReplyToExistingComment && !comment.isReply}
     <IconButton
-      label="Reply to this comment"
+      label="Reply to this comment on GitHub"
       size="xs"
       class="ml-auto"
       title="Reply on GitHub"

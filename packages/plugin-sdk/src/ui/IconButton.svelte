@@ -55,6 +55,7 @@
   sideOffset={tooltipSideOffset}
   triggerAttributes={{
     ...attributes,
+    type: attributes.type ?? 'submit',
     title: tooltip ? undefined : attributes.title,
     class: className,
     'aria-label': effectiveLabel,

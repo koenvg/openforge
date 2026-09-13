@@ -83,7 +83,7 @@ describe("SelfReviewView — hide addressed comments", () => {
     renderSelfReviewView();
     await screen.findByText('Comment 1');
     expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true');
-    await fireEvent.click(screen.getByTitle('Refresh diff'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh diff' }));
     await waitFor(() => expect(screen.queryByText('Loading diff...')).toBeNull());
     expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true');
   });

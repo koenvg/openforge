@@ -242,7 +242,7 @@
           </button>
         {/each}
       </div>
-      <Button variant="ghost" size="xs" class="shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</Button>
+      <Button tooltip tooltipSide="bottom" variant="ghost" size="xs" class="shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</Button>
     </div>
 
     <div role="status">

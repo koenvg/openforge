@@ -70,7 +70,7 @@
   <div class="ml-auto flex gap-1">
     {#if comment.status === 'approved'}
       <IconButton
-        label="Un-approve AI review comment"
+        label="Un-approve AI review comment: remove from this review"
         size="xs"
         title="Un-approve — remove from this review"
         onclick={() => updateStatus('pending')}
@@ -79,7 +79,7 @@
       </IconButton>
     {:else}
       <IconButton
-        label="Approve AI review comment"
+        label="Approve AI review comment: include in this review"
         size="xs"
         title="Approve — include in this review"
         onclick={() => updateStatus('approved')}

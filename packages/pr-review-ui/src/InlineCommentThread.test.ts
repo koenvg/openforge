@@ -85,7 +85,7 @@ describe('InlineCommentThread', () => {
     render(InlineCommentThread, { props: setup.props })
 
     const actionNames = [
-      'Approve AI review comment',
+      'Approve AI review comment: include in this review',
       'Dismiss AI review comment',
       'Remove pending comment',
     ]
@@ -148,7 +148,7 @@ describe('InlineCommentThread', () => {
     const { rerender } = render(InlineCommentThread, { props: setup.props })
 
     await fireEvent.click(screen.getByRole('button', {
-      name: 'Approve AI review comment',
+      name: 'Approve AI review comment: include in this review',
     }))
 
     expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'approved')
@@ -186,7 +186,7 @@ describe('InlineCommentThread', () => {
     })
     const { rerender } = render(InlineCommentThread, { props: setup.props })
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Un-approve AI review comment' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Un-approve AI review comment: remove from this review' }))
 
     expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'pending')
     expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
@@ -259,7 +259,7 @@ describe('InlineCommentThread', () => {
     const setup = makeProps({ data, onReplyToExistingComment: vi.fn(), onAddReplyToReview })
     render(InlineCommentThread, { props: setup.props })
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment on GitHub' }))
     const editor = screen.getByRole('textbox', { name: 'Reply to this comment' })
     await fireEvent.input(editor, { target: { value: '  Hold this reply  ' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Add to review' }))

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Tooltip } from 'bits-ui'
-  import { flushSync, type Snippet } from 'svelte'
+  import { flushSync, untrack, type Snippet } from 'svelte'
   import type { HTMLButtonAttributes } from 'svelte/elements'
   import type { TooltipAlign, TooltipSide } from './Tooltip.svelte'
 
@@ -34,21 +34,35 @@
     trigger,
   }: Props = $props()
 
+  // Bits UI reads trigger props while unregistering it. Snapshot them while
+  // mounted so teardown never reevaluates getters on a disposed host controller.
+  let currentAttributes = $state.raw<HTMLButtonAttributes>(untrack(() => ({ ...triggerAttributes })))
+  $effect.pre(() => { currentAttributes = { ...triggerAttributes } })
+
   $effect(() => {
-    if (disabled && open) {
+    if (open && disabled) {
       open = false
       onOpenChange?.(false)
     }
   })
 
-  const triggerId = $derived(triggerAttributes.id ?? `of-tooltip-trigger-${generatedId}`)
-  let activeTriggerId = $state<string | null>(null)
+  const triggerId = $derived(currentAttributes.id ?? `of-tooltip-trigger-${generatedId}`)
+  let activeTriggerId = $state<string | null>(untrack(() => triggerId))
   const descriptionIds = $derived(
-    [triggerAttributes['aria-describedby']?.trim(), open ? contentId : undefined]
+    [currentAttributes['aria-describedby']?.trim(), open ? contentId : undefined]
       .filter(Boolean).join(' ') || undefined,
   )
 
-  function handleTabNavigation(event: KeyboardEvent) {
+  function handleOverlayKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.id !== triggerId) {
+      // A hovered tooltip may have focus elsewhere in its dialog. Consume Escape
+      // before that dialog handles it; focused triggers keep their own handler.
+      event.preventDefault()
+      event.stopPropagation()
+      open = false
+      onOpenChange?.(false)
+      return
+    }
     if (event.key !== 'Tab' || event.defaultPrevented) return
     // Release the tooltip's non-trapping focus scope before the containing
     // dialog handles Tab. Otherwise Bits UI pauses the dialog's focus loop.
@@ -76,11 +90,11 @@
   }
 </script>
 
-<svelte:window onkeydowncapture={open ? handleTabNavigation : undefined} />
+<svelte:window onkeydowncapture={open ? handleOverlayKeydown : undefined} />
 
 <Tooltip.Provider {delayDuration}>
   <Tooltip.Root bind:open bind:triggerId={activeTriggerId} {disabled} {delayDuration} {ignoreNonKeyboardFocus} {onOpenChange}>
-    <Tooltip.Trigger {...triggerAttributes} id={triggerId}>
+    <Tooltip.Trigger {...currentAttributes} id={triggerId}>
       {#snippet child({ props })}
         {@render trigger({
           ...props,

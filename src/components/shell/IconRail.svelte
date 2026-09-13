@@ -43,7 +43,7 @@
             variant="ghost"
             class="rail-navigation-button"
             label={label}
-            title={label}
+            tooltipSide="right"
             aria-current={currentView === view ? 'page' : undefined}
             onclick={() => onNavigate(view)}
           >

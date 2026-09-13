@@ -265,6 +265,7 @@
   >
     <div class="flex shrink-0 items-center gap-0.5">
       <IconButton
+        tooltipSide="bottom"
         label="Go back"
         size="xs"
         type="button"
@@ -275,6 +276,7 @@
         <ArrowLeft size={15} aria-hidden="true" />
       </IconButton>
       <IconButton
+        tooltipSide="bottom"
         label="Go forward"
         size="xs"
         type="button"
@@ -285,6 +287,7 @@
         <ArrowRight size={15} aria-hidden="true" />
       </IconButton>
       <IconButton
+        tooltipSide="bottom"
         label={surfaceState.loading ? 'Stop loading' : 'Reload page'}
         size="xs"
         type="button"
@@ -321,6 +324,7 @@
     </Button>
 
     <IconButton
+      tooltipSide="bottom"
       label={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
       variant={surfaceState.devToolsOpen ? 'primary' : 'ghost'}
       size="xs"

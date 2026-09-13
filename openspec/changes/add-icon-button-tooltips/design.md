@@ -73,7 +73,7 @@ Use CSS keyframes on tooltip content driven by open/closed state. Leave position
 
 These are tuning values, not new public configuration. Reduced motion removes translation, scaling, and overshoot; prefer immediate visibility changes. Keep existing SDK theme tokens for presentation.
 
-The reference is https://www.typeui.sh/ui-animations/tooltips, specifically Overshoot. The page could not be fetched during exploration, so these values are an interpretation, not a verified reproduction. Review the reference and the component story during implementation before final visual approval.
+The reference is https://www.typeui.sh/ui-animations/tooltips, specifically Overshoot. It was unavailable during exploration but was reviewed in Chromium during implementation. Keep the restrained desktop tuning above rather than reproducing the reference's longer spring timing; comparison and visual approval are recorded in verification.md.
 
 Alternative rejected: adding a spring animation dependency for one small effect adds SDK weight without a demonstrated need.
 
@@ -96,4 +96,4 @@ Alternative rejected: adding a spring animation dependency for one small effect 
 
 ## Open Questions
 
-- Exact overshoot amplitude and timing can be tuned against the TypeUI reference and component stories without changing the API or behavior contract.
+- None. The Button opt-in extension was approved, the reference comparison is recorded, and affected-system validation is complete.

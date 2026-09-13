@@ -21,6 +21,15 @@ describe('plugin-sdk IconButton', () => {
     vi.restoreAllMocks()
   })
 
+  it('preserves the native default submit type and explicit button types', async () => {
+    const view = render(IconButton, { props: { label: 'Submit review', children } })
+    const button = screen.getByRole('button', { name: 'Submit review' }) as HTMLButtonElement
+    expect(button.type).toBe('submit')
+    await view.rerender({ type: 'button' })
+    expect(button.type).toBe('button')
+    expect(screen.getByRole('button', { name: 'Submit review' })).toBe(button)
+  })
+
   it('shows its label on keyboard focus without adding a second button', async () => {
     render(IconButton, { props: { label: 'Refresh tasks', children } })
     const button = screen.getByRole('button', { name: 'Refresh tasks' })
