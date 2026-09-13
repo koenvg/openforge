@@ -1,5 +1,6 @@
 <script lang="ts">
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import { onDestroy, onMount, type Component } from 'svelte'
   import {
     TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT,
@@ -102,9 +103,9 @@
       onTabCountChange={null}
     />
   {:else if workspaceLookupState === 'loading'}
-    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-base-content/70" role="status">
+    <div class="flex flex-1 items-center justify-center p-6 text-center text-sm text-of-text/70">
       <div class="flex flex-col items-center gap-3">
-        <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+        <LoadingIndicator size="md" decorative />
         <p>{workspaceStatusText}</p>
       </div>
     </div>
@@ -113,11 +114,11 @@
       <div class="max-w-sm space-y-3">
         <p class="font-medium">{workspaceStatusText}</p>
         {#if workspaceLookupState === 'error' && workspaceLookupError !== null}
-          <p class="text-sm text-base-content/70">{workspaceLookupError}</p>
+          <p class="text-sm text-of-text/70">{workspaceLookupError}</p>
         {:else}
-          <p class="text-sm text-base-content/70">{TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT}</p>
+          <p class="text-sm text-of-text/70">{TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT}</p>
         {/if}
-        <p class="text-xs text-base-content/50">
+        <p class="text-xs text-of-text/50">
           {TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT}
         </p>
         {#if workspaceLookupState === 'error'}

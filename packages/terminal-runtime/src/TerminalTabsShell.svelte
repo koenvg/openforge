@@ -116,9 +116,9 @@
 
 <div class="flex flex-col h-full">
   <div class="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
-  <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0" role="tablist" aria-label="Shell terminals">
+  <div class="flex items-center overflow-x-auto border-b border-of-border bg-of-surface-subtle shrink-0" role="tablist" aria-label="Shell terminals">
     {#each tabs as tab, tabPosition (tab.index)}
-      <div class="flex items-center whitespace-nowrap border-b-2 {activeTabIndex === tab.index ? 'border-primary' : 'border-transparent'}">
+      <div class="flex items-center whitespace-nowrap border-b-2 {activeTabIndex === tab.index ? 'border-of-accent' : 'border-transparent'}">
         <button
           id={tabId(tab)}
           role="tab"
@@ -128,12 +128,12 @@
           aria-controls={panelId(tab)}
           aria-label={tabAccessibleLabel(tab)}
           title={`${tab.label} (${tabStatus(tab)})`}
-          class="flex items-center gap-1 pl-3 pr-1 py-1.5 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-primary rounded-[var(--of-radius-container)] {activeTabIndex === tab.index ? 'text-base-content font-semibold' : 'text-base-content/50'}"
+          class="flex items-center gap-1 pl-3 pr-1 py-1.5 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-of-accent rounded-[var(--of-radius-container)] {activeTabIndex === tab.index ? 'text-of-text font-semibold' : 'text-of-text/50'}"
           onclick={() => switchToTab(tabPosition)}
         >
           <span>{tab.label}</span>
           {#if isTabExited(tab.key)}<Badge variant="warning">Exited</Badge>{/if}
-          {#if shortcutHintsVisible && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
+          {#if shortcutHintsVisible && tabPosition < 9}<kbd class="shortcut-hint">⌘⇧{tabPosition + 1}</kbd>{/if}
         </button>
         <IconButton
           label={`Close ${tab.label}`}
@@ -180,3 +180,25 @@
     {/each}
   </div>
 </div>
+
+<style>
+  .shortcut-hint {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    height: calc(var(--of-control-height-compact) / 2);
+    min-width: calc(var(--of-control-height-compact) / 2);
+    padding-inline: .5em;
+    font-family: var(--of-font-mono);
+    font-size: .625rem;
+    border: var(--of-border-width) solid color-mix(in srgb, var(--of-text) 20%, transparent);
+    border-bottom-width: calc(var(--of-border-width) + 1px);
+    border-radius: var(--of-radius-control);
+    color: var(--of-text);
+    background: var(--of-surface-subtle);
+    opacity: .5;
+  }
+</style>

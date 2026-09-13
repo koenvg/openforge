@@ -146,3 +146,11 @@ Board, shell, shared feedback and content styling now use semantic utilities, di
 The scoped host inventory is clear. The adapter and transitional settings probes remain for KVG-4874. Consumers belonging to still-open project/attention, task-detail/review, terminal and package/plugin batches remain explicitly owned; newly found paths were routed through their native task prompts.
 
 See [host validation and ownership](host-presentation-validation.md) for exact exclusions, dynamic-expression review, commands, browser evidence, and the existing SDK Switch test failure. The earlier machine-readable ledger is historical and is not a current remaining-consumer count.
+
+## Terminal presentation, KVG-4867
+
+Both terminal consumer inventories are clear. Runtime shells, loading feedback, native keyboard hints, plugin unavailable-state colors, host terminal scrollbars, and executable conformance presentation now consume semantic tokens. Terminal ownership, PTY handling, resource lifecycle, public exports, and theme IDs are unchanged.
+
+`scripts/terminal-ui-migration.test.mjs` applies the existing parser to both complete packages, including executable tests and conformance, plus `src/styles/terminal-presentation.css`. Its reviewed exceptions identify three identity/callback-only prop spreads and specific native role, event, and state strings. There are no remaining legacy color or feedback consumers or unexplained dynamic producers in that scope. Native keyboard-hint paint and bounds are checked without host compatibility CSS, including on checkouts before KVG-4873's scanner update.
+
+The KVG-4863 ledger above remains historical; its terminal records are superseded by this bounded scan, not a repository-wide rewrite. See [terminal migration validation](terminal-presentation-migration.md) for baseline evidence, commands, results, and gaps.

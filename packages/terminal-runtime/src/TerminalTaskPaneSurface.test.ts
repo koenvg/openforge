@@ -19,6 +19,21 @@ function createAdapter(): TerminalSurfaceAdapter {
 afterEach(() => cleanup())
 
 describe('TerminalTaskPaneSurface', () => {
+  it('announces a pending workspace lookup once, with a decorative indicator', () => {
+    const adapter = createAdapter()
+    adapter.getTaskWorkspace = () => new Promise(() => {})
+    const { container } = render(TerminalTaskPaneSurface, {
+      props: { adapter, taskId: 'T-loading', shortcutHintsVisible: false },
+    })
+
+    const statuses = screen.getAllByRole('status')
+    expect(statuses).toHaveLength(1)
+    expect(statuses[0].textContent).toContain('Loading')
+    const indicator = container.querySelector('span[aria-hidden="true"]')
+    expect(indicator).not.toBeNull()
+    expect(indicator?.getAttribute('role')).toBeNull()
+  })
+
   it('uses the host adapter to retry an unavailable workspace lookup', async () => {
     const adapter = createAdapter()
     render(TerminalTaskPaneSurface, {
