@@ -103,18 +103,18 @@ fn indexed_shell_keeps_pid_state_and_ordered_io_after_controller_loss() {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let inventory = second.inventory().unwrap();
-        if inventory.sessions[0].exit_code == Some(17) {
-            assert!(second
-                .events(cursor)
-                .unwrap()
+        let events = second.events(cursor).unwrap();
+        if inventory.sessions[0].exit_code == Some(17)
+            && events
                 .events
                 .iter()
-                .any(|event| event.is_exit(&spawned.pty)));
+                .any(|event| event.is_exit(&spawned.pty))
+        {
             break;
         }
         assert!(
             Instant::now() < deadline,
-            "exit was lost during reconciliation"
+            "exit state or event was lost during reconciliation"
         );
         std::thread::sleep(Duration::from_millis(10));
     }
