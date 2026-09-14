@@ -91,6 +91,13 @@ impl NotificationJournal {
         Ok(Self { conn, id })
     }
 
+    #[cfg(test)]
+    pub(crate) fn disable_durability_for_test(&self) -> Result<(), Error> {
+        self.conn
+            .execute_batch("PRAGMA synchronous=OFF;")
+            .map_err(|_| storage())
+    }
+
     pub fn accept(
         &mut self,
         agent: &AgentConfig,

@@ -52,6 +52,9 @@ fn acknowledged_receipts_retire_only_after_their_sender_loses_authority() {
 fn full_journal_rejects_new_records_but_can_return_existing_receipts() {
     let dir = tempfile::tempdir().unwrap();
     let mut journal = NotificationJournal::open(&dir.path().join("journal.sqlite")).unwrap();
+    // This test exercises logical capacity, not fsync behavior. Avoid making hundreds of
+    // durable commits contend with concurrent contract-suite copies.
+    journal.disable_durability_for_test().unwrap();
     let mut payload = envelope("first");
     payload.payload.activity_snapshot = Some("x".repeat(8192));
     let first = journal.accept(&agent(), payload.clone()).unwrap();
