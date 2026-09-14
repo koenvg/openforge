@@ -18,6 +18,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+const MAX_STARTUP_ATTEMPTS: usize = 5;
+
+fn should_retry_startup(log: &str, attempts_remaining: usize) -> bool {
+    attempts_remaining > 0
+        && log
+            .lines()
+            .any(|line| line.contains("[electron-sidecar] failed: Address already in use"))
+}
+
 struct Fixture {
     root: tempfile::TempDir,
     child: Option<Child>,
@@ -52,11 +61,31 @@ impl Fixture {
         }
     }
     fn start(&mut self, stage: &str) {
+        for attempt in 1..=MAX_STARTUP_ATTEMPTS {
+            match self.start_once(stage) {
+                Ok(()) => return,
+                Err((status, startup_log)) => {
+                    let attempts_remaining = MAX_STARTUP_ATTEMPTS - attempt;
+                    if should_retry_startup(&startup_log, attempts_remaining) {
+                        eprintln!(
+                            "Sidecar port {} was claimed during startup; retrying ({attempts_remaining} attempts remaining)",
+                            self.port
+                        );
+                        continue;
+                    }
+                    panic!("Sidecar exited during startup with {status}. Log:\n{startup_log}");
+                }
+            }
+        }
+        unreachable!("startup retries either return or report the final failure");
+    }
+    fn start_once(&mut self, stage: &str) -> Result<(), (std::process::ExitStatus, String)> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         self.port = listener.local_addr().unwrap().port();
         drop(listener);
         self.token = uuid::Uuid::new_v4().to_string();
-        let log = fs::File::create(self.root.path().join(format!("{stage}.log"))).unwrap();
+        let log_path = self.root.path().join(format!("{stage}.log"));
+        let log = fs::File::create(&log_path).unwrap();
         let daemon = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("crates/session-daemon/target/debug/openforge-session-daemon");
         let mut command = Command::new(env!("CARGO_BIN_EXE_openforge"));
@@ -108,13 +137,17 @@ impl Fixture {
                 .send()
                 .is_ok_and(|response| response.status().is_success())
             {
-                break;
+                return Ok(());
+            }
+            if let Some(status) = self.child.as_mut().unwrap().try_wait().unwrap() {
+                self.child = None;
+                return Err((status, fs::read_to_string(log_path).unwrap_or_default()));
             }
             assert!(
-                self.child.as_mut().unwrap().try_wait().unwrap().is_none(),
-                "Sidecar exited during startup"
+                Instant::now() < deadline,
+                "Sidecar startup timeout on port {}",
+                self.port
             );
-            assert!(Instant::now() < deadline, "Sidecar startup timeout");
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -456,4 +489,20 @@ fn notification_during_backend_outage_updates_the_existing_agent_session() {
             revision
         );
     }
+}
+
+#[test]
+fn startup_retry_accepts_only_address_conflicts_with_attempts_remaining() {
+    assert!(should_retry_startup(
+        "level=ERROR module=openforge message=[electron-sidecar] failed: Address already in use (os error 48)",
+        1,
+    ));
+    assert!(!should_retry_startup(
+        "level=ERROR module=openforge message=[electron-sidecar] failed: permission denied",
+        1,
+    ));
+    assert!(!should_retry_startup(
+        "level=ERROR module=openforge message=[electron-sidecar] failed: Address already in use (os error 48)",
+        0,
+    ));
 }
