@@ -136,7 +136,9 @@ fn receipt_migration_failure_preserves_previous_version_and_can_reopen() {
     let path = dir.path().join("migration.db");
     drop(Database::new(path.clone()).unwrap());
     let mut conn = rusqlite::Connection::open(&path).unwrap();
-    let previous = migrations::LATEST_USER_VERSION - 1;
+    // Pinned, not derived from LATEST_USER_VERSION: appending a migration would
+    // move this fixture onto the wrong migration.
+    let previous = 61;
     conn.pragma_update(None, "user_version", previous).unwrap();
     conn.execute_batch("DROP TABLE agent_notification_receipts; CREATE TABLE agent_notification_receipts (broken INTEGER);").unwrap();
     // The new table conflicts with the migration. It must not advance the schema version.

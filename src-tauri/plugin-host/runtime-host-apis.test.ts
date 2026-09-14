@@ -226,6 +226,7 @@ describe('plugin-host backend host APIs', () => {
       awaiting: 'none',
       idempotencyKey: null,
       seenAt: null,
+      hasUnreadAgentMessage: false,
       createdAt: 1,
       updatedAt: 1,
       messages: [{ id: 'rtm_1', role: 'human', body: 'Missing null check', createdAt: 1 }],
@@ -268,6 +269,48 @@ describe('plugin-host backend host APIs', () => {
           revision: 'sha-1',
           pluginId: 'com.example.reviewer',
         },
+      },
+    ])
+  })
+
+  it('routes backend Review Thread state writes through ungated host callbacks', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('reviewThreadState', {
+            async handler() {
+              await openforge.reviewThreads.setAwaiting({ threadId: 'rt_1', awaiting: 'error' })
+              await openforge.reviewThreads.setStatus({ threadId: 'rt_1', status: 'resolved' })
+              return await openforge.reviewThreads.markSeen({ threadId: 'rt_1' })
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const thread = { id: 'rt_1', status: 'resolved', awaiting: 'error', hasUnreadAgentMessage: false }
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      return thread
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'com.example.reviewer',
+      backendPath,
+      command: 'reviewThreadState',
+    })).resolves.toEqual(thread)
+    expect(calls).toEqual([
+      {
+        method: 'openforge.reviewThreads.setAwaiting',
+        params: { threadId: 'rt_1', awaiting: 'error', pluginId: 'com.example.reviewer' },
+      },
+      {
+        method: 'openforge.reviewThreads.setStatus',
+        params: { threadId: 'rt_1', status: 'resolved', pluginId: 'com.example.reviewer' },
+      },
+      {
+        method: 'openforge.reviewThreads.markSeen',
+        params: { threadId: 'rt_1', pluginId: 'com.example.reviewer' },
       },
     ])
   })

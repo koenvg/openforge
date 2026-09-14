@@ -14,9 +14,12 @@ import type {
   AgentSessionSummaryPage,
   ListAgentSessionsRequest,
   CreateReviewThreadRequest,
+  MarkReviewThreadSeenRequest,
   ReplyToReviewThreadRequest,
   ReviewThread,
   ReviewThreadScope,
+  SetReviewThreadAwaitingRequest,
+  SetReviewThreadStatusRequest,
   JsonValue,
   Project,
   ProjectAttention,
@@ -270,6 +273,18 @@ export function createBackendApi(
       ),
       reply: async (request: ReplyToReviewThreadRequest) => await hostCallback<ReviewThread>(
         'openforge.reviewThreads.reply',
+        { ...objectCallbackParams(request), pluginId: state.pluginId },
+      ),
+      setStatus: async (request: SetReviewThreadStatusRequest) => await hostCallback<ReviewThread>(
+        'openforge.reviewThreads.setStatus',
+        { ...objectCallbackParams(request), pluginId: state.pluginId },
+      ),
+      setAwaiting: async (request: SetReviewThreadAwaitingRequest) => await hostCallback<ReviewThread>(
+        'openforge.reviewThreads.setAwaiting',
+        { ...objectCallbackParams(request), pluginId: state.pluginId },
+      ),
+      markSeen: async (request: MarkReviewThreadSeenRequest) => await hostCallback<ReviewThread>(
+        'openforge.reviewThreads.markSeen',
         { ...objectCallbackParams(request), pluginId: state.pluginId },
       ),
     },

@@ -176,6 +176,15 @@ export class RuntimeCommonApiRegistry {
         reply: async (request) => this.services.host.replyToReviewThread
           ? this.services.host.replyToReviewThread(request)
           : unavailableCapability('reviewThreads.reply'),
+        setStatus: async (request) => this.services.host.setReviewThreadStatus
+          ? this.services.host.setReviewThreadStatus(request)
+          : unavailableCapability('reviewThreads.setStatus'),
+        setAwaiting: async (request) => this.services.host.setReviewThreadAwaiting
+          ? this.services.host.setReviewThreadAwaiting(request)
+          : unavailableCapability('reviewThreads.setAwaiting'),
+        markSeen: async (request) => this.services.host.markReviewThreadSeen
+          ? this.services.host.markReviewThreadSeen(request)
+          : unavailableCapability('reviewThreads.markSeen'),
       },
       tasks: {
         onDidChange: (projectId, handler) => {

@@ -88,6 +88,14 @@ _Avoid_: Pull request key, PR number, commit scope
 The location a **Review Thread** is attached to: a file path, line, and side, or an opaque custom key.
 _Avoid_: Comment position, diff hunk, line reference
 
+**Review Thread Status**:
+The reviewer decision on a **Review Thread**: open, resolved, or dismissed.
+_Avoid_: Pending, approved, answered
+
+**Review Thread Agent Turn**:
+Whether a **Review Thread** awaits an agent reply, had one fail, or expects none.
+_Avoid_: Thread status, draft, error state
+
 **Review Feedback Prompt**:
 The compiled bundle of inline and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
 _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
@@ -494,6 +502,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Review Thread** belongs to exactly one **Review Thread Scope**; a reply appends a message to that thread rather than creating a second one.
 - A **Review Thread Scope** is opaque to the host, so any review surface can store threads without the host knowing what a pull request is.
 - A **Review Thread Anchor** is stored as given; the host does not check it against the reviewed diff.
+- A **Review Thread Status** and a **Review Thread Agent Turn** move independently; resolving a thread leaves a failed agent turn reported, and asking an agent leaves the thread open.
+- A **Review Thread** marked seen counts its latest agent message as read; a later agent message makes it unread again without clearing when it was seen.
 - A **Review Feedback Prompt** instructs the agent to evaluate and fix the feedback only; it never instructs version-control actions (commit, push, PR) — those decisions stay with the user.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, PR title, or PR body rather than in prompt-derived branch text.
 - A direct merge uses an explicitly selected **Pull Request Merge Method**. OpenForge places the authenticated GitHub identity's default first, never substitutes another method after confirmation, and limits choices to methods GitHub permits for the target branch.

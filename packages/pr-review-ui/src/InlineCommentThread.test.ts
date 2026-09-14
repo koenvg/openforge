@@ -335,6 +335,7 @@ describe('InlineCommentThread Review Threads', () => {
       runId: null,
       idempotencyKey: null,
       seenAt: null,
+      hasUnreadAgentMessage: false,
       createdAt: 1,
       updatedAt: 1,
       messages: [
@@ -385,6 +386,61 @@ describe('InlineCommentThread Review Threads', () => {
     render(InlineCommentThread, { props: setup.props })
 
     expect(screen.getByText('Plugin')).toBeTruthy()
+  })
+
+  it('offers resolve and dismiss on an open thread', async () => {
+    const onSetThreadStatus = vi.fn()
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()), onSetThreadStatus })
+    render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Resolve review thread' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Dismiss review thread' }))
+
+    expect(onSetThreadStatus.mock.calls).toEqual([['rt_1', 'resolved'], ['rt_1', 'dismissed']])
+  })
+
+  it('keeps a dismissed thread readable and offers to reopen it', async () => {
+    const onSetThreadStatus = vi.fn()
+    const setup = makeProps({
+      data: makeReviewThreadData(makeReviewThread({ status: 'dismissed' })),
+      onSetThreadStatus,
+    })
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Needs a null check')).toBeTruthy()
+    expect(screen.getByText('Dismissed')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Dismiss review thread' })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: 'Reopen review thread' }))
+
+    expect(onSetThreadStatus).toHaveBeenCalledWith('rt_1', 'open')
+  })
+
+  it('hides the status actions when the embedding surface supplies no status callback', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.queryByRole('button', { name: 'Resolve review thread' })).toBeNull()
+  })
+
+  it('reports a resolved thread whose agent turn failed as both', () => {
+    const setup = makeProps({
+      data: makeReviewThreadData(makeReviewThread({ status: 'resolved', awaiting: 'error' })),
+      onSetThreadStatus: vi.fn(),
+    })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Resolved')).toBeTruthy()
+    expect(screen.getByText('Agent reply failed')).toBeTruthy()
+  })
+
+  it('reports a thread that is waiting on an agent', () => {
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ awaiting: 'agent' })) })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Waiting for agent')).toBeTruthy()
   })
 
   it('never attributes a stored message to the reading user', () => {

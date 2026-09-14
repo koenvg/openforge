@@ -38,6 +38,15 @@ impl PluginHost {
             "openforge.reviewThreads.list" => self.list_review_threads_for_host(params).await,
             "openforge.reviewThreads.create" => self.create_review_thread_for_host(params).await,
             "openforge.reviewThreads.reply" => self.reply_to_review_thread_for_host(params).await,
+            "openforge.reviewThreads.setStatus" => {
+                self.set_review_thread_status_for_host(params).await
+            }
+            "openforge.reviewThreads.setAwaiting" => {
+                self.set_review_thread_awaiting_for_host(params).await
+            }
+            "openforge.reviewThreads.markSeen" => {
+                self.mark_review_thread_seen_for_host(params).await
+            }
             "openforge.projects.list" => self.list_projects_for_host(),
             "openforge.projects.get" => self.get_project_for_host(params),
             "openforge.fs.readDir" => self.read_project_dir_for_host(params).await,

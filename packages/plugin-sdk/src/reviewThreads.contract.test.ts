@@ -163,6 +163,82 @@ describe('Review Threads public SDK contract', () => {
     expect(handler).toHaveBeenCalledWith(scope)
   })
 
+  it('leaves an asked thread open while recording that an agent reply is awaited', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create(request)
+
+    const asked = await api.reviewThreads.reply({ threadId: created.id, role: 'human', body: 'Why?', awaiting: 'agent' })
+
+    expect(asked.status).toBe('open')
+    expect(asked.awaiting).toBe('agent')
+  })
+
+  it('reports the reviewer decision and a failed agent turn side by side', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create(request)
+    await api.reviewThreads.setAwaiting({ threadId: created.id, awaiting: 'error' })
+
+    const resolved = await api.reviewThreads.setStatus({ threadId: created.id, status: 'resolved' })
+
+    expect(resolved.status).toBe('resolved')
+    expect(resolved.awaiting).toBe('error')
+  })
+
+  it('leaves the reviewer decision alone when the agent turn moves', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create(request)
+    await api.reviewThreads.setStatus({ threadId: created.id, status: 'dismissed' })
+
+    const awaited = await api.reviewThreads.setAwaiting({ threadId: created.id, awaiting: 'agent' })
+
+    expect(awaited.status).toBe('dismissed')
+  })
+
+  it.each([
+    ['setStatus', () => createMockOpenForgeApi().reviewThreads.setStatus({ threadId: 'rt_missing', status: 'resolved' as const })],
+    ['setAwaiting', () => createMockOpenForgeApi().reviewThreads.setAwaiting({ threadId: 'rt_missing', awaiting: 'agent' as const })],
+    ['markSeen', () => createMockOpenForgeApi().reviewThreads.markSeen({ threadId: 'rt_missing' })],
+  ])('rejects %s on an unknown thread', async (_operation, call) => {
+    await expect(call()).rejects.toThrow("Review Thread 'rt_missing' does not exist")
+  })
+
+  it('counts the latest agent message as read until a newer one arrives', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create({ ...request, origin: 'agent' })
+    expect(created.hasUnreadAgentMessage).toBe(true)
+
+    const seen = await api.reviewThreads.markSeen({ threadId: created.id })
+    expect(seen.hasUnreadAgentMessage).toBe(false)
+
+    const answered = await api.reviewThreads.reply({ threadId: created.id, role: 'agent', body: 'Fixed', awaiting: 'none' })
+
+    expect(answered.hasUnreadAgentMessage).toBe(true)
+    expect(answered.seenAt).toBe(seen.seenAt)
+  })
+
+  it('leaves a seen thread read when the reviewer is the one who replies', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create({ ...request, origin: 'agent' })
+    await api.reviewThreads.markSeen({ threadId: created.id })
+
+    const asked = await api.reviewThreads.reply({ threadId: created.id, role: 'human', body: 'Why?', awaiting: 'agent' })
+
+    expect(asked.hasUnreadAgentMessage).toBe(false)
+  })
+
+  it('notifies the scope on every state write', async () => {
+    const api = createMockOpenForgeApi()
+    const created = await api.reviewThreads.create(request)
+    const handler = vi.fn()
+    api.reviewThreads.onDidChange(scope, handler)
+
+    await api.reviewThreads.setStatus({ threadId: created.id, status: 'resolved' })
+    await api.reviewThreads.setAwaiting({ threadId: created.id, awaiting: 'error' })
+    await api.reviewThreads.markSeen({ threadId: created.id })
+
+    expect(handler).toHaveBeenCalledTimes(3)
+  })
+
   it('hands back copies so a caller cannot mutate stored threads', async () => {
     const api = createMockOpenForgeApi()
     const created: ReviewThread = await api.reviewThreads.create(request)

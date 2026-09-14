@@ -225,7 +225,9 @@ fn failed_completion_migration_preserves_version_and_can_reopen() {
     drop(db);
     let path = dir.path().join("completion.db");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
-    let previous = migrations::LATEST_USER_VERSION - 1;
+    // Pinned, not derived from LATEST_USER_VERSION: appending a migration would
+    // move this fixture onto the wrong migration.
+    let previous = 61;
     conn.pragma_update(None, "user_version", previous).unwrap();
     conn.execute_batch("DROP TABLE agent_deferred_completions; CREATE TABLE agent_deferred_completions (broken INTEGER);").unwrap();
     assert!(migrations::get_migrations().to_latest(&mut conn).is_err());

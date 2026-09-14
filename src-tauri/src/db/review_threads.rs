@@ -48,6 +48,7 @@ pub struct ReviewThreadRow {
     pub awaiting: String,
     pub idempotency_key: Option<String>,
     pub seen_at: Option<i64>,
+    pub has_unread_agent_message: bool,
     pub created_at: i64,
     pub updated_at: i64,
     pub messages: Vec<ReviewThreadMessageRow>,
@@ -88,6 +89,8 @@ pub struct ReplyToReviewThread {
     pub thread_id: String,
     pub role: String,
     pub body: String,
+    #[serde(default)]
+    pub awaiting: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,6 +98,13 @@ pub struct ReplyToReviewThread {
 pub struct SetReviewThreadStatus {
     pub thread_id: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SetReviewThreadAwaiting {
+    pub thread_id: String,
+    pub awaiting: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -119,6 +129,7 @@ fn invalid(field: &'static str, reason: &str) -> ReviewThreadError {
 const ORIGINS: [&str; 3] = ["agent", "human", "plugin"];
 const ROLES: [&str; 2] = ["agent", "human"];
 const STATUSES: [&str; 3] = ["open", "resolved", "dismissed"];
+const AWAITING: [&str; 3] = ["none", "agent", "error"];
 
 fn validate_scope(scope: &ReviewThreadScope) -> ReviewThreadResult<()> {
     if scope.namespace.trim().is_empty() {
@@ -174,9 +185,19 @@ fn validate_body(body: &str) -> ReviewThreadResult<()> {
     Ok(())
 }
 
+fn validate_awaiting(awaiting: &str) -> ReviewThreadResult<()> {
+    if !AWAITING.contains(&awaiting) {
+        return Err(invalid("awaiting", "must be none, agent, or error"));
+    }
+    Ok(())
+}
+
 const THREAD_COLUMNS: &str = "id, namespace, target_key, revision, run_id, origin, anchor_kind, \
-     file_path, line, side, anchor_key, status, awaiting, idempotency_key, seen_at, created_at, \
-     updated_at";
+     file_path, line, side, anchor_key, status, awaiting, idempotency_key, seen_at, \
+     EXISTS (SELECT 1 FROM review_thread_messages message \
+              WHERE message.thread_id = review_threads.id AND message.role = 'agent' \
+                AND message.sequence > COALESCE(review_threads.seen_sequence, -1)), \
+     created_at, updated_at";
 
 fn read_thread_row(row: &rusqlite::Row<'_>) -> SqlResult<ReviewThreadRow> {
     let anchor_kind: String = row.get(6)?;
@@ -204,8 +225,9 @@ fn read_thread_row(row: &rusqlite::Row<'_>) -> SqlResult<ReviewThreadRow> {
         awaiting: row.get(12)?,
         idempotency_key: row.get(13)?,
         seen_at: row.get(14)?,
-        created_at: row.get(15)?,
-        updated_at: row.get(16)?,
+        has_unread_agent_message: row.get(15)?,
+        created_at: row.get(16)?,
+        updated_at: row.get(17)?,
         messages: Vec::new(),
     })
 }
@@ -408,6 +430,9 @@ impl super::Database {
         if !ROLES.contains(&request.role.as_str()) {
             return Err(invalid("role", "must be agent or human"));
         }
+        if let Some(awaiting) = &request.awaiting {
+            validate_awaiting(awaiting)?;
+        }
 
         let now = super::current_unix_timestamp()?;
         let mut conn = self.lock_conn()?;
@@ -436,8 +461,10 @@ impl super::Database {
             next_sequence,
         )?;
         tx.execute(
-            "UPDATE review_threads SET updated_at = ?1 WHERE id = ?2",
-            rusqlite::params![now, &request.thread_id],
+            "UPDATE review_threads
+                SET awaiting = COALESCE(?1, awaiting), updated_at = ?2
+              WHERE id = ?3",
+            rusqlite::params![&request.awaiting, now, &request.thread_id],
         )?;
         tx.commit()?;
 
@@ -451,18 +478,60 @@ impl super::Database {
         if !STATUSES.contains(&request.status.as_str()) {
             return Err(invalid("status", "must be open, resolved, or dismissed"));
         }
+        self.update_review_thread(
+            "UPDATE review_threads SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            &request.status,
+            &request.thread_id,
+        )
+    }
 
+    pub fn set_review_thread_awaiting(
+        &self,
+        request: &SetReviewThreadAwaiting,
+    ) -> ReviewThreadResult<ReviewThreadRow> {
+        validate_awaiting(&request.awaiting)?;
+        self.update_review_thread(
+            "UPDATE review_threads SET awaiting = ?1, updated_at = ?2 WHERE id = ?3",
+            &request.awaiting,
+            &request.thread_id,
+        )
+    }
+
+    pub fn mark_review_thread_seen(&self, thread_id: &str) -> ReviewThreadResult<ReviewThreadRow> {
         let now = super::current_unix_timestamp()?;
         let conn = self.lock_conn()?;
         let updated = conn.execute(
-            "UPDATE review_threads SET status = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![&request.status, now, &request.thread_id],
+            "UPDATE review_threads
+                SET seen_at = ?1,
+                    seen_sequence = (
+                        SELECT COALESCE(MAX(sequence), -1)
+                          FROM review_thread_messages
+                         WHERE thread_id = review_threads.id
+                    )
+              WHERE id = ?2",
+            rusqlite::params![now, thread_id],
         )?;
         if updated == 0 {
-            return Err(ReviewThreadError::ThreadNotFound(request.thread_id.clone()));
+            return Err(ReviewThreadError::ThreadNotFound(thread_id.to_string()));
         }
 
-        read_thread(&conn, &request.thread_id)
+        read_thread(&conn, thread_id)
+    }
+
+    fn update_review_thread(
+        &self,
+        statement: &'static str,
+        value: &str,
+        thread_id: &str,
+    ) -> ReviewThreadResult<ReviewThreadRow> {
+        let now = super::current_unix_timestamp()?;
+        let conn = self.lock_conn()?;
+        let updated = conn.execute(statement, rusqlite::params![value, now, thread_id])?;
+        if updated == 0 {
+            return Err(ReviewThreadError::ThreadNotFound(thread_id.to_string()));
+        }
+
+        read_thread(&conn, thread_id)
     }
 }
 
@@ -505,6 +574,22 @@ mod tests {
         }
     }
 
+    fn create_with_origin(origin: &str) -> CreateReviewThread {
+        CreateReviewThread {
+            origin: origin.to_string(),
+            ..create_request("Missing null check")
+        }
+    }
+
+    fn reply(thread_id: &str, role: &str, awaiting: Option<&str>) -> ReplyToReviewThread {
+        ReplyToReviewThread {
+            thread_id: thread_id.to_string(),
+            role: role.to_string(),
+            body: "a message".to_string(),
+            awaiting: awaiting.map(str::to_string),
+        }
+    }
+
     #[test]
     fn a_created_thread_carries_its_anchor_origin_and_first_message() {
         let (db, _temp) = make_test_db("review_threads_create");
@@ -536,6 +621,7 @@ mod tests {
                 thread_id: thread.id.clone(),
                 role: "human".to_string(),
                 body: "Why?".to_string(),
+                awaiting: None,
             })
             .expect("reply");
 
@@ -564,6 +650,7 @@ mod tests {
                 thread_id: thread.id.clone(),
                 role: "human".to_string(),
                 body: body.to_string(),
+                awaiting: None,
             })
             .expect("reply");
         }
@@ -773,6 +860,7 @@ mod tests {
                 thread_id: "rt_missing".to_string(),
                 role: "human".to_string(),
                 body: "Anybody there?".to_string(),
+                awaiting: None,
             })
             .expect_err("reply should be rejected");
 
@@ -793,6 +881,7 @@ mod tests {
                 thread_id: thread.id.clone(),
                 role: "human".to_string(),
                 body: "  ".to_string(),
+                awaiting: None,
             })
             .expect_err("reply should be rejected");
 
@@ -1069,5 +1158,264 @@ mod tests {
             .expect_err("an unknown thread should be rejected");
 
         assert!(error.to_string().contains("rt_missing"), "got: {error}");
+    }
+
+    #[test]
+    fn asking_an_agent_on_an_open_thread_keeps_it_open_and_awaits_a_reply() {
+        let (db, _temp) = make_test_db("review_threads_ask_agent");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+
+        let asked = db
+            .reply_to_review_thread(&reply(&thread.id, "human", Some("agent")))
+            .expect("reply");
+
+        assert_eq!(asked.status, "open");
+        assert_eq!(asked.awaiting, "agent");
+    }
+
+    #[test]
+    fn a_reply_without_an_awaiting_value_leaves_the_agent_turn_untouched() {
+        let (db, _temp) = make_test_db("review_threads_reply_keeps_awaiting");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        db.set_review_thread_awaiting(&SetReviewThreadAwaiting {
+            thread_id: thread.id.clone(),
+            awaiting: "agent".to_string(),
+        })
+        .expect("await an agent");
+
+        let replied = db
+            .reply_to_review_thread(&reply(&thread.id, "human", None))
+            .expect("reply");
+
+        assert_eq!(replied.awaiting, "agent");
+    }
+
+    #[test]
+    fn resolving_a_thread_whose_agent_turn_failed_reports_both() {
+        let (db, _temp) = make_test_db("review_threads_resolve_failed_turn");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        db.set_review_thread_awaiting(&SetReviewThreadAwaiting {
+            thread_id: thread.id.clone(),
+            awaiting: "error".to_string(),
+        })
+        .expect("fail the agent turn");
+
+        let resolved = db
+            .set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: thread.id.clone(),
+                status: "resolved".to_string(),
+            })
+            .expect("resolve");
+
+        assert_eq!(resolved.status, "resolved");
+        assert_eq!(resolved.awaiting, "error");
+    }
+
+    #[test]
+    fn changing_the_agent_turn_leaves_the_reviewer_decision_untouched() {
+        let (db, _temp) = make_test_db("review_threads_awaiting_keeps_status");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        db.set_review_thread_status(&SetReviewThreadStatus {
+            thread_id: thread.id.clone(),
+            status: "dismissed".to_string(),
+        })
+        .expect("dismiss");
+
+        let awaited = db
+            .set_review_thread_awaiting(&SetReviewThreadAwaiting {
+                thread_id: thread.id.clone(),
+                awaiting: "agent".to_string(),
+            })
+            .expect("await an agent");
+
+        assert_eq!(awaited.status, "dismissed");
+    }
+
+    #[test]
+    fn an_unsupported_status_or_awaiting_value_is_rejected_naming_the_field() {
+        let (db, _temp) = make_test_db("review_threads_invalid_state");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+
+        let status_error = db
+            .set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: thread.id.clone(),
+                status: "approved".to_string(),
+            })
+            .expect_err("a legacy status value should be rejected");
+        let awaiting_error = db
+            .set_review_thread_awaiting(&SetReviewThreadAwaiting {
+                thread_id: thread.id.clone(),
+                awaiting: "answered".to_string(),
+            })
+            .expect_err("a legacy awaiting value should be rejected");
+        let reply_error = db
+            .reply_to_review_thread(&reply(&thread.id, "agent", Some("answered")))
+            .expect_err("a legacy awaiting value on a reply should be rejected");
+
+        assert!(
+            matches!(
+                status_error,
+                ReviewThreadError::InvalidField {
+                    field: "status",
+                    ..
+                }
+            ),
+            "got: {status_error}"
+        );
+        assert!(
+            matches!(
+                awaiting_error,
+                ReviewThreadError::InvalidField {
+                    field: "awaiting",
+                    ..
+                }
+            ),
+            "got: {awaiting_error}"
+        );
+        assert!(
+            matches!(
+                reply_error,
+                ReviewThreadError::InvalidField {
+                    field: "awaiting",
+                    ..
+                }
+            ),
+            "got: {reply_error}"
+        );
+        let stored = &db.list_review_threads(&scope()).expect("list")[0];
+        assert_eq!(
+            (
+                stored.status.as_str(),
+                stored.awaiting.as_str(),
+                stored.messages.len()
+            ),
+            ("open", "none", 1)
+        );
+    }
+
+    #[test]
+    fn setting_the_state_of_an_unknown_thread_is_rejected() {
+        let (db, _temp) = make_test_db("review_threads_unknown_state_target");
+
+        for error in [
+            db.set_review_thread_status(&SetReviewThreadStatus {
+                thread_id: "rt_missing".to_string(),
+                status: "resolved".to_string(),
+            })
+            .expect_err("status"),
+            db.set_review_thread_awaiting(&SetReviewThreadAwaiting {
+                thread_id: "rt_missing".to_string(),
+                awaiting: "agent".to_string(),
+            })
+            .expect_err("awaiting"),
+            db.mark_review_thread_seen("rt_missing").expect_err("seen"),
+        ] {
+            assert!(error.to_string().contains("rt_missing"), "got: {error}");
+        }
+    }
+
+    #[test]
+    fn an_agent_thread_is_unread_until_it_is_marked_seen() {
+        let (db, _temp) = make_test_db("review_threads_unread_until_seen");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        assert!(thread.has_unread_agent_message);
+
+        let seen = db.mark_review_thread_seen(&thread.id).expect("mark seen");
+
+        assert!(!seen.has_unread_agent_message);
+        assert!(seen.seen_at.is_some());
+    }
+
+    #[test]
+    fn an_agent_message_after_the_thread_was_seen_makes_it_unread_again() {
+        let (db, _temp) = make_test_db("review_threads_unread_again");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        let seen = db.mark_review_thread_seen(&thread.id).expect("mark seen");
+
+        let answered = db
+            .reply_to_review_thread(&reply(&thread.id, "agent", Some("none")))
+            .expect("agent answers");
+
+        assert!(answered.has_unread_agent_message);
+        assert_eq!(
+            answered.seen_at, seen.seen_at,
+            "a newer agent message must not clear the seen record"
+        );
+    }
+
+    #[test]
+    fn a_reviewer_reply_after_the_thread_was_seen_leaves_it_read() {
+        let (db, _temp) = make_test_db("review_threads_own_reply_stays_read");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        db.mark_review_thread_seen(&thread.id).expect("mark seen");
+
+        let asked = db
+            .reply_to_review_thread(&reply(&thread.id, "human", Some("agent")))
+            .expect("reply");
+
+        assert!(!asked.has_unread_agent_message);
+    }
+
+    #[test]
+    fn a_thread_a_reviewer_started_is_read_from_the_start() {
+        let (db, _temp) = make_test_db("review_threads_human_origin_read");
+
+        let thread = db
+            .create_review_thread(&create_with_origin("human"))
+            .expect("create")
+            .into_thread();
+
+        assert!(!thread.has_unread_agent_message);
+    }
+
+    #[test]
+    fn listing_reports_the_stored_state_of_every_thread() {
+        let (db, _temp) = make_test_db("review_threads_state_read_back");
+        let thread = db
+            .create_review_thread(&create_with_origin("agent"))
+            .expect("create")
+            .into_thread();
+        db.set_review_thread_status(&SetReviewThreadStatus {
+            thread_id: thread.id.clone(),
+            status: "dismissed".to_string(),
+        })
+        .expect("dismiss");
+        db.set_review_thread_awaiting(&SetReviewThreadAwaiting {
+            thread_id: thread.id.clone(),
+            awaiting: "error".to_string(),
+        })
+        .expect("fail the agent turn");
+        db.mark_review_thread_seen(&thread.id).expect("mark seen");
+
+        let listed = db.list_review_threads(&scope()).expect("list");
+
+        assert_eq!(listed[0].status, "dismissed");
+        assert_eq!(listed[0].awaiting, "error");
+        assert!(listed[0].seen_at.is_some());
+        assert!(!listed[0].has_unread_agent_message);
     }
 }

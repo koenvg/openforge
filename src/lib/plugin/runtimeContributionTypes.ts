@@ -25,6 +25,7 @@ import type {
   ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateReviewThreadRequest,
+  MarkReviewThreadSeenRequest,
   CreateTaskRequest,
   FileContent,
   FileEntry,
@@ -46,6 +47,8 @@ import type {
   ReviewThread,
   ReviewThreadChangeEvent,
   ReviewThreadScope,
+  SetReviewThreadAwaitingRequest,
+  SetReviewThreadStatusRequest,
   ShellSpawnRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,
@@ -80,6 +83,9 @@ export type RuntimeHostBridge = {
   listReviewThreads?(scope: ReviewThreadScope): Promise<ReviewThread[]>
   createReviewThread?(request: CreateReviewThreadRequest): Promise<ReviewThread>
   replyToReviewThread?(request: ReplyToReviewThreadRequest): Promise<ReviewThread>
+  setReviewThreadStatus?(request: SetReviewThreadStatusRequest): Promise<ReviewThread>
+  setReviewThreadAwaiting?(request: SetReviewThreadAwaitingRequest): Promise<ReviewThread>
+  markReviewThreadSeen?(request: MarkReviewThreadSeenRequest): Promise<ReviewThread>
   subscribeReviewThreadChanges?(scope: ReviewThreadScope, handler: (event: ReviewThreadChangeEvent) => void): Disposable
   getTask?(taskId: string): Promise<Task | null>
   activeTasks?(projectId: string): Promise<ActiveTasks>

@@ -60,13 +60,62 @@ impl PluginHost {
         &self,
         params: &Value,
     ) -> Result<Value, String> {
+        let mut payload = Map::new();
+        payload.insert(
+            "threadId".to_string(),
+            Value::String(required_param_string_allow_empty(params, "threadId")?),
+        );
+        payload.insert(
+            "role".to_string(),
+            Value::String(required_param_string_allow_empty(params, "role")?),
+        );
+        payload.insert(
+            "body".to_string(),
+            Value::String(required_param_string_allow_empty(params, "body")?),
+        );
+        if let Some(awaiting) = params.get("awaiting") {
+            payload.insert("awaiting".to_string(), awaiting.clone());
+        }
+
+        self.invoke_review_thread_command("reply_to_review_thread", Value::Object(payload))
+            .await
+    }
+
+    pub(super) async fn set_review_thread_status_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
         let payload = serde_json::json!({
             "threadId": required_param_string_allow_empty(params, "threadId")?,
-            "role": required_param_string_allow_empty(params, "role")?,
-            "body": required_param_string_allow_empty(params, "body")?,
+            "status": required_param_string_allow_empty(params, "status")?,
         });
 
-        self.invoke_review_thread_command("reply_to_review_thread", payload)
+        self.invoke_review_thread_command("set_review_thread_status", payload)
+            .await
+    }
+
+    pub(super) async fn set_review_thread_awaiting_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let payload = serde_json::json!({
+            "threadId": required_param_string_allow_empty(params, "threadId")?,
+            "awaiting": required_param_string_allow_empty(params, "awaiting")?,
+        });
+
+        self.invoke_review_thread_command("set_review_thread_awaiting", payload)
+            .await
+    }
+
+    pub(super) async fn mark_review_thread_seen_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let payload = serde_json::json!({
+            "threadId": required_param_string_allow_empty(params, "threadId")?,
+        });
+
+        self.invoke_review_thread_command("mark_review_thread_seen", payload)
             .await
     }
 

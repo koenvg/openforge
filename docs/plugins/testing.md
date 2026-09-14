@@ -333,11 +333,14 @@ it('creates and lists a line-anchored Review Thread', async () => {
     origin: 'plugin',
     body: 'Needs a null check',
   })
-  await api.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Fixed' })
+  await api.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Why?', awaiting: 'agent' })
+  await api.reviewThreads.setStatus({ threadId: thread.id, status: 'resolved' })
 
   await expect(api.reviewThreads.list(scope)).resolves.toHaveLength(1)
 })
 ```
+
+The fake keeps the reviewer decision and the agent turn independent, and tracks read state by message order, so a test can assert that `markSeen` clears `hasUnreadAgentMessage` and that a later agent message sets it again.
 
 Use `registry.emitReviewThreadChange(scope)` to test `reviewThreads.onDidChange` handlers. The fake applies the same scope filter as the host and the notification carries no thread snapshot.
 

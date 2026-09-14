@@ -48,6 +48,7 @@ ReviewThread
   awaiting: 'none' | 'agent' | 'error'
   idempotencyKey: string | null
   seenAt: number | null
+  hasUnreadAgentMessage: boolean
   messages: { role: 'agent' | 'human', body, createdAt }[]
 ```
 
@@ -75,10 +76,13 @@ interface ReviewThreadsAPI {
   create(request: CreateReviewThreadRequest): Promise<ReviewThread>
   reply(request: ReplyToReviewThreadRequest): Promise<ReviewThread>
   setStatus(request: SetReviewThreadStatusRequest): Promise<ReviewThread>
-  markSeen(request: { threadId: string }): Promise<void>
+  setAwaiting(request: SetReviewThreadAwaitingRequest): Promise<ReviewThread>
+  markSeen(request: { threadId: string }): Promise<ReviewThread>
   onDidChange(scope: ReviewThreadScope, handler: (event: ReviewThreadChangeEvent) => void): Disposable
 }
 ```
+
+`reply` carries an optional `awaiting`, so asking an agent a question is one write instead of a message followed by a state change that can fail on its own. `setAwaiting` covers the case with no message, such as an agent turn that failed. Every write returns the whole thread, including `markSeen`, so a caller never has to re-list to see the state it just wrote.
 
 `onDidChange` follows the `tasks.onDidChange` precedent: the event is a coalescible invalidation for a scope, never a snapshot. Subscribers repeat `list`.
 
@@ -97,6 +101,10 @@ openforge review thread status --thread-id <id> --status open|resolved|dismissed
 New allowlist entries in `agent_routes.rs` for the matching `POST /review_threads/*` routes. A new `ToolPolicy` variant adds `Bash(openforge review:*)` to the read-only whitelist, so the reviewer gains exactly the CLI it needs and keeps `Write` and `Edit` on the disallowed list.
 
 **Interim limitation, stated plainly:** this change authorizes a thread write by the existing task-scoped agent identity and takes the target from the request. An agent with a valid identity can therefore write to any target key. The next change derives the target from the session owner and closes this. Accepted for now because the only caller is a locally spawned review agent.
+
+### 5a. Read state compares message order, not clocks
+
+`markSeen` stores the sequence of the thread's newest message in `seen_sequence` beside the `seen_at` timestamp, and `hasUnreadAgentMessage` is true while an agent message carries a higher sequence. The store records whole seconds, so a timestamp comparison would count an agent message written in the same second as the mark as already read. `seen_at` stays for display and is never cleared by a later message.
 
 ### 6. Idempotency scoped to the target triple
 
