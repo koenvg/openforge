@@ -24,10 +24,7 @@
       {agentStatus}
       {onSendToAgent}
       onRefresh={controller.refresh}
-      pendingInlineComments={controller.feedbackPane.composer.pendingInlineComments}
-      selectedPrComments={controller.feedbackPane.pullRequest.selection.selectedPrComments}
-      onPendingInlineCommentsChange={controller.feedbackPane.composer.onPendingInlineCommentsChange}
-      onSendComplete={controller.feedbackPane.composer.onSendComplete}
+      feedback={controller.feedbackPane.composer}
     />
   {/if}
   <div class="grid min-h-0 flex-1 overflow-hidden">
