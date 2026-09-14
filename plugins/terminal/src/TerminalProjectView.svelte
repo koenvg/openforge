@@ -47,12 +47,12 @@
 
     <div class="flex flex-1 min-h-0 overflow-hidden">
       {#if !projectId}
-        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-of-text/50 text-sm p-6 text-center" role="status" aria-live="polite">
+        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-of-text/50 text-sm p-6 text-center">
           <p>{workspaceUnavailableMessage}</p>
           <p class="sr-only">Terminal workspace unavailable</p>
         </div>
       {:else if !projectPath}
-        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-of-text/50 text-sm p-6 text-center" role="status" aria-live="polite">
+        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-of-text/50 text-sm p-6 text-center">
           <p>{workspaceUnavailableMessage}</p>
           <p class="text-xs text-of-text/50">
             <span class="font-semibold">Keyboard focus path:</span> choose a project with a path first, then Tab to shell tabs, choose New shell, and Tab into the terminal region.
