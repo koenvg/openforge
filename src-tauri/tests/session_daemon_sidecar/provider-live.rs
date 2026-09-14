@@ -13,6 +13,18 @@ fn installed_codex_preserves_its_existing_interface() {
     preserves_installed_interface("codex", "codex");
 }
 
+#[test]
+#[ignore = "requires built binaries and OPENFORGE_LIVE_OPENCODE_BIN"]
+fn installed_opencode_preserves_its_existing_interface() {
+    preserves_installed_interface("opencode", "opencode");
+}
+
+#[test]
+#[ignore = "requires built binaries and OPENFORGE_LIVE_GROK_BIN"]
+fn installed_grok_preserves_its_existing_interface() {
+    preserves_installed_interface("grok", "grok");
+}
+
 fn diagnostics(fixture: &Fixture) -> Value {
     fixture
         .http
@@ -30,10 +42,13 @@ fn diagnostics(fixture: &Fixture) -> Value {
 }
 
 fn preserves_installed_interface(provider: &str, executable: &str) {
-    let Some(bin) = std::env::var_os("OPENFORGE_LIVE_PROVIDER_BIN") else {
-        eprintln!(
-            "SKIPPED installed {provider} demonstration: OPENFORGE_LIVE_PROVIDER_BIN is not set"
-        );
+    let variable = match provider {
+        "opencode" => "OPENFORGE_LIVE_OPENCODE_BIN",
+        "grok" => "OPENFORGE_LIVE_GROK_BIN",
+        _ => "OPENFORGE_LIVE_PROVIDER_BIN",
+    };
+    let Some(bin) = std::env::var_os(variable) else {
+        eprintln!("SKIPPED installed {provider} demonstration: {variable} is not set");
         return;
     };
     let bin = PathBuf::from(bin).canonicalize().unwrap();
@@ -82,7 +97,12 @@ fn preserves_installed_interface(provider: &str, executable: &str) {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(replay)
             .unwrap();
-        if bytes.len() > 100 {
+        let rendered = String::from_utf8_lossy(&bytes);
+        // OpenCode prints a database migration banner before its terminal UI.
+        // That banner alone is not evidence that the existing interface is ready.
+        let interface_ready =
+            provider != "opencode" || rendered.to_lowercase().contains("opencode");
+        if bytes.len() > 100 && interface_ready {
             assert_eq!(
                 buffer["isLive"],
                 true,
@@ -97,7 +117,7 @@ fn preserves_installed_interface(provider: &str, executable: &str) {
         }
         assert!(
             Instant::now() < deadline,
-            "real provider did not render an interface: {buffer}"
+            "real provider did not render an interface: {rendered}"
         );
         std::thread::sleep(Duration::from_millis(50));
     };

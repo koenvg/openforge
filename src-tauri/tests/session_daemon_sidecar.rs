@@ -35,6 +35,7 @@ struct Fixture {
     pi_key: Option<String>,
     agent_selection: Vec<(String, String)>,
     provider_bin: Option<PathBuf>,
+    provider_env: Vec<(String, String)>,
     token: String,
     http: reqwest::blocking::Client,
 }
@@ -53,6 +54,7 @@ impl Fixture {
             pi_key: None,
             agent_selection: Vec::new(),
             provider_bin: None,
+            provider_env: Vec::new(),
             token: String::new(),
             http: reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(10))
@@ -127,6 +129,7 @@ impl Fixture {
             .unwrap();
             command.env("PATH", path);
         }
+        command.envs(self.provider_env.iter().cloned());
         self.child = Some(command.spawn().unwrap());
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {

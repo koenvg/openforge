@@ -8,19 +8,25 @@ if (process.argv.includes('--print') || process.argv.includes('--help') || proce
   process.stdout.write('{}\n');
   process.exit(0);
 }
-const provider = path.basename(process.argv[1]) === 'claude' ? 'claude-code' : 'codex';
+const executable = path.basename(process.argv[1]);
+const provider = executable === 'claude' ? 'claude-code' : executable;
 const root = process.cwd();
 const tool = spawn('/bin/sleep', ['600'], { stdio: 'ignore' });
 fs.appendFileSync(path.join(root, 'invocations.jsonl'), JSON.stringify(process.argv.slice(2)) + '\n');
 let sequence = 0;
 function report() {
   process.kill(tool.pid, 0);
+  const tty = spawnSync('/usr/bin/tty', [], { stdio: [0, 'pipe', 'pipe'], encoding: 'utf8' });
+  if (tty.status !== 0) throw new Error('provider fixture lost its PTY');
   process.stdout.write(`PROVIDER-PROOF-${sequence++} ` + JSON.stringify({
     provider, pid: process.pid, toolPid: tool.pid, cwd: root,
+    tty: tty.stdout.trim(),
     instance: process.env.OPENFORGE_PTY_INSTANCE_ID,
     task: process.env.OPENFORGE_TASK_ID, claudeTask: process.env.CLAUDE_TASK_ID,
     term: process.env.TERM, stage: process.env.PRESERVATION_PROOF,
     controllerTokenAbsent: !process.env.OPENFORGE_BACKEND_TOKEN,
+    auth: process.env.XAI_API_KEY, termProgram: process.env.TERM_PROGRAM,
+    imageSession: process.env.ITERM_SESSION_ID ?? null,
   }) + '\r\n');
 }
 report();
@@ -55,6 +61,11 @@ setInterval(async () => {
   if (!kind || kind === previous) return;
   sending = true;
   try {
+    if (provider === 'opencode' || provider === 'grok') {
+      await require('./provider-hooks.cjs')(provider, kind, path.join(root, `accepted-${kind}`));
+      previous = kind;
+      return;
+    }
     const config = JSON.parse(fs.readFileSync(process.env.OPENFORGE_AGENT_CONFIG, 'utf8'));
     const response = await fetch(`http://127.0.0.1:${config.port}/notifications/agent-lifecycle`, {
       method: 'POST', headers: { authorization: `Bearer ${config.token}`, 'content-type': 'application/json' },

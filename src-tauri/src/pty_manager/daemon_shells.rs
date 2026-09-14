@@ -76,7 +76,7 @@ impl DaemonShells {
             return None;
         }
         let key = std::env::var("OPENFORGE_SESSION_DAEMON_SHELL_KEY").unwrap_or_default();
-        let agent_keys = ["pi", "claude", "codex"]
+        let agent_keys = ["pi", "claude", "codex", "opencode", "grok"]
             .into_iter()
             .filter_map(|provider| {
                 std::env::var(format!(
