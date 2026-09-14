@@ -50,10 +50,7 @@ import SendToAgentPanel from './SendToAgentPanel.svelte'
                 {agentStatus}
                 {onSendToAgent}
                 onRefresh={controller.refresh}
-                pendingInlineComments={controller.feedbackPane.composer.pendingInlineComments}
-                selectedPrComments={controller.feedbackPane.pullRequest.selection.selectedPrComments}
-                onPendingInlineCommentsChange={controller.feedbackPane.composer.onPendingInlineCommentsChange}
-                onSendComplete={controller.feedbackPane.composer.onSendComplete}
+                feedback={controller.feedbackPane.composer}
               />
             {/key}
           </div>
