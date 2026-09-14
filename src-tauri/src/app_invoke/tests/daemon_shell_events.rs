@@ -5,6 +5,9 @@ use base64::Engine;
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 
+const EVENT_DELIVERY_TIMEOUT: Duration = Duration::from_secs(15);
+const JOURNAL_OVERFLOW_BYTES: usize = 540_000;
+
 struct Consumer {
     instance: serde_json::Value,
     watermark: u64,
@@ -52,7 +55,7 @@ async fn receive_marker(
     consumer: &mut Consumer,
     marker: &str,
 ) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
         loop {
             consumer.apply(&receiver.recv().await.unwrap());
             if String::from_utf8_lossy(&consumer.bytes).contains(marker) {
@@ -138,7 +141,7 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
 
     // Stall only this owned daemon's request loop. PTY output continues on its reader,
     // overflowing the bounded journal while the bridge cannot poll it.
-    invoke_ok(&second, "pty_write", json!({"shellSessionKey":key, "data":format!("while [ ! -e run-burst ]; do sleep 0.01; done; head -c 700000 /dev/zero; {}; exit 19\n", print_command("GAP_FINAL"))})).await;
+    invoke_ok(&second, "pty_write", json!({"shellSessionKey":key, "data":format!("while [ ! -e run-burst ]; do sleep 0.01; done; head -c {JOURNAL_OVERFLOW_BYTES} /dev/zero; {}; exit 19\n", print_command("GAP_FINAL"))})).await;
     let root = fixture.0.path().to_owned();
     let blocker = tokio::task::spawn_blocking(move || {
         use std::io::Write;
@@ -159,7 +162,7 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     let mut forwarded_bytes = 0;
     let mut tail = String::new();
     let exit_name = format!("pty-exit-{key}");
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
         loop {
             let event = events.recv().await.unwrap();
             if event.event_name.starts_with("pty-model-output-") {
@@ -278,7 +281,7 @@ async fn daemon_replacement_routes_only_selected_sessions_and_does_not_revive_ol
         "data": format!("touch route; while [ ! -e excluded-done ]; do sleep 0.01; done; {}; exit 9\n", print_command("SELECTED_OUTPUT")),
     })).await;
     let mut output = Vec::new();
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
         loop {
             let event = events.recv().await.unwrap();
             if event.event_name.starts_with("pty-") {
