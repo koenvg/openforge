@@ -143,6 +143,8 @@ pnpm electron:install
 
 Rust-only validation does not require a prebuilt `dist/` renderer bundle. Release packaging is owned by Electron; use `pnpm electron:install` for a complete local build and installation.
 
+`pnpm build:plugin-sdk-runtime` builds the Plugin SDK browser runtime from current source and installed dependencies into `dist-electron/plugin-host/plugin-sdk/index.js`. The dev artifact build and Electron build also generate it. No checked-in runtime snapshot needs regeneration. Run `pnpm exec vitest run scripts/build-plugin-sdk-runtime.test.mjs` to check the output paths and standalone module exports.
+
 ## Architecture at a glance
 
 - **Renderer:** Svelte 5, TypeScript, Tailwind CSS v4, and daisyUI v5

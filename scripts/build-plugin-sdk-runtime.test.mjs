@@ -1,10 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
+import * as sdk from '../packages/plugin-sdk/src/index.ts'
 import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 
-const workspaceRoot = path.resolve(import.meta.dirname, '..')
+const execFileAsync = promisify(execFile)
 
 async function write(root, relativePath, content) {
   const fullPath = path.join(root, relativePath)
@@ -29,19 +32,34 @@ describe('plugin SDK runtime artifact', () => {
     }
   })
 
-  it('matches the checked-in runtime when an explicit output path is requested', async () => {
+  it('builds a standalone ES module with the current SDK exports at an explicit output path', async () => {
     const outDir = await mkdtemp(path.join(tmpdir(), 'openforge-plugin-sdk-runtime-'))
 
     try {
       const generatedPath = await buildPluginSdkRuntime({ outDir, logLevel: 'silent' })
-      const checkedInPath = path.join(workspaceRoot, 'src-tauri/plugin-host/plugin-sdk/index.js')
+      expect(generatedPath).toBe(path.join(outDir, 'index.js'))
+      expect(await readdir(outDir)).toEqual(['index.js'])
 
-      const [generated, checkedIn] = await Promise.all([
-        readFile(generatedPath, 'utf8'),
-        readFile(checkedInPath, 'utf8'),
-      ])
+      // A data URL has no package or filesystem resolution context. Loading it in
+      // native Node ensures the bundle needs neither Vite nor workspace dependencies.
+      const { stdout } = await execFileAsync(process.execPath, ['--input-type=module', '-e', `
+        import { readFile } from 'node:fs/promises'
+        const code = await readFile(process.argv[1], 'utf8')
+        const runtime = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))
+        console.log(JSON.stringify({
+          exports: Object.keys(runtime).sort(),
+          apiVersion: runtime.OPENFORGE_PLUGIN_API_VERSION,
+          validNumber: runtime.parseStrictFiniteNumber('12.5'),
+          invalidNumber: runtime.parseStrictFiniteNumber('12.5px'),
+        }))
+      `, generatedPath])
 
-      expect(generated).toEqual(checkedIn)
+      expect(JSON.parse(stdout)).toEqual({
+        exports: Object.keys(sdk).sort(),
+        apiVersion: sdk.OPENFORGE_PLUGIN_API_VERSION,
+        validNumber: 12.5,
+        invalidNumber: null,
+      })
     } finally {
       await rm(outDir, { recursive: true, force: true })
     }

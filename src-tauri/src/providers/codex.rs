@@ -199,17 +199,29 @@ impl CodexProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static CODEX_HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct EnvVarGuard {
         key: &'static str,
         previous: Option<std::ffi::OsString>,
+        // Keep the lock until Drop restores the environment.
+        _lock: MutexGuard<'static, ()>,
     }
 
     impl EnvVarGuard {
         fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let lock = CODEX_HOME_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let previous = std::env::var_os(key);
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self {
+                key,
+                previous,
+                _lock: lock,
+            }
         }
     }
 
@@ -308,6 +320,45 @@ mod tests {
             command.extra.get("sourceDir").and_then(|v| v.as_str()),
             Some(".codex")
         );
+    }
+
+    #[test]
+    fn concurrent_home_skill_scans_keep_their_own_environment() {
+        let start = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            for index in 0..4 {
+                let start = &start;
+                scope.spawn(move || {
+                    let temp_dir = tempfile::tempdir().expect("temp dir");
+                    let skill_name = format!("concurrent-home-skill-{index}");
+                    let skill_dir = temp_dir.path().join("skills").join(&skill_name);
+                    std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+                    std::fs::write(
+                        skill_dir.join("SKILL.md"),
+                        format!(
+                            "---\nname: {skill_name}\ndescription: Concurrent home skill\n---\n"
+                        ),
+                    )
+                    .expect("write skill");
+                    let provider = CodexProvider::new(PtyManager::new());
+
+                    start.wait();
+                    for _ in 0..16 {
+                        let _guard = EnvVarGuard::set("CODEX_HOME", temp_dir.path());
+                        std::thread::yield_now();
+                        let commands = provider.list_commands(None);
+                        assert!(
+                            commands.iter().any(|command| {
+                                command.name == format!("skill:{skill_name}")
+                                    && command.extra.get("origin").and_then(|v| v.as_str())
+                                        == Some("personal")
+                            }),
+                            "own home skill {skill_name} present"
+                        );
+                    }
+                });
+            }
+        });
     }
 
     #[test]
