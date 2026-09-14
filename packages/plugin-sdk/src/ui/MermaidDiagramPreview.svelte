@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import TooltipControl from './TooltipControl.svelte'
   import {
     FIT_MERMAID_ZOOM,
     calculateMermaidFitScale,
@@ -144,35 +145,41 @@
       <h2 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold text-base-content">Mermaid diagram preview</h2>
 
       <div class="flex items-center gap-1" role="group" aria-label="Diagram zoom controls">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0"
-          aria-label="Zoom out"
-          title="Zoom out (-)"
-          disabled={!canZoomMermaidOut(zoom, fitScale)}
-          onclick={zoomOut}
-        >
+        <TooltipControl content="Zoom out (-)" side="bottom" disabled={!canZoomMermaidOut(zoom, fitScale)} triggerAttributes={{
+          type: 'button',
+          class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
+          'aria-label': 'Zoom out (-)',
+          disabled: !canZoomMermaidOut(zoom, fitScale),
+          onclick: zoomOut,
+        }}>
+          {#snippet trigger(props)}
+          <button {...props}>
           <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3M8 11h6" />
           </svg>
-        </button>
+          </button>
+          {/snippet}
+        </TooltipControl>
 
         <output class="min-w-20 text-center text-xs tabular-nums text-base-content/70" aria-live="polite">{zoomLabel}</output>
 
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0"
-          aria-label="Zoom in"
-          title="Zoom in (+)"
-          disabled={!canZoomMermaidIn(zoom, fitScale)}
-          onclick={zoomIn}
-        >
+        <TooltipControl content="Zoom in (+)" side="bottom" disabled={!canZoomMermaidIn(zoom, fitScale)} triggerAttributes={{
+          type: 'button',
+          class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
+          'aria-label': 'Zoom in (+)',
+          disabled: !canZoomMermaidIn(zoom, fitScale),
+          onclick: zoomIn,
+        }}>
+          {#snippet trigger(props)}
+          <button {...props}>
           <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
           </svg>
-        </button>
+          </button>
+          {/snippet}
+        </TooltipControl>
 
         <button
           type="button"
@@ -192,17 +199,20 @@
         >Fit</button>
       </div>
 
-      <button
-        bind:this={closeButton}
-        type="button"
-        class="btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0"
-        aria-label="Close diagram preview"
-        onclick={onClose}
-      >
+      <TooltipControl content="Close diagram preview" side="bottom" triggerAttributes={{
+        type: 'button',
+        class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
+        'aria-label': 'Close diagram preview',
+        onclick: onClose,
+      }}>
+        {#snippet trigger(props)}
+        <button {...props} bind:this={closeButton}>
         <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M18 6 6 18M6 6l12 12" />
         </svg>
-      </button>
+        </button>
+        {/snippet}
+      </TooltipControl>
     </header>
 
     <div bind:this={viewport} data-testid="mermaid-preview-viewport" class="mermaid-diagram-preview-viewport min-h-0 flex-1 overflow-auto p-4">

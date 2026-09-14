@@ -176,7 +176,7 @@ describe('DiffViewer integration', () => {
       expect(container.textContent).toContain('addedValue')
     })
 
-    await fireEvent.click(screen.getByTitle('Search (⌘F)'))
+    await fireEvent.click(screen.getByRole('button', { name: 'Search diff (⌘F)' }))
 
     const input = await screen.findByPlaceholderText('Search diff...')
     await fireEvent.input(input, { target: { value: 'addedValue' } })
@@ -195,7 +195,7 @@ describe('DiffViewer integration', () => {
       { timeout: 3000 },
     )
 
-    await fireEvent.click(screen.getByTitle('Next match (Enter)'))
+    await fireEvent.click(screen.getByRole('button', { name: 'Next search match (Enter)' }))
 
     await waitFor(() => {
       expect(screen.getByText('2 of 2')).toBeTruthy()

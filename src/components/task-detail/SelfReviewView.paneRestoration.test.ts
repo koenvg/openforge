@@ -93,7 +93,7 @@ describe("SelfReviewView pane restoration", () => {
 			expect(screen.queryByRole("button", { name: "Reviewed files (1)" })).toBeNull();
 		});
 
-		await fireEvent.click(screen.getByTitle("Hide file tree"));
+		await fireEvent.click(screen.getByRole('button', { name: 'Hide file tree' }));
 
 		await waitFor(() => {
 			expect(screen.queryByText("Files")).toBeNull();
@@ -101,7 +101,7 @@ describe("SelfReviewView pane restoration", () => {
 			expect(screen.queryByLabelText("Reviewed file src/main.rs")).toBeNull();
 		});
 
-		await fireEvent.click(screen.getByTitle("Show file tree"));
+		await fireEvent.click(screen.getByRole('button', { name: 'Show file tree' }));
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
@@ -119,19 +119,19 @@ describe("SelfReviewView pane restoration", () => {
 		renderSelfReviewView();
 
 		await screen.findByText("src/main.rs");
-		await fireEvent.click(screen.getByTitle("Hide file tree"));
+		await fireEvent.click(screen.getByRole('button', { name: 'Hide file tree' }));
 
 		await waitFor(() => {
 			expect(screen.queryByText("Commit history")).toBeNull();
 		});
 
-		await fireEvent.click(screen.getByTitle("Refresh diff"));
+		await fireEvent.click(screen.getByRole('button', { name: 'Refresh diff' }));
 
 		await waitFor(() => {
 			expect(screen.getByText("No changes for current selection")).toBeTruthy();
 		});
 
-		await fireEvent.click(screen.getByTitle("Show file tree"));
+		await fireEvent.click(screen.getByRole('button', { name: 'Show file tree' }));
 
 		await waitFor(() => {
 			expect(screen.getByRole("heading", { name: "Changed files" })).toBeTruthy();

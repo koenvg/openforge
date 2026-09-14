@@ -4,6 +4,12 @@ The manifest includes foundation, task workspace, host chrome, Plugin SDK, termi
 
 For Task Creation, prompt editing, Project Setup, and branch-divergence dialogs, see [the creation/setup catalog](storybook-creation-setup.md).
 
+## Icon-button tooltip checks
+
+After `pnpm storybook:build`, run `node scripts/storybook-tooltip-check.mjs`. It starts the built Storybook server and checks default positioning, edge wrapping, unavailable controls, opt-out, dialogs, and menus in all four themes, plus keyboard/click counts, reduced motion, narrow toolbars, and first-touch activation. Screenshots and results go to `artifacts/tooltips/browser`; these are review evidence, not canonical baselines.
+
+The `Components/Plugin SDK/Tooltips` stories exercise both automatic IconButton tooltips and opt-in Button tooltips. The canonical split-button keyboard snapshots include the focused menu-trigger tooltip; standalone tooltip snapshots include the eight-pixel viewport gutter.
+
 ## Built-in themes
 
 OpenForge Light and OpenForge Dark use the Studio design: neutral surfaces, rounded controls, and restrained shadows. They retain their names and `openforge-light` / `openforge-dark` identifiers, so saved selections and legacy light/dark preferences receive the redesign without migration. The default and unavailable-theme fallback remain OpenForge Light.

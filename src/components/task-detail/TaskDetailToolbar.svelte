@@ -191,12 +191,12 @@
       <div class="toolbar-secondary-actions">
         <AgentStatusPill taskId={task.id} />
         <Button
+          tooltip
           type="button"
           size="md"
           variant="ghost"
           class="toolbar-action"
-          aria-label="Run app locally"
-          title={runAppState.title}
+          aria-label={runAppState.title.startsWith('Run app locally') ? runAppState.title : `Run app locally: ${runAppState.title}`}
           disabled={!runAppState.available || runAppState.isLaunching}
           onclick={onRunApp}
         >
@@ -209,6 +209,7 @@
         </Button>
         {#if vsCodeProtocolAvailable}
           <Button
+            tooltip
             type="button"
             size="md"
             variant="ghost"
@@ -272,6 +273,7 @@
 
     {#if activeView === 'agent' && workspacePath !== null}
       <Button
+        tooltip
         type="button"
         size="md"
         variant="ghost"

@@ -375,7 +375,7 @@
       <TextWrap size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-    <IconButton label="Search diff" size="sm" onclick={search.open} title="Search (⌘F)">
+    <IconButton label="Search diff (⌘F)" size="sm" onclick={search.open}>
       <Search size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
     {#if search.visible}
@@ -403,21 +403,21 @@
         {/if}
       </span>
       <IconButton
-        label="Previous search match"
+        label="Previous search match (Shift+Enter)"
         size="sm"
         onclick={search.goToPrev}
         disabled={search.matchCount === 0}
         title="Previous match (Shift+Enter)"
       ><ChevronUp size={17} strokeWidth={1.8} aria-hidden="true" /></IconButton>
       <IconButton
-        label="Next search match"
+        label="Next search match (Enter)"
         size="sm"
         onclick={search.goToNext}
         disabled={search.matchCount === 0}
         title="Next match (Enter)"
       ><ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" /></IconButton>
       <IconButton
-        label="Close diff search"
+        label="Close diff search (Escape)"
         size="sm"
         onclick={search.close}
         title="Close search (Escape)"

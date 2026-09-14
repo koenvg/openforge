@@ -21,7 +21,7 @@ describe('AgentStatusPill', () => {
     setActiveSession(createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123', status: 'running', stage: 'implement' }))
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
-    expect(await screen.findByRole('button', { name: 'Start voice input' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Start voice input (⌘D)' })).toBeTruthy()
     expect(screen.queryByText(/agent running/i)).toBeNull()
     expect(screen.queryByText('implementing')).toBeNull()
     expect(screen.queryByText('RUNNING')).toBeNull()
@@ -55,6 +55,6 @@ describe('AgentStatusPill', () => {
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
     expect(screen.queryByText('Implementation complete')).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Start voice input' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Start voice input (⌘D)' })).toBeTruthy()
   })
 })

@@ -359,7 +359,7 @@ describe('SendToAgentPanel', () => {
     render(SendToAgentPanel, { agentStatus: null, onSendToAgent: vi.fn(), onRefresh: vi.fn() })
 
     const refresh = screen.getByRole('button', { name: 'Refresh diff' })
-    expect(refresh.getAttribute('title')).toBe('Refresh diff')
+    expect(refresh.hasAttribute('title')).toBe(false)
     expect(refresh.textContent?.trim()).toBe('')
   })
 

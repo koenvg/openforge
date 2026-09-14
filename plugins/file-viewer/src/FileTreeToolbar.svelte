@@ -38,7 +38,7 @@
       />
       {#if model.searchQuery.length > 0}
         <div class="absolute right-1 top-1/2 z-10 -translate-y-1/2">
-          <IconButton label="Clear search" size="xs" type="button" onclick={actions.onClearSearch}>
+          <IconButton label="Clear search" tooltipSide="bottom" size="xs" type="button" onclick={actions.onClearSearch}>
             <X size={14} aria-hidden="true" />
           </IconButton>
         </div>
@@ -46,6 +46,7 @@
     </div>
     {#if model.hiddenRootEntryCount > 0}
       <IconButton
+        tooltipSide="bottom"
         label={hiddenRootEntriesToggleLabel}
         variant={model.showHiddenRootEntries ? 'primary' : 'outline'}
         size="md"

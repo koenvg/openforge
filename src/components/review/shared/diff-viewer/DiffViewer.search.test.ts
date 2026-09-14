@@ -49,7 +49,7 @@ describe('DiffViewer Search', () => {
     it('makes search input visible after clicking search icon button', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -59,13 +59,13 @@ describe('DiffViewer Search', () => {
     it('shows navigation buttons when search is open', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      expect(screen.getByTitle('Previous match (Shift+Enter)')).toBeTruthy()
-      expect(screen.getByTitle('Next match (Enter)')).toBeTruthy()
-      expect(screen.getByTitle('Close search (Escape)')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Previous search match (Shift+Enter)' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Next search match (Enter)' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Close diff search (Escape)' })).toBeTruthy()
     })
 
     it('toolbar always renders accessible Split and Unified mode buttons', () => {
@@ -104,7 +104,7 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       // Open search via button click
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -123,7 +123,7 @@ describe('DiffViewer Search', () => {
     it('Enter key on search input does not crash when no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -137,7 +137,7 @@ describe('DiffViewer Search', () => {
     it('Shift+Enter key on search input does not crash when no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -157,7 +157,7 @@ describe('DiffViewer Search', () => {
     it('updates value as user types', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -170,7 +170,7 @@ describe('DiffViewer Search', () => {
     it('shows "0 results" when query has no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -186,13 +186,13 @@ describe('DiffViewer Search', () => {
     it('close button (✕) hides search bar', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).not.toBeNull()
 
-      const closeBtn = screen.getByTitle('Close search (Escape)')
+      const closeBtn = screen.getByRole('button', { name: 'Close diff search (Escape)' })
       await fireEvent.click(closeBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -202,12 +202,12 @@ describe('DiffViewer Search', () => {
     it('navigation buttons are disabled when there are no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const prevBtn = requireElement(screen.getByTitle('Previous match (Shift+Enter)'), HTMLButtonElement)
-      const nextBtn = requireElement(screen.getByTitle('Next match (Enter)'), HTMLButtonElement)
+      const prevBtn = requireElement(screen.getByRole('button', { name: 'Previous search match (Shift+Enter)' }), HTMLButtonElement)
+      const nextBtn = requireElement(screen.getByRole('button', { name: 'Next search match (Enter)' }), HTMLButtonElement)
 
       expect(prevBtn.disabled).toBe(true)
       expect(nextBtn.disabled).toBe(true)
@@ -221,32 +221,32 @@ describe('DiffViewer Search', () => {
   describe('search icon button', () => {
     it('search icon button is always visible in toolbar', () => {
       render(DiffViewer, { props: { files: [] } })
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       expect(searchBtn).toBeTruthy()
     })
 
-    it('search icon button has correct title attribute', () => {
+    it('exposes the shortcut in its label without a duplicate native title', () => {
       render(DiffViewer, { props: { files: [] } })
-      const searchBtn = requireElement(screen.getByTitle('Search (⌘F)'), HTMLButtonElement)
-      expect(searchBtn.title).toBe('Search (⌘F)')
+      const searchBtn = requireElement(screen.getByRole('button', { name: 'Search diff (⌘F)' }), HTMLButtonElement)
+      expect(searchBtn.hasAttribute('title')).toBe(false)
     })
 
     it('search icon button remains visible when search bar is also open', async () => {
       render(DiffViewer, { props: { files: [] } })
 
-      const searchBtn = screen.getByTitle('Search (⌘F)')
+      const searchBtn = screen.getByRole('button', { name: 'Search diff (⌘F)' })
       await fireEvent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       // Button still in the DOM — search bar opened alongside it
-      expect(screen.getByTitle('Search (⌘F)')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Search diff (⌘F)' })).toBeTruthy()
       expect(screen.getByPlaceholderText('Search diff...')).toBeTruthy()
     })
 
     it('Wrap toggle button is always visible alongside the search icon', () => {
       render(DiffViewer, { props: { files: [] } })
-      expect(screen.getByTitle(/line wrapping/i)).toBeTruthy()
-      expect(screen.getByTitle('Search (⌘F)')).toBeTruthy()
+      expect(screen.getByRole('button', { name: /line wrapping/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Search diff (⌘F)' })).toBeTruthy()
     })
   })
 })

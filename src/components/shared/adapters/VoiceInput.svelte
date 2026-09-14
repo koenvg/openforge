@@ -158,12 +158,13 @@
 
 <div bind:this={rootElement} class="flex flex-col items-center gap-1">
   <Button
+    tooltip={!showLabel && !showShortcut && voiceState === 'idle'}
     type="button"
     size={size}
     variant={voiceState === 'recording' ? 'danger' : appearance}
     onclick={handleClick}
     disabled={disabled || voiceState === 'transcribing'}
-    aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice input'}
+    aria-label={voiceState === 'recording' ? 'Stop recording' : !showLabel && !showShortcut ? 'Start voice input (⌘D)' : 'Start voice input'}
     title={voiceState === 'recording' ? 'Stop recording (⌘D)' : 'Voice input (⌘D)'}
   >
     {#if voiceState === 'transcribing'}

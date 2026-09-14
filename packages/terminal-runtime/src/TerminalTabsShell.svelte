@@ -136,6 +136,7 @@
           {#if shortcutHintsVisible && tabPosition < 9}<kbd class="shortcut-hint">⌘⇧{tabPosition + 1}</kbd>{/if}
         </button>
         <IconButton
+          tooltipSide="bottom"
           label={`Close ${tab.label}`}
           size="xs"
           class="mr-1"

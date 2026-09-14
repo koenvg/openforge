@@ -128,6 +128,8 @@ mount(App, { target: document.body })
   import SearchPalette from '@openforge-app/plugin-sdk/ui/SearchPalette.svelte'
   import PaletteListbox from '@openforge-app/plugin-sdk/ui/PaletteListbox.svelte'
   import Tooltip from '@openforge-app/plugin-sdk/ui/Tooltip.svelte'
+  import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 
   let showModal = $state(true)
   let selected = $state('open')
@@ -152,6 +154,9 @@ mount(App, { target: document.body })
   {#snippet trigger()}Actions{/snippet}
 </AnchoredMenu>
 <SplitButton menuLabel="More packed plugin actions" items={menuItems}>Run plugin action</SplitButton>
+<IconButton label="Packed action" tooltipSide="right" tooltipAlign="start" tooltipSideOffset={12}>+</IconButton>
+<IconButton label="Packed opt-out" tooltip={false}>+</IconButton>
+<Button aria-label="Packed responsive action" tooltip tooltipSide="bottom" tooltipAlign="end" tooltipSideOffset={10}>Run</Button>
 <Tooltip label="Plugin help" content="Shared host runtime tooltip">
   {#snippet trigger()}Help{/snippet}
 </Tooltip>

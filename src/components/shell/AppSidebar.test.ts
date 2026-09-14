@@ -211,8 +211,7 @@ describe('AppSidebar', () => {
 
     const attention = screen.getByRole('button', { name: /attention/i })
     const addProject = screen.getByRole('button', { name: /add project/i })
-    // Collapsed rows are avatar-only, so they identify themselves by title rather than label.
-    const firstProject = screen.getByTitle('Alpha Project')
+    const firstProject = screen.getByRole('button', { name: 'Alpha Project' })
 
     expect(attention.compareDocumentPosition(addProject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(attention.compareDocumentPosition(firstProject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

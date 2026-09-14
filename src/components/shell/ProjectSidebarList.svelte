@@ -113,7 +113,7 @@
     {#if !collapsed}
       <span class="project-list-heading">PROJECTS</span>
     {/if}
-    <IconButton type="button" size="sm" variant="ghost" label="Add project" onclick={() => onNewProject?.()}>
+    <IconButton type="button" size="sm" variant="ghost" label="Add project" tooltipSide={collapsed ? 'right' : 'top'} onclick={() => onNewProject?.()}>
       <Plus size={14} />
     </IconButton>
   </div>
@@ -134,7 +134,7 @@
                 variant="ghost"
                 class="collapsed-project-button"
                 label={project.name}
-                title={project.name}
+                tooltipSide="right"
                 aria-current={isActive ? 'true' : undefined}
                 onclick={() => onSelectProject(project.id)}
               >
