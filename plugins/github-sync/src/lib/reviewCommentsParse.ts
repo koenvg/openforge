@@ -1,5 +1,5 @@
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
-import { commentableLines } from './hunkParser'
+import { commentableLines } from '@openforge-app/pr-review-ui/patchLines'
 
 export interface ValidatedReviewComment {
   filename: string

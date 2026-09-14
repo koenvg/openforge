@@ -24,6 +24,8 @@
   import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
   import { getGitHubMarkdownImageBaseUrl, getGitHubMarkdownLinkUrl } from './githubMarkdown'
   import DiffFileSection from './DiffFileSection.svelte'
+  import OrphanedReviewThreads from './OrphanedReviewThreads.svelte'
+  import { placeReviewThreads } from './reviewThreadAnchors'
   import { onDestroy, type Snippet } from 'svelte'
   // Attached hosts can set --of-diff-toolbar-height, --of-diff-section-radius,
   // and --of-diff-section-top-border-width without restyling controls or comments.
@@ -280,6 +282,7 @@
   const autoCollapsedFileCount = $derived(fileCollapse.autoCollapsedFileCount)
   const showLargeDiffWarning = $derived(totalChanges > 5000)
   const sortedFiles = $derived(sortFilesAsTree(files))
+  const threadPlacement = $derived(placeReviewThreads(files, threads))
 
   const virtualizer = createVirtualizer({
     getCount: () => sortedFiles.length,
@@ -429,6 +432,8 @@
     {/if}
   </div>
 
+  <OrphanedReviewThreads threads={threadPlacement.orphaned} {onReplyToThread} {onOpenUrl} />
+
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     role="region"
@@ -500,7 +505,7 @@
               {onAskAgent}
               {onCommentNow}
               {onReplyToAiThread}
-              {threads}
+              threads={threadPlacement.anchored}
               {onReplyToThread}
               {onAskAboutComment}
               {onReplyToExistingComment}
