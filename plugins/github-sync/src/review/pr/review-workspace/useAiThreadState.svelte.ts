@@ -1,6 +1,7 @@
 import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
-import type { AiThread, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, AiThreadReviewerStatus } from '../../../lib/prReviewRecords'
 import { activeProjectId, aiThreads, selectedReviewPr } from '../../../lib/stores'
 import { markThreadSeen as markThreadSeenInList } from '../../../lib/questionsIndex'
 import { editLastUserMessage } from '../../../lib/aiThreadStore'
@@ -115,6 +116,22 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
     await githubSync.deleteAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, threadId })
   }
 
+  async function setReviewerStatus(threadId: string, status: AiThreadReviewerStatus): Promise<void> {
+    const pr = selectedPr.current
+    if (!pr) return
+
+    const now = Math.floor(Date.now() / 1000)
+    const updated = threadStore.current.map(thread => (
+      thread.id === threadId ? { ...thread, reviewer_status: status, updated_at: now } : thread
+    ))
+    threadStore.current = updated
+
+    const thread = updated.find(candidate => candidate.id === threadId)
+    if (thread) {
+      await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+    }
+  }
+
   // Mark an answered thread as read so it leaves the "answers to read" group.
   // Persisted (via saveAiThread) so the state survives leaving and returning.
   async function markThreadSeen(threadId: string): Promise<void> {
@@ -203,6 +220,7 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
     askAgentStep,
     askAboutComment,
     replyToThread,
+    setReviewerStatus,
     editThread,
     deleteThread,
     markThreadSeen,

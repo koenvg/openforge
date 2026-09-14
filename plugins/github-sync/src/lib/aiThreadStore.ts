@@ -1,6 +1,6 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
-import type { AiThread } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread } from './prReviewRecords'
 
 // Ask-the-author Q&A threads live entirely in plugin storage (JSON, namespaced by
 // plugin id), keyed by (pr_id, head_sha) so each commit gets its own conversation.

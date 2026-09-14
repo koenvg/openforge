@@ -290,7 +290,7 @@ describe('DiffViewer Rich Diff View', () => {
       created_at: '2025-01-01T00:00:00Z',
       in_reply_to_id: null,
     }
-    const onAskAgent = vi.fn()
+    const onCreateThread = vi.fn()
     const onCommentNow = vi.fn()
     const onReplyToExistingComment = vi.fn()
 
@@ -303,10 +303,8 @@ describe('DiffViewer Rich Diff View', () => {
           newContent: '# Guide\nUpdated details',
         }]])),
         pendingComments: [],
-        agentComments: [],
         onPendingCommentsChange: vi.fn(),
-        onAgentCommentsChange: vi.fn(),
-        onAskAgent,
+        onCreateThread,
         onCommentNow,
         onReplyToExistingComment,
       },
@@ -322,7 +320,7 @@ describe('DiffViewer Rich Diff View', () => {
       target: { value: 'Why this change?' },
     })
     await fireEvent.click(screen.getByRole('button', { name: 'Ask the AI' }))
-    expect(onAskAgent).toHaveBeenCalledWith('README.md', 2, 'RIGHT', 'Why this change?')
+    expect(onCreateThread).toHaveBeenCalledWith('README.md', 2, 'RIGHT', 'Why this change?')
 
     await fireEvent.click(addComment)
     await fireEvent.input(screen.getByRole('textbox', { name: 'Inline review comment for README.md line 2' }), {

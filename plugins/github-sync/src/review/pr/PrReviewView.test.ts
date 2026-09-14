@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AiThread, AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread } from '../../lib/prReviewRecords'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 

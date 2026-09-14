@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
-  import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
@@ -29,7 +29,6 @@
     githubMarkdownImageBaseUrl: string | null
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
-    agentComments: AgentReviewComment[]
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath: (target: MarkdownRepositoryLinkTarget) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
@@ -40,16 +39,11 @@
     onClearInlineCommentText: (lineNumber: number, side: SplitSide) => void
     onSubmitInlineComment: (lineNumber: number, side: SplitSide, onClose: () => void) => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
-    aiThreads?: AiThread[]
-    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
-    onReplyToAiThread?: (threadId: string, body: string) => void
     threads?: ReviewThread[]
+    onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: PendingReply[]
     onAddReplyToReview?: (commentId: number, body: string) => void
@@ -71,7 +65,6 @@
     githubMarkdownImageBaseUrl,
     existingComments,
     pendingComments,
-    agentComments,
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
@@ -82,24 +75,18 @@
     onClearInlineCommentText,
     onSubmitInlineComment,
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
-    aiThreads = [],
-    onAskAgent,
     onCommentNow,
-    onReplyToAiThread,
     threads = [],
+    onCreateThread,
     onReplyToThread,
     onSetThreadStatus,
-    onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies = [],
     onAddReplyToReview,
     onRemovePendingReply,
   }: Props = $props()
 
-  // The diff widget reports a SplitSide; local Q&A anchors use LEFT/RIGHT.
-  function sideToReviewSide(side: SplitSide): ReviewSubmissionComment['side'] {
+  function sideToReviewSide(side: SplitSide): ReviewThreadSide {
     return side === SplitSide.old ? 'LEFT' : 'RIGHT'
   }
 
@@ -187,17 +174,12 @@
         }) : undefined}
         {existingComments}
         {pendingComments}
-        {agentComments}
-        {aiThreads}
         {pendingReplies}
         {onPendingCommentsChange}
-        {onAgentCommentsChange}
-        {onUpdateAgentCommentStatus}
-        {onReplyToAiThread}
         {threads}
+        {onCreateThread}
         {onReplyToThread}
         {onSetThreadStatus}
-        {onAskAboutComment}
         {onReplyToExistingComment}
         {onAddReplyToReview}
         {onRemovePendingReply}
@@ -205,7 +187,6 @@
         {onSetInlineCommentText}
         {onClearInlineCommentText}
         {onSubmitInlineComment}
-        {onAskAgent}
         {onCommentNow}
       />
     {:else if fileContentError}
@@ -299,7 +280,7 @@
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
-    extendData={buildExtendData({ filename: file.filename, existingComments, pendingComments, agentComments, aiThreads, pendingReplies, threads })}
+    extendData={buildExtendData({ filename: file.filename, existingComments, pendingComments, pendingReplies, threads })}
     {diffViewMode}
     {diffViewWrap}
     {diffViewTheme}
@@ -312,17 +293,11 @@
     {#snippet renderExtendLine({ data }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: DiffFile; onUpdate: () => void })}
       <InlineCommentThread
         {data}
-        filename={file.filename}
         {pendingComments}
-        {agentComments}
         {onPendingCommentsChange}
-        {onAgentCommentsChange}
-        {onUpdateAgentCommentStatus}
         {onOpenUrl}
-        {onReplyToAiThread}
         {onReplyToThread}
         {onSetThreadStatus}
-        {onAskAboutComment}
         {onReplyToExistingComment}
         {onAddReplyToReview}
         {onRemovePendingReply}
@@ -340,7 +315,7 @@
           onClearInlineCommentText(lineNumber, side)
           onClose()
         }}
-        onAskAgent={onAskAgent ? (body) => onAskAgent(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
+        onCreateThread={onCreateThread ? (body) => onCreateThread(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
         onCommentNow={onCommentNow ? (body) => onCommentNow(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
       />
     {/snippet}

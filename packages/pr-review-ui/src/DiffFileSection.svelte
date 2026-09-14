@@ -42,7 +42,6 @@
     githubMarkdownImageBaseUrl,
     existingComments,
     pendingComments,
-    agentComments,
     fileHeaderExtra,
     onCopyFilePath,
     resolveRepositoryImage,
@@ -58,16 +57,11 @@
     onClearInlineCommentText,
     onSubmitInlineComment,
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
-    aiThreads,
-    onAskAgent,
     onCommentNow,
-    onReplyToAiThread,
     threads,
+    onCreateThread,
     onReplyToThread,
     onSetThreadStatus,
-    onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies,
     onAddReplyToReview,
@@ -115,7 +109,6 @@
       {githubMarkdownImageBaseUrl}
       {existingComments}
       {pendingComments}
-      {agentComments}
       {resolveRepositoryImage}
       {onOpenRepositoryPath}
       {onOpenUrl}
@@ -126,16 +119,11 @@
       {onClearInlineCommentText}
       {onSubmitInlineComment}
       {onPendingCommentsChange}
-      {onAgentCommentsChange}
-      {onUpdateAgentCommentStatus}
-      {aiThreads}
-      {onAskAgent}
       {onCommentNow}
-      {onReplyToAiThread}
       {threads}
+      {onCreateThread}
       {onReplyToThread}
       {onSetThreadStatus}
-      {onAskAboutComment}
       {onReplyToExistingComment}
       {pendingReplies}
       {onAddReplyToReview}

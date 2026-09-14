@@ -8,6 +8,7 @@ import {
 } from './selfReviewCommentController.svelte'
 import { createSelfReviewDiffController } from './selfReviewDiffController.svelte'
 import { createSelfReviewFileStateController } from './selfReviewFileStateController.svelte'
+import { createSelfReviewThreadController } from './selfReviewThreadController.svelte'
 import {
   createSelfReviewNavigationController,
   type SelfReviewDiffViewerHandle,
@@ -64,6 +65,10 @@ export function createSelfReviewWorkspaceController(
     getComparisonFilenames: () => fileStateController.comparisonFilenames,
   })
 
+  const threadController = createSelfReviewThreadController({
+    getTaskId: options.getTaskId,
+  })
+
   const feedbackPane = createSelfReviewFeedbackPane({
     diff: diffController,
     comments: commentController,
@@ -74,6 +79,7 @@ export function createSelfReviewWorkspaceController(
     navigationController.synchronizeTask(options.getTaskId())
     fileStateController.synchronize()
     commentController.synchronize()
+    void threadController.synchronize()
   }
 
   async function load(): Promise<void> {
@@ -124,6 +130,7 @@ export function createSelfReviewWorkspaceController(
     get pendingInlineComments() { return commentController.pendingInlineComments },
     get visibleInlineReviewComments() { return commentController.visibleInlineReviewComments },
     get visiblePendingInlineComments() { return commentController.visiblePendingInlineComments },
+    get reviewThreads() { return threadController.threads },
     get initialScrollTop() { return navigationController.initialScrollTop },
     load,
     synchronizeWorkspaceState,
@@ -141,6 +148,8 @@ export function createSelfReviewWorkspaceController(
     toggleFileTree: navigationController.toggleFileTree,
     toggleSidebar: navigationController.toggleSidebar,
     handlePendingInlineCommentsChange: commentController.handlePendingInlineCommentsChange,
+    replyToReviewThread: threadController.replyToThread,
+    setReviewThreadStatus: threadController.setThreadStatus,
     toggleFileReviewed: fileStateController.toggleFileReviewed,
     getVisibleFileReviewIdentity: fileStateController.getVisibleFileReviewIdentity,
     hasComparison: fileStateController.hasComparison,

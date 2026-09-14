@@ -1,5 +1,5 @@
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
-import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewComment, ReviewSubmissionComment, PrComment } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Display data for comments on a single line.
@@ -12,10 +12,8 @@ export interface CommentDisplayData {
 export type InlineCommentDisplayData =
   | ExistingCommentDisplayData
   | PendingCommentDisplayData
-  | AgentCommentDisplayData
-  | AiThreadCommentDisplayData
   | PendingReplyCommentDisplayData
-  | ReviewThreadCommentDisplayData
+  | ThreadCommentDisplayData
 
 interface ExistingCommentFields {
   body: string
@@ -39,24 +37,8 @@ export interface PendingCommentDisplayData {
   index: number
 }
 
-export interface AgentCommentDisplayData {
-  body: string
-  type: 'agent'
-  commentId: number
-  status: string
-  filePath: string
-  lineNumber: number
-  commentSide: 'LEFT' | 'RIGHT'
-}
-
-export interface AiThreadCommentDisplayData {
-  type: 'ai-thread'
-  thread: AiThread
-  isReply: boolean
-}
-
-export interface ReviewThreadCommentDisplayData {
-  type: 'review-thread'
+export interface ThreadCommentDisplayData {
+  type: 'thread'
   thread: ReviewThread
 }
 
@@ -82,33 +64,6 @@ export function sideToSplitSide(side: string | null): 'oldFile' | 'newFile' {
 }
 
 /**
- * The approved inline AI review comments that should be submitted to GitHub with
- * the review. Approving a comment no longer copies it into the manual pending
- * list — the approved comment is itself the submittable item — so submission
- * pulls straight from here. Only line-anchored inline comments qualify (summary
- * comments and comments without a line can't be posted inline).
- */
-export function approvedInlineAgentComments(agentComments: AgentReviewComment[]): AgentReviewComment[] {
-  return agentComments.filter(
-    (comment) =>
-      comment.status === 'approved' &&
-      comment.comment_type === 'inline' &&
-      comment.file_path !== null &&
-      comment.line_number !== null,
-  )
-}
-
-/** Map an AI review comment to the shape the review-submission API expects. */
-export function agentCommentToSubmission(comment: AgentReviewComment): ReviewSubmissionComment {
-  return {
-    path: comment.file_path ?? '',
-    line: comment.line_number ?? 0,
-    side: (comment.side ?? 'RIGHT') as ReviewSubmissionComment['side'],
-    body: comment.body.trim(),
-  }
-}
-
-/**
  * Checks if a comment's path matches the target filename.
  * Uses the same matching logic as DiffViewer.svelte findLineRow():
  * exact match OR endsWith in either direction.
@@ -124,8 +79,6 @@ export interface BuildExtendDataOptions {
   filename: string
   existingComments?: ReviewComment[]
   pendingComments?: ReviewSubmissionComment[]
-  agentComments?: AgentReviewComment[]
-  aiThreads?: AiThread[]
   pendingReplies?: PendingReply[]
   threads?: ReviewThread[]
 }
@@ -134,8 +87,6 @@ export function buildExtendData({
   filename,
   existingComments = [],
   pendingComments = [],
-  agentComments = [],
-  aiThreads = [],
   pendingReplies = [],
   threads = [],
 }: BuildExtendDataOptions): {
@@ -234,51 +185,13 @@ export function buildExtendData({
     })
   }
 
-  for (const comment of agentComments) {
-    if (comment.comment_type !== 'inline') continue
-    if (comment.status === 'dismissed') continue
-    if (!comment.file_path || comment.line_number === null) continue
-    if (!pathMatches(comment.file_path, filename)) continue
-
-    const target = sideToSplitSide(comment.side) === 'oldFile' ? oldFile : newFile
-    const lineKey = String(comment.line_number)
-    ensureLine(target, lineKey).comments.push({
-      body: comment.body,
-      type: 'agent',
-      commentId: comment.id,
-      status: comment.status,
-      filePath: comment.file_path,
-      lineNumber: comment.line_number,
-      commentSide: comment.side === 'LEFT' ? 'LEFT' : 'RIGHT',
-    })
-  }
-
-  // Local "Ask the AI author" threads anchored to a diff line — or to a specific
-  // AI review comment (a follow-up question), which carries the same denormalized
-  // location — render inline like comments. Step-anchored threads are handled by
-  // the walkthrough view instead.
-  for (const thread of aiThreads) {
-    if (thread.anchor.type !== 'line' && thread.anchor.type !== 'comment') continue
-    if (!pathMatches(thread.anchor.filename, filename)) continue
-    const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
-    const lineKey = String(thread.anchor.line)
-    // A comment-anchored thread is a follow-up to the AI review comment above it,
-    // so nest it (reply styling) to make that relationship clear. A line-anchored
-    // thread stands on its own.
-    ensureLine(target, lineKey).comments.push({
-      type: 'ai-thread',
-      thread,
-      isReply: thread.anchor.type === 'comment',
-    })
-  }
-
   for (const thread of threads) {
     if (thread.anchor.kind !== 'line') continue
     if (thread.anchor.filePath !== filename) continue
 
     const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
     ensureLine(target, String(thread.anchor.line)).comments.push({
-      type: 'review-thread',
+      type: 'thread',
       thread,
     })
   }

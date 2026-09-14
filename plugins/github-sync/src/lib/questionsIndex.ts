@@ -1,4 +1,4 @@
-import type { AiThread, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, AgentReviewComment } from './prReviewRecords'
 
 // A single collected view of every place in a PR review that still wants the
 // reviewer's attention: questions they wrote (drafts to send, answers to read),

@@ -1,17 +1,7 @@
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import type {
-  AgentReviewComment,
-  AiThread,
-  AuthoredPullRequest,
-  PollResult,
-  PullRequestMergeMethod,
-  PrFileDiff,
-  PrOverviewComment,
-  PrWalkthrough,
-  ReviewComment,
-  ReviewPullRequest,
-} from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PollResult, PullRequestMergeMethod, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from './lib/prReviewRecords'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 import type { Base64FileContentResult, CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, GithubAssetRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
@@ -187,7 +177,7 @@ export default defineBackendPlugin({
       handler: (request) => readAiReviewComments(openforge, request.reviewPrId, request.headSha),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: string }, void>('updatePrAiReviewCommentStatus', {
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: AgentReviewCommentStatus }, void>('updatePrAiReviewCommentStatus', {
       handler: (request) => updateAiReviewCommentStatus(openforge, request.reviewPrId, request.headSha, request.commentId, request.status),
     }))
 

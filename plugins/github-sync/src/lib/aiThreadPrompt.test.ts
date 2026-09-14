@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildQuestionsPrompt, mapAnswersToThreads } from './aiThreadPrompt'
-import type { AgentReviewComment, AiThread } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AiThread } from './prReviewRecords'
 
 const threads: AiThread[] = [{
   id: 't1', anchor: { type: 'line', filename: 'a.ts', line: 2, side: 'RIGHT' }, status: 'pending',

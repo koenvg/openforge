@@ -1035,58 +1035,6 @@ export interface PrWalkthrough {
   updated_at: number;
 }
 
-/** Agent review comment for AI-powered PR review */
-export interface AgentReviewComment {
-  id: number;
-  review_pr_id: number;
-  review_session_key: string;
-  comment_type: string;  // 'inline' | 'summary'
-  file_path: string | null;
-  line_number: number | null;
-  side: string | null;  // 'LEFT' | 'RIGHT'
-  body: string;
-  status: string;  // 'pending' | 'approved' | 'dismissed'
-  opencode_session_id: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-/** One message in a local "Ask the AI author" Q&A thread. Never sent to GitHub. */
-export interface AiThreadMessage {
-  role: 'user' | 'ai';
-  body: string;
-  created_at: number;
-}
-
-/**
- * Where a Q&A thread is anchored: a specific diff line, a walkthrough step, or a
- * specific AI review comment (a follow-up like "why did you suggest this?"). The
- * `comment` variant carries the AI comment's id (so its suggestion can be quoted
- * as context) plus the denormalized diff location so it renders inline like a
- * line-anchored thread.
- */
-export type AiThreadAnchor =
-  | { type: 'line'; filename: string; line: number; side: 'LEFT' | 'RIGHT' }
-  | { type: 'step'; step_id: string }
-  | { type: 'comment'; comment_id: number; filename: string; line: number; side: 'LEFT' | 'RIGHT' };
-
-/** A private, per-commit reviewer↔AI conversation, stored locally (never on GitHub). */
-export interface AiThread {
-  id: string;
-  anchor: AiThreadAnchor;
-  status: 'draft' | 'pending' | 'answered' | 'error';
-  messages: AiThreadMessage[];
-  created_at: number;
-  updated_at: number;
-  /**
-   * When the reviewer last opened this thread's answer, in the same unit as
-   * message `created_at`. An answer counts as read only while `seen_at` is at or
-   * after the latest AI message's `created_at`; a newer answer makes it unread
-   * again without clearing the field. `null`/absent means never opened.
-   */
-  seen_at?: number | null;
-}
-
 /** App-level view for top-bar navigation */
 export type CoreAppView = 'board' | 'settings' | 'global_settings' | 'files'
 

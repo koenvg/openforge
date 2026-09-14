@@ -39,7 +39,7 @@
           <span>{REASON_LABELS[entry.reason]}</span>
         </div>
         <InlineReviewThread
-          comment={{ type: 'review-thread', thread: entry.thread }}
+          comment={{ type: 'thread', thread: entry.thread }}
           {onReplyToThread}
           {onSetThreadStatus}
           {onOpenUrl}

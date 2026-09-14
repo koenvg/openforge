@@ -1,14 +1,8 @@
 <script lang="ts">
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
-  import type {
-    AgentReviewComment,
-    AiThread,
-    PrFileDiff,
-    PrWalkthroughStep,
-    ReviewComment,
-    ReviewPullRequest,
-    ReviewSubmissionComment,
-  } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+  import type { PrFileDiff, PrWalkthroughStep, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -34,13 +28,15 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     agentComments: AgentReviewComment[]
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
+    onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
     aiThreads?: AiThread[]
-    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    reviewThreads?: ReviewThread[]
+    onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
+    onReplyToReviewThread?: (threadId: string, body: string) => void
+    onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
     onAddReplyToReview?: (commentId: number, body: string) => void
@@ -99,6 +95,11 @@
         : activeStep?.summary ?? '',
   )
   let stale = $derived(isWalkthroughStale(lifecycle.walkthrough, props.pr))
+  // A thread anchored outside this step's slice belongs to another step, not to
+  // this step's orphan report.
+  let stepFilenames = $derived(new Set(stepFiles.map(file => file.filename)))
+  let stepReviewThreads = $derived((props.reviewThreads ?? []).filter(thread =>
+    thread.anchor.kind === 'line' && stepFilenames.has(thread.anchor.filePath)))
 
   // When the questions panel asks to jump to a step-anchored thread, select that
   // step. Applied once per distinct requested id, so manual Prev/Next navigation
@@ -260,11 +261,11 @@
         onAgentCommentsChange={props.onAgentCommentsChange}
         onUpdateAgentCommentStatus={props.onUpdateAgentCommentStatus}
         onOpenUrl={props.onOpenUrl}
-        {aiThreads}
-        onAskAgent={props.onAskAgent}
+        reviewThreads={stepReviewThreads}
+        onCreateReviewThread={props.onCreateReviewThread}
+        onReplyToReviewThread={props.onReplyToReviewThread}
+        onSetReviewThreadStatus={props.onSetReviewThreadStatus}
         onCommentNow={props.onCommentNow}
-        onReplyToThread={props.onReplyToThread}
-        onAskAboutComment={props.onAskAboutComment}
         onReplyToExistingComment={props.onReplyToExistingComment}
         {pendingReplies}
         onAddReplyToReview={props.onAddReplyToReview}

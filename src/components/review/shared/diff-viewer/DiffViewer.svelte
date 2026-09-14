@@ -1,8 +1,9 @@
 <script lang="ts">
   import SharedDiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
-  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
+  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../../../../lib/types'
+  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
-  import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
+  import { pendingManualComments } from '../../../../lib/stores'
   import { openUrl as hostOpenUrl, writeClipboardText } from '../../../../lib/ipc'
   import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { selectedTheme } from '../../../../lib/theme'
@@ -29,7 +30,9 @@
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenImage?: OpenReviewImage
     includeUncommitted?: boolean
-    agentComments?: AgentReviewComment[]
+    threads?: ReviewThread[]
+    onReplyToThread?: (threadId: string, body: string) => void
+    onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
@@ -63,7 +66,9 @@
     onOpenUrl = hostOpenUrl,
     onOpenImage,
     includeUncommitted = false,
-    agentComments = [],
+    threads = [],
+    onReplyToThread,
+    onSetThreadStatus,
     pendingComments,
     onPendingCommentsChange,
     onScrollTopChange,
@@ -146,10 +151,11 @@
   onCopyFilePath={copyFilePath}
   {includeCommitted}
   {includeUncommitted}
-  {agentComments}
+  {threads}
+  {onReplyToThread}
+  {onSetThreadStatus}
   pendingComments={visiblePendingComments}
   onPendingCommentsChange={setVisiblePendingComments}
-  onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
   {onOpenUrl}
   {onOpenImage}
   {onScrollTopChange}

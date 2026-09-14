@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { threadsNeedingAnswer, upsertThread, editLastUserMessage } from './aiThreadStore'
-import type { AiThread } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread } from './prReviewRecords'
 
 function thread(id: string, lastRole: 'user' | 'ai', status: AiThread['status']): AiThread {
   return {

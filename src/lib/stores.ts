@@ -1,5 +1,5 @@
 import { writable, derived } from "svelte/store";
-import type { TaskDetail, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from './types'
+import type { TaskDetail, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from './types'
 import type { BoardFilter } from './boardFilters'
 import {
   activeTasks as canonicalActiveTasks,
@@ -125,7 +125,6 @@ export const reviewComments = writable<ReviewComment[]>([]);
 export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);
 export const prOverviewComments = writable<PrOverviewComment[]>([]);
 
-export const agentReviewComments = writable<AgentReviewComment[]>([]);
 
 /** Set of task IDs currently starting (worktree creation + agent spawn in progress) */
 export const startingTasks = writable<Set<string>>(new Set());

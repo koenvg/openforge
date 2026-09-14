@@ -1,17 +1,7 @@
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
-import type {
-  AgentReviewComment,
-  AiThread,
-  AuthoredPullRequest,
-  PollResult,
-  PrFileDiff,
-  PrOverviewComment,
-  PrWalkthrough,
-  ReviewComment,
-  ReviewPullRequest,
-  ReviewSubmissionComment,
-} from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PollResult, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
 import type { TicketSnapshot } from '../../lib/ticketCoverage'
 
 export type PullRequestRepositoryRequest = {
@@ -89,7 +79,7 @@ export interface GithubSyncPrReviewClient {
   replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<void>
   createReviewComment(request: CreateReviewCommentRequest): Promise<void>
   getPrAiReviewComments(request: { reviewPrId: number; headSha: string }): Promise<AgentReviewComment[]>
-  updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: string }): Promise<void>
+  updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: AgentReviewCommentStatus }): Promise<void>
   getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<PrWalkthrough | null>
   deletePrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<void>
   /** The Jira ticket resolved for this PR, plus whether Jira is configured at all. */

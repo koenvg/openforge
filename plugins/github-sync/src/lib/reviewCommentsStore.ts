@@ -1,6 +1,6 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
-import type { AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AgentReviewCommentStatus } from './prReviewRecords'
 import type { ValidatedReviewComment } from './reviewCommentsParse'
 
 export function prAiReviewStorageKey(prId: number, headSha: string): string {
@@ -47,7 +47,7 @@ export function toAgentReviewComments(
 }
 
 export async function updateAiReviewCommentStatus(
-  openforge: BackendOpenForgeAPI, prId: number, headSha: string, commentId: number, status: string,
+  openforge: BackendOpenForgeAPI, prId: number, headSha: string, commentId: number, status: AgentReviewCommentStatus,
 ): Promise<void> {
   const current = await readAiReviewComments(openforge, prId, headSha)
   const next = current.map(c => (c.id === commentId ? { ...c, status } : c))
