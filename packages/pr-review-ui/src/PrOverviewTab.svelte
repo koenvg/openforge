@@ -63,7 +63,7 @@
   })
 </script>
 
-<div class="flex-1 overflow-y-auto">
+<div class="h-full overflow-y-auto">
   <div class="max-w-[900px] mx-auto p-6 flex flex-col gap-6">
     <div class="bg-base-100 border border-base-300 rounded-[var(--of-radius-container)] overflow-hidden">
       <div class="flex items-center gap-3 px-5 py-3 bg-base-200 border-b border-base-300">
