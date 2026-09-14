@@ -4,17 +4,33 @@ use std::os::unix::fs::PermissionsExt;
 #[test]
 #[ignore = "requires built Sidecar and Session Daemon"]
 fn claude_and_codex_reconcile_together_and_stop_only_the_selected_task() {
+    preserves_scoped_providers([("claude-code", "claude"), ("codex", "codex")]);
+}
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn opencode_and_grok_reconcile_together_and_stop_only_the_selected_task() {
+    preserves_scoped_providers([("opencode", "opencode"), ("grok", "grok")]);
+}
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn grok_and_opencode_reject_stale_commands_and_stop_only_the_selected_task() {
+    preserves_scoped_providers([("grok", "grok"), ("opencode", "opencode")]);
+}
+
+fn preserves_scoped_providers(providers: [(&str, &str); 2]) {
     let mut fixture = Fixture::new();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
-    for executable in ["claude", "codex"] {
+    for (_, executable) in providers {
         fs::write(bin.join(executable), include_str!("provider-fixture.cjs")).unwrap();
         fs::set_permissions(bin.join(executable), fs::Permissions::from_mode(0o700)).unwrap();
     }
     fixture.provider_bin = Some(bin);
     fixture.start("setup");
     let mut tasks = Vec::new();
-    for (provider, executable) in [("claude-code", "claude"), ("codex", "codex")] {
+    for (provider, executable) in providers {
         let repo = fixture.root.path().join(executable);
         fs::create_dir(&repo).unwrap();
         assert!(Command::new("git")
@@ -100,7 +116,7 @@ fn claude_and_codex_reconcile_together_and_stop_only_the_selected_task() {
     assert_eq!(
         providers::record(&fixture, 2),
         records[1],
-        "stopping Claude must not stop Codex or its tool"
+        "stopping one provider must not stop the other provider or its tool"
     );
     fixture.invoke("pty_kill", json!({"shellSessionKey":tasks[1].0}));
 }

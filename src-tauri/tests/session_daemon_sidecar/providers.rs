@@ -36,6 +36,30 @@ fn codex_retains_exit_during_replacement() {
     preserves_provider("codex", "codex", true);
 }
 
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn opencode_keeps_agent_and_tool_through_replacement() {
+    preserves_provider("opencode", "opencode", false);
+}
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn grok_keeps_agent_and_tool_through_replacement() {
+    preserves_provider("grok", "grok", false);
+}
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn opencode_retains_exit_during_replacement() {
+    preserves_provider("opencode", "opencode", true);
+}
+
+#[test]
+#[ignore = "requires built Sidecar and Session Daemon"]
+fn grok_retains_exit_during_replacement() {
+    preserves_provider("grok", "grok", true);
+}
+
 fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bool) {
     let mut fixture = Fixture::new();
     let repo = fixture.root.path().join("repo");
@@ -49,8 +73,19 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
     fs::write(bin.join(executable), include_str!("provider-fixture.cjs")).unwrap();
+    fs::write(
+        bin.join("provider-hooks.cjs"),
+        include_str!("provider-hooks.cjs"),
+    )
+    .unwrap();
     fs::set_permissions(bin.join(executable), fs::Permissions::from_mode(0o700)).unwrap();
     fixture.provider_bin = Some(bin);
+    if matches!(provider, "opencode" | "grok") {
+        // Synthetic credentials only. Never import the developer's auth into the proof.
+        fixture
+            .provider_env
+            .push(("XAI_API_KEY".into(), "fixture-auth-only".into()));
+    }
     fixture.start("setup");
     let project = fixture.invoke(
         "create_project",
@@ -69,7 +104,7 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
     fixture.replace();
     let started = fixture.invoke(
         "start_implementation",
-        json!({"taskId":task_id, "repoPath":repo}),
+        json!({"taskId":task_id, "repoPath":repo, "terminalImageProtocol":"iterm2"}),
     );
     assert!(started["session_id"].is_string());
     let inventory = fixture.invoke("get_restart_terminal_inventory", json!({}));
@@ -81,9 +116,24 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
     let before = record(&fixture, 0);
     let instance = before["instance"].as_str().unwrap().parse::<u64>().unwrap();
     assert_eq!(inventory["sessions"][0]["instanceId"], instance);
+    assert!(before["tty"].as_str().unwrap().starts_with("/dev/"));
     assert_eq!(before["controllerTokenAbsent"], true);
     assert_eq!(before["task"], task_id);
     assert_eq!(before["provider"], provider);
+    if matches!(provider, "opencode" | "grok") {
+        assert_eq!(before["auth"], "fixture-auth-only");
+        assert_eq!(before["term"], "xterm-256color");
+        assert_eq!(before["termProgram"], "vscode");
+        assert_eq!(
+            before["imageSession"],
+            Value::Null,
+            "unsupported images stay disabled"
+        );
+        assert_eq!(
+            PathBuf::from(before["cwd"].as_str().unwrap()),
+            repo.canonicalize().unwrap()
+        );
+    }
     if provider == "claude-code" {
         assert_eq!(before["claudeTask"], task_id);
     }
@@ -98,9 +148,10 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
     assert!(arguments
         .iter()
         .any(|arg| arg.contains("Keep the current tool running")));
-    assert!(!arguments
-        .iter()
-        .any(|arg| matches!(arg.as_str(), "--resume" | "resume" | "--continue")));
+    assert!(!arguments.iter().any(|arg| matches!(
+        arg.as_str(),
+        "--resume" | "resume" | "--continue" | "--session"
+    )));
     if provider == "claude-code" {
         assert!(arguments
             .windows(2)
@@ -118,7 +169,7 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
             trust[repo.canonicalize().unwrap().to_str().unwrap()]["hasTrustDialogAccepted"],
             true
         );
-    } else {
+    } else if provider == "codex" {
         assert!(arguments
             .windows(2)
             .any(|args| args == ["--profile", "openforge-lifecycle"]));
@@ -127,6 +178,15 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
             .path()
             .join("home/.codex/openforge-lifecycle.config.toml")
             .is_file());
+    } else if provider == "opencode" {
+        assert!(!arguments.iter().any(|arg| arg == "--agent"));
+        assert!(arguments.iter().any(|arg| arg == "--prompt"));
+        assert!(!arguments.iter().any(|arg| arg == "--permission-mode"));
+    } else if provider == "grok" {
+        assert!(arguments
+            .windows(2)
+            .any(|args| args == ["--permission-mode", "plan"]));
+        assert_eq!(arguments[arguments.len() - 2], "--");
     }
     let old_fence = json!({"controller":inventory["controller"], "instanceId":instance});
     // Seed stale history while the Sidecar is absent, leaving the live allocation authoritative.
@@ -180,15 +240,16 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
         "stale input must be rejected"
     );
     assert!(!repo.join("approved").exists());
-    for (sequence, (kind, expected)) in [
+    let mut notifications = vec![
         ("requested_permission", "paused"),
         ("became_busy", "running"),
         ("became_idle", "completed"),
         ("ended", "completed"),
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    ];
+    if matches!(provider, "opencode" | "grok") {
+        notifications.insert(1, ("input_wait", "paused"));
+    }
+    for (sequence, (kind, expected)) in notifications.into_iter().enumerate() {
         let mut old = fixture.child.take().unwrap();
         old.kill().unwrap();
         old.wait().unwrap();
@@ -220,6 +281,12 @@ fn preserves_provider(provider: &str, executable: &str, exit_during_downtime: bo
                 assert_eq!(session["pty_instance_id"], instance);
                 if provider == "claude-code" {
                     assert_eq!(session["claude_session_id"], "claude-code-native-session");
+                }
+                if provider == "opencode" {
+                    assert_eq!(session["opencode_session_id"], "ses_opencode_native");
+                }
+                if provider == "grok" {
+                    assert_eq!(session["grok_session_id"], "grok-native-session");
                 }
                 break;
             }
