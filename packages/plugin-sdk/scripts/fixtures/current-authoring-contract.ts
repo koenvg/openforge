@@ -143,8 +143,18 @@ const listedReviewThreads: Promise<ReviewThread[]> = reviewThreads.list(reviewTh
 const repliedReviewThread: Promise<ReviewThread> = reviewThreads.reply({
   threadId: 'rt_1',
   role: 'human',
-  body: 'Fixed',
+  body: 'Why?',
+  awaiting: 'agent',
 })
+const resolvedReviewThread: Promise<ReviewThread> = reviewThreads.setStatus({
+  threadId: 'rt_1',
+  status: 'resolved',
+})
+const failedReviewThreadTurn: Promise<ReviewThread> = reviewThreads.setAwaiting({
+  threadId: 'rt_1',
+  awaiting: 'error',
+})
+const seenReviewThread: Promise<ReviewThread> = reviewThreads.markSeen({ threadId: 'rt_1' })
 const reviewThreadSubscription = reviewThreads.onDidChange(reviewThreadScope, (event: ReviewThreadChangeEvent) => {
   void event.namespace
   void event.targetKey
@@ -155,6 +165,9 @@ const reviewThreadSubscription = reviewThreads.onDidChange(reviewThreadScope, (e
 void createdReviewThread
 void listedReviewThreads
 void repliedReviewThread
+void resolvedReviewThread
+void failedReviewThreadTurn
+void seenReviewThread
 void reviewThreadSubscription.dispose()
 
 const appPackageMetadata = {

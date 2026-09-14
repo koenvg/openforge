@@ -114,6 +114,9 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       list: unavailable('reviewThreads.list'),
       create: unavailable('reviewThreads.create'),
       reply: unavailable('reviewThreads.reply'),
+      setStatus: unavailable('reviewThreads.setStatus'),
+      setAwaiting: unavailable('reviewThreads.setAwaiting'),
+      markSeen: unavailable('reviewThreads.markSeen'),
     },
     tasks: {
       onDidChange: () => ({ dispose: () => undefined }),

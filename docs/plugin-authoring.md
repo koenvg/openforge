@@ -645,11 +645,15 @@ const thread = await openforge.reviewThreads.create({
   origin: 'plugin',
   body: 'Needs a null check',
 })
-await openforge.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Fixed' })
+await openforge.reviewThreads.reply({ threadId: thread.id, role: 'human', body: 'Why?', awaiting: 'agent' })
+await openforge.reviewThreads.setStatus({ threadId: thread.id, status: 'resolved' })
 const threads = await openforge.reviewThreads.list(scope)
 ```
 
 - A thread carries an anchor, an origin, and an ordered list of messages. `reply` appends a message to that thread instead of creating a second one.
+- A reviewer decision (`status`: `open`, `resolved`, `dismissed`) and an in-flight agent turn (`awaiting`: `none`, `agent`, `error`) are separate fields. `setStatus` never moves the agent turn, and `setAwaiting` never moves the reviewer decision. A resolved thread whose agent reply failed reports both.
+- `reply` carries an optional `awaiting`, so asking an agent a question is one write: the thread stays open and records that a reply is awaited. Omit it to leave the agent turn where it is.
+- `markSeen({ threadId })` counts the thread's latest agent message as read. A later agent message sets `hasUnreadAgentMessage` again without clearing `seenAt`.
 - `list(scope)` returns only the threads stored under that exact triple. A revision with no threads returns an empty array.
 - A write is validated against structural invariants. A rejection names the offending field and stores nothing, so a bad comment is diagnosable instead of missing.
 - Frontend plugins can subscribe with `openforge.reviewThreads.onDidChange(scope, handler)`. The notification carries the scope only, so re-list on notification. A thread written elsewhere then reaches an open review without a reload.

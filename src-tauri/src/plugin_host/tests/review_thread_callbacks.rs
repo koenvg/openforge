@@ -146,3 +146,65 @@ async fn replying_to_an_unknown_thread_is_rejected() {
 
     assert!(error.contains("rt_missing"), "got: {error}");
 }
+
+#[tokio::test]
+async fn a_plugin_that_is_not_built_into_the_application_can_resolve_and_await_and_mark_seen() {
+    let (host, _temp_dir) = build_host();
+    let third_party = "com.example.reviewer";
+    let created = host
+        .handle_host_callback(
+            "openforge.reviewThreads.create",
+            &create_params(third_party),
+        )
+        .await
+        .expect("create");
+    let thread_id = created["id"].as_str().expect("thread id");
+
+    host.handle_host_callback(
+        "openforge.reviewThreads.setAwaiting",
+        &json!({ "pluginId": third_party, "threadId": thread_id, "awaiting": "error" }),
+    )
+    .await
+    .expect("a plugin without a built-in identity must be able to record a failed agent turn");
+    let resolved = host
+        .handle_host_callback(
+            "openforge.reviewThreads.setStatus",
+            &json!({ "pluginId": third_party, "threadId": thread_id, "status": "resolved" }),
+        )
+        .await
+        .expect("a plugin without a built-in identity must be able to resolve a thread");
+    let seen = host
+        .handle_host_callback(
+            "openforge.reviewThreads.markSeen",
+            &json!({ "pluginId": third_party, "threadId": thread_id }),
+        )
+        .await
+        .expect("a plugin without a built-in identity must be able to mark a thread seen");
+
+    assert_eq!(resolved["status"], "resolved");
+    assert_eq!(resolved["awaiting"], "error");
+    assert_eq!(seen["hasUnreadAgentMessage"], false);
+}
+
+#[tokio::test]
+async fn a_reply_carries_the_agent_turn_it_was_given() {
+    let (host, _temp_dir) = build_host();
+    let created = host
+        .handle_host_callback(
+            "openforge.reviewThreads.create",
+            &create_params("com.example.reviewer"),
+        )
+        .await
+        .expect("create");
+
+    let asked = host
+        .handle_host_callback(
+            "openforge.reviewThreads.reply",
+            &json!({ "threadId": created["id"], "role": "human", "body": "Why?", "awaiting": "agent" }),
+        )
+        .await
+        .expect("reply");
+
+    assert_eq!(asked["status"], "open");
+    assert_eq!(asked["awaiting"], "agent");
+}

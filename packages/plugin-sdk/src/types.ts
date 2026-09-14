@@ -935,10 +935,14 @@ export interface ReviewThread extends ReviewThreadScope {
   runId: string | null
   origin: ReviewThreadOrigin
   anchor: ReviewThreadAnchor
+  /** Reviewer decision. Moves independently of `awaiting`. */
   status: ReviewThreadStatus
+  /** In-flight agent turn. Moves independently of `status`. */
   awaiting: ReviewThreadAwaiting
   idempotencyKey: string | null
   seenAt: number | null
+  /** True while an agent message is newer than what the reviewer marked seen. */
+  hasUnreadAgentMessage: boolean
   createdAt: number
   updatedAt: number
   /** Oldest first. A reply appends here rather than creating a second thread. */
@@ -962,6 +966,22 @@ export interface ReplyToReviewThreadRequest {
   threadId: string
   role: ReviewThreadRole
   body: string
+  /** Moves the agent turn with the message. Left unchanged when omitted. */
+  awaiting?: ReviewThreadAwaiting
+}
+
+export interface SetReviewThreadStatusRequest {
+  threadId: string
+  status: ReviewThreadStatus
+}
+
+export interface SetReviewThreadAwaitingRequest {
+  threadId: string
+  awaiting: ReviewThreadAwaiting
+}
+
+export interface MarkReviewThreadSeenRequest {
+  threadId: string
 }
 
 /**
@@ -982,6 +1002,15 @@ export interface ReviewThreadOperationsAPI {
   create(request: CreateReviewThreadRequest): Promise<ReviewThread>
   /** Appends a message to an existing thread. Rejects an unknown thread ID. */
   reply(request: ReplyToReviewThreadRequest): Promise<ReviewThread>
+  /** Records the reviewer decision. Never moves the agent turn. */
+  setStatus(request: SetReviewThreadStatusRequest): Promise<ReviewThread>
+  /** Records the agent turn. Never moves the reviewer decision. */
+  setAwaiting(request: SetReviewThreadAwaitingRequest): Promise<ReviewThread>
+  /**
+   * Counts the thread's latest agent message as read. A later agent message
+   * makes the thread unread again without clearing `seenAt`.
+   */
+  markSeen(request: MarkReviewThreadSeenRequest): Promise<ReviewThread>
 }
 
 export interface ReviewThreadsAPI extends ReviewThreadOperationsAPI {

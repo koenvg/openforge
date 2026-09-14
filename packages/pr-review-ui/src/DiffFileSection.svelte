@@ -66,6 +66,7 @@
     onReplyToAiThread,
     threads,
     onReplyToThread,
+    onSetThreadStatus,
     onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies,
@@ -133,6 +134,7 @@
       {onReplyToAiThread}
       {threads}
       {onReplyToThread}
+      {onSetThreadStatus}
       {onAskAboutComment}
       {onReplyToExistingComment}
       {pendingReplies}

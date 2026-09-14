@@ -1,7 +1,7 @@
 use super::*;
 use crate::db::{
     CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadRow, ReviewThreadScope,
-    ReviewThreadWrite, SetReviewThreadStatus,
+    ReviewThreadWrite, SetReviewThreadAwaiting, SetReviewThreadStatus,
 };
 
 fn review_thread_error(error: ReviewThreadError) -> (StatusCode, String) {
@@ -122,6 +122,29 @@ pub(crate) async fn invoke_review_threads_command(
         })
 }
 
+pub(crate) fn set_awaiting(
+    state: &AppState,
+    payload: &serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let update: SetReviewThreadAwaiting = parse("set_review_thread_awaiting", payload)?;
+    let thread = db::acquire_db(&state.db)
+        .set_review_thread_awaiting(&update)
+        .map_err(review_thread_error)?;
+    publish_review_threads_changed(state, &thread_scope(&thread));
+    json_value(thread)
+}
+
+pub(crate) fn mark_seen(
+    state: &AppState,
+    payload: &serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let thread = db::acquire_db(&state.db)
+        .mark_review_thread_seen(&payload_string(payload, "threadId")?)
+        .map_err(review_thread_error)?;
+    publish_review_threads_changed(state, &thread_scope(&thread));
+    json_value(thread)
+}
+
 pub(super) async fn handle_app_review_threads_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -131,6 +154,8 @@ pub(super) async fn handle_app_review_threads_command(
         "create_review_thread" => create(state, &request.payload)?,
         "reply_to_review_thread" => reply(state, &request.payload)?,
         "set_review_thread_status" => set_status(state, &request.payload)?,
+        "set_review_thread_awaiting" => set_awaiting(state, &request.payload)?,
+        "mark_review_thread_seen" => mark_seen(state, &request.payload)?,
         _ => return Ok(None),
     };
 

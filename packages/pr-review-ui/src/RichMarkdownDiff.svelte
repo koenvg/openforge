@@ -1,7 +1,7 @@
 <script lang="ts">
   import { MessageSquarePlus } from '@lucide/svelte'
   import { SplitSide } from '@git-diff-view/svelte'
-  import type { ReviewThread } from '@openforge-app/plugin-sdk'
+  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -41,6 +41,7 @@
     onReplyToAiThread?: (threadId: string, body: string) => void
     threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
+    onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     onAddReplyToReview?: (commentId: number, body: string) => void
@@ -73,6 +74,7 @@
     onReplyToAiThread,
     threads = [],
     onReplyToThread,
+    onSetThreadStatus,
     onAskAboutComment,
     onReplyToExistingComment,
     onAddReplyToReview,
@@ -153,6 +155,7 @@
       {onOpenUrl}
       {onReplyToAiThread}
       {onReplyToThread}
+      {onSetThreadStatus}
       {onAskAboutComment}
       {onReplyToExistingComment}
       {onAddReplyToReview}

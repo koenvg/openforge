@@ -239,7 +239,7 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `storage` | `PluginStorage` | Read/write JSON values in global, project, or task storage scopes. |
 | `context` | `{ getSnapshot(): OpenForgeContextSnapshot }` | Read the current plugin/project/task context snapshot. |
 | `tasks` | `TaskOperationsAPI` | Read bounded Task projections, create Tasks, update status, configure start-prompt contributions, start Implementation Runs, and inspect Task workspace/session state. |
-| `reviewThreads` | `ReviewThreadOperationsAPI` | List, create, and reply to Review Threads addressed by namespace, target key, and revision. |
+| `reviewThreads` | `ReviewThreadOperationsAPI` | List, create, reply to, and set the state of Review Threads addressed by namespace, target key, and revision. |
 | `projects` | `ProjectsAPI` | List projects or get one project by id. |
 | `fs` | `FileSystemAPI` | Read directories/files, write files, and search project files. |
 | `shell` | `ShellAPI` | Spawn, write, resize, kill, and read task shell buffers. |
@@ -259,7 +259,9 @@ A Review Thread is addressed by an opaque `namespace`, `targetKey`, and `revisio
 
 - `list(scope)` returns only the threads stored under that exact triple. A revision with no threads returns an empty array.
 - `create(request)` stores a thread with one first message and returns it. The `anchor` is either `{ kind: 'line', filePath, line, side }` with `side` of `LEFT` or `RIGHT`, or `{ kind: 'custom', key }`.
-- `reply(request)` appends a message to an existing thread and returns the whole thread. Replying to an unknown thread identifier is rejected and creates nothing.
+- `reply(request)` appends a message to an existing thread and returns the whole thread. Replying to an unknown thread identifier is rejected and creates nothing. An optional `awaiting` moves the agent turn with the message; omitting it leaves the agent turn where it is.
+- `setStatus(request)` records the reviewer decision (`open`, `resolved`, `dismissed`). `setAwaiting(request)` records the in-flight agent turn (`none`, `agent`, `error`). The two axes are independent: changing one never changes the other.
+- `markSeen({ threadId })` counts the thread's latest agent message as read. A later agent message sets `hasUnreadAgentMessage` back to `true` without clearing `seenAt`. Read state compares message order, not timestamps.
 - Writes are validated against structural invariants. A rejection names the offending field, for example `Review Thread field 'filePath' must not be empty`, and stores nothing.
 - `onDidChange(scope, handler)` notifies subscribers of that scope only. The notification carries the scope, never a thread snapshot, so re-list on notification.
 

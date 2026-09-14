@@ -63,7 +63,7 @@ pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use review_threads::{
     CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadRow, ReviewThreadScope,
-    ReviewThreadWrite, SetReviewThreadStatus,
+    ReviewThreadWrite, SetReviewThreadAwaiting, SetReviewThreadStatus,
 };
 #[cfg(test)]
 pub use task_creation::TaskWorktreeOptions;
@@ -167,6 +167,7 @@ impl Database {
         migrations::ensure_plugin_tables(&conn)?;
         migrations::ensure_browser_session_purge_intents_table(&conn)?;
         migrations::ensure_review_thread_tables(&conn)?;
+        migrations::ensure_review_thread_seen_sequence_column(&conn)?;
         // After ensure_plugin_tables: global_plugins has a foreign key onto plugins.
         migrations::ensure_hierarchy_tables(&conn)?;
 

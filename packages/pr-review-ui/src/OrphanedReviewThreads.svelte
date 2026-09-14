@@ -1,15 +1,17 @@
 <script lang="ts">
   import { TriangleAlert } from '@lucide/svelte'
+  import type { ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import InlineReviewThread from './InlineReviewThread.svelte'
   import type { OrphanedReviewThread } from './reviewThreadAnchors'
 
   interface Props {
     threads: OrphanedReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
+    onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let { threads, onReplyToThread, onOpenUrl }: Props = $props()
+  let { threads, onReplyToThread, onSetThreadStatus, onOpenUrl }: Props = $props()
 
   const REASON_LABELS = {
     'file-not-in-diff': 'File is not in this diff',
@@ -39,6 +41,7 @@
         <InlineReviewThread
           comment={{ type: 'review-thread', thread: entry.thread }}
           {onReplyToThread}
+          {onSetThreadStatus}
           {onOpenUrl}
         />
       </div>

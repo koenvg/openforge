@@ -104,6 +104,44 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(replyToReviewThread).toHaveBeenCalledWith({ threadId: 'rt_1', role: 'human', body: 'Fixed' })
   })
 
+  it('forwards Review Thread state writes through the runtime host', async () => {
+    const thread = { id: 'rt_1', status: 'resolved', awaiting: 'error' }
+    const setReviewThreadStatus = vi.fn().mockResolvedValue(thread)
+    const setReviewThreadAwaiting = vi.fn().mockResolvedValue(thread)
+    const markReviewThreadSeen = vi.fn().mockResolvedValue(thread)
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'reviewer',
+      projectId: null,
+      host: { setReviewThreadStatus, setReviewThreadAwaiting, markReviewThreadSeen },
+    }))
+    const api = registry.createApi()
+
+    await expect(api.reviewThreads.setStatus({ threadId: 'rt_1', status: 'resolved' })).resolves.toEqual(thread)
+    await expect(api.reviewThreads.setAwaiting({ threadId: 'rt_1', awaiting: 'error' })).resolves.toEqual(thread)
+    await expect(api.reviewThreads.markSeen({ threadId: 'rt_1' })).resolves.toEqual(thread)
+
+    expect(setReviewThreadStatus).toHaveBeenCalledWith({ threadId: 'rt_1', status: 'resolved' })
+    expect(setReviewThreadAwaiting).toHaveBeenCalledWith({ threadId: 'rt_1', awaiting: 'error' })
+    expect(markReviewThreadSeen).toHaveBeenCalledWith({ threadId: 'rt_1' })
+  })
+
+  it.each(['setStatus', 'setAwaiting', 'markSeen'] as const)('reports %s as unavailable when the host cannot serve it', async (operation) => {
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'reviewer',
+      projectId: null,
+      host: {},
+    }))
+    const api = registry.createApi()
+
+    const call = {
+      setStatus: () => api.reviewThreads.setStatus({ threadId: 'rt_1', status: 'resolved' as const }),
+      setAwaiting: () => api.reviewThreads.setAwaiting({ threadId: 'rt_1', awaiting: 'error' as const }),
+      markSeen: () => api.reviewThreads.markSeen({ threadId: 'rt_1' }),
+    }[operation]
+
+    await expect(call()).rejects.toThrow(`reviewThreads.${operation}`)
+  })
+
   it('forwards scoped Review Thread subscriptions through the runtime host', async () => {
     const scope = { namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'sha-1' }
     const dispose = vi.fn()

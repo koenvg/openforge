@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import type { ReviewThread } from '@openforge-app/plugin-sdk'
+  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
@@ -48,6 +48,7 @@
     onReplyToAiThread?: (threadId: string, body: string) => void
     threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
+    onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: PendingReply[]
@@ -89,6 +90,7 @@
     onReplyToAiThread,
     threads = [],
     onReplyToThread,
+    onSetThreadStatus,
     onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies = [],
@@ -194,6 +196,7 @@
         {onReplyToAiThread}
         {threads}
         {onReplyToThread}
+        {onSetThreadStatus}
         {onAskAboutComment}
         {onReplyToExistingComment}
         {onAddReplyToReview}
@@ -318,6 +321,7 @@
         {onOpenUrl}
         {onReplyToAiThread}
         {onReplyToThread}
+        {onSetThreadStatus}
         {onAskAboutComment}
         {onReplyToExistingComment}
         {onAddReplyToReview}

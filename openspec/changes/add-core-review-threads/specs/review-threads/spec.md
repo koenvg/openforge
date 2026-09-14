@@ -45,6 +45,21 @@ A Review Thread SHALL carry a reviewer-facing status of open, resolved, or dismi
 - **WHEN** an agent reply fails and the reviewer then resolves the thread
 - **THEN** the thread reports the resolved status and still reports the failed agent turn
 
+### Requirement: Read state follows the latest agent message
+A Review Thread SHALL record that a reviewer marked it seen and SHALL separately report whether an agent message is newer than that mark. A later agent message MUST NOT clear the record of when the thread was marked seen.
+
+#### Scenario: Marking a thread seen
+- **WHEN** a reviewer marks a thread seen
+- **THEN** the thread counts its latest agent message as read
+
+#### Scenario: A newer agent message
+- **WHEN** an agent adds a message to a thread the reviewer already marked seen
+- **THEN** the thread reports an unread agent message and still reports that it was marked seen
+
+#### Scenario: A reviewer's own reply
+- **WHEN** a reviewer replies to a thread they already marked seen
+- **THEN** the thread stays read, because only an agent message can make it unread
+
 ### Requirement: Every enabled plugin can read and write Review Threads
 The public Plugin SDK SHALL expose Review Thread list, create, reply, and status operations on both the frontend and backend surfaces. Access MUST NOT depend on the plugin's identity: any enabled plugin, including one installed from outside the application, SHALL be able to call every Review Thread operation.
 
@@ -144,3 +159,7 @@ The shared diff viewer SHALL accept Review Threads and thread create, reply, and
 #### Scenario: Uniform inline presentation
 - **WHEN** an agent-authored thread and a person-authored thread anchor to the same line
 - **THEN** both render inline through the same thread presentation, distinguished by the author of each message
+
+#### Scenario: Reviewer acts on a rendered thread
+- **WHEN** a reviewer resolves or dismisses a thread the viewer rendered
+- **THEN** the viewer reports that decision to the surface that supplied the thread, and keeps the thread readable with its decision shown

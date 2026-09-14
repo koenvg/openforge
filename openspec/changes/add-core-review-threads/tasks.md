@@ -2,7 +2,7 @@
 
 The tracer bullet delivers list, create, and reply end to end, and the agent CLI writes threads over the transport. Deliberate divergences from this plan:
 
-- Set status reaches the store, the host boundary, and the CLI, because the agent CLI group needs it. `awaiting` and mark seen stay with the reviewer ticket, and the SDK gains no `setStatus` here, so 1.2 and 3.2 stay open.
+- Reviewer decision, agent turn, and read state landed with the reviewer ticket, closing 1.2 and 3.2. The SDK carries `setStatus`, `setAwaiting`, and `markSeen`, `reply` takes an optional `awaiting`, and 5.3 gained `onSetThreadStatus`.
 - `review thread create` has no `--key` flag, so an agent retry after an unclear response is not deduplicated even though the store now is. KVG-2204 adds the flag.
 - `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
 - `ToolPolicy::ReadAndGitHistory` became `ToolPolicy::ReadGitHistoryAndReviewCli` instead of gaining a sibling. Both repo-aware callers are review runs, so a second variant would have had no constructor.
@@ -13,7 +13,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 ## 1. Core store
 
 - [x] 1.1 Add the `review_threads` and `review_thread_messages` migration, with the lookup index on `(namespace, target_key, revision)` and the partial unique index on that triple plus `idempotency_key`; verify the migration test asserting expected tables in `db/migrations.rs` includes both new tables and that `cargo test migrations` passes
-- [ ] 1.2 Add the thread store module with list, create, reply, set status, and mark seen, returning `Result<T, String>` at the boundary; verify unit tests cover ordered message read-back and per-revision scoping
+- [x] 1.2 Add the thread store module with list, create, reply, set status, set awaiting, and mark seen, returning `Result<T, String>` at the boundary; verify unit tests cover ordered message read-back, per-revision scoping, the two independent state axes, and read state
 - [x] 1.3 Enforce the write-time invariants (non-empty file path, line at least 1, side `LEFT` or `RIGHT`, non-empty body) with a message naming the offending field; verify a unit test per invariant asserts the rejection text and that nothing is stored
 - [x] 1.4 Implement idempotent create: a repeated key on the same triple returns the stored thread as a success, and the same key on another revision creates a new thread; verify both paths with store tests
 
@@ -26,7 +26,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 ## 3. Public SDK surface
 
 - [x] 3.1 Add the unified `ReviewThread`, anchor, scope, and request types to the SDK domain types; verify `pnpm exec tsc --noEmit` passes
-- [ ] 3.2 Add `reviewThreads` to `OpenForgeCommonAPI` with list, create, reply, setStatus, markSeen, and onDidChange; verify the SDK contract test asserts the operation set on both the frontend and backend surfaces
+- [x] 3.2 Add `reviewThreads` to `OpenForgeCommonAPI` with list, create, reply, setStatus, setAwaiting, markSeen, and onDidChange; verify the SDK contract test asserts the operation set on both the frontend and backend surfaces
 - [x] 3.3 Add testing fakes for `reviewThreads` alongside the existing SDK fakes; verify a fake-backed test creates and lists a thread without a host
 - [ ] 3.4 Mark `AgentReviewComment`, `AiThread`, and `AiThreadAnchor` removed from the SDK domain; verify no first-party workspace still imports them
 
@@ -41,7 +41,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 
 - [ ] 5.1 Replace `AgentCommentDisplayData` and `AiThreadCommentDisplayData` with one `ThreadCommentDisplayData` in `diffComments.ts`; verify the existing `diffComments` tests pass against the single variant
 - [ ] 5.2 Collapse `InlineAiReviewComment.svelte` and `InlineAiQuestionThread.svelte` into one inline thread component that renders agent-authored and person-authored messages through one presentation; verify the inline thread tests cover both author roles on one line
-- [ ] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes
+- [ ] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes (`onSetThreadStatus` landed with the reviewer decision; the removals stay open)
 - [x] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
 
 ## 6. Core self-review migration and legacy removal

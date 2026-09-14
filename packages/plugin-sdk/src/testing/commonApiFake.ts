@@ -9,11 +9,14 @@ import type {
   TaskChangeEvent,
   OpenForgeCommonAPI,
   CreateReviewThreadRequest,
+  MarkReviewThreadSeenRequest,
   ReplyToReviewThreadRequest,
   ReviewThread,
   ReviewThreadAnchor,
   ReviewThreadChangeEvent,
   ReviewThreadScope,
+  SetReviewThreadAwaitingRequest,
+  SetReviewThreadStatusRequest,
 } from '../types.js'
 import type { ActiveTasks, CompletedTaskPage, CompletedTaskQuery, Task, TaskDetail, TaskLabel, TaskRead, TaskReference, TaskSummary } from '../domain.js'
 import {
@@ -370,14 +373,23 @@ function listTestingCompletedTasks(
 
 
 
-function cloneReviewThread(thread: ReviewThread): ReviewThread {
-  return { ...thread, anchor: { ...thread.anchor }, messages: thread.messages.map(message => ({ ...message })) }
+type StoredReviewThread = Omit<ReviewThread, 'hasUnreadAgentMessage'>
+
+function cloneReviewThread(thread: StoredReviewThread, seenCount: number): ReviewThread {
+  return {
+    ...thread,
+    hasUnreadAgentMessage: thread.messages.slice(seenCount).some(message => message.role === 'agent'),
+    anchor: { ...thread.anchor },
+    messages: thread.messages.map(message => ({ ...message })),
+  }
 }
 
 const REVIEW_THREAD_ORIGINS = new Set(['agent', 'human', 'plugin'])
 const REVIEW_THREAD_ROLES = new Set(['agent', 'human'])
+const REVIEW_THREAD_STATUSES = new Set(['open', 'resolved', 'dismissed'])
+const REVIEW_THREAD_AWAITING = new Set(['none', 'agent', 'error'])
 
-function reviewThreadScope(thread: ReviewThread): ReviewThreadScope {
+function reviewThreadScope(thread: StoredReviewThread): ReviewThreadScope {
   return { namespace: thread.namespace, targetKey: thread.targetKey, revision: thread.revision }
 }
 
@@ -414,7 +426,8 @@ export class TestingCommonApiFake {
   private readonly eventListeners = new Map<string, TestingEventListenerContribution>()
   private readonly eventHandlers = new Map<string, Set<TestingEventHandler>>()
   private readonly taskChangeHandlers = new Map<string, Set<(event: TaskChangeEvent) => void>>()
-  private readonly reviewThreads: ReviewThread[] = []
+  private readonly reviewThreads: StoredReviewThread[] = []
+  private readonly reviewThreadSeenCounts = new Map<string, number>()
   private readonly reviewThreadChangeHandlers = new Map<string, Set<(event: ReviewThreadChangeEvent) => void>>()
   private reviewThreadSequence = 0
   private eventListenerSequence = 0
@@ -563,10 +576,13 @@ export class TestingCommonApiFake {
           const key = reviewThreadScopeKey(scope)
           return this.reviewThreads
             .filter(thread => reviewThreadScopeKey(thread) === key)
-            .map(cloneReviewThread)
+            .map(thread => this.cloneReviewThread(thread))
         },
         create: async (request) => this.createReviewThread(request),
         reply: async (request) => this.replyToReviewThread(request),
+        setStatus: async (request) => this.setReviewThreadStatus(request),
+        setAwaiting: async (request) => this.setReviewThreadAwaiting(request),
+        markSeen: async (request) => this.markReviewThreadSeen(request),
       },
       tasks: {
         onDidChange: (projectId, handler) => {
@@ -928,11 +944,11 @@ export class TestingCommonApiFake {
         && candidate.namespace === request.namespace
         && candidate.targetKey === request.targetKey
         && candidate.revision === request.revision)
-    if (stored) return cloneReviewThread(stored)
+    if (stored) return this.cloneReviewThread(stored)
 
     this.reviewThreadSequence += 1
     const createdAt = this.reviewThreadSequence
-    const thread: ReviewThread = {
+    const thread: StoredReviewThread = {
       id: `rt_${this.reviewThreadSequence}`,
       namespace: request.namespace,
       targetKey: request.targetKey,
@@ -954,15 +970,16 @@ export class TestingCommonApiFake {
       }],
     }
     this.reviewThreads.push(thread)
-    this.emitReviewThreadChange(reviewThreadScope(thread))
-    return cloneReviewThread(thread)
+    return this.publishReviewThread(thread)
   }
 
   private replyToReviewThread(request: ReplyToReviewThreadRequest): ReviewThread {
     assertReviewThreadField(request.body?.trim().length > 0, 'body', 'must not be empty')
     assertReviewThreadField(REVIEW_THREAD_ROLES.has(request.role), 'role', 'must be agent or human')
-    const thread = this.reviewThreads.find(candidate => candidate.id === request.threadId)
-    if (!thread) throw new Error(`Review Thread '${request.threadId}' does not exist`)
+    if (request.awaiting !== undefined) {
+      assertReviewThreadField(REVIEW_THREAD_AWAITING.has(request.awaiting), 'awaiting', 'must be none, agent, or error')
+    }
+    const thread = this.requireReviewThread(request.threadId)
 
     this.reviewThreadSequence += 1
     thread.messages.push({
@@ -971,9 +988,53 @@ export class TestingCommonApiFake {
       body: request.body,
       createdAt: this.reviewThreadSequence,
     })
+    if (request.awaiting !== undefined) thread.awaiting = request.awaiting
     thread.updatedAt = this.reviewThreadSequence
+    return this.publishReviewThread(thread)
+  }
+
+  private setReviewThreadStatus(request: SetReviewThreadStatusRequest): ReviewThread {
+    assertReviewThreadField(REVIEW_THREAD_STATUSES.has(request.status), 'status', 'must be open, resolved, or dismissed')
+    const thread = this.requireReviewThread(request.threadId)
+
+    thread.status = request.status
+    this.reviewThreadSequence += 1
+    thread.updatedAt = this.reviewThreadSequence
+    return this.publishReviewThread(thread)
+  }
+
+  private setReviewThreadAwaiting(request: SetReviewThreadAwaitingRequest): ReviewThread {
+    assertReviewThreadField(REVIEW_THREAD_AWAITING.has(request.awaiting), 'awaiting', 'must be none, agent, or error')
+    const thread = this.requireReviewThread(request.threadId)
+
+    thread.awaiting = request.awaiting
+    this.reviewThreadSequence += 1
+    thread.updatedAt = this.reviewThreadSequence
+    return this.publishReviewThread(thread)
+  }
+
+  private markReviewThreadSeen(request: MarkReviewThreadSeenRequest): ReviewThread {
+    const thread = this.requireReviewThread(request.threadId)
+
+    this.reviewThreadSeenCounts.set(thread.id, thread.messages.length)
+    this.reviewThreadSequence += 1
+    thread.seenAt = this.reviewThreadSequence
+    return this.publishReviewThread(thread)
+  }
+
+  private requireReviewThread(threadId: string): StoredReviewThread {
+    const thread = this.reviewThreads.find(candidate => candidate.id === threadId)
+    if (!thread) throw new Error(`Review Thread '${threadId}' does not exist`)
+    return thread
+  }
+
+  private publishReviewThread(thread: StoredReviewThread): ReviewThread {
     this.emitReviewThreadChange(reviewThreadScope(thread))
-    return cloneReviewThread(thread)
+    return this.cloneReviewThread(thread)
+  }
+
+  private cloneReviewThread(thread: StoredReviewThread): ReviewThread {
+    return cloneReviewThread(thread, this.reviewThreadSeenCounts.get(thread.id) ?? 0)
   }
 
   private registerCommand(registration: CommandRegistration): Disposable {

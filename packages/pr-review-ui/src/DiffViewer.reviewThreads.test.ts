@@ -66,6 +66,7 @@ function makeThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
     runId: null,
     idempotencyKey: null,
     seenAt: null,
+    hasUnreadAgentMessage: false,
     createdAt: 1,
     updatedAt: 1,
     messages: [{ id: 'rtm_1', role: 'agent', body: 'Needs a null check', createdAt: 1 }],
@@ -99,6 +100,17 @@ describe('DiffViewer Review Threads', () => {
 
     await screen.findByTestId('mock-diff-view')
     expect(screen.queryByText('Needs a null check')).toBeNull()
+  })
+
+  it('reports a resolve decision with the thread identifier to the embedding surface', async () => {
+    const onSetThreadStatus = vi.fn()
+
+    render(DiffViewer, { props: { files, threads: [makeThread()], onSetThreadStatus } })
+
+    const resolve = await screen.findByRole('button', { name: 'Resolve review thread' })
+    await fireEvent.click(resolve)
+
+    expect(onSetThreadStatus).toHaveBeenCalledWith('rt_1', 'resolved')
   })
 
   it('reports a reply with the thread identifier to the embedding surface', async () => {
@@ -147,6 +159,18 @@ describe('DiffViewer Review Threads', () => {
     await fireEvent.click(within(orphans).getByRole('button', { name: 'Reply' }))
 
     expect(onReplyToThread).toHaveBeenCalledWith('rt_1', 'Still relevant')
+  })
+
+  it('resolves an orphaned thread from the region that reports it', async () => {
+    const onSetThreadStatus = vi.fn()
+    const thread = makeThread({ anchor: { kind: 'line', filePath: 'src/gone.ts', line: 12, side: 'RIGHT' } })
+
+    render(DiffViewer, { props: { files, threads: [thread], onSetThreadStatus } })
+
+    const orphans = await screen.findByRole('region', { name: 'Threads not in this diff' })
+    await fireEvent.click(within(orphans).getByRole('button', { name: 'Resolve review thread' }))
+
+    expect(onSetThreadStatus).toHaveBeenCalledWith('rt_1', 'resolved')
   })
 
   it('reports no orphans when every thread anchors to a shown line', async () => {

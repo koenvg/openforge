@@ -1858,6 +1858,10 @@ INSERT OR IGNORE INTO config (key, value)
             Ok(())
         },
     ),
+    M::up_with_hook("", |tx| {
+        ensure_review_thread_seen_sequence_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2525,6 +2529,7 @@ CREATE TABLE IF NOT EXISTS review_threads (
     awaiting TEXT NOT NULL DEFAULT 'none' CHECK (awaiting IN ('none', 'agent', 'error')),
     idempotency_key TEXT,
     seen_at INTEGER,
+    seen_sequence INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -2546,6 +2551,21 @@ CREATE INDEX IF NOT EXISTS idx_review_thread_messages_thread
     ON review_thread_messages(thread_id, sequence);
         "#,
     )?;
+    Ok(())
+}
+
+pub(super) fn ensure_review_thread_seen_sequence_column(conn: &Connection) -> Result<()> {
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('review_threads') WHERE name = 'seen_sequence'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute(
+            "ALTER TABLE review_threads ADD COLUMN seen_sequence INTEGER",
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -2582,6 +2602,7 @@ mod tests {
         TaskQueryIndexes,
         AgentSessionOutputRevisions,
         AgentReviewCommentsRemoval,
+        ReviewThreadSeenSequence,
     }
 
     impl MigrationBoundary {
@@ -2600,6 +2621,7 @@ mod tests {
                 Self::TaskQueryIndexes => 55,
                 Self::AgentSessionOutputRevisions => 57,
                 Self::AgentReviewCommentsRemoval => 59,
+                Self::ReviewThreadSeenSequence => 62,
             }
         }
     }
@@ -4403,6 +4425,41 @@ mod tests {
             !table_exists,
             "upgrade must delete stored core agent review comments"
         );
+    }
+
+    #[test]
+    fn upgrade_adds_the_review_thread_seen_sequence_column_and_keeps_stored_threads() {
+        let (_temp_dir, path) = temporary_database_path();
+
+        {
+            let conn = Connection::open(&path).expect("open legacy database");
+            ensure_review_thread_tables(&conn).expect("create Review Thread tables");
+            conn.execute_batch(
+                "ALTER TABLE review_threads DROP COLUMN seen_sequence;
+                 INSERT INTO review_threads (
+                     id, namespace, target_key, revision, origin, anchor_kind,
+                     file_path, line, side, created_at, updated_at
+                 ) VALUES (
+                     'rt_legacy', 'github', 'gh:acme/web#1', 'sha-1', 'agent', 'line',
+                     'src/main.rs', 12, 'RIGHT', 1, 1
+                 );",
+            )
+            .expect("recreate the pre-upgrade shape");
+            set_user_version_before(&conn, MigrationBoundary::ReviewThreadSeenSequence);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let seen_sequence: Option<i64> = conn
+            .query_row(
+                "SELECT seen_sequence FROM review_threads WHERE id = 'rt_legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read the upgraded thread");
+        assert_eq!(seen_sequence, None);
     }
 
     #[test]

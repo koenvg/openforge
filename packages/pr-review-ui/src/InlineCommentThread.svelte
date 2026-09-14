@@ -1,6 +1,7 @@
 <script lang="ts">
   import { X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -22,6 +23,7 @@
     onOpenUrl?: (url: string) => void | Promise<void>
     onReplyToAiThread?: (threadId: string, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
+    onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     onAddReplyToReview?: (commentId: number, body: string) => void
@@ -38,6 +40,7 @@
     onOpenUrl,
     onReplyToAiThread,
     onReplyToThread,
+    onSetThreadStatus,
     onAskAboutComment,
     onReplyToExistingComment,
     onAddReplyToReview,
@@ -131,7 +134,7 @@
           {onOpenUrl}
         />
       {:else if comment.type === 'review-thread'}
-        <InlineReviewThread {comment} {onReplyToThread} {onOpenUrl} />
+        <InlineReviewThread {comment} {onReplyToThread} {onSetThreadStatus} {onOpenUrl} />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">
           <Badge variant="warning">Pending reply</Badge>

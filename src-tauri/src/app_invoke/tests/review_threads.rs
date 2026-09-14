@@ -261,36 +261,172 @@ async fn a_status_change_is_listed_back_and_notifies_the_scope() {
 }
 
 #[tokio::test]
-async fn an_unsupported_status_is_rejected_naming_the_field_and_changes_nothing() {
-    let (state, _temp_dir) = test_state("app_invoke_review_threads_status_invalid");
+async fn a_reviewer_decision_and_the_agent_turn_move_independently() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_two_axes");
     let created = invoke_ok(&state, "create_review_thread", create_payload()).await;
+    let thread_id = created["id"].clone();
+    assert_eq!(created["status"], "open");
+    assert_eq!(created["awaiting"], "none");
 
-    let error = invoke(
+    let asked = invoke_ok(
+        &state,
+        "reply_to_review_thread",
+        json!({ "threadId": thread_id, "role": "human", "body": "Why?", "awaiting": "agent" }),
+    )
+    .await;
+    assert_eq!(asked["status"], "open");
+    assert_eq!(asked["awaiting"], "agent");
+
+    invoke_ok(
+        &state,
+        "set_review_thread_awaiting",
+        json!({ "threadId": thread_id, "awaiting": "error" }),
+    )
+    .await;
+    let resolved = invoke_ok(
         &state,
         "set_review_thread_status",
-        json!({ "threadId": created["id"], "status": "archived" }),
+        json!({ "threadId": thread_id, "status": "resolved" }),
     )
-    .await
-    .expect_err("an unsupported status should be rejected");
+    .await;
 
-    assert_eq!(error.0, StatusCode::BAD_REQUEST);
-    assert!(error.1.contains("status"), "got: {}", error.1);
-    let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;
-    assert_eq!(listed[0]["status"], "open");
+    assert_eq!(resolved["status"], "resolved");
+    assert_eq!(resolved["awaiting"], "error");
 }
 
 #[tokio::test]
-async fn setting_the_status_of_an_unknown_thread_is_rejected() {
-    let (state, _temp_dir) = test_state("app_invoke_review_threads_status_unknown");
+async fn marking_a_thread_seen_reads_its_latest_agent_message_until_a_newer_one_arrives() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_seen");
+    let mut payload = create_payload();
+    payload["origin"] = json!("agent");
+    let created = invoke_ok(&state, "create_review_thread", payload).await;
+    let thread_id = created["id"].clone();
+    assert_eq!(created["hasUnreadAgentMessage"], true);
 
-    let error = invoke(
+    let seen = invoke_ok(
         &state,
-        "set_review_thread_status",
-        json!({ "threadId": "rt_missing", "status": "resolved" }),
+        "mark_review_thread_seen",
+        json!({ "threadId": thread_id }),
     )
-    .await
-    .expect_err("an unknown thread should be rejected");
+    .await;
+    assert_eq!(seen["hasUnreadAgentMessage"], false);
 
-    assert_eq!(error.0, StatusCode::NOT_FOUND);
-    assert!(error.1.contains("rt_missing"), "got: {}", error.1);
+    let answered = invoke_ok(
+        &state,
+        "reply_to_review_thread",
+        json!({ "threadId": thread_id, "role": "agent", "body": "Fixed", "awaiting": "none" }),
+    )
+    .await;
+
+    assert_eq!(answered["hasUnreadAgentMessage"], true);
+    assert_eq!(
+        answered["seenAt"], seen["seenAt"],
+        "a newer agent message must not clear the seen record"
+    );
+}
+
+#[tokio::test]
+async fn an_unsupported_state_value_is_rejected_naming_the_field() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_invalid_state");
+    let created = invoke_ok(&state, "create_review_thread", create_payload()).await;
+    let thread_id = created["id"].clone();
+
+    for (command, payload, field) in [
+        (
+            "set_review_thread_status",
+            json!({ "threadId": thread_id, "status": "approved" }),
+            "status",
+        ),
+        (
+            "set_review_thread_awaiting",
+            json!({ "threadId": thread_id, "awaiting": "answered" }),
+            "awaiting",
+        ),
+        (
+            "reply_to_review_thread",
+            json!({ "threadId": thread_id, "role": "agent", "body": "hi", "awaiting": "answered" }),
+            "awaiting",
+        ),
+    ] {
+        let error = invoke(&state, command, payload)
+            .await
+            .expect_err("a legacy state value should be rejected");
+
+        assert_eq!(error.0, StatusCode::BAD_REQUEST, "{command}");
+        assert!(error.1.contains(field), "{command} got: {}", error.1);
+    }
+
+    let listed = invoke_ok(&state, "list_review_threads", scope_payload()).await;
+    assert_eq!(listed[0]["status"], "open");
+    assert_eq!(listed[0]["awaiting"], "none");
+    assert_eq!(listed[0]["messages"].as_array().expect("messages").len(), 1);
+}
+
+#[tokio::test]
+async fn a_state_change_on_an_unknown_thread_is_rejected_and_publishes_no_notification() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_unknown_state");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    for (command, payload) in [
+        (
+            "set_review_thread_status",
+            json!({ "threadId": "rt_missing", "status": "resolved" }),
+        ),
+        (
+            "set_review_thread_awaiting",
+            json!({ "threadId": "rt_missing", "awaiting": "agent" }),
+        ),
+        (
+            "mark_review_thread_seen",
+            json!({ "threadId": "rt_missing" }),
+        ),
+    ] {
+        let error = invoke(&state, command, payload)
+            .await
+            .expect_err("an unknown thread should be rejected");
+
+        assert_eq!(error.0, StatusCode::NOT_FOUND, "{command}");
+        assert!(error.1.contains("rt_missing"), "{command} got: {}", error.1);
+    }
+
+    assert!(events.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn every_state_write_notifies_the_scope_of_the_thread_it_changed() {
+    let (state, _temp_dir) = test_state("app_invoke_review_threads_state_events");
+    let created = invoke_ok(&state, "create_review_thread", create_payload()).await;
+    let thread_id = created["id"].clone();
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    for (command, payload) in [
+        (
+            "set_review_thread_status",
+            json!({ "threadId": thread_id, "status": "resolved" }),
+        ),
+        (
+            "set_review_thread_awaiting",
+            json!({ "threadId": thread_id, "awaiting": "error" }),
+        ),
+        ("mark_review_thread_seen", json!({ "threadId": thread_id })),
+    ] {
+        invoke_ok(&state, command, payload).await;
+
+        let envelope = events
+            .try_recv()
+            .unwrap_or_else(|_| panic!("{command} must publish an event"));
+        assert_eq!(envelope.event_name, "review-threads-changed");
+        assert_eq!(
+            envelope.payload,
+            json!({ "namespace": "github", "targetKey": "gh:acme/web#1421", "revision": "sha-1" })
+        );
+    }
 }
