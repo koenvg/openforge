@@ -128,6 +128,17 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     vi.clearAllMocks()
   })
 
+
+  it('keeps the existing loading message singular while its indicator stays decorative', () => {
+    renderDialog()
+
+    const message = screen.getByText('Gathering what needs your attention…')
+    const indicator = message.previousElementSibling as HTMLElement
+    expect(indicator.tagName).toBe('SPAN')
+    expect(indicator.getAttribute('data-size')).toBe('md')
+    expect(indicator.getAttribute('aria-hidden')).toBe('true')
+    expect(indicator.hasAttribute('role')).toBe(false)
+  })
   it('shows an initial read failure and only reports caught up after a successful retry', async () => {
     ipc.getTaskLanes.mockRejectedValue(new Error('Attention service unavailable'))
     renderDialog()
@@ -623,6 +634,11 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     // chip, so the header never reads as four lists running side by side.
     expect(chips()).toEqual(['T Focus 1', 'R Reviews 1'])
 
+
+    const hints = [...dialog.querySelectorAll('kbd')]
+    expect(hints.map((hint) => hint.textContent)).toEqual(['T', 'R'])
+    expect(hints.every((hint) => hint.classList.contains('of-key-hint'))).toBe(true)
+    expect(hints.every((hint) => hint.classList.contains('of-key-hint-xs'))).toBe(true)
     await press(dialog, 't')
     expect(chips()).toEqual(['T In Flight 2', 'R Reviews 1'])
 

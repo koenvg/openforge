@@ -267,17 +267,17 @@
   "src/components/attention/AttentionOverviewDialog.svelte": [
     {"tag":"Modal","context":"boxClass=\"h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)]!\"","tokens":["h-[calc(100vh-2rem)]","max-h-[calc(100vh-2rem)]!"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},
     {"tag":"div","context":"class=\"flex flex-col min-h-0 h-full\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"w-9 h-9 rounded-[var(--of-radius-container)] grid place-items-center shrink-0 bg-primary/15 text-primary\"","tokens":["w-9","h-9"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
+    {"tag":"div","context":"class=\"w-9 h-9 rounded-[var(--of-radius-container)] grid place-items-center shrink-0 bg-of-accent/15 text-of-accent\"","tokens":["w-9","h-9"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex flex-col min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"span","context":"class=\"text-[11px] leading-tight flex items-center gap-1.5 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"inline-block w-1.5 h-1.5 rounded-[var(--of-radius-round)] bg-success animate-pulse\"","tokens":["w-1.5","h-1.5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
+    {"tag":"span","context":"class=\"inline-block w-1.5 h-1.5 rounded-[var(--of-radius-round)] bg-of-success animate-pulse\"","tokens":["w-1.5","h-1.5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
     {"tag":"div","context":"class=\"overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"w-4 grid place-items-center text-base-content/40 transition-transform {collapsed ? '' : 'rotate-90'}\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
-    {"tag":"span","context":"class=\"w-4 grid place-items-center shrink-0 text-success\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
+    {"tag":"span","context":"class=\"w-4 grid place-items-center text-of-text/40 transition-transform {collapsed ? '' : 'rotate-90'}\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
+    {"tag":"span","context":"class=\"w-4 grid place-items-center shrink-0 text-of-success\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
     {"tag":"div","context":"class=\"min-w-0 flex-1 flex flex-col gap-0.5\"","tokens":["min-w-0"],"count":2,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"span","context":"class=\"flex min-w-0 items-center gap-2\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"min-w-0 flex-1 truncate text-sm text-base-content\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"w-4 grid place-items-center shrink-0 text-error\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}
+    {"tag":"span","context":"class=\"min-w-0 flex-1 truncate text-sm text-of-text\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"span","context":"class=\"w-4 grid place-items-center shrink-0 text-of-danger\"","tokens":["w-4"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}
   ],
   "src/components/create-task/CreateTaskProperties.svelte": [
     {"tag":"style","context":".branch-placeholder","tokens":["min-width: 0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
@@ -346,7 +346,7 @@
     {"tag":"div","context":"class=\"min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "src/components/project/ProjectSetupDialog.svelte": [
-    {"tag":"Icon","context":"class=\"size-4 text-base-content/70\"","tokens":["size-4"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."}
+    {"tag":"Icon","context":"class=\"size-4 text-of-text/70\"","tokens":["size-4"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."}
   ],
   "src/components/project/ProjectSwitcherModal.svelte": [
     {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},

@@ -3,8 +3,6 @@ import { inventoryLegacyUiConsumers, readLegacyUiSources } from './check-ui-migr
 
 // Native backlog tickets retain these consumers. KVG-4873 does not gate on them.
 const pendingOwners = [
-  /^src\/components\/attention\/AttentionOverviewDialog\.svelte$/, // KVG-4871
-  /^src\/components\/project\/ProjectSetupDialog\.svelte$/, // KVG-4871
   /^src\/components\/task-detail\//, // KVG-4872
   /^src\/components\/shared\/pr\/(PrCommentsList|PrPipelineChecks)\.svelte$/, // KVG-4872
   /^src\/components\/shared\/tasks\/TaskRelationshipDetailSection\.svelte$/, // KVG-4872

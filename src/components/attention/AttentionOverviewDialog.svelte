@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onMount, onDestroy } from 'svelte'
@@ -20,9 +21,9 @@
 
   let { onClose, onOpenTask, onOpenPr }: Props = $props()
 
-  const CHIP_ACTIVE = 'border-primary/40 bg-primary/10 text-primary'
-  const CHIP_NEUTRAL = 'border-base-300 bg-base-200/60 text-base-content/70 hover:text-base-content'
-  const CHIP_MUTED = 'border-base-300 bg-base-200/40 text-base-content/40 hover:text-base-content/70'
+  const CHIP_ACTIVE = 'border-of-accent/40 bg-of-accent/10 text-of-accent'
+  const CHIP_NEUTRAL = 'border-of-border bg-of-surface-subtle/60 text-of-text/70 hover:text-of-text'
+  const CHIP_MUTED = 'border-of-border bg-of-surface-subtle/40 text-of-text/40 hover:text-of-text/70'
   // How long a task may fly before its age is called out. Nothing enforces this; it only
   // tints the number so a long-running agent stands out from a fresh one.
   const STUCK_IN_FLIGHT_SECONDS = 4 * 3600
@@ -179,27 +180,27 @@
 >
   <div class="flex flex-col min-h-0 h-full">
     <!-- Header -->
-    <div class="flex items-center gap-3.5 px-5 py-4 border-b border-base-300">
-      <div class="w-9 h-9 rounded-[var(--of-radius-container)] grid place-items-center shrink-0 bg-primary/15 text-primary">
+    <div class="flex items-center gap-3.5 px-5 py-4 border-b border-of-border">
+      <div class="w-9 h-9 rounded-[var(--of-radius-container)] grid place-items-center shrink-0 bg-of-accent/15 text-of-accent">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
           <circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.2" />
           <path d="M12 1.5V4M12 20v2.5M1.5 12H4M20 12h2.5" />
         </svg>
       </div>
       <div class="flex flex-col min-w-0">
-        <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
+        <h2 class="text-base font-semibold text-of-text m-0 leading-tight">Needs your attention</h2>
         <!-- Always on screen, whatever T and R are set to. The focus lane deliberately holds
              no running agent, so without this the dialog can look idle while five agents
              work. -->
         <span class="text-[11px] leading-tight flex items-center gap-1.5 min-w-0">
-          <span class="flex items-center gap-1 {runningAgents > 0 ? 'text-success' : 'text-base-content/50'}">
+          <span class="flex items-center gap-1 {runningAgents > 0 ? 'text-of-success' : 'text-of-text/50'}">
             {#if runningAgents > 0}
-              <span class="inline-block w-1.5 h-1.5 rounded-[var(--of-radius-round)] bg-success animate-pulse" aria-hidden="true"></span>
+              <span class="inline-block w-1.5 h-1.5 rounded-[var(--of-radius-round)] bg-of-success animate-pulse" aria-hidden="true"></span>
             {/if}
             {error ? 'Agent status may be out of date' : runningAgentsLabel}
           </span>
           {#if taskLane !== 'focus'}
-            <span class="text-base-content/40 truncate">· Showing the {laneLabel} lane</span>
+            <span class="text-of-text/40 truncate">· Showing the {laneLabel} lane</span>
           {/if}
         </span>
       </div>
@@ -236,7 +237,7 @@
             class="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-[var(--of-radius-container)] border text-xs font-medium transition-colors {chip.tone}"
             onclick={chip.toggle}
           >
-            <kbd class="kbd kbd-xs">{chip.key}</kbd>
+            <kbd class="of-key-hint of-key-hint-xs">{chip.key}</kbd>
             <span>{chip.label}</span>
             <span class="tabular-nums opacity-70">{chip.count}</span>
           </button>
@@ -247,7 +248,7 @@
 
     <div role="status">
       {#if $interaction.preferenceError}
-        <p class="text-xs text-base-content/70 px-5 py-2 m-0 border-b border-base-300">
+        <p class="text-xs text-of-text/70 px-5 py-2 m-0 border-b border-of-border">
           Couldn't save preferences. Your choices still apply here, but may be lost when you reopen this dialog.
         </p>
       {/if}
@@ -258,12 +259,12 @@
          dialog keeps receiving E and R instead of losing them to <body>. -->
     <div bind:this={bodyEl} tabindex="-1" class="overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none">
       {#if error}
-        <div class="rounded-[var(--of-radius-container)] border border-error/30 bg-error/5 p-3 mb-2">
+        <div class="rounded-[var(--of-radius-container)] border border-of-danger/30 bg-of-danger/5 p-3 mb-2">
           <div role="alert">
             <p class="text-sm font-medium m-0">Couldn't load attention overview.</p>
-            <p class="text-xs text-base-content/70 mt-1 mb-0 break-words">{error}</p>
+            <p class="text-xs text-of-text/70 mt-1 mb-0 break-words">{error}</p>
             {#if navGroups.length > 0}
-              <p class="text-xs text-base-content/70 mt-1 mb-0">Showing the last available results. They may be out of date.</p>
+              <p class="text-xs text-of-text/70 mt-1 mb-0">Showing the last available results. They may be out of date.</p>
             {/if}
           </div>
           <Button type="button" variant="ghost" size="sm" class="mt-2" disabled={retrying} onclick={retry}>
@@ -272,21 +273,21 @@
         </div>
       {/if}
       {#if loading}
-        <div class="flex flex-col items-center justify-center gap-3 py-16 text-base-content/50 text-sm">
-          <span class="loading loading-spinner loading-md text-primary"></span>
+        <div class="flex flex-col items-center justify-center gap-3 py-16 text-of-text/50 text-sm">
+          <LoadingIndicator size="md" decorative class="text-of-accent" />
           <span>Gathering what needs your attention…</span>
         </div>
       {:else if navGroups.length === 0 && !error}
         <div class="flex flex-col items-center justify-center gap-2 py-16 text-center">
           {#if reviewsHidden}
-            <p class="text-sm font-medium text-base-content m-0">Reviews are hidden</p>
-            <p class="text-xs text-base-content/50 m-0">Press R to bring them back.</p>
+            <p class="text-sm font-medium text-of-text m-0">Reviews are hidden</p>
+            <p class="text-xs text-of-text/50 m-0">Press R to bring them back.</p>
           {:else}
             {#if taskLane === 'focus'}
               <span class="text-2xl">🎉</span>
             {/if}
-            <p class="text-sm font-medium text-base-content m-0">{EMPTY_LANE_COPY[taskLane].title}</p>
-            <p class="text-xs text-base-content/50 m-0">
+            <p class="text-sm font-medium text-of-text m-0">{EMPTY_LANE_COPY[taskLane].title}</p>
+            <p class="text-xs text-of-text/50 m-0">
               {EMPTY_LANE_COPY[taskLane].hint}
               {#if taskLane !== 'focus'}Press T for the next lane.{/if}
             </p>
@@ -304,16 +305,16 @@
               data-attn-row={ng.headerIndex}
               aria-expanded={!collapsed}
               class="flex items-center gap-2.5 px-2 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
-                {focusedIndex === ng.headerIndex ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
+                {focusedIndex === ng.headerIndex ? 'bg-of-surface-subtle border-of-accent ring-1 ring-of-accent' : 'hover:bg-of-surface-subtle/70'}"
               onclick={() => activate(ng.headerIndex)}
               onkeydown={(e) => rowKeydown(e, ng.headerIndex)}
             >
-              <span class="w-4 grid place-items-center text-base-content/40 transition-transform {collapsed ? '' : 'rotate-90'}">
+              <span class="w-4 grid place-items-center text-of-text/40 transition-transform {collapsed ? '' : 'rotate-90'}">
                 <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z" /></svg>
               </span>
-              <span class="text-sm font-semibold text-base-content">{ng.group.name}</span>
+              <span class="text-sm font-semibold text-of-text">{ng.group.name}</span>
               {#if ng.group.isActive}
-                <span class="text-[10px] px-2 py-0.5 rounded-[var(--of-radius-round)] bg-primary/15 text-primary font-semibold tracking-wide shrink-0">viewing</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-[var(--of-radius-round)] bg-of-accent/15 text-of-accent font-semibold tracking-wide shrink-0">viewing</span>
               {/if}
               <!-- Count badges only when collapsed -->
               {#if collapsed}
@@ -332,7 +333,7 @@
 
             <!-- Nested items with a guide rail -->
             {#if !collapsed}
-              <div class="ml-3.5 pl-4 border-l border-base-300 flex flex-col gap-0.5 mt-0.5">
+              <div class="ml-3.5 pl-4 border-l border-of-border flex flex-col gap-0.5 mt-0.5">
                 {#each ng.items.filter((it) => it.row.kind === 'task') as it (it.row.kind === 'task' ? it.row.item.task.id : it.index)}
                   {#if it.row.kind === 'task'}
                     {@const state = it.row.item.state}
@@ -341,22 +342,22 @@
                       tabindex="0"
                       data-attn-row={it.index}
                       class="flex items-center gap-3 px-2.5 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
-                        {focusedIndex === it.index ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
+                        {focusedIndex === it.index ? 'bg-of-surface-subtle border-of-accent ring-1 ring-of-accent' : 'hover:bg-of-surface-subtle/70'}"
                       onclick={() => activate(it.index)}
                       onkeydown={(e) => rowKeydown(e, it.index)}
                       onfocus={() => focusRow(it.index)}
                     >
                       <!-- Agent icon (green) — an OpenForge agent/task that needs you.
                            Same icon + colour as the project sidebar. -->
-                      <span class="w-4 grid place-items-center shrink-0 text-success" aria-hidden="true">
+                      <span class="w-4 grid place-items-center shrink-0 text-of-success" aria-hidden="true">
                         <Bot size={15} />
                       </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
                         <span class="flex min-w-0 items-center gap-2">
-                          <span class="min-w-0 flex-1 truncate text-sm text-base-content">{it.row.item.title}</span>
+                          <span class="min-w-0 flex-1 truncate text-sm text-of-text">{it.row.item.title}</span>
                           {#if it.row.item.hasUnreadAgentOutput}
                             <span
-                              class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-info/25 bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info"
+                              class="inline-flex shrink-0 items-center gap-1 rounded-[var(--of-radius-round)] border border-of-info/25 bg-of-info/10 px-1.5 py-0.5 text-[10px] font-medium text-of-info"
                               aria-label="Unread agent output"
                             >
                               <CircleDot size={11} aria-hidden="true" />
@@ -364,7 +365,7 @@
                             </span>
                           {/if}
                         </span>
-                        <span class="text-[11px] text-base-content/45 truncate">
+                        <span class="text-[11px] text-of-text/45 truncate">
                           {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>
                       </div>
@@ -375,12 +376,12 @@
                         {@const age = inFlightAge(it.row.item.activityAt)}
                         {#if age}
                           <span
-                            class="text-[11px] tabular-nums shrink-0 {elapsed(it.row.item.activityAt) >= STUCK_IN_FLIGHT_SECONDS ? 'text-warning font-medium' : 'text-base-content/40'}"
+                            class="text-[11px] tabular-nums shrink-0 {elapsed(it.row.item.activityAt) >= STUCK_IN_FLIGHT_SECONDS ? 'text-of-warning font-medium' : 'text-of-text/40'}"
                             title="In flight since the last state change ({relTime(it.row.item.activityAt)})"
                           >{age}</span>
                         {/if}
                       {/if}
-                      <span class="text-base-content/30 shrink-0">›</span>
+                      <span class="text-of-text/30 shrink-0">›</span>
                     </div>
                   {/if}
                 {/each}
@@ -394,21 +395,21 @@
                       tabindex="0"
                       data-attn-row={it.index}
                       class="flex items-center gap-3 px-2.5 py-2 rounded-[var(--of-radius-container)] cursor-pointer border border-transparent transition-colors
-                        {focusedIndex === it.index ? 'bg-base-200 border-primary ring-1 ring-primary' : 'hover:bg-base-200/70'}"
+                        {focusedIndex === it.index ? 'bg-of-surface-subtle border-of-accent ring-1 ring-of-accent' : 'hover:bg-of-surface-subtle/70'}"
                       onclick={() => activate(it.index)}
                       onkeydown={(e) => rowKeydown(e, it.index)}
                       onfocus={() => focusRow(it.index)}
                     >
                       <!-- Pull-request icon (red) — a review request.
                            Same icon + colour as the project sidebar. -->
-                      <span class="w-4 grid place-items-center shrink-0 text-error" aria-hidden="true">
+                      <span class="w-4 grid place-items-center shrink-0 text-of-danger" aria-hidden="true">
                         <GitPullRequest size={15} />
                       </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
-                        <span class="text-sm text-base-content truncate">{pr.title}</span>
-                        <span class="text-[11px] text-base-content/45 truncate">
+                        <span class="text-sm text-of-text truncate">{pr.title}</span>
+                        <span class="text-[11px] text-of-text/45 truncate">
                           #{pr.number} {pr.repo_owner}/{pr.repo_name} · {pr.user_login}
-                          · <span class="text-success">+{pr.additions}</span> <span class="text-error">−{pr.deletions}</span>
+                          · <span class="text-of-success">+{pr.additions}</span> <span class="text-of-danger">−{pr.deletions}</span>
                           · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
                           {#if relTime(pr.updated_at)} · {relTime(pr.updated_at)}{/if}
                         </span>
@@ -430,7 +431,7 @@
                           extraProps={{ pr }}
                         />
                       </div>
-                      <span class="text-base-content/30 shrink-0">›</span>
+                      <span class="text-of-text/30 shrink-0">›</span>
                     </div>
                   {/if}
                 {/each}
