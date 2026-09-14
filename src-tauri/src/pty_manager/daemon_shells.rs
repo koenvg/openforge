@@ -1,34 +1,34 @@
-//! Controlled terminal bridge. Owns no PTY and never stops one on drop.
+//! Controlled shell/agent selection and command preparation for the daemon bridge.
+//! Connection ownership and event forwarding live in `daemon_transport`.
+pub(crate) use super::daemon_transport::CommandFence;
+use super::daemon_transport::DaemonTransport;
 #[cfg(test)]
 use super::PtyManager;
 use super::{PtyBufferState, TerminalViewSnapshot};
 use crate::app_events::RuntimeEventPublisher;
 use base64::Engine;
 use openforge_session_client::Client;
-use openforge_session_protocol::{Error, Event, Session, ShellCommand};
+use openforge_session_protocol::{Error, Session, ShellCommand};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CommandFence {
-    controller: openforge_session_protocol::Controller,
-    instance_id: u64,
-}
+use std::sync::Arc;
 
 #[derive(Clone)]
-pub(crate) struct DaemonShells(Arc<Shared>, Option<String>, Option<CommandFence>);
-struct Shared {
-    root: PathBuf,
-    executable: PathBuf,
-    key: String,
-    agent_keys: std::collections::BTreeMap<String, String>,
-    connection: Mutex<Option<Connection>>,
+pub(crate) struct DaemonShells {
+    transport: DaemonTransport,
+    selection: Arc<Selection>,
+    key: Option<String>,
+    fence: Option<CommandFence>,
 }
-struct Connection {
-    client: Client,
-    cursor: u64,
-    publisher: RuntimeEventPublisher,
+
+struct Selection {
+    shell_key: String,
+    agent_keys: std::collections::BTreeMap<String, String>,
+}
+
+impl Selection {
+    fn owns(&self, key: &str) -> bool {
+        selected_shell(&self.shell_key, key) || self.agent_keys.contains_key(key)
+    }
 }
 
 #[cfg(test)]
@@ -58,17 +58,17 @@ impl DaemonShells {
         key: String,
         agent_keys: std::collections::BTreeMap<String, String>,
     ) -> Self {
-        Self(
-            Arc::new(Shared {
-                root,
-                executable,
-                key,
-                agent_keys,
-                connection: Mutex::new(None),
-            }),
-            None,
-            None,
-        )
+        let selection = Arc::new(Selection {
+            shell_key: key,
+            agent_keys,
+        });
+        let event_selection = Arc::clone(&selection);
+        Self {
+            transport: DaemonTransport::new(root, executable, move |key| event_selection.owns(key)),
+            selection,
+            key: None,
+            fence: None,
+        }
     }
 
     pub(super) fn from_environment() -> Option<Self> {
@@ -100,22 +100,17 @@ impl DaemonShells {
     }
 
     pub(crate) fn publisher(&self) -> RuntimeEventPublisher {
-        self.0
-            .connection
-            .lock()
-            .ok()
-            .and_then(|slot| slot.as_ref().map(|connection| connection.publisher.clone()))
-            .unwrap_or_else(|| RuntimeEventPublisher::new(None, None))
+        self.transport.publisher()
     }
 
     pub(crate) fn owns(&self, key: &str) -> bool {
-        selected_shell(&self.0.key, key) || self.owns_agent(key)
+        self.selection.owns(key)
     }
     pub(crate) fn owns_agent(&self, key: &str) -> bool {
-        self.0.agent_keys.contains_key(key)
+        self.selection.agent_keys.contains_key(key)
     }
     pub(crate) fn selects_provider(&self, key: &str, command: &str) -> bool {
-        self.0
+        self.selection
             .agent_keys
             .get(key)
             .is_some_and(|provider| provider == command)
@@ -126,14 +121,12 @@ impl DaemonShells {
         task_id: String,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.run(publisher, move |connection, selection| {
-            for session in connection.client.inventory()?.sessions {
+        self.run(publisher, move |client, selection| {
+            for session in client.inventory()?.sessions {
                 if selected_shell(selection, &session.session_key)
                     && super::pids::is_shell_session_key_for_task(&session.session_key, &task_id)
                 {
-                    connection
-                        .client
-                        .terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
+                    client.terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
                 }
             }
             Ok(())
@@ -142,16 +135,21 @@ impl DaemonShells {
     }
 
     pub(crate) fn for_key(&self, key: &str) -> Self {
-        Self(Arc::clone(&self.0), Some(key.into()), None)
+        Self {
+            transport: self.transport.clone(),
+            selection: Arc::clone(&self.selection),
+            key: Some(key.into()),
+            fence: None,
+        }
     }
 
     pub(crate) fn fenced(mut self, fence: Option<CommandFence>) -> Self {
-        self.2 = fence;
+        self.fence = fence;
         self
     }
 
     fn key(&self) -> &str {
-        self.1.as_deref().unwrap_or(&self.0.key)
+        self.key.as_deref().unwrap_or(&self.selection.shell_key)
     }
 
     pub(crate) fn prepare_shell(
@@ -197,15 +195,15 @@ impl DaemonShells {
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<serde_json::Value, String> {
-        let agent_keys = self.0.agent_keys.clone();
-        self.run(publisher, move |connection, key| {
-            let inventory = connection.client.inventory()?;
+        let selection = Arc::clone(&self.selection);
+        self.run(publisher, move |client, key| {
+            let inventory = client.inventory()?;
             let sessions: Vec<_> = inventory
                 .sessions
                 .into_iter()
                 .filter(|session| {
                     selected_shell(key, &session.session_key)
-                        || agent_keys.contains_key(&session.session_key)
+                        || selection.agent_keys.contains_key(&session.session_key)
                 })
                 .map(|session| {
                     serde_json::json!({
@@ -225,8 +223,8 @@ impl DaemonShells {
         command: ShellCommand,
         publisher: RuntimeEventPublisher,
     ) -> Result<u64, String> {
-        self.run(publisher, move |connection, key| {
-            if let Some(session) = find(&connection.client, key)? {
+        self.run(publisher, move |client, key| {
+            if let Some(session) = find(client, key)? {
                 return if session.exit_code.is_none() {
                     Ok(session.pty.instance.value())
                 } else {
@@ -236,35 +234,26 @@ impl DaemonShells {
             use sha2::Digest;
             let hash = sha2::Sha256::digest(key.as_bytes());
             let operation = format!("spawn-{:x}", hash);
-            Ok(connection
-                .client
-                .spawn(&operation, &command)?
-                .pty
-                .instance
-                .value())
+            Ok(client.spawn(&operation, &command)?.pty.instance.value())
         })
         .await
     }
 
     pub(crate) async fn agent_sessions(&self) -> Result<Vec<Session>, String> {
-        let agent_keys = self.0.agent_keys.clone();
-        self.run(self.publisher(), move |connection, _| {
-            Ok(connection
-                .client
+        let selection = Arc::clone(&self.selection);
+        self.run(self.publisher(), move |client, _| {
+            Ok(client
                 .inventory()?
                 .sessions
                 .into_iter()
-                .filter(|session| agent_keys.contains_key(&session.session_key))
+                .filter(|session| selection.agent_keys.contains_key(&session.session_key))
                 .collect())
         })
         .await
     }
 
     pub(crate) async fn session(&self) -> Result<Option<Session>, String> {
-        self.run(self.publisher(), |connection, key| {
-            find(&connection.client, key)
-        })
-        .await
+        self.run(self.publisher(), find).await
     }
 
     pub(crate) async fn write(
@@ -272,9 +261,9 @@ impl DaemonShells {
         data: Vec<u8>,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.run(publisher, move |connection, key| {
-            let session = find(&connection.client, key)?.ok_or(Error::StalePty)?;
-            connection.client.write(
+        self.run(publisher, move |client, key| {
+            let session = find(client, key)?.ok_or(Error::StalePty)?;
+            client.write(
                 &uuid::Uuid::new_v4().to_string(),
                 &session.pty,
                 session.next_io_sequence.ok_or(Error::Capacity)?,
@@ -290,9 +279,9 @@ impl DaemonShells {
         rows: u16,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.run(publisher, move |connection, key| {
-            let session = find(&connection.client, key)?.ok_or(Error::StalePty)?;
-            connection.client.resize(
+        self.run(publisher, move |client, key| {
+            let session = find(client, key)?.ok_or(Error::StalePty)?;
+            client.resize(
                 &uuid::Uuid::new_v4().to_string(),
                 &session.pty,
                 session.next_io_sequence.ok_or(Error::Capacity)?,
@@ -304,11 +293,9 @@ impl DaemonShells {
     }
 
     pub(crate) async fn terminate(&self, publisher: RuntimeEventPublisher) -> Result<(), String> {
-        self.run(publisher, move |connection, key| {
-            if let Some(session) = find(&connection.client, key)? {
-                connection
-                    .client
-                    .terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
+        self.run(publisher, move |client, key| {
+            if let Some(session) = find(client, key)? {
+                client.terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
             }
             Ok(())
         })
@@ -319,8 +306,8 @@ impl DaemonShells {
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<PtyBufferState, String> {
-        self.run(publisher, move |connection, key| {
-            let session = find(&connection.client, key)?;
+        self.run(publisher, move |client, key| {
+            let session = find(client, key)?;
             let Some(session) = session else {
                 return Ok(PtyBufferState {
                     buffer: None,
@@ -329,7 +316,7 @@ impl DaemonShells {
                     instance_id: None,
                 });
             };
-            let snapshot = match connection.client.recover(&session.pty) {
+            let snapshot = match client.recover(&session.pty) {
                 Ok(snapshot) => {
                     let base64 = base64::engine::general_purpose::STANDARD;
                     Some(TerminalViewSnapshot {
@@ -362,8 +349,8 @@ impl DaemonShells {
         publisher: RuntimeEventPublisher,
         endpoint: Option<openforge_session_protocol::SidecarEndpoint>,
     ) -> Result<(), String> {
-        self.run(publisher, move |connection, _| {
-            connection.client.register_sidecar(endpoint)
+        self.run(publisher, move |client, _| {
+            client.register_sidecar(endpoint)
         })
         .await
     }
@@ -376,8 +363,8 @@ impl DaemonShells {
         installation: String,
         instance: u64,
     ) -> Result<(), String> {
-        self.run(publisher, move |connection, _| {
-            let inventory = connection.client.inventory()?;
+        self.run(publisher, move |client, _| {
+            let inventory = client.inventory()?;
             if inventory.controller.installation.as_str() != installation {
                 return Err(Error::ForeignInstallation);
             }
@@ -401,64 +388,16 @@ impl DaemonShells {
     async fn run<T: Send + 'static>(
         &self,
         publisher: RuntimeEventPublisher,
-        operation: impl FnOnce(&mut Connection, &str) -> Result<T, Error> + Send + 'static,
+        operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
     ) -> Result<T, String> {
-        let shared = Arc::clone(&self.0);
-        let key = self.key().to_owned();
-        let fence = self.2.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut slot = shared
-                .connection
-                .lock()
-                .map_err(|_| Error::OutcomeUnknown)?;
-            if slot.is_none() {
-                let client = Client::launch(&shared.executable, &shared.root)?;
-                let cursor = client.inventory()?.cursor;
-                *slot = Some(Connection {
-                    client,
-                    cursor,
-                    publisher: publisher.clone(),
-                });
-                let weak = Arc::downgrade(&shared);
-                std::thread::Builder::new()
-                    .name("daemon-shell-events".into())
-                    .spawn(move || {
-                        while let Some(shared) = weak.upgrade() {
-                            let result = pump(&shared);
-                            drop(shared);
-                            if matches!(
-                                result,
-                                Err(Error::StaleController | Error::ForeignInstallation)
-                            ) {
-                                break;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(
-                                if result.is_ok() { 20 } else { 250 },
-                            ));
-                        }
-                    })
-                    .map_err(|error| Error::Host(error.to_string()))?;
-            }
-            let connection = slot.as_mut().ok_or(Error::OutcomeUnknown)?;
-            connection.publisher = publisher;
-            if let Some(fence) = fence {
-                let inventory = connection.client.inventory()?;
-                if inventory.controller != fence.controller {
-                    return Err(Error::StaleController);
-                }
-                let current = inventory
-                    .sessions
-                    .into_iter()
-                    .find(|session| session.session_key == key);
-                if current.is_none_or(|session| session.pty.instance.value() != fence.instance_id) {
-                    return Err(Error::StalePty);
-                }
-            }
-            operation(connection, &key)
-        })
-        .await
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())
+        self.transport
+            .run(
+                self.key().to_owned(),
+                self.fence.clone(),
+                publisher,
+                operation,
+            )
+            .await
     }
 }
 
@@ -482,57 +421,4 @@ fn find(client: &Client, key: &str) -> Result<Option<Session>, Error> {
         .into_iter()
         .filter(|s| s.session_key == key)
         .max_by_key(|s| s.pty.instance.value()))
-}
-
-fn pump(shared: &Shared) -> Result<(), Error> {
-    let mut slot = shared
-        .connection
-        .lock()
-        .map_err(|_| Error::OutcomeUnknown)?;
-    let Some(connection) = slot.as_mut() else {
-        return Ok(());
-    };
-    let batch = connection.client.events(connection.cursor)?;
-    let current: Vec<_> = connection
-        .client
-        .inventory()?
-        .sessions
-        .into_iter()
-        .filter(|session| {
-            selected_shell(&shared.key, &session.session_key)
-                || shared.agent_keys.contains_key(&session.session_key)
-        })
-        .collect();
-    if batch.gap {
-        // Existing transport reconciliation requests fresh authority snapshots, not raw replay.
-        connection
-            .publisher
-            .publish("openforge-app-events-reconnected", &serde_json::json!({}));
-        for session in &current {
-            if batch.events.iter().any(|event| event.is_exit(&session.pty)) {
-                connection.publisher.publish(
-                    &format!("pty-exit-{}", session.session_key),
-                    &serde_json::json!({ "instance_id": session.pty.instance }),
-                );
-            }
-        }
-        // A suffix after a missing prefix is not an ordered stream. Recovery restores
-        // both terminal state and liveness; never forward this suffix after an exit.
-        connection.cursor = batch.cursor;
-        return Ok(());
-    }
-    for session in current {
-        for event in &batch.events {
-            match event {
-                Event::Output { pty, sequence, data } if pty == &session.pty => connection.publisher.publish(&format!("pty-model-output-{}", session.session_key), &serde_json::json!({
-                    "instance_id": pty.instance, "start_sequence": sequence, "sequence": sequence, "data": base64::engine::general_purpose::STANDARD.encode(data),
-                })),
-                Event::Exited { pty, .. } if pty == &session.pty => connection.publisher.publish(&format!("pty-exit-{}", session.session_key), &serde_json::json!({ "instance_id": pty.instance })),
-                Event::RecoveryRequired { pty } if pty == &session.pty => connection.publisher.publish(&format!("pty-model-disabled-{}", session.session_key), &serde_json::json!({ "instance_id": pty.instance })),
-                _ => {},
-            }
-        }
-    }
-    connection.cursor = batch.cursor;
-    Ok(())
 }
