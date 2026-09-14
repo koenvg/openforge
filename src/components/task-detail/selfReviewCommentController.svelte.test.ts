@@ -1,8 +1,8 @@
+import { flushSync } from 'svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SelfReviewTaskState } from '../../lib/taskScopedSelfReviewState'
-import type { PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
+import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
 import { createSelfReviewCommentController } from './selfReviewCommentController.svelte'
-import { createSelfReviewFeedbackPane } from './selfReviewFeedbackPane.svelte'
 
 const { resolveGithubAsset } = vi.hoisted(() => ({
   resolveGithubAsset: vi.fn(),
@@ -36,6 +36,34 @@ afterEach(() => {
   resolveGithubAsset.mockReset()
 })
 
+const prComment: PrComment = {
+  id: 1, pr_id: 1, author: 'alice', body: 'Original review', comment_type: 'review_comment',
+  file_path: 'src/task.ts', line_number: 12, addressed: 0, outdated: 0, created_at: 1000,
+}
+
+function feedbackFixture(inline: ReviewSubmissionComment[] = [], pr: PrComment[] = []) {
+  let taskId = 'task-1'
+  let state = $state<SelfReviewTaskState>({
+    diffFiles: [], pendingInlineComments: inline, inlineCommentDrafts: new Map(),
+  })
+  let prComments = $state(pr)
+  let controller!: ReturnType<typeof createSelfReviewCommentController>
+  rootCleanups.push($effect.root(() => {
+    controller = createSelfReviewCommentController({
+      getTaskId: () => taskId, getState: () => state, getPrComments: () => prComments,
+      getComparisonFilenames: () => new Set([hiddenComment.path]),
+      setPendingComments: (_taskId, comments) => { state = { ...state, pendingInlineComments: comments } },
+    })
+  }))
+  flushSync()
+  return {
+    controller,
+    setInline(comments: ReviewSubmissionComment[]) { state = { ...state, pendingInlineComments: comments } },
+    setPr(comments: PrComment[]) { flushSync(() => { prComments = comments }) },
+    setTask(id: string) { taskId = id; controller.synchronize() },
+  }
+}
+
 describe('createSelfReviewCommentController', () => {
   it('hides comparison comments while preserving them when visible comments change', () => {
     let state = $state<SelfReviewTaskState>({
@@ -65,34 +93,103 @@ describe('createSelfReviewCommentController', () => {
     expect(controller.pendingInlineComments).toEqual([hiddenComment, updatedVisibleComment])
   })
 
-  it.each(['unchanged', 'edited', 'added'])('reconciles %s comparison-path feedback through the whole-list composer boundary', (change) => {
+  it.each(['unchanged', 'edited', 'added'])('reconciles %s comparison-path feedback from a captured prompt', (change) => {
     const retained = change === 'unchanged' ? [] : [{
       ...hiddenComment,
       line: change === 'added' ? 8 : hiddenComment.line,
       body: change === 'added' ? 'New feedback after preview' : 'Edited feedback after preview',
     }]
-    let state = $state<SelfReviewTaskState>({
-      diffFiles: [], pendingInlineComments: [hiddenComment, visibleComment], inlineCommentDrafts: new Map(),
-    })
-    let controller!: ReturnType<typeof createSelfReviewCommentController>
-    let pane!: ReturnType<typeof createSelfReviewFeedbackPane>
-    rootCleanups.push($effect.root(() => {
-      controller = createSelfReviewCommentController({
-        getTaskId: () => 'task-1', getState: () => state, getPrComments: () => [],
-        getComparisonFilenames: () => new Set([hiddenComment.path]),
-        setPendingComments: (_taskId, comments) => { state = { ...state, pendingInlineComments: comments } },
-      })
-      pane = createSelfReviewFeedbackPane({
-        comments: controller,
-        diff: { linkedPr: null, prComments: [], refresh: vi.fn() },
-        navigation: { showAddressed: false, setSidebarVisible: vi.fn(), setShowAddressed: vi.fn(), openLinkedPr: vi.fn(), scrollToComment: vi.fn() },
-      })
-    }))
-    state = { ...state, pendingInlineComments: change === 'edited'
-      ? [...retained, visibleComment] : [hiddenComment, visibleComment, ...retained] }
-    pane.composer.onPendingInlineCommentsChange(retained)
+    const { controller, setInline } = feedbackFixture([hiddenComment, visibleComment])
+    const capture = controller.captureReviewFeedback()
+    expect(capture.compilePrompt('address')).toContain(hiddenComment.body)
+    expect(controller.pendingInlineComments).toEqual([hiddenComment, visibleComment])
+    setInline(change === 'edited' ? [...retained, visibleComment] : [hiddenComment, visibleComment, ...retained])
+    capture.reconcileAfterSend()
     expect(controller.pendingInlineComments).toEqual(retained)
     expect(controller.visiblePendingInlineComments).toEqual([])
+  })
+
+  it.each([
+    {}, { body: 'Edited review' }, { author: 'bob' },
+    { file_path: 'src/other.ts' }, { line_number: 99 },
+  ])('deselects only unchanged captured GitHub feedback with changes %j', (changes) => {
+    const { controller, setPr } = feedbackFixture([], [prComment])
+    controller.commentSelection.selectAll()
+    const capture = controller.captureReviewFeedback()
+    const current = { ...prComment, ...changes }
+    const added = { ...prComment, id: 2, body: 'Newly selected review' }
+    setPr([current, added])
+    controller.commentSelection.toggleSelected(added.id)
+
+    expect(capture.compilePrompt('analyze')).toContain('Original review')
+    expect(capture.compilePrompt('analyze')).not.toContain('Newly selected review')
+    capture.reconcileAfterSend()
+
+    expect(controller.commentSelection.selectedPrCommentIds).toEqual(
+      new Set(Object.keys(changes).length ? [1, 2] : [2]),
+    )
+    expect(controller.commentSelection.addressedCount).toBe(0)
+    expect(controller.commentSelection.unaddressedCount).toBe(2)
+  })
+
+  it.each([1, 2])('removes only the %i captured occurrences of identical inline feedback', (count) => {
+    const { controller, setInline } = feedbackFixture(Array.from({ length: count }, () => ({ ...visibleComment })))
+    const capture = controller.captureReviewFeedback()
+    setInline(Array.from({ length: count + 1 }, () => ({ ...visibleComment })))
+    capture.reconcileAfterSend()
+    expect(controller.pendingInlineComments).toEqual([visibleComment])
+    capture.reconcileAfterSend()
+    expect(controller.pendingInlineComments).toEqual([visibleComment])
+  })
+
+  it.each([
+    { body: 'Updated feedback' }, { path: 'src/other.ts' },
+    { line: 99 }, { side: 'LEFT' as const },
+  ])('preserves edited and new inline feedback with changes %j', (changes) => {
+    const { controller, setInline } = feedbackFixture([visibleComment])
+    const capture = controller.captureReviewFeedback()
+    const edited = { ...visibleComment, ...changes }
+    const added = { ...visibleComment, line: 8, body: 'New feedback' }
+    setInline([edited, added])
+    capture.reconcileAfterSend()
+    expect(controller.pendingInlineComments).toEqual([edited, added])
+  })
+
+  it('keeps prompt snapshots when source comments are mutated', () => {
+    const { controller } = feedbackFixture([visibleComment], [prComment])
+    controller.commentSelection.selectAll()
+    const capture = controller.captureReviewFeedback()
+    controller.pendingInlineComments[0].body = 'Mutated inline feedback'
+    controller.commentSelection.selectedPrComments[0].body = 'Mutated GitHub feedback'
+    const prompt = capture.compilePrompt('analyze')
+    expect(prompt).toContain('Visible comment')
+    expect(prompt).toContain('Original review')
+    expect(prompt).not.toContain('Mutated')
+    capture.reconcileAfterSend()
+    expect(controller.feedbackCount).toBe(2)
+  })
+
+  it('does not select removed or deselected GitHub feedback while reconciling', () => {
+    const { controller, setPr } = feedbackFixture([], [prComment, { ...prComment, id: 2 }])
+    controller.commentSelection.selectAll()
+    const capture = controller.captureReviewFeedback()
+    controller.commentSelection.toggleSelected(1)
+    setPr([prComment])
+    capture.reconcileAfterSend()
+    expect(controller.commentSelection.selectedPrCommentIds.has(1)).toBe(false)
+    expect(controller.commentSelection.selectedPrComments).toEqual([])
+  })
+
+  it('does not reconcile a capture against another task', () => {
+    const { controller, setTask, setInline } = feedbackFixture([visibleComment], [prComment])
+    controller.commentSelection.selectAll()
+    const capture = controller.captureReviewFeedback()
+    setTask('task-2')
+    setInline([{ ...visibleComment }])
+    controller.commentSelection.selectAll()
+    capture.reconcileAfterSend()
+    expect(controller.pendingInlineComments).toEqual([visibleComment])
+    expect(controller.commentSelection.selectedPrCommentIds).toEqual(new Set([1]))
   })
 
   it('exchanges GitHub upload URLs through the sidecar', async () => {

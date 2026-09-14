@@ -30,7 +30,8 @@ describe('self review feedback pane', () => {
         get pendingInlineComments() { return pendingInlineComments },
         markdownImageBaseUrl: null,
         resolveRemoteMedia: vi.fn(),
-        replacePendingInlineComments: (comments) => { pendingInlineComments = comments },
+        get feedbackCount() { return pendingInlineComments.length },
+        captureReviewFeedback: vi.fn(),
       },
       navigation: {
         get showAddressed() { return showAddressed },
@@ -46,13 +47,11 @@ describe('self review feedback pane', () => {
 
     pane.pullRequest.onShowAddressedChange(true)
     pane.navigation.onCollapse()
-    pane.composer.onSendComplete([1])
 
     expect(pane.pullRequest.visibleComments).toEqual([unaddressedComment, addressedComment])
     expect(sidebarVisible).toBe(false)
-    expect(pane.pullRequest.selection.selectedPrCommentIds).toEqual(new Set([2]))
 
-    pane.composer.onPendingInlineCommentsChange([])
+    pendingInlineComments = []
     expect(pane.totalCommentCount).toBe(1)
   })
 })

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { CheckCircle2, RefreshCw, Send } from '@lucide/svelte'
-  import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
-  import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
+  import type { ReviewPromptMode } from '../../lib/reviewPrompt'
+  import type { ReviewFeedbackCapture, ReviewFeedbackComposer } from './selfReviewCommentController.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
@@ -12,13 +12,10 @@
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
     onRefresh: () => void
-    selectedPrComments?: PrComment[]
-    pendingInlineComments?: ReviewSubmissionComment[]
-    onPendingInlineCommentsChange?: (comments: ReviewSubmissionComment[]) => void
-    onSendComplete?: (sentPrCommentIds: number[]) => void
+    feedback: ReviewFeedbackComposer
   }
 
-  let { agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
+  let { agentStatus, onSendToAgent, onRefresh, feedback }: Props = $props()
 
   const isMac = navigator.platform.startsWith('Mac')
 
@@ -27,12 +24,9 @@
   let showPromptDialog = $state(false)
   let promptDraft = $state('')
   let promptMode = $state<ReviewPromptMode>('address')
-  let capturedInline = $state<ReviewSubmissionComment[]>([])
-  let capturedPr = $state<PrComment[]>([])
+  let capture = $state<ReviewFeedbackCapture | null>(null)
 
-  let inlineCount = $derived(pendingInlineComments.length)
-  let prCommentCount = $derived(selectedPrComments.length)
-  let hasComments = $derived(inlineCount > 0 || prCommentCount > 0)
+  let hasComments = $derived(feedback.feedbackCount > 0)
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
   let canSend = $derived(hasComments && !isAgentBusy)
 
@@ -41,27 +35,19 @@
   function openPromptDialog() {
     if (!canSend) return
 
-    capturedInline = pendingInlineComments.map(comment => ({ ...comment }))
-    capturedPr = selectedPrComments.map(comment => ({ ...comment }))
+    capture = feedback.captureReviewFeedback()
     promptMode = 'address'
-    promptDraft = compileReviewPrompt(promptMode, capturedInline, capturedPr)
+    promptDraft = capture.compilePrompt(promptMode)
     successMessage = null
     showPromptDialog = true
   }
 
   // Dispatches the (possibly edited) prompt the user reviewed in the dialog.
   function confirmSend() {
-    if (isAgentBusy || !promptDraft.trim()) return
+    if (!capture || isAgentBusy || !promptDraft.trim()) return
     onSendToAgent(promptDraft)
-    const unmatchedCapturedInline = [...capturedInline]
-    onPendingInlineCommentsChange?.(pendingInlineComments.filter(comment => {
-      const capturedIndex = unmatchedCapturedInline.findIndex(sent =>
-        sent.path === comment.path && sent.line === comment.line
-        && sent.side === comment.side && sent.body === comment.body)
-      if (capturedIndex < 0) return true
-      unmatchedCapturedInline.splice(capturedIndex, 1)
-      return false
-    }))
+    capture.reconcileAfterSend()
+    capture = null
     showPromptDialog = false
     successMessage = 'Feedback sent to agent!'
     clearTimeout(successTimer)
@@ -69,10 +55,6 @@
       successTimer = undefined
       successMessage = null
     }, 3000)
-    onSendComplete?.(selectedPrComments.filter(comment => capturedPr.some(sent =>
-      sent.id === comment.id && sent.body === comment.body && sent.author === comment.author
-      && sent.file_path === comment.file_path && sent.line_number === comment.line_number,
-    )).map(comment => comment.id))
   }
 
   function handlePromptKeydown(event: KeyboardEvent) {
@@ -84,13 +66,14 @@
 
   function cancelPromptDialog() {
     showPromptDialog = false
+    capture = null
   }
 
   // Switching mode regenerates the prompt from the captured comments (overwriting
   // any manual edits), so each mode shows its own template.
   function setPromptMode(mode: ReviewPromptMode) {
     promptMode = mode
-    promptDraft = compileReviewPrompt(mode, capturedInline, capturedPr)
+    if (capture) promptDraft = capture.compilePrompt(mode)
   }
 </script>
 
@@ -120,7 +103,7 @@
       title={!hasComments ? 'Add comments before sending' : isAgentBusy ? `Agent is currently ${agentStatus}` : 'Review and send feedback to agent'}
     >
       <Send size={17} strokeWidth={1.8} aria-hidden="true" />
-      {`Send feedback (${inlineCount + prCommentCount})`}
+      {`Send feedback (${feedback.feedbackCount})`}
     </Button>
   </div>
 </div>

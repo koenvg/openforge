@@ -1,7 +1,7 @@
 import type { ResolvedMarkdownMedia } from '../../lib/markdown'
 import type { CommentSelectionState } from '../../lib/useCommentSelection.svelte'
-import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
-import type { SelfReviewCommentController } from './selfReviewCommentController.svelte'
+import type { PrComment, PullRequestInfo } from '../../lib/types'
+import type { ReviewFeedbackComposer, SelfReviewCommentController } from './selfReviewCommentController.svelte'
 import type { SelfReviewDiffController } from './selfReviewDiffController.svelte'
 import type { SelfReviewNavigationController } from './selfReviewNavigationController.svelte'
 
@@ -19,12 +19,6 @@ interface SelfReviewPullRequestFeedback {
   onShowAddressedChange: (showAddressed: boolean) => void
 }
 
-interface SelfReviewFeedbackComposer {
-  readonly pendingInlineComments: ReviewSubmissionComment[]
-  onPendingInlineCommentsChange: (comments: ReviewSubmissionComment[]) => void
-  onSendComplete: (sentPrCommentIds: number[]) => void
-}
-
 interface SelfReviewFeedbackNavigation {
   onCollapse: () => void
 }
@@ -32,7 +26,7 @@ interface SelfReviewFeedbackNavigation {
 export interface SelfReviewFeedbackPane {
   readonly totalCommentCount: number
   readonly pullRequest: SelfReviewPullRequestFeedback
-  readonly composer: SelfReviewFeedbackComposer
+  readonly composer: ReviewFeedbackComposer
   readonly navigation: SelfReviewFeedbackNavigation
 }
 
@@ -44,7 +38,8 @@ interface SelfReviewFeedbackPaneSources {
     | 'pendingInlineComments'
     | 'markdownImageBaseUrl'
     | 'resolveRemoteMedia'
-    | 'replacePendingInlineComments'
+    | 'feedbackCount'
+    | 'captureReviewFeedback'
   >
   navigation: Pick<
     SelfReviewNavigationController,
@@ -82,15 +77,8 @@ export function createSelfReviewFeedbackPane(
       onShowAddressedChange: sources.navigation.setShowAddressed,
     },
     composer: {
-      get pendingInlineComments() { return sources.comments.pendingInlineComments },
-      onPendingInlineCommentsChange: sources.comments.replacePendingInlineComments,
-      onSendComplete: (sentPrCommentIds) => {
-        for (const id of sentPrCommentIds) {
-          if (sources.comments.commentSelection.selectedPrCommentIds.has(id)) {
-            sources.comments.commentSelection.toggleSelected(id)
-          }
-        }
-      },
+      get feedbackCount() { return sources.comments.feedbackCount },
+      captureReviewFeedback: sources.comments.captureReviewFeedback,
     },
     navigation: {
       onCollapse: () => sources.navigation.setSidebarVisible(false),
