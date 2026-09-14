@@ -95,6 +95,7 @@ pub struct AppState {
     pub app: Option<crate::backend_runtime::AppHandle>,
     pub db: std::sync::Arc<Mutex<db::Database>>,
     pub backend_token: Option<String>,
+    pub(crate) agent_generation_identities: crate::agent_generation_identity::GenerationIdentities,
     pub pty_manager: Option<PtyManager>,
     pub deferred_completion_watcher: deferred_completion::DeferredCompletionWatcher,
     pub github_client: GitHubClient,

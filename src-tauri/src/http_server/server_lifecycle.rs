@@ -248,6 +248,25 @@ pub async fn start_http_sidecar_server(
     .await
 }
 
+/// A failure costs headless generations their Review Thread CLI writes rather
+/// than blocking startup, so it is warned about and not propagated.
+fn activate_agent_generation_identities(state: &AppState, port: u16) {
+    let activated = state
+        .app
+        .as_ref()
+        .ok_or_else(|| "no application handle".to_string())
+        .and_then(|app| app.path().app_data_dir())
+        .and_then(|root| {
+            state.agent_generation_identities.activate(
+                root.join(crate::agent_generation_identity::CREDENTIAL_DIRECTORY_NAME),
+                port,
+            )
+        });
+    if let Err(error) = activated {
+        warn!("[http_server] headless generations have no agent identity: {error}");
+    }
+}
+
 async fn start_http_server_with_app_state(
     app: Option<crate::backend_runtime::AppHandle>,
     db: std::sync::Arc<Mutex<db::Database>>,
@@ -304,13 +323,17 @@ async fn start_http_server_with_app_state(
     let process_memory_history_enabled = process_memory_history_enabled_preference(&db);
     let deferred_completion_watcher =
         crate::http_server::deferred_completion::DeferredCompletionWatcher::new();
+    let agent_generation_identities =
+        crate::agent_generation_identity::GenerationIdentities::default();
     if let Some(app) = app.as_ref() {
         app.manage(deferred_completion_watcher.clone());
+        app.manage(agent_generation_identities.clone());
     }
     let state = AppState {
         app,
         db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
+        agent_generation_identities,
         pty_manager: Some(pty_manager),
         deferred_completion_watcher,
         github_client: github_client.clone(),
@@ -345,6 +368,7 @@ async fn start_http_server_with_app_state(
     info!("[http_server] Starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    activate_agent_generation_identities(&shutdown_state, listener.local_addr()?.port());
     if let Some(daemon) = shutdown_state
         .pty_manager
         .as_ref()

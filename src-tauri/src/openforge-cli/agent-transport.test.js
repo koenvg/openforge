@@ -29,6 +29,34 @@ it('uses its private agent route instead of stale launch-time HTTP discovery', a
   }
 });
 
+it('accepts the credential shape the Sidecar writes for a headless generation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'of-cli-generation-'));
+  await chmod(root, 0o700);
+  const requests = [];
+  const token = 'ab12'.repeat(16);
+  const server = createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+    res.setHeader('content-type', 'application/json');
+    res.end('{"id":"rt_1"}');
+  });
+  try {
+    const port = await listen(server);
+    const configPath = join(root, 'generation-fixture.json');
+    await writeFile(configPath, JSON.stringify({ version: 1, port, token }), { mode: 0o600 });
+    const { stdout } = await runCli(
+      ['review', 'thread', 'create', '--namespace', 'github', '--target', 'gh:acme/web#1', '--revision', '0f1c2d3', '--file', 'src/main.rs', '--line', '42', '--body', 'Missing null check'],
+      { OPENFORGE_AGENT_CONFIG: configPath, OPENFORGE_HTTP_PORT: '1' },
+    );
+    expect(JSON.parse(stdout)).toEqual({ id: 'rt_1' });
+    expect(requests).toEqual([
+      { method: 'POST', url: '/review_threads/create', authorization: `Bearer ${token}` },
+    ]);
+  } finally {
+    await close(server);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it('fails closed on unsafe or malformed agent configuration without using legacy discovery', async () => {
   const root = await mkdtemp(join(tmpdir(), 'of-cli-config-'));
   await chmod(root, 0o700);
