@@ -38,7 +38,8 @@ async function setup(scope: 'global' | 'repo' = 'global') {
     getReviewPrs: [pr], fetchReviewPrs: [{ ...pr, title: 'Updated login' }],
     getAuthoredPrs: [], fetchAuthoredPrs: [], getPrWalkthrough: null,
     markReviewPrViewed: null, markReviewPrUnviewed: null, dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
-    getPrAiReviewComments: [], getAiThreads: [], saveAiThread: null, askAgentQuestions: null,
+    getPrAiReviewComments: [], updatePrAiReviewCommentStatus: null,
+    getAiThreads: [], saveAiThread: null, askAgentQuestions: null,
     getPrTicket: { snapshot: null, jiraConfigured: false },
     startAgentWalkthrough: { walkthrough_session_key: 'session-1' },
     deletePrWalkthrough: null, abortAgentWalkthrough: null,
@@ -355,12 +356,92 @@ describe('review workspace', () => {
   it('keeps AI questions local and exposes replies through the selected review', async () => {
     const { workspace, calls } = await setup()
     await workspace.list.onSelectPr(pr)
-    workspace.detail!.onAskAgent('login.ts', 2, 'RIGHT', 'Why this change?')
+    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
     expect(workspace.detail!.aiThreadsPendingCount).toBe(1)
-    const threadId = workspace.detail!.aiThreads[0].id
-    await workspace.detail!.onReplyToThread(threadId, 'More detail please')
-    expect(workspace.detail!.aiThreads[0].messages.map(value => value.body)).toEqual(['Why this change?', 'More detail please'])
+    const threadId = workspace.detail!.reviewThreads[0].id
+    workspace.detail!.onReplyToReviewThread(threadId, 'More detail please')
+    await waitFor(() => expect(workspace.detail!.aiThreads[0].messages.map(value => value.body))
+      .toEqual(['Why this change?', 'More detail please']))
     expect(calls.get('createReviewComment')).toBeUndefined()
+    expect(calls.get('saveAiThread')).toHaveLength(2)
+  })
+
+  it('renders its stored agent comments through the review-thread input', async () => {
+    const { workspace, responses } = await setup()
+    responses.set('getPrAiReviewComments', [{
+      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
+      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
+      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
+    }])
+    await workspace.list.onSelectPr(pr)
+
+    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
+    const [thread] = workspace.detail!.reviewThreads
+    expect(thread.id).toBe('agent:100')
+    expect(thread.origin).toBe('agent')
+    expect(thread.targetKey).toBe('gh:acme/app#42')
+    expect(thread.revision).toBe('head')
+    expect(thread.messages.map(message => message.body)).toEqual(['Needs a null check'])
+  })
+
+  it('appends a reply to the agent comment thread it was written in', async () => {
+    const { workspace, responses } = await setup()
+    responses.set('getPrAiReviewComments', [{
+      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
+      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
+      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
+    }])
+    await workspace.list.onSelectPr(pr)
+    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
+
+    workspace.detail!.onReplyToReviewThread('agent:100', 'Why is that unsafe?')
+    await waitFor(() => expect(workspace.detail!.reviewThreads[0].messages).toHaveLength(2))
+    workspace.detail!.onReplyToReviewThread('agent:100', 'Still unclear')
+
+    await waitFor(() => expect(workspace.detail!.reviewThreads[0].messages.map(message => message.body))
+      .toEqual(['Needs a null check', 'Why is that unsafe?', 'Still unclear']))
+    expect(workspace.detail!.reviewThreads).toHaveLength(1)
+    expect(workspace.detail!.reviewThreads[0].id).toBe('agent:100')
+  })
+
+  it('records a reviewer decision on an agent comment through its own storage', async () => {
+    const { workspace, responses, calls } = await setup()
+    responses.set('getPrAiReviewComments', [{
+      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
+      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
+      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
+    }])
+    await workspace.list.onSelectPr(pr)
+    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
+
+    workspace.detail!.onSetReviewThreadStatus('agent:100', 'resolved')
+
+    await waitFor(() => expect(workspace.detail!.reviewThreads[0].status).toBe('resolved'))
+    expect(calls.get('updatePrAiReviewCommentStatus')).toContainEqual({
+      reviewPrId: pr.id, headSha: 'head', commentId: 100, status: 'approved',
+    })
+  })
+
+  it('renders its stored question threads through the review-thread input', async () => {
+    const { workspace } = await setup()
+    await workspace.list.onSelectPr(pr)
+    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
+
+    const [thread] = workspace.detail!.reviewThreads
+    expect(thread.origin).toBe('human')
+    expect(thread.anchor).toEqual({ kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' })
+    expect(thread.awaiting).toBe('agent')
+    expect(thread.messages.map(message => message.body)).toEqual(['Why this change?'])
+  })
+
+  it('records a reviewer decision on a question thread', async () => {
+    const { workspace, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
+
+    workspace.detail!.onSetReviewThreadStatus(workspace.detail!.reviewThreads[0].id, 'resolved')
+
+    await waitFor(() => expect(workspace.detail!.reviewThreads[0].status).toBe('resolved'))
     expect(calls.get('saveAiThread')).toHaveLength(2)
   })
 

@@ -1,5 +1,5 @@
 {
-  "sources": 1894,
+  "sources": 1892,
   "records": [
     {
       "path": "package.json",
@@ -3480,54 +3480,6 @@
       "token": "checkbox",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
       "line": 83
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "component",
-      "token": "loading",
-      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 44
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "component",
-      "token": "loading-spinner",
-      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 44
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "component",
-      "token": "loading-xs",
-      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 44
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "color",
-      "token": "text-base-content/50",
-      "replacement": "text-of-text/50",
-      "line": 45
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "color",
-      "token": "text-error",
-      "replacement": "text-of-danger",
-      "line": 48
-    },
-    {
-      "path": "packages/pr-review-ui/src/InlineAiQuestionThread.svelte",
-      "subsystem": "packages/pr-review-ui",
-      "kind": "color",
-      "token": "text-base-content/50",
-      "replacement": "text-of-text/50",
-      "line": 54
     },
     {
       "path": "packages/pr-review-ui/src/InlineCommentBody.svelte",

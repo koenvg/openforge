@@ -4,12 +4,12 @@
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import type { ReviewThreadStatus } from '@openforge-app/plugin-sdk'
-  import type { ReviewThreadCommentDisplayData } from './diffComments'
+  import type { ThreadCommentDisplayData } from './diffComments'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineReplyEditor from './InlineReplyEditor.svelte'
 
   interface Props {
-    comment: ReviewThreadCommentDisplayData
+    comment: ThreadCommentDisplayData
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onOpenUrl?: (url: string) => void | Promise<void>

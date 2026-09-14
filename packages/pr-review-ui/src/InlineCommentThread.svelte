@@ -1,30 +1,22 @@
 <script lang="ts">
   import { X } from '@lucide/svelte'
-  import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
-  import type { AgentCommentDisplayData, CommentDisplayData, ExistingCommentDisplayData } from './diffComments'
-  import InlineAiQuestionThread from './InlineAiQuestionThread.svelte'
-  import InlineAiReviewComment from './InlineAiReviewComment.svelte'
+  import type { CommentDisplayData, ExistingCommentDisplayData } from './diffComments'
   import InlineReviewThread from './InlineReviewThread.svelte'
   import InlineCommentBody from './InlineCommentBody.svelte'
   import InlineExistingComment from './InlineExistingComment.svelte'
 
   interface Props {
     data: CommentDisplayData
-    filename: string
     pendingComments: ReviewSubmissionComment[]
-    agentComments: AgentReviewComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
-    onReplyToAiThread?: (threadId: string, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
@@ -33,36 +25,17 @@
   let {
     data,
     pendingComments,
-    agentComments,
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
     onOpenUrl,
-    onReplyToAiThread,
     onReplyToThread,
     onSetThreadStatus,
-    onAskAboutComment,
     onReplyToExistingComment,
     onAddReplyToReview,
     onRemovePendingReply,
   }: Props = $props()
 
-  let threadReplyDrafts = $state<Record<string, string>>({})
-  let commentAskDrafts = $state<Record<number, string>>({})
-  let askOpenCommentId = $state<number | null>(null)
   let existingReplyDrafts = $state<Record<number, string>>({})
   let replyOpenCommentId = $state<number | null>(null)
-
-  function toggleAskComment(comment: AgentCommentDisplayData) {
-    askOpenCommentId = askOpenCommentId === comment.commentId ? null : comment.commentId
-  }
-
-  function clearCommentAsk(commentId: number) {
-    const next = { ...commentAskDrafts }
-    delete next[commentId]
-    commentAskDrafts = next
-    askOpenCommentId = null
-  }
 
   function toggleExistingReply(comment: ExistingCommentDisplayData) {
     if (comment.isReply) return
@@ -75,19 +48,13 @@
     existingReplyDrafts = next
     replyOpenCommentId = null
   }
-
-  function clearThreadReply(threadId: string) {
-    const next = { ...threadReplyDrafts }
-    delete next[threadId]
-    threadReplyDrafts = next
-  }
 </script>
 
 <div class="w-full">
   {#each data.comments as comment}
-    {@const isNested = comment.type === 'pending-reply' || ((comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply)}
-    {@const isConnectedReply = (comment.type === 'existing' || comment.type === 'ai-thread') && comment.isReply}
-    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5' : 'my-1.5'} text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' || comment.type === 'review-thread' ? 'border-l-4 border-l-info' : ''}">
+    {@const isNested = comment.type === 'pending-reply' || (comment.type === 'existing' && comment.isReply)}
+    {@const isConnectedReply = comment.type === 'existing' && comment.isReply}
+    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5' : 'my-1.5'} text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'thread' ? 'border-l-4 border-l-info' : ''}">
       {#if comment.type === 'existing'}
         <InlineExistingComment
           {comment}
@@ -105,35 +72,7 @@
           {onAddReplyToReview}
           {onOpenUrl}
         />
-      {:else if comment.type === 'agent'}
-        <InlineAiReviewComment
-          {comment}
-          {agentComments}
-          askOpen={askOpenCommentId === comment.commentId}
-          askDraft={commentAskDrafts[comment.commentId] ?? ''}
-          onAskDraftChange={(value) => {
-            commentAskDrafts = { ...commentAskDrafts, [comment.commentId]: value }
-          }}
-          onToggleAsk={() => toggleAskComment(comment)}
-          onAskSubmitted={() => clearCommentAsk(comment.commentId)}
-          {onAgentCommentsChange}
-          onUpdateStatus={onUpdateAgentCommentStatus}
-          {onAskAboutComment}
-          {onOpenUrl}
-        />
-      {:else if comment.type === 'ai-thread'}
-        {@const threadId = comment.thread.id}
-        <InlineAiQuestionThread
-          {comment}
-          replyDraft={threadReplyDrafts[threadId] ?? ''}
-          onReplyDraftChange={(value) => {
-            threadReplyDrafts = { ...threadReplyDrafts, [threadId]: value }
-          }}
-          onReplySubmitted={() => clearThreadReply(threadId)}
-          {onReplyToAiThread}
-          {onOpenUrl}
-        />
-      {:else if comment.type === 'review-thread'}
+      {:else if comment.type === 'thread'}
         <InlineReviewThread {comment} {onReplyToThread} {onSetThreadStatus} {onOpenUrl} />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">

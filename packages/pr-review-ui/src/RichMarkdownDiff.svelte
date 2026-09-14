@@ -1,8 +1,8 @@
 <script lang="ts">
   import { MessageSquarePlus } from '@lucide/svelte'
   import { SplitSide } from '@git-diff-view/svelte'
-  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
-  import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -28,25 +28,19 @@
     onOpenImage?: (request: MarkdownImageOpenRequest) => void
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
-    agentComments: AgentReviewComment[]
-    aiThreads: AiThread[]
     pendingReplies: PendingReply[]
     getInlineCommentText: (lineNumber: number, side: SplitSide) => string
     onSetInlineCommentText: (lineNumber: number, side: SplitSide, text: string) => void
     onClearInlineCommentText: (lineNumber: number, side: SplitSide) => void
     onSubmitInlineComment: (lineNumber: number, side: SplitSide, onClose: () => void) => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
-    onReplyToAiThread?: (threadId: string, body: string) => void
     threads?: ReviewThread[]
+    onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
-    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
   }
 
@@ -61,25 +55,19 @@
     onOpenImage,
     existingComments,
     pendingComments,
-    agentComments,
-    aiThreads,
     pendingReplies,
     getInlineCommentText,
     onSetInlineCommentText,
     onClearInlineCommentText,
     onSubmitInlineComment,
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
-    onReplyToAiThread,
     threads = [],
+    onCreateThread,
     onReplyToThread,
     onSetThreadStatus,
-    onAskAboutComment,
     onReplyToExistingComment,
     onAddReplyToReview,
     onRemovePendingReply,
-    onAskAgent,
     onCommentNow,
   }: Props = $props()
 
@@ -90,8 +78,6 @@
     filename: file.filename,
     existingComments,
     pendingComments,
-    agentComments,
-    aiThreads,
     pendingReplies,
     threads,
   }).newFile)
@@ -135,7 +121,7 @@
       onTextChange={(text) => onSetInlineCommentText(lineNumber, side, text)}
       onSubmit={() => onSubmitInlineComment(lineNumber, side, () => { openCommentLine = null })}
       onCancel={() => closeComment(lineNumber)}
-      onAskAgent={onAskAgent ? (body) => onAskAgent(file.filename, lineNumber, 'RIGHT', body) : undefined}
+      onCreateThread={onCreateThread ? (body) => onCreateThread(file.filename, lineNumber, 'RIGHT', body) : undefined}
       onCommentNow={onCommentNow ? (body) => onCommentNow(file.filename, lineNumber, 'RIGHT', body) : undefined}
     />
   {/if}
@@ -146,17 +132,11 @@
   {#if data}
     <InlineCommentThread
       {data}
-      filename={file.filename}
       {pendingComments}
-      {agentComments}
       {onPendingCommentsChange}
-      {onAgentCommentsChange}
-      {onUpdateAgentCommentStatus}
       {onOpenUrl}
-      {onReplyToAiThread}
       {onReplyToThread}
       {onSetThreadStatus}
-      {onAskAboutComment}
       {onReplyToExistingComment}
       {onAddReplyToReview}
       {onRemovePendingReply}

@@ -46,15 +46,12 @@
         onOpenRepositoryPath={() => {}}
         existingComments={[]}
         pendingComments={[]}
-        agentComments={[]}
-        aiThreads={[]}
         pendingReplies={[]}
         getInlineCommentText={() => ''}
         onSetInlineCommentText={() => {}}
         onClearInlineCommentText={() => {}}
         onSubmitInlineComment={() => {}}
         onPendingCommentsChange={() => {}}
-        onAgentCommentsChange={() => {}}
       />
     {/if}
   </section>

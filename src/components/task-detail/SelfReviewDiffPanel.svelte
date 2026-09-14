@@ -109,6 +109,9 @@
       existingComments={controller.visibleInlineReviewComments}
       pendingComments={controller.visiblePendingInlineComments}
       onPendingCommentsChange={controller.handlePendingInlineCommentsChange}
+      threads={controller.reviewThreads}
+      onReplyToThread={controller.replyToReviewThread}
+      onSetThreadStatus={controller.setReviewThreadStatus}
       inlineDraftScopeId={controller.taskId}
       fileTreeVisible={controller.fileTreeVisible}
       onToggleFileTree={controller.toggleFileTree}

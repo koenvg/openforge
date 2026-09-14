@@ -1,11 +1,13 @@
 <script lang="ts">
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
-  import type { AgentReviewComment, AiThread, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+  import type { PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
-  import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
+  import { agentCommentToSubmission, approvedInlineAgentComments, dismissSubmittedAgentComments } from './agentCommentSubmission'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -50,7 +52,7 @@
     onToggleFileTree: () => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: string) => Promise<void>
+    onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void>
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
     // The Walkthrough tab is only offered once a walkthrough for the current head
     // sha has finished generating (owned by PrReviewView). Optional so the section
@@ -59,10 +61,13 @@
     // Local "Ask the AI author" Q&A threads + handlers (owned by PrReviewView).
     aiThreads?: AiThread[]
     aiThreadsPendingCount?: number
-    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    // Stored agent comments and question threads as review threads (owned by PrReviewView).
+    reviewThreads?: ReviewThread[]
+    onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
+    onReplyToReviewThread?: (threadId: string, body: string) => void
+    onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
     replyPostingError?: string | null
@@ -122,10 +127,12 @@
     walkthroughReady = false,
     aiThreads = [],
     aiThreadsPendingCount = 0,
-    onAskAgent,
+    reviewThreads = [],
+    onCreateReviewThread,
+    onReplyToReviewThread,
+    onSetReviewThreadStatus,
     onCommentNow,
     onReplyToThread,
-    onAskAboutComment,
     onReplyToExistingComment,
     pendingReplies = [],
     replyPostingError = null,
@@ -177,20 +184,12 @@
     approvedInlineAgentComments(agentReviewComments).map(agentCommentToSubmission),
   )
 
-  // After a successful submit the approved AI comments now exist as real GitHub
-  // review comments, so mark them handled: 'dismissed' hides them from the AI list
-  // and keeps them out of the approved set, preventing a duplicate on refresh or a
-  // re-submit. Only runs on submit success (ReviewSubmitPanel guards it).
-  function handleApprovedAgentCommentsSubmitted() {
-    const submitted = approvedInlineAgentComments(agentReviewComments)
-    if (submitted.length === 0) return
-    const submittedIds = new Set(submitted.map(comment => comment.id))
-    for (const comment of submitted) void onUpdateAgentCommentStatus(comment.id, 'dismissed')
-    onAgentCommentsChange(
-      agentReviewComments.map(comment =>
-        submittedIds.has(comment.id) ? { ...comment, status: 'dismissed' } : comment,
-      ),
-    )
+  async function handleApprovedAgentCommentsSubmitted() {
+    try {
+      await dismissSubmittedAgentComments(agentReviewComments, onUpdateAgentCommentStatus, onAgentCommentsChange)
+    } catch (error) {
+      console.error('Failed to mark submitted AI review comments as handled:', error)
+    }
   }
 
   let diffViewer = $state<DiffViewer>()
@@ -322,10 +321,12 @@
           onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           {onOpenUrl}
           aiThreads={aiThreads}
-          onAskAgent={onAskAgent}
+          reviewThreads={reviewThreads}
+          onCreateReviewThread={onCreateReviewThread}
+          onReplyToReviewThread={onReplyToReviewThread}
+          onSetReviewThreadStatus={onSetReviewThreadStatus}
           onCommentNow={onCommentNow}
           onReplyToThread={onReplyToThread}
-          onAskAboutComment={onAskAboutComment}
           onReplyToExistingComment={onReplyToExistingComment}
           pendingReplies={pendingReplies}
           onAddReplyToReview={onAddReplyToReview}
@@ -376,17 +377,14 @@
               onToggleFileTree={onToggleFileTree}
               {fetchFileContents}
               {resolveRepositoryImage}
-              agentComments={agentReviewComments}
               pendingComments={pendingManualComments}
               onPendingCommentsChange={onPendingCommentsChange}
-              onAgentCommentsChange={onAgentCommentsChange}
-              onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
               {onOpenUrl}
-              aiThreads={aiThreads}
-              onAskAgent={onAskAgent}
+              threads={reviewThreads}
+              onCreateThread={onCreateReviewThread}
+              onReplyToThread={onReplyToReviewThread}
+              onSetThreadStatus={onSetReviewThreadStatus}
               onCommentNow={onCommentNow}
-              onReplyToAiThread={onReplyToThread}
-              onAskAboutComment={onAskAboutComment}
               onReplyToExistingComment={onReplyToExistingComment}
               pendingReplies={pendingReplies}
               onAddReplyToReview={onAddReplyToReview}

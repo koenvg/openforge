@@ -87,6 +87,7 @@ export function taskDetailScenario(kind: TaskDetailScenario = 'active', reviewSt
         } : diffs,
         get_commit_diff: diffs,
         get_pr_comments: prComments,
+        list_review_threads: [],
         get_task_commits: reviewState === 'empty' ? [] : [createReviewCommit()],
         get_task_file_contents: reviewFileContents, get_commit_file_contents: reviewFileContents,
         get_task_batch_file_contents: batchContents, get_commit_batch_file_contents: batchContents,

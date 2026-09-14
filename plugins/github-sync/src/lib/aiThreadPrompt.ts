@@ -1,4 +1,5 @@
-import type { AgentReviewComment, AiThread, PrFileDiff, PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AiThread } from './prReviewRecords'
 import { parseHunks } from './hunkParser'
 
 export const AI_ANSWERS_JSON_SCHEMA = JSON.stringify({

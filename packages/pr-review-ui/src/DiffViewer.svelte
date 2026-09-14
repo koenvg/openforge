@@ -4,8 +4,8 @@
   import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
-  import type { ReviewThread, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
-  import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import type { MarkdownRepositoryLinkTarget } from '@openforge-app/plugin-sdk/markdown'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import { isImageFileDiff, getFileLanguage, type FileContents } from './diffAdapter'
@@ -45,11 +45,8 @@
     footer?: Snippet
     includeCommitted?: boolean
     includeUncommitted?: boolean
-    agentComments?: AgentReviewComment[]
     pendingComments?: ReviewSubmissionComment[]
     onPendingCommentsChange?: (comments: ReviewSubmissionComment[]) => void
-    onAgentCommentsChange?: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
     onOpenImage?: OpenReviewImage
     onOpenMedia?: OpenReviewMedia
@@ -67,23 +64,18 @@
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
     onRequestFocusFileTree?: () => void
-    // Local "Ask the AI author" Q&A threads (never posted to GitHub). When
-    // `onAskAgent` is provided the inline widget offers an "Ask the AI" action.
-    aiThreads?: AiThread[]
-    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
-    onReplyToAiThread?: (threadId: string, body: string) => void
     threads?: ReviewThread[]
+    onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
-    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToAiThread, threads = [], onReplyToThread, onSetThreadStatus, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, pendingComments, onPendingCommentsChange, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, onCommentNow, threads = [], onCreateThread, onReplyToThread, onSetThreadStatus, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
@@ -271,10 +263,6 @@
 
   export function scrollToComment(filename: string, lineNumber: number) {
     return navigation.scrollToComment(filename, lineNumber)
-  }
-
-  function setVisibleAgentComments(comments: AgentReviewComment[]) {
-    onAgentCommentsChange?.(comments)
   }
 
   // Large diff warning banner calculations
@@ -484,7 +472,6 @@
               {existingComments}
               pendingComments={inlineCommentDrafts.pendingComments}
               pendingCommentCount={inlineCommentDrafts.pendingCommentCountByFile.get(file.filename) ?? 0}
-              {agentComments}
               {resolveRepositoryImage}
               onOpenRepositoryPath={openRepositoryPath}
               {onOpenUrl}
@@ -495,21 +482,16 @@
               onClearInlineCommentText={(lineNumber, side) => inlineCommentDrafts.clear(file.filename, lineNumber, side)}
               onSubmitInlineComment={(lineNumber, side, onClose) => inlineCommentDrafts.submit(file.filename, lineNumber, side, onClose)}
               onPendingCommentsChange={inlineCommentDrafts.setPendingComments}
-              onAgentCommentsChange={setVisibleAgentComments}
-              {onUpdateAgentCommentStatus}
               {fileHeaderExtra}
               {onCopyFilePath}
               onToggleCollapse={() => fileCollapse.toggleCollapse(file.filename)}
               onSetRichDiffActive={(active) => setRichDiffActive(file, active)}
               onReviewedChange={onToggleFileReviewed ? (reviewed) => fileCollapse.handleReviewedChange(file, reviewed) : undefined}
-              {aiThreads}
-              {onAskAgent}
               {onCommentNow}
-              {onReplyToAiThread}
               threads={threadPlacement.anchored}
+              {onCreateThread}
               {onReplyToThread}
               {onSetThreadStatus}
-              {onAskAboutComment}
               {onReplyToExistingComment}
               {pendingReplies}
               {onAddReplyToReview}

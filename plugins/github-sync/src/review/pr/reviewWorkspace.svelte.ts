@@ -1,6 +1,9 @@
 import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { AgentReviewComment, PrOverviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
+import type { PrOverviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment } from '../../lib/prReviewRecords'
+import { agentCommentFollowUp, parseAdaptedThreadId, reviewerStatusForAgentComment, toReviewThreads } from './reviewThreadAdapter'
 import * as stores from '../../lib/stores'
 import { createGithubSyncPrReviewClient } from './githubSyncClient'
 import { useAiThreadState } from './review-workspace/useAiThreadState.svelte'
@@ -58,6 +61,59 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const setPendingComments = (value: ReviewSubmissionComment[]) => { pendingComments.current = value }
   const setAgentComments = (value: AgentReviewComment[]) => { agentComments.current = value }
   const setOverviewComments = (value: PrOverviewComment[]) => { overviewComments.current = value }
+
+  let reviewThreads = $derived(selectedPr.current
+    ? toReviewThreads({
+        pr: selectedPr.current,
+        agentComments: agentComments.current,
+        aiThreads: ai.threads,
+      })
+    : [])
+
+  function createReviewThread(filePath: string, line: number, side: ReviewThreadSide, body: string): void {
+    ai.askAgent(filePath, line, side, body)
+  }
+
+  function replyToReviewThread(threadId: string, body: string): void {
+    const ref = parseAdaptedThreadId(threadId)
+    if (!ref) return
+    if (ref.kind === 'ai') {
+      void ai.replyToThread(ref.threadId, body)
+      return
+    }
+    const followUp = agentCommentFollowUp(ai.threads, ref.commentId)
+    if (followUp) {
+      void ai.replyToThread(followUp.id, body)
+      return
+    }
+    const comment = agentComments.current.find(candidate => candidate.id === ref.commentId)
+    if (!comment || comment.file_path === null || comment.line_number === null) return
+    ai.askAboutComment({
+      commentId: comment.id,
+      filename: comment.file_path,
+      line: comment.line_number,
+      side: comment.side ?? 'RIGHT',
+      body,
+    })
+  }
+
+  async function setReviewThreadStatus(threadId: string, status: ReviewThreadStatus): Promise<void> {
+    const ref = parseAdaptedThreadId(threadId)
+    if (!ref) return
+    try {
+      if (ref.kind === 'ai') {
+        await ai.setReviewerStatus(ref.threadId, status)
+        return
+      }
+      const storedStatus = reviewerStatusForAgentComment(status)
+      await selection.updateAgentCommentStatus(ref.commentId, storedStatus)
+      setAgentComments(agentComments.current.map(comment => (
+        comment.id === ref.commentId ? { ...comment, status: storedStatus } : comment
+      )))
+    } catch (error) {
+      console.error('Failed to record the reviewer decision:', error)
+    }
+  }
 
   let listModel = $derived({
     headerTitle: list.headerTitle,
@@ -134,12 +190,14 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onUpdateAgentCommentStatus: selection.updateAgentCommentStatus,
     onToggleFileReviewed: reviewedFiles.toggle,
     walkthroughReady: walkthrough.available,
+    reviewThreads,
+    onCreateReviewThread: createReviewThread,
+    onReplyToReviewThread: replyToReviewThread,
+    onSetReviewThreadStatus: setReviewThreadStatus,
     aiThreads: ai.threads,
     aiThreadsPendingCount: ai.pendingCount,
-    onAskAgent: ai.askAgent,
     onCommentNow: selection.commentNow,
     onReplyToThread: ai.replyToThread,
-    onAskAboutComment: ai.askAboutComment,
     onReplyToExistingComment: selection.replyToExistingComment,
     pendingReplies: replies.current,
     replyPostingError: selection.replyPostingError,

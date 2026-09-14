@@ -13,19 +13,17 @@
     onTextChange: (text: string) => void
     onSubmit: () => void
     onCancel: () => void
-    // When provided, the form offers an "Ask the AI" action that routes the draft
-    // to a local Q&A thread instead of a GitHub-bound pending comment.
-    onAskAgent?: (body: string) => void
+    onCreateThread?: (body: string) => void
     // When provided, the form offers a "Comment" action that posts the comment to
     // GitHub immediately, instead of holding it in the pending review.
     onCommentNow?: (body: string) => void
   }
 
-  let { filename, lineNumber, side, text, onTextChange, onSubmit, onCancel, onAskAgent, onCommentNow }: Props = $props()
+  let { filename, lineNumber, side, text, onTextChange, onSubmit, onCancel, onCreateThread, onCommentNow }: Props = $props()
 
-  function askAgent() {
+  function createThread() {
     if (!text.trim()) return
-    onAskAgent?.(text.trim())
+    onCreateThread?.(text.trim())
     onCancel()
   }
 
@@ -94,13 +92,13 @@
       </p>
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" type="button" onclick={onCancel}>Cancel</Button>
-        {#if onAskAgent}
+        {#if onCreateThread}
           <Button
             variant="outline"
             size="sm"
             type="button"
             title="Ask the AI author (private, not posted to GitHub)"
-            onclick={askAgent}
+            onclick={createThread}
           >Ask the AI</Button>
         {/if}
         {#if onCommentNow}

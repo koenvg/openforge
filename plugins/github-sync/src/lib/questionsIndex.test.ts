@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildQuestionsIndex, markThreadSeen, QUESTION_GROUP_ORDER } from './questionsIndex'
-import type { AiThread, AiThreadAnchor, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, AiThreadAnchor, AgentReviewComment } from './prReviewRecords'
 
 function thread(over: Partial<AiThread> & { id: string }): AiThread {
   return {

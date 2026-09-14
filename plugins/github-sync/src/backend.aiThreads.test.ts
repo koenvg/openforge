@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
-import type { AiThread } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread } from './lib/prReviewRecords'
 import packageJson from '../package.json'
 import { aiThreadsStorageKey } from './lib/aiThreadStore'
 

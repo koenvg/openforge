@@ -1,98 +1,38 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import type { ComponentProps } from 'svelte'
-import type { AgentCommentDisplayData, CommentDisplayData } from './diffComments'
+import type { CommentDisplayData } from './diffComments'
 import InlineCommentThread from './InlineCommentThread.svelte'
 
 type InlineCommentThreadProps = ComponentProps<typeof InlineCommentThread>
 
-function makeAgentComment(overrides: Partial<AgentReviewComment> = {}): AgentReviewComment {
-  return {
-    id: 7,
-    review_pr_id: 42,
-    review_session_key: 'review-session',
-    comment_type: 'inline',
-    file_path: 'src/example.ts',
-    line_number: 12,
-    side: 'RIGHT',
-    body: 'AI suggestion',
-    status: 'pending',
-    opencode_session_id: null,
-    created_at: 1,
-    updated_at: 1,
-    ...overrides,
-  }
-}
-
-
-function makeAgentDisplayComment(comment: AgentReviewComment): AgentCommentDisplayData {
-  if (!comment.file_path || comment.line_number === null) {
-    throw new Error('Agent display comments require an inline location')
-  }
-
-  return {
-    body: comment.body,
-    type: 'agent',
-    commentId: comment.id,
-    status: comment.status,
-    filePath: comment.file_path,
-    lineNumber: comment.line_number,
-    commentSide: comment.side === 'LEFT' ? 'LEFT' : 'RIGHT',
-  }
-}
-function makeDeferred() {
-  let resolve!: () => void
-  const promise = new Promise<void>((resolvePromise) => {
-    resolve = resolvePromise
-  })
-  return { promise, resolve }
-}
-
 function makeProps(overrides: Partial<InlineCommentThreadProps> = {}) {
   const onPendingCommentsChange = vi.fn()
-  const onAgentCommentsChange = vi.fn()
-  const onUpdateAgentCommentStatus = vi.fn().mockResolvedValue(undefined)
   const props: InlineCommentThreadProps = {
     data: { comments: [] },
-    filename: 'src/example.ts',
     pendingComments: [],
-    agentComments: [],
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
     ...overrides,
   }
 
-  return { props, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus }
+  return { props, onPendingCommentsChange }
 }
 
 describe('InlineCommentThread', () => {
   it('keeps icon-only actions named while hiding their icons from assistive technology', () => {
-    const agentComment = makeAgentComment()
     const data: CommentDisplayData = {
-      comments: [
-        makeAgentDisplayComment(agentComment),
-        { body: 'Pending suggestion', type: 'pending', index: 0 },
-      ],
+      comments: [{ body: 'Pending suggestion', type: 'pending', index: 0 }],
     }
     const setup = makeProps({
       data,
-      agentComments: [agentComment],
       pendingComments: [{ path: 'src/example.ts', line: 12, side: 'RIGHT', body: 'Pending suggestion' }],
     })
     render(InlineCommentThread, { props: setup.props })
 
-    const actionNames = [
-      'Approve AI review comment: include in this review',
-      'Dismiss AI review comment',
-      'Remove pending comment',
-    ]
-    for (const name of actionNames) {
-      const button = screen.getByRole('button', { name })
-      expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
-    }
+    const button = screen.getByRole('button', { name: 'Remove pending comment' })
+    expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
   })
 
   it('labels replies with text while hiding the decorative reply icon', () => {
@@ -112,6 +52,7 @@ describe('InlineCommentThread', () => {
     expect(replyLabel.textContent?.trim()).toBe('reply')
     expect(replyLabel.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
   })
+
   it('removes the selected pending comment by its source-array index', async () => {
     const pendingComments: ReviewSubmissionComment[] = [
       { path: 'src/first.ts', line: 4, side: 'RIGHT', body: 'First pending comment' },
@@ -131,119 +72,8 @@ describe('InlineCommentThread', () => {
       pendingComments[0],
       pendingComments[2],
     ])
-    expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
   })
 
-  it('approves an AI comment in place without copying it to the pending list', async () => {
-    const statusUpdate = makeDeferred()
-    const initialAgent = makeAgentComment()
-    const data: CommentDisplayData = {
-      comments: [makeAgentDisplayComment(initialAgent)],
-    }
-    const setup = makeProps({
-      data,
-      agentComments: [initialAgent],
-      onUpdateAgentCommentStatus: vi.fn(() => statusUpdate.promise),
-    })
-    const { rerender } = render(InlineCommentThread, { props: setup.props })
-
-    await fireEvent.click(screen.getByRole('button', {
-      name: 'Approve AI review comment: include in this review',
-    }))
-
-    expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'approved')
-    expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
-
-    const latestAgentComments = [
-      { ...initialAgent, body: 'Updated while approving', updated_at: 2 },
-      makeAgentComment({ id: 8, body: 'Another AI comment' }),
-    ]
-    await rerender({ ...setup.props, agentComments: latestAgentComments })
-
-    statusUpdate.resolve()
-
-    await waitFor(() => {
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledOnce()
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledWith([
-        { ...latestAgentComments[0], status: 'approved' },
-        latestAgentComments[1],
-      ])
-    })
-    // Approval must NOT create a duplicate pending comment — that was the bug.
-    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
-  })
-
-  it('un-approves an approved AI comment back to pending', async () => {
-    const statusUpdate = makeDeferred()
-    const initialAgent = makeAgentComment({ status: 'approved' })
-    const data: CommentDisplayData = {
-      comments: [makeAgentDisplayComment(initialAgent)],
-    }
-    const setup = makeProps({
-      data,
-      agentComments: [initialAgent],
-      onUpdateAgentCommentStatus: vi.fn(() => statusUpdate.promise),
-    })
-    const { rerender } = render(InlineCommentThread, { props: setup.props })
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Un-approve AI review comment: remove from this review' }))
-
-    expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'pending')
-    expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
-
-    const latestAgentComments = [
-      { ...initialAgent, body: 'Updated while un-approving', updated_at: 2 },
-      makeAgentComment({ id: 8, body: 'Another AI comment' }),
-    ]
-    await rerender({ ...setup.props, agentComments: latestAgentComments })
-
-    statusUpdate.resolve()
-
-    await waitFor(() => {
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledOnce()
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledWith([
-        { ...latestAgentComments[0], status: 'pending' },
-        latestAgentComments[1],
-      ])
-    })
-    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
-  })
-
-  it('dismisses an AI comment using updated props after the status callback resolves', async () => {
-    const statusUpdate = makeDeferred()
-    const initialAgent = makeAgentComment()
-    const data: CommentDisplayData = {
-      comments: [makeAgentDisplayComment(initialAgent)],
-    }
-    const setup = makeProps({
-      data,
-      agentComments: [initialAgent],
-      onUpdateAgentCommentStatus: vi.fn(() => statusUpdate.promise),
-    })
-    const { rerender } = render(InlineCommentThread, { props: setup.props })
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Dismiss AI review comment' }))
-
-    expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'dismissed')
-    expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
-
-    const latestAgentComments = [
-      makeAgentComment({ id: 8, body: 'Another AI comment' }),
-      { ...initialAgent, body: 'Updated while dismissing', updated_at: 2 },
-    ]
-    await rerender({ ...setup.props, agentComments: latestAgentComments })
-
-    statusUpdate.resolve()
-
-    await waitFor(() => {
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledOnce()
-      expect(setup.onAgentCommentsChange).toHaveBeenCalledWith([
-        latestAgentComments[0],
-        { ...latestAgentComments[1], status: 'dismissed' },
-      ])
-    })
-    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
-  })
   it('queues a trimmed reply to an existing GitHub comment and closes the editor', async () => {
     const onAddReplyToReview = vi.fn()
     const data: CommentDisplayData = {
@@ -267,61 +97,9 @@ describe('InlineCommentThread', () => {
     expect(onAddReplyToReview).toHaveBeenCalledWith(23, 'Hold this reply')
     expect(screen.queryByRole('textbox', { name: 'Reply to this comment' })).toBeNull()
   })
-
-  it('asks about an AI review comment with its diff location', async () => {
-    const onAskAboutComment = vi.fn()
-    const agentComment = makeAgentComment()
-    const data: CommentDisplayData = {
-      comments: [makeAgentDisplayComment(agentComment)],
-    }
-    const setup = makeProps({ data, agentComments: [agentComment], onAskAboutComment })
-    render(InlineCommentThread, { props: setup.props })
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Ask the agent about this AI review comment' }))
-    const editor = screen.getByRole('textbox', { name: 'Ask the agent about this AI review comment' })
-    await fireEvent.input(editor, { target: { value: '  Why this change?  ' } })
-    await fireEvent.keyDown(editor, { key: 'Enter' })
-
-    expect(onAskAboutComment).toHaveBeenCalledWith({
-      commentId: agentComment.id,
-      filename: 'src/example.ts',
-      line: 12,
-      side: 'RIGHT',
-      body: 'Why this change?',
-    })
-    expect(screen.queryByRole('textbox', { name: 'Ask the agent about this AI review comment' })).toBeNull()
-  })
-
-  it('replies to an answered AI Q&A thread', async () => {
-    const onReplyToAiThread = vi.fn()
-    const data: CommentDisplayData = {
-      comments: [{
-        type: 'ai-thread',
-        isReply: false,
-        thread: {
-          id: 'thread-1',
-          anchor: { type: 'line', filename: 'src/example.ts', line: 12, side: 'RIGHT' },
-          status: 'answered',
-          messages: [{ role: 'user', body: 'Why?', created_at: 1 }],
-          created_at: 1,
-          updated_at: 1,
-        },
-      }],
-    }
-    const setup = makeProps({ data, onReplyToAiThread })
-    render(InlineCommentThread, { props: setup.props })
-
-    const editor = screen.getByRole('textbox', { name: 'Reply to the AI author' })
-    await fireEvent.input(editor, { target: { value: '  One more question  ' } })
-    await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
-
-    expect(onReplyToAiThread).toHaveBeenCalledWith('thread-1', 'One more question')
-    expect((editor as HTMLInputElement).value).toBe('')
-  })
-
 })
 
-describe('InlineCommentThread Review Threads', () => {
+describe('InlineCommentThread review threads', () => {
   function makeReviewThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
     return {
       id: 'rt_1',
@@ -347,7 +125,7 @@ describe('InlineCommentThread Review Threads', () => {
   }
 
   function makeReviewThreadData(thread: ReviewThread): CommentDisplayData {
-    return { comments: [{ type: 'review-thread', thread }] }
+    return { comments: [{ type: 'thread', thread }] }
   }
 
   it('renders every message of a supplied thread', () => {
@@ -450,5 +228,27 @@ describe('InlineCommentThread Review Threads', () => {
 
     expect(screen.queryByText('You')).toBeNull()
     expect(screen.getByText('Reviewer')).toBeTruthy()
+  })
+  it('names the author of each message when an agent thread and a reviewer thread share a line', () => {
+    const agentThread = makeReviewThread({
+      id: 'rt_agent',
+      origin: 'agent',
+      messages: [{ id: 'rtm_a', role: 'agent', body: 'Agent found a leak', createdAt: 1 }],
+    })
+    const humanThread = makeReviewThread({
+      id: 'rt_human',
+      origin: 'human',
+      messages: [{ id: 'rtm_h', role: 'human', body: 'Rename this variable', createdAt: 1 }],
+    })
+    const setup = makeProps({
+      data: { comments: [{ type: 'thread', thread: agentThread }, { type: 'thread', thread: humanThread }] },
+    })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Agent found a leak')).toBeTruthy()
+    expect(screen.getByText('Rename this variable')).toBeTruthy()
+    expect(screen.getAllByText('Agent')).toHaveLength(2)
+    expect(screen.getAllByText('Reviewer')).toHaveLength(2)
   })
 })

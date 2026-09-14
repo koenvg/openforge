@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { AiThread, PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewThread } from '@openforge-app/plugin-sdk'
+import type { AiThread } from '../../lib/prReviewRecords'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
 
 // Replace the heavy diff renderer with a stub that records the props WalkthroughTab
@@ -109,6 +111,26 @@ async function goToStep(stepNumber: number) {
   await fireEvent.click(await screen.findByRole('button', { name: String(stepNumber) }))
 }
 
+function makeReviewThread(overrides: { id: string; filePath: string }): ReviewThread {
+  return {
+    id: overrides.id,
+    namespace: 'github',
+    targetKey: 'gh:acme/repo#42',
+    revision: 'head-sha',
+    origin: 'agent',
+    anchor: { kind: 'line', filePath: overrides.filePath, line: 2, side: 'RIGHT' },
+    status: 'open',
+    awaiting: 'none',
+    runId: null,
+    idempotencyKey: null,
+    seenAt: null,
+    hasUnreadAgentMessage: false,
+    createdAt: 1,
+    updatedAt: 1,
+    messages: [{ id: `${overrides.id}:m0`, role: 'agent', body: 'Needs a null check', createdAt: 1 }],
+  }
+}
+
 function renderWalkthrough(overrides: Record<string, unknown> = {}) {
   const onPendingCommentsChange = vi.fn()
   const onSubmitReview = vi.fn(async () => {})
@@ -146,6 +168,18 @@ describe('WalkthroughTab comment sync', () => {
     expect(onPendingCommentsChange).toHaveBeenCalledWith([
       { path: 'stub.ts', line: 1, side: 'RIGHT', body: 'stub comment' },
     ])
+  })
+
+  it('feeds only the current step threads to the per-step diff viewer', async () => {
+    const threadOnStepOne = makeReviewThread({ id: 'agent:1', filePath: 'src/main.rs' })
+    const threadOnStepTwo = makeReviewThread({ id: 'agent:2', filePath: 'src/checkout.ts' })
+    const stepAnchoredThread: ReviewThread = { ...threadOnStepOne, id: 'ai:s1', anchor: { kind: 'custom', key: 'step:s1' } }
+    renderWalkthrough({ reviewThreads: [threadOnStepOne, threadOnStepTwo, stepAnchoredThread] })
+    await goToStep(2)
+    await screen.findByText('Step one')
+
+    const stub = screen.getByTestId('diff-viewer-stub')
+    expect([...stub.querySelectorAll('[data-diff-thread]')].map(node => node.textContent)).toEqual(['agent:1'])
   })
 
   it('feeds only the current step files to the per-step diff viewer', async () => {

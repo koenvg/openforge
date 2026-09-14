@@ -10,6 +10,12 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 - Known gap, unchanged by KVG-2201: with no session daemon registered, the Sidecar ingress still admits a loopback caller that presents no `Authorization` header at all. Revocation is a property of the bearer, not of the listener.
 - Orphans are reported in one region above the file list, and they render through the same inline thread component as a placed thread. They are readable and repliable now, and gain resolve and dismiss with the rest of the threads when 3.2 and 5.3 land.
 - The diff viewer gained `threads` and `onReplyToThread` **beside** its existing comment inputs instead of replacing them, so no existing review surface had to move. The legacy AI-thread reply prop is now `onReplyToAiThread`. 5.1 and 5.2 stay open.
+- The contract half (KVG-2169) closed 3.4, 5.1, 5.2, 5.3, 6.1 and 7.1. Core self review reads threads under a fixed `working-tree` revision, since the reviewer reads the working tree and no commit exists to pin anchors to.
+- 6.2 and 6.3 were already delivered by earlier tickets: the host commands, their IPC wrappers, `review_parser.rs` and `db/agent_review.rs` are gone, and the `agent_review_comments` drop migration is in place. Negative tests in `src/lib/ipc.test.ts` and `src/lib/plugin/pluginHostCommands.test.ts` hold the line.
+- 7.2 stays open and is stale as written. The plugin's live methods are `getPrAiReviewComments` and `updatePrAiReviewCommentStatus`, and they stay: GitHub Sync keeps its own storage and its parse-based writes behind the plugin-local adapter until its writes move to the CLI. Rewrite the task when that move lands.
+- In GitHub Sync, a reviewer decision on an agent comment still drives its GitHub submission: `resolved` maps to the stored `approved`, which is the set a submitted review posts. The viewer's control reads "Resolve review thread" where the old one read "Approve AI review comment: include in this review", so the wording is weaker than the effect until the writes move to the CLI.
+- `ReviewThreadAwaiting` has no "not sent yet" state, so a draft question and an in-flight question both report `awaiting: 'agent'`. The questions panel stays the place a draft is signposted.
+- 8.1 ran in the tickets that touched Rust. The contract half changes no Rust, so its verification was `pnpm test`, `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm packages:test` and `pnpm packages:contract:check`.
 
 ## 1. Core store
 
@@ -29,7 +35,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 - [x] 3.1 Add the unified `ReviewThread`, anchor, scope, and request types to the SDK domain types; verify `pnpm exec tsc --noEmit` passes
 - [x] 3.2 Add `reviewThreads` to `OpenForgeCommonAPI` with list, create, reply, setStatus, setAwaiting, markSeen, and onDidChange; verify the SDK contract test asserts the operation set on both the frontend and backend surfaces
 - [x] 3.3 Add testing fakes for `reviewThreads` alongside the existing SDK fakes; verify a fake-backed test creates and lists a thread without a host
-- [ ] 3.4 Mark `AgentReviewComment`, `AiThread`, and `AiThreadAnchor` removed from the SDK domain; verify no first-party workspace still imports them
+- [x] 3.4 Mark `AgentReviewComment`, `AiThread`, and `AiThreadAnchor` removed from the SDK domain; verify no first-party workspace still imports them
 
 ## 4. Agent CLI and transport
 
@@ -40,24 +46,24 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 
 ## 5. Diff viewer contract
 
-- [ ] 5.1 Replace `AgentCommentDisplayData` and `AiThreadCommentDisplayData` with one `ThreadCommentDisplayData` in `diffComments.ts`; verify the existing `diffComments` tests pass against the single variant
-- [ ] 5.2 Collapse `InlineAiReviewComment.svelte` and `InlineAiQuestionThread.svelte` into one inline thread component that renders agent-authored and person-authored messages through one presentation; verify the inline thread tests cover both author roles on one line
-- [ ] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes (`onSetThreadStatus` landed with the reviewer decision; the removals stay open)
+- [x] 5.1 Replace `AgentCommentDisplayData` and `AiThreadCommentDisplayData` with one `ThreadCommentDisplayData` in `diffComments.ts`; verify the existing `diffComments` tests pass against the single variant
+- [x] 5.2 Collapse `InlineAiReviewComment.svelte` and `InlineAiQuestionThread.svelte` into one inline thread component that renders agent-authored and person-authored messages through one presentation; verify the inline thread tests cover both author roles on one line
+- [x] 5.3 Swap the `DiffViewer` props: add `threads`, `onCreateThread`, `onReplyToThread`, `onSetThreadStatus`, and remove the six agent-comment and AI-thread props; verify `pnpm test packages/pr-review-ui` passes (`onSetThreadStatus` landed with the reviewer decision; the removals stay open)
 - [x] 5.4 Report a thread whose anchor does not resolve to a rendered line as orphaned rather than hiding it; verify a viewer test asserts an out-of-diff thread is still readable and resolvable
 
 ## 6. Core self-review migration and legacy removal
 
-- [ ] 6.1 Feed core's self-review `DiffViewer` from `reviewThreads` and drop its legacy status-update call; verify the self-review diff viewer tests pass
-- [ ] 6.2 Delete the `getAgentReviewComments` and `updateAgentReviewCommentStatus` host commands, their plugin host entries, and their renderer IPC wrappers and registry entries; verify the generated desktop IPC registry check and `pnpm test src/lib/ipc.test.ts` pass
-- [ ] 6.3 Delete `review_parser.rs`, `db/agent_review.rs`, their `main.rs` module declarations, and drop the `agent_review_comments` table in a migration; verify `cargo test` and `cargo clippy` pass with no dead-code warnings
+- [x] 6.1 Feed core's self-review `DiffViewer` from `reviewThreads` and drop its legacy status-update call; verify the self-review diff viewer tests pass
+- [x] 6.2 Delete the `getAgentReviewComments` and `updateAgentReviewCommentStatus` host commands, their plugin host entries, and their renderer IPC wrappers and registry entries; verify the generated desktop IPC registry check and `pnpm test src/lib/ipc.test.ts` pass
+- [x] 6.3 Delete `review_parser.rs`, `db/agent_review.rs`, their `main.rs` module declarations, and drop the `agent_review_comments` table in a migration; verify `cargo test` and `cargo clippy` pass with no dead-code warnings
 
 ## 7. GitHub Sync adapter
 
-- [ ] 7.1 Add a plugin-local adapter mapping its stored `AgentReviewComment` and `AiThread` records onto the new `threads` prop, keeping its existing storage and parse-based writes; verify `pnpm test plugins/github-sync` passes with no behavior change to its review view
+- [x] 7.1 Add a plugin-local adapter mapping its stored `AgentReviewComment` and `AiThread` records onto the new `threads` prop, keeping its existing storage and parse-based writes; verify `pnpm test plugins/github-sync` passes with no behavior change to its review view
 - [ ] 7.2 Remove the plugin's now-unused `getAgentReviewComments` and `updateAgentReviewCommentStatus` backend methods and client entries; verify the plugin's backend and client tests pass
 
 ## 8. Full affected-system verification
 
-- [ ] 8.1 Run the Rust sidecar suite from the backend crate root (`cargo test`, `cargo clippy`) and report results, since this change adds a migration and a transport boundary
-- [ ] 8.2 Run `pnpm test` and `pnpm exec tsc --noEmit` across the workspace and report results, since the SDK contract and the shared viewer prop surface cross package boundaries
-- [ ] 8.3 Run `openspec validate add-core-review-threads --strict` and confirm the delta spec passes
+- [x] 8.1 Run the Rust sidecar suite from the backend crate root (`cargo test`, `cargo clippy`) and report results, since this change adds a migration and a transport boundary
+- [x] 8.2 Run `pnpm test` and `pnpm exec tsc --noEmit` across the workspace and report results, since the SDK contract and the shared viewer prop surface cross package boundaries
+- [x] 8.3 Run `openspec validate add-core-review-threads --strict` and confirm the delta spec passes

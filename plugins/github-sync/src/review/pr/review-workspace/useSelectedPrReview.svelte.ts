@@ -9,6 +9,7 @@ import type {
   ReviewSubmissionComment,
 } from '@openforge-app/plugin-sdk/domain'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
+import type { AgentReviewCommentStatus } from '../../../lib/prReviewRecords'
 import { getImagePreviewDataUrl, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 import { isGitHubAttachmentUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
 import {
@@ -531,7 +532,7 @@ export function useSelectedPrReview(
     }
   }
 
-  function updateAgentCommentStatus(commentId: number, status: string): Promise<void> | undefined {
+  function updateAgentCommentStatus(commentId: number, status: AgentReviewCommentStatus): Promise<void> | undefined {
     const pr = selectedPr.current
     if (!pr) return
     return githubSync.updatePrAiReviewCommentStatus({

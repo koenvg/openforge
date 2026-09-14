@@ -1,8 +1,6 @@
 <script lang="ts">
-  import type {
-    AiThread,
-    PrWalkthroughStep,
-  } from '@openforge-app/plugin-sdk/domain'
+  import type { PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
+  import type { AiThread } from '../../lib/prReviewRecords'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'

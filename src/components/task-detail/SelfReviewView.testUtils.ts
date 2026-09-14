@@ -48,6 +48,9 @@ const ipcMocks = vi.hoisted(() => ({
 	markCommentAddressed: vi.fn().mockResolvedValue(undefined),
 	openUrl: vi.fn(),
 	resolveGithubAsset: vi.fn().mockResolvedValue(null),
+	listReviewThreads: vi.fn().mockResolvedValue([]),
+	replyToReviewThread: vi.fn(),
+	setReviewThreadStatus: vi.fn(),
 }));
 
 const fileViewerMocks = vi.hoisted(() => ({
