@@ -48,16 +48,16 @@
 
   onMount(() => {
     void workflow.initialize()
-    placeCaretAfterSeededPrompt()
+    placeCaretAfterPrefilledPrompt()
   })
   onDestroy(() => workflow.dispose())
 
   /**
-   * The modal focuses the textarea with the caret at position 0. A seeded prompt
-   * is context the user writes *after*, so move the caret to the end.
+   * The modal focuses the textarea with the caret at position 0. Prefilled text,
+   * seeded or retained, is context the user writes *after*, so move the caret to the end.
    */
-  function placeCaretAfterSeededPrompt(): void {
-    if (mode !== 'create' || promptSeed.length === 0) return
+  function placeCaretAfterPrefilledPrompt(): void {
+    if (mode !== 'create' || view.promptDraft.length === 0) return
     queueMicrotask(() => {
       const textarea = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')
       if (!textarea) return
@@ -72,6 +72,7 @@
   onClose={onClose}
   maxWidth={mode === 'create' ? '900px' : '720px'}
   overflowVisible
+  dismissOnBackdrop={mode !== 'create' || !view.promptReady}
   initialFocus="textarea"
   ariaLabel={dialogTitle}
 >
@@ -116,13 +117,12 @@
                 placeholder="Describe the outcome you want…"
                 autofocus={false}
                 commandTrigger={view.draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
-                onTextChange={(prompt) => workflow.attachments.syncWithPrompt(prompt)}
                 onPasteImage={(blob) => workflow.attachments.attachImage(blob)}
                 onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
                 imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
                 injectableInsertRequest={injectableInsertRequest}
                 onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
-                onValueChange={(value) => { view.promptDraft = value }}
+                onValueChange={(value) => workflow.setPrompt(value)}
                 onCancel={() => onClose?.()}
               />
             {/key}
@@ -172,6 +172,14 @@
         <kbd class="of-key-hint of-key-hint-sm border-[var(--of-border)] bg-[var(--of-surface)]">Esc</kbd>
         Close
       </Button>
+      {#if mode === 'create'}
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!view.promptReady}
+          onclick={() => workflow.discardDraft()}
+        >Discard</Button>
+      {/if}
       {#if mode === 'create' && view.taskDefaultsLoading}
         <span class="truncate text-xs text-[var(--of-text-secondary)]">Loading task defaults…</span>
       {/if}

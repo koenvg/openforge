@@ -14,6 +14,7 @@
     onClose: () => void
     maxWidth?: string
     overflowVisible?: boolean
+    dismissOnBackdrop?: boolean
     initialFocus?: ModalInitialFocus
     showHeader?: boolean
     closeLabel?: string
@@ -28,7 +29,7 @@
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, ariaDescribedby, testId, modalClass = '', boxClass = '', header, footer, children }: Props & ModalAccessibleName = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, dismissOnBackdrop = true, initialFocus, ariaLabel, ariaLabelledby, showHeader = true, closeLabel = 'Close dialog', closeDisabled = false, onKeydown, ariaDescribedby, testId, modalClass = '', boxClass = '', header, footer, children }: Props & ModalAccessibleName = $props()
   let modalElement: HTMLDivElement | null = $state(null)
 
   let accessibleNameAttributes = $derived.by(() => {
@@ -109,7 +110,7 @@
   }
 
   function handleLayerClick(event: MouseEvent) {
-    if (!closeDisabled && event.target === event.currentTarget) onClose()
+    if (!closeDisabled && dismissOnBackdrop && event.target === event.currentTarget) onClose()
   }
 </script>
 

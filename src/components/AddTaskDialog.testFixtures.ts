@@ -2,6 +2,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { expect, vi } from 'vitest'
 import { createTask as createFixtureTask } from '../../storybook/shared/fixtures/appFixtures'
 import { createTask, updateTaskInitialPrompt, getProjectConfig, getResolvedAiProvider, listGitBranches, repoHasCommits, listOpenCodeCommands } from '../lib/ipc'
+import { clearAllCreateTaskDrafts } from '../lib/createTaskDraftStore'
 
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn(),
@@ -48,6 +49,7 @@ export const mockTask = createFixtureTask({
 
 export function resetDialogMocks() {
   vi.clearAllMocks()
+  clearAllCreateTaskDrafts()
   Element.prototype.scrollIntoView = vi.fn()
   vi.mocked(createTask).mockReset().mockResolvedValue(createFixtureTask({
     id: 'T-1',

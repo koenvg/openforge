@@ -164,4 +164,49 @@ describe('Modal', () => {
     opener.remove()
     destination.remove()
   })
+
+  it('calls onClose when the backdrop around the dialog box is clicked', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose } })
+
+    await fireEvent.click(screen.getByRole('dialog'))
+
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('ignores a backdrop click when backdrop dismissal is off', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose, dismissOnBackdrop: false } })
+
+    await fireEvent.click(screen.getByRole('dialog'))
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('ignores a click inside the dialog box regardless of backdrop dismissal', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose } })
+
+    await fireEvent.click(screen.getByText('Test content'))
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('still dismisses on Escape when backdrop dismissal is off', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose, dismissOnBackdrop: false } })
+
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('still dismisses from the close control when backdrop dismissal is off', async () => {
+    const onClose = vi.fn()
+    render(ModalTestWrapper, { props: { onClose, dismissOnBackdrop: false } })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
+
+    expect(onClose).toHaveBeenCalled()
+  })
 })

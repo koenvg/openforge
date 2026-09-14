@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { clearAllCreateTaskDrafts, readCreateTaskDraft } from '../../lib/createTaskDraftStore'
 import { createTaskCreationWorkflow } from './taskCreationWorkflow.svelte'
 import { LocalTaskCreationAdapter } from './testing/localTaskCreationAdapter'
 
@@ -280,5 +281,252 @@ describe('task creation workflow', () => {
     await workflow.attachments.attachImage(adapter.clipboardImage)
     expect(workflow.attachments.state.error).toBe('Could not read the pasted image.')
     expect(workflow.attachments.state.pending).toBe(0)
+  })
+})
+
+describe('retained prompt drafts', () => {
+  beforeEach(() => {
+    clearAllCreateTaskDrafts()
+  })
+
+  async function openCreateSession(adapter: LocalTaskCreationAdapter, projectId = 'project') {
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId })
+    await workflow.initialize()
+    return workflow
+  }
+
+  it('retains the prompt of an unseeded create session', async () => {
+    const workflow = await openCreateSession(new LocalTaskCreationAdapter())
+
+    workflow.setPrompt('Fix the flaky test')
+
+    expect(readCreateTaskDraft('project')?.prompt).toBe('Fix the flaky test')
+  })
+
+  it('restores a retained prompt into a later session', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    first.setPrompt('Fix the flaky test')
+    first.dispose()
+
+    const second = await openCreateSession(adapter)
+
+    expect(second.state.promptDraft).toBe('Fix the flaky test')
+    expect(second.state.initialPrompt).toBe('Fix the flaky test')
+  })
+
+  it('restores pasted images so a restored prompt submits complete', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    const marker = await first.attachments.attachImage(new Blob(['image'], { type: 'image/png' }))
+    first.setPrompt(`Look at ${marker}`)
+    first.dispose()
+
+    const second = await openCreateSession(adapter)
+    expect(second.attachments.state.images.map((image) => image.marker)).toEqual(['[image#1]'])
+
+    await second.submit('backlog')
+
+    expect(adapter.created[0].prompt).toBe('Look at [image#1]\n\n[image#1]: data:image/png;base64,dGVzdA==')
+  })
+
+  it('keeps a newly pasted image from colliding with a restored marker', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    first.setPrompt(`Look at ${await first.attachments.attachImage(new Blob(['image'], { type: 'image/png' }))}`)
+    first.dispose()
+
+    const second = await openCreateSession(adapter)
+    const added = await second.attachments.attachImage(new Blob(['image'], { type: 'image/png' }))
+
+    expect(added).toBe('[image#2]')
+    expect(second.attachments.state.images.map((image) => image.marker)).toEqual(['[image#1]', '[image#2]'])
+  })
+
+  it('leaves properties on project defaults when a draft is restored', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    first.setPrompt('Fix the flaky test')
+    first.state.draft.title = 'Typed title'
+    first.state.draft.permissionMode = 'plan'
+    first.dispose()
+
+    adapter.defaults = { ...adapter.defaults, aiProvider: 'codex' }
+    const second = await openCreateSession(adapter)
+
+    expect(second.state.draft.title).toBe('')
+    expect(second.state.draft.permissionMode).toBe('default')
+    expect(second.state.draft.aiProvider).toBe('codex')
+  })
+
+  it('does not retain the prompt of a seeded create session', async () => {
+    const workflow = createTaskCreationWorkflow(new LocalTaskCreationAdapter())
+    workflow.configure({ projectId: 'project', promptSeed: 'Seeded work' })
+    await workflow.initialize()
+
+    workflow.setPrompt('Seeded work plus my own context')
+
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('presents a supplied seed instead of a retained draft', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    first.setPrompt('My own draft')
+    first.dispose()
+
+    const seeded = createTaskCreationWorkflow(adapter)
+    seeded.configure({ projectId: 'project', promptSeed: 'Seeded work' })
+    await seeded.initialize()
+
+    expect(seeded.state.promptDraft).toBe('Seeded work')
+    expect(readCreateTaskDraft('project')?.prompt).toBe('My own draft')
+  })
+
+  it('does not retain the prompt of an edit session', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const task = await adapter.createTask('Existing prompt', 'backlog', 'project', 'default')
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project', mode: 'edit', task })
+    await workflow.initialize()
+
+    workflow.setPrompt('Edited prompt')
+
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('keeps retained drafts independent per project', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter, 'project')
+    first.setPrompt('First project work')
+    first.dispose()
+
+    const other = await openCreateSession(adapter, 'other-project')
+    expect(other.state.promptDraft).toBe('')
+    other.setPrompt('Other project work')
+    other.dispose()
+
+    const back = await openCreateSession(adapter, 'project')
+    expect(back.state.promptDraft).toBe('First project work')
+  })
+
+  it('clears the retained draft after a successful create', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = await openCreateSession(adapter)
+    workflow.setPrompt('Fix the flaky test')
+
+    await workflow.submit('backlog')
+
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('retains the draft when creation fails', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    adapter.createTask = async () => { throw new Error('backend down') }
+    const workflow = await openCreateSession(adapter)
+    workflow.setPrompt('Fix the flaky test')
+
+    await workflow.submit('backlog')
+
+    expect(workflow.state.error).toContain('backend down')
+    expect(readCreateTaskDraft('project')?.prompt).toBe('Fix the flaky test')
+  })
+
+  it('discards the prompt, its images, and the retained draft without closing', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = await openCreateSession(adapter)
+    workflow.setPrompt(`Look at ${await workflow.attachments.attachImage(new Blob(['image'], { type: 'image/png' }))}`)
+    const revisionBeforeDiscard = workflow.state.promptRevision
+
+    workflow.discardDraft()
+
+    expect(workflow.state.promptDraft).toBe('')
+    expect(workflow.state.initialPrompt).toBe('')
+    expect(workflow.attachments.state.images).toEqual([])
+    expect(workflow.state.promptRevision).toBeGreaterThan(revisionBeforeDiscard)
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('clears the retained draft when the prompt is emptied by hand', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = await openCreateSession(adapter)
+    workflow.setPrompt('Fix the flaky test')
+
+    workflow.setPrompt('   ')
+
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('retargets retention when the project changes mid-session', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project' })
+    await workflow.initialize()
+
+    workflow.configure({ projectId: 'other-project' })
+    workflow.setPrompt('Work for the other project')
+
+    expect(readCreateTaskDraft('other-project')?.prompt).toBe('Work for the other project')
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('does not carry a typed prompt into another project', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project' })
+    await workflow.initialize()
+    workflow.setPrompt('Work for the first project')
+
+    workflow.configure({ projectId: 'other-project' })
+
+    expect(workflow.state.promptDraft).toBe('')
+    expect(readCreateTaskDraft('project')?.prompt).toBe('Work for the first project')
+  })
+
+  it('stops retaining when the session turns into an edit', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const task = await adapter.createTask('Existing prompt', 'backlog', 'project', 'default')
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project' })
+    await workflow.initialize()
+
+    workflow.configure({ projectId: 'project', mode: 'edit', task })
+    expect(workflow.state.promptDraft).toBe('Existing prompt')
+    workflow.setPrompt('Edited prompt')
+
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('stops retaining when a seed arrives after the session started', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project' })
+    await workflow.initialize()
+    workflow.setPrompt('My own precious draft')
+
+    workflow.configure({ projectId: 'project', promptSeed: 'Seeded work' })
+    expect(workflow.state.promptDraft).toBe('Seeded work')
+    workflow.setPrompt('Seeded work and more')
+
+    expect(readCreateTaskDraft('project')?.prompt).toBe('My own precious draft')
+  })
+
+  it('drops an image from the retained draft when its marker is deleted', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    const first = await openCreateSession(adapter)
+    const marker = await first.attachments.attachImage(new Blob(['image'], { type: 'image/png' }))
+    first.setPrompt(`Look at ${marker}`)
+
+    first.setPrompt('Look at ')
+
+    expect(readCreateTaskDraft('project')?.images).toEqual([])
+    expect(first.attachments.state.images).toEqual([])
+
+    first.dispose()
+    const second = await openCreateSession(adapter)
+    expect(second.attachments.state.images).toEqual([])
+    await second.submit('backlog')
+    expect(adapter.created[0].prompt).toBe('Look at')
   })
 })

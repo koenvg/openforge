@@ -977,14 +977,15 @@ Every modal needs exactly one non-empty accessible-name prop. Use `ariaLabelledb
 | `showHeader` | `boolean`, default `true` | Controls the entire header row, including the built-in close button. |
 | `closeLabel` | `string`, default `'Close dialog'` | Accessible name of the built-in close button. |
 | `closeDisabled` | `boolean`, default `false` | Disables Escape, backdrop, and close-button dismissal. |
+| `dismissOnBackdrop` | `boolean`, default `true` | Set to `false` to keep backdrop clicks from dismissing the dialog while Escape and the close button still work. Use it when an accidental click would lose unsaved input. |
 | `onKeydown` | `(event: KeyboardEvent) => boolean \| void` | Runs before default key handling. Return `true` to consume the key. |
 | `testId` | `string` | Optional test id on the dialog. Prefer role and name queries. |
 | `modalClass` | `string`, default `''` | Additional class on the overlay/dialog element. |
 | `boxClass` | `string`, default `''` | Additional class on the modal box. |
 
-`Modal` renders `role="dialog"` with `aria-modal="true"`. It traps Tab focus, supports caller-selected initial focus, and restores focus to the previously focused element when the caller closes it. Escape, backdrop clicks, and the close button call `onClose` unless `closeDisabled` is true. Use `ariaDescribedby` when the dialog has visible supporting text, and use `footer` for a structured action area such as the primary and secondary controls in a form modal.
+`Modal` renders `role="dialog"` with `aria-modal="true"`. It traps Tab focus, supports caller-selected initial focus, and restores focus to the previously focused element when the caller closes it. Escape, backdrop clicks, and the close button call `onClose` unless `closeDisabled` is true. Backdrop clicks alone are suppressed when `dismissOnBackdrop` is false. Use `ariaDescribedby` when the dialog has visible supporting text, and use `footer` for a structured action area such as the primary and secondary controls in a form modal.
 
-In tests, query `getByRole('dialog', { name: 'Repository settings' })`. Assert initial focus, Tab wrapping, each enabled dismissal path, `closeDisabled`, and focus restoration when those behaviors matter. Do not make `testId` or modal classes the primary contract.
+In tests, query `getByRole('dialog', { name: 'Repository settings' })`. Assert initial focus, Tab wrapping, each enabled dismissal path, `closeDisabled`, `dismissOnBackdrop`, and focus restoration when those behaviors matter. Do not make `testId` or modal classes the primary contract.
 
 ### `PluginPageHeader`
 

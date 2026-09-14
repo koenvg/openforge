@@ -197,11 +197,10 @@ describe('PromptInput', () => {
       resolveMarker = resolve
     }))
     const onValueChange = vi.fn()
-    const onTextChange = vi.fn()
     const onSubmit = vi.fn()
 
     render(PromptInput, {
-      props: { ...baseProps, onPasteImage, onValueChange, onTextChange, onSubmit },
+      props: { ...baseProps, onPasteImage, onValueChange, onSubmit },
     })
     const textarea = requireElement(
       screen.getByPlaceholderText('Describe what you want to implement...'),
@@ -229,7 +228,6 @@ describe('PromptInput', () => {
       expect(textarea.value).toBe('Use this updated screenshot please [image#1] ')
     })
     expect(onValueChange).toHaveBeenLastCalledWith('Use this updated screenshot please [image#1] ')
-    expect(onTextChange).toHaveBeenLastCalledWith('Use this updated screenshot please [image#1] ')
     await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
     expect(onSubmit).toHaveBeenCalledWith('Use this updated screenshot please [image#1]')
   })

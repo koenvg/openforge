@@ -5,6 +5,7 @@ import { createTask, listGitBranches } from '../lib/ipc'
 import AppTaskCreationDialogs from './shell/AppTaskCreationDialogs.svelte'
 import { useAppTaskCreationController } from '../lib/appTaskCreationController.svelte'
 import { requestTaskCompose, settleTaskCompose } from '../lib/taskCompose'
+import { clearAllCreateTaskDrafts, readCreateTaskDraft, writeCreateTaskDraft } from '../lib/createTaskDraftStore'
 
 vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
   default: vi.fn(() => ({ update() {}, destroy() {} })),
@@ -51,6 +52,7 @@ async function clickAddToBacklog(): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearAllCreateTaskDrafts()
   Element.prototype.scrollIntoView = vi.fn()
   vi.mocked(listGitBranches).mockResolvedValue([
     { name: 'main', is_current: true, is_remote: false },
@@ -87,6 +89,27 @@ describe('AddTaskDialog handoff', () => {
       if (intent === 'start') finish()
       await waitFor(() => expect(promptTextarea()?.value).toBe('Next request'))
       expect(nextSettled).not.toHaveBeenCalled()
+    } finally {
+      unmount()
+      settleTaskCompose(null)
+    }
+  })
+})
+
+describe('AddTaskDialog compose over a retained draft', () => {
+  it('presents the composed seed and leaves the retained draft untouched', async () => {
+    writeCreateTaskDraft('test-project-id', { prompt: 'My own unfinished draft', images: [] })
+    const controller = useAppTaskCreationController({
+      getTasks: () => [], loadTasks: async () => {},
+      publishTask: vi.fn(), reportError: vi.fn(),
+      resetToBoard: vi.fn(), navigateToTask: vi.fn(), runAction: async () => {},
+    })
+    const pending = requestTaskCompose({ projectId: 'test-project-id', initialPrompt: SEED })
+    void pending.catch(() => {})
+    const { unmount } = render(AppTaskCreationDialogs, { props: { controller, projectPath: null, projectName: null } })
+    try {
+      await waitFor(() => expect(promptTextarea()?.value).toBe(SEED))
+      expect(readCreateTaskDraft('test-project-id')?.prompt).toBe('My own unfinished draft')
     } finally {
       unmount()
       settleTaskCompose(null)

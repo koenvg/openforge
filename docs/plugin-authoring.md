@@ -157,7 +157,7 @@ Use a direct label when there is no visible title:
 </Modal>
 ```
 
-`onClose` handles Escape, backdrop, and close-button dismissal unless `closeDisabled` is true. `initialFocus` accepts an element, a selector scoped to the dialog, a function returning an element, or `null`. In component tests, query the dialog by its role and accessible name, for example `getByRole('dialog', { name: 'Plugin settings' })`. This checks the same name exposed to assistive technology.
+`onClose` handles Escape, backdrop, and close-button dismissal unless `closeDisabled` is true. Pass `dismissOnBackdrop={false}` to drop only backdrop dismissal, for example when the dialog holds unsaved input. `initialFocus` accepts an element, a selector scoped to the dialog, a function returning an element, or `null`. In component tests, query the dialog by its role and accessible name, for example `getByRole('dialog', { name: 'Plugin settings' })`. This checks the same name exposed to assistive technology.
 Use `CollapsibleSection` for plugin sections that should remember whether the user collapsed them:
 
 ```svelte

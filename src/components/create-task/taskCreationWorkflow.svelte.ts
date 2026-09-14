@@ -2,6 +2,7 @@ import type { TaskDetail, WorktreeSource } from '../../lib/types'
 import { dedupeBranchesForSelector, matchExistingBranchSeed, type BranchListState, type BranchSelectorOption } from '../../lib/branchSelector'
 import { resolveWorktreeAvailability } from '../../lib/worktreeAvailability'
 import { getTaskPromptText } from '../../lib/taskPrompt'
+import { clearCreateTaskDraft, readCreateTaskDraft, writeCreateTaskDraft, type RetainedCreateTaskDraft } from '../../lib/createTaskDraftStore'
 import { createTaskDraft, getWorktreeOptions } from './createTaskDraft'
 import { createTaskCreationAttachments } from './taskCreationAttachments.svelte'
 import type { TaskCreationAdapter } from './taskCreationAdapter'
@@ -52,6 +53,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   let branchLoadRun = 0
   let initializationRun = 0
   let savedCreation: TaskDetail | null = null
+  let retentionProjectId: string | null = null
 
   function configure(input: TaskCreationContext) {
     context = { ...input, mode: input.mode ?? 'create' }
@@ -66,10 +68,45 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
       lastPromptSource = promptSource
       state.promptRevision++
     }
+    syncRetentionTarget()
     if (context.titleSeed === lastTitleSeed && context.sourceTicketUrlSeed === lastSourceTicketSeed
       && context.worktreeSourceSeed === lastWorktreeSourceSeed && context.worktreeBranchSeed === lastWorktreeBranchSeed) return
     applySeedsToDraft()
     applyWorktreeSeed(state.branchList.status === 'ready' ? dedupeBranchesForSelector(state.branchList.branches) : [])
+  }
+
+  /** Only unseeded creation is draft-backed, so a supplied seed always wins. */
+  function retentionTarget(): string | null {
+    if (context.mode !== 'create' || (context.promptSeed ?? '').length > 0 || !context.projectId) return null
+    return context.projectId
+  }
+
+  function syncRetentionTarget() {
+    const target = retentionTarget()
+    if (target === retentionProjectId) return
+    retentionProjectId = target
+    // A null target means the reseed branch above already owns the prompt.
+    if (target !== null) applyPrompt(readCreateTaskDraft(target))
+  }
+
+  function applyPrompt(retained: RetainedCreateTaskDraft | null) {
+    state.initialPrompt = retained?.prompt ?? ''
+    state.promptDraft = state.initialPrompt
+    attachments.restore(retained?.images ?? [])
+    state.promptRevision++
+  }
+
+  function setPrompt(prompt: string) {
+    state.promptDraft = prompt
+    attachments.controls.syncWithPrompt(prompt)
+    if (!retentionProjectId) return
+    if (prompt.trim().length === 0) clearCreateTaskDraft(retentionProjectId)
+    else writeCreateTaskDraft(retentionProjectId, { prompt, images: attachments.getImages() })
+  }
+
+  function discardDraft() {
+    if (retentionProjectId) clearCreateTaskDraft(retentionProjectId)
+    applyPrompt(null)
   }
 
   function applySeedsToDraft() {
@@ -225,6 +262,10 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
           }
         )
         savedCreation = task
+        if (retentionProjectId) {
+          clearCreateTaskDraft(retentionProjectId)
+          retentionProjectId = null
+        }
         callbacks.onTaskCreated?.(task, intent)
         callbacks.onClose?.()
       }
@@ -238,7 +279,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   }
 
   return {
-    state, attachments: attachments.controls, configure, initialize: initializeDialog, submit,
+    state, attachments: attachments.controls, configure, initialize: initializeDialog, submit, setPrompt, discardDraft,
     dispose() { initializationRun++; branchLoadRun++; attachments.dispose() },
   }
 }

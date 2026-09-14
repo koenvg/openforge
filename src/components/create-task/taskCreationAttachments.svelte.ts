@@ -1,15 +1,14 @@
 import type { TaskDetail } from '../../lib/types'
-import { formatTaskPromptWithImageReferences, getTaskPromptImageReferences, getTaskPromptText, type TaskPromptImageReference } from '../../lib/taskPrompt'
+import { formatTaskPromptWithImageReferences, getTaskPromptImageReferences, getTaskPromptText, type TaskPromptImage } from '../../lib/taskPrompt'
 import { ClipboardUnavailableError, type TaskCreationAdapter } from './taskCreationAdapter'
 
-interface PastedTaskImage extends TaskPromptImageReference { id: number }
 const MAX_PASTED_IMAGE_BYTES = 5 * 1024 * 1024
 
 /** Internal attachment state, owned and reset by the task workflow. */
 export function createTaskCreationAttachments(adapter: TaskCreationAdapter) {
   const state = $state({
-    images: [] as PastedTaskImage[],
-    preview: null as PastedTaskImage | null,
+    images: [] as TaskPromptImage[],
+    preview: null as TaskPromptImage | null,
     error: null as string | null,
     pending: 0,
     insertRequest: null as { id: number, marker: string } | null,
@@ -18,18 +17,26 @@ export function createTaskCreationAttachments(adapter: TaskCreationAdapter) {
   let nextRequestId = 1
   let generation = 0
 
-  function reset(mode: 'create' | 'edit', task: TaskDetail | null) {
+  function replaceImages(images: TaskPromptImage[]) {
     generation++
     state.preview = null
     state.error = null
     state.pending = 0
     state.insertRequest = null
-    state.images = mode === 'edit' && task
+    state.images = images
+    nextImageId = Math.max(0, ...images.map((image) => image.id)) + 1
+  }
+
+  function reset(mode: 'create' | 'edit', task: TaskDetail | null) {
+    replaceImages(mode === 'edit' && task
       ? getTaskPromptImageReferences(task)
         .filter((image) => getTaskPromptText(task).includes(image.marker))
         .map((image) => ({ ...image, id: Number(image.marker.match(/\[image#(\d+)\]/)?.[1] ?? '0') }))
-      : []
-    nextImageId = Math.max(0, ...state.images.map((image) => image.id)) + 1
+      : [])
+  }
+
+  function restore(images: TaskPromptImage[]) {
+    replaceImages(images)
   }
 
   async function attachImage(blob: Blob): Promise<string | null> {
@@ -93,6 +100,8 @@ export function createTaskCreationAttachments(adapter: TaskCreationAdapter) {
       openPreview(marker: string) { state.preview = state.images.find((image) => image.marker === marker) ?? null },
     },
     reset,
+    restore,
+    getImages(): TaskPromptImage[] { return state.images },
     formatPrompt(prompt: string) { return formatTaskPromptWithImageReferences(prompt, state.images) },
     getSubmissionError() { return state.pending > 0 ? 'Wait for the pasted image to finish processing.' : null },
     dispose() { generation++; state.pending = 0 },
