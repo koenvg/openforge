@@ -14,6 +14,30 @@ function setClipboardRead(read: () => Promise<Array<{ types: string[], getType: 
 describe('AddTaskDialog attachments', () => {
   beforeEach(resetDialogMocks)
 
+  it('restores a dismissed prompt with its pasted image and submits both', async () => {
+    const first = render(AddTaskDialog, { props: { mode: 'create', onClose: vi.fn() } })
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Inspect screenshot' } })
+    await fireEvent.paste(textbox, { clipboardData: { items: [{
+      kind: 'file', type: 'image/png',
+      getAsFile: () => new File(['image'], 'shot.png', { type: 'image/png' }),
+    }] } })
+    await waitFor(() => expect(textbox.value).toContain('[image#1]'))
+    const dismissedPrompt = textbox.value
+    first.unmount()
+
+    render(AddTaskDialog, { props: { mode: 'create', onClose: vi.fn(), onTaskCreated: vi.fn() } })
+
+    const restored = await findPromptTextbox()
+    await waitFor(() => expect(restored.value).toBe(dismissedPrompt))
+    expect(screen.getByRole('button', { name: 'Preview [image#1]' })).toBeTruthy()
+
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => expect(createTask).toHaveBeenCalled())
+    expect(vi.mocked(createTask).mock.calls[0][0]).toContain('[image#1]: data:image/png;base64,')
+  })
+
   it('preserves the draft and pasted image after persistence fails', async () => {
     vi.mocked(createTask).mockRejectedValueOnce(new Error('disk full'))
     const onClose = vi.fn()

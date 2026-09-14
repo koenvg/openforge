@@ -22,7 +22,6 @@
     projectId: string
     onSubmit: (prompt: string) => void
     onValueChange?: (value: string) => void
-    onTextChange?: (prompt: string) => void
     onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
@@ -45,7 +44,6 @@
     projectId,
     onSubmit,
     onValueChange,
-    onTextChange,
     onPasteImage,
     onImageMarkerClick,
     imageMarkerInsertRequest = null,
@@ -68,7 +66,6 @@
   function updateTextValue(nextValue: string) {
     textValue = nextValue
     onValueChange?.(nextValue)
-    onTextChange?.(nextValue)
   }
 
   // ── Autocomplete composable ───────────────────────────────────────────────────

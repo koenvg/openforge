@@ -6,9 +6,10 @@
     initialFocusTarget?: 'dialog' | 'primary-button' | 'input-selector' | 'missing-selector'
     ariaLabel?: string
     showHeader?: boolean
+    dismissOnBackdrop?: boolean
   }
 
-  let { onClose, initialFocusTarget = 'dialog', ariaLabel = 'Test dialog', showHeader = true }: Props = $props()
+  let { onClose, initialFocusTarget = 'dialog', ariaLabel = 'Test dialog', showHeader = true, dismissOnBackdrop = true }: Props = $props()
   let primaryButton: HTMLButtonElement | null = $state(null)
 
   let initialFocus = $derived.by(() => {
@@ -19,7 +20,7 @@
   })
 </script>
 
-<Modal {onClose} {initialFocus} {ariaLabel} {showHeader}>
+<Modal {onClose} {initialFocus} {ariaLabel} {showHeader} {dismissOnBackdrop}>
   <p>Test content</p>
   <button bind:this={primaryButton} type="button">Primary action</button>
   <input data-testid="modal-input" aria-label="Modal input" />

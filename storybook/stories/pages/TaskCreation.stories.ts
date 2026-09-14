@@ -98,14 +98,22 @@ export const StartTask: CreationStory = {
     creationReady(context)
   },
 }
-export const CancelAndReopen: CreationStory = {
+export const DismissRetainsDraft: CreationStory = {
   play: async (context) => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await userEvent.type(queries(context).getByRole('textbox', { name: 'What should the agent do?' }), 'Discard this draft')
-      await userEvent.keyboard('{Escape}')
-      await reopenCreation(context)
-      await expect(queries(context).getByRole('textbox', { name: 'What should the agent do?' })).toHaveValue('')
-    }
+    const prompt = () => queries(context).getByRole('textbox', { name: 'What should the agent do?' })
+    await userEvent.type(prompt(), 'Keep this draft')
+    await userEvent.keyboard('{Escape}')
+    await reopenCreation(context)
+    await waitFor(() => expect(prompt()).toHaveValue('Keep this draft'))
+
+    await userEvent.click(queries(context).getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(prompt()).toHaveValue(''))
+    await expect(queries(context).getByRole('dialog')).toBeVisible()
+
+    await userEvent.keyboard('{Escape}')
+    await reopenCreation(context)
+    await waitFor(() => expect(prompt()).toHaveValue(''))
+
     await expect(context.args.onTaskCreated).not.toHaveBeenCalled()
     await taskReady(context)
     creationReady(context)

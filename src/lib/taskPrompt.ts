@@ -6,6 +6,10 @@ export interface TaskPromptImageReference {
   size: number
 }
 
+export interface TaskPromptImage extends TaskPromptImageReference {
+  id: number
+}
+
 export interface ParsedTaskPrompt {
   text: string
   imageReferences: TaskPromptImageReference[]
