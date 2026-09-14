@@ -48,6 +48,12 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
         .id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     let response = invoke_ok(
         state,
         "start_implementation",
@@ -65,8 +71,14 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     );
     assert_eq!(response["port"], 0);
 
-    let log =
-        wait_for_provider_log_record(fixture.log_path(), "pi", "Start through Pi provider").await;
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "pi",
+        "Start through Pi provider",
+    )
+    .await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     let canonical_repo_dir = fs::canonicalize(&repo_dir).expect("repo dir should canonicalize");
     assert!(
@@ -143,6 +155,12 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
         .id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     let response = invoke_ok(
         state,
         "start_implementation",
@@ -154,7 +172,9 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
         response["workspace_path"],
         project_repo_dir.to_string_lossy().as_ref()
     );
-    let log = wait_for_provider_log_record(
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
         fixture.log_path(),
         "pi",
         "Start from authoritative project state",
@@ -276,6 +296,12 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
         .id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     let response = invoke_ok(
         state,
         "start_implementation",
@@ -284,7 +310,9 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
     .await;
 
     assert_eq!(response["task_id"], task_id);
-    let log = wait_for_provider_log_record(
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
         fixture.log_path(),
         "pi",
         "Start with plugin prompt contribution",
@@ -343,6 +371,12 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
         .id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     invoke_ok(
         state,
         "start_implementation",
@@ -350,7 +384,14 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
     )
     .await;
 
-    let log = wait_for_provider_log_record(fixture.log_path(), "pi", "Inspect [image#1]").await;
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "pi",
+        "Inspect [image#1]",
+    )
+    .await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     assert!(
         !log.contains("data:image/png;base64"),
@@ -428,8 +469,14 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     )
     .await;
 
-    let log =
-        read_provider_log_after_ready(&mut provider_events, &task_id, fixture.log_path()).await;
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "opencode",
+        "Start through OpenCode provider",
+    )
+    .await;
     assert!(log.contains("provider=opencode"), "got provider log: {log}");
     assert!(log.contains("arg1=--agent"), "got provider log: {log}");
     assert!(
@@ -508,8 +555,14 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     );
     assert_eq!(response["port"], 0);
 
-    let log =
-        read_provider_log_after_ready(&mut provider_events, &task_id, fixture.log_path()).await;
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "codex",
+        "Start through Codex provider",
+    )
+    .await;
     assert!(log.contains("provider=codex"), "got provider log: {log}");
     assert!(
         log.contains("Start through Codex provider"),

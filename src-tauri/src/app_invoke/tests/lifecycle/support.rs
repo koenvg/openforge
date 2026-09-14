@@ -180,6 +180,25 @@ pub(super) fn provider_log_has_complete_record(
         })
 }
 
+pub(super) async fn read_provider_log_record_after_ready(
+    events: &mut tokio::sync::broadcast::Receiver<crate::app_events::AppEventEnvelope>,
+    task_id: &str,
+    log_path: &Path,
+    provider: &str,
+    required_content: &str,
+) -> String {
+    // Launch completion only registers the PTY; the provider may not have run yet.
+    // The fake provider publishes readiness after closing its completed log record.
+    let contents = read_provider_log_after_ready(events, task_id, log_path).await;
+    assert!(
+        provider_log_has_complete_record(&contents, provider, required_content),
+        "fake provider log at {} should contain completed {provider:?} record with {required_content:?} after readiness, got: {contents}",
+        log_path.display()
+    );
+    contents
+}
+
+// Daemon-owned PTYs do not publish the legacy app-event stream used above.
 pub(super) async fn wait_for_provider_log_record(
     log_path: &Path,
     provider: &str,
@@ -201,7 +220,7 @@ pub(super) async fn wait_for_provider_log_record(
     );
 }
 
-pub(super) async fn read_provider_log_after_ready(
+async fn read_provider_log_after_ready(
     events: &mut tokio::sync::broadcast::Receiver<crate::app_events::AppEventEnvelope>,
     task_id: &str,
     log_path: &Path,

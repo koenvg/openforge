@@ -54,6 +54,7 @@ tempfile = "3"
 thiserror = "2"
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 openforge-session-host = { path = "crates/session-host", features = ["test-contracts"] }
 rusqlite = { version = "0.40", features = ["trace"] }
 tower = { version = "0.5", features = ["util"] }
