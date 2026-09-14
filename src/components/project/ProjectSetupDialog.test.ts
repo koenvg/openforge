@@ -128,6 +128,7 @@ describe('ProjectSetupDialog', () => {
     await waitFor(() => {
       expect(within(dialog).getByRole('alert').textContent).toContain('Repository is already registered')
     })
+    expect(within(dialog).getByRole('alert').getAttribute('data-variant')).toBe('danger')
     expect(screen.getByRole('dialog', { name: 'Add Project' })).toBeTruthy()
   })
 
@@ -143,5 +144,6 @@ describe('ProjectSetupDialog', () => {
     await waitFor(() => expect(createProject).toHaveBeenCalledWith('my-project', REPO_PATH))
     await waitFor(() => expect(onProjectCreated).toHaveBeenCalledWith(createdProject), { timeout: 2000 })
     expect(within(dialog).getByRole('status').textContent).toContain('Project created')
+    expect(within(dialog).getByRole('status').getAttribute('data-variant')).toBe('success')
   })
 })

@@ -2,7 +2,7 @@
 export const baselineCases = [
   { story: 'pages-attention-overview--loading', targets: [
     { id: 'feedback', selector: '[role="dialog"] span:text-is("Gathering what needs your attention…")' },
-    { id: 'spinner', selector: '[role="dialog"] .loading' },
+    { id: 'spinner', selector: '[role="dialog"] span[data-size="md"]' },
   ] },
   { story: 'pages-attention-overview--failure', targets: [
     { id: 'feedback', selector: '[role="dialog"] [role="alert"]' },

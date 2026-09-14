@@ -45,8 +45,8 @@
 
 ## 8. Host slices
 
-- [ ] 8.1 Migrate project-setup alerts and remaining project-setup color states while retaining its already-migrated SDK controls; verify creation/error/success flows, accessible feedback, keyboard focus, and baseline bounds across the theme matrix.
-- [ ] 8.2 Migrate `AttentionOverviewDialog.svelte` loading and semantic colors; verify existing attention actions, selection states, keyboard behavior, and narrow-dialog paint/geometry in focused tests and browser checks.
+- [x] 8.1 Migrate project-setup alerts and remaining project-setup color states while retaining its already-migrated SDK controls; verify creation/error/success flows, accessible feedback, keyboard focus, and baseline bounds across the theme matrix.
+- [x] 8.2 Migrate `AttentionOverviewDialog.svelte` loading and semantic colors; verify existing attention actions, selection states, keyboard behavior, and narrow-dialog paint/geometry in focused tests and browser checks.
 - [ ] 8.3 Migrate host task-detail and self-review feedback/color consumers, including provider loading views and terminal-shell presentation only; verify their relevant behavioral tests, preserved mounted state, and theme-aware diff/terminal rendering.
 - [ ] 8.4 Migrate remaining focus-board, shell, and shared feedback consumers, including toast and model-download progress presentation; verify focused action/progress tests, accessible announcements, disabled states, and baseline browser geometry without changing domain logic.
 - [ ] 8.5 Replace residual settings loading indicators in `SettingsView.svelte` and `ProviderSelectField.svelte` and any confirmed equivalent leftovers; verify loading/saving announcements, focus, and existing settings tests while confirming the diff does not repeat KVG-4522's caller migration or modify autosave logic.
