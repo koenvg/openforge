@@ -12,6 +12,32 @@ pub(super) async fn authorize(
     request: Request,
     next: Next,
 ) -> Response {
+    match bearer_identity(&state, request.headers()) {
+        BearerIdentity::Absent | BearerIdentity::Controller => {}
+        BearerIdentity::Unknown => {
+            return (StatusCode::UNAUTHORIZED, "agent authorization rejected").into_response()
+        }
+        BearerIdentity::Generation => {
+            if request
+                .headers()
+                .keys()
+                .any(|key| key.as_str().starts_with("x-openforge-"))
+            {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "caller-supplied ownership is forbidden",
+                )
+                    .into_response();
+            }
+            if !openforge_session_protocol::agent_route_allowed(
+                request.method().as_str(),
+                request.uri().path(),
+            ) {
+                return (StatusCode::FORBIDDEN, "agent route forbidden").into_response();
+            }
+            return next.run(request).await;
+        }
+    }
     let Some(daemon) = state
         .pty_manager
         .as_ref()
@@ -58,6 +84,30 @@ pub(super) async fn authorize(
         }
     }
     next.run(request).await
+}
+
+enum BearerIdentity {
+    Absent,
+    Controller,
+    Generation,
+    Unknown,
+}
+
+fn bearer_identity(state: &AppState, headers: &HeaderMap) -> BearerIdentity {
+    let Some(bearer) = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+    else {
+        return BearerIdentity::Absent;
+    };
+    if state.backend_token.as_deref() == Some(bearer) {
+        return BearerIdentity::Controller;
+    }
+    if state.agent_generation_identities.authorizes(bearer) {
+        return BearerIdentity::Generation;
+    }
+    BearerIdentity::Unknown
 }
 
 fn ownership(headers: &HeaderMap) -> Option<(String, String, String, u64)> {
@@ -117,5 +167,61 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    fn generation_request(path: &str, token: &str) -> Request<Body> {
+        Request::builder()
+            .uri(path)
+            .method("POST")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from("{}"))
+            .unwrap()
+    }
+
+    async fn refusal(response: axum::response::Response) -> String {
+        String::from_utf8_lossy(
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .into_owned()
+    }
+
+    #[tokio::test]
+    async fn a_generation_credential_is_refused_off_route_and_with_ownership_headers() {
+        let (state, root) = crate::test_support::test_state("generation_ingress", |_, _| {});
+        let identities = state.agent_generation_identities.clone();
+        identities
+            .activate(root.path().join("agent-generations"), 1)
+            .expect("activate generation identities");
+        let credential = identities.issue().expect("generation credential");
+        let router = super::super::create_router(state);
+
+        let off_route = router
+            .clone()
+            .oneshot(generation_request("/delete_project", credential.token()))
+            .await
+            .unwrap();
+        assert_eq!(off_route.status(), StatusCode::FORBIDDEN);
+        assert_eq!(refusal(off_route).await, "agent route forbidden");
+
+        let mut forged = generation_request("/review_threads/list", credential.token());
+        forged
+            .headers_mut()
+            .insert("x-openforge-agent-task", "T-forged".parse().unwrap());
+        let refused = router.clone().oneshot(forged).await.unwrap();
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            refusal(refused).await,
+            "caller-supplied ownership is forbidden"
+        );
+
+        let unknown = router
+            .oneshot(generation_request("/review_threads/list", &"f".repeat(64)))
+            .await
+            .unwrap();
+        assert_eq!(unknown.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(refusal(unknown).await, "agent authorization rejected");
     }
 }

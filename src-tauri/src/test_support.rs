@@ -23,6 +23,7 @@ pub(crate) fn test_state(
             app: None,
             db: Arc::clone(&db),
             backend_token: Some("test-token".to_string()),
+            agent_generation_identities: Default::default(),
             pty_manager: Some(pty_manager),
             deferred_completion_watcher:
                 crate::http_server::deferred_completion::DeferredCompletionWatcher::new(),

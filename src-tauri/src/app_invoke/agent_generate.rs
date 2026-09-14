@@ -199,6 +199,7 @@ pub(super) async fn handle_app_agent_generate_command(
                 &ToolPolicy::None,
                 None,
                 GENERATION_TIMEOUT_SECS,
+                None,
             )
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -254,6 +255,14 @@ pub(super) async fn handle_app_agent_generate_command(
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+            let credential = state
+                .agent_generation_identities
+                .issue()
+                .inspect_err(|error| {
+                    log::warn!("[agent_generate] review CLI writes are unavailable: {error}")
+                })
+                .ok();
+
             let run = run_headless_generation(
                 &provider,
                 &prompt,
@@ -263,8 +272,12 @@ pub(super) async fn handle_app_agent_generate_command(
                 &ToolPolicy::ReadGitHistoryAndReviewCli,
                 output_schema.as_deref(),
                 REPO_GENERATION_TIMEOUT_SECS,
+                credential
+                    .as_ref()
+                    .map(|credential| credential.config_path()),
             )
             .await;
+            drop(credential);
 
             // Guaranteed cleanup: remove the throwaway worktree on success, error, or abort.
             let _ = crate::git_worktree::remove_worktree(&repo_path, &worktree_path).await;
@@ -314,6 +327,7 @@ async fn run_headless_generation(
     tool_policy: &ToolPolicy,
     output_schema: Option<&str>,
     timeout_secs: u64,
+    agent_config_path: Option<&Path>,
 ) -> Result<String, String> {
     // Only the repo-aware policy exposes personal skills; the diff-only path is
     // meant to be self-contained.
@@ -343,12 +357,15 @@ async fn run_headless_generation(
         .map_err(|error| error.to_string())?;
 
     let result = run_child(
-        &binary,
-        &args,
-        &env,
-        prompt,
-        working_directory,
-        timeout_secs,
+        AgentProcess {
+            binary: &binary,
+            args: &args,
+            env: &env,
+            prompt,
+            working_directory,
+            agent_config_path,
+            timeout_secs,
+        },
         abort_rx,
     )
     .await;
@@ -415,15 +432,29 @@ fn repo_not_local_project_error(project_id: &str) -> String {
     )
 }
 
-async fn run_child(
-    binary: &Path,
-    args: &[String],
-    env: &HashMap<String, String>,
-    prompt: &str,
-    working_directory: Option<&Path>,
+struct AgentProcess<'a> {
+    binary: &'a Path,
+    args: &'a [String],
+    env: &'a HashMap<String, String>,
+    prompt: &'a str,
+    working_directory: Option<&'a Path>,
+    agent_config_path: Option<&'a Path>,
     timeout_secs: u64,
+}
+
+async fn run_child(
+    process: AgentProcess<'_>,
     abort_rx: oneshot::Receiver<()>,
 ) -> Result<String, String> {
+    let AgentProcess {
+        binary,
+        args,
+        env,
+        prompt,
+        working_directory,
+        agent_config_path,
+        timeout_secs,
+    } = process;
     let mut command = tokio::process::Command::new(binary);
     command
         .args(args)
@@ -432,6 +463,7 @@ async fn run_child(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    apply_agent_identity(&mut command, agent_config_path);
     if let Some(dir) = resolve_working_dir(working_directory) {
         command.current_dir(dir);
     }
@@ -475,6 +507,24 @@ async fn run_child(
                 ))
             }
         }
+    }
+}
+
+/// The child's environment is `user_environment()` layered on this process's own,
+/// which carries the Sidecar controller token. That token must never reach an
+/// agent, and a generation has no task or PTY to report lifecycle events against.
+fn apply_agent_identity(command: &mut tokio::process::Command, agent_config_path: Option<&Path>) {
+    for variable in [
+        "OPENFORGE_BACKEND_TOKEN",
+        "OPENFORGE_AGENT_TOKEN",
+        "OPENFORGE_AGENT_CONFIG",
+        "OPENFORGE_TASK_ID",
+        "OPENFORGE_PTY_INSTANCE_ID",
+    ] {
+        command.env_remove(variable);
+    }
+    if let Some(path) = agent_config_path {
+        command.env("OPENFORGE_AGENT_CONFIG", path);
     }
 }
 
@@ -972,6 +1022,67 @@ mod tests {
             abort_rx.try_recv(),
             Ok(()),
             "cleanup recovery must abort every sender before discarding the registry"
+        );
+    }
+
+    async fn child_environment_report(agent_config_path: Option<&Path>) -> [String; 3] {
+        let env = HashMap::from([
+            (
+                "OPENFORGE_BACKEND_TOKEN".to_string(),
+                "controller-only".to_string(),
+            ),
+            (
+                "OPENFORGE_AGENT_CONFIG".to_string(),
+                "/stale/agent.json".to_string(),
+            ),
+            ("OPENFORGE_TASK_ID".to_string(), "T-leaked".to_string()),
+        ]);
+        let (_abort_tx, abort_rx) = oneshot::channel();
+        let report = run_child(
+            AgentProcess {
+                binary: Path::new("/bin/sh"),
+                args: &[
+                    "-c".to_string(),
+                    "printf '%s\\n%s\\n%s' \"$OPENFORGE_AGENT_CONFIG\" \
+                     \"$OPENFORGE_BACKEND_TOKEN\" \"$OPENFORGE_TASK_ID\""
+                        .to_string(),
+                ],
+                env: &env,
+                prompt: "",
+                working_directory: None,
+                agent_config_path,
+                timeout_secs: 10,
+            },
+            abort_rx,
+        )
+        .await
+        .expect("child output");
+        let mut lines = report.split('\n').map(str::to_string);
+        std::array::from_fn(|_| lines.next().expect("environment line"))
+    }
+
+    #[tokio::test]
+    async fn the_generation_child_gets_its_credential_and_never_the_controller_token() {
+        let root = tempfile::tempdir().expect("credential root");
+        let identities = crate::agent_generation_identity::GenerationIdentities::default();
+        identities
+            .activate(root.path().join("agent-generations"), 1)
+            .expect("activate generation identities");
+        let credential = identities.issue().expect("generation credential");
+
+        let [agent_config, backend_token, task_id] =
+            child_environment_report(Some(credential.config_path())).await;
+
+        assert_eq!(agent_config, credential.config_path().to_string_lossy());
+        assert_eq!(backend_token, "");
+        assert_eq!(task_id, "");
+    }
+
+    #[tokio::test]
+    async fn a_generation_without_a_credential_runs_with_no_agent_configuration() {
+        assert_eq!(
+            child_environment_report(None).await,
+            ["".to_string(), "".to_string(), "".to_string()]
         );
     }
 }

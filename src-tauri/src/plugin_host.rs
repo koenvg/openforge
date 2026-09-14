@@ -164,6 +164,11 @@ impl PluginHost {
             app: Some(self.app_handle.clone()),
             db,
             backend_token: None,
+            agent_generation_identities: self
+                .app_handle
+                .try_state::<crate::agent_generation_identity::GenerationIdentities>()
+                .map(|state| state.inner().clone())
+                .unwrap_or_default(),
             pty_manager,
             deferred_completion_watcher,
             github_client,
