@@ -131,6 +131,7 @@ export const desktopCommandContracts = [
   {"functionName":"updateTaskInitialPrompt","moduleName":"tasks","ipcCommand":"update_task","payloadKeys":["id","initialPrompt"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"updateTaskTitle","moduleName":"tasks","ipcCommand":"update_task_title","payloadKeys":["id","title"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"updateTaskSourceTicketUrl","moduleName":"tasks","ipcCommand":"update_task_source_ticket_url","payloadKeys":["id","sourceTicketUrl"],"owner":"rust-sidecar","domain":"tasks-projects"},
+  {"functionName":"removeTaskDependency","moduleName":"tasks","ipcCommand":"remove_task_dependency","payloadKeys":["taskId","dependencyTaskId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"updateTaskStatus","moduleName":"tasks","ipcCommand":"update_task_status","payloadKeys":["id","status"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"deleteTask","moduleName":"tasks","ipcCommand":"delete_task","payloadKeys":["id"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"createProject","moduleName":"tasks","ipcCommand":"create_project","payloadKeys":["name","path"],"owner":"rust-sidecar","domain":"tasks-projects"},

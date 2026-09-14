@@ -90,6 +90,25 @@ export async function refreshActiveTasks(
   return result
 }
 
+/** Refresh the bounded active result and cached relationship owners after an edge changes. */
+export async function refreshTaskRelationships(taskId: string, dependencyTaskId: string): Promise<void> {
+  const changedIds = new Set([taskId, dependencyTaskId])
+  const cachedOwners = [...onDemandDetails.entries()].filter(([id, entry]) =>
+    changedIds.has(id)
+    || entry.read.task.dependsOn.some(id => changedIds.has(id))
+    || entry.read.related.some(reference => changedIds.has(reference.id)),
+  )
+  const refreshes: Promise<unknown>[] = cachedOwners.map(([id, entry]) =>
+    loadTaskDetail(entry.projectId, id, readTaskDetail, () => onDemandDetails.get(id)?.projectId === entry.projectId),
+  )
+  const active = get(activeProjectTasks)
+  if (active) {
+    const projectId = active.projectId
+    refreshes.push(refreshActiveTasks(projectId, readActiveTasks, () => get(activeProjectTasks)?.projectId === projectId))
+  }
+  await Promise.all(refreshes)
+}
+
 export function getActiveTasksForProject(projectId: string): ActiveTasks | null {
   const active = get(activeProjectTasks)
   return active?.projectId === projectId ? active.result : null

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head><meta charset="utf-8" /><title>Dependency removal interaction</title></head>
+  <body style="margin: 0; padding: 16px; background: var(--of-surface); color: var(--of-text)">
+    <div id="app" style="width: 100%; max-width: 600px"></div>
+    <output id="removals" aria-label="Removal requests">0</output>
+    <output id="navigation" aria-label="Navigation requests">0</output>
+    <script type="module">
+      import { mount } from 'svelte'
+      import '../../../../app.css'
+      import TaskRelationshipDetailSection from '../TaskRelationshipDetailSection.svelte'
+      import { BUILTIN_THEMES, THEME_TOKEN_CSS_PROPERTIES } from '../../../../lib/themeContract'
+      const theme = BUILTIN_THEMES.find(theme => theme.id === 'openforge-dark')
+      for (const [key, value] of Object.entries(theme.tokens)) {
+        document.documentElement.style.setProperty(THEME_TOKEN_CSS_PROPERTIES[key], value)
+      }
+      const items = ['T-2', 'T-3'].map(id => ({
+        id, status: 'backlog', title: 'A prerequisite with a long task title for a narrow inspector panel',
+        displayTitle: 'A prerequisite with a long task title for a narrow inspector panel',
+        tooltipTitle: 'A prerequisite with a long task title for a narrow inspector panel',
+        projectId: 'P-1', projectName: 'Release Tools',
+      }))
+      function count(id) {
+        const output = document.getElementById(id)
+        output.textContent = String(Number(output.textContent) + 1)
+      }
+      mount(TaskRelationshipDetailSection, {
+        target: document.getElementById('app'),
+        props: { taskId: 'T-1', kind: 'dependencies', items, waitingDependencyCount: 2,
+          onRemoveDependency: () => count('removals'), onOpenRelatedTask: () => count('navigation') },
+      })
+    </script>
+  </body>
+</html>

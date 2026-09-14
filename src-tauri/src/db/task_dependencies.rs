@@ -236,6 +236,34 @@ fn dedupe_dependency_ids(dependency_ids: &[String]) -> Vec<String> {
 }
 
 impl Database {
+    /// Removes one direct prerequisite without replacing unrelated relationships.
+    ///
+    /// # Errors
+    /// Returns an error if the current task is missing or persistence fails.
+    pub fn remove_task_dependency(
+        &self,
+        task_id: &str,
+        depends_on_task_id: &str,
+    ) -> TaskDependencyResult<()> {
+        let mut connection = self.lock_conn()?;
+        let transaction = connection.transaction()?;
+        task_project_id(&transaction, task_id)?
+            .ok_or_else(|| TaskDependencyPersistenceError::TaskNotFound(task_id.to_string()))?;
+        let removed = transaction.execute(
+            "DELETE FROM task_dependencies WHERE task_id = ?1 AND depends_on_task_id = ?2",
+            rusqlite::params![task_id, depends_on_task_id],
+        )?;
+        if removed > 0 {
+            let now = super::current_unix_timestamp()?;
+            transaction.execute(
+                "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![now, task_id],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn add_task_dependency(
         &self,
         task_id: &str,
@@ -367,6 +395,79 @@ mod tests {
 
         let domain_error = TaskDependencyPersistenceError::TaskNotFound("T-404".to_string());
         assert!(domain_error.source().is_none());
+    }
+
+    #[test]
+    fn remove_task_dependency_preserves_other_relationships_and_tasks() {
+        let (db, _temp_dir) = make_test_db("remove_task_dependency_targeted");
+        let task = db
+            .create_task("Dependent", "backlog", None, None, None)
+            .unwrap();
+        let prerequisite = db
+            .create_task("Prerequisite", "done", None, None, None)
+            .unwrap();
+        let concurrent = db
+            .create_task("Added after UI read", "backlog", None, None, None)
+            .unwrap();
+        let dependent = db
+            .create_task("Another dependent", "backlog", None, None, None)
+            .unwrap();
+        db.add_task_dependency(&task.id, &prerequisite.id).unwrap();
+        let stale_task = db.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(stale_task.depends_on, vec![prerequisite.id.clone()]);
+        db.add_task_dependency(&task.id, &concurrent.id).unwrap();
+        db.add_task_dependency(&dependent.id, &prerequisite.id)
+            .unwrap();
+
+        db.remove_task_dependency(&task.id, &prerequisite.id)
+            .unwrap();
+
+        let current = db.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(current.depends_on, vec![concurrent.id]);
+        assert_eq!(current.status, "backlog");
+        assert!(db.get_task(&prerequisite.id).unwrap().is_some());
+        assert_eq!(
+            db.get_task(&dependent.id).unwrap().unwrap().depends_on,
+            vec![prerequisite.id]
+        );
+    }
+
+    #[test]
+    fn remove_task_dependency_is_idempotent_even_after_prerequisite_deletion() {
+        let (db, _temp_dir) = make_test_db("remove_task_dependency_idempotent");
+        let task = db
+            .create_task("Dependent", "backlog", None, None, None)
+            .unwrap();
+        let prerequisite = db
+            .create_task("Prerequisite", "done", None, None, None)
+            .unwrap();
+        db.add_task_dependency(&task.id, &prerequisite.id).unwrap();
+
+        db.remove_task_dependency(&task.id, &prerequisite.id)
+            .unwrap();
+        db.remove_task_dependency(&task.id, &prerequisite.id)
+            .unwrap();
+        db.hard_delete_task(&prerequisite.id).unwrap();
+        db.remove_task_dependency(&task.id, &prerequisite.id)
+            .unwrap();
+
+        assert!(db
+            .get_task(&task.id)
+            .unwrap()
+            .unwrap()
+            .depends_on
+            .is_empty());
+    }
+
+    #[test]
+    fn remove_task_dependency_rejects_missing_current_task() {
+        let (db, _temp_dir) = make_test_db("remove_task_dependency_missing");
+        let error = db
+            .remove_task_dependency("T-missing", "T-prerequisite")
+            .unwrap_err();
+        assert!(
+            matches!(error, TaskDependencyPersistenceError::TaskNotFound(id) if id == "T-missing")
+        );
     }
 
     #[test]

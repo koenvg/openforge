@@ -119,6 +119,26 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                 })?;
             Ok(serde_json::Value::Null)
         }
+        "remove_task_dependency" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let dependency_task_id = payload_string(&request.payload, "dependencyTaskId")?;
+            let project_id = {
+                let db = crate::db::acquire_db(&state.db);
+                let project_id = db
+                    .get_task_project_id(&task_id)
+                    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+                db.remove_task_dependency(&task_id, &dependency_task_id)
+                    .map_err(|error| match error {
+                        db::TaskDependencyPersistenceError::TaskNotFound(_) => {
+                            (StatusCode::NOT_FOUND, error.to_string())
+                        }
+                        _ => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+                    })?;
+                project_id
+            };
+            publish_task_changed(state, &task_id, project_id.as_deref());
+            Ok(serde_json::Value::Null)
+        }
         "tasks_active" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let result = {
