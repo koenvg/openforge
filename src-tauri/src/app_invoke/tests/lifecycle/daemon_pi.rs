@@ -43,6 +43,12 @@ async fn pi_start_uses_daemon_ownership_through_existing_agent_interface() {
                 .join("crates/session-daemon/target/debug/openforge-session-daemon"),
             task_id.clone(),
         );
+    let mut provider_output = fixture
+        .state()
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
     let started = invoke_ok(
         fixture.state(),
         "start_implementation",
@@ -52,7 +58,14 @@ async fn pi_start_uses_daemon_ownership_through_existing_agent_interface() {
     )
     .await;
     assert!(started["session_id"].is_string());
-    wait_for_provider_log_record(fixture.log_path(), "pi", "Keep this Pi alive").await;
+    read_provider_log_record_after_daemon_output(
+        &mut provider_output,
+        &task_id,
+        fixture.log_path(),
+        "pi",
+        "Keep this Pi alive",
+    )
+    .await;
     let inventory = invoke_ok(fixture.state(), "get_restart_terminal_inventory", json!({})).await;
     let old_manager = fixture.state().pty_manager.as_ref().unwrap().clone();
     let instance = inventory["sessions"][0]["instanceId"].as_u64().unwrap();

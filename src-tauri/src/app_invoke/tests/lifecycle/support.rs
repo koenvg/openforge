@@ -1,5 +1,6 @@
 use super::*;
 
+use base64::Engine;
 use once_cell::sync::Lazy;
 use std::{
     fs,
@@ -198,26 +199,56 @@ pub(super) async fn read_provider_log_record_after_ready(
     contents
 }
 
-// Daemon-owned PTYs do not publish the legacy app-event stream used above.
-pub(super) async fn wait_for_provider_log_record(
+// Daemon-owned PTYs publish model output through the daemon terminal transport,
+// not the legacy raw PTY event stream used above.
+pub(super) async fn read_provider_log_record_after_daemon_output(
+    events: &mut tokio::sync::broadcast::Receiver<crate::app_events::AppEventEnvelope>,
+    task_id: &str,
     log_path: &Path,
     provider: &str,
     required_content: &str,
 ) -> String {
-    let mut last_contents = String::new();
-    for _ in 0..50 {
-        if let Ok(contents) = fs::read_to_string(log_path) {
-            if provider_log_has_complete_record(&contents, provider, required_content) {
-                return contents;
+    let output_event_name = format!("pty-model-output-{task_id}");
+    let mut output = Vec::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events
+                .recv()
+                .await
+                .expect("daemon provider output channel should remain open");
+            if event.event_name != output_event_name {
+                continue;
             }
-            last_contents = contents;
+            let data = event.payload["data"]
+                .as_str()
+                .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok())
+                .expect("daemon provider output should be base64 encoded");
+            output.extend(data);
+            if String::from_utf8_lossy(&output).contains(PROVIDER_LOG_READY) {
+                break;
+            }
         }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!(
-        "fake provider log at {} should contain completed {provider:?} record with {required_content:?}, got: {last_contents}",
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "daemon provider PTY should confirm its log is ready, got output: {:?}",
+            String::from_utf8_lossy(&output)
+        )
+    });
+
+    let contents = fs::read_to_string(log_path).unwrap_or_else(|error| {
+        panic!(
+            "provider log at {} should be readable after daemon output readiness: {error}",
+            log_path.display()
+        )
+    });
+    assert!(
+        provider_log_has_complete_record(&contents, provider, required_content),
+        "fake provider log at {} should contain completed {provider:?} record with {required_content:?} after daemon output readiness, got: {contents}",
         log_path.display()
     );
+    contents
 }
 
 async fn read_provider_log_after_ready(
