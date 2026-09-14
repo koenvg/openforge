@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { baselineCases } from './ui-migration-baseline-cases.mjs'
-import { measureTargets } from './ui-migration-baseline-measurements.mjs'
-import { baselineThemeIds, installBaselineThemes, selectBaselineTheme } from './ui-migration-theme-fixtures.mjs'
+import {
+  baselineThemeIds,
+  captureControlStates,
+  compareBaseline,
+  cycleThemes,
+  loadStory,
+  sampleTargets,
+  writeJsonArtifact,
+  writeScreenshotArtifact,
+} from './storybook-migration-browser-harness.mjs'
 
 const storybookUrl = process.env.STORYBOOK_URL
 assert.ok(storybookUrl, 'Set STORYBOOK_URL to this worktree pages Storybook')
@@ -27,25 +35,6 @@ const expectedReports = new Map(baseline.reports
 const geometryTolerance = baseline.geometryToleranceCssPx
 assert.equal(geometryTolerance, 1, 'The approved geometry tolerance must remain one CSS pixel')
 
-function compare(actual, expected, path, spinner = false) {
-  if (/\.(selector|whiteSpace|text|boxShadow)$/.test(path)) return
-  if (path.includes('.interactions.') && /\.(outline|focusVisible)$/.test(path)) return
-  if (spinner && /\.(background|border|radius|maskImage|clientWidth|clientHeight|scrollWidth|scrollHeight)$/.test(path)) return
-  if (typeof expected === 'number') {
-    assert.ok(Math.abs(actual - expected) <= geometryTolerance, `${path}: ${actual} vs ${expected}`)
-    return
-  }
-  if (Array.isArray(expected)) {
-    assert.equal(actual.length, expected.length, `${path}.length`)
-    expected.forEach((value, index) => compare(actual[index], value, `${path}.${index}`, spinner))
-    return
-  }
-  if (expected && typeof expected === 'object') {
-    for (const key of Object.keys(expected)) compare(actual[key], expected[key], `${path}.${key}`, spinner)
-    return
-  }
-  assert.equal(actual, expected, path)
-}
 function snapshotContract(snapshot) {
   return {
     theme: snapshot.theme,
@@ -88,39 +77,26 @@ function interactionContract(samples) {
   return samples.map(sample => ({ state: sample.state, ...snapshotContract(sample) }))
 }
 
-
 async function exerciseInteraction(page, entry) {
   if (!entry.interaction) return []
   const control = page.locator(entry.interaction)
   const target = [{ id: 'interaction', selector: entry.interaction }]
-  await control.evaluate(element => element.addEventListener('click', event => {
-    event.preventDefault()
-    event.stopImmediatePropagation()
-  }, { capture: true }))
-  await page.keyboard.press('Tab')
-  await control.evaluate(element => element.focus())
-  assert.ok(await control.evaluate(element => element.matches(':focus-visible')), `${entry.story}: keyboard focus must be visible`)
-  const focusSample = { state: 'focus-visible', ...await measureTargets(page, target) }
-  assert.ok(!focusSample.elements[0].outline.includes(' none '), `${entry.story}: focus outline must paint`)
-  await page.evaluate(() => document.activeElement?.blur())
-  await control.hover()
-  const hoverSample = { state: 'hover', ...await measureTargets(page, target) }
-  await page.mouse.down()
-  let pressedSample
-  try {
-    assert.ok(await control.evaluate(element => element.matches(':active')), `${entry.story}: pressed control must be active`)
-    pressedSample = { state: 'pressed', ...await measureTargets(page, target) }
-    const modalBox = await page.locator('.of-modal-box').boundingBox()
-    assert.ok(modalBox, `${entry.story}: modal box must remain visible`)
-    await page.mouse.move(modalBox.x + modalBox.width / 2, modalBox.y + 4)
-  } finally {
-    await control.evaluate(element => { element.disabled = true })
-    await page.mouse.up()
-    await control.evaluate(element => { element.disabled = false })
-  }
-  await page.keyboard.press('Tab')
-  await control.evaluate(element => element.focus())
-  return [hoverSample, pressedSample, focusSample]
+  const samples = await captureControlStates(page, {
+    control,
+    focusMessage: `${entry.story}: keyboard focus must be visible`,
+    pressedMessage: `${entry.story}: pressed control must be active`,
+    sample: async (_page, _control, state) => {
+      const snapshot = { state, ...await sampleTargets(page, target) }
+      if (state === 'focus-visible') assert.ok(!snapshot.elements[0].outline.includes(' none '), `${entry.story}: focus outline must paint`)
+      return snapshot
+    },
+    moveBeforeRelease: async () => {
+      const modalBox = await page.locator('.of-modal-box').boundingBox()
+      assert.ok(modalBox, `${entry.story}: modal box must remain visible`)
+      await page.mouse.move(modalBox.x + modalBox.width / 2, modalBox.y + 4)
+    },
+  })
+  return samples
 }
 
 async function verifyAttentionDetails(page, entry) {
@@ -170,59 +146,59 @@ async function verifyAttentionDetails(page, entry) {
 }
 
 const outputDir = resolve(process.env.PROJECT_ATTENTION_ARTIFACTS ?? 'artifacts/storybook-visual/project-attention-presentation')
-mkdirSync(outputDir, { recursive: true })
 const browser = await chromium.launch({ headless: true })
 const reports = []
 try {
   for (const entry of entries) {
     for (const width of [1280, 1000]) {
       const viewport = { width, height: 900 }
-      const page = await browser.newPage({ viewport, deviceScaleFactor: 1, locale: 'en-US', timezoneId: 'UTC', reducedMotion: 'reduce' })
-      const pageErrors = []
-      page.on('pageerror', error => pageErrors.push(error.message))
+      console.log(`Checking ${entry.story} at ${width}px`)
+      const storyToLoad = entry.story === 'pages-project-setup--success'
+        ? 'pages-project-setup--new-repository'
+        : entry.story
+      const { page, pageErrors } = await loadStory(browser, {
+        storybookUrl,
+        story: storyToLoad,
+        width,
+        locale: 'en-US',
+        timezoneId: 'UTC',
+      })
       try {
-        console.log(`Checking ${entry.story} at ${width}px`)
-        const storyToLoad = entry.story === 'pages-project-setup--success'
-          ? 'pages-project-setup--new-repository'
-          : entry.story
-        await page.goto(`${storybookUrl}/iframe.html?id=${storyToLoad}&viewMode=story&globals=openforgeTheme:openforge-light;openforgeMotion:reduced`)
-        await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
-        assert.equal(await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase), 'finished', storyToLoad)
         if (entry.story === 'pages-project-setup--success') {
           await page.evaluate(() => { window.setTimeout = () => 0 })
           await page.getByRole('button', { name: 'Create Project' }).click()
         }
         for (const target of entry.targets) await page.locator(target.selector).waitFor()
-        await page.evaluate(() => document.fonts.ready)
-        await page.addStyleTag({ content: '* { transition: none !important; }' })
-        await installBaselineThemes(page)
         const mounted = await page.locator(entry.targets[0].selector).elementHandle()
-        for (const theme of baselineThemeIds) {
-          await selectBaselineTheme(page, theme)
-          console.log(`  ${theme}`)
-          assert.ok(await mounted.evaluate(element => element.isConnected), `${entry.story}: theme selection must preserve the mounted view`)
-          const snapshot = await measureTargets(page, entry.targets)
-          const interactions = await exerciseInteraction(page, entry)
-          await verifyAttentionDetails(page, entry)
-          const key = `${entry.story}/${width}/${theme}`
-          const expected = expectedReports.get(key)
-          assert.ok(expected, `${key}: missing approved baseline`)
-          compare(snapshotContract(snapshot), snapshotContract(expected.snapshot), `${key}.snapshot`, entry.story === 'pages-attention-overview--loading')
-          compare(interactionContract(interactions), interactionContract(expected.interactions), `${key}.interactions`)
-          reports.push({ story: entry.story, theme, viewport, snapshot, interactions })
-          if (theme.startsWith('com.example.')) {
-            await page.screenshot({ path: resolve(outputDir, `${entry.story}-${theme.replaceAll(/[^a-z0-9]+/gi, '-')}-${width}.png`) })
-          }
-        }
+        const samples = await cycleThemes(page, {
+          mounted,
+          mountedMessage: `${entry.story}: theme selection must preserve the mounted view`,
+          sample: async (_page, theme) => {
+            console.log(`  ${theme}`)
+            const snapshot = await sampleTargets(page, entry.targets)
+            const interactions = await exerciseInteraction(page, entry)
+            await verifyAttentionDetails(page, entry)
+            const key = `${entry.story}/${width}/${theme}`
+            const expected = expectedReports.get(key)
+            assert.ok(expected, `${key}: missing approved baseline`)
+            const spinner = entry.story === 'pages-attention-overview--loading'
+            const ignorePath = path => /\.(selector|whiteSpace|text|boxShadow)$/.test(path)
+              || (path.includes('.interactions.') && /\.(outline|focusVisible)$/.test(path))
+              || (spinner && /\.(background|border|radius|maskImage|clientWidth|clientHeight|scrollWidth|scrollHeight)$/.test(path))
+            compareBaseline(snapshotContract(snapshot), snapshotContract(expected.snapshot), `${key}.snapshot`, { tolerance: geometryTolerance, ignorePath })
+            compareBaseline(interactionContract(interactions), interactionContract(expected.interactions), `${key}.interactions`, { tolerance: geometryTolerance, ignorePath })
+            if (theme.startsWith('com.example.')) {
+              await writeScreenshotArtifact(page, resolve(outputDir, `${entry.story}-${theme.replaceAll(/[^a-z0-9]+/gi, '-')}-${width}.png`))
+            }
+            return { snapshot, interactions }
+          },
+        })
+        for (const { theme, snapshot: sample } of samples) reports.push({ story: entry.story, theme, viewport, ...sample })
         assert.deepEqual(pageErrors, [], `${entry.story}: browser page errors`)
-      } finally {
-        await page.close()
-      }
+      } finally { await page.close() }
     }
   }
   assert.equal(reports.length, ownedStories.size * 2 * baselineThemeIds.length)
-  writeFileSync(resolve(outputDir, 'after.json'), JSON.stringify({ browser: browser.version(), geometryToleranceCssPx: geometryTolerance, reports }, null, 2) + '\n')
+  writeJsonArtifact(resolve(outputDir, 'after.json'), { browser: browser.version(), geometryToleranceCssPx: geometryTolerance, reports })
   console.log(`Verified ${reports.length} project-setup and attention paint/bounds cases across ${baselineThemeIds.length} themes and two viewports`)
-} finally {
-  await browser.close()
-}
+} finally { await browser.close() }
