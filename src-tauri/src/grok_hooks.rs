@@ -35,21 +35,15 @@ fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
     }
 }
 
-/// Build a guarded curl command for the given lifecycle event. The
-/// `[ -z "$OPENFORGE_TASK_ID" ] ||` guard keeps the hook inert (exit 0,
-/// skipping curl) for the user's own (non-OpenForge) Grok sessions, since
-/// Grok hooks are installed globally rather than per-task like Claude's.
-/// Using `[ -z ] ||` instead of `[ -n ] &&` ensures the overall command still
-/// exits 0 when OPENFORGE_TASK_ID is unset, rather than propagating the
-/// non-zero exit code of a short-circuited `&&`, which could otherwise
-/// disrupt the user's own Grok sessions.
+/// Grok hooks are installed globally (`~/.grok/hooks/openforge.json`) and
+/// fire for every `grok` invocation, so the guard keeps the hook inert for
+/// the user's own non-OpenForge sessions. `[ -z ] ||` rather than `[ -n ] &&`
+/// so the command still exits 0 when the variable is unset, instead of
+/// propagating the non-zero exit of a short-circuited `&&`.
 ///
-/// The trailing `; exit 0` is load-bearing beyond that guard: Grok treats a
-/// hook exit code of 2 as an explicit "deny", and `PreToolUse` is Grok's only
-/// blocking event. Without it, the command's exit status is curl's own, so a
-/// curl failure that happens to exit 2 (e.g. "failed to initialize") would
-/// block the user's tool call. Forcing exit 0 keeps this purely a
-/// best-effort status ping, never a decision signal.
+/// Grok reads hook stdout as a permission decision and exit code 2 as a deny,
+/// and it refuses to run a hook naming a variable its hook environment lacks.
+/// The generator test pins the whole command against those three rules.
 fn lifecycle_hook_command(port: u16, event_type: &str) -> String {
     let Some(kind) = grok_lifecycle_kind_from_event(event_type) else {
         return String::new();
@@ -57,10 +51,10 @@ fn lifecycle_hook_command(port: u16, event_type: &str) -> String {
     let Some(endpoint) = lifecycle_hook_endpoint(event_type) else {
         return String::new();
     };
-    let stable = crate::notification_hooks::shell_command("grok", kind, event_type);
-    format!(
-        "[ -z \"$OPENFORGE_TASK_ID\" ] || {{ if [ -n \"$OPENFORGE_AGENT_CONFIG\" ]; then {stable}; else curl -s -o /dev/null -X POST 'http://127.0.0.1:{port}/hooks/grok-{endpoint}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$GROK_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @-; fi; }}; exit 0"
-    )
+    let legacy_url = format!("http://127.0.0.1:{port}/hooks/grok-{endpoint}");
+    let report =
+        crate::notification_hooks::shell_command("grok", kind, event_type, Some(&legacy_url));
+    format!("[ -z \"$OPENFORGE_TASK_ID\" ] || {report} >/dev/null; exit 0")
 }
 
 pub(crate) fn build_hooks_json(port: u16) -> Value {
@@ -216,50 +210,44 @@ mod tests {
     }
 
     #[test]
-    fn grok_hook_command_is_guarded_and_targets_grok_endpoint() {
-        let json = build_hooks_json(9999);
-        let cmd = json["hooks"]["Stop"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap();
-        assert!(
-            cmd.contains("[ -z \"$OPENFORGE_TASK_ID\" ]"),
-            "must be inert without OPENFORGE_TASK_ID"
-        );
-        assert!(cmd.contains("127.0.0.1:9999"));
-        assert!(cmd.contains("/hooks/grok-stop"));
-        assert!(cmd.contains("$GROK_SESSION_ID"));
-        assert!(cmd.contains("--data-binary @-"));
-        assert!(
-            cmd.trim_end().ends_with("; exit 0"),
-            "command must always exit 0 so curl's own exit status (e.g. 2) never \
-             gets interpreted by grok as an explicit deny on PreToolUse, got: {}",
-            cmd
-        );
-    }
+    fn grok_hook_commands_are_exactly_the_guarded_reporter_invocation() {
+        let port = 54321u16;
+        let json = build_hooks_json(port);
 
-    #[test]
-    fn grok_hook_commands_all_end_with_exit_0() {
-        let json = build_hooks_json(17422);
-        let hook_keys = [
-            "SessionStart",
-            "UserPromptSubmit",
-            "PreToolUse",
-            "PostToolUse",
-            "Stop",
-            "SessionEnd",
-            "Notification",
-        ];
-        for hook_key in hook_keys {
+        for (hook_key, event_type, kind) in [
+            ("SessionStart", "session-start", "became_busy"),
+            ("UserPromptSubmit", "user-prompt-submit", "became_busy"),
+            ("PreToolUse", "pre-tool-use", "became_busy"),
+            ("PostToolUse", "post-tool-use", "became_busy"),
+            ("Stop", "stop", "ended"),
+            ("SessionEnd", "session-end", "ended"),
+            (
+                "Notification",
+                "notification-permission",
+                "requested_permission",
+            ),
+        ] {
             let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
                 .as_str()
-                .unwrap_or_else(|| panic!("Missing command for {}", hook_key));
-            assert!(
-                cmd.trim_end().ends_with("; exit 0"),
-                "{} command must end with '; exit 0' so a non-zero curl exit \
-                 (e.g. 2) can never be misread by grok as an explicit deny on \
-                 PreToolUse, got: {}",
-                hook_key,
-                cmd
+                .unwrap_or_else(|| panic!("Missing command for {hook_key}"));
+            let (guard, rest) = cmd.split_once("node -e '").expect(cmd);
+            let (_embedded_source, arguments) = rest.split_once("' ").expect(cmd);
+
+            assert_eq!(
+                guard, "[ -z \"$OPENFORGE_TASK_ID\" ] || ",
+                "{hook_key} command must stay inert for the user's own Grok sessions"
+            );
+            assert_eq!(
+                arguments,
+                format!(
+                    "'grok' '{kind}' '{event_type}' \
+                     'http://127.0.0.1:{port}/hooks/grok-{event_type}' >/dev/null; exit 0"
+                ),
+                "{hook_key} command is pinned exactly because each part carries a Grok \
+                 constraint: it may name no environment variable beyond \
+                 $OPENFORGE_TASK_ID (Grok drops a hook naming an unresolvable one), \
+                 it may write nothing to stdout (read as a permission decision), and \
+                 it must exit 0 (exit code 2 is read as a deny)"
             );
         }
     }
@@ -293,90 +281,6 @@ mod tests {
         let json = build_hooks_json(17422);
         let pre_tool_use = &json["hooks"]["PreToolUse"][0]["hooks"][0];
         assert_eq!(pre_tool_use["type"], "command");
-    }
-
-    #[test]
-    fn grok_hook_command_uses_grok_session_id_not_claude() {
-        let json = build_hooks_json(17422);
-        let cmd = json["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap();
-        assert!(cmd.contains("$GROK_SESSION_ID"));
-        assert!(!cmd.contains("$CLAUDE_SESSION_ID"));
-        assert!(cmd.contains("$OPENFORGE_TASK_ID"));
-        assert!(cmd.contains("$OPENFORGE_PTY_INSTANCE_ID"));
-        assert!(cmd.contains("--data-binary @-"));
-    }
-
-    #[test]
-    fn grok_hooks_settings_urls_match_http_server_port_and_are_guarded() {
-        let port = 54321u16;
-        let json = build_hooks_json(port);
-
-        let hook_entries = [
-            ("SessionStart", "session-start"),
-            ("UserPromptSubmit", "user-prompt-submit"),
-            ("PreToolUse", "pre-tool-use"),
-            ("PostToolUse", "post-tool-use"),
-            ("Stop", "stop"),
-            ("SessionEnd", "session-end"),
-            ("Notification", "notification-permission"),
-        ];
-
-        for (hook_key, expected_event_type) in &hook_entries {
-            let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
-                .as_str()
-                .unwrap_or_else(|| panic!("Missing command for {}", hook_key));
-
-            assert!(
-                cmd.starts_with("[ -z \"$OPENFORGE_TASK_ID\" ] ||"),
-                "{} command should be guarded to stay inert for the user's own Grok sessions, got: {}",
-                hook_key,
-                cmd
-            );
-            assert!(
-                cmd.contains(&format!("127.0.0.1:{}", port)),
-                "{} command should use port {}, got: {}",
-                hook_key,
-                port,
-                cmd
-            );
-            assert!(
-                cmd.contains(&format!("/hooks/grok-{}", expected_event_type)),
-                "{} command should POST to the event-specific Grok hook endpoint, got: {}",
-                hook_key,
-                cmd
-            );
-            assert!(
-                cmd.contains("task_id=") && cmd.contains("session_id="),
-                "{} command should include task and Grok session identity, got: {}",
-                hook_key,
-                cmd
-            );
-            assert!(
-                cmd.contains("pty_instance_id="),
-                "{} command should include PTY instance identity, got: {}",
-                hook_key,
-                cmd
-            );
-            assert!(
-                cmd.contains("--data-binary @-"),
-                "{} command should forward the Grok hook stdin JSON, got: {}",
-                hook_key,
-                cmd
-            );
-            assert!(
-                cmd.contains("-o /dev/null"),
-                "{} command must not write OpenForge hook responses into Grok stdout",
-                hook_key
-            );
-            assert!(cmd.contains("curl"), "{} command should use curl", hook_key);
-            assert!(
-                cmd.contains("-X POST"),
-                "{} command should be a POST",
-                hook_key
-            );
-        }
     }
 
     #[test]

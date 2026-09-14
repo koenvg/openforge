@@ -2,6 +2,7 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { stripTypeScriptTypes } from "node:module";
 import { compileFunction, constants } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,12 +10,12 @@ import { afterEach, describe, expect, it } from "vitest";
 const cleanups = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
-async function fixture(statuses, provider) {
+async function fixture(statuses, provider, { agentConfig = true } = {}) {
   const received = [];
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
-    received.push({ path: request.url, auth: request.headers.authorization, body: JSON.parse(body) });
+    received.push({ path: request.url, method: request.method, auth: request.headers.authorization, body: JSON.parse(body) });
     response.writeHead(statuses.shift() ?? 202, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ journalId: "journal", position: 1 }));
   });
@@ -23,6 +24,8 @@ async function fixture(statuses, provider) {
   const dir = mkdtempSync(join(tmpdir(), "of-notification-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const config = join(dir, "agent.json");
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const legacyBase = `${origin}/hooks/legacy-event`;
   writeFileSync(config, JSON.stringify({ version: 1, port: server.address().port, token: "private-fixture", pty: { installation: "install", lifetime: "lifetime", instance: 42 }, owner: { Agent: { task_id: "T-1" } } }), { mode: 0o600 });
   let source = readFileSync(new URL("../src-tauri/src/agent-notifications/client.js", import.meta.url), "utf8");
   let action = "sendOpenForgeNotification";
@@ -36,13 +39,41 @@ async function fixture(statuses, provider) {
       pi: '(kind) => reportPiLifecycle("agent.end")',
       opencode: '(kind) => postOpenForgeEvent({ type: kind === "ended" ? "session.idle" : "permission.asked", properties: {sessionID: "ses_waiting"} })',
       codex: '(kind) => postLifecycleEvent(kind, kind === "ended" ? "Stop" : "PermissionRequest")',
-      "claude-code": '(kind) => reportOpenForgeShellHook("claude-code", kind, kind === "ended" ? "stop" : "notification-permission", {})',
-      grok: '(kind) => reportOpenForgeShellHook("grok", kind, kind === "ended" ? "stop" : "notification-permission", {})',
+      "claude-code": `(kind) => reportOpenForgeShellHook("claude-code", kind, kind === "ended" ? "stop" : "notification-permission", {}, ${JSON.stringify(legacyBase)})`,
+      grok: `(kind) => reportOpenForgeShellHook("grok", kind, kind === "ended" ? "stop" : "notification-permission", {}, ${JSON.stringify(legacyBase)})`,
     }[provider];
   }
   const errors = [];
-  const send = compileFunction(`${source}\nreturn ${action};`, ["process", "console"], { importModuleDynamically: constants.USE_MAIN_CONTEXT_DEFAULT_LOADER })({ env: { OPENFORGE_AGENT_CONFIG: config, OPENFORGE_TASK_ID: "T-1", OPENFORGE_PTY_INSTANCE_ID: "42" }, getuid: () => process.getuid() }, { error: (...args) => errors.push(args) });
-  return { send, received, errors };
+  const env = { OPENFORGE_TASK_ID: "T-1", OPENFORGE_PTY_INSTANCE_ID: "42", GROK_SESSION_ID: "grok-session-9", CLAUDE_SESSION_ID: "claude-session-9" };
+  if (agentConfig) env.OPENFORGE_AGENT_CONFIG = config;
+  const send = compileFunction(`${source}\nreturn ${action};`, ["process", "console"], { importModuleDynamically: constants.USE_MAIN_CONTEXT_DEFAULT_LOADER })({ env, getuid: () => process.getuid() }, { error: (...args) => errors.push(args) });
+  return { send, received, errors, origin, legacyBase };
+}
+
+async function runGrokShellHook(stdin) {
+  const received = [];
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    received.push({ path: request.url, method: request.method, body: JSON.parse(body) });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end("{}");
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  cleanups.push(() => new Promise(resolve => server.close(resolve)));
+  const read = name => readFileSync(new URL(`../src-tauri/src/agent-notifications/${name}`, import.meta.url), "utf8");
+  const source = `${read("client.js")}\n${read("shell-hook.js")}`;
+  const legacyBase = `http://127.0.0.1:${server.address().port}/hooks/grok-stop`;
+  const child = spawn(process.execPath, ["-e", source, "grok", "ended", "stop", legacyBase], {
+    env: { PATH: process.env.PATH, OPENFORGE_TASK_ID: "T-1", OPENFORGE_PTY_INSTANCE_ID: "42", GROK_SESSION_ID: "grok-session-9" },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "";
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.resume();
+  child.stdin.end(stdin);
+  await new Promise(resolve => child.on("close", resolve));
+  return { received, stdout };
 }
 
 describe("provider lifecycle transport", () => {
@@ -97,11 +128,45 @@ describe("provider lifecycle transport", () => {
     expect(received).toHaveLength(64);
   });
 
+  for (const [provider, sessionId] of [["grok", "grok-session-9"], ["claude-code", "claude-session-9"]]) {
+    it(`${provider} shell hook falls back to the legacy listener without private configuration`, async () => {
+      const { send, received } = await fixture([200], provider, { agentConfig: false });
+      await send("ended");
+      expect(received).toHaveLength(1);
+      expect(received[0].auth).toBeUndefined();
+      expect(received[0].method).toBe("POST");
+      expect(received[0].path).toBe(`/hooks/legacy-event?task_id=T-1&pty_instance_id=42&session_id=${sessionId}`);
+    });
+  }
+
+  it("does not replay a failed legacy delivery", async () => {
+    const { send, received } = await fixture([503], "grok", { agentConfig: false });
+    await expect(send("ended")).rejects.toThrow("notification acceptance failed");
+    expect(received).toHaveLength(1);
+  });
+
   it("does not retry invalid payload rejection", async () => {
     const { send, received } = await fixture([400]);
     await expect(send({ provider: "pi", kind: "ended", task_id: "T-1", pty_instance_id: 42 }, "unused")).rejects.toThrow("notification acceptance failed");
     expect(received).toHaveLength(1);
   });
+  it("reports the legacy event from the generated argument order without touching stdout", async () => {
+    const { received, stdout } = await runGrokShellHook(JSON.stringify({ session_id: "grok-stdin-session" }));
+    expect(received).toHaveLength(1);
+    expect(received[0].method).toBe("POST");
+    expect(received[0].path).toBe("/hooks/grok-stop?task_id=T-1&pty_instance_id=42&session_id=grok-session-9");
+    expect(received[0].body).toMatchObject({ provider: "grok", kind: "ended", raw_event_type: "stop", task_id: "T-1", pty_instance_id: 42 });
+    expect(stdout).toBe("");
+  });
+
+  for (const [label, stdin] of [["oversized", "x".repeat(70000)], ["unparseable", "not json at all"]]) {
+    it(`still reports the lifecycle event when hook stdin is ${label}`, async () => {
+      const { received } = await runGrokShellHook(stdin);
+      expect(received).toHaveLength(1);
+      expect(received[0].body.kind).toBe("ended");
+    });
+  }
+
   it("captures the notification before an asynchronous caller can mutate it", async () => {
     const { send, received } = await fixture([]);
     const payload = { provider: "pi", kind: "ended", task_id: "T-1", pty_instance_id: 42 };
