@@ -47,6 +47,12 @@ process.stdin.on('data', data => {
 });
 let previous = '';
 let sending = false;
+function publish(name, value) {
+  const destination = path.join(root, name);
+  const temporary = `${destination}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, value);
+  fs.renameSync(temporary, destination);
+}
 setInterval(async () => {
   if (fs.existsSync(path.join(root, 'exit-now'))) { tool.kill(); process.exit(7); }
   if (sending) return;
@@ -64,10 +70,10 @@ setInterval(async () => {
         pty_instance_id: Number(process.env.OPENFORGE_PTY_INSTANCE_ID), kind,
       } }), signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) fs.writeFileSync(path.join(root, 'notification-error'), await response.text());
-    fs.writeFileSync(path.join(root, `accepted-${kind}`), String(response.status));
+    if (!response.ok) publish('notification-error', await response.text());
+    publish(`accepted-${kind}`, String(response.status));
     previous = kind;
   } catch (error) {
-    fs.writeFileSync(path.join(root, 'notification-error'), String(error));
+    publish('notification-error', String(error));
   } finally { sending = false; }
 }, 20);
