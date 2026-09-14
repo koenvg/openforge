@@ -208,3 +208,118 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     assert!(String::from_utf8_lossy(&vt).contains("GAP_FINAL"));
     drop(second);
 }
+
+#[tokio::test]
+#[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
+async fn daemon_replacement_routes_only_selected_sessions_and_does_not_revive_old_controller() {
+    let fixture = DaemonFixture(
+        tempfile::Builder::new()
+            .prefix("of-routing-ipc-")
+            .tempdir_in("/tmp")
+            .unwrap(),
+    );
+    let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("crates/session-daemon/target/debug/openforge-session-daemon");
+    let selected = "T-routing-shell-0";
+    let excluded = "T-routing-shell-1";
+    let (mut first, _db1) = test_state("daemon-routing-first");
+    first.pty_manager.as_mut().unwrap().enable_daemon_shell(
+        fixture.0.path().into(),
+        executable.clone(),
+        "*".into(),
+    );
+    let mut instances = Vec::new();
+    for index in 0..2 {
+        instances.push(
+            invoke_ok(
+                &first,
+                "pty_spawn_shell",
+                json!({
+                    "taskId": "T-routing", "terminalIndex": index,
+                    "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+                }),
+            )
+            .await,
+        );
+    }
+    invoke_ok(&first, "pty_write", json!({
+        "shellSessionKey": excluded,
+        "data": format!("while [ ! -e route ]; do sleep 0.01; done; {}; touch excluded-done; exit 8\n", print_command("EXCLUDED_OUTPUT")),
+    })).await;
+
+    let (mut second, _db2) = test_state("daemon-routing-second");
+    let (sender, mut events) = tokio::sync::broadcast::channel(2048);
+    second.app_event_tx = Some(sender);
+    second.pty_manager.as_mut().unwrap().enable_daemon_shell(
+        fixture.0.path().into(),
+        executable,
+        selected.into(),
+    );
+    let inventory = invoke_ok(&second, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(
+        inventory["sessions"],
+        json!([{
+            "key": selected, "instanceId": instances[0], "isLive": true,
+        }])
+    );
+    // Keep the old bridge alive. Neither commands nor polling may reclaim control.
+    let error = invoke(
+        &first,
+        "pty_write",
+        json!({
+            "shellSessionKey": selected, "data": "must-not-arrive\n",
+        }),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.1.contains("controller"), "{error:?}");
+    invoke_ok(&second, "pty_write", json!({
+        "shellSessionKey": selected,
+        "data": format!("touch route; while [ ! -e excluded-done ]; do sleep 0.01; done; {}; exit 9\n", print_command("SELECTED_OUTPUT")),
+    })).await;
+    let mut output = Vec::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.event_name.starts_with("pty-") {
+                assert!(
+                    event.event_name.ends_with(selected),
+                    "unexpected route: {}",
+                    event.event_name
+                );
+                assert_eq!(event.payload["instance_id"], instances[0]);
+            }
+            if event.event_name == format!("pty-model-output-{selected}") {
+                output.extend(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(event.payload["data"].as_str().unwrap())
+                        .unwrap(),
+                );
+            }
+            if event.event_name == format!("pty-exit-{selected}") {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(String::from_utf8_lossy(&output).contains("SELECTED_OUTPUT"));
+    assert!(!String::from_utf8_lossy(&output).contains("EXCLUDED_OUTPUT"));
+    let snapshot = invoke_ok(
+        &second,
+        "get_pty_buffer",
+        json!({"shellSessionKey": selected}),
+    )
+    .await;
+    assert_eq!(snapshot["instanceId"], instances[0]);
+    assert_eq!(snapshot["isLive"], false);
+    let inventory = invoke_ok(&second, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(
+        inventory["sessions"],
+        json!([{
+            "key": selected, "instanceId": instances[0], "isLive": false,
+        }])
+    );
+    drop(first);
+    drop(second);
+}

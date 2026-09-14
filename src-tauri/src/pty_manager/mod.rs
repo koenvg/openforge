@@ -3,6 +3,7 @@ mod attachment;
 mod attachment_tests;
 mod commands;
 pub(crate) mod daemon_shells;
+mod daemon_transport;
 pub(crate) use commands::PiSessionTarget;
 mod events;
 pub(crate) mod host;
