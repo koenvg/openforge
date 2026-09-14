@@ -31,6 +31,15 @@ function anchorSide(flags) {
   return side;
 }
 
+function idempotencyKey(flags) {
+  if (flags.key === undefined) return undefined;
+  const key = optionalString(flags, 'key');
+  if (key === undefined) {
+    throw new Error('review thread create requires one --key value');
+  }
+  return key;
+}
+
 async function listReviewThreads(flags) {
   printJson(await requestJson('/review_threads/list', {
     method: 'POST',
@@ -49,9 +58,9 @@ async function createReviewThread(flags) {
       side: anchorSide(flags),
     },
     body: requireFlag(flags, 'body'),
+    runId: optionalString(flags, 'run'),
+    idempotencyKey: idempotencyKey(flags),
   };
-  const runId = optionalString(flags, 'run');
-  if (runId !== undefined) payload.runId = runId;
   printJson(await requestJson('/review_threads/create', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -89,8 +98,8 @@ export const REVIEW_THREAD_COMMAND_SPECS = [
   },
   {
     path: ['review', 'thread', 'create'],
-    flags: ['namespace', 'target', 'revision', 'file', 'line', 'side', 'body', 'run'],
-    usage: 'openforge review thread create --namespace <ns> --target <key> --revision <rev> --file <path> --line <n> --body <text> [--side LEFT|RIGHT] [--run <id>]',
+    flags: ['namespace', 'target', 'revision', 'file', 'line', 'side', 'body', 'run', 'key'],
+    usage: 'openforge review thread create --namespace <ns> --target <key> --revision <rev> --file <path> --line <n> --body <text> [--side LEFT|RIGHT] [--key <idempotency-key>] [--run <id>]',
     handler: createReviewThread,
   },
   {

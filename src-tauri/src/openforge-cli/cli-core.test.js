@@ -35,6 +35,7 @@ describe('OpenForge CLI', () => {
     }
     expect(skill).toContain('Post each finding as its own `review thread create`');
     expect(skill).toContain('`--side` selects the side of the diff and defaults to `RIGHT`');
+    expect(skill).toContain('Derive one stable `--key` per finding');
     expect(skill).toContain('are opaque to OpenForge');
     expect(skill).toContain('openforge task create --help');
     expect(skill).toContain('openforge task update --help');

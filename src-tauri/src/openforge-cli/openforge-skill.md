@@ -104,9 +104,11 @@ Post each finding as its own `review thread create`. Every create is stored on i
 
 `--side` selects the side of the diff and defaults to `RIGHT`, the post-image. Use `LEFT` to comment on a removed line.
 
+Pass `--key` on every create. Derive one stable `--key` per finding from what the finding is about, such as the file path, the line and a short name for the problem. A repeat of that key on the same namespace, target and revision returns the thread the first attempt stored, so a retry after an unclear response does not post the comment twice. A key is scoped to the revision: the same finding on a new revision stores a new thread.
+
 ```bash
-openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 88 --body "This call bypasses the typed wrapper."
-openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 12 --side LEFT --body "Why was this guard removed?"
+openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 88 --body "This call bypasses the typed wrapper." --key "finding:src/lib/ipc.ts:88:untyped-backend-call"
+openforge review thread create --namespace pr --target owner/repo#42 --revision abc123 --file src/lib/ipc.ts --line 12 --side LEFT --body "Why was this guard removed?" --key "finding:src/lib/ipc.ts:12:removed-guard"
 openforge review thread list --namespace pr --target owner/repo#42 --revision abc123
 openforge review thread reply --thread-id RT-7 --body "Confirmed against the migration."
 openforge review thread status --thread-id RT-7 --status resolved

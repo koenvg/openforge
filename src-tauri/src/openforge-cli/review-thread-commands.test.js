@@ -114,9 +114,32 @@ describe('OpenForge Review Thread Commands', () => {
     ).rejects.toThrow('--status open, resolved, dismissed');
   });
 
-  it('refuses an idempotency key the CLI does not expose yet', async () => {
+  it('sends the idempotency key that makes a retry of one finding return the stored thread', async () => {
+    const deduplicated = await runCliAgainstJsonBridge(
+      [
+        'review', 'thread', 'create', ...SCOPE_ARGS,
+        '--file', contract.createKeyed.anchor.filePath,
+        '--line', String(contract.createKeyed.anchor.line),
+        '--body', contract.createKeyed.body,
+        '--key', contract.createKeyed.idempotencyKey,
+      ],
+      {
+        url: '/review_threads/create',
+        method: 'POST',
+        response: THREAD,
+        expectedBody: contract.createKeyed,
+      },
+    );
+
+    expect(deduplicated).toEqual(THREAD);
+  });
+
+  it('refuses a --key that carries no single value instead of posting an undeduplicated create', async () => {
     await expect(
-      runCli(['review', 'thread', 'create', ...SCOPE_ARGS, '--file', 'a.rs', '--line', '4', '--body', 'x', '--key', 'finding-1']),
-    ).rejects.toThrow('review thread create does not support --key');
+      runCli(['review', 'thread', 'create', ...SCOPE_ARGS, '--file', 'a.rs', '--line', '4', '--key', '--body', 'x']),
+    ).rejects.toThrow('requires one --key value');
+    await expect(
+      runCli(['review', 'thread', 'create', ...SCOPE_ARGS, '--file', 'a.rs', '--line', '4', '--body', 'x', '--key', 'one', '--key', 'two']),
+    ).rejects.toThrow('requires one --key value');
   });
 });
