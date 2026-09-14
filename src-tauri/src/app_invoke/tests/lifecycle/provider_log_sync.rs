@@ -1,7 +1,7 @@
 use super::support::*;
 use crate::app_events::AppEventEnvelope;
+use base64::Engine;
 use std::{fs, time::Duration};
-
 fn output(task_id: &str, data: &str) -> AppEventEnvelope {
     AppEventEnvelope {
         id: None,
@@ -9,6 +9,48 @@ fn output(task_id: &str, data: &str) -> AppEventEnvelope {
         payload: serde_json::json!({ "data": data }),
         meta: None,
     }
+}
+
+fn daemon_output(task_id: &str, data: &str) -> AppEventEnvelope {
+    AppEventEnvelope {
+        id: None,
+        event_name: format!("pty-model-output-{task_id}"),
+        payload: serde_json::json!({
+            "instance_id": 1,
+            "start_sequence": 1,
+            "sequence": 1,
+            "data": base64::engine::general_purpose::STANDARD.encode(data),
+        }),
+        meta: None,
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn daemon_provider_log_waits_for_delayed_terminal_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let log_path = temp.path().join("provider.log");
+    let (events, mut receiver) = tokio::sync::broadcast::channel(16);
+    let writer_path = log_path.clone();
+    let writer = tokio::spawn(async move {
+        // Virtual time exceeds the removed polling budget without slowing the suite.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let record = "provider=pi\narg1=Daemon prompt\nopenforge-provider-record=complete\n";
+        fs::write(writer_path, record).unwrap();
+        events
+            .send(daemon_output("task", "openforge-provider-log=ready\r\n"))
+            .unwrap();
+        record
+    });
+
+    let log = read_provider_log_record_after_daemon_output(
+        &mut receiver,
+        "task",
+        &log_path,
+        "pi",
+        "Daemon prompt",
+    )
+    .await;
+    assert_eq!(log, writer.await.unwrap());
 }
 
 #[tokio::test(start_paused = true)]
