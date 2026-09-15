@@ -18,17 +18,18 @@ This is not production restart or live daemon replacement enablement. The existi
 
 Pi, Claude Code, Codex, OpenCode, and Grok use the same embedded notification client when `OPENFORGE_AGENT_CONFIG` is present. Existing processes keep their private launch-time route after replacement. Invalid explicit configuration fails closed, without falling back to a disposable or foreign listener.
 
-A hook configuration file may reference only environment the launcher guarantees on every launch path, because a provider can refuse a hook that names a variable missing from the hook environment. Grok's generated command therefore always runs the embedded client and passes its legacy endpoint as an argument, leaving the route choice to the client. Claude Code's command still branches in the shell, because its legacy route reads the request body. A follow-up Task carries that provider. Grok's command also redirects stdout to `/dev/null`, since Grok reads `PreToolUse` stdout as a permission decision, and its generator test pins the whole shell-visible command per event.
+A hook configuration file may reference only environment the launcher guarantees on every launch path, because a provider can refuse a hook that names a variable missing from the hook environment. Grok's and Claude Code's generated commands therefore always run the embedded client and pass their legacy endpoint as an argument, leaving the route choice to the client. Both redirect stdout to `/dev/null`, since both read `PreToolUse` stdout as a permission decision, and a generator test pins the whole shell-visible command per event for each. Grok's command adds a `$OPENFORGE_TASK_ID` guard and a trailing `; exit 0`, because its hooks are installed globally and it reads exit code 2 as a denial. Claude Code's adds neither: its configuration is passed per launch, and it reports a non-zero hook exit as a visible non-blocking error.
 
 The generated adapters retain one ID for up to four attempts, with two-second request deadlines and 100/250/500 ms delays. Only transient failures and lost acceptance replies are retried. Rejected payloads, invalid configuration, and exhausted retries produce fixed, credential-free diagnostics. Long-lived adapters serialize their callbacks. Pi's settled turn reports completion and waiting for the next input; OpenCode permission and question events report permission/input waiting.
 
-Legacy listeners do not have durable acceptance or deduplication. They keep their existing routes, and their requests are not replayed by the shared client. The generated Claude command retains its legacy curl branch; Grok's legacy request is issued by the embedded client. No request-response mutation or frontend plugin command enters this journal.
+Legacy listeners do not have durable acceptance or deduplication. They keep their existing routes, and their requests are not replayed by the shared client. Where a legacy listener reads its provider's own hook body rather than the normalized envelope, as Claude Code's does for the activity snapshot and the background-work inventory, the client posts that body unchanged. The envelope limit below applies to the envelope, not to a provider body the hook process has already bounded when it read it. No request-response mutation or frontend plugin command enters this journal.
 
 ## Limits
 
 | Resource | Limit |
 | --- | --- |
 | Incoming lifecycle envelope | 16 KiB |
+| Provider hook stdin forwarded to a legacy listener | 64 KiB, past which it degrades to an empty body and the event still reports |
 | Sender ID and Task ID | 128 ASCII identifier bytes each |
 | Provider session ID and each raw diagnostic field | 256 bytes |
 | Transcript path | 4 KiB |

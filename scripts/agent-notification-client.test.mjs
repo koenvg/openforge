@@ -50,7 +50,7 @@ async function fixture(statuses, provider, { agentConfig = true } = {}) {
   return { send, received, errors, origin, legacyBase };
 }
 
-async function runGrokShellHook(stdin) {
+async function runShellHook(provider, stdin) {
   const received = [];
   const server = createServer(async (request, response) => {
     let body = "";
@@ -63,9 +63,10 @@ async function runGrokShellHook(stdin) {
   cleanups.push(() => new Promise(resolve => server.close(resolve)));
   const read = name => readFileSync(new URL(`../src-tauri/src/agent-notifications/${name}`, import.meta.url), "utf8");
   const source = `${read("client.js")}\n${read("shell-hook.js")}`;
-  const legacyBase = `http://127.0.0.1:${server.address().port}/hooks/grok-stop`;
-  const child = spawn(process.execPath, ["-e", source, "grok", "ended", "stop", legacyBase], {
-    env: { PATH: process.env.PATH, OPENFORGE_TASK_ID: "T-1", OPENFORGE_PTY_INSTANCE_ID: "42", GROK_SESSION_ID: "grok-session-9" },
+  const endpoint = provider === "grok" ? "grok-stop" : "stop";
+  const legacyBase = `http://127.0.0.1:${server.address().port}/hooks/${endpoint}`;
+  const child = spawn(process.execPath, ["-e", source, provider, "ended", "stop", legacyBase], {
+    env: { PATH: process.env.PATH, OPENFORGE_TASK_ID: "T-1", OPENFORGE_PTY_INSTANCE_ID: "42", GROK_SESSION_ID: "grok-session-9", CLAUDE_SESSION_ID: "claude-session-9" },
     stdio: ["pipe", "pipe", "pipe"],
   });
   let stdout = "";
@@ -151,7 +152,7 @@ describe("provider lifecycle transport", () => {
     expect(received).toHaveLength(1);
   });
   it("reports the legacy event from the generated argument order without touching stdout", async () => {
-    const { received, stdout } = await runGrokShellHook(JSON.stringify({ session_id: "grok-stdin-session" }));
+    const { received, stdout } = await runShellHook("grok", JSON.stringify({ session_id: "grok-stdin-session" }));
     expect(received).toHaveLength(1);
     expect(received[0].method).toBe("POST");
     expect(received[0].path).toBe("/hooks/grok-stop?task_id=T-1&pty_instance_id=42&session_id=grok-session-9");
@@ -161,11 +162,35 @@ describe("provider lifecycle transport", () => {
 
   for (const [label, stdin] of [["oversized", "x".repeat(70000)], ["unparseable", "not json at all"]]) {
     it(`still reports the lifecycle event when hook stdin is ${label}`, async () => {
-      const { received } = await runGrokShellHook(stdin);
+      const { received } = await runShellHook("grok", stdin);
       expect(received).toHaveLength(1);
       expect(received[0].body.kind).toBe("ended");
     });
   }
+
+  it("posts Claude's own hook body to the legacy listener", async () => {
+    const hookBody = { session_id: "claude-stdin-session", tool_name: "Bash", tool_input: { command: "ls" }, transcript_path: "/tmp/transcript.jsonl", background_tasks: [{ id: "bash-1", status: "running" }] };
+    const { received, stdout } = await runShellHook("claude-code", JSON.stringify(hookBody));
+    expect(received).toHaveLength(1);
+    expect(received[0].method).toBe("POST");
+    expect(received[0].path).toBe("/hooks/stop?task_id=T-1&pty_instance_id=42&session_id=claude-session-9");
+    expect(received[0].body).toEqual(hookBody);
+    expect(stdout).toBe("");
+  });
+
+  it("posts a Claude tool_input larger than the envelope bound", async () => {
+    const hookBody = { tool_name: "Write", tool_input: { content: "x".repeat(20000) } };
+    const { received } = await runShellHook("claude-code", JSON.stringify(hookBody));
+    expect(received).toHaveLength(1);
+    expect(received[0].body.tool_input.content).toHaveLength(20000);
+  });
+
+  it("posts a Claude background inventory larger than the envelope bound", async () => {
+    const background_tasks = Array.from({ length: 400 }, (_, i) => ({ id: `bash-${i}`, type: "bash", status: "running", description: "x".repeat(60) }));
+    const { received } = await runShellHook("claude-code", JSON.stringify({ transcript_path: "/tmp/transcript.jsonl", background_tasks }));
+    expect(received).toHaveLength(1);
+    expect(received[0].body.background_tasks).toHaveLength(400);
+  });
 
   it("captures the notification before an asynchronous caller can mutate it", async () => {
     const { send, received } = await fixture([]);

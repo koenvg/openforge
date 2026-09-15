@@ -3,17 +3,14 @@
 let openForgeNotificationTail = Promise.resolve();
 let openForgePendingNotifications = 0;
 
-function sendOpenForgeNotification(payload, legacyUrl) {
+function sendOpenForgeNotification(payload, legacyUrl, legacyBody) {
   // Serialize callbacks from a long-lived provider. Retries reuse the same envelope.
   let captured;
-  try {
-    const json = JSON.stringify(payload);
-    if (Buffer.byteLength(json) > 16384) return Promise.reject(new Error("notification acceptance failed: payload exceeds 16384 bytes"));
-    captured = JSON.parse(json);
-  } catch { return Promise.reject(new Error("notification acceptance failed: invalid payload")); }
+  try { captured = JSON.parse(JSON.stringify(payload)); }
+  catch { return Promise.reject(new Error("notification acceptance failed: invalid payload")); }
   if (openForgePendingNotifications >= 64) return Promise.reject(new Error("notification acceptance failed: callback capacity exhausted"));
   openForgePendingNotifications += 1;
-  const work = openForgeNotificationTail.then(() => deliverOpenForgeNotification(captured, legacyUrl))
+  const work = openForgeNotificationTail.then(() => deliverOpenForgeNotification(captured, legacyUrl, legacyBody))
     .finally(() => { openForgePendingNotifications -= 1; });
   openForgeNotificationTail = work.catch(() => {});
   return work;
@@ -41,13 +38,16 @@ async function openForgeNotificationConfig(payload) {
   } finally { await file.close(); }
 }
 
-async function deliverOpenForgeNotification(payload, legacyUrl) {
+async function deliverOpenForgeNotification(payload, legacyUrl, legacyBody) {
   let config;
   try { config = await openForgeNotificationConfig(payload); }
   catch { throw new Error("notification acceptance failed: private configuration unavailable"); }
   const { randomUUID } = await import("node:crypto");
-  const body = JSON.stringify(config ? { id: randomUUID(), payload } : payload);
-  if (Buffer.byteLength(body) > 16384) throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
+  // The bound belongs to the envelope, so it is taken after the route is known. A raw provider
+  // body is bounded by whatever read it, and rejecting one here would drop its lifecycle event.
+  const raw = !config && legacyBody !== undefined;
+  const body = raw ? legacyBody : JSON.stringify(config ? { id: randomUUID(), payload } : payload);
+  if (!raw && Buffer.byteLength(body) > 16384) throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
   const url = config ? `http://127.0.0.1:${config.port}/notifications/agent-lifecycle` : legacyUrl;
   // Legacy listeners have no durable deduplication contract. Never replay their requests.
   const attempts = config ? 4 : 1;
