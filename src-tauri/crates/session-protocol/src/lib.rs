@@ -11,6 +11,8 @@ mod notification;
 pub use notification::*;
 mod messages;
 pub use messages::*;
+mod replacement;
+pub use replacement::*;
 
 pub const VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;

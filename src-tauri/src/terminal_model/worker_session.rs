@@ -4,6 +4,7 @@ use super::super::{GhosttyTerminalModel, TerminalModel, TerminalModelError, Term
 #[cfg(test)]
 use super::event_state::TerminalModelDiagnostic;
 use super::event_state::{PortableTerminalSnapshot, TerminalModelEventSink, TerminalModelState};
+use super::checkpoint::{RetainedChange, TerminalModelCheckpoint};
 use log::{info, warn};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -95,6 +96,7 @@ enum TerminalModelCommand {
         rows: u16,
     },
     PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
+    Checkpoint(mpsc::SyncSender<Result<TerminalModelCheckpoint, String>>),
     #[cfg(test)]
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     #[cfg(test)]
@@ -205,7 +207,7 @@ impl TerminalModelSession {
         instance_id: u64,
         options: TerminalModelOptions,
     ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
-        Self::start_internal(session_key, instance_id, options, None)
+        Self::start_internal(session_key, instance_id, options, None, None)
     }
 
     pub(crate) fn start_with_event_sink(
@@ -214,7 +216,32 @@ impl TerminalModelSession {
         options: TerminalModelOptions,
         event_sink: TerminalModelEventSink,
     ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
-        Self::start_internal(session_key, instance_id, options, Some(event_sink))
+        Self::start_internal(session_key, instance_id, options, Some(event_sink), None)
+    }
+
+    pub(crate) fn restore_with_event_sink(
+        session_key: String,
+        checkpoint: TerminalModelCheckpoint,
+        event_sink: TerminalModelEventSink,
+    ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
+        checkpoint.validate().map_err(std::io::Error::other)?;
+        Self::start_internal(
+            session_key,
+            checkpoint.instance_id,
+            TerminalModelOptions::new(1, 1),
+            Some(event_sink),
+            Some(checkpoint),
+        )
+    }
+
+    pub(crate) fn checkpoint(&self) -> Result<TerminalModelCheckpoint, String> {
+        if self.state.is_disabled() {
+            return Err("terminal model is disabled".into());
+        }
+        let (response_tx, response_rx) = mpsc::sync_channel(1);
+        send_command_with_timeout(&self.tx, TerminalModelCommand::Checkpoint(response_tx))?;
+        response_rx.recv_timeout(REQUEST_TIMEOUT)
+            .map_err(|error| format!("terminal checkpoint failed: {error}"))?
     }
 
     fn start_internal(
@@ -222,6 +249,7 @@ impl TerminalModelSession {
         instance_id: u64,
         options: TerminalModelOptions,
         event_sink: Option<TerminalModelEventSink>,
+        checkpoint: Option<TerminalModelCheckpoint>,
     ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
         let session_key: Arc<str> = Arc::from(session_key);
         let queue_policy = if event_sink.is_some() {
@@ -239,6 +267,8 @@ impl TerminalModelSession {
             } else {
                 None
             };
+        let restoring = checkpoint.is_some();
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let shutdown_requested = Arc::new(AtomicBool::new(false));
         let (worker_done_tx, worker_done) = mpsc::channel();
         #[cfg(test)]
@@ -266,6 +296,7 @@ impl TerminalModelSession {
                         rx,
                         worker_state,
                         worker_shutdown_requested,
+                        checkpoint.map(|checkpoint| (checkpoint, ready_tx)),
                     );
                 }));
                 if let Err(payload) = result {
@@ -278,6 +309,16 @@ impl TerminalModelSession {
                 }
                 let _ = worker_done_tx.send(());
             })?;
+        if restoring {
+            let ready = ready_rx
+                .recv_timeout(REQUEST_TIMEOUT)
+                .map_err(|error| format!("terminal restore failed: {error}"))
+                .and_then(|result| result);
+            if let Err(error) = ready {
+                shutdown_requested.store(true, Ordering::Release);
+                return Err(std::io::Error::other(error));
+            }
+        }
         let feeder = TerminalModelFeeder {
             session_key: Arc::clone(&session_key),
             instance_id,
@@ -428,6 +469,7 @@ fn run_worker(
     rx: mpsc::Receiver<TerminalModelCommand>,
     state: Arc<TerminalModelState>,
     shutdown_requested: Arc<AtomicBool>,
+    restoration: Option<(TerminalModelCheckpoint, mpsc::SyncSender<Result<(), String>>)>,
 ) {
     #[cfg(test)]
     let test_fault = options.test_fault.clone();
@@ -445,18 +487,34 @@ fn run_worker(
         return;
     }
 
-    let mut model = match GhosttyTerminalModel::new(options) {
-        Ok(model) => model,
-        Err(error) => {
-            state.disable(&session_key, instance_id, "create", model_error(error));
-            return;
-        }
-    };
+    let (mut model, mut output_sequence, mut compatibility_replay, mut retained_checkpoint) =
+        if let Some((checkpoint, ready)) = restoration {
+            let model = match checkpoint.decode() {
+                Ok(model) => model,
+                Err(error) => {
+                    let _ = ready.send(Err(error));
+                    return;
+                }
+            };
+            let mut replay = BoundedCompatibilityReplay::new();
+            replay.push(&checkpoint.compatibility_replay);
+            if ready.send(Ok(())).is_err() {
+                return;
+            }
+            (model, checkpoint.watermark, replay, Some(checkpoint))
+        } else {
+            let model = match GhosttyTerminalModel::new(options) {
+                Ok(model) => model,
+                Err(error) => {
+                    state.disable(&session_key, instance_id, "create", model_error(error));
+                    return;
+                }
+            };
+            (model, 0, BoundedCompatibilityReplay::new(), None)
+        };
 
     let mut bytes_since_checkpoint = 0usize;
     let mut checkpoint_due = true;
-    let mut output_sequence = 0u64;
-    let mut compatibility_replay = BoundedCompatibilityReplay::new();
     #[cfg(test)]
     let mut first_command = true;
     loop {
@@ -514,14 +572,39 @@ fn run_worker(
                 if result.is_ok() {
                     compatibility_replay.push(&bytes);
                     output_sequence = output_sequence.saturating_add(1);
+                    TerminalModelCheckpoint::record_change(&mut retained_checkpoint, &model, ||
+                        RetainedChange::Feed { bytes: bytes.clone() });
                     state.publish_output(instance_id, output_sequence, bytes);
                 }
                 result
             }
-            TerminalModelCommand::Resize { cols, rows } => model.resize(cols, rows),
+            TerminalModelCommand::Resize { cols, rows } => {
+                let result = model.resize(cols, rows);
+                if result.is_ok() {
+                    TerminalModelCheckpoint::record_change(&mut retained_checkpoint, &model, ||
+                        RetainedChange::Resize { cols, rows });
+                }
+                result
+            }
+            TerminalModelCommand::Checkpoint(response) => {
+                let result = TerminalModelCheckpoint::capture(
+                    instance_id, output_sequence, &model, compatibility_replay.snapshot(),
+                    retained_checkpoint.as_ref(),
+                );
+                let _ = response.send(result);
+                continue;
+            }
             TerminalModelCommand::PortableSnapshot(response) => {
                 let result = model
                     .parser_continuation()
+                    .or_else(|error| {
+                        if matches!(error, TerminalModelError::ContinuationUnavailable) {
+                            if let Some(checkpoint) = &retained_checkpoint {
+                                return Ok(checkpoint.continuation.clone());
+                            }
+                        }
+                        Err(error)
+                    })
                     .and_then(|continuation| {
                         Ok(PortableTerminalSnapshot {
                             instance_id,

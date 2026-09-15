@@ -1,5 +1,10 @@
+mod checkpoint;
+pub(crate) use checkpoint::TerminalModelCheckpoint;
 mod event_state;
 mod worker_session;
+#[cfg(test)]
+#[path = "checkpoint_tests.rs"]
+mod checkpoint_tests;
 
 pub(crate) use event_state::{TerminalModelEvent, TerminalModelEventSink};
 pub(crate) use worker_session::{TerminalModelFeeder, TerminalModelSession};

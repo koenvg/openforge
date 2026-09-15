@@ -1,0 +1,176 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "architecture": "arm64",
+  "negativeControl": false,
+  "passed": false,
+  "pressureControl": false,
+  "fullReleaseGatePassed": false,
+  "binarySha256": {
+    "live-authority-a": "6a020eef2e192e621e9ad324d236d44f8e88803d1f1e3123beb1a80700a451e4",
+    "live-authority-b": "0016c990626fb8c0df78b8e883712e12bd1ec31ce1ca1d2963102f8a7b0f129a"
+  },
+  "testsRun": 1,
+  "sources": {
+    "scripts/experiments/pty-reexec/model_fixture.c": "5edaad4b47461f229e282281576e59b8c0c1857ae691c207baffa4d1a80d9a60",
+    "scripts/experiments/pty-reexec/live_authority.py": "b1962aff51b97169af43c34c932e7f031263fd5ae9a266d8a5605e4afd42d8bb",
+    "scripts/experiments/pty-reexec/preflight_cases.py": "4b044a2a3411b79ad369a041e6daec4324500ce3deab19b67b4d307f05aaa270",
+    "scripts/experiments/pty-reexec/run.py": "dba4fe81d5cb11d5d70630e8eaa40501ec8dc9c0e856857c4ae7077689241db2",
+    "scripts/experiments/pty-reexec/image_probe.c": "ea1e1419a213a0dc5d308a285131789723b5f645a7635e94f0f1fc4fd54faff5",
+    "scripts/experiments/pty-reexec/macos.py": "3bd50d1c08e473c2356a3f21b35bdc01e9e2246ffcbd8a1f094c84bc0b0c845c",
+    "scripts/experiments/pty-reexec/live-authority-proof.mjs": "d751a299d55fd97a933ca91c47757b3dfc477153f63ad9a24ea5bbf8ebb28936",
+    "scripts/experiments/pty-reexec/authority/Cargo.toml": "b9619c3282b82b7d5de9a0932c48fcab1ad3dacc5ceaff33237cdcdf6184bdd7",
+    "scripts/experiments/pty-reexec/authority/Cargo.lock": "7b93dda8d7ec9bb817f34524476995daf3073b4051a02d47d408fdb350a40af0",
+    "scripts/prepare-ghostty-vt.mjs": "f74c1e79fdf62a18729069e4ad153a747857aa3f5244f052743a53fbe4aa9007",
+    "scripts/experiments/pty-reexec/authority/src/live_native.rs": "8feb6367ca375c3384d582058cd4276dc49d6fbbcbfa8b11c048724f830ed462",
+    "scripts/experiments/pty-reexec/authority/src/live_b.rs": "5eb6275cf0e04938adfa47ef0641bac30e0594606adcab5ab7a9353ca793b338",
+    "scripts/experiments/pty-reexec/authority/src/live_a.rs": "a3211c5c68b7b892c6801d3a2ef2aac5384d21d8e83e02b2ff7133bf6ee8b8da",
+    "scripts/experiments/pty-reexec/authority/src/main.rs": "a178384e75dcc95a167afd4fe36d361df01fd02fdca00df5866ebbb3c7de67f9",
+    "scripts/experiments/pty-reexec/authority/src/live.rs": "3f84a6f1c020ab13134e22caae25ee2d4404e3f62211e3aa5aee69021fc83811",
+    "scripts/experiments/pty-reexec/authority/src/live_preflight.rs": "2dee55c92a85c1bd4c044eefea13004c9164395b906af56675b4cdb51b4b302d",
+    "src-tauri/src/terminal_model/session.rs": "485320762d608989efc1b79f2ab5e2f8cacd28c18fedb4e27502c7c9056816e6",
+    "src-tauri/src/terminal_model/event_state.rs": "7d9abafd5ddddde6d08308c6b3ea0ab14e4e12ca122c5ee514ac981396a6e223",
+    "src-tauri/src/terminal_model/worker_session.rs": "23a87a124808a0d6d1f703102b8f165b603baec154f1fbe59c266ccc289ae79e",
+    "src-tauri/src/terminal_model.rs": "b06c4f715e38a7d3ec9a8c5936c073f071bca72770f38fbc2e856c613712cb68"
+  },
+  "failures": [
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='wrong-protocol')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='wrong-state')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='wrong-codec')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='wrong-architecture')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='wrong-version')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='empty-response')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='oversized-response')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='unresponsive')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='executable-text')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='truncated-image')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='not-executable')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 59, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertIn(\"refused\", response, \"unsupported target reached the exec barrier\")\nAssertionError: 'refused' not found in {'prepared': True} : unsupported target reached the exec barrier\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight) (target='directory')\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 61, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertEqual(self.host.command(\"INFO\"), before)\nAssertionError: {'arc[37 chars]es': 4378, 'children': [{'cursor': 25, 'fd': 4[167 chars]': 0} != {'arc[37 chars]es': 0, 'children': [{'cursor': 25, 'fd': 4, '[164 chars]': 0}\n  {'architecture': 'aarch64',\n-  'checkpointBytes': 4378,\n?                     ^^^^\n\n+  'checkpointBytes': 0,\n?                     ^\n\n   'children': [{'cursor': 25,\n                 'fd': 4,\n                 'pid': 22982,\n                 'reaped': False,\n                 'status': 0}],\n   'cols': 20,\n   'host': 22980,\n   'recoveries': 0,\n   'replies': 0,\n   'rows': 4,\n   'stateFd': 3,\n   'text': 'ALT',\n   'version': 1,\n   'writes': 0}\n",
+    "test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors (preflight_cases.Preflight)\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/preflight_cases.py\", line 65, in test_refuses_incompatible_or_unresponsive_images_without_lending_descriptors\n    self.assertTrue((self.root / \"probe-audit\").exists(), \"no isolated probe executed\")\nAssertionError: False is not true : no isolated probe executed\n"
+  ],
+  "events": [
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-protocol",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 106432917
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-state",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 101167167
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-codec",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 115071541
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-architecture",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 104189750
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-version",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 101685042
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "empty-response",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 91838708
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "oversized-response",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 99162459
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "unresponsive",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 110344958
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "executable-text",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 113982500
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "truncated-image",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 110313333
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "not-executable",
+      "response": {
+        "prepared": true
+      },
+      "elapsedNs": 117604875
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "directory",
+      "response": {
+        "refused": "target is not a regular file"
+      },
+      "elapsedNs": 58049166
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 22980,
+          "ppid": 22974,
+          "uid": 501,
+          "pgid": 22980,
+          "status": 2,
+          "sec": 1789404178,
+          "usec": 76401,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 22982,
+          "ppid": 22980,
+          "uid": 501,
+          "pgid": 22982,
+          "status": 2,
+          "sec": 1789404178,
+          "usec": 731471,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    }
+  ]
+}

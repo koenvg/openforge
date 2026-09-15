@@ -4,6 +4,8 @@ KVG-4714, a bounded part of KVG-4532 and the [preserve-sessions-across-updates f
 
 KVG-4715 extends this fixture with refusal and controlled recovery. Its [current findings and commands](RECOVERY.md) record the initial presentation recovery failure and the owner-approved continuation repair. The full replacement gate remains incomplete and production extraction remains blocked. The KVG-4714 results and original checkpoint layout below are historical, not the complete current fixture contract.
 
+KVG-4726 is arm64-only by owner decision. Its [integrated Rust-owner preflight results](RECOVERY.md#kvg-4726-arm64-scope-and-integrated-image-preflight) supersede the earlier x64 requirement for that task, without waiving the remaining arm64 feasibility gates.
+
 ## Run
 
 Requires macOS, Xcode Command Line Tools and Python 3.9 or newer. No Python packages are needed. From the repository root:

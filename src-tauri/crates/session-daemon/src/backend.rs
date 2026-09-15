@@ -1,4 +1,7 @@
 //! PTY resource adapter. The shared host owns controller, admission, receipt and I/O policy.
+#[path = "backend_checkpoint.rs"]
+mod checkpoint;
+pub(crate) use checkpoint::BackendCheckpoint;
 use crate::{
     journal::{lock, SharedJournal},
     process::Process,

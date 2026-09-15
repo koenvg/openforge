@@ -165,7 +165,7 @@ pub async fn ordered_io_contract(host: &impl PtyHost, installation: &Installatio
         Err(HostError::StaleOutput)
     ));
     for phase in [
-        ReplacementPhase::Prepare,
+        ReplacementPhase::Prepare { executable: "/nonexistent/session-daemon".into() },
         ReplacementPhase::Commit,
         ReplacementPhase::Abort,
     ] {

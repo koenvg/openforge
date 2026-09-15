@@ -9,7 +9,8 @@ pub const MAX_RETAINED_REQUEST_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_SESSIONS: usize = 1024;
 pub const MAX_EXIT_HISTORY: usize = 1024;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HostLimits {
     pub live_sessions: usize,
     pub retained_sessions: usize,
@@ -204,9 +205,10 @@ pub struct IoRequest {
     pub sequence: u64,
     pub action: IoAction,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReplacementPhase {
-    Prepare,
+    Prepare { executable: std::path::PathBuf },
     Commit,
     Abort,
 }

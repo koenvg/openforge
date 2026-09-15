@@ -4,12 +4,17 @@ mod agent_gateway;
 mod backend;
 mod host;
 mod journal;
+mod input;
+mod quiescence;
 mod notification_delivery;
 mod notification_journal;
+mod notification_checkpoint;
+mod replacement;
 #[cfg(test)]
 mod notification_journal_tests;
 mod output;
 mod process;
+mod process_native;
 mod server;
 
 // Compile the existing domain-free authority and supervision code in the PTY owner.
@@ -22,7 +27,7 @@ mod managed_process;
 mod terminal_model;
 
 fn main() {
-    if let Err(error) = server::run() {
+    if let Err(error) = replacement::run() {
         eprintln!("session daemon stopped: {error}");
         std::process::exit(1);
     }

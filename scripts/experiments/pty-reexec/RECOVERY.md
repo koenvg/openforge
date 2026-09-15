@@ -4,6 +4,40 @@ KVG-4715 extends the KVG-4714 experiment. The release gate remains **incomplete*
 
 KVG-4717 subsequently received an explicit owner exception for one controlled daemon-hosted indexed shell and Sidecar-only replacement. See [the slice contract](../../../docs/session-daemon-shell.md). The daemon itself is not replaced; the broader feasibility and production enablement gates below remain open.
 
+## KVG-4726 arm64 scope and integrated image preflight
+
+The owner removed all macOS x64 work from KVG-4726. This task requires only arm64 builds and execution evidence. Earlier x64 requirements below record the original parent scope; they no longer block this task. The remaining arm64 feasibility gates still apply. No production daemon replacement has been enabled.
+
+The isolated Rust authority owner now combines its real Ghostty checkpoint and PTY with image preflight. Before changing the checkpoint or descriptor flags, it checks both the target and retained recovery image. Only thin arm64 Mach-O executables are accepted. A child probe receives null stdin/stderr, a bounded stdout pipe, no inherited host environment and no session/checkpoint descriptors. It must return compatible protocol, checkpoint-format, authority-codec and architecture metadata within two seconds and 4 KiB. Every probe is reaped. Nonregular files are opened nonblocking and refused; scripts are refused without execution.
+
+The private checkpoint format is now version 2 because it retains activation outcomes. An actual failed exec leaves the old owner serving and reports failed activation. Controlled initialization failure reexecs the retained compatible image before installing the model or consuming PTY I/O, and still reports failed activation. The resumed executable checks its actual version against the prepared version; a changed compatible target falls back rather than reporting the wrong version active. These are fixture contracts, not production protocol or state-format compatibility promises.
+
+### Evidence
+
+- [Initial refusal regression](evidence/macos-arm64-integrated-preflight-red.json): incompatible and unresponsive regular-file targets incorrectly reached the preparation barrier before implementation. Cleanup was graceful with zero survivors.
+- [Complete green run](evidence/macos-arm64-integrated-preflight-green.json), [repeat 2](evidence/macos-arm64-integrated-preflight-repeat-2.json), and [repeat 3](evidence/macos-arm64-integrated-preflight-repeat-3.json): nine tests and ten clean session teardowns per run. Tests cover missing/malformed images, incompatible metadata, probe isolation, timeout/output limits, scripts, FIFOs, unusable recovery images, failed exec, changed target version, explicit controlled-fallback failure, parser/query recovery and numbered output under pressure.
+- [Authority-discard negative control](evidence/macos-arm64-integrated-preflight-negative.json): both parser cases fail with the expected missing `ALTRED` and wrong query column. Both cleanup audits have zero survivors.
+- Every pressure run receives all 4,096 numbered lines without gaps or duplicates. Across the three runs, request-to-ready is 513 to 782 ms, GO-to-ready is 41 to 43 ms, and the longest producer write is 542 to 811 ms. These include debug-build and driver overhead plus a deliberate 201 to 210 ms pause. They are not production latency guarantees. The unresponsive-image refusals take about 2.05 seconds.
+
+```sh
+node scripts/experiments/pty-reexec/live-authority-proof.mjs \
+  --report /tmp/authority-preflight.json
+# Focus only the image/refusal/failure cases.
+node scripts/experiments/pty-reexec/live-authority-proof.mjs \
+  --report /tmp/authority-preflight-focused.json Preflight
+```
+
+Affected-system checks pass: all 51 imported Rust authority tests across three binaries; Cargo format, check, build and clippy with warnings denied; ten C/Python live tests; seven teardown regressions; the nine-test Rust-owner live suite; the no-replacement pressure control; all four production-view presentation probe cases; Python compilation, Node syntax and Clang analysis of every C fixture, including burst mode. Desktop, Sidecar and plugin suites were not rerun because this slice changes only the isolated experiment. Their checks remain required when production code changes.
+
+### Remaining limits
+
+The probe is synchronous in this fixture: it does not demonstrate concurrent old-host request servicing during preflight. Image headers and declared contracts are not signature verification, immutable installation, tamper protection or a combined state decode in the target probe. Arbitrary target/fallback corruption, fatal loader failure and loss of the sole PTY-owning process remain unrecoverable.
+
+The experiment still lacks the combined listener/lock/credential and notification-journal protocol, concurrent accepted-input accounting, stale-controller/duplicate-request handling, tested global retained-state budgets and supported-image state through reexec. The temporary post-restore checkpoint refusal remains. Production daemon PTY-wrapper reconstruction and quiescence are not implemented by this fixture. These gaps must be closed before production replacement proceeds.
+
+KVG-5062 tracks existing error handling in `live_native.rs` teardown: failed signals/close/reaping can be reported as success. This slice leaves that adapter unchanged and retains independent survivor audits.
+
+
 ## KVG-4760 owner-approved recovery contract
 
 The owner confirmed this focused production fix. Ghostty captures portable VT, bounded compatibility/image replay, explicit parser continuation and the output watermark in one actor command. Continuation comes from Ghostty's replay-safe continuation API, not from a guessed retained-output suffix. Unavailable continuation still defers the snapshot without disabling the authority.

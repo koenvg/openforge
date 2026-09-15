@@ -12,7 +12,7 @@ pub use backend::{
     BackendAttachment, BackendOutput, BackendOutputStream, BackendSession, HostBackend,
 };
 pub use identity::*;
-pub use state::HostState;
+pub use state::{HostState, MAX_HOST_CHECKPOINT_BYTES};
 pub use types::*;
 
 use state::{Mutation, Receipt};

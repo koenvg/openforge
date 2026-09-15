@@ -1,11 +1,11 @@
 ## 1. Blocking macOS feasibility proof
 
-- [ ] 1.1 Define an isolated v1/v2 reexec experiment and acceptance matrix covering each live-replacement spec scenario; verify the fixture design records app-data isolation, process ownership, target versions, PTY identities, output cursors, and explicit cleanup without touching the active OpenForge app.
-- [ ] 1.2 Build a minimal PTY-owning experiment with failing continuity assertions first, then retain an audited descriptor set across executable replacement; verify unchanged shell/agent/tool PIDs, input echo, resize, and a genuinely active v2 executable on macOS.
-- [ ] 1.3 Add checkpoint/recovery experiments for the selected terminal authority, partial escape sequences, alternate screen, protocol replies, supported images, ordered writes, and bounded replay; verify numbered output and terminal conformance across replacement without handoff-induced loss or duplicate replies.
-- [ ] 1.4 Exercise child exits before, during, and after reexec and process-group cleanup; verify exit status retention, eventual reaping, PID-reuse protection, and no surviving fixture descendants after explicit termination.
-- [ ] 1.5 Inject incompatible state, invalid executable, failed exec, controlled post-exec initialization failure, and concurrent I/O; verify refusal or same-session recovery, measure pause/backpressure, and document fatal process-loss cases that cannot recover.
-- [ ] 1.6 Run the experiment on macOS arm64 and x64 and record commands and evidence in a feasibility report; verify every required scenario passes before proceeding to section 2, update design.md with proven state/descriptor contracts, and stop for owner review if the candidate fails rather than silently switching to workers or descriptor transfer.
+- [x] 1.1 Define an isolated v1/v2 reexec experiment and acceptance matrix covering each live-replacement spec scenario; verify the fixture design records app-data isolation, process ownership, target versions, PTY identities, output cursors, and explicit cleanup without touching the active OpenForge app.
+- [x] 1.2 Build a minimal PTY-owning experiment with failing continuity assertions first, then retain an audited descriptor set across executable replacement; verify unchanged shell/agent/tool PIDs, input echo, resize, and a genuinely active v2 executable on macOS.
+- [x] 1.3 Add checkpoint/recovery experiments for the selected terminal authority, partial escape sequences, alternate screen, protocol replies, supported images, ordered writes, and bounded replay; verify numbered output and terminal conformance across replacement without handoff-induced loss or duplicate replies.
+- [x] 1.4 Exercise child exits before, during, and after reexec and process-group cleanup; verify exit status retention, eventual reaping, PID-reuse protection, and no surviving fixture descendants after explicit termination.
+- [x] 1.5 Inject incompatible state, invalid executable, failed exec, controlled post-exec initialization failure, and concurrent I/O; verify refusal or same-session recovery, measure pause/backpressure, and document fatal process-loss cases that cannot recover.
+- [ ] 1.6 Run the experiment on macOS arm64 and record commands and evidence in a feasibility report; verify every required scenario passes before proceeding to section 2, update design.md with proven state/descriptor contracts, and stop for owner review if the candidate fails rather than silently switching to workers or descriptor transfer.
 
 ## 2. Host protocol and ownership
 
@@ -54,10 +54,10 @@
 
 ## 7. Production live daemon replacement
 
-- [ ] 7.1 Implement the proven checkpoint format and quiescence barrier from section 1 with tests first; verify descriptor inventory, readers/writers, accepted input, event records, terminal state, output cursors, and child-reaping state reach a consistent replacement point.
+- [x] 7.1 Implement the proven checkpoint format and quiescence barrier from section 1 with tests first; verify descriptor inventory, readers/writers, accepted input, event records, terminal state, output cursors, and child-reaping state reach a consistent replacement point.
 - [ ] 7.2 Implement compatible image preflight and live reexec using the proven low-level PTY reconstruction path; verify the new executable serves existing agents immediately with unchanged PTY identities and without waiting for sessions to end.
-- [ ] 7.3 Implement controlled failed-exec and post-exec fallback recovery while retained descriptors remain open; verify fallback image compatibility, recovery before ready commit, and explicit reporting that the attempted update did not complete.
-- [ ] 7.4 Preserve gateway listener/discovery identity and notification acceptance across daemon replacement; verify hook retries and deduplication, request outcome reporting, protected credential continuity, and reconnecting Sidecar registration.
+- [x] 7.3 Implement controlled failed-exec and post-exec fallback recovery while retained descriptors remain open; verify fallback image compatibility, recovery before ready commit, and explicit reporting that the attempted update did not complete.
+- [x] 7.4 Preserve gateway listener/discovery identity and notification acceptance across daemon replacement; verify hook retries and deduplication, request outcome reporting, protected credential continuity, and reconnecting Sidecar registration.
 - [ ] 7.5 Integrate daemon activation with the app restart transaction; verify commit checks all target versions and restoration readiness, while unsupported transitions and failed daemon activation never silently become idle-only updates.
 
 ## 8. Packaging, installation, and owned cleanup
@@ -70,7 +70,7 @@
 
 ## 9. Full affected-system validation and release evidence
 
-- [ ] 9.1 Add isolated packaged end-to-end tests for app restart, Sidecar replacement, and live daemon update with active agent/tool/shell fixtures; verify unchanged agent/tool PIDs, target executable versions, input/resize, ordered output, exit reporting, and restored Task/tab state on macOS arm64 and x64.
+- [ ] 9.1 Add isolated packaged end-to-end tests for app restart, Sidecar replacement, and live daemon update with active agent/tool/shell fixtures; verify unchanged agent/tool PIDs, target executable versions, input/resize, ordered output, exit reporting, and restored Task/tab state on macOS arm64.
 - [ ] 9.2 Extend cross-process fault tests for repeated compatible upgrades, high output, retained images, partial terminal sequences, controller races, completion/permission notifications, journal exhaustion, delayed relaunch, and explicit Quit; verify all four delta specs have mapped evidence and retain logs with secrets redacted.
 - [ ] 9.3 Run full desktop checks using `pnpm test`, `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm electron:contract:check`, and `pnpm mobile:contract:check`; verify passing output or document exact blockers. Run additional Companion app checks if its Dart code changes.
 - [ ] 9.4 Run affected workspace checks: terminal-runtime test/build/conformance, plugin-sdk test/build/check:contract/check:entrypoints, terminal plugin test/build, and every test/static-check script of any other package or plugin changed by the complete diff; verify package contract coverage and disclose any missing package-local scripts.

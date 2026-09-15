@@ -1,4 +1,5 @@
 use crate::host::Host;
+use crate::replacement::{Manager, Resources};
 use openforge_session_client::runtime::{check_peer, io_error, RuntimeDirectory};
 use openforge_session_protocol::*;
 use std::os::unix::{fs::PermissionsExt, net::UnixListener};
@@ -8,7 +9,7 @@ use subtle::ConstantTimeEq;
 pub fn run() -> Result<(), Error> {
     let root = std::env::args_os().nth(1).ok_or(Error::InvalidRequest)?;
     let runtime = RuntimeDirectory::open(std::path::Path::new(&root))?;
-    let _ownership = runtime.claim()?;
+    let ownership = runtime.claim()?;
     let socket = runtime.socket_path();
     if socket.try_exists().map_err(io_error)? {
         runtime.check_socket()?;
@@ -23,20 +24,25 @@ pub fn run() -> Result<(), Error> {
         directory: runtime.path().to_path_buf(),
         port: agent_listener.local_addr().map_err(io_error)?.port(),
     };
-    let mut host = Host::new(runtime.credentials().installation.clone(), agent_runtime)?;
-    let notifications = crate::notification_journal::NotificationJournal::open(
-        &runtime.path().join("notifications.sqlite"),
-    )?;
-    crate::agent_gateway::start(
-        agent_listener,
-        host.backend.clone(),
-        host.sidecar.clone(),
-        notifications,
-    )?;
+    let host = Host::new(runtime.credentials().installation.clone(), agent_runtime)?;
+    let resources = Resources { ownership, control: listener, agent: agent_listener };
+    let manager = Manager::new(&runtime);
+    let notifications = crate::notification_journal::NotificationJournal::open(&runtime.path().join("notifications.sqlite"))?;
+    start_gateway(&resources, &host, notifications)?;
+    serve(runtime, resources, host, manager)
+}
+
+pub(crate) fn start_gateway(resources: &Resources, host: &Host, notifications: crate::notification_journal::NotificationJournal) -> Result<(), Error> {
+    crate::agent_gateway::start(resources.agent.try_clone().map_err(io_error)?, host.backend.clone(), host.sidecar.clone(), notifications, std::sync::Arc::clone(&host.ingress_gate))
+}
+
+pub(crate) fn serve(runtime: RuntimeDirectory, resources: Resources, mut host: Host, mut manager: Manager) -> Result<(), Error> {
+    let socket = runtime.socket_path();
     eprintln!("session daemon ready");
     loop {
         host.poll()?;
-        let mut stream = match listener.accept() {
+        manager.poll();
+        let mut stream = match resources.control.accept() {
             Ok((stream, _)) => stream,
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(Duration::from_millis(5));
@@ -57,6 +63,7 @@ pub fn run() -> Result<(), Error> {
         {
             continue;
         }
+        let mut activation = None;
         let result = read_frame::<_, Request>(&mut stream).and_then(|request| {
             if !bool::from(
                 request
@@ -66,7 +73,9 @@ pub fn run() -> Result<(), Error> {
             ) {
                 return Err(Error::Unauthorized);
             }
-            host.handle(request.command)
+            let dispatch = manager.dispatch(&mut host, &runtime, &resources, request.command)?;
+            activation = dispatch.activation;
+            Ok(dispatch.response)
         });
         if host.shutdown {
             std::fs::remove_file(&socket).map_err(io_error)?;
@@ -79,6 +88,7 @@ pub fn run() -> Result<(), Error> {
                 body: result,
             },
         );
+        if let Some(activation) = activation { activation.execute(&mut manager); }
         if host.shutdown {
             return Ok(());
         }

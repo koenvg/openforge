@@ -52,6 +52,13 @@ pub struct Request {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Command {
+    Capabilities,
+    Replacement {
+        controller: Controller,
+        operation: OperationId,
+        phase: crate::ReplacementPhase,
+    },
+    ReplacementStatus { operation: OperationId },
     RegisterSidecar {
         controller: Controller,
         endpoint: Option<crate::SidecarEndpoint>,
@@ -94,6 +101,8 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Response {
+    Capabilities(crate::Capabilities),
+    Replacement(crate::ReplacementStatus),
     Inventory(Inventory),
     Spawned(Session),
     Recovery(Recovery),

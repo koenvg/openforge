@@ -1,4 +1,10 @@
 //! Wire dispatch around the canonical host, not a second ownership ledger.
+#[path = "host_checkpoint.rs"]
+mod checkpoint;
+pub(crate) use checkpoint::{HostCheckpoint, HostPause};
+#[cfg(test)]
+#[path = "host_checkpoint_tests.rs"]
+mod checkpoint_tests;
 use crate::{backend::Backend, journal::lock};
 use base64::Engine;
 use openforge_session_host::{HostLimits, HostState, InProcessHost, IoRequest, PtyHost};
@@ -13,6 +19,8 @@ pub struct Host {
     runtime: tokio::runtime::Runtime,
     pub sidecar: crate::agent_gateway::Registration,
     pub shutdown: bool,
+    pub ingress_gate: Arc<crate::quiescence::Gate>,
+    restore_ingress_pause: Option<crate::quiescence::Paused>,
 }
 impl Host {
     pub fn new(
@@ -44,10 +52,15 @@ impl Host {
             runtime,
             sidecar: Default::default(),
             shutdown: false,
+            ingress_gate: Default::default(),
+            restore_ingress_pause: None,
         })
     }
     pub fn poll(&self) -> Result<(), Error> {
         self.backend.poll()
+    }
+    pub fn validate_replacement_controller(&self, controller: &Controller) -> Result<(), Error> {
+        self.runtime.block_on(self.host.reconcile(controller)).map(|_| ()).map_err(Error::from)
     }
     fn inventory(&self, controller: &Controller) -> Result<Inventory, Error> {
         let hosted = self.runtime.block_on(self.host.reconcile(controller))?;
@@ -80,6 +93,7 @@ impl Host {
     }
     pub fn handle(&mut self, command: Command) -> Result<Response, Error> {
         match command {
+            Command::Capabilities | Command::Replacement { .. } | Command::ReplacementStatus { .. } => Err(Error::UnsupportedReplacement),
             Command::RegisterSidecar {
                 controller,
                 endpoint,

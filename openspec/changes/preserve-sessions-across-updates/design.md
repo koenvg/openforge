@@ -12,7 +12,7 @@ Current ownership is deliberately destructive on Quit:
 - `taskTerminalTabsSession.ts` retains tabs in memory; renderer navigation includes session-scoped state. Neither is a durable restart workspace.
 - Terminal coordination already checks PTY instances, replay positions, attachments, and geometry leases. `terminalSessionService.ts` selects xterm today, while the existing terminal coordination spec contains Ghostty-specific language. This change must preserve the selected renderer/authority's actual recovery contract rather than assuming a raw byte suffix is a complete terminal snapshot or switching renderers as part of daemon extraction.
 
-The supported first implementation target is packaged macOS on arm64 and x64, matching the existing desktop release targets. Linux descriptor semantics inform the design but do not establish macOS acceptance evidence.
+The supported first implementation target is packaged macOS on arm64 only. The owner excluded x64 builds, runners, and acceptance evidence from this change. Linux descriptor semantics inform the design but do not establish macOS acceptance evidence.
 
 ## Goals / Non-Goals
 
@@ -167,7 +167,7 @@ Do not automatically relaunch an older domain Sidecar after new database migrati
 
 ## Migration Plan
 
-1. Build the isolated reexec spike and record macOS arm64/x64 evidence. Stop if the design cannot meet the specs. Update the design with proven state formats and failure limits before production extraction.
+1. Build the isolated reexec spike and record macOS arm64 evidence. Stop if the design cannot meet the specs. Update the design with proven state formats and failure limits before production extraction.
 2. Add the host protocol/client and daemon, keeping the existing path as a temporary development comparison only. Exercise both adapters through the same behavior contract.
 3. Move all app-owned PTYs and their recovery/supervision into the daemon. Adapt provider starts, plugin shells, Companion terminals, completed replay capture, and process diagnostics. Remove production double ownership.
 4. Move agent ingress to the stable gateway; ship notification retries/deduplication and CLI discovery together. Do not leave existing supported providers pointing at disposable endpoints.
