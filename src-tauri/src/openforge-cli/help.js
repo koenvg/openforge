@@ -31,6 +31,7 @@ Review Threads:
   review thread create anchors one comment to a file and line and stores it immediately; a rejection names the field to correct.
   Post each finding as its own create; one rejected create leaves the rest of the run's threads stored.
   --side defaults to RIGHT, the post-image of the diff. Use LEFT to comment on a removed line.
+  --key deduplicates a retry: derive one stable key per finding, and a repeat of that key on the same namespace, target and revision returns the stored thread.
   --namespace, --target and --revision are opaque to OpenForge: use the ones the review surface gave you.
 
 Diagnostics:
@@ -57,7 +58,7 @@ Examples:
   openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
   openforge task plan apply --file follow-up-plan.json
   openforge review thread list --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3
-  openforge review thread create --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3 --file src/main.rs --line 42 --body "Missing null check"
+  openforge review thread create --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3 --file src/main.rs --line 42 --body "Missing null check" --key "finding:src/main.rs:42:missing-null-check"
   openforge review thread reply --thread-id rt_9f2 --body "Corrected in the next commit"
   openforge review thread status --thread-id rt_9f2 --status resolved
 

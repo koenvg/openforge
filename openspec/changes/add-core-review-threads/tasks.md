@@ -3,7 +3,7 @@
 The tracer bullet delivers list, create, and reply end to end, and the agent CLI writes threads over the transport. Deliberate divergences from this plan:
 
 - Reviewer decision, agent turn, and read state landed with the reviewer ticket, closing 1.2 and 3.2. The SDK carries `setStatus`, `setAwaiting`, and `markSeen`, `reply` takes an optional `awaiting`, and 5.3 gained `onSetThreadStatus`.
-- `review thread create` has no `--key` flag, so an agent retry after an unclear response is not deduplicated even though the store now is. KVG-2204 adds the flag.
+- `review thread create` takes `--key` and sends it as `idempotencyKey` (KVG-2204), so an agent retry after an unclear response returns the thread the first attempt stored. The skill tells the reviewer to derive one stable key per finding.
 - `onDidChange` is frontend-only, matching the existing `tasks` invalidation surface. Backend plugins receive the operation-only API.
 - `ToolPolicy::ReadAndGitHistory` became `ToolPolicy::ReadGitHistoryAndReviewCli` instead of gaining a sibling. Both repo-aware callers are review runs, so a second variant would have had no constructor.
 - The headless review generation now gets its own agent identity (KVG-2201). `agent_generate_in_repo` issues a generation-scoped credential from the Sidecar, hands the subprocess only `OPENFORGE_AGENT_CONFIG`, and revokes the token and deletes the file when the run ends. The Sidecar ingress refuses any bearer that is neither the controller's nor a live generation's, so a presented credential stops working the moment its run ends. The credential reaches the same `agent_route_allowed` set as a PTY agent; the tool policy is what keeps a review run to review commands.
@@ -43,6 +43,7 @@ The tracer bullet delivers list, create, and reply end to end, and the agent CLI
 - [x] 4.2 Add the matching `POST /review_threads/*` routes to the agent transport allowlist; verify the `agent_routes` unit tests assert each new route is allowed and that an unlisted review route is refused
 - [x] 4.3 Add a `ToolPolicy` variant that appends `Bash(openforge review:*)` to the read-only tool whitelist while keeping `Write` and `Edit` disallowed; verify a unit test asserts the composed allow and disallow strings
 - [x] 4.4 Point the repo-aware review generation at the new tool policy; verify a test asserts the spawned generation carries the widened allowlist
+- [x] 4.5 Expose the create idempotency key as `review thread create --key`; verify the CLI test asserts the sent `idempotencyKey` and route tests cover a repeated key, the same key on a new revision, and unkeyed repeats
 
 ## 5. Diff viewer contract
 

@@ -17,6 +17,20 @@
     },
     "body": "Missing null check"
   },
+  "createKeyed": {
+    "namespace": "github",
+    "targetKey": "gh:acme/web#1421",
+    "revision": "0f1c2d3",
+    "origin": "agent",
+    "anchor": {
+      "kind": "line",
+      "filePath": "src/main.rs",
+      "line": 42,
+      "side": "RIGHT"
+    },
+    "body": "Missing null check",
+    "idempotencyKey": "finding:src/main.rs:42:missing-null-check"
+  },
   "reply": {
     "threadId": "rt_9f2",
     "role": "agent",

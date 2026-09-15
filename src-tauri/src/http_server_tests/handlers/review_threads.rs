@@ -23,6 +23,10 @@ fn body_for(key: &str, thread_id: &str) -> String {
     body.to_string()
 }
 
+fn keyed_create() -> serde_json::Value {
+    contract()["createKeyed"].clone()
+}
+
 fn post(path: &str, body: String) -> Request<Body> {
     Request::builder()
         .uri(path)
@@ -32,18 +36,35 @@ fn post(path: &str, body: String) -> Request<Body> {
         .expect("review thread request")
 }
 
+async fn created_thread(router: &axum::Router, body: String) -> serde_json::Value {
+    let response = router
+        .clone()
+        .oneshot(post("/review_threads/create", body))
+        .await
+        .expect("create response");
+    assert_eq!(response.status(), StatusCode::OK);
+    response_body_json(response).await
+}
+
+async fn listed_threads(router: axum::Router) -> Vec<serde_json::Value> {
+    response_body_json(
+        router
+            .oneshot(post("/review_threads/list", scope_body()))
+            .await
+            .expect("list response"),
+    )
+    .await
+    .as_array()
+    .expect("list")
+    .clone()
+}
+
 #[tokio::test]
 async fn test_review_thread_routes_create_reply_status_and_list_over_the_agent_transport() {
     let (state, _temp_dir) = test_state("http_review_threads_round_trip");
     let router = create_router(state);
 
-    let created = router
-        .clone()
-        .oneshot(post("/review_threads/create", create_body()))
-        .await
-        .expect("create response");
-    assert_eq!(created.status(), StatusCode::OK);
-    let created = response_body_json(created).await;
+    let created = created_thread(&router, create_body()).await;
     let thread_id = created["id"].as_str().expect("thread id").to_string();
 
     let listed = router
@@ -280,4 +301,46 @@ async fn test_a_headless_generation_credential_writes_a_thread_a_later_listing_r
     )
     .await;
     assert_eq!(listed.as_array().expect("list").len(), 1);
+}
+
+#[tokio::test]
+async fn test_repeating_an_idempotency_key_returns_the_thread_the_first_create_stored() {
+    let (state, _temp_dir) = test_state("http_review_threads_repeated_key");
+    let router = create_router(state);
+
+    let first = created_thread(&router, keyed_create().to_string()).await;
+    let repeated = created_thread(&router, keyed_create().to_string()).await;
+
+    assert_eq!(repeated["id"], first["id"]);
+    assert_eq!(repeated["messages"], first["messages"]);
+    assert_eq!(repeated["idempotencyKey"], keyed_create()["idempotencyKey"]);
+    assert_eq!(listed_threads(router).await.len(), 1);
+}
+
+#[tokio::test]
+async fn test_one_idempotency_key_under_a_new_revision_stores_a_second_thread() {
+    let (state, _temp_dir) = test_state("http_review_threads_key_scoped_to_revision");
+    let router = create_router(state);
+    let mut next_revision = keyed_create();
+    next_revision["revision"] = serde_json::json!("9a8b7c6");
+
+    let first = created_thread(&router, keyed_create().to_string()).await;
+    let second = created_thread(&router, next_revision.to_string()).await;
+
+    assert_ne!(second["id"], first["id"]);
+    let listed = listed_threads(router).await;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["id"], first["id"]);
+}
+
+#[tokio::test]
+async fn test_creates_without_an_idempotency_key_each_store_their_own_thread() {
+    let (state, _temp_dir) = test_state("http_review_threads_unkeyed");
+    let router = create_router(state);
+
+    let first = created_thread(&router, create_body()).await;
+    let second = created_thread(&router, create_body()).await;
+
+    assert_ne!(second["id"], first["id"]);
+    assert_eq!(listed_threads(router).await.len(), 2);
 }
