@@ -26,16 +26,26 @@ impl Journal {
         Ok(self.clone())
     }
     pub fn validate(&self) -> Result<(), Error> {
-        if self.cursor == u64::MAX || self.events.len() > MAX_EVENTS || self.retained_bytes > MAX_EVENT_BYTES {
+        if self.cursor == u64::MAX
+            || self.events.len() > MAX_EVENTS
+            || self.retained_bytes > MAX_EVENT_BYTES
+        {
             return Err(Error::Capacity);
         }
         let mut total = 0usize;
         let mut previous = None;
         for (cursor, event, size) in &self.events {
-            let actual = match event { Event::Output { data, .. } => data.len() + 512, _ => 512 };
-            if *cursor == 0 || *cursor > self.cursor || *size != actual
+            let actual = match event {
+                Event::Output { data, .. } => data.len() + 512,
+                _ => 512,
+            };
+            if *cursor == 0
+                || *cursor > self.cursor
+                || *size != actual
                 || previous.is_some_and(|previous| previous + 1 != *cursor)
-            { return Err(Error::InvalidRequest); }
+            {
+                return Err(Error::InvalidRequest);
+            }
             total = total.checked_add(*size).ok_or(Error::Capacity)?;
             previous = Some(*cursor);
         }

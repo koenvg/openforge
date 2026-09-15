@@ -1,5 +1,7 @@
 use super::*;
-use openforge_session_host::{DaemonLifetimeId, InstallationId, PreparedCommand, PtyInstanceId, TerminalOwner};
+use openforge_session_host::{
+    DaemonLifetimeId, InstallationId, PreparedCommand, PtyInstanceId, TerminalOwner,
+};
 use std::collections::BTreeMap;
 
 #[test]
@@ -29,25 +31,41 @@ fn abandoned_restore_does_not_consume_output_close_the_master_or_kill_the_servin
     let checkpoint = serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
     let restored = Process::restore(checkpoint, journal).unwrap();
     assert_eq!(restored.pid(), pid);
-    assert_eq!(serde_json::to_value(restored.recover(0).unwrap()).unwrap(), serde_json::to_value(before).unwrap());
+    assert_eq!(
+        serde_json::to_value(restored.recover(0).unwrap()).unwrap(),
+        serde_json::to_value(before).unwrap()
+    );
     drop(restored);
     drop(pause);
-    process.operate(&IoAction::Write(b"still-alive\n".to_vec())).unwrap();
+    process
+        .operate(&IoAction::Write(b"still-alive\n".to_vec()))
+        .unwrap();
     wait_for_text(&process, b"VALUE:still-alive");
     process.terminate().unwrap();
     drop(process);
     // SAFETY: signal zero only queries existence of the known test-owned PID.
     assert_eq!(unsafe { libc::kill(pid as i32, 0) }, -1);
-    assert_eq!(std::io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::ESRCH)
+    );
 }
 
 fn wait_for_text(process: &Process, text: &[u8]) {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        if process.recover(0).is_ok_and(|snapshot| snapshot.portable_vt.windows(text.len()).any(|window| window == text)) {
+        if process.recover(0).is_ok_and(|snapshot| {
+            snapshot
+                .portable_vt
+                .windows(text.len())
+                .any(|window| window == text)
+        }) {
             return;
         }
-        assert!(Instant::now() < deadline, "test PTY did not produce expected text");
+        assert!(
+            Instant::now() < deadline,
+            "test PTY did not produce expected text"
+        );
         std::thread::sleep(Duration::from_millis(5));
     }
 }

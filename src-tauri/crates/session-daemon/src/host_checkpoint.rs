@@ -1,5 +1,8 @@
 use super::*;
-use crate::{backend::BackendCheckpoint, quiescence::{Gate, Paused}};
+use crate::{
+    backend::BackendCheckpoint,
+    quiescence::{Gate, Paused},
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -16,13 +19,24 @@ pub(crate) struct HostPause {
     _ingress: Paused,
 }
 impl HostCheckpoint {
-    pub fn validate_for_image(&self, installation: &InstallationId, runtime: &crate::agent_config::AgentRuntime) -> Result<(), Error> {
-        if self.format != 1 { return Err(Error::Version); }
-        if let Some(endpoint) = &self.sidecar { endpoint.validate()?; }
+    pub fn validate_for_image(
+        &self,
+        installation: &InstallationId,
+        runtime: &crate::agent_config::AgentRuntime,
+    ) -> Result<(), Error> {
+        if self.format != 1 {
+            return Err(Error::Version);
+        }
+        if let Some(endpoint) = &self.sidecar {
+            endpoint.validate()?;
+        }
         let state = HostState::restore_checkpoint(&self.ledger)?;
-        self.backend.validate_for_image(installation, &state, runtime)
+        self.backend
+            .validate_for_image(installation, &state, runtime)
     }
-    pub fn descriptors(&self) -> Vec<i32> { self.backend.descriptors() }
+    pub fn descriptors(&self) -> Vec<i32> {
+        self.backend.descriptors()
+    }
 }
 impl Host {
     pub fn checkpoint(&self) -> Result<(HostCheckpoint, HostPause), Error> {
@@ -32,26 +46,61 @@ impl Host {
         let state = self.runtime.block_on(self.state.lock());
         let (backend, readers) = self.backend.checkpoint()?;
         let ledger = state.checkpoint()?;
-        let sidecar = self.sidecar.read().map_err(|_| Error::OutcomeUnknown)?
-            .as_ref().map(|endpoint| (**endpoint).clone());
-        Ok((HostCheckpoint { format: 1, ledger, backend, sidecar }, HostPause { _readers: readers, _ingress: ingress }))
+        let sidecar = self
+            .sidecar
+            .read()
+            .map_err(|_| Error::OutcomeUnknown)?
+            .as_ref()
+            .map(|endpoint| (**endpoint).clone());
+        Ok((
+            HostCheckpoint {
+                format: 1,
+                ledger,
+                backend,
+                sidecar,
+            },
+            HostPause {
+                _readers: readers,
+                _ingress: ingress,
+            },
+        ))
     }
-    pub fn restore(saved: HostCheckpoint, installation: InstallationId, agent_runtime: crate::agent_config::AgentRuntime) -> Result<Self, Error> {
-        if saved.format != 1 { return Err(Error::Version); }
-        if let Some(endpoint) = &saved.sidecar { endpoint.validate()?; }
+    pub fn restore(
+        saved: HostCheckpoint,
+        installation: InstallationId,
+        agent_runtime: crate::agent_config::AgentRuntime,
+    ) -> Result<Self, Error> {
+        if saved.format != 1 {
+            return Err(Error::Version);
+        }
+        if let Some(endpoint) = &saved.sidecar {
+            endpoint.validate()?;
+        }
         let state = HostState::restore_checkpoint(&saved.ledger)?;
         saved.backend.validate_ledger(&installation, &state)?;
-        let backend = Backend::restore(saved.backend, &installation, state.lifetime(), agent_runtime)?;
+        let backend = Backend::restore(
+            saved.backend,
+            &installation,
+            state.lifetime(),
+            agent_runtime,
+        )?;
         let state = Arc::new(Mutex::new(state));
         let host = InProcessHost::new(backend.clone(), installation, Arc::clone(&state));
-        let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build()
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
             .map_err(|error| Error::Host(error.to_string()))?;
         let ingress_gate = Arc::new(Gate::default());
         let restore_ingress_pause = ingress_gate.pause(Duration::ZERO)?;
         Ok(Self {
-            host, backend, state, runtime,
+            host,
+            backend,
+            state,
+            runtime,
             sidecar: Arc::new(std::sync::RwLock::new(saved.sidecar.map(Arc::new))),
-            ingress_gate, restore_ingress_pause: Some(restore_ingress_pause), shutdown: false,
+            ingress_gate,
+            restore_ingress_pause: Some(restore_ingress_pause),
+            shutdown: false,
         })
     }
     /// # Safety
@@ -59,7 +108,9 @@ impl Host {
     /// retained descriptors have been validated and initialization can no longer fail.
     pub unsafe fn activate_restored(&mut self) -> Result<(), Error> {
         // SAFETY: caller establishes the image boundary; backend validates descriptor uniqueness.
-        unsafe { self.backend.activate_restored()?; }
+        unsafe {
+            self.backend.activate_restored()?;
+        }
         self.restore_ingress_pause.take();
         Ok(())
     }

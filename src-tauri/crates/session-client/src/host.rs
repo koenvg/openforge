@@ -106,8 +106,13 @@ impl PtyHost for Client {
         phase: ReplacementPhase,
     ) -> Result<(), HostError> {
         let client = self.with_controller(controller.clone());
-        tokio::task::spawn_blocking(move || client.complete_replacement(operation, phase).map_err(HostError::from))
-            .await.map_err(|_| HostError::OutcomeUnknown)?
+        tokio::task::spawn_blocking(move || {
+            client
+                .complete_replacement(operation, phase)
+                .map_err(HostError::from)
+        })
+        .await
+        .map_err(|_| HostError::OutcomeUnknown)?
     }
     async fn attach_recover(
         &self,

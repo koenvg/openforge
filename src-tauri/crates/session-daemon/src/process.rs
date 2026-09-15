@@ -11,9 +11,12 @@ use crate::journal::{lock, SharedJournal};
 use crate::managed_process::{
     terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity, RootReapMode,
 };
-use crate::terminal_model::{TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
 use crate::process_native::{ChildHandle, Master};
 use crate::quiescence::{Gate, Paused};
+use crate::terminal_model::{
+    TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
+    TerminalModelSession,
+};
 use openforge_session_protocol::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::Read;
@@ -106,13 +109,18 @@ impl Process {
             root_exit: None,
             session_key: command.owner.session_key(),
             reader_gate: Arc::new(Gate::default()),
-            restore_pause: None, cleanup_on_drop: true,
+            restore_pause: None,
+            cleanup_on_drop: true,
         };
         process.start_reader(reader, feeder)?;
         Ok(process)
     }
 
-    fn start_reader(&self, mut reader: Box<dyn Read + Send>, feeder: TerminalModelFeeder) -> Result<(), Error> {
+    fn start_reader(
+        &self,
+        mut reader: Box<dyn Read + Send>,
+        feeder: TerminalModelFeeder,
+    ) -> Result<(), Error> {
         let pid = self.pid();
         let stopping = Arc::clone(&self.stopping);
         let reader_done = Arc::clone(&self.reader_done);
@@ -130,8 +138,12 @@ impl Process {
                     };
                     // An abandoned restore sets stopping before reopening its gate.
                     // Recheck after admission so that teardown cannot race one read/write.
-                    if stopping.load(Ordering::Acquire) { break; }
-                    if let Ok(mut writer) = reader_writer.lock() { let _ = writer.progress(); }
+                    if stopping.load(Ordering::Acquire) {
+                        break;
+                    }
+                    if let Ok(mut writer) = reader_writer.lock() {
+                        let _ = writer.progress();
+                    }
                     match reader.read(&mut buffer) {
                         Ok(0) => break,
                         Ok(size) => feeder.feed(&buffer[..size]),
@@ -145,7 +157,8 @@ impl Process {
                 // Cross the authority queue before publishing the final process exit.
                 let _ = barrier.portable_snapshot();
                 reader_done.store(true, Ordering::Release);
-            }).map_err(host_error)?;
+            })
+            .map_err(host_error)?;
         Ok(())
     }
 
@@ -176,8 +189,11 @@ impl Process {
 
     pub fn operate(&self, action: &IoAction) -> Result<(), Error> {
         match action {
-            IoAction::Write(bytes) => self.writer.lock()
-                .map_err(|_| Error::OutcomeUnknown)?.submit(bytes),
+            IoAction::Write(bytes) => self
+                .writer
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)?
+                .submit(bytes),
             IoAction::Resize { columns, rows } => {
                 self.master.resize(size(*columns, *rows))?;
                 self.model.resize(*columns, *rows);
@@ -251,14 +267,23 @@ impl Drop for Process {
     }
 }
 
-fn event_sink(pty: PtyIdentity, journal: SharedJournal, writer: Arc<Mutex<InputWriter>>) -> TerminalModelEventSink {
+fn event_sink(
+    pty: PtyIdentity,
+    journal: SharedJournal,
+    writer: Arc<Mutex<InputWriter>>,
+) -> TerminalModelEventSink {
     Arc::new(move |event| match event {
         TerminalModelEvent::Output(frame) => lock(&journal).publish(Event::Output {
-            pty: pty.clone(), sequence: frame.sequence, data: frame.bytes,
+            pty: pty.clone(),
+            sequence: frame.sequence,
+            data: frame.bytes,
         }),
         TerminalModelEvent::ProtocolReply { bytes, .. } => {
-            if writer.lock().map_err(|_| Error::OutcomeUnknown)
-                .and_then(|mut writer| writer.reply(&bytes)).is_err()
+            if writer
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)
+                .and_then(|mut writer| writer.reply(&bytes))
+                .is_err()
             {
                 lock(&journal).publish(Event::RecoveryRequired { pty: pty.clone() });
             }
@@ -280,4 +305,3 @@ fn size(columns: u16, rows: u16) -> PtySize {
 fn host_error(error: impl std::fmt::Display) -> Error {
     Error::Host(error.to_string())
 }
-

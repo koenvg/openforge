@@ -25,18 +25,39 @@ pub fn run() -> Result<(), Error> {
         port: agent_listener.local_addr().map_err(io_error)?.port(),
     };
     let host = Host::new(runtime.credentials().installation.clone(), agent_runtime)?;
-    let resources = Resources { ownership, control: listener, agent: agent_listener };
+    let resources = Resources {
+        ownership,
+        control: listener,
+        agent: agent_listener,
+    };
     let manager = Manager::new(&runtime);
-    let notifications = crate::notification_journal::NotificationJournal::open(&runtime.path().join("notifications.sqlite"))?;
+    let notifications = crate::notification_journal::NotificationJournal::open(
+        &runtime.path().join("notifications.sqlite"),
+    )?;
     start_gateway(&resources, &host, notifications)?;
     serve(runtime, resources, host, manager)
 }
 
-pub(crate) fn start_gateway(resources: &Resources, host: &Host, notifications: crate::notification_journal::NotificationJournal) -> Result<(), Error> {
-    crate::agent_gateway::start(resources.agent.try_clone().map_err(io_error)?, host.backend.clone(), host.sidecar.clone(), notifications, std::sync::Arc::clone(&host.ingress_gate))
+pub(crate) fn start_gateway(
+    resources: &Resources,
+    host: &Host,
+    notifications: crate::notification_journal::NotificationJournal,
+) -> Result<(), Error> {
+    crate::agent_gateway::start(
+        resources.agent.try_clone().map_err(io_error)?,
+        host.backend.clone(),
+        host.sidecar.clone(),
+        notifications,
+        std::sync::Arc::clone(&host.ingress_gate),
+    )
 }
 
-pub(crate) fn serve(runtime: RuntimeDirectory, resources: Resources, mut host: Host, mut manager: Manager) -> Result<(), Error> {
+pub(crate) fn serve(
+    runtime: RuntimeDirectory,
+    resources: Resources,
+    mut host: Host,
+    mut manager: Manager,
+) -> Result<(), Error> {
     let socket = runtime.socket_path();
     eprintln!("session daemon ready");
     loop {
@@ -88,7 +109,9 @@ pub(crate) fn serve(runtime: RuntimeDirectory, resources: Resources, mut host: H
                 body: result,
             },
         );
-        if let Some(activation) = activation { activation.execute(&mut manager); }
+        if let Some(activation) = activation {
+            activation.execute(&mut manager);
+        }
         if host.shutdown {
             return Ok(());
         }

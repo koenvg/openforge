@@ -1,10 +1,10 @@
 #[cfg(test)]
 use super::super::TerminalModelQueueSaturationGate;
 use super::super::{GhosttyTerminalModel, TerminalModel, TerminalModelError, TerminalModelOptions};
+use super::checkpoint::{RetainedChange, TerminalModelCheckpoint};
 #[cfg(test)]
 use super::event_state::TerminalModelDiagnostic;
 use super::event_state::{PortableTerminalSnapshot, TerminalModelEventSink, TerminalModelState};
-use super::checkpoint::{RetainedChange, TerminalModelCheckpoint};
 use log::{info, warn};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -96,6 +96,7 @@ enum TerminalModelCommand {
         rows: u16,
     },
     PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
+    #[allow(dead_code, reason = "Requested by the daemon's shared-source build")]
     Checkpoint(mpsc::SyncSender<Result<TerminalModelCheckpoint, String>>),
     #[cfg(test)]
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
@@ -219,6 +220,10 @@ impl TerminalModelSession {
         Self::start_internal(session_key, instance_id, options, Some(event_sink), None)
     }
 
+    #[allow(
+        dead_code,
+        reason = "Used by the daemon's shared-source build and checkpoint tests"
+    )]
     pub(crate) fn restore_with_event_sink(
         session_key: String,
         checkpoint: TerminalModelCheckpoint,
@@ -234,13 +239,18 @@ impl TerminalModelSession {
         )
     }
 
+    #[allow(
+        dead_code,
+        reason = "Used by the daemon's shared-source build and checkpoint tests"
+    )]
     pub(crate) fn checkpoint(&self) -> Result<TerminalModelCheckpoint, String> {
         if self.state.is_disabled() {
             return Err("terminal model is disabled".into());
         }
         let (response_tx, response_rx) = mpsc::sync_channel(1);
         send_command_with_timeout(&self.tx, TerminalModelCommand::Checkpoint(response_tx))?;
-        response_rx.recv_timeout(REQUEST_TIMEOUT)
+        response_rx
+            .recv_timeout(REQUEST_TIMEOUT)
             .map_err(|error| format!("terminal checkpoint failed: {error}"))?
     }
 
@@ -469,7 +479,10 @@ fn run_worker(
     rx: mpsc::Receiver<TerminalModelCommand>,
     state: Arc<TerminalModelState>,
     shutdown_requested: Arc<AtomicBool>,
-    restoration: Option<(TerminalModelCheckpoint, mpsc::SyncSender<Result<(), String>>)>,
+    restoration: Option<(
+        TerminalModelCheckpoint,
+        mpsc::SyncSender<Result<(), String>>,
+    )>,
 ) {
     #[cfg(test)]
     let test_fault = options.test_fault.clone();
@@ -572,8 +585,13 @@ fn run_worker(
                 if result.is_ok() {
                     compatibility_replay.push(&bytes);
                     output_sequence = output_sequence.saturating_add(1);
-                    TerminalModelCheckpoint::record_change(&mut retained_checkpoint, &model, ||
-                        RetainedChange::Feed { bytes: bytes.clone() });
+                    TerminalModelCheckpoint::record_change(
+                        &mut retained_checkpoint,
+                        &model,
+                        || RetainedChange::Feed {
+                            bytes: bytes.clone(),
+                        },
+                    );
                     state.publish_output(instance_id, output_sequence, bytes);
                 }
                 result
@@ -581,14 +599,20 @@ fn run_worker(
             TerminalModelCommand::Resize { cols, rows } => {
                 let result = model.resize(cols, rows);
                 if result.is_ok() {
-                    TerminalModelCheckpoint::record_change(&mut retained_checkpoint, &model, ||
-                        RetainedChange::Resize { cols, rows });
+                    TerminalModelCheckpoint::record_change(
+                        &mut retained_checkpoint,
+                        &model,
+                        || RetainedChange::Resize { cols, rows },
+                    );
                 }
                 result
             }
             TerminalModelCommand::Checkpoint(response) => {
                 let result = TerminalModelCheckpoint::capture(
-                    instance_id, output_sequence, &model, compatibility_replay.snapshot(),
+                    instance_id,
+                    output_sequence,
+                    &model,
+                    compatibility_replay.snapshot(),
                     retained_checkpoint.as_ref(),
                 );
                 let _ = response.send(result);

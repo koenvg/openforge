@@ -58,7 +58,9 @@ pub enum Command {
         operation: OperationId,
         phase: crate::ReplacementPhase,
     },
-    ReplacementStatus { operation: OperationId },
+    ReplacementStatus {
+        operation: OperationId,
+    },
     RegisterSidecar {
         controller: Controller,
         endpoint: Option<crate::SidecarEndpoint>,

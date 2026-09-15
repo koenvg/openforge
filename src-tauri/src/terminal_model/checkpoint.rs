@@ -39,17 +39,32 @@ pub(crate) struct TerminalModelCheckpoint {
     pub(super) continuation: Vec<u8>,
 }
 impl TerminalModelCheckpoint {
-    pub(crate) fn instance_id(&self) -> u64 { self.instance_id }
+    #[allow(dead_code, reason = "Used by the daemon's shared-source build")]
+    pub(crate) fn instance_id(&self) -> u64 {
+        self.instance_id
+    }
+    #[allow(dead_code, reason = "Used by the daemon's shared-source build")]
     pub(crate) fn retained_bytes(&self) -> usize {
-        self.model.len().saturating_add(self.compatibility_replay.len())
+        self.model
+            .len()
+            .saturating_add(self.compatibility_replay.len())
             .saturating_add(self.continuation.len())
-            .saturating_add(self.changes.iter().map(RetainedChange::size).fold(0, usize::saturating_add))
+            .saturating_add(
+                self.changes
+                    .iter()
+                    .map(RetainedChange::size)
+                    .fold(0, usize::saturating_add),
+            )
     }
 
     /// Decode and exercise presentation privately, without starting an owner worker
     /// or emitting any of the saved model's already-delivered protocol replies.
+    #[allow(dead_code, reason = "Used by the daemon's shared-source build")]
     pub(crate) fn validate_for_image(&self) -> Result<(), String> {
-        self.decode()?.format_portable_vt().map(|_| ()).map_err(|error| error.to_string())
+        self.decode()?
+            .format_portable_vt()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 
     pub(super) fn capture(
@@ -67,7 +82,9 @@ impl TerminalModelCheckpoint {
                 model: model_bytes,
                 changes: Vec::new(),
                 compatibility_replay: Vec::new(),
-                continuation: model.parser_continuation().map_err(|error| error.to_string())?,
+                continuation: model
+                    .parser_continuation()
+                    .map_err(|error| error.to_string())?,
             },
             Err(error @ TerminalModelError::ContinuationUnavailable) => {
                 retained.ok_or_else(|| error.to_string())?.clone()
@@ -86,17 +103,23 @@ impl TerminalModelCheckpoint {
         model: &GhosttyTerminalModel,
         change: impl FnOnce() -> RetainedChange,
     ) {
-        let Some(checkpoint) = retained.as_mut() else { return; };
-        if !matches!(model.ensure_snapshot_continuation_available(), Err(TerminalModelError::ContinuationUnavailable)) {
+        let Some(checkpoint) = retained.as_mut() else {
+            return;
+        };
+        if !matches!(
+            model.ensure_snapshot_continuation_available(),
+            Err(TerminalModelError::ContinuationUnavailable)
+        ) {
             *retained = None;
             return;
         }
         let change = change();
         let total: usize = checkpoint.changes.iter().map(RetainedChange::size).sum();
-        let continuation_size = checkpoint.continuation.len() + match &change {
-            RetainedChange::Feed { bytes } => bytes.len(),
-            RetainedChange::Resize { .. } => 0,
-        };
+        let continuation_size = checkpoint.continuation.len()
+            + match &change {
+                RetainedChange::Feed { bytes } => bytes.len(),
+                RetainedChange::Resize { .. } => 0,
+            };
         if checkpoint.changes.len() >= MAX_RETAINED_CHANGES
             || total.saturating_add(change.size()) > MAX_SNAPSHOT_CONTINUATION_BYTES
             || continuation_size > MAX_SNAPSHOT_CONTINUATION_BYTES
@@ -119,7 +142,8 @@ impl TerminalModelCheckpoint {
             match change {
                 RetainedChange::Feed { bytes } => model.feed(bytes),
                 RetainedChange::Resize { cols, rows } => model.resize(*cols, *rows),
-            }.map_err(|error| error.to_string())?;
+            }
+            .map_err(|error| error.to_string())?;
             model.take_protocol_replies();
         }
         Ok(model)
@@ -136,7 +160,11 @@ impl TerminalModelCheckpoint {
             || self.compatibility_replay.len() > MAX_SNAPSHOT_CONTINUATION_BYTES
             || self.continuation.len() > MAX_SNAPSHOT_CONTINUATION_BYTES
             || self.changes.len() > MAX_RETAINED_CHANGES
-            || self.changes.iter().map(RetainedChange::size).try_fold(0usize, usize::checked_add)
+            || self
+                .changes
+                .iter()
+                .map(RetainedChange::size)
+                .try_fold(0usize, usize::checked_add)
                 .is_none_or(|bytes| bytes > MAX_SNAPSHOT_CONTINUATION_BYTES)
         {
             return Err("terminal checkpoint budget exceeded".into());

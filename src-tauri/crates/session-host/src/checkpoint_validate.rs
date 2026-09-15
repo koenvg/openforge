@@ -48,14 +48,18 @@ impl Checkpoint {
                 }
                 Mutation::Io(request) => {
                     identity(&request.pty)?;
-                    if request.sequence == 0 || !ordered.insert((request.pty.instance, request.sequence)) {
+                    if request.sequence == 0
+                        || !ordered.insert((request.pty.instance, request.sequence))
+                    {
                         return Err(invalid());
                     }
                     let last = expected_sequences.entry(request.pty.instance).or_default();
                     *last = (*last).max(request.sequence);
                     *sequence_counts.entry(request.pty.instance).or_default() += 1;
                     match &request.action {
-                        IoAction::Write(bytes) if bytes.len() <= MAX_REQUEST_BYTES => bytes.len() + 512,
+                        IoAction::Write(bytes) if bytes.len() <= MAX_REQUEST_BYTES => {
+                            bytes.len() + 512
+                        }
                         IoAction::Resize { columns, rows } => {
                             validate_geometry(*columns, *rows).map_err(|_| invalid())?;
                             512
@@ -69,10 +73,14 @@ impl Checkpoint {
                 (Mutation::Terminate(_) | Mutation::Io(_), Ok(Receipt::Done)) | (_, Err(_)) => {}
                 _ => return Err(invalid()),
             }
-            retained_bytes = retained_bytes.checked_add(bytes).ok_or(HostError::Capacity)?;
+            retained_bytes = retained_bytes
+                .checked_add(bytes)
+                .ok_or(HostError::Capacity)?;
             if !matches!(request, Mutation::Terminate(_)) {
                 ordinary_operations += 1;
-                ordinary_bytes = ordinary_bytes.checked_add(bytes).ok_or(HostError::Capacity)?;
+                ordinary_bytes = ordinary_bytes
+                    .checked_add(bytes)
+                    .ok_or(HostError::Capacity)?;
             }
         }
         if expected_sequences != sequence_counts
@@ -100,7 +108,11 @@ impl Checkpoint {
                 || session.session_key.is_empty()
                 || session.session_key.len() > 256
                 || session.next_io_sequence
-                    != input_sequences.get(&session.pty.instance).copied().unwrap_or(0).checked_add(1)
+                    != input_sequences
+                        .get(&session.pty.instance)
+                        .copied()
+                        .unwrap_or(0)
+                        .checked_add(1)
             {
                 return Err(invalid());
             }

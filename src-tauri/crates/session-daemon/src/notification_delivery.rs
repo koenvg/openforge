@@ -41,22 +41,24 @@ pub(crate) async fn run(
         })
         .await;
         let result = match next {
-            Ok(Ok(Some(delivery))) => match send(&endpoint, &delivery, &registration, &admission).await {
-                Ok(receipt) => {
-                    let journal = Arc::clone(&journal);
-                    let write_admission = Arc::clone(&admission);
-                    tokio::task::spawn_blocking(move || {
-                        let _admission = write_admission;
-                        journal
-                            .lock()
-                            .map_err(|_| Error::OutcomeUnknown)?
-                            .acknowledge(&receipt)
-                    })
-                    .await
-                    .unwrap_or(Err(Error::OutcomeUnknown))
+            Ok(Ok(Some(delivery))) => {
+                match send(&endpoint, &delivery, &registration, &admission).await {
+                    Ok(receipt) => {
+                        let journal = Arc::clone(&journal);
+                        let write_admission = Arc::clone(&admission);
+                        tokio::task::spawn_blocking(move || {
+                            let _admission = write_admission;
+                            journal
+                                .lock()
+                                .map_err(|_| Error::OutcomeUnknown)?
+                                .acknowledge(&receipt)
+                        })
+                        .await
+                        .unwrap_or(Err(Error::OutcomeUnknown))
+                    }
+                    Err(error) => Err(error),
                 }
-                Err(error) => Err(error),
-            },
+            }
             Ok(Ok(None)) => {
                 drop(admission);
                 tokio::time::sleep(Duration::from_millis(250)).await;

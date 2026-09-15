@@ -50,7 +50,10 @@ pub(crate) fn start(
             runtime.block_on(async move {
                 let listener = match tokio::net::TcpListener::from_std(listener) {
                     Ok(listener) => listener,
-                    Err(error) => { let _ = ready.send(Err(openforge_session_client::runtime::io_error(error))); return; }
+                    Err(error) => {
+                        let _ = ready.send(Err(openforge_session_client::runtime::io_error(error)));
+                        return;
+                    }
                 };
                 let notifications = Arc::new(std::sync::Mutex::new(notifications));
                 tokio::spawn(crate::notification_delivery::run(
@@ -68,7 +71,9 @@ pub(crate) fn start(
                         gate,
                     });
                 let permits = Arc::new(Semaphore::new(32));
-                if ready.send(Ok(())).is_err() { return; }
+                if ready.send(Ok(())).is_err() {
+                    return;
+                }
                 loop {
                     let Ok((stream, _)) = listener.accept().await else {
                         break;
@@ -91,7 +96,9 @@ pub(crate) fn start(
             })
         })
         .map_err(openforge_session_client::runtime::io_error)?;
-    readiness.recv_timeout(Duration::from_secs(2)).map_err(|_| openforge_session_protocol::Error::RecoveryUnavailable)?
+    readiness
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| openforge_session_protocol::Error::RecoveryUnavailable)?
 }
 
 // A single bounded rejection slot, not a queue of domain requests.
@@ -120,7 +127,10 @@ fn unknown() -> Response {
 
 async fn forward(State(state): State<GatewayState>, request: Request) -> Response {
     let Some(admission) = state.gate.enter() else {
-        return rejected(StatusCode::SERVICE_UNAVAILABLE, "daemon replacement in progress; request not executed");
+        return rejected(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "daemon replacement in progress; request not executed",
+        );
     };
     let admission = Arc::new(admission);
     if request

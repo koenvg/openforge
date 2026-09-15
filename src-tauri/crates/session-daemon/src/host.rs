@@ -60,7 +60,10 @@ impl Host {
         self.backend.poll()
     }
     pub fn validate_replacement_controller(&self, controller: &Controller) -> Result<(), Error> {
-        self.runtime.block_on(self.host.reconcile(controller)).map(|_| ()).map_err(Error::from)
+        self.runtime
+            .block_on(self.host.reconcile(controller))
+            .map(|_| ())
+            .map_err(Error::from)
     }
     fn inventory(&self, controller: &Controller) -> Result<Inventory, Error> {
         let hosted = self.runtime.block_on(self.host.reconcile(controller))?;
@@ -93,7 +96,9 @@ impl Host {
     }
     pub fn handle(&mut self, command: Command) -> Result<Response, Error> {
         match command {
-            Command::Capabilities | Command::Replacement { .. } | Command::ReplacementStatus { .. } => Err(Error::UnsupportedReplacement),
+            Command::Capabilities
+            | Command::Replacement { .. }
+            | Command::ReplacementStatus { .. } => Err(Error::UnsupportedReplacement),
             Command::RegisterSidecar {
                 controller,
                 endpoint,

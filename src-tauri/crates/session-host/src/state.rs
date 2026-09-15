@@ -67,9 +67,13 @@ impl HostState {
         &self.lifetime
     }
     /// Installation established by the first controller connection.
-    pub fn installation(&self) -> Option<&InstallationId> { self.installation.as_ref() }
+    pub fn installation(&self) -> Option<&InstallationId> {
+        self.installation.as_ref()
+    }
     /// Retained identities let a resource-owning adapter validate a combined checkpoint.
-    pub fn retained_sessions(&self) -> impl ExactSizeIterator<Item = &HostedSession> { self.sessions.values() }
+    pub fn retained_sessions(&self) -> impl ExactSizeIterator<Item = &HostedSession> {
+        self.sessions.values()
+    }
     pub fn capacity(&self) -> HostCapacity {
         HostCapacity {
             operations: self.operations.len(),

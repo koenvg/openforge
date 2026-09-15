@@ -11,11 +11,18 @@ struct ResourceState {
 }
 impl HostBackend for Resources {
     async fn inventory(&self) -> Result<Vec<BackendSession>, HostError> {
-        Ok(self.0.lock().unwrap().sessions.iter().map(|session| BackendSession {
-            instance: session.instance,
-            session_key: session.session_key.clone(),
-            state: session.state,
-        }).collect())
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .sessions
+            .iter()
+            .map(|session| BackendSession {
+                instance: session.instance,
+                session_key: session.session_key.clone(),
+                state: session.state,
+            })
+            .collect())
     }
     async fn spawn_prepared(&self, request: &SpawnRequest) -> Result<PtyInstanceId, HostError> {
         let mut resources = self.0.lock().unwrap();
@@ -51,7 +58,10 @@ impl HostBackend for Resources {
 }
 fn request() -> SpawnRequest {
     SpawnRequest {
-        owner: TerminalOwner::Shell { task_id: "checkpoint".into(), index: Some(0) },
+        owner: TerminalOwner::Shell {
+            task_id: "checkpoint".into(),
+            index: Some(0),
+        },
         command: PreparedCommand {
             program: "/bin/sh".into(),
             args: vec![],
@@ -67,22 +77,43 @@ fn operation(value: &str) -> OperationId {
     OperationId::parse(value).unwrap()
 }
 fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap()
+    tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap()
 }
 
 #[test]
 fn corrupt_checkpoint_cannot_reset_receipts_counters_identity_or_capacity() {
     let bytes = runtime().block_on(async {
         let installation = InstallationId::parse("validated-installation").unwrap();
-        let state = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(HostLimits {
-            retained_sessions: 4, ..HostLimits::default()
-        })));
-        let host = InProcessHost::new(Resources::default(), installation.clone(), Arc::clone(&state));
+        let state = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(
+            HostLimits {
+                retained_sessions: 4,
+                ..HostLimits::default()
+            },
+        )));
+        let host = InProcessHost::new(
+            Resources::default(),
+            installation.clone(),
+            Arc::clone(&state),
+        );
         let controller = host.connect(&installation).await.unwrap().controller;
-        let pty = host.spawn(&controller, operation("spawn"), request()).await.unwrap();
-        host.io(&controller, operation("input"), IoRequest {
-            pty, sequence: 1, action: IoAction::Write(b"retained".to_vec()),
-        }).await.unwrap();
+        let pty = host
+            .spawn(&controller, operation("spawn"), request())
+            .await
+            .unwrap();
+        host.io(
+            &controller,
+            operation("input"),
+            IoRequest {
+                pty,
+                sequence: 1,
+                action: IoAction::Write(b"retained".to_vec()),
+            },
+        )
+        .await
+        .unwrap();
         let bytes = state.lock().await.checkpoint().unwrap();
         bytes
     });
@@ -113,10 +144,19 @@ fn corrupt_checkpoint_cannot_reset_receipts_counters_identity_or_capacity() {
         cases.push((path.into(), corrupt));
     }
     for (name, corrupt) in cases {
-        assert!(HostState::restore_checkpoint(&serde_json::to_vec(&corrupt).unwrap()).is_err(), "accepted {name}");
+        assert!(
+            HostState::restore_checkpoint(&serde_json::to_vec(&corrupt).unwrap()).is_err(),
+            "accepted {name}"
+        );
     }
-    assert!(matches!(HostState::restore_checkpoint(&vec![b' '; MAX_HOST_CHECKPOINT_BYTES + 1]), Err(HostError::Capacity)));
-    assert!(HostState::restore_checkpoint(&bytes).is_ok(), "valid original remains usable");
+    assert!(matches!(
+        HostState::restore_checkpoint(&vec![b' '; MAX_HOST_CHECKPOINT_BYTES + 1]),
+        Err(HostError::Capacity)
+    ));
+    assert!(
+        HostState::restore_checkpoint(&bytes).is_ok(),
+        "valid original remains usable"
+    );
 }
 
 #[test]
@@ -124,41 +164,110 @@ fn restored_ledger_preserves_receipts_input_order_and_lifetime_while_fencing_old
     runtime().block_on(async {
         let installation = InstallationId::parse("checkpoint-installation").unwrap();
         let resources = Resources::default();
-        let ledger = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(HostLimits {
-            live_sessions: 2,
-            retained_sessions: 4,
-            exit_history: 4,
-            ..HostLimits::default()
-        })));
+        let ledger = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(
+            HostLimits {
+                live_sessions: 2,
+                retained_sessions: 4,
+                exit_history: 4,
+                ..HostLimits::default()
+            },
+        )));
         let host = InProcessHost::new(resources.clone(), installation.clone(), Arc::clone(&ledger));
         let old = host.connect(&installation).await.unwrap().controller;
-        let pty = host.spawn(&old, operation("spawn"), request()).await.unwrap();
-        let first = IoRequest { pty: pty.clone(), sequence: 1, action: IoAction::Write(b"once".to_vec()) };
-        let uncertain = IoRequest { pty: pty.clone(), sequence: 2, action: IoAction::Write(b"unknown".to_vec()) };
-        host.io(&old, operation("first"), first.clone()).await.unwrap();
-        assert_eq!(host.io(&old, operation("uncertain"), uncertain.clone()).await, Err(HostError::OutcomeUnknown));
+        let pty = host
+            .spawn(&old, operation("spawn"), request())
+            .await
+            .unwrap();
+        let first = IoRequest {
+            pty: pty.clone(),
+            sequence: 1,
+            action: IoAction::Write(b"once".to_vec()),
+        };
+        let uncertain = IoRequest {
+            pty: pty.clone(),
+            sequence: 2,
+            action: IoAction::Write(b"unknown".to_vec()),
+        };
+        host.io(&old, operation("first"), first.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            host.io(&old, operation("uncertain"), uncertain.clone())
+                .await,
+            Err(HostError::OutcomeUnknown)
+        );
         let bytes = ledger.lock().await.checkpoint().unwrap();
         let restored = HostState::restore_checkpoint(&bytes).unwrap();
         assert_eq!(restored.lifetime(), &pty.lifetime);
         let restored = Arc::new(tokio::sync::Mutex::new(restored));
-        let resumed = InProcessHost::new(resources.clone(), installation.clone(), Arc::clone(&restored));
-        assert_eq!(resumed.reconcile(&old).await, Err(HostError::StaleController));
+        let resumed = InProcessHost::new(
+            resources.clone(),
+            installation.clone(),
+            Arc::clone(&restored),
+        );
+        assert_eq!(
+            resumed.reconcile(&old).await,
+            Err(HostError::StaleController)
+        );
         let current = resumed.connect(&installation).await.unwrap().controller;
-        assert_eq!(resumed.spawn(&current, operation("spawn"), request()).await.unwrap(), pty);
-        resumed.io(&current, operation("first"), first).await.unwrap();
-        assert_eq!(resumed.io(&current, operation("uncertain"), uncertain).await, Err(HostError::OutcomeUnknown));
-        assert_eq!(resumed.reconcile(&current).await.unwrap()[0].next_io_sequence, Some(3));
-        assert_eq!(resumed.io(&current, operation("gap"), IoRequest {
-            pty: pty.clone(), sequence: 4, action: IoAction::Write(b"gap".to_vec()),
-        }).await, Err(HostError::OutOfOrder));
-        resumed.io(&current, operation("next"), IoRequest {
-            pty: pty.clone(), sequence: 3, action: IoAction::Write(b"next".to_vec()),
-        }).await.unwrap();
+        assert_eq!(
+            resumed
+                .spawn(&current, operation("spawn"), request())
+                .await
+                .unwrap(),
+            pty
+        );
+        resumed
+            .io(&current, operation("first"), first)
+            .await
+            .unwrap();
+        assert_eq!(
+            resumed
+                .io(&current, operation("uncertain"), uncertain)
+                .await,
+            Err(HostError::OutcomeUnknown)
+        );
+        assert_eq!(
+            resumed.reconcile(&current).await.unwrap()[0].next_io_sequence,
+            Some(3)
+        );
+        assert_eq!(
+            resumed
+                .io(
+                    &current,
+                    operation("gap"),
+                    IoRequest {
+                        pty: pty.clone(),
+                        sequence: 4,
+                        action: IoAction::Write(b"gap".to_vec()),
+                    }
+                )
+                .await,
+            Err(HostError::OutOfOrder)
+        );
+        resumed
+            .io(
+                &current,
+                operation("next"),
+                IoRequest {
+                    pty: pty.clone(),
+                    sequence: 3,
+                    action: IoAction::Write(b"next".to_vec()),
+                },
+            )
+            .await
+            .unwrap();
         let mut conflict = request();
         conflict.columns = 100;
-        assert_eq!(resumed.spawn(&current, operation("spawn"), conflict).await, Err(HostError::OperationConflict));
+        assert_eq!(
+            resumed.spawn(&current, operation("spawn"), conflict).await,
+            Err(HostError::OperationConflict)
+        );
         assert_eq!(resources.0.lock().unwrap().next, 1);
-        assert_eq!(resources.0.lock().unwrap().writes, [b"once".to_vec(), b"unknown".to_vec(), b"next".to_vec()]);
+        assert_eq!(
+            resources.0.lock().unwrap().writes,
+            [b"once".to_vec(), b"unknown".to_vec(), b"next".to_vec()]
+        );
         let second = restored.lock().await.checkpoint().unwrap();
         let twice = HostState::restore_checkpoint(&second).unwrap();
         assert_eq!(twice.lifetime(), &pty.lifetime);

@@ -1,6 +1,6 @@
 //! Maintenance operations use their own bounded job identities across prepare/commit/abort.
-pub use openforge_session_host::ReplacementPhase;
 use crate::OperationId;
+pub use openforge_session_host::ReplacementPhase;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,7 +12,12 @@ pub struct Capabilities {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ReplacementStage { Preflight, Checkpoint, Exec, Initialization }
+pub enum ReplacementStage {
+    Preflight,
+    Checkpoint,
+    Exec,
+    Initialization,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReplacementState {

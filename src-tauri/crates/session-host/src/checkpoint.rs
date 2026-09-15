@@ -86,20 +86,28 @@ impl HostState {
     /// # Errors
     /// Refuses oversized or unrepresentable state without changing the serving ledger.
     pub fn checkpoint(&self) -> Result<Vec<u8>, HostError> {
-        let operations = self.operations.iter().map(|(operation, recorded)| {
-            let result = match &recorded.result {
-                Ok(receipt) => Ok(receipt.clone()),
-                Err(error) => Err(Failure::try_from(error)?),
-            };
-            Ok((operation.clone(), recorded.request.clone(), result))
-        }).collect::<Result<Vec<_>, HostError>>()?;
+        let operations = self
+            .operations
+            .iter()
+            .map(|(operation, recorded)| {
+                let result = match &recorded.result {
+                    Ok(receipt) => Ok(receipt.clone()),
+                    Err(error) => Err(Failure::try_from(error)?),
+                };
+                Ok((operation.clone(), recorded.request.clone(), result))
+            })
+            .collect::<Result<Vec<_>, HostError>>()?;
         let checkpoint = Checkpoint {
             format: FORMAT,
             installation: self.installation.clone(),
             lifetime: self.lifetime.clone(),
             generation: self.generation,
             sessions: self.sessions.values().cloned().collect(),
-            input_sequences: self.input_sequences.iter().map(|(id, sequence)| (*id, *sequence)).collect(),
+            input_sequences: self
+                .input_sequences
+                .iter()
+                .map(|(id, sequence)| (*id, *sequence))
+                .collect(),
             operations,
             retained_bytes: self.retained_bytes,
             limits: self.limits,
@@ -119,18 +127,35 @@ impl HostState {
         if bytes.len() > MAX_HOST_CHECKPOINT_BYTES {
             return Err(HostError::Capacity);
         }
-        let checkpoint: Checkpoint = serde_json::from_slice(bytes)
-            .map_err(|_| HostError::UnsupportedReplacement)?;
+        let checkpoint: Checkpoint =
+            serde_json::from_slice(bytes).map_err(|_| HostError::UnsupportedReplacement)?;
         checkpoint.validate()?;
         Ok(Self {
             installation: checkpoint.installation,
             lifetime: checkpoint.lifetime,
-            generation: checkpoint.generation.checked_add(1).ok_or(HostError::Capacity)?,
-            sessions: checkpoint.sessions.into_iter().map(|session| (session.pty.instance, session)).collect(),
+            generation: checkpoint
+                .generation
+                .checked_add(1)
+                .ok_or(HostError::Capacity)?,
+            sessions: checkpoint
+                .sessions
+                .into_iter()
+                .map(|session| (session.pty.instance, session))
+                .collect(),
             input_sequences: checkpoint.input_sequences.into_iter().collect(),
-            operations: checkpoint.operations.into_iter().map(|(id, request, result)| {
-                (id, RecordedOperation { request, result: result.map_err(HostError::from) })
-            }).collect(),
+            operations: checkpoint
+                .operations
+                .into_iter()
+                .map(|(id, request, result)| {
+                    (
+                        id,
+                        RecordedOperation {
+                            request,
+                            result: result.map_err(HostError::from),
+                        },
+                    )
+                })
+                .collect(),
             retained_bytes: checkpoint.retained_bytes,
             limits: checkpoint.limits,
         })
