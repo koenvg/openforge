@@ -98,39 +98,30 @@ fn claude_lifecycle_kind_from_event(
     }
 }
 
-fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
-    match event_type {
-        "user-prompt-submit" => Some("user-prompt-submit"),
-        "pre-tool-use" => Some("pre-tool-use"),
-        "post-tool-use" => Some("post-tool-use"),
-        "stop" => Some("stop"),
-        "session-end" => Some("session-end"),
-        "notification-permission" => Some("notification-permission"),
-        _ => None,
-    }
-}
-
-fn lifecycle_hook_command(port: u16, event_type: &str, _include_tool_name: bool) -> String {
+/// `>/dev/null` guards the command rather than the JavaScript inside it: Claude reads
+/// `PreToolUse` stdout as a permission decision, and the embedded hook writing only to
+/// stderr is not a guarantee the generator can make.
+fn lifecycle_hook_command(port: u16, event_type: &str) -> String {
     let Some(kind) = claude_lifecycle_kind_from_event(event_type) else {
         return String::new();
     };
-    let Some(endpoint) = lifecycle_hook_endpoint(event_type) else {
-        return String::new();
-    };
-    let stable = crate::notification_hooks::shell_command("claude-code", kind, event_type, None);
-    format!(
-        "if [ -n \"$OPENFORGE_AGENT_CONFIG\" ]; then {stable}; else curl -s -o /dev/null -X POST 'http://127.0.0.1:{port}/hooks/{endpoint}?task_id='\"$OPENFORGE_TASK_ID\"'&pty_instance_id='\"$OPENFORGE_PTY_INSTANCE_ID\"'&session_id='\"$CLAUDE_SESSION_ID\" -H 'Content-Type: application/json' --data-binary @-; fi "
-    )
+    let legacy_url = format!("http://127.0.0.1:{port}/hooks/{event_type}");
+    let report = crate::notification_hooks::shell_command(
+        "claude-code",
+        kind,
+        event_type,
+        Some(&legacy_url),
+    );
+    format!("{report} >/dev/null")
 }
 
 fn build_hooks_json(port: u16) -> Value {
-    let user_prompt_submit_cmd = lifecycle_hook_command(port, "user-prompt-submit", false);
-    let pre_tool_use_cmd = lifecycle_hook_command(port, "pre-tool-use", true);
-    let post_tool_use_cmd = lifecycle_hook_command(port, "post-tool-use", true);
-    let stop_cmd = lifecycle_hook_command(port, "stop", false);
-    let session_end_cmd = lifecycle_hook_command(port, "session-end", false);
-    let notification_permission_cmd =
-        lifecycle_hook_command(port, "notification-permission", false);
+    let user_prompt_submit_cmd = lifecycle_hook_command(port, "user-prompt-submit");
+    let pre_tool_use_cmd = lifecycle_hook_command(port, "pre-tool-use");
+    let post_tool_use_cmd = lifecycle_hook_command(port, "post-tool-use");
+    let stop_cmd = lifecycle_hook_command(port, "stop");
+    let session_end_cmd = lifecycle_hook_command(port, "session-end");
+    let notification_permission_cmd = lifecycle_hook_command(port, "notification-permission");
 
     json!({
         "hooks": {
@@ -300,19 +291,6 @@ mod tests {
     }
 
     #[test]
-    fn test_curl_commands_contain_openforge_env_vars() {
-        let json = build_hooks_json(17422);
-        let pre_tool_use_cmd = json["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap();
-        assert!(pre_tool_use_cmd.contains("$CLAUDE_SESSION_ID"));
-        assert!(pre_tool_use_cmd.contains("$OPENFORGE_TASK_ID"));
-        assert!(!pre_tool_use_cmd.contains("$CLAUDE_TASK_ID"));
-        assert!(pre_tool_use_cmd.contains("$OPENFORGE_PTY_INSTANCE_ID"));
-        assert!(pre_tool_use_cmd.contains("--data-binary @-"));
-    }
-
-    #[test]
     fn test_file_creation() {
         let temp_dir = tempdir().unwrap();
 
@@ -418,83 +396,37 @@ mod tests {
     }
 
     #[test]
-    fn test_hooks_settings_urls_match_http_server_port() {
+    fn claude_hook_commands_are_exactly_the_reporter_invocation() {
         let port = 54321u16;
         let json = build_hooks_json(port);
 
-        let hook_entries = [
-            ("UserPromptSubmit", 0, "user-prompt-submit"),
-            ("PreToolUse", 0, "pre-tool-use"),
-            ("PostToolUse", 0, "post-tool-use"),
-            ("Stop", 0, "stop"),
-            ("SessionEnd", 0, "session-end"),
-            ("Notification", 0, "notification-permission"),
-        ];
-
-        for (hook_key, idx, expected_event_type) in &hook_entries {
-            let cmd = json["hooks"][hook_key][idx]["hooks"][0]["command"]
+        for (hook_key, event_type, kind) in [
+            ("UserPromptSubmit", "user-prompt-submit", "became_busy"),
+            ("PreToolUse", "pre-tool-use", "became_busy"),
+            ("PostToolUse", "post-tool-use", "became_busy"),
+            ("Stop", "stop", "ended"),
+            ("SessionEnd", "session-end", "ended"),
+            (
+                "Notification",
+                "notification-permission",
+                "requested_permission",
+            ),
+        ] {
+            let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
                 .as_str()
-                .unwrap_or_else(|| panic!("Missing command for {}[{}]", hook_key, idx));
+                .unwrap_or_else(|| panic!("Missing command for {hook_key}"));
+            let (prefix, rest) = cmd.split_once("node -e '").expect(cmd);
+            let (_embedded_source, arguments) = rest.split_once("' ").expect(cmd);
 
-            assert!(
-                cmd.contains(&format!("127.0.0.1:{}", port)),
-                "{}[{}] command should use port {}, got: {}",
-                hook_key,
-                idx,
-                port,
-                cmd
-            );
-            assert!(
-                cmd.contains(&format!("/hooks/{}", expected_event_type)),
-                "{}[{}] command should POST to the event-specific Claude hook endpoint, got: {}",
-                hook_key,
-                idx,
-                cmd
-            );
-            assert!(
-                cmd.contains("task_id=") && cmd.contains("session_id="),
-                "{}[{}] command should include task and Claude session identity, got: {}",
-                hook_key,
-                idx,
-                cmd
-            );
-            assert!(
-                cmd.contains("pty_instance_id="),
-                "{}[{}] command should include PTY instance identity, got: {}",
-                hook_key,
-                idx,
-                cmd
-            );
-            assert!(
-                cmd.contains("--data-binary @-"),
-                "{}[{}] command should forward Claude hook stdin JSON, got: {}",
-                hook_key,
-                idx,
-                cmd
-            );
-            assert!(
-                cmd.contains("-o /dev/null"),
-                "{}[{}] command must not write OpenForge hook responses into Claude stdout",
-                hook_key,
-                idx
-            );
-            assert!(
-                !cmd.contains("Task Display Title") && !cmd.contains("Return only JSON"),
-                "{}[{}] command must not inject title-generation instructions into the live Claude session",
-                hook_key,
-                idx
-            );
-            assert!(
-                cmd.contains("curl"),
-                "{}[{}] command should use curl",
-                hook_key,
-                idx
-            );
-            assert!(
-                cmd.contains("-X POST"),
-                "{}[{}] command should be a POST",
-                hook_key,
-                idx
+            assert_eq!(prefix, "", "{hook_key} command must have no shell branch");
+            assert_eq!(
+                arguments,
+                format!(
+                    "'claude-code' '{kind}' '{event_type}' \
+                     'http://127.0.0.1:{port}/hooks/{event_type}' >/dev/null"
+                ),
+                "{hook_key} command is pinned exactly so it can name no environment variable \
+                 and write nothing to stdout"
             );
         }
     }
