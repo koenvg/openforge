@@ -160,6 +160,10 @@ export function useSelectedPrReview(
    */
   function removeReviewPr(pr: ReviewPullRequest): void {
     pullRequests.current = pullRequests.current.filter(candidate => candidate.id !== pr.id)
+    // Discard the persisted AI review session too; it is useless once the PR is
+    // gone. Best-effort and independent of the removal itself.
+    githubSync.deleteReviewSession({ prId: pr.id })
+      .catch(cause => console.error('Failed to delete review session:', cause))
     githubSync.removeReviewPullRequest({ prId: pr.id })
       .catch(cause => console.error('Failed to remove PR from list:', cause))
   }

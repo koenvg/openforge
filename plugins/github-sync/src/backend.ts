@@ -41,6 +41,7 @@ import {
   writeAiThreads,
 } from './lib/aiThreadStore'
 import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
+import { cleanupReviewSession, supersedeReviewSession } from './lib/reviewSessionLifecycle'
 import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
 import {
@@ -210,6 +211,18 @@ export default defineBackendPlugin({
       },
     }))
 
+    // Called when a PR leaves the review list: drop the persisted review session
+    // so its transcript stops taking up disk. Best-effort; never blocks removal.
+    context.subscriptions.add(openforge.backend.registerMethod<{ prId: number }, void>('deleteReviewSession', {
+      handler: async (request) => {
+        await cleanupReviewSession(openforge, {
+          prId: request.prId,
+          deleteSession: (sessionId) =>
+            invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
+        })
+      },
+    }))
+
     // Answer every unanswered thread in one repo-aware agent pass. Fire-and-forget:
     // mark the pending threads immediately (so the UI shows "thinking"), then run
     // the agent in the background and merge its answers back (poll from the UI).
@@ -253,6 +266,9 @@ export default defineBackendPlugin({
               repo: request.repoName,
               prNumber: request.prNumber,
               headSha: request.headSha,
+              // Resume the review's session so the agent recalls its own reasoning.
+              // Null for older reviews or non-Claude providers → clean one-shot.
+              resumeSessionId: walkthrough?.walkthrough_session_key ?? undefined,
               outputSchema: AI_ANSWERS_JSON_SCHEMA,
             })
             const answered = mapAnswersToThreads(result?.text ?? '', pending)
@@ -288,6 +304,16 @@ export default defineBackendPlugin({
         const sessionKey = randomUUID()
         const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: '' }
         await beginWalkthroughGeneration(openforge, params)
+
+        // Reuse this run's key as the Claude session id (see `persistSession`
+        // below), and drop any session recorded for an earlier commit of this PR.
+        await supersedeReviewSession(openforge, {
+          prId: request.reviewPrId,
+          headSha: request.headSha,
+          sessionKey,
+          deleteSession: (sessionId) =>
+            invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
+        })
 
         // Fetch diffs server-side so the trigger works without the UI having loaded files,
         // then compile the combined steps+review prompt here. The template itself is the
@@ -346,6 +372,9 @@ export default defineBackendPlugin({
               repo: request.repoName,
               prNumber: request.prNumber,
               headSha: request.headSha,
+              // Persist this run under `sessionKey` so a follow-up question can
+              // resume the review's reasoning instead of starting cold.
+              persistSession: true,
               // Only ask for coverage when the agent actually has a ticket to
               // judge against; otherwise the schema would force it to invent one.
               outputSchema: ticket

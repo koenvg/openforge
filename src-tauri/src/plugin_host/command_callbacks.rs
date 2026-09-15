@@ -101,6 +101,9 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "agentGenerateInRepo" => Ok(ResolvedGlobalCommand::agent_generate(
             "agent_generate_in_repo",
         )),
+        "deleteAgentSession" => Ok(ResolvedGlobalCommand::agent_generate(
+            "delete_agent_session",
+        )),
         "setJiraApiToken" => Ok(ResolvedGlobalCommand::jira("set_jira_api_token")),
         "clearJiraApiToken" => Ok(ResolvedGlobalCommand::jira("clear_jira_api_token")),
         "getJiraApiTokenStatus" => Ok(ResolvedGlobalCommand::jira("get_jira_api_token_status")),
@@ -196,6 +199,11 @@ mod tests {
             (
                 "openforge.agentGenerateInRepo",
                 "agent_generate_in_repo",
+                GlobalCommandHandler::AgentGenerate,
+            ),
+            (
+                "openforge.deleteAgentSession",
+                "delete_agent_session",
                 GlobalCommandHandler::AgentGenerate,
             ),
             (

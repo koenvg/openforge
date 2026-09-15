@@ -77,6 +77,8 @@ export interface GithubSyncPrReviewClient {
   markReviewPullRequestUnviewed(request: { prId: number }): Promise<void>
   /** Remove a PR from the review list (manual "Remove from list" action). */
   removeReviewPullRequest(request: { prId: number }): Promise<void>
+  /** Delete the persisted AI review session for a PR (paired with removal). */
+  deleteReviewSession(request: { prId: number }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
   getFileContent(request: FileContentRequest): Promise<string>
   getFileContentBase64(request: FileContentRequest): Promise<Base64FileContentResult>
@@ -162,6 +164,7 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
     markReviewPullRequestUnviewed: ({ prId }) => invokeBackend<void>(api, 'markReviewPrUnviewed', { prId }),
     removeReviewPullRequest: ({ prId }) => invokeBackend<void>(api, 'dismissReviewPr', { prId }),
+    deleteReviewSession: ({ prId }) => invokeBackend<void>(api, 'deleteReviewSession', { prId }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
     getFileContentBase64: (request) => invokeBackend<Base64FileContentResult>(api, 'getFileContentBase64', request),
