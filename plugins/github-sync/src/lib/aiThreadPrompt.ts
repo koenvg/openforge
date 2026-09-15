@@ -58,6 +58,7 @@ export function buildQuestionsPrompt(
   })
   return [
     'You are the author of this pull request, answering a reviewer\'s questions. You are running inside a checkout of the PR head — read any file and use git history to answer precisely and honestly. If a choice was arbitrary, say so.',
+    'The repository is freshly checked out in your current working directory. Ignore any file paths remembered from earlier in this session and re-read files relative to the current working directory.',
     '',
     'Answer EACH thread below. Respond with a single JSON object: { "answers": [ { "thread_id": "<id>", "body": "<markdown answer>" } ] }. Include one entry per thread_id. No prose outside the JSON.',
     '',

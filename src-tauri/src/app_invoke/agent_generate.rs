@@ -36,6 +36,21 @@ pub(super) enum ToolPolicy {
     ReadGitHistoryAndReviewCli,
 }
 
+/// How a repo-aware run relates to a persisted Claude session.
+///
+/// Only the `ReadGitHistoryAndReviewCli` policy consults this; the diff-only
+/// policy is self-contained and emits no session flags at all.
+enum SessionMode {
+    /// One-shot; keep no history (`--no-session-persistence`). Today's default.
+    OneShot,
+    /// Persist under a caller-chosen id so a later run can resume it
+    /// (`--session-id <id>`). Used by the PR review generation.
+    Persist { session_id: String },
+    /// Resume an existing session and fork it, leaving the original intact
+    /// (`--resume <id> --fork-session`). Used by review follow-up questions.
+    Resume { session_id: String },
+}
+
 /// The read + git-history + Review Thread CLI whitelist, passed as a single
 /// `--allowedTools` value.
 ///
@@ -200,6 +215,7 @@ pub(super) async fn handle_app_agent_generate_command(
                 None,
                 GENERATION_TIMEOUT_SECS,
                 None,
+                SessionMode::OneShot,
             )
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -223,6 +239,23 @@ pub(super) async fn handle_app_agent_generate_command(
             let model = payload_optional_string(&request.payload, "model")?;
             let output_schema = payload_optional_string(&request.payload, "outputSchema")?;
             let provider = resolve_generation_provider(state, &request.payload, &project_id)?;
+
+            // Session continuity: `persistSession` pins this run's Claude session
+            // to `sessionKey` so a follow-up can resume it; `resumeSessionId` forks
+            // an earlier review session. Absent both, the run stays a one-shot.
+            let persist_session = request
+                .payload
+                .get("persistSession")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let resume_session_id = payload_optional_string(&request.payload, "resumeSessionId")?;
+            let session_mode = match (resume_session_id, persist_session) {
+                (Some(id), _) => SessionMode::Resume { session_id: id },
+                (None, true) => SessionMode::Persist {
+                    session_id: session_key.clone(),
+                },
+                (None, false) => SessionMode::OneShot,
+            };
 
             // Bound concurrent repo-aware runs system-wide: extra callers wait here
             // for a permit rather than all spawning worktrees + agents at once. Held
@@ -275,6 +308,7 @@ pub(super) async fn handle_app_agent_generate_command(
                 credential
                     .as_ref()
                     .map(|credential| credential.config_path()),
+                session_mode,
             )
             .await;
             drop(credential);
@@ -291,6 +325,13 @@ pub(super) async fn handle_app_agent_generate_command(
                 .abort(&session_key)
                 .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
             json_value(serde_json::json!({ "aborted": true }))?
+        }
+        "delete_agent_session" => {
+            let session_id = payload_string(&request.payload, "sessionId")?;
+            delete_agent_session(&session_id)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            json_value(serde_json::json!({ "deleted": true }))?
         }
         _ => return Ok(None),
     };
@@ -328,6 +369,7 @@ async fn run_headless_generation(
     output_schema: Option<&str>,
     timeout_secs: u64,
     agent_config_path: Option<&Path>,
+    session_mode: SessionMode,
 ) -> Result<String, String> {
     // Only the repo-aware policy exposes personal skills; the diff-only path is
     // meant to be self-contained.
@@ -341,6 +383,7 @@ async fn run_headless_generation(
         tool_policy,
         output_schema,
         local_skills.as_deref(),
+        session_mode,
     )?;
 
     let env = crate::user_environment::user_environment();
@@ -430,6 +473,34 @@ fn repo_not_local_project_error(project_id: &str) -> String {
         "cannot generate a repo-aware walkthrough: project '{project_id}' has no local project \
          clone. Add this repository as a project to enable the walkthrough."
     )
+}
+
+/// Remove a persisted Claude session transcript by id. Sessions live under
+/// `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`; resume is global-by-id,
+/// so deletion is too — we scan the project dirs for a matching file. A missing
+/// file (or no `projects` dir yet) is success, so callers can fire this blindly.
+async fn delete_agent_session(session_id: &str) -> Result<(), String> {
+    let root = dirs::home_dir()
+        .ok_or_else(|| "could not resolve home directory".to_string())?
+        .join(".claude");
+    delete_agent_session_in(&root, session_id).await
+}
+
+async fn delete_agent_session_in(claude_root: &Path, session_id: &str) -> Result<(), String> {
+    let projects = claude_root.join("projects");
+    let target = format!("{session_id}.jsonl");
+    let mut entries = match tokio::fs::read_dir(&projects).await {
+        Ok(entries) => entries,
+        // No projects directory yet means nothing was ever persisted.
+        Err(_) => return Ok(()),
+    };
+    while let Ok(Some(dir)) = entries.next_entry().await {
+        let candidate = dir.path().join(&target);
+        if tokio::fs::try_exists(&candidate).await.unwrap_or(false) {
+            let _ = tokio::fs::remove_file(&candidate).await;
+        }
+    }
+    Ok(())
 }
 
 struct AgentProcess<'a> {
@@ -537,6 +608,7 @@ fn headless_command(
     tool_policy: &ToolPolicy,
     output_schema: Option<&str>,
     local_skills_plugin: Option<&Path>,
+    session_mode: SessionMode,
 ) -> Result<(&'static str, Vec<String>), String> {
     match provider {
         "claude-code" => {
@@ -566,8 +638,26 @@ fn headless_command(
                 //   approval, which in headless `--print` mode is a denial.
                 //   (`dontAsk` would auto-approve everything and is unsafe here.)
                 // - `--disallowedTools`: hard-remove the edit tools regardless.
-                // - `--no-session-persistence`: these one-shot runs keep no history.
-                args.push("--no-session-persistence".to_string());
+                // - session flags: a one-shot run keeps no history; a review run
+                //   persists under a pinned id so a follow-up can `--resume` it;
+                //   a follow-up forks that session so the original stays intact.
+                match &session_mode {
+                    SessionMode::OneShot => args.push("--no-session-persistence".to_string()),
+                    SessionMode::Persist { session_id } => {
+                        args.push("--session-id".to_string());
+                        args.push(session_id.clone());
+                    }
+                    SessionMode::Resume { session_id } => {
+                        args.push("--resume".to_string());
+                        args.push(session_id.clone());
+                        // Fork so the review session stays intact for the next
+                        // follow-up, and don't persist the fork: verified that
+                        // resume+fork+no-persist reads the original yet writes no
+                        // new transcript, so follow-ups leave no untracked residue.
+                        args.push("--fork-session".to_string());
+                        args.push("--no-session-persistence".to_string());
+                    }
+                }
                 args.push("--setting-sources".to_string());
                 args.push("project".to_string());
                 args.push("--permission-mode".to_string());
@@ -660,8 +750,15 @@ mod tests {
 
     #[test]
     fn claude_code_uses_print_mode_and_reads_stdin() {
-        let (binary, args) = headless_command("claude-code", None, &ToolPolicy::None, None, None)
-            .expect("supported");
+        let (binary, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::None,
+            None,
+            None,
+            SessionMode::OneShot,
+        )
+        .expect("supported");
         assert_eq!(binary, "claude");
         assert!(args.contains(&"--print".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
@@ -677,6 +774,7 @@ mod tests {
             &ToolPolicy::None,
             None,
             None,
+            SessionMode::OneShot,
         )
         .unwrap();
         let idx = args
@@ -688,15 +786,29 @@ mod tests {
 
     #[test]
     fn empty_model_is_not_forwarded() {
-        let (_, args) =
-            headless_command("claude-code", Some(""), &ToolPolicy::None, None, None).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            Some(""),
+            &ToolPolicy::None,
+            None,
+            None,
+            SessionMode::OneShot,
+        )
+        .unwrap();
         assert!(!args.iter().any(|a| a == "--model"));
     }
 
     #[test]
     fn unsupported_provider_returns_actionable_error() {
-        let err = headless_command("opencode", None, &ToolPolicy::None, None, None)
-            .expect_err("opencode not supported");
+        let err = headless_command(
+            "opencode",
+            None,
+            &ToolPolicy::None,
+            None,
+            None,
+            SessionMode::OneShot,
+        )
+        .expect_err("opencode not supported");
         assert!(err.contains("opencode"));
         assert!(err.contains("claude-code"));
     }
@@ -704,8 +816,15 @@ mod tests {
     #[test]
     fn none_policy_adds_no_tool_or_permission_flags() {
         // The existing diff-only caller must be unchanged: no tool/permission flags.
-        let (_, args) =
-            headless_command("claude-code", None, &ToolPolicy::None, None, None).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::None,
+            None,
+            None,
+            SessionMode::OneShot,
+        )
+        .unwrap();
         assert!(!args.iter().any(|a| a == "--allowedTools"));
         assert!(!args.iter().any(|a| a == "--disallowedTools"));
         assert!(!args.iter().any(|a| a == "--permission-mode"));
@@ -721,6 +840,7 @@ mod tests {
             &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
             None,
+            SessionMode::OneShot,
         )
         .unwrap();
         // Do NOT inherit the user's global permissions.allow (often Bash(*)/Write/
@@ -778,6 +898,7 @@ mod tests {
             &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
             Some(&plugin),
+            SessionMode::OneShot,
         )
         .unwrap();
 
@@ -807,6 +928,7 @@ mod tests {
                 &ToolPolicy::ReadGitHistoryAndReviewCli,
                 None,
                 None,
+                SessionMode::OneShot,
             );
             let err = result.expect_err("only claude-code is supported");
             assert!(err.contains("claude-code"), "provider {provider}: {err}");
@@ -816,7 +938,8 @@ mod tests {
             None,
             &ToolPolicy::ReadGitHistoryAndReviewCli,
             None,
-            None
+            None,
+            SessionMode::OneShot,
         )
         .is_ok());
     }
@@ -824,8 +947,15 @@ mod tests {
     #[test]
     fn none_policy_never_mounts_personal_skills() {
         let plugin = std::path::PathBuf::from("/tmp/openforge-local-skills-1");
-        let (_, args) =
-            headless_command("claude-code", None, &ToolPolicy::None, None, Some(&plugin)).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::None,
+            None,
+            Some(&plugin),
+            SessionMode::OneShot,
+        )
+        .unwrap();
         assert!(!args.iter().any(|a| a == "--plugin-dir"));
     }
 
@@ -865,8 +995,15 @@ mod tests {
     #[test]
     fn output_schema_switches_to_json_and_passes_schema() {
         let schema = r#"{"type":"object"}"#;
-        let (_, args) =
-            headless_command("claude-code", None, &ToolPolicy::None, Some(schema), None).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::None,
+            Some(schema),
+            None,
+            SessionMode::OneShot,
+        )
+        .unwrap();
         let fmt_idx = args
             .iter()
             .position(|a| a == "--output-format")
@@ -877,6 +1014,97 @@ mod tests {
             .position(|a| a == "--json-schema")
             .expect("schema flag");
         assert_eq!(args[schema_idx + 1], schema);
+    }
+
+    #[test]
+    fn one_shot_mode_disables_session_persistence() {
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
+            None,
+            None,
+            SessionMode::OneShot,
+        )
+        .unwrap();
+        assert!(args.iter().any(|a| a == "--no-session-persistence"));
+        assert!(!args.iter().any(|a| a == "--session-id"));
+        assert!(!args.iter().any(|a| a == "--resume"));
+        assert!(!args.iter().any(|a| a == "--fork-session"));
+    }
+
+    #[test]
+    fn persist_mode_pins_the_session_id_and_keeps_history() {
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
+            None,
+            None,
+            SessionMode::Persist {
+                session_id: "REVIEW-ID".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(!args.iter().any(|a| a == "--no-session-persistence"));
+        let idx = args
+            .iter()
+            .position(|a| a == "--session-id")
+            .expect("session-id present");
+        assert_eq!(args[idx + 1], "REVIEW-ID");
+    }
+
+    #[test]
+    fn resume_mode_forks_the_review_session() {
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadGitHistoryAndReviewCli,
+            None,
+            None,
+            SessionMode::Resume {
+                session_id: "REVIEW-ID".to_string(),
+            },
+        )
+        .unwrap();
+        let idx = args
+            .iter()
+            .position(|a| a == "--resume")
+            .expect("resume present");
+        assert_eq!(args[idx + 1], "REVIEW-ID");
+        assert!(args.iter().any(|a| a == "--fork-session"));
+        // The fork is not persisted: follow-ups read the original review session
+        // but write no new transcript, so nothing untracked is left on disk.
+        assert!(args.iter().any(|a| a == "--no-session-persistence"));
+        // The original review id is never re-pinned; we resume it, not recreate it.
+        assert!(!args.iter().any(|a| a == "--session-id"));
+    }
+
+    #[tokio::test]
+    async fn delete_agent_session_removes_matching_transcripts_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let proj = tmp.path().join("projects").join("encoded-cwd");
+        std::fs::create_dir_all(&proj).unwrap();
+        let target = proj.join("SESSION-XYZ.jsonl");
+        std::fs::write(&target, b"{}").unwrap();
+        let bystander = proj.join("OTHER.jsonl");
+        std::fs::write(&bystander, b"{}").unwrap();
+
+        delete_agent_session_in(tmp.path(), "SESSION-XYZ")
+            .await
+            .unwrap();
+
+        assert!(!target.exists(), "the targeted session was removed");
+        assert!(bystander.exists(), "an unrelated session was left alone");
+    }
+
+    #[tokio::test]
+    async fn delete_agent_session_is_a_noop_when_nothing_is_persisted() {
+        let tmp = tempfile::tempdir().unwrap();
+        // No `projects` directory at all: deleting must still succeed.
+        delete_agent_session_in(tmp.path(), "SESSION-XYZ")
+            .await
+            .expect("missing session is success");
     }
 
     #[test]

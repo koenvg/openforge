@@ -380,6 +380,7 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getAiThreads', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('saveAiThread', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('deleteAiThread', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('deleteReviewSession', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('askAgentQuestions', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('replyToReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('createReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
@@ -389,7 +390,7 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('testJiraConnection', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrTicket', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('setPrJiraKey', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(41)
+    expect(subscriptions.add).toHaveBeenCalledTimes(42)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {

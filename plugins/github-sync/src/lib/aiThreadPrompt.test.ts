@@ -22,6 +22,12 @@ describe('aiThreadPrompt', () => {
     expect(prompt).toContain('why a Map here?')
     expect(prompt).toContain('a.ts')
   })
+  it('tells a resumed agent to re-read files relative to the current directory', () => {
+    // On a follow-up the session is resumed but the checkout path has changed, so
+    // the prompt must steer the agent away from paths it remembers from the review.
+    const prompt = buildQuestionsPrompt(threads, [], [])
+    expect(prompt).toMatch(/re-read files relative to the current working directory/i)
+  })
   it('quotes the referenced AI review comment for a comment-anchored thread', () => {
     const commentThread: AiThread = {
       id: 't2',
