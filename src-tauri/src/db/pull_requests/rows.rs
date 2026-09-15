@@ -37,6 +37,7 @@ pub struct PrRow {
     pub merge_methods_policy_known: Option<bool>,
     pub allowed_merge_methods: Option<String>,
     pub default_merge_method: Option<String>,
+    pub reviewers: Option<String>,
     pub unaddressed_comment_count: i64,
 }
 
@@ -76,7 +77,8 @@ pub(super) fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
         merge_methods_policy_known: row.get(31)?,
         allowed_merge_methods: row.get(32)?,
         default_merge_method: row.get(33)?,
-        unaddressed_comment_count: row.get(34)?,
+        reviewers: row.get(34)?,
+        unaddressed_comment_count: row.get(35)?,
     })
 }
 

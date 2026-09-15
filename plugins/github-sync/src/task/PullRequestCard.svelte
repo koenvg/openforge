@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
-  import { getPrStatusChips, getPullRequestMergeActionLabel, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import { getPrReviewerRows, getPrStatusChips, getPullRequestMergeActionLabel, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -42,11 +42,13 @@
 
   let collapsed = $derived(isSectionCollapsed($collapsedSections, sectionKey))
   let bodyId = $derived(`pull-request-body-${sectionKey}`)
+  let reviewersLabelId = $derived(`pull-request-reviewers-${sectionKey}`)
   let chips = $derived(getPrStatusChips(pr, 'detail'))
   let mergeActionLabel = $derived(pr.default_merge_method ? getPullRequestMergeActionLabel(pr.default_merge_method) : 'Merge')
   let canMerge = $derived(canMergePullRequest(pr) && pr.default_merge_method !== null && pr.default_merge_method !== undefined)
   let unaddressedComments = $derived(comments.filter((comment) => comment.addressed === 0))
   let checkSummary = $derived(splitCheckRuns(parseCheckRuns(pr.ci_check_runs)))
+  let reviewerRows = $derived(getPrReviewerRows(pr))
 
   function prNumber(value: PullRequestInfo): number {
     return value.pr_number ?? value.id
@@ -157,6 +159,26 @@
           <Badge class="github-sync-compact-chip github-sync-signal-count">{pr.unaddressed_comment_count} {pr.unaddressed_comment_count === 1 ? 'comment' : 'comments'}</Badge>
         {/if}
       </div>
+
+      {#if reviewerRows.length > 0}
+        <div class="border-t border-base-300/70 px-2.5 py-2 flex flex-col gap-1">
+          <div class="text-[0.7rem] font-medium text-base-content/55" id={reviewersLabelId}>Reviewers</div>
+          <ul class="flex flex-col gap-1" aria-labelledby={reviewersLabelId}>
+            {#each reviewerRows as reviewer (`${reviewer.kind}-${reviewer.login}`)}
+              <li class="flex items-center gap-2 text-xs">
+                <span class="truncate text-base-content/70" title={reviewer.name}>{reviewer.name}</span>
+                <StatusBadge
+                  status={reviewer.status}
+                  role="img"
+                  aria-label={reviewer.label}
+                  title={reviewer.label}
+                  class="github-sync-compact-chip github-sync-signal-status"
+                >{reviewer.label}</StatusBadge>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
 
       {#if checkSummary.visible.length > 0 || checkSummary.passingCount > 0}
         <div class="border-t border-base-300/70 px-2.5 py-2 flex flex-col gap-1" aria-label="Pipeline checks">

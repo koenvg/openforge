@@ -1862,6 +1862,10 @@ INSERT OR IGNORE INTO config (key, value)
         ensure_review_thread_seen_sequence_column(tx)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up_with_hook("", |tx| {
+        ensure_pull_request_reviewers_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2569,6 +2573,22 @@ pub(super) fn ensure_review_thread_seen_sequence_column(conn: &Connection) -> Re
     Ok(())
 }
 
+pub(super) fn ensure_pull_request_reviewers_column(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "pull_requests")? {
+        return Ok(());
+    }
+
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'reviewers'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN reviewers TEXT", [])?;
+    }
+    Ok(())
+}
+
 pub(super) fn ensure_browser_session_purge_intents_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2603,6 +2623,7 @@ mod tests {
         AgentSessionOutputRevisions,
         AgentReviewCommentsRemoval,
         ReviewThreadSeenSequence,
+        PullRequestReviewers,
     }
 
     impl MigrationBoundary {
@@ -2622,6 +2643,7 @@ mod tests {
                 Self::AgentSessionOutputRevisions => 57,
                 Self::AgentReviewCommentsRemoval => 59,
                 Self::ReviewThreadSeenSequence => 62,
+                Self::PullRequestReviewers => 63,
             }
         }
     }
@@ -2636,6 +2658,46 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("create temporary database directory");
         let path = temp_dir.path().join("migration.db");
         (temp_dir, path)
+    }
+
+    fn pull_requests_has_reviewers_column(conn: &Connection) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'reviewers'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("check pull request reviewers column")
+    }
+
+    #[test]
+    fn fresh_database_has_pull_request_reviewers_column() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        assert!(pull_requests_has_reviewers_column(&conn));
+    }
+
+    #[test]
+    fn upgrade_adds_pull_request_reviewers_column_once() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            drop(db);
+            let conn = Connection::open(&path).expect("open pre-upgrade database");
+            conn.execute("ALTER TABLE pull_requests DROP COLUMN reviewers", [])
+                .expect("drop reviewers column");
+            set_user_version_before(&conn, MigrationBoundary::PullRequestReviewers);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+
+        assert!(pull_requests_has_reviewers_column(&conn));
+        ensure_pull_request_reviewers_column(&conn).expect("rerun the reviewers column migration");
+        assert!(pull_requests_has_reviewers_column(&conn));
     }
 
     #[test]

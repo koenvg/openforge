@@ -1,4 +1,4 @@
-import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PullRequestMergeMethod } from './domain.js'
+import { getMergeReadiness, isClosedUnmergedPullRequest, parseJsonListColumn, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PrReviewer, type PrReviewerKind, type PrReviewerState, type PullRequestMergeMethod } from './domain.js'
 
 export type PrChipSurface = 'compact' | 'detail'
 
@@ -192,4 +192,52 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
   }
 
   return chips
+}
+
+export type PrReviewerStatus = 'failed' | 'pending' | 'in-review' | 'expired' | 'success'
+
+export interface PrReviewerRow extends PrReviewer {
+  name: string
+  label: string
+  status: PrReviewerStatus
+}
+
+interface PrReviewerPresentation {
+  label: string
+  status: PrReviewerStatus
+  holdRank: number
+}
+
+const PR_REVIEWER_PRESENTATION: Record<PrReviewerState, PrReviewerPresentation> = {
+  changes_requested: { label: 'Changes requested', status: 'failed', holdRank: 0 },
+  pending: { label: 'Pending', status: 'pending', holdRank: 1 },
+  commented: { label: 'Commented', status: 'in-review', holdRank: 2 },
+  dismissed: { label: 'Dismissed', status: 'expired', holdRank: 2 },
+  approved: { label: 'Approved', status: 'success', holdRank: 3 },
+}
+
+const PR_REVIEWER_KINDS: PrReviewerKind[] = ['user', 'team', 'bot']
+
+function isPrReviewer(value: unknown): value is PrReviewer {
+  const candidate = value as PrReviewer | null
+  return typeof candidate?.login === 'string'
+    && PR_REVIEWER_KINDS.includes(candidate.kind)
+    && candidate.state in PR_REVIEWER_PRESENTATION
+}
+
+/** Reviewers of a pull request in reading order: whoever holds it comes first. */
+export function getPrReviewerRows(pr: { reviewers?: string | PrReviewer[] | null }): PrReviewerRow[] {
+  return parseJsonListColumn(pr.reviewers, isPrReviewer)
+    .map((reviewer) => {
+      const { label, status } = PR_REVIEWER_PRESENTATION[reviewer.state]
+      return {
+        ...reviewer,
+        name: reviewer.kind === 'team' ? `${reviewer.login} (team)` : reviewer.login,
+        label,
+        status,
+      }
+    })
+    .sort((left, right) => (
+      PR_REVIEWER_PRESENTATION[left.state].holdRank - PR_REVIEWER_PRESENTATION[right.state].holdRank
+    ))
 }

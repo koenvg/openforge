@@ -38,7 +38,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
         check_runs: None,
         combined_status: None,
         reviews: Some(vec![review]),
-        has_requested_reviewers: false,
+        requested_reviewers: None,
         mergeable: None,
         mergeable_state: None,
         is_queued: false,
@@ -95,7 +95,7 @@ fn make_review_comment_poll_result(
         check_runs: None,
         combined_status: None,
         reviews: None,
-        has_requested_reviewers: false,
+        requested_reviewers: None,
         mergeable: None,
         mergeable_state: None,
         is_queued: false,
@@ -466,4 +466,165 @@ async fn github_poller_events_match_renderer_contracts() {
             ),
         ]
     );
+}
+
+fn make_reviewer_poll_result(
+    pr_id: i64,
+    reviews: Option<Vec<PrReview>>,
+    requested_reviewers: Option<Vec<crate::github_client::RequestedReviewer>>,
+) -> PollSinglePrResult {
+    PollSinglePrResult {
+        reviews,
+        requested_reviewers,
+        ..make_review_comment_poll_result(pr_id, 900, false)
+    }
+}
+
+fn approving_review(login: &str) -> PrReview {
+    PrReview {
+        id: 1,
+        user: crate::github_client::GitHubUser {
+            login: login.to_string(),
+            extra: serde_json::json!({}),
+        },
+        state: "APPROVED".to_string(),
+        body: None,
+        submitted_at: None,
+        extra: serde_json::json!({}),
+    }
+}
+
+fn insert_test_pull_request(db: &crate::db::Database, pr_id: i64) {
+    db.insert_pull_request(
+        pr_id,
+        "T-100",
+        "acme",
+        "repo",
+        "Reviewer test",
+        "https://github.com/acme/repo/pull/42",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert pull request");
+}
+
+fn stored_reviewers(db: &crate::db::Database, pr_id: i64) -> Option<String> {
+    db.get_all_pull_requests()
+        .expect("read pull requests")
+        .into_iter()
+        .find(|pr| pr.id == pr_id)
+        .expect("stored pull request")
+        .reviewers
+}
+
+#[test]
+fn polling_stores_per_reviewer_verdicts() {
+    let (db, _temp_dir) = make_test_db("persist_reviewers");
+    insert_test_task(&db);
+    insert_test_pull_request(&db, 42);
+
+    let result = make_reviewer_poll_result(
+        42,
+        Some(vec![approving_review("alice")]),
+        Some(vec![crate::github_client::RequestedReviewer {
+            login: "carol".to_string(),
+            kind: crate::github_client::PrReviewerKind::User,
+        }]),
+    );
+    persist_review_status(&db, &result).expect("persist review status");
+
+    let stored: Vec<crate::github_client::PrReviewer> =
+        serde_json::from_str(&stored_reviewers(&db, 42).expect("stored reviewers"))
+            .expect("parse stored reviewers");
+    assert_eq!(
+        stored
+            .iter()
+            .map(|reviewer| (reviewer.login.as_str(), reviewer.state))
+            .collect::<Vec<_>>(),
+        vec![
+            ("alice", crate::github_client::PrReviewerState::Approved),
+            ("carol", crate::github_client::PrReviewerState::Pending),
+        ]
+    );
+}
+
+#[test]
+fn a_failed_review_fetch_keeps_the_stored_reviewers() {
+    let (db, _temp_dir) = make_test_db("persist_reviewers_fetch_failure");
+    insert_test_task(&db);
+    insert_test_pull_request(&db, 42);
+
+    let stored_result = make_reviewer_poll_result(
+        42,
+        Some(vec![approving_review("alice")]),
+        Some(Vec::new()),
+    );
+    persist_review_status(&db, &stored_result).expect("persist review status");
+    let before = stored_reviewers(&db, 42).expect("stored reviewers");
+
+    let failed_fetch = make_reviewer_poll_result(42, None, Some(Vec::new()));
+    persist_review_status(&db, &failed_fetch).expect("persist review status");
+
+    assert_eq!(stored_reviewers(&db, 42), Some(before));
+}
+
+#[test]
+fn a_failed_pr_details_fetch_keeps_the_stored_reviewers() {
+    let (db, _temp_dir) = make_test_db("persist_reviewers_details_failure");
+    insert_test_task(&db);
+    insert_test_pull_request(&db, 42);
+
+    let stored_result = make_reviewer_poll_result(
+        42,
+        Some(vec![approving_review("alice")]),
+        Some(vec![crate::github_client::RequestedReviewer {
+            login: "carol".to_string(),
+            kind: crate::github_client::PrReviewerKind::User,
+        }]),
+    );
+    persist_review_status(&db, &stored_result).expect("persist review status");
+    let before = stored_reviewers(&db, 42).expect("stored reviewers");
+
+    let failed_details =
+        make_reviewer_poll_result(42, Some(vec![approving_review("alice")]), None);
+    persist_review_status(&db, &failed_details).expect("persist review status");
+
+    assert_eq!(stored_reviewers(&db, 42), Some(before));
+}
+
+#[test]
+fn a_reviewer_dropped_from_the_pull_request_stops_being_stored() {
+    let (db, _temp_dir) = make_test_db("persist_reviewers_removal");
+    insert_test_task(&db);
+    insert_test_pull_request(&db, 42);
+
+    let with_request = make_reviewer_poll_result(
+        42,
+        Some(Vec::new()),
+        Some(vec![crate::github_client::RequestedReviewer {
+            login: "carol".to_string(),
+            kind: crate::github_client::PrReviewerKind::User,
+        }]),
+    );
+    persist_review_status(&db, &with_request).expect("persist review status");
+    assert!(stored_reviewers(&db, 42).is_some());
+
+    let without_request = make_reviewer_poll_result(42, Some(Vec::new()), Some(Vec::new()));
+    persist_review_status(&db, &without_request).expect("persist review status");
+
+    assert_eq!(stored_reviewers(&db, 42), None);
+}
+
+#[test]
+fn a_pull_request_without_reviews_or_requests_stores_no_reviewers() {
+    let (db, _temp_dir) = make_test_db("persist_reviewers_empty");
+    insert_test_task(&db);
+    insert_test_pull_request(&db, 42);
+
+    let result = make_reviewer_poll_result(42, Some(Vec::new()), Some(Vec::new()));
+    persist_review_status(&db, &result).expect("persist review status");
+
+    assert_eq!(stored_reviewers(&db, 42), None);
 }

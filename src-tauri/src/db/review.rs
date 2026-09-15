@@ -58,7 +58,7 @@ impl super::Database {
         created_at: i64,
         updated_at: i64,
     ) -> Result<()> {
-        let labels_json = super::serialize_labels_column(labels);
+        let labels_json = super::serialize_json_list_column(labels);
         let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, labels, created_at, updated_at)

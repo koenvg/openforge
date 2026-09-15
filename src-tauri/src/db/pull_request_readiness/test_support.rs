@@ -36,6 +36,7 @@ pub(super) fn make_github_readiness_pr() -> PrRow {
         merge_methods_policy_known: None,
         allowed_merge_methods: None,
         default_merge_method: None,
+        reviewers: None,
         unaddressed_comment_count: 0,
     }
 }

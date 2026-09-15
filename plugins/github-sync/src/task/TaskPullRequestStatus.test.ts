@@ -169,6 +169,52 @@ describe('GitHub Sync Task pull request section', () => {
     expect(within(pipelineChecks).getByRole('img', { name: 'Passed' }).getAttribute('data-status')).toBe('success')
   })
 
+  it('lists each reviewer with their verdict, blockers first', async () => {
+    const pullRequest = createPullRequest({
+      reviewers: JSON.stringify([
+        { login: 'alice', kind: 'user', state: 'approved' },
+        { login: 'dependabot', kind: 'bot', state: 'commented' },
+        { login: 'bob', kind: 'user', state: 'pending' },
+        { login: 'carol', kind: 'user', state: 'changes_requested' },
+        { login: 'platform', kind: 'team', state: 'pending' },
+      ]),
+    })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pullRequest]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    const reviewers = await screen.findByRole('list', { name: 'Reviewers' })
+    const rows = within(reviewers).getAllByRole('listitem')
+    expect(rows.map((row) => row.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'carol Changes requested',
+      'bob Pending',
+      'platform (team) Pending',
+      'dependabot Commented',
+      'alice Approved',
+    ])
+    expect(within(rows[0]).getByRole('img', { name: 'Changes requested' }).getAttribute('data-status')).toBe('failed')
+    expect(within(rows[4]).getByRole('img', { name: 'Approved' }).getAttribute('data-status')).toBe('success')
+  })
+
+  it('renders no reviewer list when nobody reviewed and nobody was asked', async () => {
+    const pullRequest = createPullRequest({ reviewers: null })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pullRequest]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    await screen.findByText('Test PR')
+    expect(screen.queryByRole('list', { name: 'Reviewers' })).toBeNull()
+    expect(screen.queryByText('Reviewers')).toBeNull()
+  })
+
   it('removes a comment after it is marked addressed', async () => {
     let loaded = false
     const invoke = vi.fn(async (method: string) => {

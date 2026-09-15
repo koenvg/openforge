@@ -217,6 +217,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn update_pr_reviewers(&self, pr_id: i64, reviewers: Option<&str>) -> Result<()> {
+        let conn = self.lock_conn()?;
+        conn.execute(
+            "UPDATE pull_requests SET reviewers = ?1 WHERE id = ?2",
+            rusqlite::params![reviewers, pr_id],
+        )?;
+        Ok(())
+    }
+
     pub fn update_pr_merged(&self, id: i64, merged_at: i64) -> Result<()> {
         self.update_pr_merged_state(id, Some(merged_at))
     }
