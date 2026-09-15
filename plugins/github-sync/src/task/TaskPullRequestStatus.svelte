@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { GitPullRequest, Plus } from '@lucide/svelte'
+  import { GitPullRequest, Info, Plus } from '@lucide/svelte'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import type { PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
@@ -30,6 +30,11 @@
   const sectionKey = pluginSectionKey(pluginId, 'pull-requests')
   const client = createGithubTaskClient(initialApi)
   const cache = getTaskPullRequestCache(initialApi, client)
+
+  // Shown when hovering the header info icon, and reused as that button's accessible
+  // name so screen readers get the same explanation of how PRs link to a task.
+  const PR_LINKING_HELP =
+    'A pull request is automatically linked when the task ID is in its branch name, title, or description.'
 
   let cachedTask = $derived(cache.forTask(taskId))
   let pullRequests = $derived(cachedTask.pullRequests)
@@ -176,6 +181,17 @@
       <span class="w-3 shrink-0" aria-hidden="true"></span>
       <GitPullRequest size={14} class="shrink-0 text-base-content/50" aria-hidden="true" />
       <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Pull Requests</h3>
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="xs"
+        class="text-base-content/50 hover:text-base-content"
+        label={PR_LINKING_HELP}
+        tooltipSide="bottom"
+        tooltipAlign="start"
+      >
+        <Info size={13} aria-hidden="true" />
+      </IconButton>
       <Button
         type="button"
         variant="ghost"
