@@ -288,7 +288,10 @@ fn reviewer_state(sources: &ReviewerVerdictSources) -> PrReviewerState {
     }
 }
 
-pub fn build_pr_reviewers(reviews: &[PrReview], requested: &[RequestedReviewer]) -> Vec<PrReviewer> {
+pub fn build_pr_reviewers(
+    reviews: &[PrReview],
+    requested: &[RequestedReviewer],
+) -> Vec<PrReviewer> {
     let mut sources: BTreeMap<(&str, PrReviewerKind), ReviewerVerdictSources> = BTreeMap::new();
 
     for review in reviews {

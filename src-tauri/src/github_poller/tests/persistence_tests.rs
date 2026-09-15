@@ -556,11 +556,8 @@ fn a_failed_review_fetch_keeps_the_stored_reviewers() {
     insert_test_task(&db);
     insert_test_pull_request(&db, 42);
 
-    let stored_result = make_reviewer_poll_result(
-        42,
-        Some(vec![approving_review("alice")]),
-        Some(Vec::new()),
-    );
+    let stored_result =
+        make_reviewer_poll_result(42, Some(vec![approving_review("alice")]), Some(Vec::new()));
     persist_review_status(&db, &stored_result).expect("persist review status");
     let before = stored_reviewers(&db, 42).expect("stored reviewers");
 
@@ -587,8 +584,7 @@ fn a_failed_pr_details_fetch_keeps_the_stored_reviewers() {
     persist_review_status(&db, &stored_result).expect("persist review status");
     let before = stored_reviewers(&db, 42).expect("stored reviewers");
 
-    let failed_details =
-        make_reviewer_poll_result(42, Some(vec![approving_review("alice")]), None);
+    let failed_details = make_reviewer_poll_result(42, Some(vec![approving_review("alice")]), None);
     persist_review_status(&db, &failed_details).expect("persist review status");
 
     assert_eq!(stored_reviewers(&db, 42), Some(before));

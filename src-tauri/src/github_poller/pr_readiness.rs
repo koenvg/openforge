@@ -323,15 +323,17 @@ pub(super) fn requested_reviewers_from_details(
             .unwrap_or_default()
     };
 
-    let people = entries("requested_reviewers").into_iter().filter_map(|value| {
-        let login = value.get("login")?.as_str()?.to_string();
-        let kind = if value.get("type").and_then(|kind| kind.as_str()) == Some("Bot") {
-            PrReviewerKind::Bot
-        } else {
-            PrReviewerKind::User
-        };
-        Some(RequestedReviewer { login, kind })
-    });
+    let people = entries("requested_reviewers")
+        .into_iter()
+        .filter_map(|value| {
+            let login = value.get("login")?.as_str()?.to_string();
+            let kind = if value.get("type").and_then(|kind| kind.as_str()) == Some("Bot") {
+                PrReviewerKind::Bot
+            } else {
+                PrReviewerKind::User
+            };
+            Some(RequestedReviewer { login, kind })
+        });
 
     let teams = entries("requested_teams").into_iter().filter_map(|value| {
         let login = value

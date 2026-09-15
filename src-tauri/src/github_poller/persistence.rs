@@ -9,8 +9,7 @@ use crate::db::{
 };
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, build_pr_reviewers, deduplicate_check_runs,
-    filter_to_required,
-    GitHubClient,
+    filter_to_required, GitHubClient,
 };
 use futures::future::join_all;
 use log::{error, warn};
