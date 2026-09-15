@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use log::warn;
 
@@ -259,6 +259,74 @@ pub(crate) fn normalize_review_decision(decision: Option<&str>) -> Option<String
     })
 }
 
+fn reviewer_kind_from_user(user: &GitHubUser) -> PrReviewerKind {
+    if user.extra.get("type").and_then(|kind| kind.as_str()) == Some("Bot") {
+        PrReviewerKind::Bot
+    } else {
+        PrReviewerKind::User
+    }
+}
+
+#[derive(Default)]
+struct ReviewerVerdictSources<'a> {
+    reviewed: bool,
+    decision: Option<&'a str>,
+    awaiting: bool,
+}
+
+/// An open review request outranks an earlier decision: GitHub asking again
+/// means the reviewer's old verdict no longer counts. A dismissal outranks even
+/// that, so a dismissed approval never reads as pending.
+fn reviewer_state(sources: &ReviewerVerdictSources) -> PrReviewerState {
+    match sources.decision {
+        Some("DISMISSED") => PrReviewerState::Dismissed,
+        _ if sources.awaiting => PrReviewerState::Pending,
+        Some("CHANGES_REQUESTED") => PrReviewerState::ChangesRequested,
+        Some("APPROVED") => PrReviewerState::Approved,
+        _ if sources.reviewed => PrReviewerState::Commented,
+        _ => PrReviewerState::Pending,
+    }
+}
+
+pub fn build_pr_reviewers(
+    reviews: &[PrReview],
+    requested: &[RequestedReviewer],
+) -> Vec<PrReviewer> {
+    let mut sources: BTreeMap<(&str, PrReviewerKind), ReviewerVerdictSources> = BTreeMap::new();
+
+    for review in reviews {
+        let entry = sources
+            .entry((
+                review.user.login.as_str(),
+                reviewer_kind_from_user(&review.user),
+            ))
+            .or_default();
+        entry.reviewed = true;
+        if matches!(
+            review.state.as_str(),
+            "APPROVED" | "CHANGES_REQUESTED" | "DISMISSED"
+        ) {
+            entry.decision = Some(review.state.as_str());
+        }
+    }
+
+    for reviewer in requested {
+        sources
+            .entry((reviewer.login.as_str(), reviewer.kind))
+            .or_default()
+            .awaiting = true;
+    }
+
+    sources
+        .into_iter()
+        .map(|((login, kind), sources)| PrReviewer {
+            login: login.to_string(),
+            kind,
+            state: reviewer_state(&sources),
+        })
+        .collect()
+}
+
 /// Aggregate review status from PR reviews and requested reviewers
 ///
 /// Determines the overall review status by examining submitted reviews.
@@ -332,6 +400,173 @@ mod tests {
             submitted_at: None,
             extra: serde_json::json!({}),
         }
+    }
+
+    fn make_bot_review(login: &str, state: &str) -> PrReview {
+        let mut review = make_review(login, state);
+        review.user.extra = serde_json::json!({ "type": "Bot" });
+        review
+    }
+
+    fn requested_user(login: &str) -> RequestedReviewer {
+        RequestedReviewer {
+            login: login.to_string(),
+            kind: PrReviewerKind::User,
+        }
+    }
+
+    fn requested_team(slug: &str) -> RequestedReviewer {
+        RequestedReviewer {
+            login: slug.to_string(),
+            kind: PrReviewerKind::Team,
+        }
+    }
+
+    fn reviewer_states(reviewers: &[PrReviewer]) -> Vec<(&str, PrReviewerState)> {
+        reviewers
+            .iter()
+            .map(|reviewer| (reviewer.login.as_str(), reviewer.state))
+            .collect()
+    }
+
+    #[test]
+    fn a_team_and_a_person_sharing_a_name_stay_separate_reviewers() {
+        let reviewers = build_pr_reviewers(
+            &[make_review("platform", "APPROVED")],
+            &[requested_team("platform")],
+        );
+
+        assert_eq!(
+            reviewers
+                .iter()
+                .map(|reviewer| (reviewer.kind, reviewer.state))
+                .collect::<Vec<_>>(),
+            vec![
+                (PrReviewerKind::User, PrReviewerState::Approved),
+                (PrReviewerKind::Team, PrReviewerState::Pending),
+            ]
+        );
+    }
+
+    #[test]
+    fn reviewers_are_empty_without_reviews_or_requests() {
+        assert!(build_pr_reviewers(&[], &[]).is_empty());
+    }
+
+    #[test]
+    fn latest_decision_of_a_reviewer_wins() {
+        let reviews = vec![
+            make_review("alice", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROVED"),
+        ];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&reviews, &[])),
+            vec![("alice", PrReviewerState::Approved)]
+        );
+    }
+
+    #[test]
+    fn a_later_comment_does_not_erase_an_earlier_decision() {
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("alice", "COMMENTED"),
+        ];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&reviews, &[])),
+            vec![("alice", PrReviewerState::Approved)]
+        );
+    }
+
+    #[test]
+    fn a_reviewer_who_only_commented_reads_as_commented() {
+        let reviews = vec![make_review("alice", "COMMENTED")];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&reviews, &[])),
+            vec![("alice", PrReviewerState::Commented)]
+        );
+    }
+
+    #[test]
+    fn a_dismissed_approval_reads_as_dismissed_even_when_asked_again() {
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("alice", "DISMISSED"),
+        ];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&reviews, &[requested_user("alice")])),
+            vec![("alice", PrReviewerState::Dismissed)]
+        );
+    }
+
+    #[test]
+    fn a_reviewer_asked_again_after_approving_reads_as_pending() {
+        let reviews = vec![make_review("alice", "APPROVED")];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&reviews, &[requested_user("alice")])),
+            vec![("alice", PrReviewerState::Pending)]
+        );
+    }
+
+    #[test]
+    fn a_reviewer_who_has_not_reviewed_reads_as_pending() {
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(&[], &[requested_user("carol")])),
+            vec![("carol", PrReviewerState::Pending)]
+        );
+    }
+
+    #[test]
+    fn a_requested_team_is_one_pending_reviewer() {
+        let reviewers = build_pr_reviewers(&[], &[requested_team("platform")]);
+
+        assert_eq!(
+            reviewers,
+            vec![PrReviewer {
+                login: "platform".to_string(),
+                kind: PrReviewerKind::Team,
+                state: PrReviewerState::Pending,
+            }]
+        );
+    }
+
+    #[test]
+    fn an_automated_reviewer_is_marked_as_a_bot() {
+        let reviews = vec![make_bot_review("copilot[bot]", "COMMENTED")];
+
+        assert_eq!(
+            build_pr_reviewers(&reviews, &[]),
+            vec![PrReviewer {
+                login: "copilot[bot]".to_string(),
+                kind: PrReviewerKind::Bot,
+                state: PrReviewerState::Commented,
+            }]
+        );
+    }
+
+    #[test]
+    fn reviewers_are_returned_in_a_stable_order() {
+        let reviews = vec![
+            make_review("zoe", "APPROVED"),
+            make_review("alice", "CHANGES_REQUESTED"),
+        ];
+
+        assert_eq!(
+            reviewer_states(&build_pr_reviewers(
+                &reviews,
+                &[requested_user("bob"), requested_team("platform")]
+            )),
+            vec![
+                ("alice", PrReviewerState::ChangesRequested),
+                ("bob", PrReviewerState::Pending),
+                ("platform", PrReviewerState::Pending),
+                ("zoe", PrReviewerState::Approved),
+            ]
+        );
     }
 
     #[test]

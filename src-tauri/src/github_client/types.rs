@@ -363,6 +363,37 @@ pub struct PrReview {
     pub extra: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum PrReviewerKind {
+    User,
+    Team,
+    Bot,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PrReviewerState {
+    Approved,
+    ChangesRequested,
+    Commented,
+    Dismissed,
+    Pending,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PrReviewer {
+    pub login: String,
+    pub kind: PrReviewerKind,
+    pub state: PrReviewerState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestedReviewer {
+    pub login: String,
+    pub kind: PrReviewerKind,
+}
+
 /// Request body for creating a repository on the authenticated user's account.
 #[derive(Debug, Serialize)]
 pub(crate) struct CreateRepoRequest {

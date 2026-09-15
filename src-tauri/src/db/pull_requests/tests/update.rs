@@ -1,7 +1,8 @@
 use super::fixtures::PullRequestFixture;
 
 use crate::db::test_helpers::*;
-use crate::db::PrMergeReadinessFacts;
+use crate::db::{serialize_json_list_column, PrMergeReadinessFacts};
+use crate::github_client::{PrReviewer, PrReviewerKind, PrReviewerState};
 
 #[test]
 fn test_pull_request_terminal_state_updates_merged_and_closed() {
@@ -257,4 +258,38 @@ fn test_pr_last_polled_lifecycle() {
     assert_eq!(nonexistent, None);
 
     drop(db);
+}
+
+#[test]
+fn test_pr_reviewers_round_trip_and_clear() {
+    let (db, _temp_dir) = make_test_db("pr_reviewers_round_trip");
+    insert_test_task(&db);
+    PullRequestFixture::new(42).insert(&db).expect("insert pr");
+
+    let reviewers = vec![
+        PrReviewer {
+            login: "alice".to_string(),
+            kind: PrReviewerKind::User,
+            state: PrReviewerState::Approved,
+        },
+        PrReviewer {
+            login: "platform".to_string(),
+            kind: PrReviewerKind::Team,
+            state: PrReviewerState::Pending,
+        },
+    ];
+    db.update_pr_reviewers(42, serialize_json_list_column(&reviewers).as_deref())
+        .expect("store reviewers");
+
+    let stored = db.get_all_pull_requests().expect("read prs");
+    let parsed: Vec<PrReviewer> =
+        serde_json::from_str(stored[0].reviewers.as_deref().expect("stored reviewers"))
+            .expect("parse stored reviewers");
+    assert_eq!(parsed, reviewers);
+
+    db.update_pr_reviewers(42, serialize_json_list_column::<PrReviewer>(&[]).as_deref())
+        .expect("clear reviewers");
+
+    let cleared = db.get_all_pull_requests().expect("read prs");
+    assert_eq!(cleared[0].reviewers, None);
 }

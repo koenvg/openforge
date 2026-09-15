@@ -4,7 +4,7 @@ use crate::db::{
 };
 use crate::github_client::{
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubReadinessSnapshot, PolicyValue,
-    PrReview, PullRequestMergeMethod,
+    PrReview, PrReviewerKind, PullRequestMergeMethod, RequestedReviewer,
 };
 use log::warn;
 
@@ -15,7 +15,9 @@ pub(super) struct RestReadinessSources {
     pub(super) reviews: Option<Vec<PrReview>>,
     pub(super) pr_details_result:
         Result<crate::github_client::PullRequest, crate::github_client::GitHubError>,
-    pub(super) has_requested_reviewers: bool,
+    /// `None` when the details fetch failed: an unknown request list, not an
+    /// empty one.
+    pub(super) requested_reviewers: Option<Vec<RequestedReviewer>>,
     pub(super) mergeable: Option<bool>,
     pub(super) mergeable_state: Option<String>,
     pub(super) is_queued: bool,
@@ -211,15 +213,15 @@ pub(super) async fn collect_rest_readiness_sources(
         }
     };
 
-    let has_requested_reviewers = match &pr_details_result {
-        Ok(details) => has_requested_reviewers_from_details(details),
+    let requested_reviewers = match &pr_details_result {
+        Ok(details) => Some(requested_reviewers_from_details(details)),
         Err(e) => {
             warn!(
                 "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
                 pr.pr_number,
                 e.sanitized_log_message()
             );
-            false
+            None
         }
     };
     let is_queued = pr_details_result
@@ -236,7 +238,7 @@ pub(super) async fn collect_rest_readiness_sources(
         combined_status,
         reviews,
         pr_details_result,
-        has_requested_reviewers,
+        requested_reviewers,
         mergeable,
         mergeable_state,
         is_queued,
@@ -307,21 +309,45 @@ pub(super) fn current_graphql_mergeable_state<'a>(
         .or_else(|| graphql_inputs.and_then(|inputs| inputs.mergeable_state.as_deref()))
 }
 
-pub(super) fn has_requested_reviewers_from_details(
+/// The reviewers a pull request is currently asking for review, people and
+/// teams alike. GitHub reports a team request under a slug rather than a login.
+pub(super) fn requested_reviewers_from_details(
     details: &crate::github_client::PullRequest,
-) -> bool {
-    details
-        .extra
-        .get("requested_reviewers")
-        .and_then(|reviewers| reviewers.as_array())
-        .map(|reviewers| !reviewers.is_empty())
-        .unwrap_or(false)
-        || details
+) -> Vec<RequestedReviewer> {
+    let entries = |field: &str| -> Vec<serde_json::Value> {
+        details
             .extra
-            .get("requested_teams")
-            .and_then(|teams| teams.as_array())
-            .map(|teams| !teams.is_empty())
-            .unwrap_or(false)
+            .get(field)
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let people = entries("requested_reviewers")
+        .into_iter()
+        .filter_map(|value| {
+            let login = value.get("login")?.as_str()?.to_string();
+            let kind = if value.get("type").and_then(|kind| kind.as_str()) == Some("Bot") {
+                PrReviewerKind::Bot
+            } else {
+                PrReviewerKind::User
+            };
+            Some(RequestedReviewer { login, kind })
+        });
+
+    let teams = entries("requested_teams").into_iter().filter_map(|value| {
+        let login = value
+            .get("slug")
+            .or_else(|| value.get("name"))?
+            .as_str()?
+            .to_string();
+        Some(RequestedReviewer {
+            login,
+            kind: PrReviewerKind::Team,
+        })
+    });
+
+    people.chain(teams).collect()
 }
 
 pub(super) fn pr_is_queued_from_details(details: &crate::github_client::PullRequest) -> bool {

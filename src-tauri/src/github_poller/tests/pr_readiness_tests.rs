@@ -77,6 +77,7 @@ fn make_github_readiness_pr() -> PrRow {
         merge_methods_policy_known: None,
         allowed_merge_methods: None,
         default_merge_method: None,
+        reviewers: None,
         unaddressed_comment_count: 0,
     }
 }
@@ -268,7 +269,7 @@ fn current_graphql_readiness_keeps_mergeability_when_check_rollup_needs_rest_fal
         pr_details_result: Err(crate::github_client::GitHubError::NetworkError(
             "unused".to_string(),
         )),
-        has_requested_reviewers: false,
+        requested_reviewers: None,
         mergeable: None,
         mergeable_state: Some("unknown".to_string()),
         is_queued: false,
@@ -334,7 +335,7 @@ fn github_readiness_keeps_merge_group_validation_sha_out_of_pr_head() {
         pr_details_result: Err(crate::github_client::GitHubError::NetworkError(
             "unused".to_string(),
         )),
-        has_requested_reviewers: false,
+        requested_reviewers: None,
         mergeable: None,
         mergeable_state: None,
         is_queued: true,
@@ -345,4 +346,60 @@ fn github_readiness_keeps_merge_group_validation_sha_out_of_pr_head() {
 
     assert_eq!(pr_head_sha, "pr-head-sha");
     assert_eq!(ci_validation_sha, "merge-group-sha");
+}
+
+fn pr_details_with(extra: serde_json::Value) -> crate::github_client::PullRequest {
+    crate::github_client::PullRequest {
+        number: 1,
+        title: "Test PR".to_string(),
+        state: "open".to_string(),
+        html_url: "https://github.com/acme/repo/pull/1".to_string(),
+        user: GitHubUser {
+            login: "octocat".to_string(),
+            extra: serde_json::json!({}),
+        },
+        head: GitHubHead {
+            ref_name: "feature/test".to_string(),
+            sha: "abc123".to_string(),
+            extra: serde_json::json!({}),
+        },
+        draft: Some(false),
+        mergeable: None,
+        mergeable_state: None,
+        extra,
+    }
+}
+
+#[test]
+fn requested_reviewers_cover_people_bots_and_teams() {
+    let details = pr_details_with(serde_json::json!({
+        "requested_reviewers": [
+            { "login": "carol", "type": "User" },
+            { "login": "copilot[bot]", "type": "Bot" }
+        ],
+        "requested_teams": [{ "slug": "platform", "name": "Platform" }]
+    }));
+
+    assert_eq!(
+        requested_reviewers_from_details(&details),
+        vec![
+            crate::github_client::RequestedReviewer {
+                login: "carol".to_string(),
+                kind: crate::github_client::PrReviewerKind::User,
+            },
+            crate::github_client::RequestedReviewer {
+                login: "copilot[bot]".to_string(),
+                kind: crate::github_client::PrReviewerKind::Bot,
+            },
+            crate::github_client::RequestedReviewer {
+                login: "platform".to_string(),
+                kind: crate::github_client::PrReviewerKind::Team,
+            },
+        ]
+    );
+}
+
+#[test]
+fn pr_details_without_review_requests_yield_no_requested_reviewers() {
+    assert!(requested_reviewers_from_details(&pr_details_with(serde_json::json!({}))).is_empty());
 }

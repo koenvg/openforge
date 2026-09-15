@@ -99,14 +99,13 @@ pub(crate) fn parse_labels_column(raw: Option<String>) -> Vec<PrLabel> {
         .unwrap_or_default()
 }
 
-/// Serialize labels for the nullable JSON-TEXT `labels` column. Returns `None`
-/// for an empty label set so the column stays NULL, matching the
-/// `ci_check_runs` pattern.
-pub(crate) fn serialize_labels_column(labels: &[PrLabel]) -> Option<String> {
-    if labels.is_empty() {
+/// Serialize a list for a nullable JSON-TEXT column. Returns `None` for an empty
+/// list so the column stays NULL instead of holding `[]`.
+pub(crate) fn serialize_json_list_column<T: serde::Serialize>(items: &[T]) -> Option<String> {
+    if items.is_empty() {
         None
     } else {
-        serde_json::to_string(labels).ok()
+        serde_json::to_string(items).ok()
     }
 }
 

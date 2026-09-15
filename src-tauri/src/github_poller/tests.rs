@@ -90,6 +90,7 @@ fn make_pr(
             merge_methods_policy_known: None,
             allowed_merge_methods: None,
             default_merge_method: None,
+            reviewers: None,
             unaddressed_comment_count: 0,
         },
         project_id: project_id.to_string(),

@@ -193,6 +193,16 @@ export interface PrComment {
   created_at: number;
 }
 
+export type PrReviewerKind = 'user' | 'team' | 'bot';
+
+export type PrReviewerState = 'approved' | 'changes_requested' | 'commented' | 'dismissed' | 'pending';
+
+export interface PrReviewer {
+  login: string;
+  kind: PrReviewerKind;
+  state: PrReviewerState;
+}
+
 export type PullRequestMergeMethod = 'merge' | 'squash' | 'rebase';
 
 export interface PullRequestInfo {
@@ -230,6 +240,7 @@ export interface PullRequestInfo {
   merge_methods_policy_known?: boolean | null;
   allowed_merge_methods?: string | PullRequestMergeMethod[] | null;
   default_merge_method?: PullRequestMergeMethod | null;
+  reviewers?: string | PrReviewer[] | null;
 }
 
 export type PollOutcome =
@@ -382,20 +393,29 @@ function isMergeReadinessAction(value: string | null | undefined): value is Merg
   return MERGE_READINESS_ACTIONS.includes(value as MergeReadinessAction);
 }
 
-function parseMergeReadinessDetails(value: string | MergeReadinessDetail[] | null | undefined): MergeReadinessDetail[] {
-  if (Array.isArray(value)) return value;
+/** Read a nullable JSON-TEXT column that the sidecar may also send pre-parsed. */
+export function parseJsonListColumn<T>(
+  value: string | T[] | null | undefined,
+  isItem: (candidate: unknown) => candidate is T,
+): T[] {
+  if (Array.isArray(value)) return value.filter(isItem);
   if (!value) return [];
 
   try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((detail): detail is MergeReadinessDetail =>
-          typeof detail?.code === 'string' && typeof detail?.message === 'string',
-        )
-      : [];
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(isItem) : [];
   } catch {
     return [];
   }
+}
+
+function isMergeReadinessDetail(value: unknown): value is MergeReadinessDetail {
+  const candidate = value as MergeReadinessDetail | null;
+  return typeof candidate?.code === 'string' && typeof candidate?.message === 'string';
+}
+
+function parseMergeReadinessDetails(value: string | MergeReadinessDetail[] | null | undefined): MergeReadinessDetail[] {
+  return parseJsonListColumn(value, isMergeReadinessDetail);
 }
 function isUnresolvedConversationDetail(detail: MergeReadinessDetail): boolean {
   return detail.code === 'unresolved_conversations';

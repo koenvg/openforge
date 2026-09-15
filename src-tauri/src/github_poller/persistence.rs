@@ -4,10 +4,12 @@ use super::poll_events::{
 };
 use super::pr_execution::{poll_single_pr, should_fetch_comments_for_pr, PollSinglePrResult};
 use super::review_sync::StaleAuthoredPrTerminalState;
-use crate::db::{acquire_db, finalize_readiness_facts_for_poll, Database, PrRow};
+use crate::db::{
+    acquire_db, finalize_readiness_facts_for_poll, serialize_json_list_column, Database, PrRow,
+};
 use crate::github_client::{
-    aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
-    GitHubClient,
+    aggregate_ci_status, aggregate_review_status, build_pr_reviewers, deduplicate_check_runs,
+    filter_to_required, GitHubClient,
 };
 use futures::future::join_all;
 use log::{error, warn};
@@ -536,16 +538,31 @@ fn persist_ci_status(
     Ok(payload.status_changed.then_some(payload.status))
 }
 
-fn persist_review_status(
+pub(super) fn persist_review_status(
     db: &Database,
     result: &PollSinglePrResult,
 ) -> rusqlite::Result<Option<String>> {
     let Some(reviews) = &result.reviews else {
         return Ok(None);
     };
+
+    // Half-known reviewers would be wrong, not just stale: without the request
+    // list a pending reviewer looks absent and a re-requested approver looks
+    // approved. Leave the stored list alone until a poll sees both halves.
+    if let Some(requested) = &result.requested_reviewers {
+        let reviewers = build_pr_reviewers(reviews, requested);
+        db.update_pr_reviewers(
+            result.pr_id,
+            serialize_json_list_column(&reviewers).as_deref(),
+        )?;
+    }
+
     let status = aggregate_review_status(
         reviews,
-        result.has_requested_reviewers,
+        result
+            .requested_reviewers
+            .as_ref()
+            .is_some_and(|requested| !requested.is_empty()),
         result.required_approving_count,
     );
     db.update_pr_review_status(result.pr_id, &status)?;

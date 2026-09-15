@@ -11,6 +11,7 @@ use crate::db::{
 };
 use crate::github_client::{
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubError, PrComment, PrReview,
+    RequestedReviewer,
 };
 use std::collections::HashSet;
 
@@ -40,7 +41,9 @@ pub(super) struct PollSinglePrResult {
     pub(super) check_runs: Option<CheckRunsResponse>,
     pub(super) combined_status: Option<CombinedStatusResponse>,
     pub(super) reviews: Option<Vec<PrReview>>,
-    pub(super) has_requested_reviewers: bool,
+    /// `None` when the details fetch failed: an unknown request list, not an
+    /// empty one.
+    pub(super) requested_reviewers: Option<Vec<RequestedReviewer>>,
     pub(super) mergeable: Option<bool>,
     pub(super) mergeable_state: Option<String>,
     pub(super) is_queued: bool,
@@ -75,7 +78,7 @@ pub(super) fn comment_fetch_error_result(
         check_runs: None,
         combined_status: None,
         reviews: None,
-        has_requested_reviewers: false,
+        requested_reviewers: None,
         mergeable: old_mergeable,
         mergeable_state: old_mergeable_state,
         is_queued: false,
@@ -215,7 +218,10 @@ pub(super) async fn poll_single_pr(
         review_status_for_readiness(
             None,
             rest_sources.reviews.as_ref(),
-            rest_sources.has_requested_reviewers,
+            rest_sources
+                .requested_reviewers
+                .as_ref()
+                .is_some_and(|requested| !requested.is_empty()),
             branch_policy_inputs.required_approving_count,
             old_review_status.as_ref(),
         )
@@ -284,7 +290,7 @@ pub(super) async fn poll_single_pr(
         check_runs,
         combined_status,
         reviews: rest_sources.reviews,
-        has_requested_reviewers: rest_sources.has_requested_reviewers,
+        requested_reviewers: rest_sources.requested_reviewers,
         mergeable: rest_sources.mergeable,
         mergeable_state: rest_sources.mergeable_state,
         is_queued: readiness_is_queued,
