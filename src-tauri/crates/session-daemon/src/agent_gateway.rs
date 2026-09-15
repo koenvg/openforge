@@ -26,6 +26,7 @@ struct GatewayState {
     backend: Backend,
     registration: Registration,
     notifications: Arc<std::sync::Mutex<crate::notification_journal::NotificationJournal>>,
+    gate: Arc<crate::quiescence::Gate>,
 }
 
 pub(crate) fn start(
@@ -33,6 +34,7 @@ pub(crate) fn start(
     backend: Backend,
     registration: Registration,
     notifications: crate::notification_journal::NotificationJournal,
+    gate: Arc<crate::quiescence::Gate>,
 ) -> Result<(), openforge_session_protocol::Error> {
     listener
         .set_nonblocking(true)
@@ -41,18 +43,24 @@ pub(crate) fn start(
         .enable_all()
         .build()
         .map_err(openforge_session_client::runtime::io_error)?;
+    let (ready, readiness) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("agent-gateway".into())
         .spawn(move || {
             runtime.block_on(async move {
-                let Ok(listener) = tokio::net::TcpListener::from_std(listener) else {
-                    return;
+                let listener = match tokio::net::TcpListener::from_std(listener) {
+                    Ok(listener) => listener,
+                    Err(error) => {
+                        let _ = ready.send(Err(openforge_session_client::runtime::io_error(error)));
+                        return;
+                    }
                 };
                 let notifications = Arc::new(std::sync::Mutex::new(notifications));
                 tokio::spawn(crate::notification_delivery::run(
                     Arc::clone(&notifications),
                     Arc::clone(&registration),
                     backend.clone(),
+                    Arc::clone(&gate),
                 ));
                 let router = Router::new()
                     .fallback(any(forward))
@@ -60,8 +68,12 @@ pub(crate) fn start(
                         backend,
                         registration,
                         notifications,
+                        gate,
                     });
                 let permits = Arc::new(Semaphore::new(32));
+                if ready.send(Ok(())).is_err() {
+                    return;
+                }
                 loop {
                     let Ok((stream, _)) = listener.accept().await else {
                         break;
@@ -84,7 +96,9 @@ pub(crate) fn start(
             })
         })
         .map_err(openforge_session_client::runtime::io_error)?;
-    Ok(())
+    readiness
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| openforge_session_protocol::Error::RecoveryUnavailable)?
 }
 
 // A single bounded rejection slot, not a queue of domain requests.
@@ -112,6 +126,13 @@ fn unknown() -> Response {
 }
 
 async fn forward(State(state): State<GatewayState>, request: Request) -> Response {
+    let Some(admission) = state.gate.enter() else {
+        return rejected(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "daemon replacement in progress; request not executed",
+        );
+    };
+    let admission = Arc::new(admission);
     if request
         .headers()
         .get_all(header::AUTHORIZATION)
@@ -175,6 +196,7 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
             Err(_) => return rejected(StatusCode::BAD_REQUEST, "invalid notification envelope"),
         };
         return match tokio::task::spawn_blocking(move || {
+            let _admission = admission;
             state
                 .notifications
                 .lock()
@@ -245,8 +267,10 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
     else {
         return unavailable();
     };
+    let connection_admission = Arc::clone(&admission);
     let connection = tokio::spawn(async move {
-        let _ = connection.await;
+        let _admission = connection_admission;
+        let _ = tokio::time::timeout(DEADLINE + Duration::from_secs(2), connection).await;
     });
     let current = state
         .registration
@@ -255,6 +279,7 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
         .and_then(|value| value.clone());
     if !current.is_some_and(|value| Arc::ptr_eq(&value, &endpoint)) {
         connection.abort();
+        let _ = connection.await;
         return unavailable();
     }
     let uri = parts
@@ -278,6 +303,7 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
         .body(Body::from(bytes));
     let Ok(outgoing) = outgoing else {
         connection.abort();
+        let _ = connection.await;
         return rejected(StatusCode::BAD_REQUEST, "invalid owner identity");
     };
     // This is the forwarding boundary. All subsequent failures have unknown outcome.
@@ -292,6 +318,7 @@ async fn forward(State(state): State<GatewayState>, request: Request) -> Respons
     })
     .await;
     connection.abort();
+    let _ = connection.await;
     match result {
         Ok(Ok((status, bytes))) => {
             let text = String::from_utf8_lossy(&bytes)

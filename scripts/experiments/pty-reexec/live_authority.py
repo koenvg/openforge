@@ -13,6 +13,7 @@ import re
 import unittest
 
 from run import Host, EVIDENCE, record, macos
+from preflight_cases import Preflight
 
 SOURCE = Path(__file__).resolve().parent
 
@@ -112,6 +113,9 @@ class LiveAuthority(unittest.TestCase):
                         after = host.command("GO")
                         self.assertEqual(after["version"], 1 if fail_initialization else 2)
                         self.assertEqual(after["recoveries"], int(fail_initialization))
+                        self.assertEqual(after.get("activation"),
+                                         {"status": "failed", "requestedVersion": 2, "stage": "initialization"}
+                                         if fail_initialization else {"status": "active", "requestedVersion": 2})
                         expected_image = root / ("live-authority-a" if fail_initialization else "live-authority-b")
                         self.assertEqual(macos.executable(host.proc.pid), str(expected_image))
                         self.assertEqual(macos.descriptors(host.proc.pid), descriptors)
@@ -157,9 +161,12 @@ if __name__ == "__main__":
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--negative-control", action="store_true")
     parser.add_argument("--pressure-control", action="store_true", help="omit only the pressure-case replacement")
+    parser.add_argument("tests", nargs="*", help="optional unittest names")
     OPTIONS = parser.parse_args()
-    program = unittest.main(argv=[__file__], exit=False, verbosity=2)
-    paths = [SOURCE / "model_fixture.c", SOURCE / "live_authority.py", SOURCE / "run.py",
+    Preflight.bin_dir = OPTIONS.bin_dir
+    program = unittest.main(argv=[__file__, *OPTIONS.tests], exit=False, verbosity=2)
+    paths = [SOURCE / "model_fixture.c", SOURCE / "live_authority.py", SOURCE / "preflight_cases.py", SOURCE / "run.py",
+             SOURCE / "image_probe.c",
              SOURCE / "macos.py", SOURCE / "live-authority-proof.mjs",
              SOURCE / "authority/Cargo.toml", SOURCE / "authority/Cargo.lock",
              SOURCE.parents[2] / "scripts/prepare-ghostty-vt.mjs"]

@@ -1,6 +1,11 @@
 #[path = "terminal_model/session.rs"]
 mod session;
 
+#[allow(
+    unused_imports,
+    reason = "Checkpoint export is consumed by the daemon's shared-source build"
+)]
+pub(crate) use session::TerminalModelCheckpoint;
 pub(crate) use session::{
     TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelSession,
 };

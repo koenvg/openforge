@@ -1,15 +1,20 @@
+#[path = "checkpoint.rs"]
+mod checkpoint;
+pub use checkpoint::MAX_HOST_CHECKPOINT_BYTES;
+use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 
 use super::*;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) enum Mutation {
     Spawn(SpawnRequest),
     Terminate(PtyIdentity),
     Io(IoRequest),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(super) enum Receipt {
     Spawn(PtyIdentity),
     Done,
@@ -60,6 +65,14 @@ impl HostState {
     }
     pub fn lifetime(&self) -> &DaemonLifetimeId {
         &self.lifetime
+    }
+    /// Installation established by the first controller connection.
+    pub fn installation(&self) -> Option<&InstallationId> {
+        self.installation.as_ref()
+    }
+    /// Retained identities let a resource-owning adapter validate a combined checkpoint.
+    pub fn retained_sessions(&self) -> impl ExactSizeIterator<Item = &HostedSession> {
+        self.sessions.values()
     }
     pub fn capacity(&self) -> HostCapacity {
         HostCapacity {

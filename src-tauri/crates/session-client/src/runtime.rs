@@ -13,6 +13,54 @@ pub struct RuntimeDirectory {
 }
 
 impl RuntimeDirectory {
+    /// Reopens metadata for a retained owner, without claiming its lock or creating
+    /// directories/credentials. The caller must already hold the ownership descriptor.
+    ///
+    /// # Errors
+    /// Refuses missing, unsafe, changed, or incompatible credentials.
+    pub fn reopen(root: &Path, expected: &Credentials) -> Result<Self, Error> {
+        let metadata = fs::symlink_metadata(root).map_err(io_error)?;
+        if !metadata.is_dir() || metadata.uid() != uid() || metadata.mode() & 0o022 != 0 {
+            return Err(Error::Unauthorized);
+        }
+        let path = fs::canonicalize(root).map_err(io_error)?.join("session-v1");
+        check_private(&path, true)?;
+        let credential_path = path.join("credentials.json");
+        check_private(&credential_path, false)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(&credential_path)
+            .map_err(io_error)?;
+        let metadata = file.metadata().map_err(io_error)?;
+        if !metadata.is_file()
+            || metadata.uid() != uid()
+            || metadata.mode() & 0o077 != 0
+            || metadata.len() > 4096
+        {
+            return Err(Error::Unauthorized);
+        }
+        let mut bytes = Vec::new();
+        file.take(4097).read_to_end(&mut bytes).map_err(io_error)?;
+        if bytes.len() > 4096 {
+            return Err(Error::Capacity);
+        }
+        let credentials: Credentials =
+            serde_json::from_slice(&bytes).map_err(|_| Error::Unauthorized)?;
+        if uuid::Uuid::parse_str(credentials.installation.as_str()).is_err()
+            || credentials.token.len() != 64
+            || !credentials
+                .token
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+            || credentials.installation != expected.installation
+            || credentials.token != expected.token
+        {
+            return Err(Error::Unauthorized);
+        }
+        Ok(Self { path, credentials })
+    }
+
     /// Opens a private runtime under an existing installation data directory.
     ///
     /// # Errors
@@ -198,3 +246,7 @@ pub fn check_peer(stream: &UnixStream) -> Result<(), Error> {
 pub fn io_error(error: std::io::Error) -> Error {
     Error::Transport(error.to_string())
 }
+
+#[cfg(test)]
+#[path = "runtime_checkpoint_tests.rs"]
+mod checkpoint_tests;

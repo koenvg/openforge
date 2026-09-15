@@ -1,0 +1,97 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "architecture": "arm64",
+  "negativeControl": true,
+  "passed": false,
+  "pressureControl": false,
+  "fullReleaseGatePassed": false,
+  "binarySha256": {
+    "live-authority-a": "a863b2521cea681b079ea8c1573c7246adbfa04f28698df87db8f219fdfc9f89",
+    "live-authority-b": "19f0919fdaa5f8fe41e86eb145e976d5feb162d7fe9e67ca8a7725641f476307"
+  },
+  "testsRun": 1,
+  "sources": {
+    "scripts/experiments/pty-reexec/model_fixture.c": "5edaad4b47461f229e282281576e59b8c0c1857ae691c207baffa4d1a80d9a60",
+    "scripts/experiments/pty-reexec/live_authority.py": "e869f18a41ab29636a9b8b186cfc2fd59e7451c5a5bab932894c10660b0aa214",
+    "scripts/experiments/pty-reexec/preflight_cases.py": "69621e7fb3ac766e1ac4e93a6ffa3c7637f9ba83864832f4f562b948c4d52435",
+    "scripts/experiments/pty-reexec/run.py": "dba4fe81d5cb11d5d70630e8eaa40501ec8dc9c0e856857c4ae7077689241db2",
+    "scripts/experiments/pty-reexec/image_probe.c": "a0ae0ceb6fd8f7bcc1529091e3cf2a8695d97816f7f1fdcb1cb76eb60a9cd659",
+    "scripts/experiments/pty-reexec/macos.py": "3bd50d1c08e473c2356a3f21b35bdc01e9e2246ffcbd8a1f094c84bc0b0c845c",
+    "scripts/experiments/pty-reexec/live-authority-proof.mjs": "d751a299d55fd97a933ca91c47757b3dfc477153f63ad9a24ea5bbf8ebb28936",
+    "scripts/experiments/pty-reexec/authority/Cargo.toml": "b9619c3282b82b7d5de9a0932c48fcab1ad3dacc5ceaff33237cdcdf6184bdd7",
+    "scripts/experiments/pty-reexec/authority/Cargo.lock": "7b93dda8d7ec9bb817f34524476995daf3073b4051a02d47d408fdb350a40af0",
+    "scripts/prepare-ghostty-vt.mjs": "f74c1e79fdf62a18729069e4ad153a747857aa3f5244f052743a53fbe4aa9007",
+    "scripts/experiments/pty-reexec/authority/src/live_native.rs": "8feb6367ca375c3384d582058cd4276dc49d6fbbcbfa8b11c048724f830ed462",
+    "scripts/experiments/pty-reexec/authority/src/live_b.rs": "5eb6275cf0e04938adfa47ef0641bac30e0594606adcab5ab7a9353ca793b338",
+    "scripts/experiments/pty-reexec/authority/src/live_a.rs": "a3211c5c68b7b892c6801d3a2ef2aac5384d21d8e83e02b2ff7133bf6ee8b8da",
+    "scripts/experiments/pty-reexec/authority/src/main.rs": "a178384e75dcc95a167afd4fe36d361df01fd02fdca00df5866ebbb3c7de67f9",
+    "scripts/experiments/pty-reexec/authority/src/live.rs": "be0681010f11cd81142aca5a0d06dd651ec4240c644327a089adeb4269f06737",
+    "scripts/experiments/pty-reexec/authority/src/live_preflight.rs": "3f0411ad3279592b4c6f6d9fc46aa37d051c20c38f88ebbef456ee35b436ca9f",
+    "src-tauri/src/terminal_model/session.rs": "485320762d608989efc1b79f2ab5e2f8cacd28c18fedb4e27502c7c9056816e6",
+    "src-tauri/src/terminal_model/event_state.rs": "7d9abafd5ddddde6d08308c6b3ea0ab14e4e12ca122c5ee514ac981396a6e223",
+    "src-tauri/src/terminal_model/worker_session.rs": "23a87a124808a0d6d1f703102b8f165b603baec154f1fbe59c266ccc289ae79e",
+    "src-tauri/src/terminal_model.rs": "b06c4f715e38a7d3ec9a8c5936c073f071bca72770f38fbc2e856c613712cb68"
+  },
+  "failures": [
+    "test_parser_query_primary_screen_and_live_descriptors_survive (__main__.LiveAuthority) (fail_initialization=False)\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/live_authority.py\", line 134, in test_parser_query_primary_screen_and_live_descriptors_survive\n    self.assertIn(\"ALTRED\", continued[\"text\"])\nAssertionError: 'ALTRED' not found in 'mRED\\nQUERY=1b5b313b3552'\n",
+    "test_parser_query_primary_screen_and_live_descriptors_survive (__main__.LiveAuthority) (fail_initialization=True)\nTraceback (most recent call last):\n  File \"/Users/koen/.openforge/worktrees/openforge/KVG-4726/scripts/experiments/pty-reexec/live_authority.py\", line 134, in test_parser_query_primary_screen_and_live_descriptors_survive\n    self.assertIn(\"ALTRED\", continued[\"text\"])\nAssertionError: 'ALTRED' not found in 'mRED\\nQUERY=1b5b313b3552'\n"
+  ],
+  "events": [
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 28380,
+          "ppid": 28374,
+          "uid": 501,
+          "pgid": 28380,
+          "status": 2,
+          "sec": 1789405257,
+          "usec": 314828,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 28383,
+          "ppid": 28380,
+          "uid": 501,
+          "pgid": 28383,
+          "status": 2,
+          "sec": 1789405257,
+          "usec": 516907,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 28402,
+          "ppid": 28374,
+          "uid": 501,
+          "pgid": 28402,
+          "status": 2,
+          "sec": 1789405258,
+          "usec": 84742,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 28405,
+          "ppid": 28402,
+          "uid": 501,
+          "pgid": 28405,
+          "status": 2,
+          "sec": 1789405258,
+          "usec": 346816,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    }
+  ]
+}

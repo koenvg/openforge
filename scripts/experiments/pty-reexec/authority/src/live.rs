@@ -1,6 +1,8 @@
 //! One-session, single-threaded feasibility owner, never a production host.
 #[path = "live_native.rs"]
 mod native;
+#[path = "live_preflight.rs"]
+mod preflight;
 #[allow(dead_code, unused_imports)]
 #[path = "../../../../../src-tauri/src/terminal_model.rs"]
 mod terminal_model;
@@ -30,6 +32,33 @@ use terminal_model::{GhosttyTerminalModel, TerminalModel, TerminalModelOptions};
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const LIMIT: usize = 64 * 1024 * 1024;
 
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+enum Activation {
+    Pending {
+        requested_version: u8,
+    },
+    Active {
+        requested_version: u8,
+    },
+    Failed {
+        requested_version: u8,
+        stage: FailureStage,
+    },
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum FailureStage {
+    Exec,
+    Initialization,
+    Version,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Checkpoint {
@@ -44,6 +73,7 @@ struct Checkpoint {
     recovery_image: PathBuf,
     fail_resume: bool,
     forget_state: bool,
+    activation: Option<Activation>,
     model: Vec<u8>,
 }
 
@@ -76,7 +106,7 @@ fn restore(fd: i32) -> Result<Checkpoint> {
     let mut bytes = vec![0; length];
     file.read_exact_at(&mut bytes, 0)?;
     let state: Checkpoint = serde_json::from_slice(&bytes)?;
-    if state.format != 1
+    if state.format != preflight::STATE_FORMAT
         || state.host != std::process::id()
         || state.state_fd != fd
         || state.pty.fd < 3
@@ -133,6 +163,7 @@ fn inventory(version: u8, state: &mut Checkpoint, model: &GhosttyTerminalModel) 
         "host": state.host, "version": version, "recoveries": state.recoveries,
         "stateFd": state.state_fd, "rows": size.ws_row, "cols": size.ws_col,
         "architecture": std::env::consts::ARCH,
+        "activation": state.activation,
         "writes": state.writes, "replies": state.replies,
         "checkpointBytes": checkpoint_file(state.state_fd)?.metadata()?.len(),
         "text": String::from_utf8_lossy(text.as_ref()),
@@ -199,6 +230,13 @@ fn serve(version: u8, state: &mut Checkpoint, model: &mut GhosttyTerminalModel) 
                 publish(serde_json::json!({"ok":true}))?;
             }
             ["REEXEC", target, fault @ ..] if fault.is_empty() || fault == ["FAIL"] => {
+                let (target_version, recovery_image) = match preflight::validate(target, version) {
+                    Ok(images) => images,
+                    Err(error) => {
+                        publish(serde_json::json!({"refused":error.to_string()}))?;
+                        continue;
+                    }
+                };
                 // All accepted input and replies have been written synchronously.
                 state.pty.reap()?;
                 state.model = match model.encode_snapshot() {
@@ -208,8 +246,11 @@ fn serve(version: u8, state: &mut Checkpoint, model: &mut GhosttyTerminalModel) 
                         continue;
                     }
                 };
-                state.recovery_image = env::current_exe()?;
+                state.recovery_image = recovery_image;
                 state.fail_resume = !fault.is_empty();
+                state.activation = Some(Activation::Pending {
+                    requested_version: target_version,
+                });
                 save(state)?;
                 native::allowlist(state.pty.fd, state.state_fd)?;
                 publish(serde_json::json!({"prepared":true}))?;
@@ -225,7 +266,13 @@ fn serve(version: u8, state: &mut Checkpoint, model: &mut GhosttyTerminalModel) 
                     .arg("resume")
                     .arg(state.state_fd.to_string())
                     .exec();
-                publish(serde_json::json!({"execError":error.raw_os_error()}))?;
+                state.activation = Some(Activation::Failed {
+                    requested_version: target_version,
+                    stage: FailureStage::Exec,
+                });
+                publish(serde_json::json!({
+                    "execError":error.raw_os_error(), "activation":state.activation,
+                }))?;
             }
             _ => return Err("invalid fixture command".into()),
         }
@@ -238,6 +285,9 @@ pub fn run(version: u8) -> Result<()> {
         return Err("macOS evidence only".into());
     }
     let args: Vec<_> = env::args().collect();
+    if args.get(1).is_some_and(|arg| arg == "--check-image") {
+        return preflight::describe(version);
+    }
     let (mut state, mut model) = match args.get(1).map(String::as_str) {
         Some("start") => {
             let model = GhosttyTerminalModel::new(TerminalModelOptions::new(20, 4))?;
@@ -251,7 +301,7 @@ pub fn run(version: u8) -> Result<()> {
             let state_fd = file.into_raw_fd();
             let pty = native::Pty::spawn(args.get(2).ok_or("missing fixture")?)?;
             let state = Checkpoint {
-                format: 1,
+                format: preflight::STATE_FORMAT,
                 host: std::process::id(),
                 state_fd,
                 pty,
@@ -262,6 +312,7 @@ pub fn run(version: u8) -> Result<()> {
                 recovery_image: env::current_exe()?,
                 fail_resume: false,
                 forget_state: args.get(3).is_some_and(|arg| arg == "forget-state"),
+                activation: None,
                 model: Vec::new(),
             };
             (state, model)
@@ -269,9 +320,22 @@ pub fn run(version: u8) -> Result<()> {
         Some("resume") => {
             let fd = args.get(2).ok_or("missing descriptor")?.parse::<i32>()?;
             let mut state = restore(fd)?;
-            if state.fail_resume {
+            let failure = match state.activation {
+                Some(Activation::Pending { requested_version }) if version != requested_version => {
+                    Some(FailureStage::Version)
+                }
+                _ if state.fail_resume => Some(FailureStage::Initialization),
+                _ => None,
+            };
+            if let Some(stage) = failure {
                 state.fail_resume = false;
                 state.recoveries += 1;
+                if let Some(Activation::Pending { requested_version }) = state.activation {
+                    state.activation = Some(Activation::Failed {
+                        requested_version,
+                        stage,
+                    });
+                }
                 save(&state)?;
                 // No owning PTY wrapper, parser or reader has been installed yet.
                 return Err(Command::new(&state.recovery_image)
@@ -286,6 +350,9 @@ pub fn run(version: u8) -> Result<()> {
             } else {
                 GhosttyTerminalModel::decode_snapshot(&state.model)?
             };
+            if let Some(Activation::Pending { requested_version }) = state.activation {
+                state.activation = Some(Activation::Active { requested_version });
+            }
             (state, model)
         }
         _ => return Err("expected start or resume".into()),

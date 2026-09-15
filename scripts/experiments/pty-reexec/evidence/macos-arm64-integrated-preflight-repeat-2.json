@@ -1,0 +1,889 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "architecture": "arm64",
+  "negativeControl": false,
+  "passed": true,
+  "pressureControl": false,
+  "fullReleaseGatePassed": false,
+  "binarySha256": {
+    "live-authority-a": "a863b2521cea681b079ea8c1573c7246adbfa04f28698df87db8f219fdfc9f89",
+    "live-authority-b": "19f0919fdaa5f8fe41e86eb145e976d5feb162d7fe9e67ca8a7725641f476307"
+  },
+  "testsRun": 9,
+  "sources": {
+    "scripts/experiments/pty-reexec/model_fixture.c": "5edaad4b47461f229e282281576e59b8c0c1857ae691c207baffa4d1a80d9a60",
+    "scripts/experiments/pty-reexec/live_authority.py": "e869f18a41ab29636a9b8b186cfc2fd59e7451c5a5bab932894c10660b0aa214",
+    "scripts/experiments/pty-reexec/preflight_cases.py": "69621e7fb3ac766e1ac4e93a6ffa3c7637f9ba83864832f4f562b948c4d52435",
+    "scripts/experiments/pty-reexec/run.py": "dba4fe81d5cb11d5d70630e8eaa40501ec8dc9c0e856857c4ae7077689241db2",
+    "scripts/experiments/pty-reexec/image_probe.c": "a0ae0ceb6fd8f7bcc1529091e3cf2a8695d97816f7f1fdcb1cb76eb60a9cd659",
+    "scripts/experiments/pty-reexec/macos.py": "3bd50d1c08e473c2356a3f21b35bdc01e9e2246ffcbd8a1f094c84bc0b0c845c",
+    "scripts/experiments/pty-reexec/live-authority-proof.mjs": "d751a299d55fd97a933ca91c47757b3dfc477153f63ad9a24ea5bbf8ebb28936",
+    "scripts/experiments/pty-reexec/authority/Cargo.toml": "b9619c3282b82b7d5de9a0932c48fcab1ad3dacc5ceaff33237cdcdf6184bdd7",
+    "scripts/experiments/pty-reexec/authority/Cargo.lock": "7b93dda8d7ec9bb817f34524476995daf3073b4051a02d47d408fdb350a40af0",
+    "scripts/prepare-ghostty-vt.mjs": "f74c1e79fdf62a18729069e4ad153a747857aa3f5244f052743a53fbe4aa9007",
+    "scripts/experiments/pty-reexec/authority/src/live_native.rs": "8feb6367ca375c3384d582058cd4276dc49d6fbbcbfa8b11c048724f830ed462",
+    "scripts/experiments/pty-reexec/authority/src/live_b.rs": "5eb6275cf0e04938adfa47ef0641bac30e0594606adcab5ab7a9353ca793b338",
+    "scripts/experiments/pty-reexec/authority/src/live_a.rs": "a3211c5c68b7b892c6801d3a2ef2aac5384d21d8e83e02b2ff7133bf6ee8b8da",
+    "scripts/experiments/pty-reexec/authority/src/main.rs": "a178384e75dcc95a167afd4fe36d361df01fd02fdca00df5866ebbb3c7de67f9",
+    "scripts/experiments/pty-reexec/authority/src/live.rs": "be0681010f11cd81142aca5a0d06dd651ec4240c644327a089adeb4269f06737",
+    "scripts/experiments/pty-reexec/authority/src/live_preflight.rs": "3f0411ad3279592b4c6f6d9fc46aa37d051c20c38f88ebbef456ee35b436ca9f",
+    "src-tauri/src/terminal_model/session.rs": "485320762d608989efc1b79f2ab5e2f8cacd28c18fedb4e27502c7c9056816e6",
+    "src-tauri/src/terminal_model/event_state.rs": "7d9abafd5ddddde6d08308c6b3ea0ab14e4e12ca122c5ee514ac981396a6e223",
+    "src-tauri/src/terminal_model/worker_session.rs": "23a87a124808a0d6d1f703102b8f165b603baec154f1fbe59c266ccc289ae79e",
+    "src-tauri/src/terminal_model.rs": "b06c4f715e38a7d3ec9a8c5936c073f071bca72770f38fbc2e856c613712cb68"
+  },
+  "failures": [],
+  "events": [
+    {
+      "event": "authorityPressure",
+      "numberedLines": 4096,
+      "bytes": 240627,
+      "outputSha256": "d54ca2870c17227aba82690b9562a54dcb0995b792276f05a163fd13ec9dbdf2",
+      "maxWriteNs": 584193000,
+      "producerTotalNs": 8022245000,
+      "requestToReadyNs": 556075125,
+      "deliberatePauseNs": 200748750,
+      "execRequestToReadyNs": 41347542,
+      "before": {
+        "activation": null,
+        "architecture": "aarch64",
+        "checkpointBytes": 0,
+        "children": [
+          {
+            "cursor": 1037,
+            "fd": 4,
+            "pid": 26921,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 26919,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "BURST_READY\nROW 0 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 1 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 2 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 3 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 4 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 5 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 6 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 7 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 8 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 9 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 10 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 11 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 12 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 13 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 14 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 15 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 16 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 17 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 18 x",
+        "version": 1,
+        "writes": 1
+      },
+      "after": {
+        "activation": {
+          "requestedVersion": 2,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 8313,
+        "children": [
+          {
+            "cursor": 1037,
+            "fd": 4,
+            "pid": 26921,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 26919,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "BURST_READY\nROW 0 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 1 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 2 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 3 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 4 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 5 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 6 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 7 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 8 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 9 xxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxx\nROW 10 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 11 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 12 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 13 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 14 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 15 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 16 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 17 xxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxx\nROW 18 x",
+        "version": 2,
+        "writes": 1
+      },
+      "final": {
+        "activation": {
+          "requestedVersion": 2,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 8313,
+        "children": [
+          {
+            "cursor": 240627,
+            "fd": 4,
+            "pid": 26921,
+            "reaped": true,
+            "status": 5888
+          }
+        ],
+        "cols": 20,
+        "host": 26919,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "version": 2,
+        "writes": 2,
+        "textSha256": "e42d9b3301f02a0c4f1e4c3082807b9b70d18c30240db35b7494b3ec0ff22f8c",
+        "textTail": "ROW 4093 xxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxx\nROW 4094 xxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxx\nROW 4095 xxxxxxxxxxx\nxxxxxxxxxxxxxxxxxxxx\nxxxxxxxxxxxxxxxxx\nBURST_DONE 4096 MAX_\nWRITE_NS 584193000 T\nOTAL_NS 8022245000"
+      },
+      "descriptors": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 26919,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 26919,
+          "status": 2,
+          "sec": 1789405199,
+          "usec": 924160,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 26921,
+          "ppid": 26919,
+          "uid": 501,
+          "pgid": 26921,
+          "status": 2,
+          "sec": 1789405200,
+          "usec": 246046,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "postRestoreCheckpointRefusal",
+      "response": {
+        "refused": "terminal snapshot continuation is temporarily unavailable"
+      }
+    },
+    {
+      "event": "liveAuthority",
+      "failedInitialization": false,
+      "before": {
+        "activation": null,
+        "architecture": "aarch64",
+        "checkpointBytes": 0,
+        "children": [
+          {
+            "cursor": 25,
+            "fd": 4,
+            "pid": 27185,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27183,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALT",
+        "version": 1,
+        "writes": 0
+      },
+      "after": {
+        "activation": {
+          "requestedVersion": 2,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 4428,
+        "children": [
+          {
+            "cursor": 25,
+            "fd": 4,
+            "pid": 27185,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27183,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALT",
+        "version": 2,
+        "writes": 0
+      },
+      "continued": {
+        "activation": {
+          "requestedVersion": 2,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 4428,
+        "children": [
+          {
+            "cursor": 55,
+            "fd": 4,
+            "pid": 27185,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27183,
+        "recoveries": 0,
+        "replies": 1,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALTRED\nQUERY=1b5b313b3752",
+        "version": 2,
+        "writes": 1
+      },
+      "final": {
+        "activation": {
+          "requestedVersion": 1,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 5259,
+        "children": [
+          {
+            "cursor": 69,
+            "fd": 4,
+            "pid": 27185,
+            "reaped": true,
+            "status": 5888
+          }
+        ],
+        "cols": 101,
+        "host": 27183,
+        "recoveries": 0,
+        "replies": 1,
+        "rows": 37,
+        "stateFd": 3,
+        "text": "PRIMARYDONE",
+        "version": 1,
+        "writes": 2
+      },
+      "descriptors": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "identities": {
+        "27183": [
+          27183,
+          501,
+          1789405208,
+          627166
+        ],
+        "27185": [
+          27185,
+          501,
+          1789405208,
+          848639
+        ]
+      },
+      "observedBytes": "5052494d4152591b5b3f31303439681b5b48414c541b5b33316d5245441b5b366e0d0a51554552593d3162356233313362333735320d0a1b5b3f313034396c444f4e450d0a"
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27183,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27183,
+          "status": 2,
+          "sec": 1789405208,
+          "usec": 627166,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27185,
+          "ppid": 27183,
+          "uid": 501,
+          "pgid": 27185,
+          "status": 2,
+          "sec": 1789405208,
+          "usec": 848639,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "postRestoreCheckpointRefusal",
+      "response": {
+        "refused": "terminal snapshot continuation is temporarily unavailable"
+      }
+    },
+    {
+      "event": "liveAuthority",
+      "failedInitialization": true,
+      "before": {
+        "activation": null,
+        "architecture": "aarch64",
+        "checkpointBytes": 0,
+        "children": [
+          {
+            "cursor": 25,
+            "fd": 4,
+            "pid": 27218,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27216,
+        "recoveries": 0,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALT",
+        "version": 1,
+        "writes": 0
+      },
+      "after": {
+        "activation": {
+          "requestedVersion": 2,
+          "stage": "initialization",
+          "status": "failed"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 4452,
+        "children": [
+          {
+            "cursor": 25,
+            "fd": 4,
+            "pid": 27218,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27216,
+        "recoveries": 1,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALT",
+        "version": 1,
+        "writes": 0
+      },
+      "continued": {
+        "activation": {
+          "requestedVersion": 2,
+          "stage": "initialization",
+          "status": "failed"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 4452,
+        "children": [
+          {
+            "cursor": 55,
+            "fd": 4,
+            "pid": 27218,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27216,
+        "recoveries": 1,
+        "replies": 1,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALTRED\nQUERY=1b5b313b3752",
+        "version": 1,
+        "writes": 1
+      },
+      "final": {
+        "activation": {
+          "requestedVersion": 1,
+          "status": "active"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 5259,
+        "children": [
+          {
+            "cursor": 69,
+            "fd": 4,
+            "pid": 27218,
+            "reaped": true,
+            "status": 5888
+          }
+        ],
+        "cols": 101,
+        "host": 27216,
+        "recoveries": 1,
+        "replies": 1,
+        "rows": 37,
+        "stateFd": 3,
+        "text": "PRIMARYDONE",
+        "version": 1,
+        "writes": 2
+      },
+      "descriptors": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "identities": {
+        "27216": [
+          27216,
+          501,
+          1789405209,
+          603811
+        ],
+        "27218": [
+          27218,
+          501,
+          1789405209,
+          816183
+        ]
+      },
+      "observedBytes": "5052494d4152591b5b3f31303439681b5b48414c541b5b33316d5245441b5b366e0d0a51554552593d3162356233313362333735320d0a1b5b3f313034396c444f4e450d0a"
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27216,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27216,
+          "status": 2,
+          "sec": 1789405209,
+          "usec": 603811,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27218,
+          "ppid": 27216,
+          "uid": 501,
+          "pgid": 27218,
+          "status": 2,
+          "sec": 1789405209,
+          "usec": 816183,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityChangedImage",
+      "response": {
+        "activation": {
+          "requestedVersion": 2,
+          "stage": "version",
+          "status": "failed"
+        },
+        "architecture": "aarch64",
+        "checkpointBytes": 4450,
+        "children": [
+          {
+            "cursor": 25,
+            "fd": 4,
+            "pid": 27251,
+            "reaped": false,
+            "status": 0
+          }
+        ],
+        "cols": 20,
+        "host": 27249,
+        "recoveries": 1,
+        "replies": 0,
+        "rows": 4,
+        "stateFd": 3,
+        "text": "ALT",
+        "version": 1,
+        "writes": 0
+      }
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27249,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27249,
+          "status": 2,
+          "sec": 1789405210,
+          "usec": 574369,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27251,
+          "ppid": 27249,
+          "uid": 501,
+          "pgid": 27251,
+          "status": 2,
+          "sec": 1789405210,
+          "usec": 779762,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityFailedExec",
+      "response": {
+        "activation": {
+          "requestedVersion": 2,
+          "stage": "exec",
+          "status": "failed"
+        },
+        "execError": 2
+      }
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27277,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27277,
+          "status": 2,
+          "sec": 1789405211,
+          "usec": 692788,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27279,
+          "ppid": 27277,
+          "uid": 501,
+          "pgid": 27279,
+          "status": 2,
+          "sec": 1789405211,
+          "usec": 888538,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authoritySpecialFileRefusal",
+      "response": {
+        "refused": "target is not a regular file"
+      },
+      "elapsedNs": 12784292
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27306,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27306,
+          "status": 2,
+          "sec": 1789405212,
+          "usec": 773243,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27308,
+          "ppid": 27306,
+          "uid": 501,
+          "pgid": 27308,
+          "status": 2,
+          "sec": 1789405212,
+          "usec": 966221,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityNonImageRefusal",
+      "response": {
+        "refused": "target is not a supported arm64 Mach-O executable"
+      }
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27328,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27328,
+          "status": 2,
+          "sec": 1789405215,
+          "usec": 338574,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27330,
+          "ppid": 27328,
+          "uid": 501,
+          "pgid": 27330,
+          "status": 2,
+          "sec": 1789405215,
+          "usec": 551705,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-protocol",
+      "response": {
+        "refused": "incompatible image contract"
+      },
+      "elapsedNs": 342156333
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-state",
+      "response": {
+        "refused": "incompatible image contract"
+      },
+      "elapsedNs": 199614416
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-codec",
+      "response": {
+        "refused": "incompatible image contract"
+      },
+      "elapsedNs": 187803916
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-architecture",
+      "response": {
+        "refused": "incompatible image contract"
+      },
+      "elapsedNs": 189535000
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "wrong-version",
+      "response": {
+        "refused": "incompatible image contract"
+      },
+      "elapsedNs": 199352792
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "empty-response",
+      "response": {
+        "refused": "EOF while parsing a value at line 1 column 0"
+      },
+      "elapsedNs": 185074458
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "oversized-response",
+      "response": {
+        "refused": "image probe response budget exceeded"
+      },
+      "elapsedNs": 188756209
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "unresponsive",
+      "response": {
+        "refused": "image probe timed out"
+      },
+      "elapsedNs": 2051394084
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "executable-text",
+      "response": {
+        "refused": "failed to fill whole buffer"
+      },
+      "elapsedNs": 15698375
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "truncated-image",
+      "response": {
+        "refused": "failed to fill whole buffer"
+      },
+      "elapsedNs": 14120708
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "not-executable",
+      "response": {
+        "refused": "Permission denied (os error 13)"
+      },
+      "elapsedNs": 26634500
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "directory",
+      "response": {
+        "refused": "target is not a regular file"
+      },
+      "elapsedNs": 11607458
+    },
+    {
+      "event": "authorityProbeIsolation",
+      "audit": [
+        [
+          27356,
+          0,
+          0
+        ],
+        [
+          27360,
+          0,
+          0
+        ],
+        [
+          27363,
+          0,
+          0
+        ],
+        [
+          27366,
+          0,
+          0
+        ],
+        [
+          27369,
+          0,
+          0
+        ],
+        [
+          27373,
+          0,
+          0
+        ],
+        [
+          27376,
+          0,
+          0
+        ],
+        [
+          27379,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27346,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27346,
+          "status": 2,
+          "sec": 1789405215,
+          "usec": 860230,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27348,
+          "ppid": 27346,
+          "uid": 501,
+          "pgid": 27348,
+          "status": 2,
+          "sec": 1789405216,
+          "usec": 49367,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityPreflightRefusal",
+      "target": "missing-image",
+      "response": {
+        "refused": "No such file or directory (os error 2)"
+      },
+      "elapsedNs": 12484833
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27418,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27418,
+          "status": 2,
+          "sec": 1789405220,
+          "usec": 564955,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27420,
+          "ppid": 27418,
+          "uid": 501,
+          "pgid": 27420,
+          "status": 2,
+          "sec": 1789405220,
+          "usec": 761040,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    },
+    {
+      "event": "authorityRecoveryImageRefusal",
+      "response": {
+        "refused": "Permission denied (os error 13)"
+      }
+    },
+    {
+      "event": "cleanup",
+      "owned": [
+        {
+          "pid": 27445,
+          "ppid": 26915,
+          "uid": 501,
+          "pgid": 27445,
+          "status": 2,
+          "sec": 1789405221,
+          "usec": 413475,
+          "tdev": 4294967295
+        },
+        {
+          "pid": 27447,
+          "ppid": 27445,
+          "uid": 501,
+          "pgid": 27447,
+          "status": 2,
+          "sec": 1789405221,
+          "usec": 684585,
+          "tdev": 268435474
+        }
+      ],
+      "survivors": [],
+      "forced": false,
+      "errors": []
+    }
+  ]
+}

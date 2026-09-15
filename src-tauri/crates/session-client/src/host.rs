@@ -22,10 +22,12 @@ impl PtyHost for Client {
         let Response::Inventory(inventory) = response else {
             return Err(HostError::OutcomeUnknown);
         };
+        // A daemon without this optional command must not advertise live replacement.
+        let supports_replacement = matches!(self.host_request(Command::Capabilities).await, Ok(Response::Capabilities(capabilities)) if capabilities.supports_replacement);
         Ok(Connection {
             controller: inventory.controller,
             inventory: inventory.sessions.iter().map(|s| s.hosted()).collect(),
-            supports_replacement: false,
+            supports_replacement,
         })
     }
     async fn reconcile(&self, controller: &Controller) -> Result<Vec<HostedSession>, HostError> {
@@ -100,11 +102,17 @@ impl PtyHost for Client {
     async fn replacement(
         &self,
         controller: &Controller,
-        _operation: OperationId,
-        _phase: ReplacementPhase,
+        operation: OperationId,
+        phase: ReplacementPhase,
     ) -> Result<(), HostError> {
-        self.reconcile(controller).await?;
-        Err(HostError::UnsupportedReplacement)
+        let client = self.with_controller(controller.clone());
+        tokio::task::spawn_blocking(move || {
+            client
+                .complete_replacement(operation, phase)
+                .map_err(HostError::from)
+        })
+        .await
+        .map_err(|_| HostError::OutcomeUnknown)?
     }
     async fn attach_recover(
         &self,

@@ -3,6 +3,7 @@
 mod host;
 mod operations;
 mod output;
+mod replacement;
 pub mod runtime;
 use openforge_session_protocol::*;
 use runtime::{check_peer, io_error, RuntimeDirectory};

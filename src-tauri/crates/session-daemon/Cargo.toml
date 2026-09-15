@@ -3,6 +3,25 @@ name = "openforge-session-daemon"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.95"
+default-run = "openforge-session-daemon"
+
+[features]
+replacement-fixtures = []
+
+[[bin]]
+name = "openforge-session-daemon-fixture-v2"
+path = "src/replacement_fixture_v2.rs"
+required-features = ["replacement-fixtures"]
+
+[[bin]]
+name = "openforge-session-daemon-fixture-init-fails"
+path = "src/replacement_fixture_init_fails.rs"
+required-features = ["replacement-fixtures"]
+
+[[bin]]
+name = "openforge-session-daemon-fixture-exec-fails"
+path = "src/replacement_fixture_exec_fails.rs"
+required-features = ["replacement-fixtures"]
 
 [dependencies]
 axum = "0.7"
@@ -14,6 +33,7 @@ openforge-session-protocol = { path = "../session-protocol" }
 openforge-session-client = { path = "../session-client" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_json = "1"
+sha2 = "0.10"
 subtle = "2"
 uuid = { version = "1", features = ["v4"] }
 serde = { version = "1", features = ["derive"] }

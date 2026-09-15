@@ -1,3 +1,8 @@
+mod checkpoint;
+pub(crate) use checkpoint::TerminalModelCheckpoint;
+#[cfg(test)]
+#[path = "checkpoint_tests.rs"]
+mod checkpoint_tests;
 mod event_state;
 mod worker_session;
 

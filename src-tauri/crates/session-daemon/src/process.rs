@@ -1,11 +1,25 @@
+#[path = "process_checkpoint.rs"]
+mod checkpoint;
+pub(crate) use checkpoint::ProcessCheckpoint;
+
+#[cfg(test)]
+#[path = "process_checkpoint_tests.rs"]
+mod checkpoint_tests;
+
+use crate::input::InputWriter;
 use crate::journal::{lock, SharedJournal};
 use crate::managed_process::{
     terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity, RootReapMode,
 };
-use crate::terminal_model::{TerminalModelEvent, TerminalModelOptions, TerminalModelSession};
+use crate::process_native::{ChildHandle, Master};
+use crate::quiescence::{Gate, Paused};
+use crate::terminal_model::{
+    TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
+    TerminalModelSession,
+};
 use openforge_session_protocol::*;
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
-use std::io::{Read, Write};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::io::Read;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -13,15 +27,19 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 pub struct Process {
-    master: Box<dyn MasterPty + Send>,
-    child: Box<dyn Child + Send + Sync>,
+    master: Master,
+    child: ChildHandle,
     identity: ManagedProcessIdentity,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    writer: Arc<Mutex<InputWriter>>,
     model: Arc<TerminalModelSession>,
     stopping: Arc<AtomicBool>,
     reader_done: Arc<AtomicBool>,
     pty: PtyIdentity,
     root_exit: Option<(u32, Instant)>,
+    session_key: String,
+    reader_gate: Arc<Gate>,
+    restore_pause: Option<Paused>,
+    cleanup_on_drop: bool,
 }
 
 impl Process {
@@ -43,35 +61,17 @@ impl Process {
         if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
             return Err(host_error(std::io::Error::last_os_error()));
         }
-        let mut reader = pair.master.try_clone_reader().map_err(host_error)?;
-        let writer = Arc::new(Mutex::new(pair.master.take_writer().map_err(host_error)?));
-        let event_writer = Arc::clone(&writer);
-        let event_pty = pty.clone();
+        let reader = pair.master.try_clone_reader().map_err(host_error)?;
+        let writer = Arc::new(Mutex::new(InputWriter::new(
+            pair.master.take_writer().map_err(host_error)?,
+        )));
         let mut options = TerminalModelOptions::new(command.columns, command.rows);
         options.max_scrollback_bytes = 256 * 1024;
         let (model, feeder) = TerminalModelSession::start_with_event_sink(
             command.owner.session_key(),
             pty.instance.value(),
             options,
-            Arc::new(move |event| match event {
-                TerminalModelEvent::Output(frame) => lock(&journal).publish(Event::Output {
-                    pty: event_pty.clone(),
-                    sequence: frame.sequence,
-                    data: frame.bytes,
-                }),
-                TerminalModelEvent::ProtocolReply { bytes, .. } => {
-                    if write_bounded(&event_writer, &bytes).is_err() {
-                        lock(&journal).publish(Event::RecoveryRequired {
-                            pty: event_pty.clone(),
-                        });
-                    }
-                }
-                TerminalModelEvent::Disabled { .. } => {
-                    lock(&journal).publish(Event::RecoveryRequired {
-                        pty: event_pty.clone(),
-                    })
-                }
-            }),
+            event_sink(pty.clone(), journal, Arc::clone(&writer)),
         )
         .map_err(host_error)?;
         let model = Arc::new(model);
@@ -98,8 +98,8 @@ impl Process {
             }
         };
         let process = Self {
-            master: pair.master,
-            child,
+            master: Master::Spawned(pair.master),
+            child: ChildHandle::Spawned(child),
             identity,
             writer,
             model,
@@ -107,15 +107,43 @@ impl Process {
             reader_done: Arc::new(AtomicBool::new(false)),
             pty,
             root_exit: None,
+            session_key: command.owner.session_key(),
+            reader_gate: Arc::new(Gate::default()),
+            restore_pause: None,
+            cleanup_on_drop: true,
         };
-        let stopping = Arc::clone(&process.stopping);
-        let reader_done = Arc::clone(&process.reader_done);
-        let barrier = Arc::clone(&process.model);
+        process.start_reader(reader, feeder)?;
+        Ok(process)
+    }
+
+    fn start_reader(
+        &self,
+        mut reader: Box<dyn Read + Send>,
+        feeder: TerminalModelFeeder,
+    ) -> Result<(), Error> {
+        let pid = self.pid();
+        let stopping = Arc::clone(&self.stopping);
+        let reader_done = Arc::clone(&self.reader_done);
+        let barrier = Arc::clone(&self.model);
+        let reader_writer = Arc::clone(&self.writer);
+        let reader_gate = Arc::clone(&self.reader_gate);
         std::thread::Builder::new()
             .name(format!("session-read-{pid}"))
             .spawn(move || {
                 let mut buffer = [0; 8192];
                 while !stopping.load(Ordering::Acquire) {
+                    let Some(_admission) = reader_gate.enter() else {
+                        std::thread::sleep(Duration::from_millis(2));
+                        continue;
+                    };
+                    // An abandoned restore sets stopping before reopening its gate.
+                    // Recheck after admission so that teardown cannot race one read/write.
+                    if stopping.load(Ordering::Acquire) {
+                        break;
+                    }
+                    if let Ok(mut writer) = reader_writer.lock() {
+                        let _ = writer.progress();
+                    }
                     match reader.read(&mut buffer) {
                         Ok(0) => break,
                         Ok(size) => feeder.feed(&buffer[..size]),
@@ -131,7 +159,7 @@ impl Process {
                 reader_done.store(true, Ordering::Release);
             })
             .map_err(host_error)?;
-        Ok(process)
+        Ok(())
     }
 
     pub fn pid(&self) -> u32 {
@@ -141,8 +169,8 @@ impl Process {
     pub fn poll_exit(&mut self) -> Result<Option<u32>, Error> {
         // Root liveness is independent of a descendant-held slave or reader progress.
         if self.root_exit.is_none() {
-            if let Some(status) = self.child.try_wait().map_err(host_error)? {
-                self.root_exit = Some((status.exit_code(), Instant::now()));
+            if let Some(code) = self.child.try_wait()? {
+                self.root_exit = Some((code, Instant::now()));
             }
         }
         Ok(self.root_exit.map(|(code, _)| code))
@@ -161,11 +189,13 @@ impl Process {
 
     pub fn operate(&self, action: &IoAction) -> Result<(), Error> {
         match action {
-            IoAction::Write(bytes) => write_bounded(&self.writer, bytes),
+            IoAction::Write(bytes) => self
+                .writer
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)?
+                .submit(bytes),
             IoAction::Resize { columns, rows } => {
-                self.master
-                    .resize(size(*columns, *rows))
-                    .map_err(host_error)?;
+                self.master.resize(size(*columns, *rows))?;
                 self.model.resize(*columns, *rows);
                 self.model
                     .portable_snapshot()
@@ -228,11 +258,40 @@ impl Process {
 impl Drop for Process {
     fn drop(&mut self) {
         // Used only for explicit scoped cleanup, failed spawn, or an already exited root.
-        if let Err(error) = self.terminate() {
-            eprintln!("session cleanup failed: {error}");
+        if self.cleanup_on_drop {
+            if let Err(error) = self.terminate() {
+                eprintln!("session cleanup failed: {error}");
+            }
         }
         self.stopping.store(true, Ordering::Release);
     }
+}
+
+fn event_sink(
+    pty: PtyIdentity,
+    journal: SharedJournal,
+    writer: Arc<Mutex<InputWriter>>,
+) -> TerminalModelEventSink {
+    Arc::new(move |event| match event {
+        TerminalModelEvent::Output(frame) => lock(&journal).publish(Event::Output {
+            pty: pty.clone(),
+            sequence: frame.sequence,
+            data: frame.bytes,
+        }),
+        TerminalModelEvent::ProtocolReply { bytes, .. } => {
+            if writer
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)
+                .and_then(|mut writer| writer.reply(&bytes))
+                .is_err()
+            {
+                lock(&journal).publish(Event::RecoveryRequired { pty: pty.clone() });
+            }
+        }
+        TerminalModelEvent::Disabled { .. } => {
+            lock(&journal).publish(Event::RecoveryRequired { pty: pty.clone() });
+        }
+    })
 }
 
 fn size(columns: u16, rows: u16) -> PtySize {
@@ -245,29 +304,4 @@ fn size(columns: u16, rows: u16) -> PtySize {
 }
 fn host_error(error: impl std::fmt::Display) -> Error {
     Error::Host(error.to_string())
-}
-
-fn write_bounded(writer: &Arc<Mutex<Box<dyn Write + Send>>>, bytes: &[u8]) -> Result<(), Error> {
-    let mut writer = writer.lock().map_err(|_| Error::OutcomeUnknown)?;
-    let deadline = Instant::now() + Duration::from_millis(250);
-    let mut remaining = bytes;
-    while !remaining.is_empty() {
-        match writer.write(remaining) {
-            Ok(0) => return Err(Error::OutcomeUnknown),
-            Ok(written) => remaining = &remaining[written..],
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                ) && Instant::now() < deadline =>
-            {
-                std::thread::sleep(Duration::from_millis(2))
-            }
-            Err(_) => return Err(Error::OutcomeUnknown),
-        }
-        if Instant::now() >= deadline && !remaining.is_empty() {
-            return Err(Error::OutcomeUnknown);
-        }
-    }
-    Ok(())
 }

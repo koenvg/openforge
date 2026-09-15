@@ -12,3 +12,6 @@ openforge-session-protocol = { path = "../session-protocol" }
 serde_json = "1"
 libc = "0.2"
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

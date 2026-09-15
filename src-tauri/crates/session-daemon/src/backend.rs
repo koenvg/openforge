@@ -1,9 +1,12 @@
 //! PTY resource adapter. The shared host owns controller, admission, receipt and I/O policy.
+#[path = "backend_checkpoint.rs"]
+mod checkpoint;
 use crate::{
     journal::{lock, SharedJournal},
     process::Process,
 };
 use base64::Engine;
+pub(crate) use checkpoint::BackendCheckpoint;
 use openforge_session_host::*;
 use openforge_session_protocol::{Error, Event, Recovery, Session};
 use std::{
