@@ -1871,6 +1871,25 @@ INSERT OR IGNORE INTO config (key, value)
         ensure_review_pr_status_signal_columns(tx)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up_with_hook("", |tx| {
+        if !table_exists(tx, "authored_prs")? {
+            return Ok(());
+        }
+
+        let has_merged_at: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('authored_prs') WHERE name = 'merged_at'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        if has_merged_at {
+            tx.execute("ALTER TABLE authored_prs DROP COLUMN merged_at", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2687,6 +2706,7 @@ mod tests {
         ReviewThreadSeenSequence,
         PullRequestReviewers,
         ReviewPrStatusSignals,
+        AuthoredPrMergedTimestampRemoval,
     }
 
     impl MigrationBoundary {
@@ -2708,6 +2728,7 @@ mod tests {
                 Self::ReviewThreadSeenSequence => 62,
                 Self::PullRequestReviewers => 63,
                 Self::ReviewPrStatusSignals => 64,
+                Self::AuthoredPrMergedTimestampRemoval => 65,
             }
         }
     }
@@ -2775,6 +2796,15 @@ mod tests {
         })
     }
 
+    fn authored_pr_has_merged_timestamp(conn: &Connection) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('authored_prs') WHERE name = 'merged_at'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("check authored PR merged timestamp column")
+    }
+
     #[test]
     fn fresh_database_has_review_pr_status_signal_columns() {
         let (_temp_dir, path) = temporary_database_path();
@@ -2783,6 +2813,77 @@ mod tests {
         let conn = conn.lock().expect("lock database");
 
         assert!(review_pr_has_status_signal_columns(&conn));
+    }
+
+    #[test]
+    fn fresh_database_omits_authored_pr_merged_timestamp() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        assert!(!authored_pr_has_merged_timestamp(&conn));
+    }
+
+    #[test]
+    fn upgrade_removes_authored_pr_merged_timestamp_without_deleting_rows() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            db.upsert_authored_pr(
+                123,
+                456,
+                "Keep authored PR",
+                None,
+                "open",
+                false,
+                "https://github.com/owner/repo/pull/456",
+                "octocat",
+                None,
+                "owner",
+                "repo",
+                "feature-branch",
+                "main",
+                "abc123",
+                100,
+                50,
+                10,
+                Some("success"),
+                Some("[]"),
+                Some("approved"),
+                false,
+                None,
+                &[],
+                1000,
+                2000,
+            )
+            .expect("seed authored PR");
+            drop(db);
+
+            let conn = Connection::open(&path).expect("open pre-upgrade database");
+            conn.execute("ALTER TABLE authored_prs ADD COLUMN merged_at INTEGER", [])
+                .expect("restore legacy authored PR merged timestamp column");
+            conn.execute(
+                "UPDATE authored_prs SET merged_at = 1704067200 WHERE id = 123",
+                [],
+            )
+            .expect("seed legacy authored PR merged timestamp");
+            set_user_version_before(&conn, MigrationBoundary::AuthoredPrMergedTimestampRemoval);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+
+        assert!(!authored_pr_has_merged_timestamp(&conn));
+        let row_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM authored_prs WHERE id = 123",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count preserved authored PR rows");
+        assert_eq!(row_count, 1);
     }
 
     #[test]

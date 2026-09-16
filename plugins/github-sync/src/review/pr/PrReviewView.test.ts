@@ -864,7 +864,6 @@ const baseAuthoredPr: AuthoredPullRequest = {
   review_status: 'review_required',
   mergeable: true,
   mergeable_state: 'clean',
-  merged_at: null,
   is_queued: false,
   task_id: null,
   created_at: 1_700_000_000,

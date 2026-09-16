@@ -171,7 +171,6 @@ fn persist_authored_prs(
             enriched.ci_status.as_deref(),
             enriched.ci_check_runs.as_deref(),
             enriched.review_status.as_deref(),
-            None,
             enriched.is_queued,
             task_id.as_deref(),
             &pr.labels,
@@ -260,14 +259,14 @@ mod tests {
         }
     }
 
-    fn check_runs(id: i64) -> CheckRunsResponse {
+    fn check_runs(id: i64, conclusion: &str) -> CheckRunsResponse {
         CheckRunsResponse {
             total_count: 1,
             check_runs: vec![CheckRun {
                 id,
                 name: "test".to_string(),
                 status: "completed".to_string(),
-                conclusion: Some("success".to_string()),
+                conclusion: Some(conclusion.to_string()),
                 html_url: format!("https://github.com/acme/repo/actions/runs/{id}"),
             }],
         }
@@ -283,8 +282,8 @@ mod tests {
         }
     }
 
-    fn ci_signal(id: i64) -> CiSignal {
-        let check_runs = check_runs(id);
+    fn ci_signal(id: i64, conclusion: &str) -> CiSignal {
+        let check_runs = check_runs(id, conclusion);
         let combined_status = combined_status(id);
         CiSignal {
             status: crate::github_client::aggregate_ci_status(&check_runs, &combined_status),
@@ -292,16 +291,16 @@ mod tests {
         }
     }
 
-    fn reviews(id: i64) -> Vec<PrReview> {
+    fn reviews(id: i64, state: &str, submitted_at: &str) -> Vec<PrReview> {
         vec![PrReview {
             id,
             user: GitHubUser {
                 login: "reviewer".to_string(),
                 extra: serde_json::json!({}),
             },
-            state: "APPROVED".to_string(),
+            state: state.to_string(),
             body: None,
-            submitted_at: Some("2024-01-02T00:00:00Z".to_string()),
+            submitted_at: Some(submitted_at.to_string()),
             extra: serde_json::json!({}),
         }]
     }
@@ -339,7 +338,7 @@ mod tests {
         let result = aggregate_authored_pr_enrichment(
             search_pr(71),
             Err(network_error()),
-            Ok(reviews(71)),
+            Ok(reviews(71, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(71)),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         );
@@ -351,8 +350,8 @@ mod tests {
     fn complete_enrichment_aggregates_ci_review_queue_and_detail_mergeability() {
         let enriched = aggregate_authored_pr_enrichment(
             search_pr(73),
-            Ok(ci_signal(73)),
-            Ok(reviews(73)),
+            Ok(ci_signal(73, "success")),
+            Ok(reviews(73, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(73)),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         )
@@ -386,7 +385,7 @@ mod tests {
         let enriched = aggregate_authored_pr_enrichment(
             search_pr(72),
             Err(network_error()),
-            Ok(reviews(72)),
+            Ok(reviews(72, "APPROVED", "2024-01-02T00:00:00Z")),
             Err(network_error()),
             AuthoredPrEnrichmentPolicy::BestEffort,
         )
@@ -401,13 +400,92 @@ mod tests {
     }
 
     #[test]
+    fn best_effort_persistence_preserves_unavailable_signals_and_replaces_available_signals() {
+        let (db, _temp_dir) = make_test_db("authored_pr_signal_preservation");
+        let initial = aggregate_authored_pr_enrichment(
+            search_pr(74),
+            Ok(ci_signal(74, "success")),
+            Ok(reviews(74, "APPROVED", "2024-01-02T00:00:00Z")),
+            Ok(details(74)),
+            AuthoredPrEnrichmentPolicy::RequireComplete,
+        )
+        .expect("enrich initial authored PR");
+        persist_authored_prs(&db, &[initial], AuthoredPrStalePolicy::Preserve)
+            .expect("persist initial authored PR");
+
+        let missing_ci = aggregate_authored_pr_enrichment(
+            search_pr(74),
+            Err(network_error()),
+            Ok(reviews(74, "CHANGES_REQUESTED", "2024-01-03T00:00:00Z")),
+            Ok(details(74)),
+            AuthoredPrEnrichmentPolicy::BestEffort,
+        )
+        .expect("best-effort enrichment should tolerate unavailable signals");
+        persist_authored_prs(&db, &[missing_ci], AuthoredPrStalePolicy::Preserve)
+            .expect("persist authored PR without a CI signal");
+
+        let after_missing_ci = db
+            .get_all_authored_prs()
+            .expect("read authored PR after unavailable CI signal")
+            .pop()
+            .expect("persisted authored PR");
+        assert_eq!(after_missing_ci.ci_status.as_deref(), Some("success"));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                after_missing_ci
+                    .ci_check_runs
+                    .as_deref()
+                    .expect("stored check runs")
+            )
+            .expect("valid stored check runs")[0]["conclusion"],
+            "success"
+        );
+        assert_eq!(
+            after_missing_ci.review_status.as_deref(),
+            Some("changes_requested")
+        );
+
+        let missing_review = aggregate_authored_pr_enrichment(
+            search_pr(74),
+            Ok(ci_signal(74, "failure")),
+            Err(network_error()),
+            Ok(details(74)),
+            AuthoredPrEnrichmentPolicy::BestEffort,
+        )
+        .expect("best-effort enrichment should tolerate unavailable signals");
+        persist_authored_prs(&db, &[missing_review], AuthoredPrStalePolicy::Preserve)
+            .expect("persist authored PR without a review signal");
+
+        let after_missing_review = db
+            .get_all_authored_prs()
+            .expect("read authored PR after unavailable review signal")
+            .pop()
+            .expect("persisted authored PR");
+        assert_eq!(after_missing_review.ci_status.as_deref(), Some("failure"));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                after_missing_review
+                    .ci_check_runs
+                    .as_deref()
+                    .expect("stored check runs")
+            )
+            .expect("valid stored check runs")[0]["conclusion"],
+            "failure"
+        );
+        assert_eq!(
+            after_missing_review.review_status.as_deref(),
+            Some("changes_requested")
+        );
+    }
+
+    #[test]
     fn persistence_applies_the_callers_stale_reconciliation_policy() {
         let (db, _temp_dir) = make_test_db("shared_authored_pr_persistence");
         let first = EnrichedAuthoredPr::from_search_result(search_pr(81));
         let second = aggregate_authored_pr_enrichment(
             search_pr(82),
-            Ok(ci_signal(82)),
-            Ok(reviews(82)),
+            Ok(ci_signal(82, "success")),
+            Ok(reviews(82, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(82)),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         )
