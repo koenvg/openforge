@@ -8,16 +8,16 @@ A Task already offers what is missing: a tab where the agent is visible while it
 
 ## What Changes
 
-- Add an Agent tab to the pull request detail view. State whether it is always present or conditional, as the Walkthrough tab is conditional on a ready walkthrough today.
+- Add an always-present Agent tab to the pull request detail view while keeping the Walkthrough tab conditional on an available walkthrough.
 - Run walkthrough and AI review generation in a visible Scoped Agent Session instead of a headless subprocess, so the user watches it work and reads its failures directly.
 - Address the session by the namespace, target key, and revision triple the plugin already builds for that pull request's Review Threads, so threads and session share one address.
 - Run the session in a host-owned Scoped Workspace checked out at the pull request head, kept alive for the life of the session instead of removed when generation ends.
 - Have the agent submit walkthrough steps through the OpenForge CLI instead of printing a schema-validated payload, and have the host validate each submission as it arrives and reject it with a reason the agent can act on. Review comment submission already lands as Review Threads through the CLI in `add-core-review-threads`.
-- Bound submission validation by the changed-file set the host actually has. That set is capped at 100 files today, so either state what happens above the cap or take KVG-2229 first.
+- Bound submission validation by the complete changed-file set. KVG-2229 lifts the 100-file cap first, so a submission above that boundary is checked against every changed file instead of a truncated set.
 - Give a generation that submits nothing an explicit terminal state, with the session readable so the user can see why.
 - Continue the same session in the same workspace for follow-up questions, replacing the batched question runs.
 - Keep the session read-only through a Session Tool Policy. It explains and answers; it cannot edit code. Edits belong in a Task with a real branch.
-- **BREAKING** Drop the plugin's `pr-ai-review:*` and `pr-ai-threads:*` storage keys and the walkthrough cache status model built around the parse path. Locally stored AI review comments and question threads for existing pull requests do not carry over.
+- **BREAKING** Drop the plugin's `pr-ai-review:*`, `pr-ai-threads:*`, and `pr-review-session:*` storage keys and the walkthrough cache status model built around the parse path. Locally stored AI review comments and question threads for existing pull requests do not carry over.
 
 Out of scope, deliberately:
 
@@ -37,8 +37,8 @@ None yet in `openspec/specs`. Pull request walkthrough behavior has never been s
 ## Impact
 
 - Depends on `add-scoped-agent-sessions` for Session Scope, Scoped Workspace, Session Tool Policy, and the host-rendered session terminal.
-- Depends on `add-core-review-threads` for the agent CLI write channel this change extends with walkthrough submission.
-- OpenForge CLI and its agent transport allowlist: new walkthrough submission verbs and their validation.
+- Depends on `add-core-review-threads` for scope-bound Review Thread submission and uses the existing agent-facing Plugin Command CLI for walkthrough steps.
+- OpenForge CLI and agent authorization: one hidden GitHub Sync walkthrough command on the existing allowlisted Plugin Command route, constrained to the calling Scoped Agent Session.
 - GitHub Sync detail tabs: the tab list and its shortcuts, plus the duplicated tab-id union held in both the detail section and the selected-review state.
 - GitHub Sync generation: the walkthrough prompt, the walkthrough cache and its status model, the question panel, and retirement of the output schema and the standard-output parsers.
 - Removal of the plugin's headless walkthrough generation path once the session path replaces it.
