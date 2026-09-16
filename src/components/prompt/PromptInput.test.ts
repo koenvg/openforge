@@ -18,7 +18,6 @@ describe('PromptInput', () => {
   const baseProps = {
     projectId: 'test-project',
     onSubmit: vi.fn(),
-    onCancel: vi.fn(),
   }
 
   beforeEach(() => {
@@ -104,19 +103,16 @@ describe('PromptInput', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('calls onCancel on Escape', async () => {
-    const onCancel = vi.fn()
-    render(PromptInput, {
-      props: {
-        ...baseProps,
-        onCancel,
-      },
-    })
+  it('leaves Escape unhandled when autocomplete is inactive', () => {
+    render(PromptInput, { props: baseProps })
 
     const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
-    await fireEvent.keyDown(textarea, { key: 'Escape' })
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const stopPropagation = vi.spyOn(event, 'stopPropagation')
+    textarea.dispatchEvent(event)
 
-    expect(onCancel).toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
+    expect(stopPropagation).not.toHaveBeenCalled()
   })
 
 

@@ -124,7 +124,7 @@
       aria-label={accessibleNameAttributes.ariaLabel}
       aria-labelledby={accessibleNameAttributes.ariaLabelledby}
       aria-describedby={ariaDescribedby}
-      escapeKeydownBehavior={closeDisabled ? 'ignore' : 'close'}
+      escapeKeydownBehavior="ignore"
       interactOutsideBehavior="ignore"
       onOpenAutoFocus={focusInitialTarget}
       onclick={handleLayerClick}

@@ -11,7 +11,7 @@ vi.mock('../../lib/ipc', () => ({
 
 describe('PromptInput injectable button', () => {
   it('inserts injectable text into the textarea when injectableInsertRequest changes', async () => {
-    const base = { projectId: 'P-1', onSubmit: vi.fn(), onCancel: vi.fn(), value: '' }
+    const base = { projectId: 'P-1', onSubmit: vi.fn(), value: '' }
     const { container, rerender } = render(PromptInput, {
       props: { ...base, injectableInsertRequest: null },
     })
