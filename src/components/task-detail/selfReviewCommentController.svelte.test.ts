@@ -38,7 +38,7 @@ afterEach(() => {
 
 const prComment: PrComment = {
   id: 1, pr_id: 1, author: 'alice', body: 'Original review', comment_type: 'review_comment',
-  file_path: 'src/task.ts', line_number: 12, addressed: 0, outdated: 0, created_at: 1000,
+  file_path: 'src/task.ts', line_number: 12, in_reply_to_id: null, addressed: 0, outdated: 0, created_at: 1000,
 }
 
 function feedbackFixture(inline: ReviewSubmissionComment[] = [], pr: PrComment[] = []) {

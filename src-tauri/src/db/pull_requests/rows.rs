@@ -92,6 +92,7 @@ pub struct PrCommentRow {
     pub comment_type: String,
     pub file_path: Option<String>,
     pub line_number: Option<i32>,
+    pub in_reply_to_id: Option<i64>,
     pub addressed: i32,
     pub outdated: i32,
     pub created_at: i64,
@@ -106,8 +107,9 @@ pub(super) fn read_pr_comment_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<P
         comment_type: row.get(4)?,
         file_path: row.get(5)?,
         line_number: row.get(6)?,
-        addressed: row.get(7)?,
-        outdated: row.get(8)?,
-        created_at: row.get(9)?,
+        in_reply_to_id: row.get(7)?,
+        addressed: row.get(8)?,
+        outdated: row.get(9)?,
+        created_at: row.get(10)?,
     })
 }

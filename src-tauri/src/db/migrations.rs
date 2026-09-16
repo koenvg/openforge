@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS pr_comments (
     file_path TEXT,
     line_number INTEGER,
     addressed INTEGER DEFAULT 0,
+    in_reply_to_id INTEGER,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
 );
@@ -2066,6 +2067,35 @@ pub(super) fn ensure_pr_number_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Add cached review-thread identity without advancing SQLite's `user_version`.
+///
+/// Keeping this repair outside the versioned migration list lets the previous
+/// OpenForge build reopen the database after this nullable column is added.
+pub(super) fn ensure_pr_comment_reply_parent_column(conn: &Connection) -> Result<()> {
+    let table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pr_comments'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !table_exists {
+        return Ok(());
+    }
+
+    let column_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('pr_comments') WHERE name = 'in_reply_to_id'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !column_exists {
+        conn.execute(
+            "ALTER TABLE pr_comments ADD COLUMN in_reply_to_id INTEGER",
+            [],
+        )?;
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
     for (table, column, sql) in [
         (
@@ -3512,6 +3542,78 @@ mod tests {
 
         drop(conn);
         drop(db);
+    }
+
+    #[test]
+    fn reply_parent_schema_repair_keeps_previous_build_compatible() {
+        let (_temp_dir, path) = temporary_database_path();
+        let previous_user_version;
+
+        {
+            let db = Database::new(path.clone()).expect("create previous-build database");
+            crate::db::test_helpers::insert_test_task(&db);
+            db.insert_pull_request(
+                10,
+                "T-100",
+                "acme",
+                "repo",
+                "Review thread",
+                "https://github.com/acme/repo/pull/10",
+                "open",
+                1000,
+                1000,
+                false,
+            )
+            .expect("insert pull request");
+            db.insert_pr_comment(
+                501,
+                10,
+                "reviewer",
+                "Please fix this",
+                "review_comment",
+                Some("src/lib.rs"),
+                Some(12),
+                None,
+                true,
+                2000,
+            )
+            .expect("insert legacy comment");
+
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock previous-build database");
+            conn.execute("ALTER TABLE pr_comments DROP COLUMN in_reply_to_id", [])
+                .expect("remove reply parent to simulate previous schema");
+            previous_user_version = conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+                .expect("read previous user version");
+        }
+
+        let db = Database::new(path).expect("repair previous-build database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock repaired database");
+
+        let repaired_user_version = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+            .expect("read repaired user version");
+        assert_eq!(repaired_user_version, previous_user_version);
+
+        let parent: Option<i64> = conn
+            .query_row(
+                "SELECT in_reply_to_id FROM pr_comments WHERE id = 501",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read repaired reply parent");
+        assert_eq!(parent, None);
+
+        let old_build_row: (i64, String, i32) = conn
+            .query_row(
+                "SELECT id, body, addressed FROM pr_comments WHERE id = 501",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read row with previous-build query");
+        assert_eq!(old_build_row, (501, "Please fix this".to_string(), 1));
     }
 
     #[test]

@@ -72,6 +72,7 @@ const baseComment: PrComment = {
   comment_type: 'review_comment',
   file_path: 'src/main.ts',
   line_number: 12,
+  in_reply_to_id: null,
   addressed: 0,
   outdated: 0,
   created_at: 2000,

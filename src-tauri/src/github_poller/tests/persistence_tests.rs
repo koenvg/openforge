@@ -31,6 +31,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
             line: None,
             comment_type: "review_body".to_string(),
             outdated: false,
+            in_reply_to_id: None,
             created_at: review
                 .submitted_at
                 .clone()
@@ -91,6 +92,7 @@ fn make_review_comment_poll_result(
             line: Some(10),
             comment_type: "review_comment".to_string(),
             outdated,
+            in_reply_to_id: Some(800),
             created_at: "2024-01-01T00:00:00Z".to_string(),
         }],
         check_runs: None,
@@ -161,8 +163,17 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     let comments = db.get_comments_for_pr(142).expect("get comments");
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].outdated, 1, "first poll stores outdated");
+    assert_eq!(comments[0].in_reply_to_id, Some(800));
 
-    // User addresses the comment locally.
+    {
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        conn.execute(
+            "UPDATE pr_comments SET in_reply_to_id = NULL WHERE id = 900",
+            [],
+        )
+        .expect("clear cached reply parent");
+    }
     db.mark_comment_addressed(900).expect("mark addressed");
 
     // Second poll: the line came back, comment is no longer outdated.
@@ -175,6 +186,11 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     );
     let comments = db.get_comments_for_pr(142).expect("get comments");
     assert_eq!(comments[0].outdated, 0, "outdated refreshed on re-poll");
+    assert_eq!(
+        comments[0].in_reply_to_id,
+        Some(800),
+        "reply parent healed on re-poll"
+    );
     assert_eq!(
         comments[0].addressed, 1,
         "addressed preserved across re-poll"

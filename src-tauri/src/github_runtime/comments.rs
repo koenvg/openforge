@@ -331,6 +331,7 @@ mod tests {
             line: Some(3),
             comment_type: "issue_comment".to_string(),
             outdated: false,
+            in_reply_to_id: None,
             created_at: "2026-05-04T12:01:00Z".to_string(),
         }];
 

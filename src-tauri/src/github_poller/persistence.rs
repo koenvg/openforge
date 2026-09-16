@@ -88,6 +88,7 @@ pub(super) fn persist_polled_comments(
                 &comment.comment_type,
                 comment.path.as_deref(),
                 comment.line,
+                comment.in_reply_to_id,
                 false,
                 created_at,
             ) {
@@ -108,9 +109,11 @@ pub(super) fn persist_polled_comments(
         // Refresh the GitHub "outdated" state for every fetched comment — new or
         // pre-existing. This never touches the local `addressed` flag, so an
         // addressed comment stays addressed even after it becomes outdated.
-        if let Err(e) = db.update_comment_outdated(comment.id, comment.outdated) {
+        if let Err(e) =
+            db.update_comment_github_state(comment.id, comment.outdated, comment.in_reply_to_id)
+        {
             warn!(
-                "[GitHub Poller] Failed to update outdated for comment {}: {}",
+                "[GitHub Poller] Failed to update GitHub state for comment {}: {}",
                 comment.id, e
             );
             persist_result.error_count += 1;

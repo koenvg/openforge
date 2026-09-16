@@ -81,6 +81,26 @@ fn next_page_url(headers: &HeaderMap) -> Option<String> {
         })
 }
 
+fn review_body_comment(review: &PrReview) -> Option<PrComment> {
+    let body = review
+        .body
+        .as_ref()
+        .filter(|body| !body.is_empty())?
+        .clone();
+
+    Some(PrComment {
+        id: -review.id,
+        body,
+        user: review.user.clone(),
+        path: None,
+        line: None,
+        comment_type: "review_body".to_string(),
+        outdated: false,
+        in_reply_to_id: None,
+        created_at: review.submitted_at.clone().unwrap_or_default(),
+    })
+}
+
 impl GitHubClient {
     pub async fn merge_pr(
         &self,
@@ -199,28 +219,17 @@ impl GitHubClient {
             });
 
         for review in reviews {
-            let body = match &review.body {
-                Some(b) if !b.is_empty() => b.clone(),
-                _ => continue,
+            let Some(comment) = review_body_comment(&review) else {
+                continue;
             };
-            let submitted_at = review.submitted_at.unwrap_or_default();
-            if !submitted_at.is_empty() {
+            if !comment.created_at.is_empty() {
                 if let Some(ts) = since {
-                    if submitted_at.as_str() < ts {
+                    if comment.created_at.as_str() < ts {
                         continue;
                     }
                 }
             }
-            all_comments.push(PrComment {
-                id: -review.id,
-                body,
-                user: review.user,
-                path: None,
-                line: None,
-                comment_type: "review_body".to_string(),
-                outdated: false,
-                created_at: submitted_at,
-            });
+            all_comments.push(comment);
         }
 
         Ok(all_comments)
@@ -669,6 +678,26 @@ mod tests {
             refreshed.last().map(|file| file.filename.as_str()),
             Some("src/file-101.rs")
         );
+    }
+
+    #[test]
+    fn review_summary_is_a_thread_root() {
+        let review = PrReview {
+            id: 42,
+            user: GitHubUser {
+                login: "reviewer".to_string(),
+                extra: serde_json::json!({}),
+            },
+            state: "COMMENTED".to_string(),
+            body: Some("Overall review".to_string()),
+            submitted_at: Some("2024-01-01T00:00:00Z".to_string()),
+            extra: serde_json::json!({}),
+        };
+
+        let comment = review_body_comment(&review).expect("review summary comment");
+
+        assert_eq!(comment.comment_type, "review_body");
+        assert_eq!(comment.in_reply_to_id, None);
     }
 
     #[test]

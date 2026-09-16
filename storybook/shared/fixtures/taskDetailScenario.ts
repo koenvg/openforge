@@ -60,7 +60,7 @@ export function taskDetailScenario(kind: TaskDetailScenario = 'active', reviewSt
   const linkedPr = reviewState === 'github-comments' ? createPullRequest({ ticket_id: task.id }) : null
   const prComments: PrComment[] = linkedPr ? [{
     id: 101, pr_id: linkedPr.id, author: 'alex', body: 'Please handle whitespace-only names.',
-    comment_type: 'review_comment', file_path: 'src/greet.ts', line_number: 2,
+    comment_type: 'review_comment', file_path: 'src/greet.ts', line_number: 2, in_reply_to_id: null,
     addressed: 0, outdated: 0, created_at: task.createdAt,
   }] : []
   function batchContents(payload: unknown) {

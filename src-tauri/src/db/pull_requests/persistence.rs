@@ -17,13 +17,14 @@ impl Database {
         comment_type: &str,
         file_path: Option<&str>,
         line_number: Option<i32>,
+        in_reply_to_id: Option<i64>,
         addressed: bool,
         created_at: i64,
     ) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, in_reply_to_id, addressed, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 id,
                 pr_id,
@@ -32,6 +33,7 @@ impl Database {
                 comment_type,
                 file_path,
                 line_number,
+                in_reply_to_id,
                 if addressed { 1 } else { 0 },
                 created_at,
             ],
@@ -321,14 +323,16 @@ impl Database {
         Ok(())
     }
 
-    /// Refresh a comment's `outdated` flag without touching its local
-    /// `addressed` state. Used by the poller when re-reading comments from
-    /// GitHub, so an addressed comment stays addressed even as it goes outdated.
-    pub fn update_comment_outdated(&self, id: i64, outdated: bool) -> Result<()> {
+    pub fn update_comment_github_state(
+        &self,
+        id: i64,
+        outdated: bool,
+        in_reply_to_id: Option<i64>,
+    ) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute(
-            "UPDATE pr_comments SET outdated = ?2 WHERE id = ?1",
-            rusqlite::params![id, if outdated { 1 } else { 0 }],
+            "UPDATE pr_comments SET outdated = ?2, in_reply_to_id = ?3 WHERE id = ?1",
+            rusqlite::params![id, if outdated { 1 } else { 0 }, in_reply_to_id],
         )?;
         Ok(())
     }

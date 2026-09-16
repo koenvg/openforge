@@ -128,7 +128,7 @@ impl Database {
     pub fn get_comments_for_pr(&self, pr_id: i64) -> Result<Vec<PrCommentRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at
+            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, in_reply_to_id, addressed, outdated, created_at
              FROM pr_comments
              WHERE pr_id = ?1
              ORDER BY created_at ASC"
@@ -151,7 +151,7 @@ impl Database {
 
         let conn = self.lock_conn()?;
         let sql = format!(
-            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
+            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, in_reply_to_id, addressed, outdated, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
             id_list.placeholders
         );
         let mut stmt = conn.prepare(&sql)?;
