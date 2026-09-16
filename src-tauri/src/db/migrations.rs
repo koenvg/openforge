@@ -1866,6 +1866,10 @@ INSERT OR IGNORE INTO config (key, value)
         ensure_pull_request_reviewers_column(tx)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up_with_hook("", |tx| {
+        ensure_review_pr_status_signal_columns(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2589,6 +2593,34 @@ pub(super) fn ensure_pull_request_reviewers_column(conn: &Connection) -> Result<
     Ok(())
 }
 
+pub(super) fn ensure_review_pr_status_signal_columns(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "review_prs")? {
+        return Ok(());
+    }
+
+    for (column, sql) in [
+        (
+            "ci_status",
+            "ALTER TABLE review_prs ADD COLUMN ci_status TEXT",
+        ),
+        (
+            "merged_at",
+            "ALTER TABLE review_prs ADD COLUMN merged_at INTEGER",
+        ),
+    ] {
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            conn.execute(sql, [])?;
+        }
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_browser_session_purge_intents_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2624,6 +2656,7 @@ mod tests {
         AgentReviewCommentsRemoval,
         ReviewThreadSeenSequence,
         PullRequestReviewers,
+        ReviewPrStatusSignals,
     }
 
     impl MigrationBoundary {
@@ -2644,6 +2677,7 @@ mod tests {
                 Self::AgentReviewCommentsRemoval => 59,
                 Self::ReviewThreadSeenSequence => 62,
                 Self::PullRequestReviewers => 63,
+                Self::ReviewPrStatusSignals => 64,
             }
         }
     }
@@ -2698,6 +2732,51 @@ mod tests {
         assert!(pull_requests_has_reviewers_column(&conn));
         ensure_pull_request_reviewers_column(&conn).expect("rerun the reviewers column migration");
         assert!(pull_requests_has_reviewers_column(&conn));
+    }
+
+    fn review_pr_has_status_signal_columns(conn: &Connection) -> bool {
+        ["ci_status", "merged_at"].into_iter().all(|column| {
+            conn.query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = ?1",
+                [column],
+                |row| row.get(0),
+            )
+            .expect("check review PR status signal column")
+        })
+    }
+
+    #[test]
+    fn fresh_database_has_review_pr_status_signal_columns() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        assert!(review_pr_has_status_signal_columns(&conn));
+    }
+
+    #[test]
+    fn upgrade_adds_review_pr_status_signal_columns_once() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            drop(db);
+            let conn = Connection::open(&path).expect("open pre-upgrade database");
+            conn.execute("ALTER TABLE review_prs DROP COLUMN ci_status", [])
+                .expect("drop review PR CI status column");
+            conn.execute("ALTER TABLE review_prs DROP COLUMN merged_at", [])
+                .expect("drop review PR merged timestamp column");
+            set_user_version_before(&conn, MigrationBoundary::ReviewPrStatusSignals);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+
+        assert!(review_pr_has_status_signal_columns(&conn));
+        ensure_review_pr_status_signal_columns(&conn)
+            .expect("rerun review PR status signal migration");
+        assert!(review_pr_has_status_signal_columns(&conn));
     }
 
     #[test]

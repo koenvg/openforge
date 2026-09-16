@@ -1,10 +1,10 @@
-use super::common::{parse_github_timestamp, GitHubEventTarget};
+use super::common::GitHubEventTarget;
 use crate::authored_pr_sync::{
     enrich_and_persist_authored_prs, AuthoredPrEnrichmentPolicy, AuthoredPrStalePolicy,
     AuthoredPrSyncError,
 };
 use crate::db::{acquire_db, Database, PrRow};
-use crate::github_client::GitHubClient;
+use crate::github_client::{GitHubClient, PullRequestTerminalState};
 use crate::review_pr_sync::enrich_and_persist_review_prs;
 use log::{error, warn};
 use std::collections::HashSet;
@@ -100,12 +100,6 @@ impl fmt::Display for SyncOpenPrsError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum StaleAuthoredPrTerminalState {
-    Closed,
-    Merged(Option<i64>),
-}
-
 pub(super) fn stale_authored_task_pr_candidates(
     open_prs: Vec<PrRow>,
     open_search_ids: &[i64],
@@ -115,34 +109,6 @@ pub(super) fn stale_authored_task_pr_candidates(
         .into_iter()
         .filter(|pr| !open_search_ids.contains(&pr.id))
         .collect()
-}
-
-pub(super) fn terminal_state_for_pr_details(
-    details: &crate::github_client::PullRequest,
-) -> Option<StaleAuthoredPrTerminalState> {
-    let state = details.state.to_ascii_lowercase();
-    if state == "open" {
-        return None;
-    }
-
-    let merged_at = details
-        .extra
-        .get("merged_at")
-        .and_then(|value| value.as_str())
-        .and_then(parse_github_timestamp);
-    let merged = details
-        .extra
-        .get("merged")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-        || merged_at.is_some();
-
-    match state.as_str() {
-        "closed" if merged => Some(StaleAuthoredPrTerminalState::Merged(merged_at)),
-        "closed" => Some(StaleAuthoredPrTerminalState::Closed),
-        "merged" => Some(StaleAuthoredPrTerminalState::Merged(merged_at)),
-        _ => None,
-    }
 }
 
 pub(super) async fn reconcile_stale_authored_task_prs(
@@ -166,7 +132,7 @@ pub(super) async fn reconcile_stale_authored_task_prs(
             .await
         {
             Ok(details) => {
-                if let Some(terminal_state) = terminal_state_for_pr_details(&details) {
+                if let Some(terminal_state) = details.terminal_state() {
                     terminal_states.push((pr.id, terminal_state));
                 }
             }
@@ -185,10 +151,10 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     let mut updated = 0;
     for (pr_id, terminal_state) in terminal_states {
         match terminal_state {
-            StaleAuthoredPrTerminalState::Closed => db_lock
+            PullRequestTerminalState::Closed => db_lock
                 .update_pr_closed(pr_id)
                 .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PR: {}", e)))?,
-            StaleAuthoredPrTerminalState::Merged(merged_at) => db_lock
+            PullRequestTerminalState::Merged(merged_at) => db_lock
                 .update_pr_merged_state(pr_id, merged_at)
                 .map_err(|e| {
                     SyncOpenPrsError::Db(format!("Failed to mark stale PR merged: {}", e))
@@ -402,11 +368,13 @@ pub(super) async fn poll_review_prs(
         .await
         .map_err(PollPhaseError::GitHub)?;
 
-    let count = enrich_and_persist_review_prs(db, prs, &all_search_ids)
-        .map_err(PollPhaseError::Db)?
-        .iter()
-        .filter(|pr| pr.viewed_at.is_none())
-        .count();
+    let count =
+        enrich_and_persist_review_prs(github_client, db, github_token, prs, &all_search_ids)
+            .await
+            .map_err(PollPhaseError::Db)?
+            .iter()
+            .filter(|pr| pr.viewed_at.is_none())
+            .count();
     events.emit("review-pr-count-changed", serde_json::json!(count));
 
     Ok(())

@@ -939,8 +939,10 @@ export interface ReviewPullRequest {
   additions: number;
   deletions: number;
   changed_files: number;
+  ci_status: string | null;
   mergeable: boolean | null;
   mergeable_state: string | null;
+  merged_at: number | null;
   created_at: number;
   updated_at: number;
   viewed_at: number | null;

@@ -47,6 +47,41 @@ pub struct PullRequest {
     pub extra: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PullRequestTerminalState {
+    Closed,
+    Merged(Option<i64>),
+}
+
+impl PullRequest {
+    pub(crate) fn terminal_state(&self) -> Option<PullRequestTerminalState> {
+        let state = self.state.to_ascii_lowercase();
+        if state == "open" {
+            return None;
+        }
+
+        let merged_at = self
+            .extra
+            .get("merged_at")
+            .and_then(|value| value.as_str())
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map(|timestamp| timestamp.timestamp());
+        let merged = self
+            .extra
+            .get("merged")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+            || merged_at.is_some();
+
+        match state.as_str() {
+            "closed" if merged => Some(PullRequestTerminalState::Merged(merged_at)),
+            "closed" => Some(PullRequestTerminalState::Closed),
+            "merged" => Some(PullRequestTerminalState::Merged(merged_at)),
+            _ => None,
+        }
+    }
+}
+
 /// A GitHub label attached to a pull request.
 ///
 /// `color` is a 6-digit hex string without a leading '#' (e.g. "b60205"),

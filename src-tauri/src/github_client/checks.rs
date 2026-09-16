@@ -6,7 +6,38 @@ use super::error::GitHubError;
 use super::types::*;
 use super::GitHubClient;
 
+#[derive(Debug, Clone)]
+pub(crate) struct CiSignal {
+    pub(crate) status: String,
+    pub(crate) check_runs: CheckRunsResponse,
+}
+
+fn ci_signal_from_responses(
+    check_runs: CheckRunsResponse,
+    combined_status: CombinedStatusResponse,
+) -> CiSignal {
+    CiSignal {
+        status: aggregate_ci_status(&check_runs, &combined_status),
+        check_runs,
+    }
+}
+
 impl GitHubClient {
+    pub(crate) async fn get_ci_signal(
+        &self,
+        owner: &str,
+        repo: &str,
+        sha: &str,
+        token: &str,
+    ) -> Result<CiSignal, GitHubError> {
+        let (check_runs, combined_status) = tokio::join!(
+            self.get_check_runs(owner, repo, sha, token),
+            self.get_combined_status(owner, repo, sha, token),
+        );
+
+        Ok(ci_signal_from_responses(check_runs?, combined_status?))
+    }
+
     /// Get all check runs for a commit (paginated)
     ///
     /// Fetches all pages of check runs to ensure none are missed.
@@ -589,6 +620,39 @@ mod tests {
             aggregate_ci_status(&all_done_failure_runs, &pending_combined_with_statuses),
             "pending"
         );
+    }
+
+    #[test]
+    fn ci_signal_uses_the_shared_aggregation_and_keeps_check_runs() {
+        let cases = [
+            (
+                make_check_runs(vec![("build", "completed", Some("success"))]),
+                make_combined("success", vec![]),
+                "success",
+            ),
+            (
+                make_check_runs(vec![("build", "completed", Some("failure"))]),
+                make_combined("failure", vec![]),
+                "failure",
+            ),
+            (
+                make_check_runs(vec![("build", "in_progress", None)]),
+                make_combined("pending", vec![]),
+                "pending",
+            ),
+            (
+                make_check_runs(vec![]),
+                make_combined("pending", vec![]),
+                "none",
+            ),
+        ];
+
+        for (check_runs, combined_status, expected) in cases {
+            let expected_check_run_count = check_runs.check_runs.len();
+            let signal = ci_signal_from_responses(check_runs, combined_status);
+            assert_eq!(signal.status, expected);
+            assert_eq!(signal.check_runs.check_runs.len(), expected_check_run_count);
+        }
     }
 
     // ========================================================================

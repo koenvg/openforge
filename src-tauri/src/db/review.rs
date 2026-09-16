@@ -1,4 +1,4 @@
-use crate::github_client::PrLabel;
+use crate::github_client::{PrLabel, PullRequestTerminalState};
 use rusqlite::Result;
 use serde::Serialize;
 
@@ -22,8 +22,10 @@ pub struct ReviewPrRow {
     pub additions: i64,
     pub deletions: i64,
     pub changed_files: i64,
+    pub ci_status: Option<String>,
     pub mergeable: Option<bool>,
     pub mergeable_state: Option<String>,
+    pub merged_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
     pub viewed_at: Option<i64>,
@@ -52,11 +54,21 @@ pub struct ReviewPrUpsert {
     pub additions: i64,
     pub deletions: i64,
     pub changed_files: i64,
+    pub ci_status: Option<String>,
     pub mergeable: Option<bool>,
     pub mergeable_state: Option<String>,
+    pub merged_at: Option<i64>,
     pub labels: Vec<PrLabel>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReviewPrReconcileCandidate {
+    pub(crate) id: i64,
+    pub(crate) number: i64,
+    pub(crate) repo_owner: String,
+    pub(crate) repo_name: String,
 }
 
 impl super::Database {
@@ -64,8 +76,8 @@ impl super::Database {
         let labels_json = super::serialize_json_list_column(&row.labels);
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, mergeable, mergeable_state, labels, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, mergeable, mergeable_state, merged_at, labels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -83,8 +95,10 @@ impl super::Database {
                   additions = excluded.additions,
                   deletions = excluded.deletions,
                   changed_files = excluded.changed_files,
+                  ci_status = COALESCE(excluded.ci_status, review_prs.ci_status),
                   mergeable = excluded.mergeable,
                   mergeable_state = excluded.mergeable_state,
+                  merged_at = excluded.merged_at,
                   labels = excluded.labels,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at,
@@ -111,8 +125,10 @@ impl super::Database {
                 row.additions,
                 row.deletions,
                 row.changed_files,
+                row.ci_status,
                 row.mergeable,
                 row.mergeable_state,
+                row.merged_at,
                 labels_json,
                 row.created_at,
                 row.updated_at,
@@ -126,7 +142,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, mergeable, mergeable_state, created_at, updated_at, viewed_at, viewed_head_sha, labels
+                    changed_files, ci_status, mergeable, mergeable_state, merged_at, created_at, updated_at, viewed_at, viewed_head_sha, labels
              FROM review_prs
              WHERE dismissed_at IS NULL
              ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
@@ -150,13 +166,15 @@ impl super::Database {
                 additions: row.get(14)?,
                 deletions: row.get(15)?,
                 changed_files: row.get(16)?,
-                mergeable: row.get(17)?,
-                mergeable_state: row.get(18)?,
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
-                viewed_at: row.get(21)?,
-                viewed_head_sha: row.get(22)?,
-                labels: super::parse_labels_column(row.get(23)?),
+                ci_status: row.get(17)?,
+                mergeable: row.get(18)?,
+                mergeable_state: row.get(19)?,
+                merged_at: row.get(20)?,
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
+                viewed_at: row.get(23)?,
+                viewed_head_sha: row.get(24)?,
+                labels: super::parse_labels_column(row.get(25)?),
             })
         })?;
         let mut result = Vec::new();
@@ -238,6 +256,46 @@ impl super::Database {
         Ok(())
     }
 
+    pub(crate) fn get_review_pr_reconcile_candidates(
+        &self,
+    ) -> Result<Vec<ReviewPrReconcileCandidate>> {
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(
+            "SELECT id, number, repo_owner, repo_name
+             FROM review_prs
+             WHERE review_requested = 0 AND state = 'open' AND dismissed_at IS NULL",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(ReviewPrReconcileCandidate {
+                id: row.get(0)?,
+                number: row.get(1)?,
+                repo_owner: row.get(2)?,
+                repo_name: row.get(3)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub(crate) fn update_review_pr_terminal_state(
+        &self,
+        pr_id: i64,
+        terminal_state: PullRequestTerminalState,
+    ) -> Result<bool> {
+        let (state, merged_at) = match terminal_state {
+            PullRequestTerminalState::Closed => ("closed", None),
+            PullRequestTerminalState::Merged(merged_at) => ("merged", merged_at),
+        };
+        let conn = self.lock_conn()?;
+        let updated = conn.execute(
+            "UPDATE review_prs
+             SET state = ?1, merged_at = ?2
+             WHERE id = ?3 AND review_requested = 0 AND state = 'open' AND dismissed_at IS NULL",
+            rusqlite::params![state, merged_at, pr_id],
+        )?;
+        Ok(updated > 0)
+    }
+
     /// Test-only raw read of the sticky-list bookkeeping columns for a single PR,
     /// including dismissed rows (which `get_all_review_prs` hides). Returns
     /// `(dismissed, dismissed_head_sha, review_requested)`.
@@ -266,6 +324,7 @@ impl super::Database {
 mod tests {
     use super::ReviewPrUpsert;
     use crate::db::test_helpers::*;
+    use crate::github_client::PullRequestTerminalState;
 
     fn review_pr_row(id: i64, number: i64, head_sha: &str, updated_at: i64) -> ReviewPrUpsert {
         ReviewPrUpsert {
@@ -286,8 +345,10 @@ mod tests {
             additions: 10,
             deletions: 5,
             changed_files: 2,
+            ci_status: None,
             mergeable: None,
             mergeable_state: None,
+            merged_at: None,
             labels: vec![],
             created_at: 1000,
             updated_at,
@@ -583,6 +644,83 @@ mod tests {
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].id, 2);
         assert_eq!(prs[1].id, 1);
+
+        drop(db);
+    }
+
+    #[test]
+    fn test_upsert_preserves_known_ci_status_when_enrichment_has_no_state() {
+        let (db, _temp_dir) = make_test_db("review_pr_ci_status_preserved");
+
+        db.upsert_review_pr(&ReviewPrUpsert {
+            ci_status: Some("success".to_string()),
+            ..review_pr_row(1, 10, "sha1", 1000)
+        })
+        .expect("persist known CI status");
+        db.upsert_review_pr(&ReviewPrUpsert {
+            ci_status: None,
+            ..review_pr_row(1, 10, "sha1", 2000)
+        })
+        .expect("upsert without a fetched CI status");
+
+        let prs = db.get_all_review_prs().expect("read review PRs");
+        assert_eq!(prs[0].ci_status.as_deref(), Some("success"));
+
+        db.upsert_review_pr(&ReviewPrUpsert {
+            ci_status: Some("failure".to_string()),
+            ..review_pr_row(1, 10, "sha2", 3000)
+        })
+        .expect("replace known CI status");
+        let prs = db.get_all_review_prs().expect("read updated review PRs");
+        assert_eq!(prs[0].ci_status.as_deref(), Some("failure"));
+
+        drop(db);
+    }
+
+    #[test]
+    fn test_reconcile_candidates_and_terminal_updates_are_self_limiting() {
+        let (db, _temp_dir) = make_test_db("review_pr_reconcile_candidates");
+        for id in 1..=4 {
+            db.upsert_review_pr(&review_pr_row(id, id, &format!("sha{id}"), id))
+                .expect("insert review PR");
+        }
+        db.mark_review_prs_not_requested(&[])
+            .expect("mark rows as kept");
+
+        db.upsert_review_pr(&review_pr_row(2, 2, "sha2", 20))
+            .expect("re-request PR 2");
+        assert!(db
+            .update_review_pr_terminal_state(3, PullRequestTerminalState::Closed)
+            .expect("close PR 3"));
+        db.dismiss_review_pr(4).expect("dismiss PR 4");
+
+        let candidates = db
+            .get_review_pr_reconcile_candidates()
+            .expect("read reconcile candidates");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, 1);
+
+        assert!(db
+            .update_review_pr_terminal_state(
+                1,
+                PullRequestTerminalState::Merged(Some(1_700_000_000)),
+            )
+            .expect("merge kept PR 1"));
+        assert!(!db
+            .update_review_pr_terminal_state(2, PullRequestTerminalState::Closed)
+            .expect("ignore concurrently re-requested PR 2"));
+
+        let rows = db.get_all_review_prs().expect("read review PRs");
+        let merged = rows.iter().find(|row| row.id == 1).expect("merged row");
+        assert_eq!(merged.state, "merged");
+        assert_eq!(merged.merged_at, Some(1_700_000_000));
+        let closed = rows.iter().find(|row| row.id == 3).expect("closed row");
+        assert_eq!(closed.state, "closed");
+        assert_eq!(closed.merged_at, None);
+        assert!(db
+            .get_review_pr_reconcile_candidates()
+            .expect("read candidates after terminal updates")
+            .is_empty());
 
         drop(db);
     }

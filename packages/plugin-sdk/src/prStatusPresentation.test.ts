@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getPrStatusChips, type PrInput } from '@openforge-app/plugin-sdk/prStatusPresentation'
+import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 describe('getPrStatusChips shared package API', () => {
   const basePr: PrInput = {
@@ -49,5 +50,65 @@ describe('getPrStatusChips shared package API', () => {
 
     expect(getPrStatusChips({ ...basePr, state: 'merged' }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }))
+  })
+
+  it('presents review-request CI and terminal outcomes through the shared helper', () => {
+    const reviewPr: ReviewPullRequest = {
+      id: 42,
+      number: 7,
+      title: 'Review this',
+      body: null,
+      state: 'open',
+      draft: false,
+      html_url: 'https://github.com/acme/widgets/pull/7',
+      user_login: 'octocat',
+      user_avatar_url: null,
+      repo_owner: 'acme',
+      repo_name: 'widgets',
+      head_ref: 'feature/review-sync',
+      base_ref: 'main',
+      head_sha: 'abc123',
+      additions: 12,
+      deletions: 3,
+      changed_files: 2,
+      ci_status: null,
+      mergeable: null,
+      mergeable_state: null,
+      merged_at: null,
+      created_at: 1,
+      updated_at: 2,
+      viewed_at: null,
+      viewed_head_sha: null,
+      labels: [],
+    }
+
+    for (const [ci_status, label] of [
+      ['success', 'CI Passed'],
+      ['failure', 'CI Failed'],
+      ['pending', 'CI Pending'],
+    ] as const) {
+      expect(getPrStatusChips({ ...reviewPr, ci_status }, 'compact'))
+        .toContainEqual(expect.objectContaining({ type: 'ci', label }))
+    }
+    expect(getPrStatusChips({ ...reviewPr, ci_status: 'none' }, 'compact'))
+      .not.toContainEqual(expect.objectContaining({ type: 'ci' }))
+
+    expect(getPrStatusChips({
+      ...reviewPr,
+      state: 'closed',
+      merged_at: 1_700_000_000,
+      ci_status: 'failure',
+      mergeable_state: 'clean',
+    }, 'compact')).toEqual([
+      expect.objectContaining({ type: 'merge', label: 'merged' }),
+    ])
+    expect(getPrStatusChips({
+      ...reviewPr,
+      state: 'closed',
+      ci_status: 'pending',
+      mergeable_state: 'clean',
+    }, 'compact')).toEqual([
+      expect.objectContaining({ type: 'merge', label: 'closed' }),
+    ])
   })
 })

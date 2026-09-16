@@ -21,8 +21,10 @@ const basePr: ReviewPullRequest = {
   additions: 50,
   deletions: 10,
   changed_files: 3,
+  ci_status: null,
   mergeable: null,
   mergeable_state: null,
+  merged_at: null,
   created_at: Date.now() - 3600000,
   updated_at: Date.now(),
   viewed_at: null,
@@ -98,6 +100,45 @@ describe('ReviewPrCard', () => {
     const conflictedPr = { ...basePr, mergeable: false, mergeable_state: 'dirty', state: 'open' }
     render(ReviewPrCard, { props: { pr: conflictedPr, selected: false, onClick } })
     expect(screen.getByText('Merge Conflict')).toBeTruthy()
+  })
+
+  it('shows the review request check state', () => {
+    render(ReviewPrCard, {
+      props: { pr: { ...basePr, ci_status: 'success' }, selected: false, onClick: () => {} },
+    })
+    expect(screen.getByText('CI Passed')).toBeTruthy()
+  })
+
+  it('shows only the finished state after a review request merges', () => {
+    render(ReviewPrCard, {
+      props: {
+        pr: {
+          ...basePr,
+          state: 'closed',
+          merged_at: 1_700_000_000,
+          ci_status: 'failure',
+          mergeable_state: 'clean',
+        },
+        selected: false,
+        onClick: () => {},
+      },
+    })
+    expect(screen.getByText('merged')).toBeTruthy()
+    expect(screen.queryByText('CI Failed')).toBeNull()
+    expect(screen.queryByText('Ready to Merge')).toBeNull()
+  })
+
+  it('shows closed for a review request that did not merge', () => {
+    render(ReviewPrCard, {
+      props: {
+        pr: { ...basePr, state: 'closed', ci_status: 'pending', mergeable_state: 'clean' },
+        selected: false,
+        onClick: () => {},
+      },
+    })
+    expect(screen.getByText('closed')).toBeTruthy()
+    expect(screen.queryByText('CI Pending')).toBeNull()
+    expect(screen.queryByText('Ready to Merge')).toBeNull()
   })
 
   it('calls onClick when card is clicked', async () => {
