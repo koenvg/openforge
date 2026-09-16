@@ -9,20 +9,26 @@ function getPackageMetadata() {
   return packageJson.openforge
 }
 
-/**
- * Minimal backend host harness: captures registered method handlers, records
- * `commands.invokeGlobal` calls, and backs plugin storage with an in-memory map
- * so the fire-and-forget walkthrough generation can run to completion.
- */
-function makeBackendHarness() {
-  const store = new Map<string, unknown>()
+interface BackendHarnessOptions {
+  fileDiffError?: Error
+  store?: Map<string, unknown>
+  agentGenerate?: () => Promise<{ text: string }>
+}
+
+function makeBackendHarness(options: BackendHarnessOptions = {}) {
+  const store = options.store ?? new Map<string, unknown>()
   const projectRepos: Record<string, { owner: string; name: string } | null> = {
     'project-other': { owner: 'acme', name: 'other' },
     'project-app': { owner: 'acme', name: 'app' },
   }
   const invokeGlobal = vi.fn(async (id: string, payload?: unknown) => {
-    if (id === 'openforge.getPrFileDiffs') return []
-    if (id === 'openforge.agentGenerateInRepo') return { text: '{"steps":[]}' }
+    if (id === 'openforge.getPrFileDiffs') {
+      if (options.fileDiffError) throw options.fileDiffError
+      return []
+    }
+    if (id === 'openforge.agentGenerateInRepo') {
+      return options.agentGenerate?.() ?? { text: '{"steps":[]}' }
+    }
     if (id === 'openforge.getProjectRepo') {
       return projectRepos[(payload as { projectId: string }).projectId] ?? null
     }
@@ -57,9 +63,9 @@ function makeBackendHarness() {
   return { openforge, invokeGlobal, handlers, projectRepos }
 }
 
-async function activateBackend() {
+async function activateBackend(options: BackendHarnessOptions = {}) {
   const { default: backend } = await import('./backend')
-  const { openforge, invokeGlobal, handlers } = makeBackendHarness()
+  const { openforge, invokeGlobal, handlers } = makeBackendHarness(options)
   const packageMetadata = getPackageMetadata()
   await backend.activate(openforge as never, {
     pluginId: packageMetadata.id,
@@ -85,6 +91,57 @@ const walkthroughRequest = (overrides: Record<string, unknown> = {}) => ({
 })
 
 describe('startAgentWalkthrough backend handler', () => {
+  it('records a readable error when setup fails after generation starts', async () => {
+    const { handlers } = await activateBackend({
+      fileDiffError: new Error('Received 304 but no cached response found'),
+    })
+    const start = handlers.get('startAgentWalkthrough')!
+    const get = handlers.get('getPrWalkthrough')!
+
+    await expect(start(walkthroughRequest())).resolves.toEqual({
+      walkthrough_session_key: expect.any(String),
+    })
+
+    await expect(get({ reviewPrId: 42, headSha: 'sha123' })).resolves.toMatchObject({
+      status: 'error',
+      error_message: 'Received 304 but no cached response found',
+    })
+  })
+
+  it('turns generation interrupted by an app restart into a readable error', async () => {
+    const persisted = new Map<string, unknown>()
+    let resolveGeneration!: (result: { text: string }) => void
+    const generation = new Promise<{ text: string }>((resolve) => {
+      resolveGeneration = resolve
+    })
+    const first = await activateBackend({
+      store: persisted,
+      agentGenerate: () => generation,
+    })
+
+    await first.handlers.get('startAgentWalkthrough')!(walkthroughRequest())
+    await expect(first.handlers.get('getPrWalkthrough')!({
+      reviewPrId: 42,
+      headSha: 'sha123',
+    })).resolves.toMatchObject({ status: 'generating' })
+    vi.resetModules()
+
+    const restarted = await activateBackend({ store: persisted })
+    const getRestartedWalkthrough = () => restarted.handlers.get('getPrWalkthrough')!({
+      reviewPrId: 42,
+      headSha: 'sha123',
+    })
+    await expect(getRestartedWalkthrough()).resolves.toMatchObject({
+      status: 'error',
+      error_message: 'Walkthrough generation stopped because OpenForge restarted. Try again.',
+    })
+
+    resolveGeneration({ text: '{"steps":[]}' })
+    await vi.waitFor(async () => {
+      await expect(getRestartedWalkthrough()).resolves.toMatchObject({ status: 'error' })
+    })
+  })
+
   it('forwards the project id to agentGenerateInRepo so the per-project provider is used', async () => {
     const { invokeGlobal, handlers } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')
