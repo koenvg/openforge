@@ -100,7 +100,7 @@ describe('github-sync plugin', () => {
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.mjs')
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend', 'projects', 'projectConfig']))
   })
 
   it('keeps GitHub PR review host command strings out of plugin UI and activation code', () => {
@@ -390,7 +390,8 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('testJiraConnection', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrTicket', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('setPrJiraKey', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(42)
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('resolveProjectIdsByRepo', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(43)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {

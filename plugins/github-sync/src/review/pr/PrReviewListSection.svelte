@@ -55,6 +55,7 @@
     // a background walkthrough+AI-review generation from the card. Optional so the
     // list renders (all cards 'idle') before the parent wires generation.
     walkthroughByPr?: Map<number, PrWalkthrough | null>
+    canGenerateWalkthrough?: (pr: ReviewPullRequest) => boolean
     onGenerateWalkthrough?: (pr: ReviewPullRequest) => void
     /** Stops an in-flight generation for this PR. Optional; a no-op until wired. */
     onStopWalkthrough?: (pr: ReviewPullRequest) => void
@@ -101,6 +102,7 @@
     onStartTaskFromAuthoredPr,
     pluralize,
     walkthroughByPr = new Map(),
+    canGenerateWalkthrough = () => false,
     onGenerateWalkthrough = () => {},
     onStopWalkthrough = () => {},
   }: Props = $props()
@@ -216,9 +218,11 @@
                         onRemove={() => onRemove(pr)}
                       >
                         {#snippet footer()}
-                          <div class="pt-1">
-                            <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
-                          </div>
+                          {#if wtState === 'generating' || wtState === 'ready' || canGenerateWalkthrough(pr)}
+                            <div class="pt-1">
+                              <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
+                            </div>
+                          {/if}
                         {/snippet}
                       </ReviewPrCard>
                     </div>

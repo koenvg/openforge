@@ -45,6 +45,7 @@
       "commands",
       "events",
       "storage",
+      "projects",
       "system.openUrl",
       "projectConfig",
       "context",

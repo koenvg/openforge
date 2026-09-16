@@ -14,6 +14,11 @@
 
   const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync' })
   const backend = registry.backendApi.backend
+  backend.registerMethod('resolveProjectIdsByRepo', {
+    handler: async () => props.projectId
+      ? { [`${props.pr.repo_owner}/${props.pr.repo_name}`.toLowerCase()]: props.projectId }
+      : {},
+  })
   backend.registerMethod('getReviewPrs', { handler: async () => [] })
   backend.registerMethod('getAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('markReviewPrViewed', { handler: async () => {} })

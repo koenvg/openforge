@@ -225,6 +225,8 @@ pub(super) async fn handle_app_agent_generate_command(
             let session_key = payload_string(&request.payload, "sessionKey")?;
             let prompt = payload_string(&request.payload, "prompt")?;
             let project_id = payload_string(&request.payload, "projectId")?;
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
             let pr_number = request
                 .payload
                 .get("prNumber")
@@ -239,6 +241,29 @@ pub(super) async fn handle_app_agent_generate_command(
             let model = payload_optional_string(&request.payload, "model")?;
             let output_schema = payload_optional_string(&request.payload, "outputSchema")?;
             let provider = resolve_generation_provider(state, &request.payload, &project_id)?;
+
+            let project_repo = crate::github_runtime::get_project_repo(&state.db, &project_id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        repo_not_local_project_error(&project_id),
+                    )
+                })?;
+            if !project_repo.owner.eq_ignore_ascii_case(&owner)
+                || !project_repo.name.eq_ignore_ascii_case(&repo)
+            {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    repo_project_mismatch_error(
+                        &project_id,
+                        &project_repo.owner,
+                        &project_repo.name,
+                        &owner,
+                        &repo,
+                    ),
+                ));
+            }
 
             // Session continuity: `persistSession` pins this run's Claude session
             // to `sessionKey` so a follow-up can resume it; `resumeSessionId` forks
@@ -267,8 +292,8 @@ pub(super) async fn handle_app_agent_generate_command(
                 )
             })?;
 
-            // Resolve the PR's base repo to a local project clone. Scope the DB
-            // guard so the lock is released before the long checkout + agent run.
+            // Resolve the verified project to its local clone. Scope the DB guard
+            // so the lock is released before the long checkout + agent run.
             let repo_path = {
                 let db = crate::db::acquire_db(&state.db);
                 db.get_project(&project_id)
@@ -472,6 +497,19 @@ fn repo_not_local_project_error(project_id: &str) -> String {
     format!(
         "cannot generate a repo-aware walkthrough: project '{project_id}' has no local project \
          clone. Add this repository as a project to enable the walkthrough."
+    )
+}
+
+fn repo_project_mismatch_error(
+    project_id: &str,
+    project_owner: &str,
+    project_repo: &str,
+    pr_owner: &str,
+    pr_repo: &str,
+) -> String {
+    format!(
+        "cannot generate a repo-aware walkthrough: project '{project_id}' points to \
+         '{project_owner}/{project_repo}', not pull request repository '{pr_owner}/{pr_repo}'"
     )
 }
 

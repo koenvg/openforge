@@ -2,7 +2,8 @@ import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import { activeProjectId, agentReviewComments, selectedReviewPr } from '../../../lib/stores'
+import { agentReviewComments, selectedReviewPr } from '../../../lib/stores'
+import { projectRepoKey, resolveProjectIdsByRepo } from '../../../lib/projectRepoResolution'
 import { walkthroughButtonState } from '../../../lib/walkthroughButtonState'
 import { resolveWalkthroughGuidance } from '../../../lib/walkthroughGuidance'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
@@ -19,16 +20,26 @@ const keyOf = (pr: ReviewPullRequest) => `${pr.id}:${pr.head_sha}`
 
 /** One poll owner per PR head, shared by list buttons and the walkthrough model. */
 export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: GithubSyncPrReviewClient) {
-  const project = fromStore(activeProjectId)
   const selectedPr = fromStore(selectedReviewPr)
   const agentComments = fromStore(agentReviewComments)
   let statuses = $state<Map<string, Status>>(new Map())
   let byPr = $state<Map<number, PrWalkthrough | null>>(new Map())
+  let projectIdsByRepo = $state<Map<string, string>>(new Map())
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const versions = new Map<string, number>()
   const requests = new Map<string, Promise<PrWalkthrough | null>>()
   const latestHeads = new Map<number, string>()
   let disposed = false
+
+  async function refreshProjectIds(): Promise<Map<string, string>> {
+    const resolved = await resolveProjectIdsByRepo(api)
+    if (!disposed) projectIdsByRepo = new Map(resolved)
+    return resolved
+  }
+
+  function canGenerate(pr: ReviewPullRequest): boolean {
+    return projectIdsByRepo.has(projectRepoKey(pr.repo_owner, pr.repo_name))
+  }
 
   function status(pr: ReviewPullRequest | null): Status {
     return pr ? statuses.get(keyOf(pr)) ?? empty : empty
@@ -121,7 +132,15 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     if (disposed || status(pr).isStarting) return
     activate(pr)
     const version = cancel(pr)
-    const projectId = project.current
+    let projectId: string | undefined
+    try {
+      const resolved = await refreshProjectIds()
+      projectId = resolved.get(projectRepoKey(pr.repo_owner, pr.repo_name))
+    } catch (error) {
+      console.error('Failed to resolve a local project for walkthrough generation:', error)
+      return
+    }
+    if (!projectId || !current(pr, version)) return
     update(pr, { isStarting: true, loadError: null })
     try {
       const guidance = await resolveWalkthroughGuidance(api, projectId)
@@ -173,6 +192,10 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     requests.clear()
   })
 
+  void refreshProjectIds().catch((error) => {
+    console.error('Failed to resolve local projects for walkthrough generation:', error)
+  })
+
   return {
     status,
     get byPr() { return byPr },
@@ -180,6 +203,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
       const pr = selectedPr.current
       return !!pr && walkthroughButtonState(status(pr).walkthrough, pr.head_sha) === 'ready'
     },
+    canGenerate,
     refreshStatus,
     async refreshVisible(prs: ReviewPullRequest[]) { await Promise.all(prs.map(refreshStatus)) },
     generate,

@@ -4,6 +4,7 @@
   import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import PrWalkthroughButton from './PrWalkthroughButton.svelte'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
+  import { resolveProjectIdForRepo } from '../../lib/projectRepoResolution'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
 
@@ -15,13 +16,17 @@
     projectId?: string | null
   }
 
-  let { api, context: _context, pr, projectId = null }: Props = $props()
+  let { api, context: _context, pr, projectId: _projectId = null }: Props = $props()
 
   const POLL_INTERVAL_MS = 2500
 
   let githubSync = $derived(createGithubSyncPrReviewClient(api))
   let walkthrough = $state<PrWalkthrough | null>(null)
+  let resolvedProjectId = $state<string | null>(null)
   let buttonState = $derived(walkthroughButtonState(walkthrough, pr.head_sha))
+  let actionAvailable = $derived(
+    buttonState === 'generating' || buttonState === 'ready' || resolvedProjectId !== null,
+  )
 
   // The host surface remounts nothing on a data refresh: it keys rows by pull-request id and
   // hands us a fresh `pr` object each time. So identify the subject by (id, head_sha) and
@@ -64,6 +69,8 @@
 
   async function generate(): Promise<void> {
     const subject = pr
+    const projectId = resolvedProjectId
+    if (!projectId) return
     try {
       const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, projectId)
       await githubSync.startAgentWalkthrough({
@@ -116,8 +123,16 @@
     loadedKey = key
     stopPolling()
     walkthrough = null
+    resolvedProjectId = null
 
     const subject = pr
+    void resolveProjectIdForRepo(api, subject.repo_owner, subject.repo_name)
+      .then((projectId) => {
+        if (subjectKey(subject) === subjectKey(pr)) resolvedProjectId = projectId
+      })
+      .catch((error) => {
+        console.error('Failed to resolve a local project for walkthrough generation:', error)
+      })
     void loadWalkthrough(subject).then((loaded) => {
       // Someone else's generation (the PR review view, a previous session) may already be
       // running for this commit; pick it up so the row tracks it to completion.
@@ -130,4 +145,6 @@
   onDestroy(stopPolling)
 </script>
 
-<PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} onStop={() => void stop()} />
+{#if actionAvailable}
+  <PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} onStop={() => void stop()} />
+{/if}

@@ -36,7 +36,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const replies = fromStore(stores.pendingReplies)
   const reviewPrs = fromStore(stores.reviewPrs)
   const authoredPrs = fromStore(stores.authoredPrs)
-  const ai = useAiThreadState(githubSync)
+  const ai = useAiThreadState(api, githubSync)
   const walkthroughs = useWalkthroughPolling(api, githubSync)
   const selection = useSelectedPrReview(api, githubSync, ai, walkthroughs)
   const walkthrough = createWalkthroughReview(
@@ -156,6 +156,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onStartTaskFromAuthoredPr: getContext().projectId ? list.startTaskFromAuthoredPr : undefined,
     pluralize: list.pluralize,
     walkthroughByPr: walkthroughs.byPr,
+    canGenerateWalkthrough: walkthroughs.canGenerate,
     onGenerateWalkthrough: walkthroughs.generate,
     onStopWalkthrough: walkthroughs.stop,
   })
@@ -196,6 +197,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onSetReviewThreadStatus: setReviewThreadStatus,
     aiThreads: ai.threads,
     aiThreadsPendingCount: ai.pendingCount,
+    canSendQuestionsToAgent: ai.canSendQuestions,
     onCommentNow: selection.commentNow,
     onReplyToThread: ai.replyToThread,
     onReplyToExistingComment: selection.replyToExistingComment,

@@ -27,14 +27,23 @@ const readyWalkthrough = {
 }
 const workspaces: ReviewWorkspace[] = []
 
-async function setup(scope: 'global' | 'repo' = 'global') {
+async function setup(
+  scope: 'global' | 'repo' = 'global',
+  projectRepos: Record<string, string> = { 'project-1': 'acme/app' },
+) {
   const registry = createOpenForgeRegistryFake({
     pluginId: 'com.openforge.github-sync', projectId: 'project-1',
     viewId: `plugin:com.openforge.github-sync:pr_review${scope === 'global' ? '_global' : ''}`,
   })
   await registry.frontendApi.config.set('github_token', 'test-token')
-  await registry.frontendApi.projectConfig.set('resolved_repo', 'acme/app', 'project-1')
+  registry.frontendApi.projects.list = vi.fn(async () => Object.keys(projectRepos).map((id) => ({
+    id, name: id, path: `/${id}`, created_at: 1, updated_at: 1,
+  })))
+  for (const [projectId, repo] of Object.entries(projectRepos)) {
+    await registry.frontendApi.projectConfig.set('resolved_repo', repo, projectId)
+  }
   const responses = new Map<string, unknown>(Object.entries({
+    resolveProjectIdsByRepo: Object.fromEntries(Object.entries(projectRepos).map(([id, repo]) => [repo.toLowerCase(), id])),
     getReviewPrs: [pr], fetchReviewPrs: [{ ...pr, title: 'Updated login' }],
     getAuthoredPrs: [], fetchAuthoredPrs: [], getPrWalkthrough: null,
     markReviewPrViewed: null, markReviewPrUnviewed: null, dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
@@ -459,6 +468,43 @@ describe('review workspace', () => {
     expect(walkthrough.walkthrough?.status).toBe('ready')
     expect(workspace.detail!.walkthroughReady).toBe(true)
     expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('ready')
+  })
+
+  it('generates in the project matched to the pull request repository', async () => {
+    const { workspace, calls } = await setup('global', {
+      'project-1': 'acme/other',
+      'project-2': 'acme/app',
+    })
+
+    await workspace.list.onGenerateWalkthrough(pr)
+
+    expect(calls.get('startAgentWalkthrough')).toContainEqual(expect.objectContaining({
+      projectId: 'project-2',
+    }))
+  })
+
+  it('asks follow-up questions in the project matched to the pull request repository', async () => {
+    const { workspace, calls } = await setup('global', {
+      'project-1': 'acme/other',
+      'project-2': 'acme/app',
+    })
+    await workspace.list.onSelectPr(pr)
+    expect(workspace.detail!.canSendQuestionsToAgent).toBe(true)
+    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
+
+    await workspace.detail!.onSendQuestionsToAgent()
+
+    expect(calls.get('askAgentQuestions')).toContainEqual(expect.objectContaining({
+      projectId: 'project-2',
+    }))
+  })
+
+  it('does not offer follow-up question submission without a matching local project', async () => {
+    const { workspace } = await setup('global', { 'project-1': 'acme/other' })
+
+    await workspace.list.onSelectPr(pr)
+
+    expect(workspace.detail!.canSendQuestionsToAgent).toBe(false)
   })
 
   it('does not restore a stopped walkthrough from an in-flight poll', async () => {

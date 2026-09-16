@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
+import { tick } from 'svelte'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
@@ -156,7 +157,17 @@ function renderWalkthrough(overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
   })
-  return { onPendingCommentsChange, onSubmitReview, unmount: rendered.unmount }
+  return {
+    onPendingCommentsChange,
+    onSubmitReview,
+    unmount: rendered.unmount,
+  }
+}
+
+async function waitForInitialWalkthroughLoad(githubSync: GithubSyncPrReviewClient): Promise<void> {
+  await waitFor(() => expect(githubSync.getPrWalkthrough).toHaveBeenCalledTimes(2))
+  await Promise.all(vi.mocked(githubSync.getPrWalkthrough).mock.results.map(result => result.value))
+  await tick()
 }
 
 describe('WalkthroughTab comment sync', () => {
@@ -396,21 +407,27 @@ describe('WalkthroughTab stop generation', () => {
     const githubSync = makeGeneratingSync()
     renderWalkthrough({ githubSync })
 
+    await waitForInitialWalkthroughLoad(githubSync)
     await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
     await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
 
-    expect(githubSync.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+    await waitFor(() => {
+      expect(githubSync.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+    })
   })
 
   it('returns to the Generate state after stopping, not an error screen', async () => {
     const githubSync = makeGeneratingSync()
     renderWalkthrough({ githubSync })
 
+    await waitForInitialWalkthroughLoad(githubSync)
     await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
     await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
 
     expect(await screen.findByRole('button', { name: /generate walkthrough/i })).toBeTruthy()
-    expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
+    await waitFor(() => {
+      expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
+    })
     expect(screen.queryByText(/aborted/i)).toBeNull()
   })
 })
