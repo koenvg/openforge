@@ -43,12 +43,23 @@
   let loading = $derived(cachedTask.loading)
   let loadError = $derived(cachedTask.loaded ? null : cachedTask.error)
   let cachedRefreshError = $derived(cachedTask.loaded ? cachedTask.error : null)
+  let githubUsername = $state<string | null>(null)
+  let githubIdentityLoaded = $state(false)
   let refreshError = $state<string | null>(null)
   const revalidation = useTaskPullRequestRevalidation(initialApi, cache, () => taskId, () => { refreshError = null })
   let visibleRefreshError = $derived(refreshError ?? cachedRefreshError)
   let refreshing = $state(false)
   let adding = $state(false)
   let confirmingEnqueue = $state<PullRequestInfo | null>(null)
+
+  async function readGithubUsername(): Promise<string | null> {
+    return initialApi.config.get<string>('github_username').catch(() => null)
+  }
+
+  void readGithubUsername().then((username) => {
+    githubUsername = username
+    githubIdentityLoaded = true
+  })
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
@@ -79,12 +90,16 @@
     if (refreshing) return
     refreshing = true
     refreshError = null
+    githubIdentityLoaded = false
     try {
       await client.refreshTask(taskId)
+      const nextGithubUsername = await readGithubUsername()
       await cache.invalidateAndRefresh(taskId)
+      githubUsername = nextGithubUsername
     } catch (error) {
       refreshError = errorMessage(error)
     } finally {
+      githubIdentityLoaded = true
       refreshing = false
     }
   }
@@ -147,20 +162,23 @@
     <PullRequestLinkForm onLink={linkPullRequest} onLinked={() => { adding = false }} onCancel={() => { adding = false }} />
   {/if}
 
-  {#each pullRequests as pr (pr.id)}
-    <PullRequestCard
-      {pr}
-      sectionKey={cardSectionKey(pr)}
-      comments={commentsByPrId.get(pr.id) ?? []}
-      feedback={orchestration.feedbackByPr.get(pr.id)}
-      pendingPrId={orchestration.pendingPrId}
-      {taskActionPending}
-      resolveRemoteMedia={resolveCommentMedia(pr)}
-      onOpenUrl={openExternal}
-      onMarkAddressed={markAddressed}
-      onRequestAction={requestAction}
-    />
-  {/each}
+  {#if githubIdentityLoaded}
+    {#each pullRequests as pr (pr.id)}
+      <PullRequestCard
+        {pr}
+        sectionKey={cardSectionKey(pr)}
+        comments={commentsByPrId.get(pr.id) ?? []}
+        {githubUsername}
+        feedback={orchestration.feedbackByPr.get(pr.id)}
+        pendingPrId={orchestration.pendingPrId}
+        {taskActionPending}
+        resolveRemoteMedia={resolveCommentMedia(pr)}
+        onOpenUrl={openExternal}
+        onMarkAddressed={markAddressed}
+        onRequestAction={requestAction}
+      />
+    {/each}
+  {/if}
 {/snippet}
 
 {#if isEmpty}

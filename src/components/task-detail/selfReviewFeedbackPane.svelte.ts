@@ -61,10 +61,10 @@ export function createSelfReviewFeedbackPane(
     },
     pullRequest: {
       get linkedPr() { return sources.diff.linkedPr },
-      get comments() { return sources.diff.prComments },
+      get comments() { return sources.comments.commentSelection.threadRoots },
       get visibleComments() {
         return sources.navigation.showAddressed
-          ? sources.diff.prComments
+          ? sources.comments.commentSelection.threadRoots
           : sources.comments.commentSelection.unaddressedComments
       },
       get selection() { return sources.comments.commentSelection },

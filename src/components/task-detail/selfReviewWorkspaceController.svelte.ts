@@ -61,6 +61,7 @@ export function createSelfReviewWorkspaceController(
     getTaskId: options.getTaskId,
     getState: () => selfReviewState,
     getPrComments: () => diffController.prComments,
+    getGithubUsername: () => diffController.githubUsername,
     getLinkedPr: () => diffController.linkedPr,
     getComparisonFilenames: () => fileStateController.comparisonFilenames,
   })

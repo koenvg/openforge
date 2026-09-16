@@ -24,6 +24,7 @@ vi.mock('../../lib/ipc', () => ({
   getCommitFileContents: vi.fn().mockResolvedValue({ oldContent: '', newContent: '' }),
   getCommitBatchFileContents: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
+  getConfig: vi.fn().mockResolvedValue(null),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   resolveGithubAsset: vi.fn().mockResolvedValue(null),

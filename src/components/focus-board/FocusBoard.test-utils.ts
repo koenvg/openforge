@@ -35,6 +35,7 @@ const taskStore = activeTasks as Writable<TaskDetail[]>
 vi.mock('../../lib/ipc', () => ({
   readTaskDetail: vi.fn(),
   getPrComments: vi.fn().mockResolvedValue([]),
+  getConfig: vi.fn().mockResolvedValue(null),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),

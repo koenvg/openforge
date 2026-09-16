@@ -51,7 +51,8 @@ export const SendFeedback: Story = {
   ...scenario('populated'),
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.findByText('greet.ts')).resolves.toBeVisible()
+    const diff = within(await canvas.findByRole('region', { name: 'Code diff panel' }))
+    await expect(diff.findByText('Please cover the empty-name case too.')).resolves.toBeVisible()
     await userEvent.click(canvas.getByRole('button', { name: /Send feedback/ }))
     const dialog = within(await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Review the prompt before sending to the agent' }))
     await userEvent.click(dialog.getByRole('button', { name: 'Send to agent' }))

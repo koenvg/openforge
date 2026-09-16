@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
+import type { JsonValue } from '@openforge-app/plugin-sdk'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import type { FrontendOpenForgeAPI, PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
 import type { PollResult, PrComment, PullRequestInfo, TaskDetail } from '@openforge-app/plugin-sdk/domain'
@@ -98,8 +99,15 @@ const task: TaskDetail = {
   titleGeneratedAt: null,
 }
 
-function renderSection(invoke: ReturnType<typeof vi.fn>, taskActionPending = false) {
+function renderSection(
+  invoke: ReturnType<typeof vi.fn>,
+  taskActionPending = false,
+  githubUsername: string | null | Promise<string | null> = null,
+) {
   const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.github-sync', projectId: 'P-1' })
+  api.config.get = async <T extends JsonValue = JsonValue>(key: string): Promise<T | null> => (
+    (key === 'github_username' ? await githubUsername : null) as T | null
+  )
   api.backend.whenReady = vi.fn(async () => undefined)
   api.backend.invoke = invoke as unknown as FrontendOpenForgeAPI['backend']['invoke']
   const props: PluginTaskUISectionProps & { taskActionPending: boolean } = {
@@ -235,6 +243,60 @@ describe('GitHub Sync Task pull request section', () => {
 
     await waitFor(() => expect(screen.queryByRole('button', { name: '✓ Mark addressed' })).toBeNull())
     expect(invoke).toHaveBeenCalledWith('markTaskPrCommentAddressed', { commentId: 501 })
+  })
+
+  it('lists the same unaddressed reviewer threads reported by the badge', async () => {
+    const pullRequest = createPullRequest({ unaddressed_comment_count: 1 })
+    const comments = [
+      { ...baseComment, body: 'Reviewer root' },
+      { ...baseComment, id: 502, body: 'Reply one', author: 'author', in_reply_to_id: 501 },
+      { ...baseComment, id: 503, body: 'Reply two', in_reply_to_id: 501 },
+      { ...baseComment, id: 504, body: 'Own root', author: 'AUTHOR' },
+    ]
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pullRequest]
+      if (method === 'getTaskPrComments') return comments
+      return emptyPollResult
+    })
+
+    renderSection(invoke, false, 'author')
+
+    expect(await screen.findByText('Reviewer root')).toBeTruthy()
+    expect(screen.getByText('1 comment')).toBeTruthy()
+    expect(screen.queryByText('Reply one')).toBeNull()
+    expect(screen.queryByText('Reply two')).toBeNull()
+    expect(screen.queryByText('Own root')).toBeNull()
+    expect(screen.getAllByRole('button', { name: '✓ Mark addressed' })).toHaveLength(1)
+  })
+
+  it('waits for identity before rendering a badge and its matching comment list', async () => {
+    let resolveIdentity!: (username: string | null) => void
+    const identity = new Promise<string | null>((resolve) => {
+      resolveIdentity = resolve
+    })
+    const pullRequest = createPullRequest({ unaddressed_comment_count: 1 })
+    const comments = [
+      { ...baseComment, body: 'Reviewer root' },
+      { ...baseComment, id: 502, body: 'Own root', author: 'author' },
+    ]
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pullRequest]
+      if (method === 'getTaskPrComments') return comments
+      return emptyPollResult
+    })
+
+    renderSection(invoke, false, identity)
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('getTaskPrComments', { prId: 42 }))
+
+    expect(screen.queryByText('Test PR')).toBeNull()
+    expect(screen.queryByText('Reviewer root')).toBeNull()
+
+    resolveIdentity('author')
+
+    expect(await screen.findByText('Reviewer root')).toBeTruthy()
+    expect(screen.queryByText('Own root')).toBeNull()
+    expect(screen.getByText('1 comment')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '✓ Mark addressed' })).toHaveLength(1)
   })
 
   it('does not show merge-readiness blockers after the pull request is merged', async () => {

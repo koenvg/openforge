@@ -7,6 +7,7 @@ vi.mock('../../lib/ipc', () => ({
   refreshTaskGithubStatus: vi.fn().mockImplementation(() => Promise.resolve(createEmptyGithubSyncResult())),
   getPullRequests: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
+  getConfig: vi.fn().mockResolvedValue(null),
   linkPullRequest: vi.fn().mockResolvedValue(undefined),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),

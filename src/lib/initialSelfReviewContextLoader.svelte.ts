@@ -1,11 +1,12 @@
 import { get } from "svelte/store";
-import { getPrComments } from "./ipc";
+import { getConfig, getPrComments } from "./ipc";
 import { ticketPrs } from "./stores";
 import type { PrComment, PullRequestInfo } from "./types";
 
 export interface InitialSelfReviewContextLoader {
 	readonly prComments: PrComment[];
 	readonly linkedPr: PullRequestInfo | null;
+	readonly githubUsername: string | null;
 	hydrate(taskId: string): Promise<void>;
 	invalidate(): void;
 	cleanup(taskId: string): void;
@@ -14,6 +15,7 @@ export interface InitialSelfReviewContextLoader {
 export function createInitialSelfReviewContextLoader(): InitialSelfReviewContextLoader {
 	let prComments = $state<PrComment[]>([]);
 	let linkedPr = $state<PullRequestInfo | null>(null);
+	let githubUsername = $state<string | null>(null);
 	let generation = 0;
 
 	function invalidate(): void {
@@ -24,26 +26,19 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 		return requestGeneration !== generation;
 	}
 
-	async function loadLinkedPrComments(
-		taskId: string,
-		requestGeneration: number,
-	): Promise<void> {
-		if (isStale(requestGeneration)) return;
+	async function loadLinkedPrComments(taskId: string): Promise<PrComment[]> {
 		const openPrs = (get(ticketPrs).get(taskId) ?? [])
 			.filter((pr) => pr.state === "open")
 			.sort((a, b) => b.updated_at - a.updated_at);
-		if (openPrs.length === 0) return;
+		if (openPrs.length === 0) return [];
 
 		const pr = openPrs[0];
 		linkedPr = pr;
 		try {
-			const nextPrComments = await getPrComments(pr.id);
-			if (isStale(requestGeneration)) return;
-			prComments = nextPrComments;
+			return await getPrComments(pr.id);
 		} catch (error) {
-			if (isStale(requestGeneration)) return;
 			console.error(`Failed to load comments for PR ${pr.id}:`, error);
-			prComments = [];
+			return [];
 		}
 	}
 
@@ -51,13 +46,21 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 		const requestGeneration = ++generation;
 		linkedPr = null;
 		prComments = [];
-		await loadLinkedPrComments(taskId, requestGeneration);
+		githubUsername = null;
+		const [nextGithubUsername, nextPrComments] = await Promise.all([
+			getConfig("github_username").catch(() => null),
+			loadLinkedPrComments(taskId),
+		]);
+		if (isStale(requestGeneration)) return;
+		githubUsername = nextGithubUsername;
+		prComments = nextPrComments;
 	}
 
 	function cleanup(_taskId: string): void {
 		invalidate();
 		prComments = [];
 		linkedPr = null;
+		githubUsername = null;
 	}
 
 	return {
@@ -66,6 +69,9 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 		},
 		get linkedPr() {
 			return linkedPr;
+		},
+		get githubUsername() {
+			return githubUsername;
 		},
 		hydrate,
 		invalidate,

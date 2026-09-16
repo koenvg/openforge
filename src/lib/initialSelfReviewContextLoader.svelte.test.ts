@@ -11,9 +11,11 @@ import type { PrComment, PullRequestInfo } from "./types";
 
 vi.mock("./ipc", () => ({
   getPrComments: vi.fn(),
+  getConfig: vi.fn(),
 }));
 
 const mockGetPrComments = vi.mocked(ipc.getPrComments);
+const mockGetConfig = vi.mocked(ipc.getConfig);
 
 const olderOpenPr = {
 	id: 10,
@@ -54,6 +56,7 @@ describe("createInitialSelfReviewContextLoader", () => {
 		selfReviewStateByTask.set(new Map());
 		ticketPrs.set(new Map());
 		mockGetPrComments.mockResolvedValue([]);
+		mockGetConfig.mockResolvedValue('author');
 	});
 
 	it("hydrates comments for the newest open linked pull request", async () => {
@@ -65,6 +68,30 @@ describe("createInitialSelfReviewContextLoader", () => {
 
 		expect(mockGetPrComments).toHaveBeenCalledWith(newestOpenPr.id);
 		expect(loader.linkedPr).toEqual(newestOpenPr);
+		expect(loader.prComments).toEqual([prComment]);
+		expect(loader.githubUsername).toBe('author');
+	});
+
+	it("waits for the cached identity before exposing pull request comments", async () => {
+		let resolveIdentity!: (username: string | null) => void;
+		mockGetConfig.mockReturnValue(new Promise((resolve) => {
+			resolveIdentity = resolve;
+		}));
+		ticketPrs.set(new Map([["task-1", [newestOpenPr]]]));
+		mockGetPrComments.mockResolvedValue([prComment]);
+		const loader = createInitialSelfReviewContextLoader();
+
+		const hydration = loader.hydrate("task-1");
+		await Promise.resolve();
+
+		expect(mockGetConfig).toHaveBeenCalledWith("github_username");
+		expect(mockGetPrComments).toHaveBeenCalledWith(newestOpenPr.id);
+		expect(loader.prComments).toEqual([]);
+
+		resolveIdentity(null);
+		await hydration;
+
+		expect(loader.githubUsername).toBeNull();
 		expect(loader.prComments).toEqual([prComment]);
 	});
 
