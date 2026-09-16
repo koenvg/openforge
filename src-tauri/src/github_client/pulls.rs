@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose, Engine as _};
 use futures::future::join_all;
 use log::warn;
+use reqwest::header::{HeaderMap, LINK};
 use serde::{Deserialize, Serialize};
 
 use super::error::GitHubError;
@@ -63,6 +64,21 @@ fn exclude_draft_search_pr_results(
         .collect();
 
     (filtered_prs, filtered_safe_search_ids)
+}
+
+fn next_page_url(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get_all(LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .find_map(|link| {
+            let mut parts = link.split(';');
+            let url = parts.next()?.trim().strip_prefix('<')?.strip_suffix('>')?;
+            parts
+                .any(|part| part.trim() == "rel=\"next\"")
+                .then(|| url.to_string())
+        })
 }
 
 impl GitHubClient {
@@ -372,12 +388,27 @@ impl GitHubClient {
         pr_number: i64,
         token: &str,
     ) -> Result<Vec<PrFileDiff>, GitHubError> {
-        let url = format!(
+        let mut next_url = Some(format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/files?per_page=100",
             owner, repo, pr_number
-        );
+        ));
+        let mut files = Vec::new();
 
-        self.get_with_etag::<Vec<PrFileDiff>>(&url, token).await
+        while let Some(url) = next_url {
+            let response = self.send_github(self.github_get(&url, token)).await?;
+            if !response.status().is_success() {
+                return Err(Self::api_error_from_response(response).await);
+            }
+
+            next_url = next_page_url(response.headers());
+            let page = response
+                .json::<Vec<PrFileDiff>>()
+                .await
+                .map_err(|error| GitHubError::ParseError(error.to_string()))?;
+            files.extend(page);
+        }
+
+        Ok(files)
     }
 
     /// Get blob content by SHA
@@ -491,6 +522,154 @@ impl GitHubClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        extract::{Query, State},
+        http::{header::IF_NONE_MATCH, HeaderMap, HeaderValue, StatusCode},
+        response::{IntoResponse, Response},
+        routing::get,
+        Json, Router,
+    };
+    use std::collections::HashMap;
+    use std::sync::{atomic::AtomicUsize, Arc};
+
+    fn pr_file_json(index: usize) -> serde_json::Value {
+        serde_json::json!({
+            "sha": format!("sha-{index}"),
+            "filename": format!("src/file-{index}.rs"),
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "changes": 1,
+            "patch": "@@ -1 +1 @@",
+            "previous_filename": null
+        })
+    }
+
+    async fn paginated_pr_files_response(
+        Query(query): Query<HashMap<String, String>>,
+    ) -> (HeaderMap, Json<serde_json::Value>) {
+        if query.get("page").map(String::as_str) == Some("2") {
+            return (
+                HeaderMap::new(),
+                Json(serde_json::json!([pr_file_json(100)])),
+            );
+        }
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "link",
+            HeaderValue::from_static(
+                "<https://api.github.com/repos/acme/widgets/pulls/7/files?per_page=100&page=2>; rel=\"next\"",
+            ),
+        );
+        let files = (0..100).map(pr_file_json).collect::<Vec<_>>();
+        (headers, Json(serde_json::Value::Array(files)))
+    }
+
+    #[derive(Default)]
+    struct ChangingSecondPage {
+        page_two_requests: AtomicUsize,
+    }
+
+    async fn changing_paginated_pr_files_response(
+        State(state): State<Arc<ChangingSecondPage>>,
+        Query(query): Query<HashMap<String, String>>,
+        request_headers: HeaderMap,
+    ) -> Response {
+        if query.get("page").map(String::as_str) == Some("2") {
+            let request_index = state
+                .page_two_requests
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            return Json(serde_json::json!([pr_file_json(100 + request_index)])).into_response();
+        }
+
+        if request_headers.contains_key(IF_NONE_MATCH) {
+            return StatusCode::NOT_MODIFIED.into_response();
+        }
+
+        let mut headers = HeaderMap::new();
+        headers.insert("etag", HeaderValue::from_static("first-page-etag"));
+        headers.insert(
+            "link",
+            HeaderValue::from_static(
+                "<https://api.github.com/repos/acme/widgets/pulls/7/files?per_page=100&page=2>; rel=\"next\"",
+            ),
+        );
+        let files = (0..100).map(pr_file_json).collect::<Vec<_>>();
+        (headers, Json(serde_json::Value::Array(files))).into_response()
+    }
+
+    #[tokio::test]
+    async fn get_pr_files_returns_every_paginated_file() {
+        let router = Router::new().route(
+            "/repos/acme/widgets/pulls/7/files",
+            get(paginated_pr_files_response),
+        );
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind fake GitHub API");
+        let address = listener.local_addr().expect("read fake GitHub address");
+        tokio::spawn(async move {
+            axum::serve(listener, router)
+                .await
+                .expect("serve fake GitHub API");
+        });
+        let client = GitHubClient::new().with_test_api_base_url(format!("http://{address}"));
+
+        let files = client
+            .get_pr_files("acme", "widgets", 7, "token")
+            .await
+            .expect("fetch all pull request files");
+
+        assert_eq!(files.len(), 101);
+        assert_eq!(
+            files.first().map(|file| file.filename.as_str()),
+            Some("src/file-0.rs")
+        );
+        assert_eq!(
+            files.last().map(|file| file.filename.as_str()),
+            Some("src/file-100.rs")
+        );
+    }
+
+    #[tokio::test]
+    async fn get_pr_files_refreshes_later_pages_on_each_fetch() {
+        let state = Arc::new(ChangingSecondPage::default());
+        let router = Router::new()
+            .route(
+                "/repos/acme/widgets/pulls/7/files",
+                get(changing_paginated_pr_files_response),
+            )
+            .with_state(state);
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind fake GitHub API");
+        let address = listener.local_addr().expect("read fake GitHub address");
+        tokio::spawn(async move {
+            axum::serve(listener, router)
+                .await
+                .expect("serve fake GitHub API");
+        });
+        let client = GitHubClient::new().with_test_api_base_url(format!("http://{address}"));
+
+        let first = client
+            .get_pr_files("acme", "widgets", 7, "token")
+            .await
+            .expect("fetch initial pull request files");
+        let refreshed = client
+            .get_pr_files("acme", "widgets", 7, "token")
+            .await
+            .expect("refresh pull request files");
+
+        assert_eq!(
+            first.last().map(|file| file.filename.as_str()),
+            Some("src/file-100.rs")
+        );
+        assert_eq!(
+            refreshed.last().map(|file| file.filename.as_str()),
+            Some("src/file-101.rs")
+        );
+    }
 
     #[test]
     fn bounded_base64_content_omits_content_over_the_limit() {
