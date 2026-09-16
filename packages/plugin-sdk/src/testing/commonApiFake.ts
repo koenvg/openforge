@@ -2,6 +2,8 @@ import { MAX_AGENT_SESSION_PAGE_SIZE, resolveExternalTextFileChunkSize } from '.
 import type { FileEntry } from '../domain.js'
 import type {
   BackendOpenForgeAPI,
+  AgentCommandDescriptor,
+  AgentCommandRuntime,
   CommandRegistration,
   Disposable,
   FrontendOpenForgeAPI,
@@ -445,10 +447,10 @@ export class TestingCommonApiFake {
       handler({ namespace: event.namespace, targetKey: event.targetKey, revision: event.revision })
     }
   }
-  createApi(): TestingCommonApi {
+  createApi(runtime: AgentCommandRuntime = 'frontend'): TestingCommonApi {
     const api: TestingCommonApi = {
       commands: {
-        register: (registration) => this.registerCommand(registration),
+        register: (registration) => this.registerCommand(registration, runtime),
         invoke: async <TOutput = unknown>(id: string, payload?: unknown) => this.invokeCommand<TOutput>(id, payload),
         invokeGlobal: async <TOutput = unknown>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
         list: async () => Array.from(this.commands.values()).map(commandDescriptor),
@@ -824,7 +826,7 @@ export class TestingCommonApiFake {
   }
 
   createBackendApi(): TestingCommonApi & Pick<BackendOpenForgeAPI, 'fs'> {
-    const api = this.createApi()
+    const api = this.createApi('backend')
     return {
       ...api,
       fs: {
@@ -919,10 +921,23 @@ export class TestingCommonApiFake {
 
   getSnapshot(): {
     commands: TestingCommandContribution[]
+    agentCommands: AgentCommandDescriptor[]
     eventListeners: TestingEventListenerContribution[]
   } {
     return {
       commands: Array.from(this.commands.values()),
+      agentCommands: Array.from(this.commands.values()).flatMap(command => command.agent
+        ? [{
+            qualifiedId: command.qualifiedId,
+            pluginId: command.pluginId,
+            runtime: command.runtime,
+            description: command.agent.description,
+            examples: command.agent.examples ?? [],
+            discoverable: command.agent.discoverable ?? true,
+            input: command.input,
+            output: command.output,
+          }]
+        : []),
       eventListeners: Array.from(this.eventListeners.values()),
     }
   }
@@ -1037,7 +1052,7 @@ export class TestingCommonApiFake {
     return cloneReviewThread(thread, this.reviewThreadSeenCounts.get(thread.id) ?? 0)
   }
 
-  private registerCommand(registration: CommandRegistration): Disposable {
+  private registerCommand(registration: CommandRegistration, runtime: AgentCommandRuntime): Disposable {
     const qualifiedId = this.services.localQualifiedId('commands', registration.id)
     assertTitle('commands', registration.title)
     assertFunction('commands', 'handler', registration.handler)
@@ -1053,6 +1068,7 @@ export class TestingCommonApiFake {
     const contribution: TestingCommandContribution = {
       ...registration,
       agent,
+      runtime,
       id: registration.id.trim(),
       title: registration.title.trim(),
       qualifiedId,

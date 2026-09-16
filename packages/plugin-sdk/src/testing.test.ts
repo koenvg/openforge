@@ -300,6 +300,18 @@ describe('plugin SDK testing utilities', () => {
       handler: async () => null,
     })
 
+    expect(registry.snapshot.agentCommands).toEqual([
+      {
+        qualifiedId: 'sync.agent-sync',
+        pluginId: 'sync',
+        runtime: 'backend',
+        description: 'Synchronize the current project.',
+        examples: [{ force: true }],
+        discoverable: true,
+        input: undefined,
+        output: undefined,
+      },
+    ])
     expect(registry.snapshot.commands).toMatchObject([
       {
         qualifiedId: 'sync.agent-sync',

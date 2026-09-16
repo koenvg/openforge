@@ -219,11 +219,13 @@ where
         let project_id = self.resolve_project_id(context)?;
         let plugins = {
             let database = self.database_lock()?;
-            database.get_enabled_plugins(&project_id).map_err(|error| {
-                PluginCommandDiscoveryError::Database(format!(
-                    "Failed to get enabled plugins: {error}"
-                ))
-            })?
+            database
+                .get_active_plugins_for_project(&project_id)
+                .map_err(|error| {
+                    PluginCommandDiscoveryError::Database(format!(
+                        "Failed to get active plugins: {error}"
+                    ))
+                })?
         };
 
         let mut descriptors = Vec::new();
@@ -597,6 +599,28 @@ mod tests {
         })
         .expect("seed plugin");
     }
+    fn seed_app_plugin(db: &crate::db::Database, plugin_id: &str) {
+        let plugin = crate::db::PluginRow {
+            id: plugin_id.to_string(),
+            name: plugin_id.to_string(),
+            version: "1.0.0".to_string(),
+            api_version: 1,
+            description: String::new(),
+            permissions: "[]".to_string(),
+            contributes: "{}".to_string(),
+            frontend_entry: "dist/frontend.js".to_string(),
+            backend_entry: Some("dist/backend.js".to_string()),
+            install_path: "/tmp/plugin".to_string(),
+            source_kind: "test".to_string(),
+            source_spec: plugin_id.to_string(),
+            package_metadata: format!(r#"{{"id":"{plugin_id}","enablement":"app"}}"#),
+            installed_at: 0,
+            is_builtin: false,
+        };
+        db.install_plugin(&plugin).expect("seed app plugin");
+        db.set_app_plugin_enabled(plugin_id, true)
+            .expect("enable app plugin");
+    }
 
     fn backend_only_broker<Catalog>(
         database: Arc<Mutex<crate::db::Database>>,
@@ -610,7 +634,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lists_only_catalog_discoverable_backend_commands_enabled_for_resolved_task_project() {
+    async fn lists_agent_discoverable_commands_from_project_and_app_enabled_plugins() {
         let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_list");
         let project = database
@@ -621,6 +645,7 @@ mod tests {
             .expect("task");
         seed_plugin(&database, "com.example.sync", true);
         seed_plugin(&database, "com.example.disabled", true);
+        seed_app_plugin(&database, "com.example.app-usage");
         seed_plugin(&database, "com.example.frontend", false);
         database
             .set_plugin_enabled(&project.id, "com.example.sync", true)
@@ -646,6 +671,14 @@ mod tests {
                     "com.example.disabled".to_string(),
                     vec![descriptor("com.example.disabled", "visible", true)],
                 ),
+                (
+                    "com.example.app-usage".to_string(),
+                    vec![descriptor(
+                        "com.example.app-usage",
+                        "historical-import",
+                        true,
+                    )],
+                ),
             ]),
             ..Default::default()
         };
@@ -661,7 +694,10 @@ mod tests {
 
         assert_eq!(
             commands,
-            vec![descriptor("com.example.sync", "visible", true)]
+            vec![
+                descriptor("com.example.app-usage", "historical-import", true),
+                descriptor("com.example.sync", "visible", true),
+            ]
         );
     }
 
