@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
+import type { JsonValue } from '@openforge-app/plugin-sdk'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import type { FrontendOpenForgeAPI, PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
 import type { PollResult, PrComment, PullRequestInfo, TaskDetail } from '@openforge-app/plugin-sdk/domain'
@@ -104,7 +105,9 @@ function renderSection(
   githubUsername: string | null | Promise<string | null> = null,
 ) {
   const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.github-sync', projectId: 'P-1' })
-  api.config.get = vi.fn(async (key: string) => key === 'github_username' ? await githubUsername : null)
+  api.config.get = async <T extends JsonValue = JsonValue>(key: string): Promise<T | null> => (
+    (key === 'github_username' ? await githubUsername : null) as T | null
+  )
   api.backend.whenReady = vi.fn(async () => undefined)
   api.backend.invoke = invoke as unknown as FrontendOpenForgeAPI['backend']['invoke']
   const props: PluginTaskUISectionProps & { taskActionPending: boolean } = {
