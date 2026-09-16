@@ -14,7 +14,7 @@
     onReplyDraftChange: (value: string) => void
     onToggleReply: () => void
     onClearReply: () => void
-    onReplyToExistingComment?: (commentId: number, body: string) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     onAddReplyToReview?: (commentId: number, body: string) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
@@ -31,12 +31,23 @@
     onOpenUrl,
   }: Props = $props()
 
-  function submitReply() {
-    if (comment.isReply) return
+  let isReplying = $state(false)
+  let replyError = $state<string | null>(null)
+
+  async function submitReply() {
+    if (comment.isReply || isReplying || !onReplyToExistingComment) return
     const body = replyDraft.trim()
     if (!body) return
-    onReplyToExistingComment?.(comment.commentId, body)
-    onClearReply()
+    isReplying = true
+    replyError = null
+    try {
+      await onReplyToExistingComment(comment.commentId, body)
+      onClearReply()
+    } catch {
+      replyError = 'Reply was not posted. Try again.'
+    } finally {
+      isReplying = false
+    }
   }
 
   function addReplyToReview() {
@@ -74,14 +85,19 @@
 </div>
 <InlineCommentBody>
   <MarkdownContent content={comment.body} {onOpenUrl} />
-  {#if !comment.isReply && replyOpen}
+  {#if !comment.isReply && replyOpen && onReplyToExistingComment}
     <InlineReplyEditor
       value={replyDraft}
       ariaLabel="Reply to this comment"
       placeholder="Reply on GitHub…"
       primaryLabel="Reply"
       primaryTitle="Post this reply to GitHub now"
-      onValueChange={onReplyDraftChange}
+      error={replyError}
+      {isReplying}
+      onValueChange={(value) => {
+        replyError = null
+        onReplyDraftChange(value)
+      }}
       onSubmit={submitReply}
       secondaryLabel={onAddReplyToReview ? 'Add to review' : undefined}
       secondaryTitle="Hold this reply in your pending review"

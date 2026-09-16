@@ -112,6 +112,7 @@
       threads={controller.reviewThreads}
       onReplyToThread={controller.replyToReviewThread}
       onSetThreadStatus={controller.setReviewThreadStatus}
+      onReplyToExistingComment={controller.canReplyToExistingComments ? controller.replyToExistingComment : undefined}
       inlineDraftScopeId={controller.taskId}
       fileTreeVisible={controller.fileTreeVisible}
       onToggleFileTree={controller.toggleFileTree}

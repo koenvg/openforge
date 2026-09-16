@@ -80,6 +80,7 @@ export const desktopCommandContracts = [
   {"functionName":"getPullRequests","moduleName":"github","ipcCommand":"get_pull_requests","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"linkPullRequest","moduleName":"github","ipcCommand":"link_pull_request","payloadKeys":["taskId","prUrl"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"getPrComments","moduleName":"github","ipcCommand":"get_pr_comments","payloadKeys":["prId"],"owner":"rust-sidecar","domain":"github-review"},
+  {"functionName":"createReviewCommentReply","moduleName":"github","ipcCommand":"create_review_comment_reply","payloadKeys":["owner","repo","prNumber","commentId","body"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"markCommentAddressed","moduleName":"github","ipcCommand":"mark_comment_addressed","payloadKeys":["commentId"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"mergePullRequest","moduleName":"github","ipcCommand":"merge_task_pull_request","payloadKeys":["taskId","prId","expectedHeadSha","mergeMethod"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"enqueuePullRequest","moduleName":"github","ipcCommand":"enqueue_task_pull_request","payloadKeys":["taskId","prId","expectedHeadSha"],"owner":"rust-sidecar","domain":"github-review"},

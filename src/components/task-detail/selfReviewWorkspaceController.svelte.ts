@@ -1,4 +1,5 @@
 import { get } from 'svelte/store'
+import { ticketPrs } from '../../lib/stores'
 import { selfReviewStateByTask } from '../../lib/taskScopedSelfReviewState'
 import type { PrFileDiff } from '../../lib/types'
 import { createSelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
@@ -24,10 +25,14 @@ export function createSelfReviewWorkspaceController(
   options: SelfReviewWorkspaceControllerOptions,
 ) {
   let selfReviewStateMap = $state(get(selfReviewStateByTask))
+  let pullRequestsByTask = $state(get(ticketPrs))
   let disposed = false
 
   const unsubscribeSelfReviewState = selfReviewStateByTask.subscribe((value) => {
     selfReviewStateMap = value
+  })
+  const unsubscribePullRequests = ticketPrs.subscribe((value) => {
+    pullRequestsByTask = value
   })
 
   let selfReviewState = $derived(selfReviewStateMap.get(options.getTaskId()))
@@ -35,6 +40,12 @@ export function createSelfReviewWorkspaceController(
 
   const diffController = createSelfReviewDiffController({
     getTaskId: options.getTaskId,
+  })
+  let replyPullRequest = $derived.by(() => {
+    const loadedPr = diffController.linkedPr
+    if (!loadedPr) return null
+    return (pullRequestsByTask.get(options.getTaskId()) ?? [])
+      .find(pr => pr.id === loadedPr.id && pr.state === 'open') ?? null
   })
 
   const fileStateController = createSelfReviewFileStateController({
@@ -63,6 +74,7 @@ export function createSelfReviewWorkspaceController(
     getPrComments: () => diffController.prComments,
     getGithubUsername: () => diffController.githubUsername,
     getLinkedPr: () => diffController.linkedPr,
+    getReplyPullRequest: () => replyPullRequest,
     getComparisonFilenames: () => fileStateController.comparisonFilenames,
   })
 
@@ -98,6 +110,7 @@ export function createSelfReviewWorkspaceController(
     disposed = true
     navigationController.dispose(diffViewer)
     unsubscribeSelfReviewState()
+    unsubscribePullRequests()
     diffController.dispose()
   }
 
@@ -131,6 +144,7 @@ export function createSelfReviewWorkspaceController(
     get pendingInlineComments() { return commentController.pendingInlineComments },
     get visibleInlineReviewComments() { return commentController.visibleInlineReviewComments },
     get visiblePendingInlineComments() { return commentController.visiblePendingInlineComments },
+    get canReplyToExistingComments() { return commentController.canReplyToExistingComments },
     get reviewThreads() { return threadController.threads },
     get initialScrollTop() { return navigationController.initialScrollTop },
     load,
@@ -149,6 +163,7 @@ export function createSelfReviewWorkspaceController(
     toggleFileTree: navigationController.toggleFileTree,
     toggleSidebar: navigationController.toggleSidebar,
     handlePendingInlineCommentsChange: commentController.handlePendingInlineCommentsChange,
+    replyToExistingComment: commentController.replyToExistingComment,
     replyToReviewThread: threadController.replyToThread,
     setReviewThreadStatus: threadController.setThreadStatus,
     toggleFileReviewed: fileStateController.toggleFileReviewed,

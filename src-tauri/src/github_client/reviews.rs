@@ -117,7 +117,7 @@ impl GitHubClient {
         comment_id: i64,
         body: &str,
         token: &str,
-    ) -> Result<(), GitHubError> {
+    ) -> Result<PrReviewComment, GitHubError> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/comments/{}/replies",
             owner, repo, pr_number, comment_id
@@ -138,7 +138,10 @@ impl GitHubClient {
             return Err(Self::api_error_from_response(response).await);
         }
 
-        Ok(())
+        response
+            .json::<PrReviewComment>()
+            .await
+            .map_err(|error| GitHubError::ParseError(error.to_string()))
     }
 
     /// Get reviews for a pull request
@@ -387,6 +390,45 @@ pub fn aggregate_review_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{routing::post, Json, Router};
+
+    #[tokio::test]
+    async fn create_review_comment_reply_returns_the_accepted_reply() {
+        let router = Router::new().route(
+            "/repos/acme/widgets/pulls/7/comments/41/replies",
+            post(|| async {
+                Json(serde_json::json!({
+                    "id": 99,
+                    "path": "src/lib.rs",
+                    "line": null,
+                    "side": null,
+                    "body": "Applied, thanks",
+                    "user": { "login": "author" },
+                    "created_at": "2026-09-16T13:00:00Z",
+                    "in_reply_to_id": 41
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind fake GitHub API");
+        let address = listener.local_addr().expect("read fake GitHub address");
+        tokio::spawn(async move {
+            axum::serve(listener, router)
+                .await
+                .expect("serve fake GitHub API");
+        });
+        let client = GitHubClient::new().with_test_api_base_url(format!("http://{address}"));
+
+        let reply = client
+            .create_review_comment_reply("acme", "widgets", 7, 41, "Applied, thanks", "token")
+            .await
+            .expect("post review reply");
+
+        assert_eq!(reply.id, 99);
+        assert_eq!(reply.body, "Applied, thanks");
+        assert_eq!(reply.in_reply_to_id, Some(41));
+    }
 
     fn make_review(login: &str, state: &str) -> PrReview {
         PrReview {

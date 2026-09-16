@@ -66,6 +66,7 @@ export const desktopIpcFunctionDomains = {
   getProcessMemoryHistory: 'app-shell',
   setProcessMemoryHistoryEnabled: 'app-shell',
   getPrComments: 'github-review',
+  createReviewCommentReply: 'github-review',
   markCommentAddressed: 'github-review',
   mergePullRequest: 'github-review',
   enqueuePullRequest: 'github-review',

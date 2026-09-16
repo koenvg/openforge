@@ -1,6 +1,6 @@
 import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
 import { getGitHubMarkdownImageBaseUrl, isGitHubAttachmentUrl } from '../../lib/githubMarkdown'
-import { resolveGithubAsset } from '../../lib/ipc'
+import { createReviewCommentReply, resolveGithubAsset } from '../../lib/ipc'
 import type { ResolvedMarkdownMedia } from '../../lib/markdown'
 import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
 import {
@@ -10,7 +10,12 @@ import {
   type SelfReviewTaskState,
 } from '../../lib/taskScopedSelfReviewState'
 import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
-import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
+import type { PrComment, PullRequestInfo, ReviewComment, ReviewSubmissionComment } from '../../lib/types'
+
+function mergeReviewComments(cached: ReviewComment[], acceptedReplies: ReviewComment[]): ReviewComment[] {
+  const cachedIds = new Set(cached.map(comment => comment.id))
+  return [...cached, ...acceptedReplies.filter(comment => !cachedIds.has(comment.id))]
+}
 
 export interface ReviewFeedbackCapture {
   compilePrompt(mode: ReviewPromptMode): string
@@ -29,6 +34,7 @@ export interface SelfReviewCommentControllerOptions {
   getPrComments: () => PrComment[]
   getGithubUsername?: () => string | null
   getLinkedPr?: () => PullRequestInfo | null
+  getReplyPullRequest?: () => PullRequestInfo | null
   getComparisonFilenames: () => Set<string>
   setPendingComments?: (taskId: string, comments: ReviewSubmissionComment[]) => void
   onCommentsNeedAttention?: () => void
@@ -36,28 +42,38 @@ export interface SelfReviewCommentControllerOptions {
 
 export function createSelfReviewCommentController(options: SelfReviewCommentControllerOptions) {
   let synchronizedTaskId: string | null = null
+  let synchronizedPrId: number | null = null
   let hasRequestedAttention = false
+  let acceptedReplies = $state<ReviewComment[]>([])
   const commentSelection = createCommentSelection({
     getPrComments: options.getPrComments,
     getGithubUsername: options.getGithubUsername,
   })
   const getState = () => options.getState() ?? emptySelfReviewTaskState
+  const getReplyPullRequest = options.getReplyPullRequest ?? options.getLinkedPr ?? (() => null)
   const setPendingComments = options.setPendingComments ?? setPendingSelfReviewComments
 
   let pendingInlineComments = $derived(getState().pendingInlineComments)
-  let inlineReviewComments = $derived(prCommentsToReviewComments(options.getPrComments()))
+  let inlineReviewComments = $derived(mergeReviewComments(
+    prCommentsToReviewComments(options.getPrComments()),
+    acceptedReplies,
+  ))
   let visibleInlineReviewComments = $derived(
     inlineReviewComments.filter((comment) => !options.getComparisonFilenames().has(comment.path)),
   )
   let visiblePendingInlineComments = $derived(
     pendingInlineComments.filter((comment) => !options.getComparisonFilenames().has(comment.path)),
   )
+  let canReplyToExistingComments = $derived(getReplyPullRequest()?.state === 'open')
   let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(options.getLinkedPr?.() ?? null))
 
   function synchronize(): void {
     const taskId = options.getTaskId()
-    if (synchronizedTaskId !== taskId) {
+    const prId = getReplyPullRequest()?.id ?? null
+    if (synchronizedTaskId !== taskId || synchronizedPrId !== prId) {
       synchronizedTaskId = taskId
+      synchronizedPrId = prId
+      acceptedReplies = []
       commentSelection.deselectAll()
       hasRequestedAttention = false
     }
@@ -117,7 +133,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
   // signed-in browser session can fetch; the sidecar trades it for a URL this app
   // can render, and tells us whether it is a picture or a recording.
   async function resolveRemoteMedia(url: string): Promise<ResolvedMarkdownMedia | null> {
-    const pr = options.getLinkedPr?.() ?? null
+    const pr = getReplyPullRequest()
     if (!pr || !isGitHubAttachmentUrl(url)) return null
 
     try {
@@ -127,13 +143,31 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
     }
   }
 
+  async function replyToExistingComment(commentId: number, body: string): Promise<void> {
+    const taskId = options.getTaskId()
+    const pr = options.getLinkedPr?.() ?? null
+    if (!pr || pr.state !== 'open') throw new Error('No linked open pull request')
+
+    const reply = await createReviewCommentReply(
+      pr.repo_owner,
+      pr.repo_name,
+      pr.pr_number,
+      commentId,
+      body,
+    )
+    if (options.getTaskId() !== taskId || getReplyPullRequest()?.id !== pr.id) return
+    acceptedReplies = mergeReviewComments(acceptedReplies, [reply])
+  }
+
   return {
     get commentSelection() { return commentSelection },
     get pendingInlineComments() { return pendingInlineComments },
     get visibleInlineReviewComments() { return visibleInlineReviewComments },
     get visiblePendingInlineComments() { return visiblePendingInlineComments },
+    get canReplyToExistingComments() { return canReplyToExistingComments },
     get markdownImageBaseUrl() { return markdownImageBaseUrl },
     resolveRemoteMedia,
+    replyToExistingComment,
     synchronize,
     handlePendingInlineCommentsChange,
     get feedbackCount() { return pendingInlineComments.length + commentSelection.selectedPrComments.length },

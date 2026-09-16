@@ -1,14 +1,15 @@
 import { flushSync } from 'svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SelfReviewTaskState } from '../../lib/taskScopedSelfReviewState'
-import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
+import type { PrComment, PullRequestInfo, ReviewComment, ReviewSubmissionComment } from '../../lib/types'
 import { createSelfReviewCommentController } from './selfReviewCommentController.svelte'
 
-const { resolveGithubAsset } = vi.hoisted(() => ({
+const { createReviewCommentReply, resolveGithubAsset } = vi.hoisted(() => ({
+  createReviewCommentReply: vi.fn(),
   resolveGithubAsset: vi.fn(),
 }))
 
-vi.mock('../../lib/ipc', () => ({ resolveGithubAsset }))
+vi.mock('../../lib/ipc', () => ({ createReviewCommentReply, resolveGithubAsset }))
 
 const hiddenComment: ReviewSubmissionComment = {
   path: 'src/hidden.ts',
@@ -25,8 +26,11 @@ const visibleComment: ReviewSubmissionComment = {
 const rootCleanups: Array<() => void> = []
 
 const linkedPr = {
+  id: 1,
+  pr_number: 42,
   repo_owner: 'acme',
   repo_name: 'repo',
+  state: 'open',
 } as PullRequestInfo
 
 const uploadUrl = 'https://github.com/user-attachments/assets/971f5efc-5e71-4d11-a2b5-daecad5323f3'
@@ -34,6 +38,7 @@ const uploadUrl = 'https://github.com/user-attachments/assets/971f5efc-5e71-4d11
 afterEach(() => {
   while (rootCleanups.length > 0) rootCleanups.pop()?.()
   resolveGithubAsset.mockReset()
+  createReviewCommentReply.mockReset()
 })
 
 const prComment: PrComment = {
@@ -232,5 +237,82 @@ describe('createSelfReviewCommentController', () => {
     linked = linkedPr
     await expect(controller.resolveRemoteMedia('https://github.com/acme/repo/pull/1')).resolves.toBeNull()
     expect(resolveGithubAsset).not.toHaveBeenCalled()
+  })
+
+  it('does not enable or post replies without a linked open pull request', async () => {
+    let pr = $state<PullRequestInfo | null>(null)
+    let controller!: ReturnType<typeof createSelfReviewCommentController>
+    rootCleanups.push($effect.root(() => {
+      controller = createSelfReviewCommentController({
+        getTaskId: () => 'task-1',
+        getState: () => undefined,
+        getPrComments: () => [prComment],
+        getLinkedPr: () => pr,
+        getComparisonFilenames: () => new Set(),
+      })
+    }))
+
+    expect(controller.canReplyToExistingComments).toBe(false)
+    await expect(controller.replyToExistingComment(1, 'No PR')).rejects.toThrow(
+      'No linked open pull request',
+    )
+
+    flushSync(() => {
+      pr = { ...linkedPr, state: 'closed' }
+    })
+    expect(controller.canReplyToExistingComments).toBe(false)
+    await expect(controller.replyToExistingComment(1, 'Closed PR')).rejects.toThrow(
+      'No linked open pull request',
+    )
+    expect(createReviewCommentReply).not.toHaveBeenCalled()
+  })
+
+  it('shows an accepted reply once when the cached comments catch up', async () => {
+    const acceptedReply: ReviewComment = {
+      id: 99,
+      pr_number: 42,
+      repo_owner: 'acme',
+      repo_name: 'repo',
+      path: 'src/task.ts',
+      line: null,
+      side: null,
+      body: 'Applied, thanks',
+      author: 'koen',
+      created_at: '2026-09-16T13:00:00Z',
+      in_reply_to_id: 1,
+    }
+    createReviewCommentReply.mockResolvedValue(acceptedReply)
+    let comments = $state<PrComment[]>([prComment])
+    let controller!: ReturnType<typeof createSelfReviewCommentController>
+    rootCleanups.push($effect.root(() => {
+      controller = createSelfReviewCommentController({
+        getTaskId: () => 'task-1',
+        getState: () => undefined,
+        getPrComments: () => comments,
+        getLinkedPr: () => linkedPr,
+        getComparisonFilenames: () => new Set(),
+      })
+    }))
+
+    await controller.replyToExistingComment(1, 'Applied, thanks')
+
+    expect(createReviewCommentReply).toHaveBeenCalledWith('acme', 'repo', 42, 1, 'Applied, thanks')
+    expect(controller.visibleInlineReviewComments).toEqual([
+      expect.objectContaining({ id: 1, in_reply_to_id: null }),
+      acceptedReply,
+    ])
+
+    flushSync(() => {
+      comments = [prComment, {
+        ...prComment,
+        id: 99,
+        author: 'koen',
+        body: 'Applied, thanks',
+        in_reply_to_id: 1,
+        created_at: Date.parse(acceptedReply.created_at) / 1000,
+      }]
+    })
+
+    expect(controller.visibleInlineReviewComments.filter(comment => comment.id === 99)).toHaveLength(1)
   })
 })

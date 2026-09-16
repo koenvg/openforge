@@ -139,26 +139,35 @@ fn map_pr_review_comments_for_frontend(
 ) -> Vec<FrontendReviewComment> {
     comments
         .into_iter()
-        .map(|comment| FrontendReviewComment {
-            id: comment.id,
-            pr_number,
-            repo_owner: owner.to_string(),
-            repo_name: repo.to_string(),
-            path: comment.path,
-            line: comment.line.or_else(|| {
-                comment
-                    .extra
-                    .get("original_line")
-                    .and_then(|value| value.as_i64())
-                    .and_then(|value| i32::try_from(value).ok())
-            }),
-            side: comment.side,
-            body: comment.body,
-            author: comment.user.login,
-            created_at: comment.created_at,
-            in_reply_to_id: comment.in_reply_to_id,
-        })
+        .map(|comment| map_pr_review_comment_for_frontend(owner, repo, pr_number, comment))
         .collect()
+}
+
+fn map_pr_review_comment_for_frontend(
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+    comment: PrReviewComment,
+) -> FrontendReviewComment {
+    FrontendReviewComment {
+        id: comment.id,
+        pr_number,
+        repo_owner: owner.to_string(),
+        repo_name: repo.to_string(),
+        path: comment.path,
+        line: comment.line.or_else(|| {
+            comment
+                .extra
+                .get("original_line")
+                .and_then(|value| value.as_i64())
+                .and_then(|value| i32::try_from(value).ok())
+        }),
+        side: comment.side,
+        body: comment.body,
+        author: comment.user.login,
+        created_at: comment.created_at,
+        in_reply_to_id: comment.in_reply_to_id,
+    }
 }
 
 pub async fn get_review_comments(
@@ -276,12 +285,15 @@ pub async fn create_review_comment_reply(
     pr_number: i64,
     comment_id: i64,
     body: &str,
-) -> Result<(), String> {
+) -> Result<FrontendReviewComment, String> {
     let token = github_token().await?;
-    github_client
+    let reply = github_client
         .create_review_comment_reply(owner, repo, pr_number, comment_id, body, &token)
         .await
-        .map_err(|e| format!("Failed to reply to review comment: {e}"))
+        .map_err(|e| format!("Failed to reply to review comment: {e}"))?;
+    Ok(map_pr_review_comment_for_frontend(
+        owner, repo, pr_number, reply,
+    ))
 }
 
 #[cfg(test)]
