@@ -42,6 +42,7 @@ const prComment = {
 	comment_type: "inline",
 	file_path: "src/main.rs",
 	line_number: 12,
+	in_reply_to_id: null,
 	addressed: 0,
 	outdated: 0,
 	created_at: 1_700_000_300,

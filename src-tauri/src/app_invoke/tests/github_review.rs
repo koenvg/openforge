@@ -365,10 +365,24 @@ async fn handles_db_backed_commands_and_events() {
             "review",
             Some("src/main.rs"),
             Some(12),
+            None,
             false,
             3000,
         )
         .expect("insert PR comment");
+        db.insert_pr_comment(
+            502,
+            10,
+            "author",
+            "Updated",
+            "review",
+            Some("src/main.rs"),
+            Some(12),
+            Some(501),
+            false,
+            3001,
+        )
+        .expect("insert PR comment reply");
         db.upsert_review_pr(&crate::db::ReviewPrUpsert {
             id: 20,
             number: 7,
@@ -431,10 +445,11 @@ async fn handles_db_backed_commands_and_events() {
         invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await[0]["title"],
         "Fix bug"
     );
-    assert_eq!(
-        invoke_ok(&state, "get_pr_comments", json!({ "prId": 10 })).await[0]["body"],
-        "Please fix"
-    );
+    let comments = invoke_ok(&state, "get_pr_comments", json!({ "prId": 10 })).await;
+    assert_eq!(comments[0]["body"], "Please fix");
+    assert_eq!(comments[0]["in_reply_to_id"], serde_json::Value::Null);
+    assert_eq!(comments[1]["body"], "Updated");
+    assert_eq!(comments[1]["in_reply_to_id"], 501);
     invoke_ok(
         &state,
         "mark_comment_addressed",

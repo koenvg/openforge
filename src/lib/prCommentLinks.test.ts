@@ -11,6 +11,7 @@ function makeComment(overrides: Partial<PrComment> = {}): PrComment {
     comment_type: 'review_comment',
     file_path: 'src/lib.rs',
     line_number: 5,
+    in_reply_to_id: null,
     addressed: 0,
     outdated: 0,
     created_at: 0,

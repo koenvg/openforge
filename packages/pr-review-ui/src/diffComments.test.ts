@@ -495,6 +495,48 @@ describe('buildExtendData', () => {
     ])
   })
 
+  it('keeps each reply beside its parent when threads share a line', () => {
+    const firstParent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      body: 'First parent',
+    }
+    const secondParent: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      body: 'Second parent',
+    }
+    const firstReply: ReviewComment = {
+      ...baseExistingComment,
+      id: 3,
+      body: 'First reply',
+      in_reply_to_id: 1,
+    }
+    const secondReply: ReviewComment = {
+      ...baseExistingComment,
+      id: 4,
+      body: 'Second reply',
+      in_reply_to_id: 2,
+    }
+
+    const result = buildExtendData({
+      filename: 'src/main.ts',
+      existingComments: [firstParent, secondParent, firstReply, secondReply],
+    })
+
+    expect(
+      result.newFile['10'].data.comments.map(comment => ({
+        body: commentOfType(comment, 'existing').body,
+        isReply: commentOfType(comment, 'existing').isReply,
+      }))
+    ).toEqual([
+      { body: 'First parent', isReply: false },
+      { body: 'First reply', isReply: true },
+      { body: 'Second parent', isReply: false },
+      { body: 'Second reply', isReply: true },
+    ])
+  })
+
   it('replies are sorted chronologically within a thread', () => {
     const parent: ReviewComment = {
       ...baseExistingComment,
@@ -612,6 +654,7 @@ const basePrComment: PrComment = {
   comment_type: 'review_comment',
   file_path: 'src/main.ts',
   line_number: 10,
+  in_reply_to_id: null,
   addressed: 0,
   outdated: 0,
   created_at: 1704067200, // 2024-01-01T00:00:00Z
@@ -743,6 +786,31 @@ describe('prCommentsToReviewComments', () => {
     const displayComment = commentOfType(extendData.newFile['10'].data.comments[0], 'existing')
     expect(displayComment.author).toBe('reviewer')
     expect(displayComment.body).toBe('Looks good')
+  })
+
+  it('keeps a cached reply beneath its parent', () => {
+    const parent = { ...basePrComment, id: 100, body: 'Please change this' }
+    const reply = {
+      ...basePrComment,
+      id: 101,
+      author: 'author',
+      body: 'Updated',
+      in_reply_to_id: 100,
+    }
+
+    const reviewComments = prCommentsToReviewComments([parent, reply])
+    const extendData = buildExtendData({ filename: 'src/main.ts', existingComments: reviewComments })
+
+    const comments = extendData.newFile['10'].data.comments
+    expect(comments).toHaveLength(2)
+    expect(commentOfType(comments[0], 'existing')).toMatchObject({
+      body: 'Please change this',
+      isReply: false,
+    })
+    expect(commentOfType(comments[1], 'existing')).toMatchObject({
+      body: 'Updated',
+      isReply: true,
+    })
   })
 })
 

@@ -169,6 +169,8 @@ pub struct PrComment {
     /// review comments; issue comments and review bodies are never outdated.
     #[serde(default)]
     pub outdated: bool,
+    #[serde(default)]
+    pub in_reply_to_id: Option<i64>,
     pub created_at: String,
 }
 
@@ -209,6 +211,8 @@ pub(crate) struct ReviewComment {
     /// the comment goes outdated, so it's used for display/anchoring.
     #[serde(default)]
     pub original_line: Option<i32>,
+    #[serde(default)]
+    pub in_reply_to_id: Option<i64>,
     pub created_at: String,
 }
 
@@ -229,6 +233,7 @@ impl ReviewComment {
             line: self.line.or(self.original_line),
             comment_type: "review_comment".to_string(),
             outdated,
+            in_reply_to_id: self.in_reply_to_id,
             created_at: self.created_at,
         }
     }
@@ -255,6 +260,7 @@ impl IssueComment {
             line: None,
             comment_type: "issue_comment".to_string(),
             outdated: false,
+            in_reply_to_id: None,
             created_at: self.created_at,
         }
     }
@@ -1135,6 +1141,7 @@ mod tests {
             line: Some(42),
             comment_type: "review_comment".to_string(),
             outdated: false,
+            in_reply_to_id: None,
             created_at: "2024-01-01T00:00:00Z".to_string(),
         };
 
@@ -2045,6 +2052,25 @@ mod tests {
     }
 
     #[test]
+    fn review_comment_reply_keeps_its_parent() {
+        let json = r#"{
+            "id": 126,
+            "body": "Agreed, updated",
+            "user": { "login": "octocat" },
+            "path": "src/lib.rs",
+            "line": 10,
+            "original_line": 10,
+            "in_reply_to_id": 124,
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+
+        let comment: ReviewComment = serde_json::from_str(json).unwrap();
+        let pr_comment = comment.into_pr_comment();
+
+        assert_eq!(pr_comment.in_reply_to_id, Some(124));
+    }
+
+    #[test]
     fn test_review_comment_not_outdated_when_no_line_info() {
         // File-level / non-line comments have neither line nor original_line and
         // are not "outdated".
@@ -2074,5 +2100,6 @@ mod tests {
         assert!(!pr.outdated, "issue comments are never outdated");
         assert_eq!(pr.comment_type, "issue_comment");
         assert!(pr.path.is_none());
+        assert_eq!(pr.in_reply_to_id, None);
     }
 }

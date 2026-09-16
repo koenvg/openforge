@@ -157,6 +157,7 @@ impl Database {
         migrations::ensure_tasks_columns(&conn)?;
         migrations::ensure_handoff_notes_removed(&conn)?;
         migrations::ensure_pr_number_column(&conn)?;
+        migrations::ensure_pr_comment_reply_parent_column(&conn)?;
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_is_queued_columns(&conn)?;
         migrations::ensure_labels_columns(&conn)?;

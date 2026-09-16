@@ -37,6 +37,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		comment_type: "review_comment",
 		file_path: "src/main.rs",
 		line_number: 10,
+		in_reply_to_id: null,
 		addressed,
 		outdated: 0,
 		created_at: 1000 + id,

@@ -249,7 +249,7 @@ describe('SendToAgentPanel', () => {
     { inline: 1, pr: 1, status: 'running', label: 'Send feedback (2)', disabled: true, reason: 'Agent is currently running' },
     { inline: 1, pr: 1, status: 'paused', label: 'Send feedback (2)', disabled: true, reason: 'Agent is currently paused' },
   ])('reports feedback eligibility for $label with agent $status', ({ inline, pr, status, label, disabled, reason }) => {
-    const comment: PrComment = { id: 1, pr_id: 1, author: 'alice', body: 'review', comment_type: 'review_comment', file_path: 'src/task.ts', line_number: 12, addressed: 0, outdated: 0, created_at: 1000 }
+    const comment: PrComment = { id: 1, pr_id: 1, author: 'alice', body: 'review', comment_type: 'review_comment', file_path: 'src/task.ts', line_number: 12, in_reply_to_id: null, addressed: 0, outdated: 0, created_at: 1000 }
     setup({ agentStatus: status, inline: inline ? inlineComments : [], pr: pr ? [comment] : [] })
     const button = screen.getByRole('button', { name: label }) as HTMLButtonElement
     expect(button.disabled).toBe(disabled)

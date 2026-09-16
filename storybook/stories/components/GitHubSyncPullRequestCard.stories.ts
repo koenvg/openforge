@@ -96,6 +96,7 @@ const reviewComment: PrComment = {
   comment_type: 'review_comment',
   file_path: 'src/cli/profile.ts',
   line_number: 42,
+  in_reply_to_id: null,
   addressed: 0,
   outdated: 0,
   created_at: 1767346000,

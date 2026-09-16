@@ -48,6 +48,36 @@ fn test_pr_comment_lifecycle() {
 
     drop(db);
 }
+
+#[test]
+fn reply_parent_round_trips_through_comment_reads() {
+    let (db, _temp_dir) = make_test_db("pr_comment_reply_parent");
+    insert_test_task(&db);
+    PullRequestFixture::new(10)
+        .insert(&db)
+        .expect("insert pr failed");
+
+    PrCommentFixture::new(501, 10, "Parent")
+        .file_path("src/main.rs")
+        .line_number(42)
+        .insert(&db)
+        .expect("insert parent failed");
+    PrCommentFixture::new(502, 10, "Reply")
+        .file_path("src/main.rs")
+        .line_number(42)
+        .in_reply_to_id(501)
+        .insert(&db)
+        .expect("insert reply failed");
+
+    let comments = db.get_comments_for_pr(10).expect("get comments failed");
+    assert_eq!(comments[0].in_reply_to_id, None);
+    assert_eq!(comments[1].in_reply_to_id, Some(501));
+
+    let by_id = db
+        .get_pr_comments_by_ids(&[502])
+        .expect("get reply by id failed");
+    assert_eq!(by_id[0].in_reply_to_id, Some(501));
+}
 #[test]
 fn test_mark_comments_addressed_batch() {
     let (db, _temp_dir) = make_test_db("mark_batch_addressed");
@@ -116,7 +146,7 @@ fn test_insert_pr_comment_with_addressed() {
     drop(db);
 }
 #[test]
-fn test_update_comment_outdated_preserves_addressed() {
+fn test_update_comment_github_state_preserves_addressed() {
     let (db, _temp_dir) = make_test_db("comment_outdated_preserves_addressed");
     insert_test_task(&db);
 
@@ -143,20 +173,22 @@ fn test_update_comment_outdated_preserves_addressed() {
     assert_eq!(comments[0].addressed, 1);
 
     // The poller re-reads and finds it outdated — the local addressed flag must survive.
-    db.update_comment_outdated(801, true)
-        .expect("update outdated failed");
+    db.update_comment_github_state(801, true, Some(700))
+        .expect("update GitHub state failed");
     let comments = db.get_comments_for_pr(110).expect("get comments failed");
     assert_eq!(comments[0].outdated, 1, "outdated flag updated");
+    assert_eq!(comments[0].in_reply_to_id, Some(700));
     assert_eq!(
         comments[0].addressed, 1,
         "addressed flag preserved through outdated update"
     );
 
     // And it can flip back without disturbing addressed.
-    db.update_comment_outdated(801, false)
-        .expect("clear outdated failed");
+    db.update_comment_github_state(801, false, None)
+        .expect("clear GitHub state failed");
     let comments = db.get_comments_for_pr(110).expect("get comments failed");
     assert_eq!(comments[0].outdated, 0);
+    assert_eq!(comments[0].in_reply_to_id, None);
     assert_eq!(comments[0].addressed, 1);
 
     drop(db);

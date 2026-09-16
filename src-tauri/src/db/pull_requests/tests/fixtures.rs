@@ -86,6 +86,7 @@ pub(super) struct PrCommentFixture {
     comment_type: String,
     file_path: Option<String>,
     line_number: Option<i32>,
+    in_reply_to_id: Option<i64>,
     addressed: bool,
     created_at: i64,
 }
@@ -100,6 +101,7 @@ impl PrCommentFixture {
             comment_type: "review_comment".to_string(),
             file_path: None,
             line_number: None,
+            in_reply_to_id: None,
             addressed: false,
             created_at: 1000,
         }
@@ -125,6 +127,11 @@ impl PrCommentFixture {
         self
     }
 
+    pub(super) fn in_reply_to_id(mut self, in_reply_to_id: i64) -> Self {
+        self.in_reply_to_id = Some(in_reply_to_id);
+        self
+    }
+
     pub(super) fn addressed(mut self, addressed: bool) -> Self {
         self.addressed = addressed;
         self
@@ -144,6 +151,7 @@ impl PrCommentFixture {
             &self.comment_type,
             self.file_path.as_deref(),
             self.line_number,
+            self.in_reply_to_id,
             self.addressed,
             self.created_at,
         )

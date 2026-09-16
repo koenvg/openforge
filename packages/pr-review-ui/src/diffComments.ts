@@ -112,35 +112,30 @@ export function buildExtendData({
     if (pathMatches(c.path, filename)) commentById.set(c.id, c)
   }
 
-  // Separate parents and replies, then process parents first
   const fileComments = existingComments.filter(c => pathMatches(c.path, filename))
   const parents = fileComments.filter(c => c.in_reply_to_id === null)
-  const replies = fileComments.filter(c => c.in_reply_to_id !== null)
-
-  for (const comment of parents) {
-    if (comment.line === null) continue
-
-    const target = sideToSplitSide(comment.side) === 'oldFile' ? oldFile : newFile
-    const lineKey = String(comment.line)
-    ensureLine(target, lineKey).comments.push({
-      body: comment.body,
-      author: comment.author,
-      type: 'existing',
-      createdAt: comment.created_at,
-      isReply: false,
-      commentId: comment.id,
-    })
-  }
-
-  // Sort replies chronologically, then attach each to its parent's position
-  const sortedReplies = [...replies].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  )
+  const parentIds = new Set(parents.map(parent => parent.id))
+  const sortedReplies = fileComments
+    .filter(c => c.in_reply_to_id !== null)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const repliesByParentId = new Map<number, ReviewComment[]>()
+  const orphanReplies: ReviewComment[] = []
 
   for (const reply of sortedReplies) {
+    const parentId = reply.in_reply_to_id
+    if (parentId === null || !parentIds.has(parentId)) {
+      orphanReplies.push(reply)
+      continue
+    }
+    const replies = repliesByParentId.get(parentId) ?? []
+    replies.push(reply)
+    repliesByParentId.set(parentId, replies)
+  }
+
+  function appendReply(reply: ReviewComment): void {
     const parent = reply.in_reply_to_id !== null ? commentById.get(reply.in_reply_to_id) : undefined
     const resolvedLine = parent?.line ?? reply.line
-    if (resolvedLine === null) continue
+    if (resolvedLine === null) return
 
     const resolvedSide = (reply.line === null && reply.side === null && parent)
       ? parent.side
@@ -156,6 +151,24 @@ export function buildExtendData({
       isReply: true,
     })
   }
+
+  for (const comment of parents) {
+    if (comment.line !== null) {
+      const target = sideToSplitSide(comment.side) === 'oldFile' ? oldFile : newFile
+      const lineKey = String(comment.line)
+      ensureLine(target, lineKey).comments.push({
+        body: comment.body,
+        author: comment.author,
+        type: 'existing',
+        createdAt: comment.created_at,
+        isReply: false,
+        commentId: comment.id,
+      })
+    }
+    for (const reply of repliesByParentId.get(comment.id) ?? []) appendReply(reply)
+  }
+
+  for (const reply of orphanReplies) appendReply(reply)
 
   for (let index = 0; index < pendingComments.length; index++) {
     const comment = pendingComments[index]
@@ -213,6 +226,6 @@ export function prCommentsToReviewComments(prComments: PrComment[]): ReviewComme
       body: c.body,
       author: c.author,
       created_at: new Date(c.created_at * 1000).toISOString(),
-      in_reply_to_id: null,
+      in_reply_to_id: c.in_reply_to_id,
     }))
 }
