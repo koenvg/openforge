@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
-  import { canEnqueuePullRequest, canMergePullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
+  import { canEnqueuePullRequest, canMergePullRequest, getUnaddressedPrCommentThreadRoots, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
   import { getPrReviewerRows, getPrStatusChips, getPullRequestMergeActionLabel, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -18,6 +18,7 @@
     // `pluginSectionKey` so it cannot collide with another plugin's sections.
     sectionKey: string
     comments: PrComment[]
+    githubUsername: string | null
     feedback?: MergeFeedback
     pendingPrId: number | null
     taskActionPending: boolean
@@ -31,6 +32,7 @@
     pr,
     sectionKey,
     comments,
+    githubUsername,
     feedback,
     pendingPrId,
     taskActionPending,
@@ -46,7 +48,9 @@
   let chips = $derived(getPrStatusChips(pr, 'detail'))
   let mergeActionLabel = $derived(pr.default_merge_method ? getPullRequestMergeActionLabel(pr.default_merge_method) : 'Merge')
   let canMerge = $derived(canMergePullRequest(pr) && pr.default_merge_method !== null && pr.default_merge_method !== undefined)
-  let unaddressedComments = $derived(comments.filter((comment) => comment.addressed === 0))
+  let unaddressedComments = $derived(
+    getUnaddressedPrCommentThreadRoots(comments, githubUsername),
+  )
   let checkSummary = $derived(splitCheckRuns(parseCheckRuns(pr.ci_check_runs)))
   let reviewerRows = $derived(getPrReviewerRows(pr))
 

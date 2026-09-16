@@ -27,6 +27,7 @@ export interface SelfReviewCommentControllerOptions {
   getTaskId: () => string
   getState: () => SelfReviewTaskState | undefined
   getPrComments: () => PrComment[]
+  getGithubUsername?: () => string | null
   getLinkedPr?: () => PullRequestInfo | null
   getComparisonFilenames: () => Set<string>
   setPendingComments?: (taskId: string, comments: ReviewSubmissionComment[]) => void
@@ -36,7 +37,10 @@ export interface SelfReviewCommentControllerOptions {
 export function createSelfReviewCommentController(options: SelfReviewCommentControllerOptions) {
   let synchronizedTaskId: string | null = null
   let hasRequestedAttention = false
-  const commentSelection = createCommentSelection({ getPrComments: options.getPrComments })
+  const commentSelection = createCommentSelection({
+    getPrComments: options.getPrComments,
+    getGithubUsername: options.getGithubUsername,
+  })
   const getState = () => options.getState() ?? emptySelfReviewTaskState
   const setPendingComments = options.setPendingComments ?? setPendingSelfReviewComments
 

@@ -7,6 +7,7 @@ vi.mock('../../lib/ipc', () => ({
   getTaskCommits: vi.fn().mockResolvedValue([]),
   getCommitDiff: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
+  getConfig: vi.fn().mockResolvedValue(null),
 }))
 
 const taskId = 'task-1'

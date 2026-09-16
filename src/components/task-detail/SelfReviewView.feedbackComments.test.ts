@@ -8,6 +8,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrComment, PullRequestInfo } from "../../lib/types";
 import {
+	getConfig,
 	getPrComments,
 	getTaskDiff,
 	markCommentAddressed,
@@ -170,6 +171,29 @@ describe("SelfReviewView — hide addressed comments", () => {
 			// Addressed comment should NOT be in DOM
 			expect(screen.queryByText("Comment 2")).toBeNull();
 		});
+	});
+
+	it("shows one card per unaddressed reviewer thread", async () => {
+		const reviewerRoot = makeComment(1, 0, "Reviewer root");
+		const comments = [
+			reviewerRoot,
+			{ ...makeComment(2, 0, "Reply one"), author: "author", in_reply_to_id: 1 },
+			{ ...makeComment(3, 0, "Reply two"), author: "reviewer", in_reply_to_id: 1 },
+			{ ...makeComment(4, 0, "Own root"), author: "AUTHOR" },
+		];
+		vi.mocked(getConfig).mockImplementation(async (key) => key === "github_username" ? "author" : null);
+		vi.mocked(getPrComments).mockResolvedValue(comments);
+		ticketPrs.set(new Map([["task-1", [{ ...mockPr, unaddressed_comment_count: 1 }]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		await renderFeedbackView();
+
+		expect(await screen.findByText("Reviewer root")).toBeTruthy();
+		expect(screen.queryByText("Reply one")).toBeNull();
+		expect(screen.queryByText("Reply two")).toBeNull();
+		expect(screen.queryByText("Own root")).toBeNull();
+		expect(screen.getAllByRole("button", { name: /mark addressed/i })).toHaveLength(1);
+		expect(screen.getByRole("tab", { name: "GitHub comments (2)" })).toBeTruthy();
 	});
 
 	it("keeps failed Review comment addressing visible and retryable", async () => {

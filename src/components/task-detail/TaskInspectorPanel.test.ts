@@ -32,6 +32,7 @@ vi.mock('../../lib/ipc', () => ({
   }),
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
+  getConfig: vi.fn().mockResolvedValue(null),
   getPullRequests: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),

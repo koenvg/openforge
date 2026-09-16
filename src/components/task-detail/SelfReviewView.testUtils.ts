@@ -45,6 +45,7 @@ const ipcMocks = vi.hoisted(() => ({
 	getCommitFileContents: vi.fn().mockResolvedValue({ oldContent: "", newContent: "" }),
 	getCommitBatchFileContents: vi.fn().mockResolvedValue([{ oldContent: "", newContent: "" }]),
 	getPrComments: vi.fn().mockResolvedValue([]),
+	getConfig: vi.fn().mockResolvedValue(null),
 	markCommentAddressed: vi.fn().mockResolvedValue(undefined),
 	openUrl: vi.fn(),
 	resolveGithubAsset: vi.fn().mockResolvedValue(null),

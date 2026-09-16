@@ -1,6 +1,10 @@
 import { createCommentAddressing } from './commentAddressing.svelte'
 import { markCommentAddressed } from './ipc'
-import type { PrComment } from './types'
+import {
+  getPrCommentThreadRoots,
+  getUnaddressedPrCommentThreadRoots,
+  type PrComment,
+} from './types'
 
 // ============================================================================
 // Interface
@@ -8,9 +12,11 @@ import type { PrComment } from './types'
 
 export interface CommentSelectionState {
   readonly selectedPrCommentIds: Set<number>
+  readonly threadRoots: PrComment[]
   readonly unaddressedComments: PrComment[]
   readonly unaddressedCount: number
   readonly addressedCount: number
+  readonly hiddenThreadCount: number
   readonly selectedCount: number
   readonly selectedPrComments: PrComment[]
   toggleSelected(id: number): void
@@ -27,6 +33,7 @@ export interface CommentSelectionState {
 
 export function createCommentSelection(deps: {
   getPrComments: () => PrComment[]
+  getGithubUsername?: () => string | null
 }): CommentSelectionState {
   let selectedPrCommentIds = $state<Set<number>>(new Set())
   let localPrComments = $state<PrComment[]>([])
@@ -37,11 +44,15 @@ export function createCommentSelection(deps: {
     localPrComments = deps.getPrComments()
   })
 
-  let unaddressedComments = $derived(localPrComments.filter(c => c.addressed === 0))
+  let threadRoots = $derived(getPrCommentThreadRoots(localPrComments))
+  let unaddressedComments = $derived(
+    getUnaddressedPrCommentThreadRoots(localPrComments, deps.getGithubUsername?.()),
+  )
   let unaddressedCount = $derived(unaddressedComments.length)
-  let addressedCount = $derived(localPrComments.filter(c => c.addressed === 1).length)
+  let addressedCount = $derived(threadRoots.filter(c => c.addressed === 1).length)
+  let hiddenThreadCount = $derived(threadRoots.length - unaddressedCount)
   let selectedCount = $derived(selectedPrCommentIds.size)
-  let selectedPrComments = $derived(localPrComments.filter(c => selectedPrCommentIds.has(c.id)))
+  let selectedPrComments = $derived(threadRoots.filter(c => selectedPrCommentIds.has(c.id)))
 
   function toggleSelected(id: number): void {
     const next = new Set(selectedPrCommentIds)
@@ -74,9 +85,11 @@ export function createCommentSelection(deps: {
 
   return {
     get selectedPrCommentIds() { return selectedPrCommentIds },
+    get threadRoots() { return threadRoots },
     get unaddressedComments() { return unaddressedComments },
     get unaddressedCount() { return unaddressedCount },
     get addressedCount() { return addressedCount },
+    get hiddenThreadCount() { return hiddenThreadCount },
     get selectedCount() { return selectedCount },
     get selectedPrComments() { return selectedPrComments },
     toggleSelected,

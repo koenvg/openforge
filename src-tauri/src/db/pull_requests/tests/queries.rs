@@ -147,20 +147,30 @@ fn unaddressed_comment_count_agrees_across_pull_request_and_project_queries() {
         .insert(&db)
         .expect("insert pr 1 failed");
 
-    PrCommentFixture::new(711, 101, "Check passed")
-        .author("bot")
+    db.set_config("github_username", "author")
+        .expect("set GitHub username failed");
+
+    PrCommentFixture::new(711, 101, "Reviewer root")
+        .author("reviewer")
         .created_at(2000)
         .insert(&db)
         .expect("insert comment 1 failed");
-    PrCommentFixture::new(712, 101, "Fix this")
+    PrCommentFixture::new(712, 101, "Reviewer reply")
+        .author("second-reviewer")
+        .in_reply_to_id(711)
         .created_at(2001)
         .insert(&db)
         .expect("insert comment 2 failed");
-    PrCommentFixture::new(713, 101, "Also fix that")
-        .addressed(true)
+    PrCommentFixture::new(713, 101, "Author root")
+        .author("AUTHOR")
         .created_at(2002)
         .insert(&db)
         .expect("insert comment 3 failed");
+    PrCommentFixture::new(715, 101, "Addressed reviewer root")
+        .addressed(true)
+        .created_at(2003)
+        .insert(&db)
+        .expect("insert addressed comment failed");
     PullRequestFixture::new(102)
         .ticket_id(&other_task.id)
         .title("Other PR")
@@ -198,8 +208,38 @@ fn unaddressed_comment_count_agrees_across_pull_request_and_project_queries() {
             task_pull_request_count,
             project_attention_count,
         ],
-        [2, 2, 2]
+        [1, 1, 1]
     );
 
     drop(db);
+}
+
+#[test]
+fn unknown_github_identity_counts_every_unaddressed_thread_root() {
+    let (db, _temp_dir) = make_test_db("unaddressed_count_unknown_identity");
+    insert_test_task(&db);
+
+    PullRequestFixture::new(101)
+        .insert(&db)
+        .expect("insert pr failed");
+    PrCommentFixture::new(711, 101, "First root")
+        .author("reviewer")
+        .insert(&db)
+        .expect("insert first root failed");
+    PrCommentFixture::new(712, 101, "Reply")
+        .author("author")
+        .in_reply_to_id(711)
+        .insert(&db)
+        .expect("insert reply failed");
+    PrCommentFixture::new(713, 101, "Second root")
+        .author("author")
+        .insert(&db)
+        .expect("insert second root failed");
+
+    let count = db
+        .get_pull_requests_for_task("T-100")
+        .expect("get task PRs failed")[0]
+        .unaddressed_comment_count;
+
+    assert_eq!(count, 2);
 }

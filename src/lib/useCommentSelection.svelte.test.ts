@@ -56,6 +56,35 @@ describe('createCommentSelection', () => {
     cleanup()
   })
 
+  it('selects only unaddressed thread roots written by someone else', () => {
+    const reviewerRoot = makeComment(1)
+    const comments = [
+      reviewerRoot,
+      { ...makeComment(2), author: 'author', in_reply_to_id: 1 },
+      { ...makeComment(3), author: 'second-reviewer', in_reply_to_id: 1 },
+      { ...makeComment(4), author: 'AUTHOR' },
+      makeComment(5, 1),
+    ]
+    let selection!: ReturnType<typeof createCommentSelection>
+    const cleanup = $effect.root(() => {
+      selection = createCommentSelection({
+        getPrComments: () => comments,
+        getGithubUsername: () => 'author',
+      })
+    })
+    flushSync()
+
+    expect(selection.threadRoots).toEqual([reviewerRoot, comments[3], comments[4]])
+    expect(selection.unaddressedComments).toEqual([reviewerRoot])
+    expect(selection.unaddressedCount).toBe(1)
+    expect(selection.hiddenThreadCount).toBe(2)
+
+    selection.selectAll()
+    flushSync()
+    expect(selection.selectedPrCommentIds).toEqual(new Set([reviewerRoot.id]))
+    cleanup()
+  })
+
   it('toggleSelected adds an ID to selection', () => {
     const comments = [makeComment(1), makeComment(2)]
     let selection!: ReturnType<typeof createCommentSelection>

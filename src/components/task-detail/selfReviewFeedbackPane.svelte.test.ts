@@ -11,7 +11,9 @@ describe('self review feedback pane', () => {
     const selectedPrCommentIds = new Set([1, 2])
     const selection = {
       unaddressedCount: 1,
+      threadRoots: [unaddressedComment, addressedComment],
       unaddressedComments: [unaddressedComment],
+      hiddenThreadCount: 1,
       selectedPrCommentIds,
       toggleSelected: (id: number) => selectedPrCommentIds.delete(id),
     } as unknown as CommentSelectionState

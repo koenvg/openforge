@@ -27,9 +27,17 @@
       {:else if commentSelection.unaddressedCount > 0}
         <Button variant="ghost" size="sm" onclick={commentSelection.selectAll}>Select all</Button>
       {/if}
-      {#if commentSelection.addressedCount > 0}
+      {#if commentSelection.hiddenThreadCount > 0}
         <Button variant="ghost" size="sm" onclick={() => onShowAddressedChange(!showAddressed)}>
-          {showAddressed ? 'Hide addressed' : `Show ${commentSelection.addressedCount} addressed`}
+          {#if showAddressed}
+            {commentSelection.hiddenThreadCount === commentSelection.addressedCount
+              ? 'Hide addressed'
+              : 'Hide other threads'}
+          {:else if commentSelection.hiddenThreadCount === commentSelection.addressedCount}
+            Show {commentSelection.addressedCount} addressed
+          {:else}
+            Show {commentSelection.hiddenThreadCount} other {commentSelection.hiddenThreadCount === 1 ? 'thread' : 'threads'}
+          {/if}
         </Button>
       {/if}
       <Button variant="ghost" size="sm" type="button" onclick={onOpenLinkedPr}>GitHub ↗</Button>
@@ -39,10 +47,14 @@
         <MessageSquare size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
         <p class="m-0 text-[13px] text-of-text/60">No review comments on this PR yet</p>
       </div>
-    {:else if visibleComments.length === 0 && commentSelection.addressedCount > 0}
+    {:else if visibleComments.length === 0 && commentSelection.hiddenThreadCount > 0}
       <div class="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
         <CheckCircle2 size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
-        <p class="m-0 text-[13px] text-of-text/60">All comments addressed</p>
+        <p class="m-0 text-[13px] text-of-text/60">
+          {commentSelection.hiddenThreadCount === commentSelection.addressedCount
+            ? 'All comments addressed'
+            : 'No threads need attention'}
+        </p>
       </div>
     {:else}
       <div class="min-h-0 flex-1 overflow-y-auto p-3">

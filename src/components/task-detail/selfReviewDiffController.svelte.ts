@@ -63,6 +63,7 @@ export function createSelfReviewDiffController(options: SelfReviewDiffController
     get selectedCommitSha() { return diffLoader.selectedCommitSha },
     get linkedPr() { return initialReviewContext.linkedPr },
     get prComments() { return initialReviewContext.prComments },
+    get githubUsername() { return initialReviewContext.githubUsername },
     getReviewContext,
     load,
     refresh: diffLoader.refresh,

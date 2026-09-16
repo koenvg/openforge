@@ -194,6 +194,21 @@ export interface PrComment {
   created_at: number;
 }
 
+export function getPrCommentThreadRoots(comments: readonly PrComment[]): PrComment[] {
+  return comments.filter(comment => comment.in_reply_to_id === null);
+}
+
+export function getUnaddressedPrCommentThreadRoots(
+  comments: readonly PrComment[],
+  githubUsername: string | null | undefined,
+): PrComment[] {
+  const normalizedUsername = githubUsername?.trim().toLowerCase() || null;
+  return getPrCommentThreadRoots(comments).filter(comment =>
+    comment.addressed === 0
+    && (normalizedUsername === null || comment.author.toLowerCase() !== normalizedUsername)
+  );
+}
+
 export type PrReviewerKind = 'user' | 'team' | 'bot';
 
 export type PrReviewerState = 'approved' | 'changes_requested' | 'commented' | 'dismissed' | 'pending';
