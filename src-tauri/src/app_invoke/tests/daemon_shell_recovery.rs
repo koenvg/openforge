@@ -32,7 +32,7 @@ async fn exited_shell_recovers_final_output_after_sidecar_absence_without_respaw
         executable,
         key.into(),
     );
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = tokio::time::Instant::now() + DAEMON_SHELL_CONTRACT_TIMEOUT;
     let replay = loop {
         let replay = invoke_ok(&second, "get_pty_buffer", json!({"shellSessionKey":key})).await;
         if replay["isLive"] == false {

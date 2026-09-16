@@ -5,6 +5,9 @@ use super::test_support::{
 use axum::http::StatusCode;
 use serde_json::json;
 
+use std::time::Duration;
+
+const DAEMON_SHELL_CONTRACT_TIMEOUT: Duration = Duration::from_secs(30);
 mod companion;
 mod core;
 mod daemon_fixture;
