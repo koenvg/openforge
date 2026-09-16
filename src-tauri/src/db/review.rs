@@ -33,36 +33,39 @@ pub struct ReviewPrRow {
     pub labels: Vec<PrLabel>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ReviewPrUpsert {
+    pub id: i64,
+    pub number: i64,
+    pub title: String,
+    pub body: Option<String>,
+    pub state: String,
+    pub draft: bool,
+    pub html_url: String,
+    pub user_login: String,
+    pub user_avatar_url: Option<String>,
+    pub repo_owner: String,
+    pub repo_name: String,
+    pub head_ref: String,
+    pub base_ref: String,
+    pub head_sha: String,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changed_files: i64,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
+    pub labels: Vec<PrLabel>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 impl super::Database {
-    #[allow(clippy::too_many_arguments)]
-    pub fn upsert_review_pr(
-        &self,
-        id: i64,
-        number: i64,
-        title: &str,
-        body: Option<&str>,
-        state: &str,
-        draft: bool,
-        html_url: &str,
-        user_login: &str,
-        user_avatar_url: Option<&str>,
-        repo_owner: &str,
-        repo_name: &str,
-        head_ref: &str,
-        base_ref: &str,
-        head_sha: &str,
-        additions: i64,
-        deletions: i64,
-        changed_files: i64,
-        labels: &[PrLabel],
-        created_at: i64,
-        updated_at: i64,
-    ) -> Result<()> {
-        let labels_json = super::serialize_json_list_column(labels);
+    pub fn upsert_review_pr(&self, row: &ReviewPrUpsert) -> Result<()> {
+        let labels_json = super::serialize_json_list_column(&row.labels);
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, labels, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, mergeable, mergeable_state, labels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -80,6 +83,8 @@ impl super::Database {
                   additions = excluded.additions,
                   deletions = excluded.deletions,
                   changed_files = excluded.changed_files,
+                  mergeable = excluded.mergeable,
+                  mergeable_state = excluded.mergeable_state,
                   labels = excluded.labels,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at,
@@ -89,24 +94,29 @@ impl super::Database {
                   dismissed_head_sha = CASE WHEN review_prs.review_requested = 0 OR (review_prs.dismissed_head_sha IS NOT NULL AND review_prs.dismissed_head_sha != excluded.head_sha) THEN NULL ELSE review_prs.dismissed_head_sha END,
                   review_requested = 1",
             rusqlite::params![
-                id, number, title, body, state, draft as i32, html_url, user_login, user_avatar_url,
-                repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files,
-                labels_json, created_at, updated_at
+                row.id,
+                row.number,
+                row.title,
+                row.body,
+                row.state,
+                row.draft as i32,
+                row.html_url,
+                row.user_login,
+                row.user_avatar_url,
+                row.repo_owner,
+                row.repo_name,
+                row.head_ref,
+                row.base_ref,
+                row.head_sha,
+                row.additions,
+                row.deletions,
+                row.changed_files,
+                row.mergeable,
+                row.mergeable_state,
+                labels_json,
+                row.created_at,
+                row.updated_at,
             ],
-        )?;
-        Ok(())
-    }
-
-    pub fn update_review_pr_mergeability(
-        &self,
-        id: i64,
-        mergeable: Option<bool>,
-        mergeable_state: Option<&str>,
-    ) -> Result<()> {
-        let conn = self.lock_conn()?;
-        conn.execute(
-            "UPDATE review_prs SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
-            rusqlite::params![mergeable, mergeable_state, id],
         )?;
         Ok(())
     }
@@ -254,35 +264,52 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
+    use super::ReviewPrUpsert;
     use crate::db::test_helpers::*;
+
+    fn review_pr_row(id: i64, number: i64, head_sha: &str, updated_at: i64) -> ReviewPrUpsert {
+        ReviewPrUpsert {
+            id,
+            number,
+            title: format!("PR {id}"),
+            body: None,
+            state: "open".to_string(),
+            draft: false,
+            html_url: format!("https://github.com/owner/repo/pull/{number}"),
+            user_login: "user".to_string(),
+            user_avatar_url: None,
+            repo_owner: "owner".to_string(),
+            repo_name: "repo".to_string(),
+            head_ref: format!("branch{id}"),
+            base_ref: "main".to_string(),
+            head_sha: head_sha.to_string(),
+            additions: 10,
+            deletions: 5,
+            changed_files: 2,
+            mergeable: None,
+            mergeable_state: None,
+            labels: vec![],
+            created_at: 1000,
+            updated_at,
+        }
+    }
 
     #[test]
     fn test_review_pr_upsert_and_retrieve() {
         let (db, _temp_dir) = make_test_db("review_pr_upsert");
 
-        db.upsert_review_pr(
-            123,
-            456,
-            "Add new feature",
-            Some("This PR adds a new feature"),
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/456",
-            "octocat",
-            Some("https://avatars.githubusercontent.com/u/1?v=4"),
-            "owner",
-            "repo",
-            "feature-branch",
-            "main",
-            "abc123def",
-            100,
-            50,
-            10,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        let row = ReviewPrUpsert {
+            title: "Add new feature".to_string(),
+            body: Some("This PR adds a new feature".to_string()),
+            user_login: "octocat".to_string(),
+            user_avatar_url: Some("https://avatars.githubusercontent.com/u/1?v=4".to_string()),
+            head_ref: "feature-branch".to_string(),
+            additions: 100,
+            deletions: 50,
+            changed_files: 10,
+            ..review_pr_row(123, 456, "abc123def", 2000)
+        };
+        db.upsert_review_pr(&row).expect("upsert failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
@@ -309,29 +336,19 @@ mod tests {
         assert_eq!(prs[0].created_at, 1000);
         assert_eq!(prs[0].updated_at, 2000);
 
-        db.upsert_review_pr(
-            123,
-            456,
-            "Add new feature - updated",
-            Some("This PR adds a new feature"),
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/456",
-            "octocat",
-            Some("https://avatars.githubusercontent.com/u/1?v=4"),
-            "owner",
-            "repo",
-            "feature-branch",
-            "main",
-            "abc123def",
-            100,
-            50,
-            10,
-            &[],
-            1000,
-            3000,
-        )
-        .expect("upsert update failed");
+        let updated_row = ReviewPrUpsert {
+            title: "Add new feature - updated".to_string(),
+            body: Some("This PR adds a new feature".to_string()),
+            user_login: "octocat".to_string(),
+            user_avatar_url: Some("https://avatars.githubusercontent.com/u/1?v=4".to_string()),
+            head_ref: "feature-branch".to_string(),
+            additions: 100,
+            deletions: 50,
+            changed_files: 10,
+            ..review_pr_row(123, 456, "abc123def", 3000)
+        };
+        db.upsert_review_pr(&updated_row)
+            .expect("upsert update failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
@@ -359,29 +376,17 @@ mod tests {
         ];
 
         let upsert = |labels: &[PrLabel], updated_at: i64| {
-            db.upsert_review_pr(
-                123,
-                456,
-                "Labeled PR",
-                None,
-                "open",
-                false,
-                "https://github.com/owner/repo/pull/456",
-                "octocat",
-                None,
-                "owner",
-                "repo",
-                "feature-branch",
-                "main",
-                "abc123def",
-                100,
-                50,
-                10,
-                labels,
-                1000,
-                updated_at,
-            )
-            .expect("upsert failed");
+            let row = ReviewPrUpsert {
+                title: "Labeled PR".to_string(),
+                user_login: "octocat".to_string(),
+                head_ref: "feature-branch".to_string(),
+                additions: 100,
+                deletions: 50,
+                changed_files: 10,
+                labels: labels.to_vec(),
+                ..review_pr_row(123, 456, "abc123def", updated_at)
+            };
+            db.upsert_review_pr(&row).expect("upsert failed");
         };
 
         // Non-empty labels persist and round-trip with name + color preserved.
@@ -407,28 +412,11 @@ mod tests {
         head_sha: &str,
         updated_at: i64,
     ) {
-        db.upsert_review_pr(
-            id,
-            id,
-            "PR",
-            None,
-            "open",
-            false,
-            &format!("https://github.com/owner/repo/pull/{id}"),
-            "user",
-            None,
-            "owner",
-            "repo",
-            "branch",
-            "main",
-            head_sha,
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            updated_at,
-        )
+        db.upsert_review_pr(&ReviewPrUpsert {
+            title: "PR".to_string(),
+            head_ref: "branch".to_string(),
+            ..review_pr_row(id, id, head_sha, updated_at)
+        })
         .expect("upsert failed");
     }
 
@@ -574,51 +562,21 @@ mod tests {
     fn test_review_pr_ordering() {
         let (db, _temp_dir) = make_test_db("review_pr_ordering");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "Older PR",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "sha1",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            1000,
-        )
+        db.upsert_review_pr(&ReviewPrUpsert {
+            title: "Older PR".to_string(),
+            user_login: "user1".to_string(),
+            ..review_pr_row(1, 10, "sha1", 1000)
+        })
         .expect("insert older failed");
-        db.upsert_review_pr(
-            2,
-            20,
-            "Newer PR",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/20",
-            "user2",
-            None,
-            "owner",
-            "repo",
-            "branch2",
-            "main",
-            "sha2",
-            20,
-            10,
-            3,
-            &[],
-            2000,
-            5000,
-        )
+        db.upsert_review_pr(&ReviewPrUpsert {
+            title: "Newer PR".to_string(),
+            user_login: "user2".to_string(),
+            additions: 20,
+            deletions: 10,
+            changed_files: 3,
+            created_at: 2000,
+            ..review_pr_row(2, 20, "sha2", 5000)
+        })
         .expect("insert newer failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
@@ -633,29 +591,8 @@ mod tests {
     fn test_review_pr_viewed_null_by_default() {
         let (db, _temp_dir) = make_test_db("review_pr_viewed_null");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "sha1",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "sha1", 2000))
+            .expect("upsert failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
@@ -669,29 +606,8 @@ mod tests {
     fn test_mark_review_pr_viewed() {
         let (db, _temp_dir) = make_test_db("review_pr_mark_viewed");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "sha1",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "sha1", 2000))
+            .expect("upsert failed");
 
         db.mark_review_pr_viewed(1, "sha1")
             .expect("mark viewed failed");
@@ -708,29 +624,8 @@ mod tests {
     fn test_mark_review_pr_unviewed() {
         let (db, _temp_dir) = make_test_db("review_pr_mark_unviewed");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "sha1",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "sha1", 2000))
+            .expect("upsert failed");
 
         // Mark it viewed first so we can prove unviewed clears the state.
         db.mark_review_pr_viewed(1, "sha1")
@@ -750,29 +645,8 @@ mod tests {
     fn test_upsert_preserves_viewed_when_sha_unchanged() {
         let (db, _temp_dir) = make_test_db("review_pr_preserve_viewed");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "abc",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "abc", 2000))
+            .expect("upsert failed");
 
         db.mark_review_pr_viewed(1, "abc")
             .expect("mark viewed failed");
@@ -781,28 +655,10 @@ mod tests {
         let viewed_at_before = prs_before[0].viewed_at;
 
         // Upsert again with same sha
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1 updated",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "abc",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            3000,
-        )
+        db.upsert_review_pr(&ReviewPrUpsert {
+            title: "PR 1 updated".to_string(),
+            ..review_pr_row(1, 10, "abc", 3000)
+        })
         .expect("re-upsert failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
@@ -817,57 +673,15 @@ mod tests {
     fn test_upsert_clears_viewed_when_sha_changed() {
         let (db, _temp_dir) = make_test_db("review_pr_clear_viewed");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "abc",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "abc", 2000))
+            .expect("upsert failed");
 
         db.mark_review_pr_viewed(1, "abc")
             .expect("mark viewed failed");
 
         // Upsert again with different sha
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "def",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            3000,
-        )
-        .expect("re-upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "def", 3000))
+            .expect("re-upsert failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
@@ -881,54 +695,12 @@ mod tests {
     fn test_upsert_never_viewed_stays_unviewed() {
         let (db, _temp_dir) = make_test_db("review_pr_never_viewed");
 
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "abc",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            2000,
-        )
-        .expect("upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "abc", 2000))
+            .expect("upsert failed");
 
         // Never mark as viewed, upsert with new sha
-        db.upsert_review_pr(
-            1,
-            10,
-            "PR 1",
-            None,
-            "open",
-            false,
-            "https://github.com/owner/repo/pull/10",
-            "user1",
-            None,
-            "owner",
-            "repo",
-            "branch1",
-            "main",
-            "new-sha",
-            10,
-            5,
-            2,
-            &[],
-            1000,
-            3000,
-        )
-        .expect("re-upsert failed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "new-sha", 3000))
+            .expect("re-upsert failed");
 
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
@@ -944,28 +716,10 @@ mod tests {
 
         // Insert 3 PRs (all unviewed initially)
         for i in 1_i64..=3 {
-            db.upsert_review_pr(
-                i,
-                i * 10,
-                &format!("PR {}", i),
-                None,
-                "open",
-                false,
-                &format!("https://github.com/owner/repo/pull/{}", i * 10),
-                "user1",
-                None,
-                "owner",
-                "repo",
-                &format!("branch{}", i),
-                "main",
-                &format!("sha{}", i),
-                10,
-                5,
-                2,
-                &[],
-                i * 1000,
-                i * 1000,
-            )
+            db.upsert_review_pr(&ReviewPrUpsert {
+                created_at: i * 1000,
+                ..review_pr_row(i, i * 10, &format!("sha{i}"), i * 1000)
+            })
             .expect("upsert failed");
         }
 

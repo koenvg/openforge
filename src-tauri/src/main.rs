@@ -53,6 +53,7 @@ mod project_fs;
 mod provider_runtime;
 pub mod providers;
 mod pty_manager;
+mod review_pr_sync;
 mod runtime_checks;
 mod secure_config;
 mod secure_store;

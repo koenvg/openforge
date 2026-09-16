@@ -60,7 +60,7 @@ pub(crate) use pull_request_readiness::{
     PullRequestReadinessInput, PullRequestReadinessStatus, PullRequestReadinessView,
 };
 pub use pull_requests::{PrCommentRow, PrRow};
-pub use review::ReviewPrRow;
+pub use review::{ReviewPrRow, ReviewPrUpsert};
 pub use review_threads::{
     CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadRow, ReviewThreadScope,
     ReviewThreadWrite, SetReviewThreadAwaiting, SetReviewThreadStatus,

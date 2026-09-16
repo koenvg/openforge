@@ -1,6 +1,7 @@
 use crate::authored_pr_sync::{
     enrich_and_persist_authored_prs, AuthoredPrEnrichmentPolicy, AuthoredPrStalePolicy,
 };
+use crate::review_pr_sync::enrich_and_persist_review_prs;
 use crate::{db, github_client::GitHubClient};
 use futures::future::join_all;
 use log::error;
@@ -60,62 +61,18 @@ pub async fn fetch_review_prs(
     github_client: &GitHubClient,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     let username = github_username(db, github_client).await?;
-    let token = github_token().await?;
+    let token = github_client
+        .github_token()
+        .await
+        .map_err(|error| format!("Failed to get config: {error}"))?
+        .ok_or_else(|| "github_token not configured".to_string())?;
 
     let (prs, all_search_ids) = github_client
         .search_review_requested_prs(&username, &token)
         .await
         .map_err(|e| format!("Failed to search review PRs: {e}"))?;
 
-    {
-        let db_lock = crate::db::acquire_db(db);
-        for pr in &prs {
-            let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-
-            db_lock
-                .upsert_review_pr(
-                    pr.id,
-                    pr.number,
-                    &pr.title,
-                    pr.body.as_deref(),
-                    &pr.state,
-                    pr.draft,
-                    &pr.html_url,
-                    &pr.user_login,
-                    pr.user_avatar_url.as_deref(),
-                    &pr.repo_owner,
-                    &pr.repo_name,
-                    &pr.head_ref,
-                    &pr.base_ref,
-                    &pr.head_sha,
-                    pr.additions,
-                    pr.deletions,
-                    pr.changed_files,
-                    &pr.labels,
-                    created_at,
-                    updated_at,
-                )
-                .map_err(|e| format!("Failed to upsert review PR: {e}"))?;
-            db_lock
-                .update_review_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
-                .map_err(|e| format!("Failed to update review PR mergeability: {e}"))?;
-        }
-
-        if !all_search_ids.is_empty() || prs.is_empty() {
-            // Sticky list: a PR that left the search is kept, only flagged as no
-            // longer requested (so a later re-request can re-surface a removed PR).
-            db_lock
-                .mark_review_prs_not_requested(&all_search_ids)
-                .map_err(|e| format!("Failed to update review PR request state: {e}"))?;
-        }
-    }
-
-    get_review_prs(db)
+    enrich_and_persist_review_prs(db, prs, &all_search_ids)
 }
 
 fn should_fallback_to_search(

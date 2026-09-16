@@ -4,6 +4,16 @@ use reqwest::{Method, RequestBuilder, Response};
 
 impl GitHubClient {
     pub(super) fn github_request(&self, method: Method, url: &str, token: &str) -> RequestBuilder {
+        #[cfg(test)]
+        let url = self
+            .api_base_url
+            .as_ref()
+            .and_then(|base_url| {
+                url.strip_prefix("https://api.github.com")
+                    .map(|path| format!("{base_url}{path}"))
+            })
+            .unwrap_or_else(|| url.to_string());
+
         self.client
             .request(method, url)
             .header("Authorization", format!("token {}", token))

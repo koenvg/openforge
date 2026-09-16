@@ -60,6 +60,8 @@ pub struct GitHubClient {
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
     refresh_lock: Arc<tokio::sync::Mutex<()>>,
     token_source: GitHubTokenSource,
+    #[cfg(test)]
+    api_base_url: Option<String>,
 }
 
 /// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
@@ -99,6 +101,8 @@ impl GitHubClient {
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
             refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             token_source: GitHubTokenSource::SecureStore,
+            #[cfg(test)]
+            api_base_url: None,
         }
     }
 
@@ -108,6 +112,12 @@ impl GitHubClient {
             token_source: GitHubTokenSource::Fixed(result),
             ..Self::new()
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_api_base_url(mut self, api_base_url: String) -> Self {
+        self.api_base_url = Some(api_base_url);
+        self
     }
 
     pub(crate) async fn acquire_refresh_permit(&self) -> tokio::sync::OwnedMutexGuard<()> {
