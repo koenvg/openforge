@@ -402,81 +402,211 @@ async fn run_headless_generation(
         ToolPolicy::ReadGitHistoryAndReviewCli => super::local_skills::local_skills_plugin_dir(),
         ToolPolicy::None => None,
     };
-    let (binary_name, args) = headless_command(
-        provider,
-        model,
-        tool_policy,
-        output_schema,
-        local_skills.as_deref(),
-        session_mode,
-    )?;
+    let output_mode = if output_schema.is_some() {
+        GenerationOutputMode::Structured
+    } else {
+        GenerationOutputMode::Text
+    };
+    let attempt: Result<GenerationOutcome, String> = async {
+        let (binary_name, args) = headless_command(
+            provider,
+            model,
+            tool_policy,
+            output_schema,
+            local_skills.as_deref(),
+            session_mode,
+        )?;
+        let env = crate::user_environment::user_environment();
+        let path = env
+            .get("PATH")
+            .cloned()
+            .unwrap_or_else(crate::user_environment::user_tool_path);
+        let binary = crate::user_environment::find_tool_on_path(binary_name, &path)
+            .ok_or_else(|| format!("{binary_name} executable was not found on PATH"))?;
 
-    let env = crate::user_environment::user_environment();
-    let path = env
-        .get("PATH")
-        .cloned()
-        .unwrap_or_else(crate::user_environment::user_tool_path);
-    let binary = crate::user_environment::find_tool_on_path(binary_name, &path)
-        .ok_or_else(|| format!("{binary_name} executable was not found on PATH"))?;
+        let (abort_tx, abort_rx) = oneshot::channel::<()>();
+        let registration_id = generation_registry()
+            .register(session_key, abort_tx)
+            .map_err(|error| error.to_string())?;
 
-    let (abort_tx, abort_rx) = oneshot::channel::<()>();
-    let registration_id = generation_registry()
-        .register(session_key, abort_tx)
-        .map_err(|error| error.to_string())?;
+        let execution = run_child(
+            AgentProcess {
+                binary: &binary,
+                args: &args,
+                env: &env,
+                prompt,
+                working_directory,
+                agent_config_path,
+                timeout_secs,
+            },
+            abort_rx,
+        )
+        .await;
 
-    let result = run_child(
-        AgentProcess {
-            binary: &binary,
-            args: &args,
-            env: &env,
-            prompt,
-            working_directory,
-            agent_config_path,
-            timeout_secs,
-        },
-        abort_rx,
-    )
+        generation_registry()
+            .remove(session_key, registration_id)
+            .map_err(|error| error.to_string())?;
+
+        Ok(classify_generation(execution, output_mode))
+    }
     .await;
+    let outcome = classify_generation_attempt(attempt);
+    log::info!(
+        "[agent_generate] {}",
+        generation_outcome_diagnostic(provider, output_mode, &outcome)
+    );
+    outcome.into_result()
+}
 
-    // Remove only this run's registration. Other runs may share the session key.
-    generation_registry()
-        .remove(session_key, registration_id)
-        .map_err(|error| error.to_string())?;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GenerationOutputMode {
+    Text,
+    Structured,
+}
 
-    // With a schema we run the CLI in `--output-format json`, whose stdout is a
-    // *result envelope* — the model's actual answer is the string in `result`.
-    // Callers expect the model's text, not the envelope, so unwrap it here (the
-    // text-format path returns raw stdout and is unaffected).
-    match result {
-        Ok(stdout) if output_schema.is_some() => unwrap_json_result_envelope(&stdout),
-        other => other,
+#[derive(Debug)]
+enum ChildExecution {
+    Completed(std::process::Output),
+    TimedOut { timeout_secs: u64 },
+    Aborted,
+    ProcessFailure(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum GenerationOutcome {
+    Success(String),
+    ProviderError(String),
+    TimedOut { timeout_secs: u64 },
+    Aborted,
+    UnusableOutput,
+    ProcessFailure(String),
+}
+
+impl GenerationOutcome {
+    fn diagnostic_label(&self) -> &'static str {
+        match self {
+            Self::Success(_) => "success",
+            Self::ProviderError(_) => "provider_error",
+            Self::TimedOut { .. } => "timed_out",
+            Self::Aborted => "aborted",
+            Self::UnusableOutput => "unusable_output",
+            Self::ProcessFailure(_) => "process_failure",
+        }
+    }
+
+    fn into_result(self) -> Result<String, String> {
+        match self {
+            Self::Success(text) => Ok(text),
+            Self::ProviderError(error) | Self::ProcessFailure(error) => Err(error),
+            Self::TimedOut { timeout_secs } => {
+                Err(format!("agent generation timed out after {timeout_secs}s"))
+            }
+            Self::Aborted => Err("agent generation was aborted".to_string()),
+            Self::UnusableOutput => {
+                Err("agent generation returned unusable structured output".to_string())
+            }
+        }
     }
 }
 
-/// The claude CLI's `--output-format json` wraps the model's answer in a result
-/// envelope (`{ "type": "result", "result": "<the model text>", ... }`). Callers
-/// want the model's text, so extract `result`. A non-`success` envelope surfaces
-/// as an error. Anything that isn't a recognizable envelope is returned unchanged
-/// so we never mangle raw output from a different CLI/version.
-fn unwrap_json_result_envelope(stdout: &str) -> Result<String, String> {
+fn classify_generation_attempt(attempt: Result<GenerationOutcome, String>) -> GenerationOutcome {
+    attempt.unwrap_or_else(GenerationOutcome::ProcessFailure)
+}
+
+impl GenerationOutputMode {
+    fn diagnostic_label(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Structured => "structured",
+        }
+    }
+}
+
+fn generation_outcome_diagnostic(
+    provider: &str,
+    output_mode: GenerationOutputMode,
+    outcome: &GenerationOutcome,
+) -> String {
+    format!(
+        "provider={} output_mode={} generation_outcome={}",
+        provider,
+        output_mode.diagnostic_label(),
+        outcome.diagnostic_label()
+    )
+}
+
+fn classify_generation(
+    execution: ChildExecution,
+    output_mode: GenerationOutputMode,
+) -> GenerationOutcome {
+    match execution {
+        ChildExecution::TimedOut { timeout_secs } => GenerationOutcome::TimedOut { timeout_secs },
+        ChildExecution::Aborted => GenerationOutcome::Aborted,
+        ChildExecution::ProcessFailure(error) => GenerationOutcome::ProcessFailure(error),
+        ChildExecution::Completed(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            if output_mode == GenerationOutputMode::Structured {
+                match parse_json_result_envelope(&stdout) {
+                    Some(ResultEnvelope::Error(error)) => {
+                        return GenerationOutcome::ProviderError(format!(
+                            "agent generation reported an error: {error}"
+                        ))
+                    }
+                    Some(ResultEnvelope::Success(result)) if output.status.success() => {
+                        return GenerationOutcome::Success(result)
+                    }
+                    _ if output.status.success() => return GenerationOutcome::UnusableOutput,
+                    _ => {}
+                }
+            } else if output.status.success() {
+                return GenerationOutcome::Success(stdout);
+            }
+
+            GenerationOutcome::ProcessFailure(process_exit_error(&output))
+        }
+    }
+}
+
+fn process_exit_error(output: &std::process::Output) -> String {
+    let message = format!("agent process exited with status {}", output.status);
+    let error_output = String::from_utf8_lossy(&output.stderr);
+    let error_output = error_output.trim();
+    if error_output.is_empty() {
+        message
+    } else {
+        format!("{message}: {error_output}")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ResultEnvelope {
+    Success(String),
+    Error(String),
+}
+
+/// Parses the result envelope emitted by `claude --output-format json`.
+/// Unrecognized output stays distinct from a valid envelope so structured
+/// callers never mistake provider diagnostics or a changed wire shape for the
+/// requested model result.
+fn parse_json_result_envelope(stdout: &str) -> Option<ResultEnvelope> {
     let envelope: serde_json::Value = match serde_json::from_str(stdout) {
         Ok(value) => value,
-        Err(_) => return Ok(stdout.to_string()),
+        Err(_) => return None,
     };
     if envelope.get("type").and_then(|v| v.as_str()) != Some("result") {
-        return Ok(stdout.to_string());
+        return None;
     }
     if envelope.get("is_error").and_then(|v| v.as_bool()) == Some(true) {
         let detail = envelope
             .get("result")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        return Err(format!("agent generation reported an error: {detail}"));
+        return Some(ResultEnvelope::Error(detail.to_string()));
     }
-    match envelope.get("result").and_then(|v| v.as_str()) {
-        Some(result) => Ok(result.to_string()),
-        None => Ok(stdout.to_string()),
-    }
+    envelope
+        .get("result")
+        .and_then(|v| v.as_str())
+        .map(|result| ResultEnvelope::Success(result.to_string()))
 }
 
 /// The directory the agent process runs in: an explicit checkout when provided,
@@ -551,10 +681,7 @@ struct AgentProcess<'a> {
     timeout_secs: u64,
 }
 
-async fn run_child(
-    process: AgentProcess<'_>,
-    abort_rx: oneshot::Receiver<()>,
-) -> Result<String, String> {
+async fn run_child(process: AgentProcess<'_>, abort_rx: oneshot::Receiver<()>) -> ChildExecution {
     let AgentProcess {
         binary,
         args,
@@ -577,9 +704,14 @@ async fn run_child(
         command.current_dir(dir);
     }
 
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("failed to spawn agent process: {e}"))?;
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return ChildExecution::ProcessFailure(format!(
+                "failed to spawn agent process: {error}"
+            ))
+        }
+    };
 
     // Feed the prompt via stdin from a separate task so a full stdout pipe can't deadlock us.
     if let Some(mut stdin) = child.stdin.take() {
@@ -601,21 +733,12 @@ async fn run_child(
     .await;
 
     match selected {
-        Err(_) => Err(format!("agent generation timed out after {timeout_secs}s")),
-        Ok(None) => Err("agent generation was aborted".to_string()),
-        Ok(Some(Err(e))) => Err(format!("agent process failed: {e}")),
-        Ok(Some(Ok(output))) => {
-            if output.status.success() {
-                Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(format!(
-                    "agent process exited with status {}: {}",
-                    output.status,
-                    stderr.trim()
-                ))
-            }
+        Err(_) => ChildExecution::TimedOut { timeout_secs },
+        Ok(None) => ChildExecution::Aborted,
+        Ok(Some(Err(error))) => {
+            ChildExecution::ProcessFailure(format!("agent process failed: {error}"))
         }
+        Ok(Some(Ok(output))) => ChildExecution::Completed(output),
     }
 }
 
@@ -721,6 +844,10 @@ fn headless_command(
         )),
     }
 }
+
+#[cfg(test)]
+#[path = "agent_generate/outcome_tests.rs"]
+mod outcome_tests;
 
 #[cfg(test)]
 mod tests {
@@ -998,39 +1125,6 @@ mod tests {
     }
 
     #[test]
-    fn unwrap_json_result_envelope_extracts_model_text() {
-        // Real shape of `claude --print --output-format json --json-schema` stdout:
-        // the model's answer is the *string* in `result`, wrapped in a result
-        // envelope. Callers want that inner text, not the envelope.
-        let envelope = r#"{"type":"result","subtype":"success","is_error":false,"result":"{\"steps\":[{\"id\":\"step-1\",\"title\":\"Hello\"}]}","structured_output":{"steps":[{"id":"step-1","title":"Hello"}]}}"#;
-        assert_eq!(
-            unwrap_json_result_envelope(envelope).unwrap(),
-            r#"{"steps":[{"id":"step-1","title":"Hello"}]}"#,
-        );
-    }
-
-    #[test]
-    fn unwrap_json_result_envelope_passes_through_non_envelope() {
-        // Raw schema JSON (not a result envelope) must be returned untouched so we
-        // never mangle output from a CLI/version that prints the answer directly.
-        let raw = r#"{"steps":[]}"#;
-        assert_eq!(unwrap_json_result_envelope(raw).unwrap(), raw);
-        // Non-JSON text is returned unchanged too (defensive: keep the raw output).
-        assert_eq!(
-            unwrap_json_result_envelope("plain text").unwrap(),
-            "plain text"
-        );
-    }
-
-    #[test]
-    fn unwrap_json_result_envelope_surfaces_error_envelopes() {
-        let envelope =
-            r#"{"type":"result","subtype":"error","is_error":true,"result":"rate limit exceeded"}"#;
-        let err = unwrap_json_result_envelope(envelope).expect_err("error envelope is an error");
-        assert!(err.contains("rate limit exceeded"));
-    }
-
-    #[test]
     fn output_schema_switches_to_json_and_passes_schema() {
         let schema = r#"{"type":"object"}"#;
         let (_, args) = headless_command(
@@ -1304,7 +1398,7 @@ mod tests {
             ("OPENFORGE_TASK_ID".to_string(), "T-leaked".to_string()),
         ]);
         let (_abort_tx, abort_rx) = oneshot::channel();
-        let report = run_child(
+        let execution = run_child(
             AgentProcess {
                 binary: Path::new("/bin/sh"),
                 args: &[
@@ -1321,8 +1415,10 @@ mod tests {
             },
             abort_rx,
         )
-        .await
-        .expect("child output");
+        .await;
+        let report = classify_generation(execution, GenerationOutputMode::Text)
+            .into_result()
+            .expect("child output");
         let mut lines = report.split('\n').map(str::to_string);
         std::array::from_fn(|_| lines.next().expect("environment line"))
     }
