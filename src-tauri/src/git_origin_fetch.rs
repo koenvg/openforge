@@ -14,7 +14,7 @@ use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 /// How long a fetch may run before it is signalled. Long enough for a
 /// large-but-healthy fetch, short enough that a broken network degrades to stale
@@ -98,13 +98,23 @@ async fn configured_ssh_command(repo_path: &Path) -> Option<String> {
 /// possibly stale. Never fails the caller: every call site treats origin as a
 /// refresh, not a requirement.
 pub(crate) async fn fetch_origin(repo_path: &Path, timeout: Duration) -> bool {
-    let state = origin_fetch_state(repo_path);
-    let mut last_success = state.lock().await;
+    let last_success = origin_fetch_state(repo_path).lock_owned().await;
+    fetch_origin_while_locked(repo_path, timeout, last_success).await
+}
 
+async fn fetch_origin_while_locked(
+    repo_path: &Path,
+    timeout: Duration,
+    mut last_success: OwnedMutexGuard<Option<Instant>>,
+) -> bool {
     if last_success.is_some_and(|at| at.elapsed() < ORIGIN_FETCH_FRESHNESS) {
         return true;
     }
 
+    #[cfg(all(test, unix))]
+    let _serialized = hanging_fetch_test_support::PROCESS_WIDE_FETCH_LOCK
+        .lock()
+        .await;
     let succeeded = run_fetch(repo_path, timeout).await;
     if succeeded {
         *last_success = Some(Instant::now());
@@ -117,24 +127,20 @@ pub(crate) async fn fetch_origin(repo_path: &Path, timeout: Duration) -> bool {
 /// disk.
 pub(crate) fn spawn_background_origin_refresh(repo_path: &Path) {
     let state = origin_fetch_state(repo_path);
-    if state.try_lock().is_err() {
+    let Ok(last_success) = state.try_lock_owned() else {
         // A fetch for this repository is already running. Queueing another is how
         // reopening the dialog against an unresponsive remote stacked up twelve of
         // them.
         return;
-    }
+    };
 
     let repo_path = repo_path.to_path_buf();
     tokio::spawn(async move {
-        let _ = fetch_origin(&repo_path, ORIGIN_FETCH_TIMEOUT).await;
+        let _ = fetch_origin_while_locked(&repo_path, ORIGIN_FETCH_TIMEOUT, last_success).await;
     });
 }
 
 async fn run_fetch(repo_path: &Path, timeout: Duration) -> bool {
-    #[cfg(all(test, unix))]
-    let _serialized = hanging_fetch_test_support::PROCESS_WIDE_FETCH_LOCK
-        .lock()
-        .await;
     let mut command = git_command();
     command
         .arg("-C")
@@ -350,6 +356,10 @@ pub(crate) mod hanging_fetch_test_support {
         pid_file
     }
 
+    pub(crate) fn origin_refresh_is_reserved(repo_path: &Path) -> bool {
+        origin_fetch_state(repo_path).try_lock().is_err()
+    }
+
     pub(crate) async fn wait_for_recorded_pid(pid_file: &Path) -> i32 {
         for _ in 0..500 {
             if let Ok(contents) = std::fs::read_to_string(pid_file) {
@@ -396,6 +406,30 @@ pub(crate) mod hanging_fetch_test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn background_refresh_reserves_the_repository_before_returning() {
+        use hanging_fetch_test_support::*;
+
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_repo(&repo_path);
+
+        spawn_background_origin_refresh(&repo_path);
+
+        let state = origin_fetch_state(&repo_path);
+        assert!(
+            state.try_lock().is_err(),
+            "the repository must be reserved before another refresh can start"
+        );
+        tokio::time::timeout(Duration::from_secs(30), async {
+            while state.try_lock().is_err() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the background refresh should release the repository");
+    }
 
     #[test]
     fn a_pinned_ssh_command_is_never_replaced() {
