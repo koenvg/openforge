@@ -20,12 +20,35 @@
   let replyDraft = $state('')
 
   const ORIGIN_LABELS = { agent: 'Agent', plugin: 'Plugin', human: 'Reviewer' } as const
+  // On the GitHub PR review, an agent thread is a suggestion the reviewer accepts
+  // into their own review, which posts it as an inline comment when the review is
+  // submitted, so it speaks in "add to review" terms. Everything else (self-review
+  // threads, human/plugin conversations) keeps the resolve/reopen wording that fits
+  // closing a discussion, since there is no GitHub review to post into.
   const STATUS_LABELS = { resolved: 'Resolved', dismissed: 'Dismissed' } as const
+  const SUGGESTION_STATUS_LABELS = { resolved: 'Included in review', dismissed: 'Dismissed' } as const
   const AWAITING_LABELS = { agent: 'Waiting for agent', error: 'Agent reply failed' } as const
 
+  const isReviewSuggestion = $derived(
+    comment.thread.origin === 'agent' && comment.thread.namespace === 'github',
+  )
   const originLabel = $derived(ORIGIN_LABELS[comment.thread.origin])
-  const statusLabel = $derived(comment.thread.status === 'open' ? null : STATUS_LABELS[comment.thread.status])
+  const statusLabel = $derived(
+    comment.thread.status === 'open'
+      ? null
+      : (isReviewSuggestion ? SUGGESTION_STATUS_LABELS : STATUS_LABELS)[comment.thread.status],
+  )
   const awaitingLabel = $derived(comment.thread.awaiting === 'none' ? null : AWAITING_LABELS[comment.thread.awaiting])
+
+  // Accepting a suggestion stages it as an inline comment posted when the review is
+  // submitted; the label says so instead of the ambiguous "Resolve".
+  const acceptLabel = $derived(isReviewSuggestion ? 'Include in review; posts when you submit the review' : 'Resolve review thread')
+  const dismissLabel = $derived(isReviewSuggestion ? 'Dismiss suggestion' : 'Dismiss review thread')
+  const reopenLabel = $derived(
+    isReviewSuggestion
+      ? (comment.thread.status === 'resolved' ? 'Remove from review' : 'Restore suggestion')
+      : 'Reopen review thread',
+  )
 
   function submitReply() {
     const body = replyDraft.trim()
@@ -48,14 +71,14 @@
     <div class="ml-auto flex gap-1">
       {#if comment.thread.status === 'open'}
         <IconButton
-          label="Resolve review thread"
+          label={acceptLabel}
           size="xs"
           onclick={() => onSetThreadStatus(threadId, 'resolved')}
         >
           <Check size={14} strokeWidth={2} aria-hidden="true" />
         </IconButton>
         <IconButton
-          label="Dismiss review thread"
+          label={dismissLabel}
           size="xs"
           onclick={() => onSetThreadStatus(threadId, 'dismissed')}
         >
@@ -63,7 +86,7 @@
         </IconButton>
       {:else}
         <IconButton
-          label="Reopen review thread"
+          label={reopenLabel}
           size="xs"
           onclick={() => onSetThreadStatus(threadId, 'open')}
         >

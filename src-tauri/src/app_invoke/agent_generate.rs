@@ -54,8 +54,10 @@ enum SessionMode {
 /// The read + git-history + Review Thread CLI whitelist, passed as a single
 /// `--allowedTools` value.
 ///
-/// `Skill` is deliberately absent: the CLI does not gate skill invocation on the
-/// allowlist, so guidance text can name a skill without widening this list.
+/// `Skill` is deliberately absent: adding it would let the model auto-invoke
+/// skills, and a `disable-model-invocation` skill refuses the Skill tool anyway.
+/// Skills the guidance names are inlined into the prompt instead (see
+/// `local_skills::inline_referenced_skills`), so this list stays this narrow.
 ///
 /// `Bash(openforge review:*)` is the review agent's only write channel: it reaches
 /// the Review Thread routes on the agent transport and nothing else.
@@ -407,6 +409,23 @@ async fn run_headless_generation(
     } else {
         GenerationOutputMode::Text
     };
+
+    // For the repo-aware review, resolve any `/skill` the guidance names and inline
+    // its instructions into the prompt. A headless run can't load a skill as a tool,
+    // and a `disable-model-invocation` skill refuses the Skill tool outright, so
+    // inlining is the only reliable way the user's review skills reach the agent.
+    // References inside an inlined body are resolved too (a loader pulls its whole
+    // tree in). See `local_skills::inline_referenced_skills`.
+    let inlined_prompt;
+    let prompt = match tool_policy {
+        ToolPolicy::ReadGitHistoryAndReviewCli => {
+            inlined_prompt =
+                super::local_skills::inline_referenced_skills(prompt, working_directory);
+            inlined_prompt.as_str()
+        }
+        ToolPolicy::None => prompt,
+    };
+
     let attempt: Result<GenerationOutcome, String> = async {
         let (binary_name, args) = headless_command(
             provider,
