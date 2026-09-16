@@ -1,6 +1,7 @@
 use crate::db::{acquire_db, Database};
 use crate::github_client::{
-    CiSignal, GitHubClient, GitHubError, PrReview, PullRequest, SearchPrResult,
+    CiSignal, GitHubClient, GitHubError, GitHubReadinessSnapshot, PrReview, PullRequest,
+    SearchPrResult,
 };
 use std::sync::Mutex;
 
@@ -90,11 +91,23 @@ fn aggregate_details(
     }
 }
 
+/// A PR is enqueued when GitHub's GraphQL readiness snapshot reports a
+/// `mergeQueueEntry.state`. This is the only reliable queue signal: the REST pull
+/// object never carries `merge_queue_entry`, so REST-only enrichment always reads
+/// `is_queued = false` and a queued PR renders as "Ready to Merge". Mirrors the
+/// task-linked PR path (`github_poller::pr_execution`).
+fn is_queued_from_readiness(snapshot: Option<&GitHubReadinessSnapshot>) -> bool {
+    snapshot
+        .and_then(|snapshot| snapshot.merge_queue_state.as_deref())
+        .is_some()
+}
+
 fn aggregate_authored_pr_enrichment(
     pr: SearchPrResult,
     ci_signal_result: Result<CiSignal, GitHubError>,
     reviews_result: Result<Vec<PrReview>, GitHubError>,
     details_result: Result<PullRequest, GitHubError>,
+    readiness_result: Result<GitHubReadinessSnapshot, GitHubError>,
     policy: AuthoredPrEnrichmentPolicy,
 ) -> Result<EnrichedAuthoredPr, AuthoredPrSyncError> {
     let mut enriched = EnrichedAuthoredPr::from_search_result(pr);
@@ -118,6 +131,13 @@ fn aggregate_authored_pr_enrichment(
         }
     }
 
+    // GraphQL is the authoritative queue signal; keep the REST fallback set above
+    // when the snapshot is unavailable. Best-effort in both policies so a GraphQL
+    // outage never fails the whole authored-PR sync.
+    if is_queued_from_readiness(readiness_result.as_ref().ok()) {
+        enriched.is_queued = true;
+    }
+
     Ok(enriched)
 }
 
@@ -127,13 +147,19 @@ async fn enrich_authored_pr(
     pr: SearchPrResult,
     policy: AuthoredPrEnrichmentPolicy,
 ) -> Result<EnrichedAuthoredPr, AuthoredPrSyncError> {
-    let (ci_signal, reviews, details) = tokio::join!(
+    let (ci_signal, reviews, details, readiness) = tokio::join!(
         github_client.get_ci_signal(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
         github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
-        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
+        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
+        github_client.get_pr_readiness_snapshot(
+            &pr.repo_owner,
+            &pr.repo_name,
+            pr.number,
+            github_token
+        )
     );
 
-    aggregate_authored_pr_enrichment(pr, ci_signal, reviews, details, policy)
+    aggregate_authored_pr_enrichment(pr, ci_signal, reviews, details, readiness, policy)
 }
 
 fn persist_authored_prs(
@@ -329,8 +355,76 @@ mod tests {
         }
     }
 
+    /// Real production shape: GitHub's REST pull object has no `merge_queue_entry`,
+    /// so REST alone can never tell whether a PR is enqueued.
+    fn details_without_queue_entry(id: i64) -> PullRequest {
+        PullRequest {
+            extra: serde_json::json!({}),
+            ..details(id)
+        }
+    }
+
+    fn queued_readiness_snapshot() -> GitHubReadinessSnapshot {
+        GitHubReadinessSnapshot {
+            merge_queue_state: Some("AWAITING_CHECKS".to_string()),
+            ..GitHubReadinessSnapshot::unknown("test")
+        }
+    }
+
     fn network_error() -> GitHubError {
         GitHubError::NetworkError("offline".to_string())
+    }
+
+    #[test]
+    fn graphql_merge_queue_state_marks_authored_pr_queued_without_rest_signal() {
+        // Real GitHub data: REST omits merge_queue_entry, so only the GraphQL
+        // readiness snapshot reveals that the PR is enqueued (AVIV-395).
+        let enriched = aggregate_authored_pr_enrichment(
+            search_pr(91),
+            Ok(ci_signal(91, "success")),
+            Ok(reviews(91, "APPROVED", "2024-01-02T00:00:00Z")),
+            Ok(details_without_queue_entry(91)),
+            Ok(queued_readiness_snapshot()),
+            AuthoredPrEnrichmentPolicy::RequireComplete,
+        )
+        .expect("complete enrichment should succeed");
+
+        assert!(
+            enriched.is_queued,
+            "a PR in the merge queue must be marked queued from the GraphQL snapshot"
+        );
+    }
+
+    #[test]
+    fn authored_pr_is_not_queued_without_any_queue_signal() {
+        let enriched = aggregate_authored_pr_enrichment(
+            search_pr(92),
+            Ok(ci_signal(92, "success")),
+            Ok(reviews(92, "APPROVED", "2024-01-02T00:00:00Z")),
+            Ok(details_without_queue_entry(92)),
+            Ok(GitHubReadinessSnapshot::unknown("not queued")),
+            AuthoredPrEnrichmentPolicy::RequireComplete,
+        )
+        .expect("complete enrichment should succeed");
+
+        assert!(!enriched.is_queued);
+    }
+
+    #[test]
+    fn queue_state_falls_back_to_rest_when_graphql_snapshot_unavailable() {
+        // details(93) carries a REST merge_queue_entry; with the GraphQL snapshot
+        // unavailable the REST heuristic still marks the PR queued.
+        let enriched = aggregate_authored_pr_enrichment(
+            search_pr(93),
+            Ok(ci_signal(93, "success")),
+            Ok(reviews(93, "APPROVED", "2024-01-02T00:00:00Z")),
+            Ok(details(93)),
+            Err(network_error()),
+            AuthoredPrEnrichmentPolicy::RequireComplete,
+        )
+        .expect("complete enrichment should succeed");
+
+        assert!(enriched.is_queued);
     }
 
     #[test]
@@ -340,6 +434,7 @@ mod tests {
             Err(network_error()),
             Ok(reviews(71, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(71)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         );
 
@@ -353,6 +448,7 @@ mod tests {
             Ok(ci_signal(73, "success")),
             Ok(reviews(73, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(73)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         )
         .expect("complete enrichment should succeed");
@@ -387,6 +483,7 @@ mod tests {
             Err(network_error()),
             Ok(reviews(72, "APPROVED", "2024-01-02T00:00:00Z")),
             Err(network_error()),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::BestEffort,
         )
         .expect("best-effort enrichment should tolerate signal failures");
@@ -407,6 +504,7 @@ mod tests {
             Ok(ci_signal(74, "success")),
             Ok(reviews(74, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(74)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         )
         .expect("enrich initial authored PR");
@@ -418,6 +516,7 @@ mod tests {
             Err(network_error()),
             Ok(reviews(74, "CHANGES_REQUESTED", "2024-01-03T00:00:00Z")),
             Ok(details(74)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::BestEffort,
         )
         .expect("best-effort enrichment should tolerate unavailable signals");
@@ -450,6 +549,7 @@ mod tests {
             Ok(ci_signal(74, "failure")),
             Err(network_error()),
             Ok(details(74)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::BestEffort,
         )
         .expect("best-effort enrichment should tolerate unavailable signals");
@@ -487,6 +587,7 @@ mod tests {
             Ok(ci_signal(82, "success")),
             Ok(reviews(82, "APPROVED", "2024-01-02T00:00:00Z")),
             Ok(details(82)),
+            Err(network_error()),
             AuthoredPrEnrichmentPolicy::RequireComplete,
         )
         .expect("enrich replacement authored PR");
