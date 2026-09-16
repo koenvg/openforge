@@ -5,6 +5,7 @@ use crate::authored_pr_sync::{
 };
 use crate::db::{acquire_db, Database, PrRow};
 use crate::github_client::GitHubClient;
+use crate::review_pr_sync::enrich_and_persist_review_prs;
 use log::{error, warn};
 use std::collections::HashSet;
 use std::fmt;
@@ -401,64 +402,12 @@ pub(super) async fn poll_review_prs(
         .await
         .map_err(PollPhaseError::GitHub)?;
 
-    {
-        let db_lock = acquire_db(db);
-        for pr in &prs {
-            let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-
-            db_lock
-                .upsert_review_pr(
-                    pr.id,
-                    pr.number,
-                    &pr.title,
-                    pr.body.as_deref(),
-                    &pr.state,
-                    pr.draft,
-                    &pr.html_url,
-                    &pr.user_login,
-                    pr.user_avatar_url.as_deref(),
-                    &pr.repo_owner,
-                    &pr.repo_name,
-                    &pr.head_ref,
-                    &pr.base_ref,
-                    &pr.head_sha,
-                    pr.additions,
-                    pr.deletions,
-                    pr.changed_files,
-                    &pr.labels,
-                    created_at,
-                    updated_at,
-                )
-                .map_err(|e| PollPhaseError::Db(format!("Failed to upsert review PR: {e}")))?;
-            db_lock
-                .update_review_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
-                .map_err(|e| {
-                    PollPhaseError::Db(format!("Failed to update review PR mergeability: {e}"))
-                })?;
-        }
-
-        if !all_search_ids.is_empty() || prs.is_empty() {
-            // Sticky list: a PR that left the search is kept, only flagged as no
-            // longer requested (so a later re-request can re-surface a removed PR).
-            db_lock
-                .mark_review_prs_not_requested(&all_search_ids)
-                .map_err(|e| {
-                    PollPhaseError::Db(format!("Failed to update review PR request state: {e}"))
-                })?;
-        }
-        let count = db_lock
-            .get_all_review_prs()
-            .map_err(|e| PollPhaseError::Db(format!("Failed to get review PRs: {e}")))?
-            .iter()
-            .filter(|pr| pr.viewed_at.is_none())
-            .count();
-        events.emit("review-pr-count-changed", serde_json::json!(count));
-    }
+    let count = enrich_and_persist_review_prs(db, prs, &all_search_ids)
+        .map_err(PollPhaseError::Db)?
+        .iter()
+        .filter(|pr| pr.viewed_at.is_none())
+        .count();
+    events.emit("review-pr-count-changed", serde_json::json!(count));
 
     Ok(())
 }

@@ -1,4 +1,125 @@
 use super::*;
+use crate::db::acquire_db;
+use axum::{routing::get, Json, Router};
+use std::sync::Arc;
+
+async fn review_request_search_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "total_count": 1,
+        "items": [{
+            "id": 42,
+            "number": 7,
+            "title": "Review this",
+            "body": "A useful description",
+            "state": "open",
+            "draft": false,
+            "html_url": "https://github.com/acme/widgets/pull/7",
+            "user": {
+                "login": "octocat",
+                "avatar_url": "https://avatars.example/octocat"
+            },
+            "repository_url": "https://api.github.com/repos/acme/widgets",
+            "created_at": "2026-09-14T08:30:00Z",
+            "updated_at": "2026-09-15T09:45:00Z",
+            "labels": [{ "name": "backend", "color": "0052cc" }]
+        }]
+    }))
+}
+
+async fn review_request_detail_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "number": 7,
+        "title": "Review this",
+        "state": "open",
+        "html_url": "https://github.com/acme/widgets/pull/7",
+        "user": { "login": "octocat" },
+        "head": { "ref": "feature/review-sync", "sha": "abc123" },
+        "base": { "ref": "main" },
+        "draft": false,
+        "mergeable": false,
+        "mergeable_state": "blocked",
+        "additions": 12,
+        "deletions": 3,
+        "changed_files": 2
+    }))
+}
+
+async fn review_request_github_client() -> GitHubClient {
+    let router = Router::new()
+        .route("/search/issues", get(review_request_search_response))
+        .route(
+            "/repos/acme/widgets/pulls/7",
+            get(review_request_detail_response),
+        );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake GitHub API");
+    let address = listener.local_addr().expect("read fake GitHub address");
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve fake GitHub API");
+    });
+
+    GitHubClient::with_test_token(Ok(Some("token".to_string())))
+        .with_test_api_base_url(format!("http://{address}"))
+}
+
+#[tokio::test]
+async fn manual_refresh_and_background_poll_persist_the_same_rows() {
+    let client = review_request_github_client().await;
+    let (manual_db, _manual_temp_dir) = make_test_db("review_pr_manual_sync");
+    manual_db
+        .set_config("github_username", "reviewer")
+        .expect("configure manual refresh username");
+    let manual_db = Arc::new(Mutex::new(manual_db));
+    let (poll_db, _poll_temp_dir) = make_test_db("review_pr_poll_sync");
+    poll_db
+        .set_config("github_username", "reviewer")
+        .expect("configure background poll username");
+    let poll_db = Mutex::new(poll_db);
+    let bus = crate::app_events::AppEventBus::new(16, 8);
+    let mut subscription = bus.subscribe(None).expect("subscribe to app events");
+    let events = GitHubEventTarget::sidecar(Some(bus.sender()));
+
+    let manual_rows = crate::github_runtime::fetch_review_prs(&manual_db, &client)
+        .await
+        .expect("manual refresh should persist review requests");
+    if let Err(error) = poll_review_prs(&client, &poll_db, &events, "token").await {
+        panic!("background poll should persist review requests: {error}");
+    }
+    let poll_rows = acquire_db(&poll_db)
+        .get_all_review_prs()
+        .expect("read background poll rows");
+
+    assert_eq!(manual_rows.len(), 1);
+    let persisted = &manual_rows[0];
+    assert_eq!(persisted.id, 42);
+    assert_eq!(persisted.number, 7);
+    assert_eq!(persisted.title, "Review this");
+    assert_eq!(persisted.body.as_deref(), Some("A useful description"));
+    assert_eq!(persisted.head_sha, "abc123");
+    assert_eq!(persisted.mergeable, Some(false));
+    assert_eq!(persisted.mergeable_state.as_deref(), Some("blocked"));
+    assert_eq!(persisted.labels.len(), 1);
+    assert_eq!(persisted.labels[0].name, "backend");
+    assert_eq!(persisted.created_at, 1_789_374_600);
+    assert_eq!(persisted.updated_at, 1_789_465_500);
+    assert_eq!(
+        serde_json::to_value(manual_rows).expect("manual rows should serialize"),
+        serde_json::to_value(poll_rows).expect("poll rows should serialize")
+    );
+
+    let crate::app_events::AppEventFrame::Event(event) = subscription
+        .recv()
+        .await
+        .expect("review-request count event should arrive")
+    else {
+        panic!("expected review-request count event");
+    };
+    assert_eq!(event.event_name, "review-pr-count-changed");
+    assert_eq!(event.payload, serde_json::json!(1));
+}
 
 fn make_stale_detail(state: &str, extra: serde_json::Value) -> PullRequest {
     PullRequest {
