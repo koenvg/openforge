@@ -2,10 +2,7 @@ use super::daemon_fixture::DaemonFixture;
 use super::*;
 use crate::app_events::AppEventEnvelope;
 use base64::Engine;
-use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
-
-const EVENT_DELIVERY_TIMEOUT: Duration = Duration::from_secs(15);
 const JOURNAL_OVERFLOW_BYTES: usize = 540_000;
 
 struct Consumer {
@@ -55,7 +52,7 @@ async fn receive_marker(
     consumer: &mut Consumer,
     marker: &str,
 ) {
-    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
+    tokio::time::timeout(DAEMON_SHELL_CONTRACT_TIMEOUT, async {
         loop {
             consumer.apply(&receiver.recv().await.unwrap());
             if String::from_utf8_lossy(&consumer.bytes).contains(marker) {
@@ -162,7 +159,7 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     let mut forwarded_bytes = 0;
     let mut tail = String::new();
     let exit_name = format!("pty-exit-{key}");
-    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
+    tokio::time::timeout(DAEMON_SHELL_CONTRACT_TIMEOUT, async {
         loop {
             let event = events.recv().await.unwrap();
             if event.event_name.starts_with("pty-model-output-") {
@@ -281,7 +278,7 @@ async fn daemon_replacement_routes_only_selected_sessions_and_does_not_revive_ol
         "data": format!("touch route; while [ ! -e excluded-done ]; do sleep 0.01; done; {}; exit 9\n", print_command("SELECTED_OUTPUT")),
     })).await;
     let mut output = Vec::new();
-    tokio::time::timeout(EVENT_DELIVERY_TIMEOUT, async {
+    tokio::time::timeout(DAEMON_SHELL_CONTRACT_TIMEOUT, async {
         loop {
             let event = events.recv().await.unwrap();
             if event.event_name.starts_with("pty-") {
