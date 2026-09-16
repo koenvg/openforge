@@ -2,6 +2,7 @@ use super::{WhisperError, WhisperManager, WhisperModelSize};
 use crate::idle_resource::{IdleResource, IdleResourceGuard};
 use log::info;
 use reqwest::Client;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use whisper_rs::{WhisperContext, WhisperContextParameters};
@@ -16,6 +17,10 @@ pub(super) struct LoadedWhisperContext {
 impl WhisperManager {
     /// Create a new manager with a specific active model.
     pub fn with_active_model(size: WhisperModelSize) -> Self {
+        Self::with_model_directory(size, super::model_catalog::default_model_directory())
+    }
+
+    fn with_model_directory(size: WhisperModelSize, model_directory: Option<PathBuf>) -> Self {
         Self {
             context: Arc::new(IdleResource::new(WHISPER_IDLE_TIMEOUT)),
             transcription_admission: Arc::new(tokio::sync::Semaphore::new(
@@ -24,11 +29,20 @@ impl WhisperManager {
             active_model: std::sync::RwLock::new(size),
             client: Client::new(),
             idle_reaper: std::sync::Mutex::new(None),
+            model_directory,
             #[cfg(test)]
             download_override: None,
             #[cfg(test)]
             transcription_override: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_model_directory_for_test(
+        size: WhisperModelSize,
+        model_directory: PathBuf,
+    ) -> Self {
+        Self::with_model_directory(size, Some(model_directory))
     }
 
     /// Start the background task that releases an idle model context.
@@ -93,8 +107,9 @@ impl WhisperManager {
         let context = self.context.acquire_or_try_replace(
             |loaded| loaded.model == selected_model,
             || {
-                let path =
-                    Self::model_file_path_for(selected_model).ok_or(WhisperError::ModelNotFound)?;
+                let path = self
+                    .model_file_path_for(selected_model)
+                    .ok_or(WhisperError::ModelNotFound)?;
                 if !path.exists() {
                     return Err(WhisperError::ModelNotFound);
                 }

@@ -16,12 +16,13 @@ impl WhisperManager {
     #[cfg(test)]
     pub(crate) fn with_transcription_override_for_test<F>(
         size: super::WhisperModelSize,
+        model_directory: std::path::PathBuf,
         transcribe: F,
     ) -> Self
     where
         F: Fn(&[f32]) -> Result<TranscriptionResult, WhisperError> + Send + Sync + 'static,
     {
-        let mut manager = Self::with_active_model(size);
+        let mut manager = Self::with_model_directory_for_test(size, model_directory);
         manager.transcription_override = Some(std::sync::Arc::new(transcribe));
         manager
     }

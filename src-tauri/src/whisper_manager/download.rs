@@ -25,7 +25,11 @@ pub(super) fn sha1_digest_to_lower_hex(digest: impl AsRef<[u8]>) -> String {
 
 impl WhisperManager {
     #[cfg(test)]
-    pub(crate) fn with_download_override_for_test<F>(size: WhisperModelSize, download: F) -> Self
+    pub(crate) fn with_download_override_for_test<F>(
+        size: WhisperModelSize,
+        model_directory: std::path::PathBuf,
+        download: F,
+    ) -> Self
     where
         F: Fn(
                 WhisperModelSize,
@@ -35,7 +39,7 @@ impl WhisperManager {
             + Sync
             + 'static,
     {
-        let mut manager = Self::with_active_model(size);
+        let mut manager = Self::with_model_directory_for_test(size, model_directory);
         manager.download_override = Some(std::sync::Arc::new(download));
         manager
     }
@@ -54,7 +58,7 @@ impl WhisperManager {
             return download(size, &mut on_progress);
         }
         let spec = size.spec();
-        let dest_path = Self::model_file_path_for(size).ok_or_else(|| {
+        let dest_path = self.model_file_path_for(size).ok_or_else(|| {
             WhisperError::ModelDownloadFailed("Cannot resolve data directory".to_string())
         })?;
 
