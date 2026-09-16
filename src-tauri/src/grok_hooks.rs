@@ -252,6 +252,73 @@ mod tests {
         }
     }
 
+    /// Grok scans the whole hook command, including `node -e` source, for
+    /// `$NAME` and `${NAME}` before it runs the shell. JavaScript template
+    /// literals such as `${base}` are therefore required environment, not
+    /// string interpolation. The existing exact pin of the shell-visible
+    /// remainder cannot see them.
+    fn grok_required_env_names(command: &str) -> Vec<String> {
+        let bytes = command.as_bytes();
+        let mut names = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] != b'$' {
+                i += 1;
+                continue;
+            }
+            i += 1;
+            let braced = i < bytes.len() && bytes[i] == b'{';
+            if braced {
+                i += 1;
+            }
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            if start == i {
+                continue;
+            }
+            if braced {
+                if i >= bytes.len() || bytes[i] != b'}' {
+                    continue;
+                }
+                i += 1;
+            }
+            let end = if braced { i - 1 } else { i };
+            names.push(command[start..end].to_string());
+        }
+        names
+    }
+
+    #[test]
+    fn grok_hook_commands_name_only_the_task_id_environment_variable() {
+        let json = build_hooks_json(54321);
+
+        for hook_key in [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "Stop",
+            "SessionEnd",
+            "Notification",
+        ] {
+            let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap_or_else(|| panic!("Missing command for {hook_key}"));
+            let mut names = grok_required_env_names(cmd);
+            names.sort();
+            names.dedup();
+            assert_eq!(
+                names,
+                ["OPENFORGE_TASK_ID"],
+                "{hook_key} command names environment Grok will require before \
+                 execution; JavaScript template literals in the embedded source \
+                 count as named variables: {cmd}"
+            );
+        }
+    }
+
     #[test]
     fn grok_hooks_json_structure_has_all_seven_events() {
         let json = build_hooks_json(17422);
