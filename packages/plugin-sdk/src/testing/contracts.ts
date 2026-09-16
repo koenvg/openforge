@@ -3,6 +3,8 @@ import type { CompletedTaskQuery } from '../domain.js'
 import type { TestingOpenForgeRegistryFake } from './registryFake.js'
 import type {
   BackendMethodRegistration,
+  AgentCommandDescriptor,
+  AgentCommandRuntime,
   BackendOpenForgeAPI,
   BackgroundServiceRegistration,
   CommandRegistration,
@@ -170,6 +172,7 @@ export type TestingCommandContribution = TestingContributionBase & CommandRegist
   title: string
   icon?: string
   shortcut?: CommandShortcutMetadata
+  runtime: AgentCommandRuntime
   handler: TestingCommandHandler
 }
 
@@ -215,6 +218,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   settingsSections: TestingSettingsSectionContribution[]
   themes: TestingThemeContribution[]
   commands: TestingCommandContribution[]
+  agentCommands: AgentCommandDescriptor[]
   eventListeners: TestingEventListenerContribution[]
   backendMethods: TestingBackendMethodContribution[]
   backgroundServices: TestingBackgroundServiceContribution[]

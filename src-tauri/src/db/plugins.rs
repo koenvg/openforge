@@ -216,6 +216,32 @@ impl super::Database {
         Ok(result)
     }
 
+    /// Return every plugin active in Project context, including app-owned plugins.
+    pub fn get_active_plugins_for_project(&self, project_id: &str) -> Result<Vec<PluginRow>> {
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT p.id, p.name, p.version, p.api_version, p.description, p.permissions,
+                    p.contributes, p.frontend_entry, p.backend_entry, p.install_path,
+                    p.source_kind, p.source_spec, p.package_metadata, p.installed_at, p.is_builtin
+             FROM plugins p
+             LEFT JOIN app_plugins ap ON ap.plugin_id = p.id
+             LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
+             LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
+             WHERE CASE
+                 WHEN json_extract(p.package_metadata, '$.enablement') = 'app'
+                 THEN COALESCE(ap.enabled, 0)
+                 ELSE COALESCE(pp.enabled, gp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
+             END = 1
+             ORDER BY p.name ASC",
+        )?;
+        let rows = stmt.query_map([project_id], row_to_plugin)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Return true if the plugin is enabled for the given project.
     ///
     /// Precedence: `project_plugins.enabled ?? global_plugins.enabled ??
