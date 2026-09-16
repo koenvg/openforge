@@ -10,9 +10,13 @@ const client = {
   deletePrWalkthrough: vi.fn(async () => {}),
 }
 
-vi.mock('./githubSyncClient', () => ({
-  createGithubSyncPrReviewClient: () => client,
-}))
+vi.mock('./githubSyncClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./githubSyncClient')>()
+  return {
+    ...actual,
+    createGithubSyncPrReviewClient: () => client,
+  }
+})
 
 vi.mock('../../lib/walkthroughGuidance', () => ({
   resolveWalkthroughGuidance: vi.fn(async () => ({ reviewGuidance: '', walkthroughGuidance: '' })),

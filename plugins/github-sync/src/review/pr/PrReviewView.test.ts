@@ -185,8 +185,11 @@ function registerPrReviewBackends(
   // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
   void registry.frontendApi.projectConfig.set('resolved_repo', `${basePr.repo_owner}/${basePr.repo_name}`, 'project-1')
   const backend = registry.backendApi.backend
+  const resolveProjects = vi.fn(async () => ({
+    [`${basePr.repo_owner}/${basePr.repo_name}`.toLowerCase()]: 'project-1',
+  }))
   backend.registerMethod('resolveProjectIdsByRepo', {
-    handler: async () => ({ [`${basePr.repo_owner}/${basePr.repo_name}`.toLowerCase()]: 'project-1' }),
+    handler: resolveProjects,
   })
   backend.registerMethod('getReviewPrs', { handler: async () => prs })
   backend.registerMethod('fetchReviewPrs', { handler: async () => prs })
@@ -215,6 +218,7 @@ function registerPrReviewBackends(
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })
+  return { resolveProjects }
 }
 
 async function openFilesTab(registry: TestingOpenForgeRegistryFake) {
@@ -1290,9 +1294,8 @@ describe('PrReviewView walkthrough generation', () => {
     const registry = createOpenForgeRegistryFake({
       pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID,
     })
-    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
-    const resolveProjects = vi.fn(async () => ({}))
-    registry.backendApi.backend.registerMethod('resolveProjectIdsByRepo', { handler: resolveProjects })
+    const { resolveProjects } = registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    resolveProjects.mockResolvedValue({})
 
     renderPrReviewView(registry)
 
