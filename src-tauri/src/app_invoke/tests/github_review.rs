@@ -417,7 +417,6 @@ async fn handles_db_backed_commands_and_events() {
             Some("success"),
             None,
             Some("approved"),
-            None,
             false,
             Some(&task.id),
             &[],

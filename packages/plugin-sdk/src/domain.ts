@@ -911,7 +911,6 @@ export interface AuthoredPullRequest {
   review_status: string | null;
   mergeable: boolean | null;
   mergeable_state: string | null;
-  merged_at: number | null;
   is_queued: boolean;
   task_id: string | null;
   created_at: number;

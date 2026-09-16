@@ -26,7 +26,6 @@ const basePr: AuthoredPullRequest = {
   review_status: null,
   mergeable: null,
   mergeable_state: null,
-  merged_at: null,
   is_queued: false,
   task_id: null,
   created_at: Math.floor(Date.now() / 1000) - 3600,
