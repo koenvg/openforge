@@ -1981,6 +1981,7 @@ mod tests {
         let repo_path = temp.path().join("repo");
         let pid_file = init_repo_with_hanging_origin(&repo_path);
         assert_git_success(&repo_path, &["branch", "feature/hangs-on-fetch"]);
+        let serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
 
         let branches = tokio::time::timeout(Duration::from_secs(20), list_git_branches(&repo_path))
             .await
@@ -1993,9 +1994,12 @@ mod tests {
                 .any(|branch| branch.name == "feature/hangs-on-fetch"),
             "local refs must be returned even when origin is unreachable"
         );
+        assert!(
+            origin_refresh_is_reserved(&repo_path),
+            "listing branches must reserve a background origin refresh"
+        );
 
-        // The background refresh is still hanging; take it down so the fixture
-        // cannot outlive the test.
+        drop(serialized);
         let helper_pid = wait_for_recorded_pid(&pid_file).await;
         terminate_fetch_process_group(process_group_of(helper_pid));
         assert_process_exits(helper_pid).await;
