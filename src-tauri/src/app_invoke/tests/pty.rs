@@ -583,6 +583,27 @@ async fn wait_for_file(path: &std::path::Path) -> String {
     panic!("timed out waiting for follow-up delivery");
 }
 
+async fn wait_for_pty_output(
+    manager: &crate::pty_manager::PtyManager,
+    task_id: &str,
+    expected: &str,
+) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if manager
+                .get_pty_buffer(task_id)
+                .await
+                .is_some_and(|output| output.contains(expected))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("Agent PTY output should contain {expected:?} before timeout"));
+}
+
 #[tokio::test]
 async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessions() {
     for (status, expected_disposition) in [
@@ -594,20 +615,21 @@ async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessio
         let (task_id, session_id) = seed_follow_up_session(&state, status);
         let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let output_path = temp_dir.path().join("follow-up.txt");
+        let readiness_marker = "follow-up-agent-ready";
         let script = format!(
-            "cat > {}",
+            "printf {}; exec cat > {}",
+            shell_single_quote(readiness_marker),
             shell_single_quote(&output_path.to_string_lossy())
         );
-        state
-            .pty_manager
-            .as_ref()
-            .expect("pty manager")
+        let pty_manager = state.pty_manager.as_ref().expect("pty manager");
+        pty_manager
             .spawn_companion_test_agent_pty(&task_id, temp_dir.path(), &script)
             .await
             .expect("spawn test Agent PTY");
 
         with_pty_cleanup(
             async {
+                wait_for_pty_output(pty_manager, &task_id, readiness_marker).await;
                 let receipt = invoke_ok(
             &state,
             "send_agent_follow_up",
