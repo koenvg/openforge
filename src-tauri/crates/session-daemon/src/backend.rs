@@ -207,6 +207,7 @@ impl HostBackend for Backend {
         let metadata = Session {
             pty,
             session_key: key,
+            owner: request.owner.clone(),
             pid: process.pid(),
             exit_code: None,
             next_io_sequence: Some(1),

@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CommandFence {
-    controller: openforge_session_protocol::Controller,
-    instance_id: u64,
+    pub(super) controller: openforge_session_protocol::Controller,
+    pub(super) instance_id: u64,
 }
 
 #[derive(Clone)]

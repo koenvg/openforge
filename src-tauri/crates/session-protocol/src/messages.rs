@@ -24,6 +24,7 @@ pub struct Inventory {
 pub struct Session {
     pub pty: PtyIdentity,
     pub session_key: String,
+    pub owner: TerminalOwner,
     pub pid: u32,
     pub exit_code: Option<u32>,
     pub next_io_sequence: Option<u64>,

@@ -7,6 +7,7 @@ mod host_app_event_callbacks;
 mod lifecycle;
 mod project_callbacks;
 mod review_thread_callbacks;
+mod shell_callbacks;
 mod stdio_test_support;
 mod storage_config_callbacks;
 mod task_callbacks;

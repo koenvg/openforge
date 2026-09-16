@@ -1,3 +1,4 @@
+import { createBackendShellApi } from './backend-shell-api'
 import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'
 import type {
   ActiveTasks,
@@ -425,13 +426,7 @@ export function createBackendApi(
         },
       },
     },
-    shell: {
-      spawn: async request => await hostCallback<number>('openforge.shell.spawn', objectCallbackParams(request)),
-      write: async request => { await hostCallback<void>('openforge.shell.write', objectCallbackParams(request)) },
-      resize: async request => { await hostCallback<void>('openforge.shell.resize', objectCallbackParams(request)) },
-      kill: async request => { await hostCallback<void>('openforge.shell.kill', objectCallbackParams(request)) },
-      getBuffer: async request => await hostCallback<string | null>('openforge.shell.getBuffer', objectCallbackParams(request)),
-    },
+    shell: createBackendShellApi(hostCallback),
     notifications: {
       notify: async request => { await hostCallback<void>('openforge.notifications.notify', objectCallbackParams(request)) },
     },

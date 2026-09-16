@@ -4,7 +4,7 @@ KVG-4717 adds an opt-in indexed shell path through a detached Session Daemon. Th
 
 ## Ownership and activation
 
-`crates/session-host` owns the canonical `PtyHost` contract, validated identities and shared control/admission/receipt ledger. The existing adapter and daemon use that same policy; the daemon client implements `PtyHost`. The version-1 local protocol, client and executable live in `crates/session-protocol`, `crates/session-client` and `crates/session-daemon` under the configured Backend Crate. Resolve manifests and the debug executable through `scripts/rust-sidecar-layout.mjs`, not an installed app path.
+`crates/session-host` owns the canonical `PtyHost` contract, validated identities and shared control/admission/receipt ledger. The existing adapter and daemon use that same policy; the daemon client implements `PtyHost`. The local protocol, client and executable live in `crates/session-protocol`, `crates/session-client` and `crates/session-daemon` under the configured Backend Crate. Resolve manifests and the debug executable through `scripts/rust-sidecar-layout.mjs`, not an installed app path.
 
 The daemon compiles the existing domain-free Ghostty authority and verified process-supervision modules. Their source remains shared with the old adapter during migration. It does not link the Backend Crate, SQLite, Task orchestration or plugins. The Sidecar prepares the shell command and environment, translates existing typed IPC operations, and forwards model output and exits. Dropping that bridge or killing the Sidecar does not drop a PTY master.
 
@@ -23,6 +23,8 @@ The private `session-v1` directory has mode 0700. Credentials, lock files, logs 
 A held OS file lock owns the daemon singleton. Only that lock holder may remove a validated stale socket. Launch uses a detached session and daemon log descriptors rather than parent pipes. Empty-daemon shutdown requires the current installation, daemon lifetime and controller generation. Termination targets one exact PTY identity; it never uses a process-name search.
 
 Frames are length-prefixed JSON with an explicit protocol version. Readers check the four-byte length before allocating. The maximum serialized frame is 4 MiB. Spawn requests and input are limited to 64 KiB. Geometry is bounded to 512 columns by 256 rows.
+
+Protocol v2 adds the authoritative terminal owner to each inventory session. A v1 peer is rejected rather than guessing whether a session is an agent or shell. Plugin and Companion consumers use that owner to enforce their existing terminal access boundaries. See [plugin and Companion terminal access](session-daemon-consumers.md).
 
 A connect acquires a new controller generation. Older controllers cannot read inventory, recover, write, resize or stop. Spawn and I/O retries retain their operation ID across reconnect; changed requests under the same ID are refused. The shared ledger retains validated requests and outcomes within its memory budget; command environments are not logged or returned as diagnostics. Admitted I/O advances its sequence even after an unknown outcome, and input is never automatically replayed under a new operation ID.
 

@@ -1,3 +1,6 @@
+#[path = "terminal_daemon_tests.rs"]
+mod daemon;
+
 use super::{
     attention::UnavailableCompanionAttentionSource,
     contract::{

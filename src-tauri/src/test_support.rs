@@ -1,3 +1,5 @@
+pub(crate) mod daemon;
+
 use crate::{
     backend_runtime::AppHandle,
     github_client::GitHubClient,
