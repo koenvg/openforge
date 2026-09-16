@@ -1,7 +1,7 @@
 ## 1. Domain and key contract
 
 - [ ] 1.1 Add Session Scope, Scoped Agent Session, Scoped Workspace, and Session Tool Policy to `CONTEXT.md`, revise Agent Session ownership, and add the agreed relationships; verify the terms match the OpenSpec design and no existing Implementation Run statement becomes non-Task-scoped
-- [ ] 1.2 Add shared Session Scope structural validation and canonical length-prefixed encoding with the 128-byte namespace, 2,048-byte target key, and 256-byte revision limits; verify unit tests cover exact equality, empty and oversized fields, NUL, Unicode byte length, and delimiter-like content
+- [x] 1.2 Add shared Session Scope structural validation and canonical length-prefixed encoding with the 128-byte namespace, 2,048-byte target key, and 256-byte revision limits; verify unit tests cover exact equality, empty and oversized fields, NUL, Unicode byte length, and delimiter-like content
 - [ ] 1.3 Implement `scoped-agent-v1-<sha256>` construction and parsing in the Terminal Runtime and Rust host, reserve that grammar in backend Task-prefix validation, and preserve both existing key shapes; verify shared fixture vectors, migration preflight, direct config writes, round trips, rejection cases, existing parser tests, and digest-collision failure all pass
 - [ ] 1.4 Reconcile the third key kind with `preserve-sessions-across-updates` across daemon protocol, inventory, PID ownership, diagnostics, Task cleanup, and restart workspace validation; verify restart tests terminate or quarantine scoped keys without restoring them or treating them as Task agents
 

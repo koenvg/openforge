@@ -1,9 +1,12 @@
 export { decodeTerminalBase64, decodeTerminalReplay } from './terminalWire'
 export {
   createIndexedShellSessionKey,
+  createScopedAgentSessionKey,
+  encodeSessionScope,
   parsePtySessionKey,
   type IndexedShellSessionKeyParts,
   type PtySessionKey,
+  type SessionScope,
 } from './ptySessionKey'
 export {
   createLiveModelOutputSubscriptionLifecycle,

@@ -1,5 +1,7 @@
 use rusqlite::Result;
 
+use super::config::validate_config_value;
+
 impl super::Database {
     fn project_config_value(
         conn: &rusqlite::Connection,
@@ -21,6 +23,7 @@ impl super::Database {
         key: &str,
         value: &str,
     ) -> Result<()> {
+        validate_config_value(key, value)?;
         conn.execute(
             "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
             [project_id, key, value],
@@ -123,6 +126,27 @@ mod tests {
         assert_eq!(nonexistent, None);
 
         drop(db);
+    }
+
+    #[test]
+    fn project_task_prefix_cannot_enter_the_scoped_agent_key_namespace() {
+        let (db, _temp_dir) = make_test_db("project_config_scoped_agent_prefix");
+        let project = db
+            .create_project("Test Project", "/tmp/project-config-scoped-agent-prefix")
+            .expect("create project");
+
+        let error = db
+            .set_project_config(&project.id, "task_id_prefix", "SCOPED-AGENT-V1")
+            .expect_err("reserved scoped agent prefix should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("reserved for scoped agent sessions"));
+        assert_eq!(
+            db.get_project_config(&project.id, "task_id_prefix")
+                .expect("read project Task prefix"),
+            None
+        );
     }
 
     #[test]

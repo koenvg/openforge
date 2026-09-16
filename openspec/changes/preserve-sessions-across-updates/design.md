@@ -86,7 +86,9 @@ The experiment must include interactive shells, alternate-screen applications, p
 
 Use a stable installation data identity, a daemon lifetime identity, a monotonic controller generation, Shell Session Key, PTY instance ID, operation ID, and output cursor. Reexec changes executable version but preserves the daemon lifetime identity and live PTY identities. A genuinely new daemon lifetime is distinguishable even if numeric counters repeat.
 
-Keep the existing Task/indexed-shell key model. Persist the next PTY instance allocation and spawn-operation deduplication state through reexec. Reconnection begins with authenticated inventory plus an event cursor; records after that cursor are replayed before domain reconciliation commits. This prevents an exit between inventory enumeration and subscription from disappearing.
+Keep the existing Task-agent and indexed-shell key behavior, and recognize the reserved `scoped-agent-v1-<sha256>` shape added by `add-scoped-agent-sessions`. The daemon protocol, inventory, PID ownership, and diagnostics keep carrying the opaque key, but Task cleanup and restart restoration must branch on its parsed kind. A coordinated restart terminates scoped sessions and records them as interrupted before committing the handoff. A replacement that encounters a stray scoped key quarantines and terminates it instead of restoring it or treating it as a Task agent. Restart workspace records remain limited to Task indexed-shell tabs.
+
+Persist the next PTY instance allocation and spawn-operation deduplication state through reexec. Reconnection begins with authenticated inventory plus an event cursor; records after that cursor are replayed before domain reconciliation commits. This prevents an exit between inventory enumeration and subscription from disappearing.
 
 A new Sidecar acquires exclusive mutation authority. Old controller commands and delayed completions are fenced even when the same PTY survives. Terminal view attachment and geometry ownership remain separate from Sidecar controller ownership. Cross-window clients cannot each assume they hold the current resize lease.
 
