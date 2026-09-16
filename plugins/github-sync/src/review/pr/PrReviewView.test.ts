@@ -178,10 +178,16 @@ function registerPrReviewBackends(
   getWalkthrough: () => PrWalkthrough | null | Promise<PrWalkthrough | null> = () => null,
   getAiThreads: () => AiThread[] | Promise<AiThread[]> = () => [],
 ) {
+  registry.frontendApi.projects.list = vi.fn(async () => [{
+    id: 'project-1', name: 'Project 1', path: '/project-1', created_at: 1, updated_at: 1,
+  }])
   // Per-repo scope now shows only the project's resolved repo (never all repos), so
   // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
   void registry.frontendApi.projectConfig.set('resolved_repo', `${basePr.repo_owner}/${basePr.repo_name}`, 'project-1')
   const backend = registry.backendApi.backend
+  backend.registerMethod('resolveProjectIdsByRepo', {
+    handler: async () => ({ [`${basePr.repo_owner}/${basePr.repo_name}`.toLowerCase()]: 'project-1' }),
+  })
   backend.registerMethod('getReviewPrs', { handler: async () => prs })
   backend.registerMethod('fetchReviewPrs', { handler: async () => prs })
   backend.registerMethod('getAuthoredPrs', { handler: async () => [] })
@@ -1280,6 +1286,21 @@ describe('PrReviewView walkthrough generation', () => {
     vi.clearAllMocks()
   })
 
+  it('does not offer generation in the all-repos view when the repository has no local project', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID,
+    })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    const resolveProjects = vi.fn(async () => ({}))
+    registry.backendApi.backend.registerMethod('resolveProjectIdsByRepo', { handler: resolveProjects })
+
+    renderPrReviewView(registry)
+
+    await screen.findByText('Fix authentication middleware')
+    await waitFor(() => expect(resolveProjects).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Generate walkthrough and AI review' })).toBeNull()
+  })
+
   it('starts a background generation from the card without opening or marking the PR read', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff], [basePr])
@@ -1302,6 +1323,7 @@ describe('PrReviewView walkthrough generation', () => {
       baseRef: 'main',
       headSha: 'head-sha',
       reviewPrId: 12345,
+      projectId: 'project-1',
     })
     // Plan 2 compiles the combined prompt server-side, so the caller sends none.
     expect((call?.payload as Record<string, unknown>).prompt).toBeUndefined()

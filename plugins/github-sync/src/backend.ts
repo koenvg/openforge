@@ -68,6 +68,26 @@ function invokeHostCommand<TOutput>(openforge: BackendOpenForgeAPI, command: str
   return openforge.commands.invokeGlobal<TOutput>(hostCommandId(command), payload ?? null)
 }
 
+async function resolveProjectIdsByRepo(openforge: BackendOpenForgeAPI): Promise<Record<string, string>> {
+  const projects = await openforge.projects.list()
+  const resolved = await Promise.all(projects.map(async project => ({
+    projectId: project.id,
+    repo: await invokeHostCommand<{ owner: string; name: string } | null>(
+      openforge,
+      'getProjectRepo',
+      { projectId: project.id },
+    ),
+  })))
+
+  const projectIdsByRepo: Record<string, string> = {}
+  for (const candidate of resolved) {
+    if (!candidate.repo) continue
+    const key = `${candidate.repo.owner}/${candidate.repo.name}`.toLowerCase()
+    projectIdsByRepo[key] ??= candidate.projectId
+  }
+  return projectIdsByRepo
+}
+
 /** Whether the Jira API token is present in the keychain. Never returns the token. */
 async function jiraTokenConfigured(openforge: BackendOpenForgeAPI): Promise<boolean> {
   const status = await invokeHostCommand<{ configured: boolean }>(
@@ -79,6 +99,10 @@ async function jiraTokenConfigured(openforge: BackendOpenForgeAPI): Promise<bool
 
 export default defineBackendPlugin({
   activate(openforge, context) {
+    context.subscriptions.add(openforge.backend.registerMethod<null, Record<string, string>>('resolveProjectIdsByRepo', {
+      handler: () => resolveProjectIdsByRepo(openforge),
+    }))
+
     context.subscriptions.add(openforge.backend.registerMethod<null, PollResult>('forceGithubSync', {
       handler: () => invokeHostCommand<PollResult>(openforge, 'forceGithubSync'),
     }))
@@ -222,7 +246,7 @@ export default defineBackendPlugin({
       repoOwner: string
       repoName: string
       prNumber: number
-      projectId: string | null
+      projectId: string
     }, void>('askAgentQuestions', {
       handler: async (request) => {
         const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
@@ -286,7 +310,7 @@ export default defineBackendPlugin({
       prBody: string | null
       headSha: string
       reviewPrId: number
-      projectId: string | null
+      projectId: string
       reviewGuidance: string
       walkthroughGuidance: string
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {

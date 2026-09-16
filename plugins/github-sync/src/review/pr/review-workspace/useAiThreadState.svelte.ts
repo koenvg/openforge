@@ -1,18 +1,20 @@
 import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { AiThread, AiThreadReviewerStatus } from '../../../lib/prReviewRecords'
-import { activeProjectId, aiThreads, selectedReviewPr } from '../../../lib/stores'
+import { aiThreads, selectedReviewPr } from '../../../lib/stores'
+import { resolveProjectIdForRepo } from '../../../lib/projectRepoResolution'
 import { markThreadSeen as markThreadSeenInList } from '../../../lib/questionsIndex'
 import { editLastUserMessage } from '../../../lib/aiThreadStore'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
-export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
-  const activeProject = fromStore(activeProjectId)
+export function useAiThreadState(api: FrontendOpenForgeAPI, githubSync: GithubSyncPrReviewClient) {
   const threadStore = fromStore(aiThreads)
   const selectedPr = fromStore(selectedReviewPr)
   const pollTimers = new Map<number, ReturnType<typeof setInterval>>()
   let loadSequence = 0
+  let localProjectIds = $state<Map<string, string>>(new Map())
 
   let pendingCount = $derived(
     threadStore.current.filter(thread => (
@@ -20,6 +22,14 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
       && thread.messages.at(-1)?.role === 'user'
     )).length,
   )
+
+  function prKey(pr: ReviewPullRequest): string {
+    return `${pr.repo_owner}/${pr.repo_name}`.toLowerCase()
+  }
+
+  function canSendQuestions(pr: ReviewPullRequest | null): boolean {
+    return !!pr && localProjectIds.has(prKey(pr))
+  }
 
   function newThreadId(): string {
     return `thread-${crypto.randomUUID()}`
@@ -150,10 +160,20 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
 
   async function load(pr: ReviewPullRequest): Promise<void> {
     const sequence = ++loadSequence
-    const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
+    const [threads, projectId] = await Promise.all([
+      githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha }),
+      resolveProjectIdForRepo(api, pr.repo_owner, pr.repo_name).catch((error) => {
+        console.error('Failed to resolve a local project for AI review questions:', error)
+        return null
+      }),
+    ])
     if (sequence !== loadSequence) return
     if (selectedPr.current?.id === pr.id && selectedPr.current?.head_sha === pr.head_sha) {
       threadStore.current = threads
+      const next = new Map(localProjectIds)
+      if (projectId) next.set(prKey(pr), projectId)
+      else next.delete(prKey(pr))
+      localProjectIds = next
     }
   }
 
@@ -188,6 +208,11 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
   async function sendQuestionsToAgent(): Promise<void> {
     const pr = selectedPr.current
     if (!pr) return
+    const projectId = await resolveProjectIdForRepo(api, pr.repo_owner, pr.repo_name).catch((error) => {
+      console.error('Failed to resolve a local project for AI review questions:', error)
+      return null
+    })
+    if (!projectId) return
 
     await githubSync.askAgentQuestions({
       reviewPrId: pr.id,
@@ -195,7 +220,7 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
       repoOwner: pr.repo_owner,
       repoName: pr.repo_name,
       prNumber: pr.number,
-      projectId: activeProject.current,
+      projectId,
     })
     await refresh(pr)
     startPolling(pr)
@@ -204,6 +229,7 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
   function clear(): void {
     loadSequence += 1
     threadStore.current = []
+    localProjectIds = new Map()
   }
 
   onDestroy(() => {
@@ -214,6 +240,7 @@ export function useAiThreadState(githubSync: GithubSyncPrReviewClient) {
   return {
     get threads() { return threadStore.current },
     get pendingCount() { return pendingCount },
+    get canSendQuestions() { return canSendQuestions(selectedPr.current) },
     load,
     clear,
     askAgent,

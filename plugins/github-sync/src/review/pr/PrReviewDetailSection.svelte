@@ -61,6 +61,7 @@
     // Local "Ask the AI author" Q&A threads + handlers (owned by PrReviewView).
     aiThreads?: AiThread[]
     aiThreadsPendingCount?: number
+    canSendQuestionsToAgent?: boolean
     // Stored agent comments and question threads as review threads (owned by PrReviewView).
     reviewThreads?: ReviewThread[]
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
@@ -127,6 +128,7 @@
     walkthroughReady = false,
     aiThreads = [],
     aiThreadsPendingCount = 0,
+    canSendQuestionsToAgent = false,
     reviewThreads = [],
     onCreateReviewThread,
     onReplyToReviewThread,
@@ -254,7 +256,7 @@
           {/if}
         </Button>
       {/if}
-      {#if aiThreadsPendingCount > 0}
+      {#if aiThreadsPendingCount > 0 && canSendQuestionsToAgent}
         <Button
           size="xs"
           class="mr-2"

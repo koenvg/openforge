@@ -100,7 +100,7 @@ describe('github-sync plugin', () => {
     expect(packageJson.openforge).not.toHaveProperty('contributes')
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
     expect(packageJson.openforge.backend).toBe('./dist/backend.mjs')
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['backend', 'projects', 'projectConfig']))
   })
 
   it('keeps GitHub PR review host command strings out of plugin UI and activation code', () => {

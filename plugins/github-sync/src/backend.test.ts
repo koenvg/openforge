@@ -16,9 +16,16 @@ function getPackageMetadata() {
  */
 function makeBackendHarness() {
   const store = new Map<string, unknown>()
-  const invokeGlobal = vi.fn(async (id: string) => {
+  const projectRepos: Record<string, { owner: string; name: string } | null> = {
+    'project-other': { owner: 'acme', name: 'other' },
+    'project-app': { owner: 'acme', name: 'app' },
+  }
+  const invokeGlobal = vi.fn(async (id: string, payload?: unknown) => {
     if (id === 'openforge.getPrFileDiffs') return []
     if (id === 'openforge.agentGenerateInRepo') return { text: '{"steps":[]}' }
+    if (id === 'openforge.getProjectRepo') {
+      return projectRepos[(payload as { projectId: string }).projectId] ?? null
+    }
     return null
   })
   const handlers = new Map<string, (request: unknown) => Promise<unknown>>()
@@ -30,6 +37,11 @@ function makeBackendHarness() {
       }),
     },
     commands: { invokeGlobal },
+    projects: {
+      list: vi.fn(async () => Object.keys(projectRepos).map(id => ({
+        id, name: id, path: `/${id}`, created_at: 1, updated_at: 1,
+      }))),
+    },
     storage: {
       global: {
         get: vi.fn(async (key: string) => store.get(key) ?? null),
@@ -42,7 +54,7 @@ function makeBackendHarness() {
       },
     },
   }
-  return { openforge, invokeGlobal, handlers }
+  return { openforge, invokeGlobal, handlers, projectRepos }
 }
 
 async function activateBackend() {
@@ -88,17 +100,29 @@ describe('startAgentWalkthrough backend handler', () => {
     })
   })
 
-  it('forwards a null project id (global PR view) without inventing one', async () => {
+  it('forwards the pull request repository used to verify the local project', async () => {
     const { invokeGlobal, handlers } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')!
 
-    await handler(walkthroughRequest({ projectId: null }))
+    await handler(walkthroughRequest())
 
     await vi.waitFor(() => {
       expect(invokeGlobal).toHaveBeenCalledWith(
         'openforge.agentGenerateInRepo',
-        expect.objectContaining({ projectId: null }),
+        expect.objectContaining({ owner: 'octo', repo: 'frontend' }),
       )
     })
+  })
+})
+
+describe('resolveProjectIdsByRepo backend handler', () => {
+  it('resolves every project from its current git origin without relying on cached config', async () => {
+    const { invokeGlobal, handlers } = await activateBackend()
+
+    await expect(handlers.get('resolveProjectIdsByRepo')!(null)).resolves.toEqual({
+      'acme/other': 'project-other',
+      'acme/app': 'project-app',
+    })
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getProjectRepo', { projectId: 'project-app' })
   })
 })

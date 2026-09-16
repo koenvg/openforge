@@ -101,7 +101,7 @@ export interface GithubSyncPrReviewClient {
     prBody: string | null
     headSha: string
     reviewPrId: number
-    projectId: string | null
+    projectId: string
     reviewGuidance: string
     walkthroughGuidance: string
   }): Promise<{ walkthrough_session_key: string }>
@@ -115,7 +115,7 @@ export interface GithubSyncPrReviewClient {
     repoOwner: string
     repoName: string
     prNumber: number
-    projectId: string | null
+    projectId: string
   }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable
   onReviewPullRequestCountChanged(handler: () => void): Disposable
@@ -131,6 +131,12 @@ function hostEventId(event: string): string {
 async function invokeBackend<TOutput>(api: Pick<FrontendOpenForgeAPI, 'backend'>, method: string, payload?: unknown): Promise<TOutput> {
   await api.backend.whenReady()
   return api.backend.invoke<TOutput>(method, payload)
+}
+
+export function resolveLocalProjectIdsByRepo(
+  api: Pick<FrontendOpenForgeAPI, 'backend'>,
+): Promise<Record<string, string>> {
+  return invokeBackend<Record<string, string>>(api, 'resolveProjectIdsByRepo', null)
 }
 
 /**

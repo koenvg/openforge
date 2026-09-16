@@ -24,6 +24,7 @@ import {
   selectedReviewPr,
 } from '../../../lib/stores'
 import { isInputFocused } from '../../../lib/domUtils'
+import { resolveProjectIdForRepo } from '../../../lib/projectRepoResolution'
 import { fetchGithubFileContents } from '../githubFileContents'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
@@ -169,21 +170,6 @@ export function useSelectedPrReview(
       .catch(cause => console.error('Failed to remove PR from list:', cause))
   }
 
-  /** The local project whose git remote is this repo, or null when none is linked. */
-  async function resolveProjectIdForRepo(repoOwner: string, repoName: string): Promise<string | null> {
-    const repoKey = `${repoOwner}/${repoName}`
-    try {
-      const projects = await api.projects.list()
-      for (const project of projects) {
-        const resolved = await api.projectConfig.get<string>('resolved_repo', project.id)
-        if (resolved === repoKey) return project.id
-      }
-    } catch (cause) {
-      console.error('Failed to resolve project for repo:', cause)
-    }
-    return null
-  }
-
   /**
    * Close the detail view and return to the list this PR belongs to: its project's
    * Pull Requests tab when a local project owns the repo, otherwise the all-repos
@@ -191,7 +177,10 @@ export function useSelectedPrReview(
    */
   async function returnToReviewList(pr: ReviewPullRequest): Promise<void> {
     backToList()
-    const projectId = await resolveProjectIdForRepo(pr.repo_owner, pr.repo_name)
+    const projectId = await resolveProjectIdForRepo(api, pr.repo_owner, pr.repo_name).catch((cause) => {
+      console.error('Failed to resolve project for repo:', cause)
+      return null
+    })
     const viewId = projectId ? PR_REVIEW_VIEW : PR_REVIEW_GLOBAL_VIEW
     await api.navigation.navigate({ viewId, projectId: projectId ?? undefined })
   }

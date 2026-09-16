@@ -66,6 +66,7 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "getReviewPrs" => Ok(ResolvedGlobalCommand::github_review("get_review_prs")),
         "fetchAuthoredPrs" => Ok(ResolvedGlobalCommand::github_review("fetch_authored_prs")),
         "getAuthoredPrs" => Ok(ResolvedGlobalCommand::github_review("get_authored_prs")),
+        "getProjectRepo" => Ok(ResolvedGlobalCommand::github_review("get_project_repo")),
         "markReviewPrViewed" => Ok(ResolvedGlobalCommand::github_review(
             "mark_review_pr_viewed",
         )),
@@ -194,6 +195,11 @@ mod tests {
             (
                 "openforge.fetchReviewPrs",
                 "fetch_review_prs",
+                GlobalCommandHandler::GithubReview,
+            ),
+            (
+                "openforge.getProjectRepo",
+                "get_project_repo",
                 GlobalCommandHandler::GithubReview,
             ),
             (
