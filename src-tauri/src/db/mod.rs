@@ -154,6 +154,7 @@ impl Database {
             .to_latest(&mut conn)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
+        migrations::ensure_no_scoped_agent_task_key_collision(&conn)?;
         migrations::ensure_tasks_columns(&conn)?;
         migrations::ensure_handoff_notes_removed(&conn)?;
         migrations::ensure_pr_number_column(&conn)?;

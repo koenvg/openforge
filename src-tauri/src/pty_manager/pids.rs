@@ -1,4 +1,5 @@
 use log::{info, warn};
+use sha2::{Digest, Sha256};
 use std::fmt;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -259,6 +260,75 @@ impl PtyManager {
     }
 }
 
+const SCOPED_AGENT_KEY_PREFIX: &str = "scoped-agent-v1-";
+#[allow(dead_code)]
+const SESSION_SCOPE_VERSION: u8 = 1;
+
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub(crate) struct SessionScope<'a> {
+    pub(crate) namespace: &'a str,
+    pub(crate) target_key: &'a str,
+    pub(crate) revision: &'a str,
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[allow(dead_code)]
+pub(crate) enum SessionScopeError {
+    #[error("Session Scope {field} must not be empty")]
+    Empty { field: &'static str },
+    #[error("Session Scope {field} must not contain NUL")]
+    ContainsNul { field: &'static str },
+    #[error("Session Scope {field} must not exceed {max_bytes} UTF-8 bytes")]
+    TooLong {
+        field: &'static str,
+        max_bytes: usize,
+    },
+}
+
+#[allow(dead_code)]
+fn encode_scope_field(
+    encoded: &mut Vec<u8>,
+    field: &'static str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<(), SessionScopeError> {
+    if value.is_empty() {
+        return Err(SessionScopeError::Empty { field });
+    }
+    if value.contains('\0') {
+        return Err(SessionScopeError::ContainsNul { field });
+    }
+    if value.len() > max_bytes {
+        return Err(SessionScopeError::TooLong { field, max_bytes });
+    }
+
+    let byte_length =
+        u32::try_from(value.len()).map_err(|_| SessionScopeError::TooLong { field, max_bytes })?;
+    encoded.extend_from_slice(&byte_length.to_be_bytes());
+    encoded.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_session_scope(scope: SessionScope<'_>) -> Result<Vec<u8>, SessionScopeError> {
+    let mut encoded = Vec::with_capacity(1 + 4 * 3 + 128 + 2_048 + 256);
+    encoded.push(SESSION_SCOPE_VERSION);
+    encode_scope_field(&mut encoded, "namespace", scope.namespace, 128)?;
+    encode_scope_field(&mut encoded, "targetKey", scope.target_key, 2_048)?;
+    encode_scope_field(&mut encoded, "revision", scope.revision, 256)?;
+    Ok(encoded)
+}
+
+#[allow(dead_code)]
+pub(crate) fn scoped_agent_session_key(
+    scope: SessionScope<'_>,
+) -> Result<String, SessionScopeError> {
+    let digest = Sha256::digest(encode_session_scope(scope)?);
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(format!("{SCOPED_AGENT_KEY_PREFIX}{hex}"))
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum PtySessionKey<'a> {
     Agent {
@@ -267,6 +337,9 @@ pub(super) enum PtySessionKey<'a> {
     Shell {
         task_id: &'a str,
         terminal_index: u32,
+    },
+    ScopedAgent {
+        digest: &'a str,
     },
 }
 
@@ -279,6 +352,16 @@ impl<'a> PtySessionKey<'a> {
     }
 
     fn parse(session_key: &'a str) -> Self {
+        if let Some(digest) = session_key.strip_prefix(SCOPED_AGENT_KEY_PREFIX) {
+            if digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Self::ScopedAgent { digest };
+            }
+        }
+
         if let Some((task_id, shell_index)) = session_key.rsplit_once("-shell-") {
             if !task_id.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit()) {
                 if let Ok(terminal_index) = shell_index.parse::<u32>() {
@@ -301,6 +384,9 @@ impl fmt::Display for PtySessionKey<'_> {
                 task_id,
                 terminal_index,
             } => write!(formatter, "{task_id}-shell-{terminal_index}"),
+            Self::ScopedAgent { digest } => {
+                write!(formatter, "{SCOPED_AGENT_KEY_PREFIX}{digest}")
+            }
         }
     }
 }
@@ -322,7 +408,9 @@ pub(super) fn is_shell_session_key_for_task(session_key: &str, task_id: &str) ->
 pub(super) fn pid_file_name_for_session_key(session_key: &str) -> String {
     match PtySessionKey::parse(session_key) {
         PtySessionKey::Agent { task_id } => format!("{}-pty.pid", task_id),
-        PtySessionKey::Shell { .. } => format!("{}.pid", session_key),
+        PtySessionKey::Shell { .. } | PtySessionKey::ScopedAgent { .. } => {
+            format!("{}.pid", session_key)
+        }
     }
 }
 
@@ -351,7 +439,7 @@ fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
     }
 
     match PtySessionKey::parse(stem) {
-        PtySessionKey::Shell { .. } => Some(stem.to_string()),
+        PtySessionKey::Shell { .. } | PtySessionKey::ScopedAgent { .. } => Some(stem.to_string()),
         PtySessionKey::Agent { .. } => None,
     }
 }
@@ -359,11 +447,188 @@ fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::CommandExt;
     use std::process::{Child, Command, Stdio};
     use std::time::Instant;
     use sysinfo::{Pid, ProcessStatus, System};
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SessionKeyFixture {
+        version: u8,
+        valid_scopes: Vec<SessionKeyVector>,
+        invalid_scopes: Vec<InvalidSessionScopeVector>,
+        existing_keys: Vec<ExistingSessionKeyVector>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SessionKeyVector {
+        scope: SessionScopeFixture,
+        canonical_hex: String,
+        digest: String,
+        key: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SessionScopeFixture {
+        namespace: String,
+        target_key: String,
+        revision: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct InvalidSessionScopeVector {
+        field: String,
+        value: String,
+        repeat: usize,
+        error: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ExistingSessionKeyVector {
+        key: String,
+        parsed: ParsedSessionKeyFixture,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(
+        tag = "kind",
+        rename_all = "kebab-case",
+        rename_all_fields = "camelCase"
+    )]
+    enum ParsedSessionKeyFixture {
+        Agent {
+            task_id: String,
+        },
+        IndexedShell {
+            task_id: String,
+            terminal_index: u32,
+        },
+    }
+
+    fn session_key_fixture() -> SessionKeyFixture {
+        serde_json::from_str(include_str!(
+            "../../../packages/terminal-runtime/fixtures/pty-session-key-v1.json"
+        ))
+        .expect("valid shared Shell Session Key fixture")
+    }
+
+    fn bytes_to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    #[test]
+    fn constructs_and_parses_scoped_agent_keys_from_shared_fixtures() {
+        let fixture = session_key_fixture();
+        assert_eq!(fixture.version, 1);
+
+        for vector in fixture.valid_scopes {
+            let scope = SessionScope {
+                namespace: &vector.scope.namespace,
+                target_key: &vector.scope.target_key,
+                revision: &vector.scope.revision,
+            };
+            assert_eq!(
+                bytes_to_hex(&encode_session_scope(scope).expect("valid Session Scope")),
+                vector.canonical_hex
+            );
+            assert_eq!(
+                scoped_agent_session_key(scope).expect("valid scoped agent key"),
+                vector.key
+            );
+            assert_eq!(
+                PtySessionKey::parse(&vector.key),
+                PtySessionKey::ScopedAgent {
+                    digest: &vector.digest,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_session_scopes_from_shared_fixtures() {
+        for vector in session_key_fixture().invalid_scopes {
+            let invalid = vector.value.repeat(vector.repeat);
+            let mut namespace = "plugin";
+            let mut target_key = "target";
+            let mut revision = "revision";
+            match vector.field.as_str() {
+                "namespace" => namespace = &invalid,
+                "targetKey" => target_key = &invalid,
+                "revision" => revision = &invalid,
+                field => panic!("unknown Session Scope fixture field {field}"),
+            }
+
+            let error = scoped_agent_session_key(SessionScope {
+                namespace,
+                target_key,
+                revision,
+            })
+            .expect_err("invalid Session Scope should be rejected");
+            assert_eq!(error.to_string(), vector.error);
+        }
+    }
+
+    #[test]
+    fn preserves_existing_session_keys_from_shared_fixtures() {
+        for vector in session_key_fixture().existing_keys {
+            let parsed = PtySessionKey::parse(&vector.key);
+            match vector.parsed {
+                ParsedSessionKeyFixture::Agent { task_id } => {
+                    assert_eq!(parsed, PtySessionKey::Agent { task_id: &task_id });
+                }
+                ParsedSessionKeyFixture::IndexedShell {
+                    task_id,
+                    terminal_index,
+                } => {
+                    assert_eq!(
+                        parsed,
+                        PtySessionKey::Shell {
+                            task_id: &task_id,
+                            terminal_index,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn accepts_exact_utf8_byte_limits_without_normalizing_scope_identity() {
+        let namespace = "é".repeat(64);
+        let target_key = "t".repeat(2_048);
+        let revision = "🚀".repeat(64);
+        let at_limits = scoped_agent_session_key(SessionScope {
+            namespace: &namespace,
+            target_key: &target_key,
+            revision: &revision,
+        })
+        .expect("exact Session Scope limits should be accepted");
+        assert!(matches!(
+            PtySessionKey::parse(&at_limits),
+            PtySessionKey::ScopedAgent { .. }
+        ));
+
+        let composed = scoped_agent_session_key(SessionScope {
+            namespace: "é",
+            target_key: "target",
+            revision: "revision",
+        })
+        .expect("composed scope");
+        let decomposed = scoped_agent_session_key(SessionScope {
+            namespace: "é",
+            target_key: "target",
+            revision: "revision",
+        })
+        .expect("decomposed scope");
+        assert_ne!(composed, decomposed);
+    }
 
     #[test]
     fn classifies_indexed_shell_session_keys() {
@@ -396,6 +661,7 @@ mod tests {
 
     #[test]
     fn derives_pid_file_names_from_session_keys() {
+        let scoped_key = format!("scoped-agent-v1-{}", "a".repeat(64));
         assert_eq!(
             pid_file_name_for_session_key("task-1-shell-2"),
             "task-1-shell-2.pid"
@@ -404,13 +670,23 @@ mod tests {
             pid_file_name_for_session_key("task-shell-feature"),
             "task-shell-feature-pty.pid"
         );
+        assert_eq!(
+            pid_file_name_for_session_key(&scoped_key),
+            format!("{scoped_key}.pid")
+        );
+        assert!(!is_shell_session_key_for_task(
+            &scoped_key,
+            "scoped-agent-v1"
+        ));
     }
 
     #[test]
     fn classifies_managed_pid_files_through_one_parser() {
+        let scoped_pid_file = format!("scoped-agent-v1-{}.pid", "a".repeat(64));
         assert!(is_pty_pid_file_name("task-1-shell-2.pid"));
         assert!(is_pty_pid_file_name("task-shell-feature-pty.pid"));
         assert!(is_pty_pid_file_name("task-1-claude.pid"));
+        assert!(is_pty_pid_file_name(&scoped_pid_file));
         assert!(!is_pty_pid_file_name("task-1-shell-x.pid"));
     }
 

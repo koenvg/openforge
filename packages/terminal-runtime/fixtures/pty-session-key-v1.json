@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "validScopes": [
+    {
+      "id": "basic",
+      "scope": {
+        "namespace": "github-sync/review",
+        "targetKey": "koenvg/openforge#2500",
+        "revision": "abc123"
+      },
+      "canonicalHex": "01000000126769746875622d73796e632f726576696577000000156b6f656e76672f6f70656e666f726765233235303000000006616263313233",
+      "digest": "d3d64cc8cc94131fb0400c25c115429c5bdfeee63c021b5ed360149934068493",
+      "key": "scoped-agent-v1-d3d64cc8cc94131fb0400c25c115429c5bdfeee63c021b5ed360149934068493"
+    },
+    {
+      "id": "delimiters",
+      "scope": {
+        "namespace": "plugin:review|v1",
+        "targetKey": "owner/repo:pull/42|head",
+        "revision": "refs/heads/feat:one"
+      },
+      "canonicalHex": "0100000010706c7567696e3a7265766965777c7631000000176f776e65722f7265706f3a70756c6c2f34327c6865616400000013726566732f68656164732f666561743a6f6e65",
+      "digest": "4c371a8bafe7159de556204a32d9b8a2f36ded0fa0816d7b5c06927bee5a1786",
+      "key": "scoped-agent-v1-4c371a8bafe7159de556204a32d9b8a2f36ded0fa0816d7b5c06927bee5a1786"
+    },
+    {
+      "id": "unicode",
+      "scope": {
+        "namespace": "révision",
+        "targetKey": "仓库/审查#四十二",
+        "revision": "café-🚀"
+      },
+      "canonicalHex": "010000000972c3a9766973696f6e00000017e4bb93e5ba932fe5aea1e69fa523e59b9be58d81e4ba8c0000000a636166c3a92df09f9a80",
+      "digest": "58ba46261d1988ab6c9de2e11539ac5b909952776794b382c359165ab2eb6d86",
+      "key": "scoped-agent-v1-58ba46261d1988ab6c9de2e11539ac5b909952776794b382c359165ab2eb6d86"
+    }
+  ],
+  "invalidScopes": [
+    { "id": "empty-namespace", "field": "namespace", "value": "", "repeat": 1, "error": "Session Scope namespace must not be empty" },
+    { "id": "empty-target-key", "field": "targetKey", "value": "", "repeat": 1, "error": "Session Scope targetKey must not be empty" },
+    { "id": "empty-revision", "field": "revision", "value": "", "repeat": 1, "error": "Session Scope revision must not be empty" },
+    { "id": "nul-namespace", "field": "namespace", "value": "\u0000", "repeat": 1, "error": "Session Scope namespace must not contain NUL" },
+    { "id": "oversized-namespace-unicode", "field": "namespace", "value": "é", "repeat": 65, "error": "Session Scope namespace must not exceed 128 UTF-8 bytes" },
+    { "id": "oversized-target-key", "field": "targetKey", "value": "xx", "repeat": 1025, "error": "Session Scope targetKey must not exceed 2048 UTF-8 bytes" },
+    { "id": "oversized-revision-unicode", "field": "revision", "value": "🚀", "repeat": 65, "error": "Session Scope revision must not exceed 256 UTF-8 bytes" }
+  ],
+  "existingKeys": [
+    { "key": "T-1", "parsed": { "kind": "agent", "taskId": "T-1" } },
+    { "key": "T-1-shell-2", "parsed": { "kind": "indexed-shell", "taskId": "T-1", "terminalIndex": 2 } },
+    { "key": "task-shell-feature", "parsed": { "kind": "agent", "taskId": "task-shell-feature" } },
+    { "key": "task-shell-4294967296", "parsed": { "kind": "agent", "taskId": "task-shell-4294967296" } },
+    { "key": "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-shell-2", "parsed": { "kind": "indexed-shell", "taskId": "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "terminalIndex": 2 } },
+    { "key": "scoped-agent-v1-ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "parsed": { "kind": "agent", "taskId": "scoped-agent-v1-ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789" } },
+    { "key": "scoped-agent-v1-abcdef", "parsed": { "kind": "agent", "taskId": "scoped-agent-v1-abcdef" } },
+    { "key": "scoped-agent-v2-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "parsed": { "kind": "agent", "taskId": "scoped-agent-v2-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } }
+  ]
+}

@@ -1,5 +1,35 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, OptionalExtension, Result};
 use rusqlite_migration::{Migrations, M};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+#[error("existing Task id '{0}' collides with the scoped agent Shell Session Key namespace")]
+struct ScopedAgentTaskKeyCollision(String);
+
+pub(super) fn ensure_no_scoped_agent_task_key_collision(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "tasks")? {
+        return Ok(());
+    }
+
+    let collision = conn
+        .query_row(
+            "SELECT id FROM tasks
+             WHERE length(id) = 80
+               AND substr(id, 1, 16) = 'scoped-agent-v1-'
+               AND substr(id, 17) NOT GLOB '*[^0-9a-f]*'
+             LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    match collision {
+        Some(task_id) => Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+            ScopedAgentTaskKeyCollision(task_id),
+        ))),
+        None => Ok(()),
+    }
+}
 
 pub(super) const TASK_QUERY_INDEXES_SQL: &str =
     "CREATE INDEX IF NOT EXISTS idx_tasks_project_updated_at
@@ -1890,6 +1920,10 @@ INSERT OR IGNORE INTO config (key, value)
 
         Ok(())
     }),
+    M::up_with_hook("", |tx| {
+        ensure_no_scoped_agent_task_key_collision(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2707,6 +2741,7 @@ mod tests {
         PullRequestReviewers,
         ReviewPrStatusSignals,
         AuthoredPrMergedTimestampRemoval,
+        ScopedAgentKeyReservation,
     }
 
     impl MigrationBoundary {
@@ -2729,6 +2764,7 @@ mod tests {
                 Self::PullRequestReviewers => 63,
                 Self::ReviewPrStatusSignals => 64,
                 Self::AuthoredPrMergedTimestampRemoval => 65,
+                Self::ScopedAgentKeyReservation => 66,
             }
         }
     }
@@ -2923,6 +2959,65 @@ mod tests {
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
         );
+    }
+
+    #[test]
+    fn scoped_agent_key_reservation_rejects_an_existing_colliding_task_id() {
+        let (_temp_dir, path) = temporary_database_path();
+        let reserved_key = format!("scoped-agent-v1-{}", "a".repeat(64));
+
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            db.set_config("task_id_prefix", "T")
+                .expect("set ordinary Task prefix");
+            let task = db
+                .create_task("Existing task", "backlog", None, None, None)
+                .expect("create existing task");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock pre-upgrade database");
+            conn.execute(
+                "UPDATE tasks SET id = ?1 WHERE id = ?2",
+                [&reserved_key, &task.id],
+            )
+            .expect("create colliding legacy Task id");
+            set_user_version_before(&conn, MigrationBoundary::ScopedAgentKeyReservation);
+        }
+
+        let error = match Database::new(path) {
+            Ok(_) => panic!("colliding Task id should block migration"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains(&reserved_key));
+    }
+
+    #[test]
+    fn scoped_agent_key_reservation_is_checked_at_the_latest_user_version() {
+        let (_temp_dir, path) = temporary_database_path();
+        let reserved_key = format!("scoped-agent-v1-{}", "b".repeat(64));
+
+        {
+            let db = Database::new(path.clone()).expect("create current database");
+            let task = db
+                .create_task("Existing task", "backlog", None, None, None)
+                .expect("create existing task");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock current database");
+            conn.execute(
+                "UPDATE tasks SET id = ?1 WHERE id = ?2",
+                [&reserved_key, &task.id],
+            )
+            .expect("create colliding Task id at the latest user version");
+            let user_version: i32 = conn
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .expect("read current user version");
+            assert_eq!(user_version, LATEST_USER_VERSION);
+        }
+
+        let error = match Database::new(path) {
+            Ok(_) => panic!("colliding Task id should block opening a current database"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains(&reserved_key));
     }
 
     #[test]
