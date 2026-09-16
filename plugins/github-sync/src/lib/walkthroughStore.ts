@@ -1,6 +1,7 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { PrWalkthrough, PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+import { randomUUID } from 'node:crypto'
 import { parseAndValidateReviewComments } from './reviewCommentsParse'
 import { toAgentReviewComments, writeAiReviewComments } from './reviewCommentsStore'
 
@@ -11,6 +12,14 @@ import { toAgentReviewComments, writeAiReviewComments } from './reviewCommentsSt
 
 export const WALKTHROUGH_INVALID_JSON_MESSAGE =
   'The agent did not return a valid walkthrough. Try regenerating.'
+export const WALKTHROUGH_INTERRUPTED_MESSAGE =
+  'Walkthrough generation stopped because OpenForge restarted. Try again.'
+
+interface StoredPrWalkthrough extends PrWalkthrough {
+  generation_owner_id?: string
+}
+
+const generationOwnerId = randomUUID()
 
 export function walkthroughStorageKey(prId: number, headSha: string): string {
   return `walkthrough:${prId}:${headSha}`
@@ -22,7 +31,24 @@ export async function readWalkthrough(
   headSha: string,
 ): Promise<PrWalkthrough | null> {
   const value = await openforge.storage.global.get<JsonValue>(walkthroughStorageKey(prId, headSha))
-  return (value as PrWalkthrough | null) ?? null
+  const stored = (value as StoredPrWalkthrough | null) ?? null
+  if (!stored) return null
+
+  const { generation_owner_id: storedOwnerId, ...walkthrough } = stored
+  if (walkthrough.status !== 'generating' || storedOwnerId === generationOwnerId) {
+    return walkthrough
+  }
+
+  const interrupted: PrWalkthrough = {
+    ...walkthrough,
+    walkthrough_session_key: null,
+    status: 'error',
+    steps_json: null,
+    error_message: WALKTHROUGH_INTERRUPTED_MESSAGE,
+    updated_at: nowSeconds(),
+  }
+  await writeWalkthrough(openforge, interrupted)
+  return interrupted
 }
 
 export async function writeWalkthrough(
@@ -91,7 +117,7 @@ export async function beginWalkthroughGeneration(
 ): Promise<PrWalkthrough> {
   const existing = await readWalkthrough(openforge, params.prId, params.headSha)
   const timestamp = now()
-  const generating: PrWalkthrough = {
+  const generating: StoredPrWalkthrough = {
     pr_id: params.prId,
     head_sha: params.headSha,
     walkthrough_session_key: params.sessionKey,
@@ -100,9 +126,32 @@ export async function beginWalkthroughGeneration(
     error_message: null,
     created_at: existing?.created_at ?? timestamp,
     updated_at: timestamp,
+    generation_owner_id: generationOwnerId,
   }
-  await writeWalkthrough(openforge, generating)
-  return generating
+  await openforge.storage.global.set(
+    walkthroughStorageKey(generating.pr_id, generating.head_sha),
+    generating as unknown as JsonValue,
+  )
+  const { generation_owner_id: _, ...walkthrough } = generating
+  return walkthrough
+}
+
+export async function failWalkthroughGeneration(
+  openforge: BackendOpenForgeAPI,
+  params: { prId: number; headSha: string; sessionKey: string },
+  error: unknown,
+  now: () => number = nowSeconds,
+): Promise<void> {
+  const current = await readWalkthrough(openforge, params.prId, params.headSha)
+  if (!current || current.walkthrough_session_key !== params.sessionKey) return
+
+  await writeWalkthrough(openforge, {
+    ...current,
+    status: 'error',
+    steps_json: null,
+    error_message: error instanceof Error ? error.message : String(error),
+    updated_at: now(),
+  })
 }
 
 /**

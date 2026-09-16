@@ -14,6 +14,7 @@ type TaskPullRequestActionRequest = {
 import { randomUUID } from 'node:crypto'
 import {
   beginWalkthroughGeneration,
+  failWalkthroughGeneration,
   readWalkthrough,
   removeWalkthrough,
   runWalkthroughAndReviewGeneration,
@@ -319,84 +320,88 @@ export default defineBackendPlugin({
         const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: '' }
         await beginWalkthroughGeneration(openforge, params)
 
-        // Reuse this run's key as the Claude session id (see `persistSession`
-        // below), and drop any session recorded for an earlier commit of this PR.
-        await supersedeReviewSession(openforge, {
-          prId: request.reviewPrId,
-          headSha: request.headSha,
-          sessionKey,
-          deleteSession: (sessionId) =>
-            invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
-        })
+        try {
+          // Reuse this run's key as the Claude session id (see `persistSession`
+          // below), and drop any session recorded for an earlier commit of this PR.
+          await supersedeReviewSession(openforge, {
+            prId: request.reviewPrId,
+            headSha: request.headSha,
+            sessionKey,
+            deleteSession: (sessionId) =>
+              invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
+          })
 
-        // Fetch diffs server-side so the trigger works without the UI having loaded files,
-        // then compile the combined steps+review prompt here. The template itself is the
-        // built-in one and never crosses this boundary; what the UI passes are the two
-        // resolved guidance settings, which the template embeds. Everything else in the
-        // prompt is the output contract and can't be reached from Settings.
-        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
-          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-        })
-        // Existing PR comments (human + earlier AI) so the agent avoids duplicating them.
-        const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
-          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-        }).catch(() => [] as ReviewComment[])
+          // Fetch diffs server-side so the trigger works without the UI having loaded files,
+          // then compile the combined steps+review prompt here. The template itself is the
+          // built-in one and never crosses this boundary; what the UI passes are the two
+          // resolved guidance settings, which the template embeds. Everything else in the
+          // prompt is the output contract and can't be reached from Settings.
+          const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+            owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+          })
+          // Existing PR comments (human + earlier AI) so the agent avoids duplicating them.
+          const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
+            owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+          }).catch(() => [] as ReviewComment[])
 
-        // Preliminary step: the PR is an outcome of a Jira ticket, so resolve and
-        // fetch that ticket before compiling the prompt. Returns null when Jira
-        // is unconfigured, in which case everything below is exactly as it was
-        // before the gap analysis existed — same prompt, same schema.
-        const ticketSnapshot = await resolveTicketSnapshot({
-          config: await readJiraConfig(openforge),
-          tokenConfigured: await jiraTokenConfigured(openforge),
-          override: await readJiraKeyOverride(openforge, request.reviewPrId),
-          pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
-          fetchWorkItem: payload =>
-            invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
-        })
-        if (ticketSnapshot) {
-          await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
+          // Preliminary step: the PR is an outcome of a Jira ticket, so resolve and
+          // fetch that ticket before compiling the prompt. Returns null when Jira
+          // is unconfigured, in which case everything below is exactly as it was
+          // before the gap analysis existed — same prompt, same schema.
+          const ticketSnapshot = await resolveTicketSnapshot({
+            config: await readJiraConfig(openforge),
+            tokenConfigured: await jiraTokenConfigured(openforge),
+            override: await readJiraKeyOverride(openforge, request.reviewPrId),
+            pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
+            fetchWorkItem: payload =>
+              invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
+          })
+          if (ticketSnapshot) {
+            await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
+          }
+
+          const ticket = ticketSnapshot?.item ?? null
+          const prompt = compileWalkthroughPrompt({
+            title: request.prTitle,
+            body: request.prBody,
+            files,
+            existingComments,
+            ticket,
+            reviewGuidance: request.reviewGuidance,
+            walkthroughGuidance: request.walkthroughGuidance,
+          })
+
+          // Kick off generation in the background so the UI gets its session key
+          // immediately and can render the optimistic "generating" state. The
+          // repo-aware agent runs inside a checkout of the PR head (Plan 1) and
+          // returns a schema-validated { steps, review_comments } object.
+          void runWalkthroughAndReviewGeneration(
+            openforge,
+            { ...params, prompt },
+            (key, p) =>
+              invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
+                sessionKey: key,
+                prompt: p,
+                model: WALKTHROUGH_MODEL,
+                projectId: request.projectId,
+                owner: request.repoOwner,
+                repo: request.repoName,
+                prNumber: request.prNumber,
+                headSha: request.headSha,
+                // Persist this run under `sessionKey` so a follow-up question can
+                // resume the review's reasoning instead of starting cold.
+                persistSession: true,
+                // Only ask for coverage when the agent actually has a ticket to
+                // judge against; otherwise the schema would force it to invent one.
+                outputSchema: ticket
+                  ? WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA
+                  : WALKTHROUGH_REVIEW_JSON_SCHEMA,
+              }).then((result) => result?.text ?? ''),
+            files,
+          )
+        } catch (error) {
+          await failWalkthroughGeneration(openforge, params, error)
         }
-
-        const ticket = ticketSnapshot?.item ?? null
-        const prompt = compileWalkthroughPrompt({
-          title: request.prTitle,
-          body: request.prBody,
-          files,
-          existingComments,
-          ticket,
-          reviewGuidance: request.reviewGuidance,
-          walkthroughGuidance: request.walkthroughGuidance,
-        })
-
-        // Kick off generation in the background so the UI gets its session key
-        // immediately and can render the optimistic "generating" state. The
-        // repo-aware agent runs inside a checkout of the PR head (Plan 1) and
-        // returns a schema-validated { steps, review_comments } object.
-        void runWalkthroughAndReviewGeneration(
-          openforge,
-          { ...params, prompt },
-          (key, p) =>
-            invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
-              sessionKey: key,
-              prompt: p,
-              model: WALKTHROUGH_MODEL,
-              projectId: request.projectId,
-              owner: request.repoOwner,
-              repo: request.repoName,
-              prNumber: request.prNumber,
-              headSha: request.headSha,
-              // Persist this run under `sessionKey` so a follow-up question can
-              // resume the review's reasoning instead of starting cold.
-              persistSession: true,
-              // Only ask for coverage when the agent actually has a ticket to
-              // judge against; otherwise the schema would force it to invent one.
-              outputSchema: ticket
-                ? WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA
-                : WALKTHROUGH_REVIEW_JSON_SCHEMA,
-            }).then((result) => result?.text ?? ''),
-          files,
-        )
         return { walkthrough_session_key: sessionKey }
       },
     }))
