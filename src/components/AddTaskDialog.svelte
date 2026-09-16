@@ -123,7 +123,6 @@
                 injectableInsertRequest={injectableInsertRequest}
                 onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
                 onValueChange={(value) => workflow.setPrompt(value)}
-                onCancel={() => onClose?.()}
               />
             {/key}
             <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-[var(--of-text-muted)]">{view.promptDraft.length.toLocaleString()} / 10,000</span>

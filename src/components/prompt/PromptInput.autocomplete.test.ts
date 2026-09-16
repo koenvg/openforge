@@ -18,16 +18,15 @@ function deferred<T>() {
 }
 
 function mount() {
-  const onCancel = vi.fn()
   const onSubmit = vi.fn()
-  const view = render(PromptInput, { projectId: 'project', onSubmit, onCancel })
+  const view = render(PromptInput, { projectId: 'project', onSubmit })
   const input = screen.getByRole('textbox') as HTMLTextAreaElement
   async function type(value: string) {
     input.value = value
     input.setSelectionRange(value.length, value.length)
     await fireEvent.input(input)
   }
-  return { ...view, input, type, onCancel, onSubmit }
+  return { ...view, input, type, onSubmit }
 }
 
 async function settle() {
@@ -71,10 +70,9 @@ describe('PromptInput autocomplete ownership', () => {
   it('discards a command lookup cancelled with Escape before suggestions appear', async () => {
     const lookup = deferred<typeof commands>()
     vi.mocked(listOpenCodeCommands).mockReturnValueOnce(lookup.promise)
-    const { type, input, onCancel } = mount()
+    const { type, input } = mount()
     await type('/')
     await fireEvent.keyDown(input, { key: 'Escape' })
-    expect(onCancel).toHaveBeenCalledOnce()
     lookup.resolve(commands)
     await settle()
     expect(screen.queryByRole('listbox')).toBeNull()
@@ -169,16 +167,14 @@ describe('PromptInput autocomplete ownership', () => {
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith('/beta')
   })
 
-  it('dismisses suggestions before cancelling the prompt and preserves focus on pointer acceptance', async () => {
-    const { type, input, onCancel } = mount()
+  it('dismisses suggestions before letting Escape bubble and preserves focus on pointer acceptance', async () => {
+    const { type, input } = mount()
     input.focus()
     await type('/')
     await settle()
-    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false)
     expect(screen.queryByRole('listbox')).toBeNull()
-    expect(onCancel).not.toHaveBeenCalled()
-    await fireEvent.keyDown(input, { key: 'Escape' })
-    expect(onCancel).toHaveBeenCalledOnce()
+    expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(true)
     await type('/a')
     await settle()
     const option = screen.getByRole('option', { name: 'alpha' })

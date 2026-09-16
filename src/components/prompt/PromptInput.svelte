@@ -26,7 +26,6 @@
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
     injectableInsertRequest?: { id: number, text: string } | null
-    onCancel: () => void
     autofocus?: boolean
     commandTrigger?: CommandTrigger
   }
@@ -48,7 +47,6 @@
     onImageMarkerClick,
     imageMarkerInsertRequest = null,
     injectableInsertRequest = null,
-    onCancel,
     autofocus = false,
     commandTrigger = 'slash',
   }: Props = $props()
@@ -227,6 +225,13 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && ac.activeTrigger !== null) {
+      e.preventDefault()
+      e.stopPropagation()
+      ac.closePopover()
+      return
+    }
+
     if (ac.popoverVisible) {
       const handled = paletteListbox?.handleKeydown(e) ?? false
       if (handled) return
@@ -236,13 +241,6 @@
       e.preventDefault()
       handleSubmit()
       return
-    }
-
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      e.stopPropagation()
-      ac.closePopover()
-      onCancel()
     }
   }
 
@@ -265,7 +263,6 @@
     listboxLabel="Autocomplete suggestions"
     visible={ac.popoverVisible && ac.autocompleteItems.length > 0}
     wrap={false}
-    onCancel={ac.closePopover}
     listClass="absolute top-full left-0 right-0 z-50 mt-1 bg-of-surface border border-of-border shadow-lg rounded-[var(--of-radius-container)] overflow-hidden max-h-[320px] overflow-y-auto"
     optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-of-surface-subtle ${highlighted ? 'bg-of-accent/10 text-of-accent' : ''}`}
   >

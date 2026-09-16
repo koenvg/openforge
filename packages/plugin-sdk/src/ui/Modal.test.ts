@@ -97,6 +97,8 @@ describe('plugin-sdk Modal', () => {
 
     const dialog = screen.getByRole('dialog')
     await fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+
     await fireEvent.click(dialog)
 
     expect(onClose).toHaveBeenCalledTimes(2)

@@ -105,8 +105,11 @@
     }
 
     if (event.metaKey || event.ctrlKey || event.altKey || event.key === 'Tab') return
+    if (event.key === 'Escape') {
+      if (closeDisabled) event.stopPropagation()
+      return
+    }
     event.stopPropagation()
-    if (event.key === 'Escape' && !closeDisabled) onClose()
   }
 
   function handleLayerClick(event: MouseEvent) {

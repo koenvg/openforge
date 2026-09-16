@@ -59,17 +59,16 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('stops propagation of Escape key events', async () => {
+  it('prevents the default Escape action', () => {
     const onClose = vi.fn()
     render(ModalTestWrapper, { props: { onClose } })
 
     const dialog = screen.getByRole('dialog')
-    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
-    const stopSpy = vi.spyOn(event, 'stopPropagation')
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
 
     dialog.dispatchEvent(event)
 
-    expect(stopSpy).toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
   })
 
   it('stops propagation of Enter key events so they do not reach parent handlers', async () => {
