@@ -228,10 +228,6 @@ function fileSection(file: PrFileDiff): string {
 
   const lines: string[] = [header]
 
-  if (file.is_truncated) {
-    lines.push(`_(diff truncated by backend; ${file.patch_line_count ?? 'many'} total lines)_`)
-  }
-
   const hunks = parseHunks(file.patch)
   if (hunks.length === 0) {
     lines.push('(no patch content available)')

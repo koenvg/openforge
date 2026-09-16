@@ -123,23 +123,6 @@ describe('compileWalkthroughPrompt', () => {
     expect(out).toContain('oldname.ts → renamed.ts')
   })
 
-  it('notes when a file diff was truncated by the backend', () => {
-    const out = compileWalkthroughPrompt({
-      title: 't',
-      body: null,
-      files: [
-        makeFile({
-          filename: 'big.ts',
-          status: 'modified',
-          patch: '@@ -1,1 +1,1 @@\n-a\n+A',
-          is_truncated: true,
-          patch_line_count: 4000,
-        }),
-      ],
-    })
-    expect(out).toContain('truncated')
-  })
-
   it('asks for a JSON object with steps[] containing id/title/summary/files', () => {
     const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
     expect(out).toContain('"steps"')
