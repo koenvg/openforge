@@ -12,7 +12,8 @@ function openForgeLegacyHookUrl(base, provider, taskId) {
     // narrower sub-session id, which would break resume.
     session_id: process.env[openForgeSessionIdEnvName(provider)] ?? "",
   });
-  return `${base}?${query}`;
+  // Concatenate. Grok scans this source for dollar-brace identifiers and requires them as env vars.
+  return base + "?" + query;
 }
 
 async function reportOpenForgeShellHook(provider, kind, rawEventType, input, legacyBase) {
