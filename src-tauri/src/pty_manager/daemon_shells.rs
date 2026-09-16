@@ -225,6 +225,9 @@ impl DaemonShells {
     ) -> Result<u64, String> {
         self.run(publisher, move |client, key| {
             if let Some(session) = find(client, key)? {
+                if session.owner != command.owner {
+                    return Err(Error::StalePty);
+                }
                 return if session.exit_code.is_none() {
                     Ok(session.pty.instance.value())
                 } else {
@@ -254,6 +257,52 @@ impl DaemonShells {
 
     pub(crate) async fn session(&self) -> Result<Option<Session>, String> {
         self.run(self.publisher(), find).await
+    }
+
+    pub(crate) async fn shell_only(&self) -> Result<Self, String> {
+        let fence = self
+            .run(self.publisher(), |client, key| {
+                let Some(session) = find(client, key)? else {
+                    return Ok(None);
+                };
+                if !matches!(
+                    session.owner,
+                    openforge_session_protocol::TerminalOwner::Shell { .. }
+                ) || session.owner.session_key() != key
+                {
+                    return Err(Error::StalePty);
+                }
+                Ok(Some(CommandFence {
+                    controller: client.controller().clone(),
+                    instance_id: session.pty.instance.value(),
+                }))
+            })
+            .await?;
+        Ok(self.clone().fenced(fence))
+    }
+
+    pub(super) async fn session_client(&self) -> Result<Option<(Client, Session)>, String> {
+        self.run(self.publisher(), |client, key| {
+            Ok(find(client, key)?.map(|session| (client.clone(), session)))
+        })
+        .await
+    }
+
+    /// Captures the existing controller and exact PTY, never reacquiring ownership.
+    pub(crate) async fn pin(&self, instance_id: u64) -> Result<Self, String> {
+        let fence = self
+            .run(self.publisher(), move |client, key| {
+                let session = find(client, key)?.ok_or(Error::StalePty)?;
+                if session.pty.instance.value() != instance_id || session.exit_code.is_some() {
+                    return Err(Error::StalePty);
+                }
+                Ok(CommandFence {
+                    controller: client.controller().clone(),
+                    instance_id,
+                })
+            })
+            .await?;
+        Ok(self.clone().fenced(Some(fence)))
     }
 
     pub(crate) async fn write(

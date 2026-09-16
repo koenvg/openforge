@@ -4,6 +4,28 @@ use crate::pty_manager::shell_session_key;
 use serde_json::Value;
 
 impl PluginHost {
+    fn shell_publisher(&self) -> crate::app_events::RuntimeEventPublisher {
+        crate::app_events::RuntimeEventPublisher::new(
+            Some(self.app_handle.clone()),
+            self.app_event_tx.clone(),
+        )
+    }
+
+    async fn daemon_shell_for_host(
+        &self,
+        key: &str,
+    ) -> Result<Option<crate::pty_manager::daemon_shells::DaemonShells>, String> {
+        let manager = self.pty_manager_for_host()?;
+        let Some(bridge) = manager
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(key))
+        else {
+            return Ok(None);
+        };
+        Ok(Some(bridge.for_key(key).shell_only().await?))
+    }
+
     fn pty_manager_for_host(&self) -> Result<crate::pty_manager::PtyManager, String> {
         self.app_handle
             .try_state::<crate::pty_manager::PtyManager>()
@@ -24,6 +46,17 @@ impl PluginHost {
                 Some(value) => return Err(format!("unsupported terminal image protocol: {value}")),
             };
         let pty_manager = self.pty_manager_for_host()?;
+        let key = shell_session_key(&task_id, terminal_index);
+        if let Some(bridge) = pty_manager
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(&key))
+        {
+            let bridge = bridge.for_key(&key);
+            let command = bridge.prepare_shell(cwd.into(), cols, rows, terminal_image_protocol)?;
+            return serde_json::to_value(bridge.spawn(command, self.shell_publisher()).await?)
+                .map_err(|error| error.to_string());
+        }
         serde_json::to_value(
             pty_manager
                 .spawn_shell_pty(
@@ -52,6 +85,15 @@ impl PluginHost {
             .get("data")
             .and_then(Value::as_str)
             .ok_or_else(|| "plugin host callback missing string param: data".to_string())?;
+        if let Some(bridge) = self.daemon_shell_for_host(&task_id).await? {
+            let bridge = bridge
+                .pin(required_unsigned_param(params, "instanceId")?)
+                .await?;
+            bridge
+                .write(data.as_bytes().to_vec(), self.shell_publisher())
+                .await?;
+            return Ok(Value::Null);
+        }
         self.pty_manager_for_host()?
             .write_pty(&task_id, data.as_bytes())
             .await
@@ -63,6 +105,13 @@ impl PluginHost {
         let task_id = required_shell_session_key(params)?;
         let cols = required_param_u16(params, "cols")?;
         let rows = required_param_u16(params, "rows")?;
+        if let Some(bridge) = self.daemon_shell_for_host(&task_id).await? {
+            let bridge = bridge
+                .pin(required_unsigned_param(params, "instanceId")?)
+                .await?;
+            bridge.resize(cols, rows, self.shell_publisher()).await?;
+            return Ok(Value::Null);
+        }
         self.pty_manager_for_host()?
             .resize_pty(&task_id, cols, rows)
             .await
@@ -72,6 +121,13 @@ impl PluginHost {
 
     pub(super) async fn kill_shell_for_host(&self, params: &Value) -> Result<Value, String> {
         let task_id = required_shell_session_key(params)?;
+        if let Some(bridge) = self.daemon_shell_for_host(&task_id).await? {
+            let bridge = bridge
+                .pin(required_unsigned_param(params, "instanceId")?)
+                .await?;
+            bridge.terminate(self.shell_publisher()).await?;
+            return Ok(Value::Null);
+        }
         self.pty_manager_for_host()?
             .kill_pty(&task_id)
             .await
@@ -81,6 +137,10 @@ impl PluginHost {
 
     pub(super) async fn get_shell_buffer_for_host(&self, params: &Value) -> Result<Value, String> {
         let task_id = required_shell_session_key(params)?;
+        if let Some(bridge) = self.daemon_shell_for_host(&task_id).await? {
+            return serde_json::to_value(bridge.buffer(self.shell_publisher()).await?)
+                .map_err(|error| error.to_string());
+        }
         serde_json::to_value(
             self.pty_manager_for_host()?
                 .pty_buffer_state(&task_id)

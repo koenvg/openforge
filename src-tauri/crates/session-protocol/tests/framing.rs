@@ -3,19 +3,22 @@ use std::io::Cursor;
 
 #[test]
 fn local_protocol_refuses_unknown_versions_and_oversized_frames_before_payload_allocation() {
-    let mut wire = Vec::new();
-    write_frame(
-        &mut wire,
-        &Envelope {
-            version: 2,
-            body: "connect",
-        },
-    )
-    .unwrap();
-    assert!(matches!(
-        read_frame::<_, String>(&mut Cursor::new(wire)),
-        Err(Error::Version)
-    ));
+    // v1 lacks authoritative owner metadata; reject it as well as future versions.
+    for version in [1, openforge_session_protocol::VERSION + 1] {
+        let mut wire = Vec::new();
+        write_frame(
+            &mut wire,
+            &Envelope {
+                version,
+                body: "connect",
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            read_frame::<_, String>(&mut Cursor::new(wire)),
+            Err(Error::Version)
+        ));
+    }
     let mut oversized = Cursor::new(((MAX_FRAME_BYTES + 1) as u32).to_be_bytes());
     assert!(matches!(
         read_frame::<_, String>(&mut oversized),

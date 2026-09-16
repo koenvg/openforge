@@ -682,7 +682,7 @@ describe('plugin-host backend host APIs', () => {
         case 'openforge.shell.spawn': return 42
         case 'openforge.shell.write': return null
         case 'openforge.shell.resize': return null
-        case 'openforge.shell.getBuffer': return 'hello'
+        case 'openforge.shell.getBuffer': return { buffer: 'hello', snapshot: null, instanceId: 42, isLive: true }
         case 'openforge.shell.kill': return null
         case 'openforge.notifications.notify': return null
         case 'openforge.attention.listProjects': return [{ project_id: 'P-1', needs_input: 1 }]
@@ -707,16 +707,16 @@ describe('plugin-host backend host APIs', () => {
       taskFile: { type: 'text', content: '# Task Readme', mimeType: 'text/markdown', size: 13 },
       taskSearch: ['src/task-plugin.ts'],
       pty: 42,
-      buffer: 'hello',
+      buffer: { buffer: 'hello', snapshot: null, instanceId: 42, isLive: true },
       attention: [{ project_id: 'P-1', needs_input: 1 }],
       configBefore: 'light',
       projectConfigBefore: null,
     })
     expect(calls.find(call => call.method === 'openforge.commands.listCatalog')?.params).toEqual({ projectId: 'P-1' })
-    expect(calls.find(call => call.method === 'openforge.shell.write')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
-    expect(calls.find(call => call.method === 'openforge.shell.resize')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
+    expect(calls.find(call => call.method === 'openforge.shell.write')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n', instanceId: 42 })
+    expect(calls.find(call => call.method === 'openforge.shell.resize')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30, instanceId: 42 })
     expect(calls.find(call => call.method === 'openforge.shell.getBuffer')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2 })
-    expect(calls.find(call => call.method === 'openforge.shell.kill')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2 })
+    expect(calls.find(call => call.method === 'openforge.shell.kill')?.params).toEqual({ taskId: 'T-1', terminalIndex: 2, instanceId: 42 })
     expect(calls.map(call => call.method)).toEqual([
       'openforge.commands.listCatalog',
       'openforge.projects.list',
@@ -742,6 +742,45 @@ describe('plugin-host backend host APIs', () => {
       'openforge.projectConfig.get',
       'openforge.projectConfig.set',
     ])
+  })
+
+  it('keeps backend shell identities scoped to plugin activation and captures them before a delayed request', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        activate(openforge, context) {
+          for (const command of ['spawn', 'getBuffer', 'write', 'resize', 'kill']) {
+            context.subscriptions.add(openforge.backend.registerMethod(command, {
+              handler: request => openforge.shell[command](request)
+            }))
+          }
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    let instanceId = 41
+    let finishWrite: (() => void) | undefined
+    const runtime = createPluginHostRuntime({ hostCallbacks: async request => {
+      calls.push(request)
+      if (request.method === 'openforge.shell.spawn') return instanceId++
+      if (request.method === 'openforge.shell.getBuffer') return { buffer: null, snapshot: null, instanceId, isLive: true }
+      if (request.method === 'openforge.shell.write') return new Promise<void>(resolve => { finishWrite = resolve })
+      return null
+    } })
+    const request = { taskId: 'T-1', terminalIndex: 2, cwd: '/repo', cols: 80, rows: 24 }
+    const invoke = (pluginId: string, command: string, payload = request) => runtime.invokeBackend({ pluginId, backendPath, command, payload })
+    await invoke('first', 'spawn')
+    await invoke('second', 'spawn')
+    const pending = invoke('first', 'write')
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'))
+    await invoke('first', 'getBuffer')
+    finishWrite!()
+    await pending
+    await invoke('first', 'resize')
+    await invoke('second', 'kill')
+    await invoke('unattached', 'kill')
+    expect(calls.find(call => call.method === 'openforge.shell.write')?.params.instanceId).toBe(41)
+    expect(calls.find(call => call.method === 'openforge.shell.resize')?.params.instanceId).toBe(43)
+    expect(calls.filter(call => call.method === 'openforge.shell.kill').map(call => call.params.instanceId)).toEqual([42, undefined])
   })
 
   it('routes backend openforge global command fallback through durable host callbacks', async () => {

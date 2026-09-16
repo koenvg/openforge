@@ -1,3 +1,4 @@
+pub(crate) use super::agent_attachment::AgentTerminalAttachment;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
@@ -33,14 +34,14 @@ const ITERM_IMAGE_PREFIX: &[u8] = b"\x1b]1337;File=";
 const MOBILE_IMAGE_MARKER: &[u8] = b"\r\n[Image unavailable on mobile]\r\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CompanionOutputSanitizerError {
+pub(super) enum CompanionOutputSanitizerError {
     MalformedUtf8,
     ImageSequenceTooLarge,
     UnterminatedImageSequence,
 }
 
 #[derive(Default)]
-struct CompanionOutputSanitizer {
+pub(super) struct CompanionOutputSanitizer {
     prefix: Vec<u8>,
     utf8_pending: Vec<u8>,
     in_image: bool,
@@ -49,7 +50,7 @@ struct CompanionOutputSanitizer {
 }
 
 impl CompanionOutputSanitizer {
-    fn push(&mut self, input: &[u8]) -> Result<Vec<u8>, CompanionOutputSanitizerError> {
+    pub(super) fn push(&mut self, input: &[u8]) -> Result<Vec<u8>, CompanionOutputSanitizerError> {
         let mut output = Vec::with_capacity(input.len().min(4096));
         let mut consumed = 0;
 
@@ -128,7 +129,7 @@ impl CompanionOutputSanitizer {
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<Vec<u8>, CompanionOutputSanitizerError> {
+    pub(super) fn finish(&mut self) -> Result<Vec<u8>, CompanionOutputSanitizerError> {
         if !self.utf8_pending.is_empty() {
             return Err(CompanionOutputSanitizerError::MalformedUtf8);
         }
@@ -225,7 +226,7 @@ impl PtyAttachmentHub {
     }
 }
 
-pub(crate) struct AgentTerminalAttachment {
+pub(super) struct LocalAgentTerminalAttachment {
     task_id: String,
     instance_id: u64,
     replay: Vec<u8>,
@@ -234,7 +235,7 @@ pub(crate) struct AgentTerminalAttachment {
     terminal_sessions: TerminalSessions,
 }
 
-impl AgentTerminalAttachment {
+impl LocalAgentTerminalAttachment {
     pub(super) fn new(
         task_id: String,
         instance_id: u64,
@@ -330,6 +331,16 @@ impl AgentTerminalAttachment {
 
 impl PtyManager {
     pub(crate) async fn agent_terminal_available(&self, task_id: &str) -> bool {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(task_id))
+        {
+            return bridge.owns_agent(task_id)
+                && bridge.for_key(task_id).session().await.ok().flatten()
+                    .is_some_and(|session| session.exit_code.is_none()
+                        && matches!(&session.owner, openforge_session_protocol::TerminalOwner::Agent { task_id: owner } if owner == task_id));
+        }
         self.terminal_sessions
             .agent_terminal_available(task_id)
             .await
@@ -339,6 +350,16 @@ impl PtyManager {
         &self,
         task_id: &str,
     ) -> Result<AgentTerminalAttachment, AgentTerminalAttachmentError> {
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(task_id))
+        {
+            if !bridge.owns_agent(task_id) {
+                return Err(AgentTerminalAttachmentError::NoActiveAgentTerminal);
+            }
+            return AgentTerminalAttachment::daemon(bridge.for_key(task_id)).await;
+        }
         self.terminal_sessions.attach_agent_terminal(task_id).await
     }
 }
