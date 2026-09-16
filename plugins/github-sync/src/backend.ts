@@ -172,8 +172,8 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<void>(openforge, 'submitPrReview', request),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<ReplyToReviewCommentRequest, void>('replyToReviewComment', {
-      handler: (request) => invokeHostCommand<void>(openforge, 'replyToReviewComment', request),
+    context.subscriptions.add(openforge.backend.registerMethod<ReplyToReviewCommentRequest, ReviewComment>('replyToReviewComment', {
+      handler: (request) => invokeHostCommand<ReviewComment>(openforge, 'replyToReviewComment', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<CreateReviewCommentRequest, void>('createReviewComment', {

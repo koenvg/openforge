@@ -1,13 +1,15 @@
 import {
 	baseDiff,
+	InlineDiffWorker,
   baseTask,
 	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrComment, PullRequestInfo } from "../../lib/types";
 import {
+	createReviewCommentReply,
 	getConfig,
 	getPrComments,
 	getTaskDiff,
@@ -19,14 +21,33 @@ import { setSelfReviewDiffFiles } from "../../lib/taskScopedSelfReviewState";
 
 setupSelfReviewViewTestSuite();
 
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
 async function renderFeedbackView() {
   const view = renderSelfReviewView();
   await fireEvent.click(await screen.findByRole('tab', { name: /^GitHub comments/ }));
   return view;
 }
 
+function mockDiffGeometry(): void {
+	vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+		bottom: 20,
+		height: 20,
+		left: 0,
+		right: 800,
+		top: 0,
+		width: 800,
+		x: 0,
+		y: 0,
+		toJSON: () => ({}),
+	});
+}
+
 describe("SelfReviewView — hide addressed comments", () => {
 	beforeEach(() => {
+		globalThis.Worker = InlineDiffWorker as unknown as typeof Worker;
 		setSelfReviewDiffFiles("task-1", [baseDiff]);
 	});
 
@@ -152,6 +173,84 @@ describe("SelfReviewView — hide addressed comments", () => {
 		await waitFor(() => {
 			expect(container.querySelector("img")?.getAttribute("src")).toBe("https://raw.githubusercontent.com/acme/repo/abc/docs/review.png");
 		});
+	});
+
+	it("posts an inline reply on an outdated comment and shows it beneath the parent", async () => {
+		mockDiffGeometry();
+		const parent = { ...makeComment(41, 0, "Outdated review comment"), line_number: 3, outdated: 1 };
+		vi.mocked(getPrComments).mockResolvedValue([parent]);
+		vi.mocked(createReviewCommentReply).mockResolvedValue({
+			id: 99,
+			pr_number: 1,
+			repo_owner: "acme",
+			repo_name: "repo",
+			path: "src/main.rs",
+			line: null,
+			side: null,
+			body: "Applied, thanks",
+			author: "koen",
+			created_at: "2026-09-16T13:00:00Z",
+			in_reply_to_id: 41,
+		});
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		const { container } = await renderFeedbackView();
+
+		expect(await screen.findByText("Outdated review comment")).toBeTruthy();
+		expect(
+			within(screen.getByRole("region", { name: "Feedback panel" })).queryByRole("button", {
+				name: "Reply to this comment on GitHub",
+			}),
+		).toBeNull();
+		const diffFile = container.querySelector('[data-diff-file="src/main.rs"]');
+		expect(diffFile).not.toBeNull();
+		expect(await within(diffFile as HTMLElement).findByText("Outdated review comment")).toBeTruthy();
+		await fireEvent.click(within(diffFile as HTMLElement).getByRole("button", { name: "Reply to this comment on GitHub" }));
+		expect(screen.queryByRole("button", { name: "Add to review" })).toBeNull();
+		await fireEvent.input(screen.getByRole("textbox", { name: "Reply to this comment" }), {
+			target: { value: "Applied, thanks" },
+		});
+		await fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+
+		expect(await within(diffFile as HTMLElement).findByText("Applied, thanks")).toBeTruthy();
+		expect(createReviewCommentReply).toHaveBeenCalledWith(
+			"acme",
+			"repo",
+			1,
+			41,
+			"Applied, thanks",
+		);
+		expect(within(diffFile as HTMLElement).getByText("reply")).toBeTruthy();
+		expect(markCommentAddressed).not.toHaveBeenCalled();
+	});
+
+	it("closes an open reply box when the linked pull request closes", async () => {
+		mockDiffGeometry();
+		const parent = { ...makeComment(41, 0, "Closing review comment"), line_number: 3 };
+		vi.mocked(getPrComments).mockResolvedValue([parent]);
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		const { container } = await renderFeedbackView();
+		expect(await screen.findByText("Closing review comment")).toBeTruthy();
+		const diffFile = container.querySelector('[data-diff-file="src/main.rs"]');
+		expect(diffFile).not.toBeNull();
+		expect(await within(diffFile as HTMLElement).findByText("Closing review comment")).toBeTruthy();
+		await fireEvent.click(within(diffFile as HTMLElement).getByRole("button", {
+			name: "Reply to this comment on GitHub",
+		}));
+		expect(await screen.findByRole("textbox", { name: "Reply to this comment" })).toBeTruthy();
+
+		ticketPrs.set(new Map([["task-1", [{ ...mockPr, state: "closed" }]]]));
+
+		await waitFor(() => {
+			expect(screen.queryByRole("textbox", { name: "Reply to this comment" })).toBeNull();
+			expect(within(diffFile as HTMLElement).queryByRole("button", {
+				name: "Reply to this comment on GitHub",
+			})).toBeNull();
+		});
+		expect(createReviewCommentReply).not.toHaveBeenCalled();
 	});
 
 	it("addressed comments hidden by default", async () => {

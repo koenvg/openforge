@@ -47,6 +47,22 @@ export async function getPrComments(prId: number): Promise<PrComment[]> {
   return invoke<PrComment[]>("get_pr_comments", { prId });
 }
 
+export async function createReviewCommentReply(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  commentId: number,
+  body: string,
+): Promise<ReviewComment> {
+  return invoke<ReviewComment>('create_review_comment_reply', {
+    owner,
+    repo,
+    prNumber,
+    commentId,
+    body,
+  })
+}
+
 export async function markCommentAddressed(commentId: number): Promise<void> {
   return invoke("mark_comment_addressed", { commentId });
 }

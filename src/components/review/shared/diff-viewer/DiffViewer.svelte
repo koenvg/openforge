@@ -33,6 +33,7 @@
     threads?: ReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
     inlineDraftScopeId?: string
@@ -69,6 +70,7 @@
     threads = [],
     onReplyToThread,
     onSetThreadStatus,
+    onReplyToExistingComment,
     pendingComments,
     onPendingCommentsChange,
     onScrollTopChange,
@@ -154,6 +156,7 @@
   {threads}
   {onReplyToThread}
   {onSetThreadStatus}
+  {onReplyToExistingComment}
   pendingComments={visiblePendingComments}
   onPendingCommentsChange={setVisiblePendingComments}
   {onOpenUrl}

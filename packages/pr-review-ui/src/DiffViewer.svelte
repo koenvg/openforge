@@ -69,7 +69,7 @@
     onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
-    onReplyToExistingComment?: (commentId: number, body: string) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     pendingReplies?: { commentId: number; body: string }[]
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void

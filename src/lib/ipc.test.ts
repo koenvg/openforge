@@ -17,6 +17,7 @@ import {
   cancelCompanionPairing,
   checkCodexInstalled,
   checkPiInstalled,
+  createReviewCommentReply,
   createTask,
   deleteTaskLabel,
   emitTerminalFixtureOutput,
@@ -127,6 +128,34 @@ describe("ipc GitHub pull request commands", () => {
       taskId: "T-42",
       prId: 1001,
       expectedHeadSha: "head-sha",
+    });
+  });
+
+  it("returns the accepted GitHub reply using a camelCase payload", async () => {
+    const acceptedReply = {
+      id: 99,
+      pr_number: 7,
+      repo_owner: "acme",
+      repo_name: "web",
+      path: "src/main.ts",
+      line: null,
+      side: null,
+      body: "Applied, thanks",
+      author: "koen",
+      created_at: "2026-09-16T13:00:00Z",
+      in_reply_to_id: 41,
+    };
+    invokeMock.mockResolvedValue(acceptedReply);
+
+    await expect(
+      createReviewCommentReply("acme", "web", 7, 41, "Applied, thanks"),
+    ).resolves.toEqual(acceptedReply);
+    expect(invokeMock).toHaveBeenCalledWith("create_review_comment_reply", {
+      owner: "acme",
+      repo: "web",
+      prNumber: 7,
+      commentId: 41,
+      body: "Applied, thanks",
     });
   });
 });

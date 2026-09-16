@@ -8,6 +8,8 @@
     primaryLabel: string
     onValueChange: (value: string) => void
     onSubmit: () => void
+    error?: string | null
+    isSubmitting?: boolean
     primaryTitle?: string
     secondaryLabel?: string
     secondaryTitle?: string
@@ -22,6 +24,8 @@
     primaryLabel,
     onValueChange,
     onSubmit,
+    error = null,
+    isSubmitting = false,
     primaryTitle,
     secondaryLabel,
     secondaryTitle,
@@ -38,12 +42,14 @@
     size="sm"
     {placeholder}
     {value}
+    {error}
+    disabled={isSubmitting}
     oninput={(event) => {
       if (!(event.currentTarget instanceof HTMLInputElement)) return
       onValueChange(event.currentTarget.value)
     }}
     onkeydown={(event) => {
-      if (event.key !== 'Enter') return
+      if (event.key !== 'Enter' || isSubmitting) return
       event.preventDefault()
       onSubmit()
     }}
@@ -55,6 +61,7 @@
       size="xs"
       type="button"
       title={secondaryTitle}
+      disabled={isSubmitting}
       onclick={onSecondarySubmit}
     >{secondaryLabel}</Button>
   {/if}
@@ -62,6 +69,9 @@
     size="xs"
     type="button"
     title={primaryTitle}
+    loading={isSubmitting}
+    loadingLabel="Posting reply"
+    disabled={isSubmitting}
     onclick={onSubmit}
   >{primaryLabel}</Button>
 </div>

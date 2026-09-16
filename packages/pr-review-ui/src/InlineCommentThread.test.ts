@@ -97,6 +97,71 @@ describe('InlineCommentThread', () => {
     expect(onAddReplyToReview).toHaveBeenCalledWith(23, 'Hold this reply')
     expect(screen.queryByRole('textbox', { name: 'Reply to this comment' })).toBeNull()
   })
+
+  it('keeps a rejected reply available to retry', async () => {
+    const onReplyToExistingComment = vi.fn().mockRejectedValue(new Error('GitHub rejected it'))
+    const data: CommentDisplayData = {
+      comments: [{
+        body: 'Existing review comment',
+        type: 'existing',
+        author: 'reviewer',
+        createdAt: '2024-01-01T00:00:00Z',
+        isReply: false,
+        commentId: 23,
+      }],
+    }
+    const setup = makeProps({ data, onReplyToExistingComment })
+    render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment on GitHub' }))
+    const editor = screen.getByRole('textbox', { name: 'Reply to this comment' })
+    await fireEvent.input(editor, { target: { value: 'Please retry this' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Reply was not posted. Try again.')
+    expect((editor as HTMLInputElement).value).toBe('Please retry this')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+    expect(onReplyToExistingComment).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not offer a reply action without an immediate reply callback', () => {
+    const setup = makeProps({
+      data: {
+        comments: [{
+          body: 'Existing review comment',
+          type: 'existing',
+          author: 'reviewer',
+          createdAt: '2024-01-01T00:00:00Z',
+          isReply: false,
+          commentId: 23,
+        }],
+      },
+    })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.queryByRole('button', { name: 'Reply to this comment on GitHub' })).toBeNull()
+  })
+
+  it('does not offer a reply action on a reply', () => {
+    const setup = makeProps({
+      data: {
+        comments: [{
+          body: 'Existing reply',
+          type: 'existing',
+          author: 'reviewer',
+          createdAt: '2024-01-01T00:00:00Z',
+          isReply: true,
+        }],
+      },
+      onReplyToExistingComment: vi.fn(),
+    })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.queryByRole('button', { name: 'Reply to this comment on GitHub' })).toBeNull()
+  })
 })
 
 describe('InlineCommentThread review threads', () => {

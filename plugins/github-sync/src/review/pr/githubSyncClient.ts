@@ -78,7 +78,7 @@ export interface GithubSyncPrReviewClient {
   listReviewComments(request: PullRequestRepositoryRequest): Promise<ReviewComment[]>
   listPullRequestOverviewComments(request: PullRequestRepositoryRequest): Promise<PrOverviewComment[]>
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
-  replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<void>
+  replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<ReviewComment>
   createReviewComment(request: CreateReviewCommentRequest): Promise<void>
   getPrAiReviewComments(request: { reviewPrId: number; headSha: string }): Promise<AgentReviewComment[]>
   updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: AgentReviewCommentStatus }): Promise<void>
@@ -178,7 +178,7 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
       comments,
       commitId,
     }),
-    replyToReviewComment: ({ owner, repo, prNumber, commentId, body }) => invokeBackend<void>(api, 'replyToReviewComment', {
+    replyToReviewComment: ({ owner, repo, prNumber, commentId, body }) => invokeBackend<ReviewComment>(api, 'replyToReviewComment', {
       owner,
       repo,
       prNumber,
