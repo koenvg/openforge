@@ -105,8 +105,11 @@
     }
 
     if (event.metaKey || event.ctrlKey || event.altKey || event.key === 'Tab') return
+    if (event.key === 'Escape') {
+      if (closeDisabled) event.stopPropagation()
+      return
+    }
     event.stopPropagation()
-    if (event.key === 'Escape' && !closeDisabled) onClose()
   }
 
   function handleLayerClick(event: MouseEvent) {
@@ -124,7 +127,7 @@
       aria-label={accessibleNameAttributes.ariaLabel}
       aria-labelledby={accessibleNameAttributes.ariaLabelledby}
       aria-describedby={ariaDescribedby}
-      escapeKeydownBehavior="ignore"
+      escapeKeydownBehavior={closeDisabled ? 'ignore' : 'close'}
       interactOutsideBehavior="ignore"
       onOpenAutoFocus={focusInitialTarget}
       onclick={handleLayerClick}
