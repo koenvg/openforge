@@ -3,7 +3,6 @@ use super::pr_readiness::{
     current_graphql_review_status, enforce_merge_method_policy, fetch_graphql_readiness_snapshot,
     poll_result_ci_validation_sha, poll_result_pr_head_sha, select_branch_policy_inputs,
 };
-use super::review_sync::{terminal_state_for_pr_details, StaleAuthoredPrTerminalState};
 use crate::db::{
     build_merge_readiness_facts, ci_status_for_readiness, enforce_actor_scoped_readiness,
     finalize_readiness_facts_for_poll, review_status_for_readiness,
@@ -11,7 +10,7 @@ use crate::db::{
 };
 use crate::github_client::{
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubError, PrComment, PrReview,
-    RequestedReviewer,
+    PullRequestTerminalState, RequestedReviewer,
 };
 use std::collections::HashSet;
 
@@ -53,7 +52,7 @@ pub(super) struct PollSinglePrResult {
     pub(super) allowed_merge_methods: Vec<crate::github_client::PullRequestMergeMethod>,
     pub(super) default_merge_method: Option<crate::github_client::PullRequestMergeMethod>,
     pub(super) readiness_facts: PrMergeReadinessFacts,
-    pub(super) terminal_state: Option<StaleAuthoredPrTerminalState>,
+    pub(super) terminal_state: Option<PullRequestTerminalState>,
     pub(super) error: Option<String>,
 }
 
@@ -272,7 +271,7 @@ pub(super) async fn poll_single_pr(
         .pr_details_result
         .as_ref()
         .ok()
-        .and_then(terminal_state_for_pr_details);
+        .and_then(|details| details.terminal_state());
 
     PollSinglePrResult {
         pr_id: pr.id,

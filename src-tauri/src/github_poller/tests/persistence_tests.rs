@@ -1,4 +1,5 @@
 use super::*;
+use crate::github_client::PullRequestTerminalState;
 
 fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
     let review = PrReview {
@@ -367,7 +368,7 @@ fn refresh_task_github_status_reconciles_terminal_pr_state() {
     .expect("insert pr failed");
 
     let mut result = make_review_body_poll_result(142);
-    result.terminal_state = Some(StaleAuthoredPrTerminalState::Merged(Some(1704067200)));
+    result.terminal_state = Some(PullRequestTerminalState::Merged(Some(1704067200)));
 
     let changed = apply_terminal_pr_state(&db, &result).expect("terminal state should persist");
     let pr = db

@@ -3,13 +3,12 @@ use super::poll_events::{
     emit_ci_status_changed, emit_new_pr_comment, emit_review_status_changed, emit_task_updated,
 };
 use super::pr_execution::{poll_single_pr, should_fetch_comments_for_pr, PollSinglePrResult};
-use super::review_sync::StaleAuthoredPrTerminalState;
 use crate::db::{
     acquire_db, finalize_readiness_facts_for_poll, serialize_json_list_column, Database, PrRow,
 };
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, build_pr_reviewers, deduplicate_check_runs,
-    filter_to_required, GitHubClient,
+    filter_to_required, GitHubClient, PullRequestTerminalState,
 };
 use futures::future::join_all;
 use log::{error, warn};
@@ -126,11 +125,11 @@ pub(super) fn apply_terminal_pr_state(
     result: &PollSinglePrResult,
 ) -> rusqlite::Result<bool> {
     match &result.terminal_state {
-        Some(StaleAuthoredPrTerminalState::Closed) => {
+        Some(PullRequestTerminalState::Closed) => {
             db.update_pr_closed(result.pr_id)?;
             Ok(true)
         }
-        Some(StaleAuthoredPrTerminalState::Merged(merged_at)) => {
+        Some(PullRequestTerminalState::Merged(merged_at)) => {
             db.update_pr_merged_state(result.pr_id, *merged_at)?;
             Ok(true)
         }

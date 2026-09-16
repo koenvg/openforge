@@ -60,6 +60,7 @@ pub async fn fetch_review_prs(
     db: &Arc<Mutex<db::Database>>,
     github_client: &GitHubClient,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
+    let _refresh_permit = github_client.acquire_refresh_permit().await;
     let username = github_username(db, github_client).await?;
     let token = github_client
         .github_token()
@@ -72,7 +73,7 @@ pub async fn fetch_review_prs(
         .await
         .map_err(|e| format!("Failed to search review PRs: {e}"))?;
 
-    enrich_and_persist_review_prs(db, prs, &all_search_ids)
+    enrich_and_persist_review_prs(github_client, db, &token, prs, &all_search_ids).await
 }
 
 fn should_fallback_to_search(

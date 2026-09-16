@@ -1,7 +1,12 @@
 use super::*;
-use crate::db::acquire_db;
-use axum::{routing::get, Json, Router};
-use std::sync::Arc;
+use crate::db::{acquire_db, Database, ReviewPrUpsert};
+use crate::github_client::PullRequestTerminalState;
+use axum::{extract::State, routing::get, Json, Router};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+use tokio::sync::Notify;
 
 async fn review_request_search_response() -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -44,12 +49,42 @@ async fn review_request_detail_response() -> Json<serde_json::Value> {
     }))
 }
 
+async fn review_request_check_runs_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "total_count": 1,
+        "check_runs": [{
+            "id": 91,
+            "name": "test",
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": "https://github.com/acme/widgets/actions/runs/91"
+        }]
+    }))
+}
+
+async fn review_request_combined_status_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "state": "success",
+        "statuses": [],
+        "sha": "abc123",
+        "total_count": 0
+    }))
+}
+
 async fn review_request_github_client() -> GitHubClient {
     let router = Router::new()
         .route("/search/issues", get(review_request_search_response))
         .route(
             "/repos/acme/widgets/pulls/7",
             get(review_request_detail_response),
+        )
+        .route(
+            "/repos/acme/widgets/commits/abc123/check-runs",
+            get(review_request_check_runs_response),
+        )
+        .route(
+            "/repos/acme/widgets/commits/abc123/status",
+            get(review_request_combined_status_response),
         );
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
@@ -63,6 +98,77 @@ async fn review_request_github_client() -> GitHubClient {
 
     GitHubClient::with_test_token(Ok(Some("token".to_string())))
         .with_test_api_base_url(format!("http://{address}"))
+}
+
+async fn empty_review_search_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "total_count": 0, "items": [] }))
+}
+
+async fn merged_review_request_detail_response() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "number": 7,
+        "title": "Review this",
+        "state": "closed",
+        "html_url": "https://github.com/acme/widgets/pull/7",
+        "user": { "login": "octocat" },
+        "head": { "ref": "feature/review-sync", "sha": "abc123" },
+        "draft": false,
+        "merged": true,
+        "merged_at": "2023-11-14T22:13:20Z"
+    }))
+}
+
+async fn merged_review_request_github_client() -> GitHubClient {
+    let router = Router::new()
+        .route("/search/issues", get(empty_review_search_response))
+        .route(
+            "/repos/acme/widgets/pulls/7",
+            get(merged_review_request_detail_response),
+        );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake GitHub API");
+    let address = listener.local_addr().expect("read fake GitHub address");
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve fake GitHub API");
+    });
+
+    GitHubClient::with_test_token(Ok(Some("token".to_string())))
+        .with_test_api_base_url(format!("http://{address}"))
+}
+
+fn seed_kept_review_request(db: &Database) {
+    db.upsert_review_pr(&ReviewPrUpsert {
+        id: 42,
+        number: 7,
+        title: "Review this".to_string(),
+        body: None,
+        state: "open".to_string(),
+        draft: false,
+        html_url: "https://github.com/acme/widgets/pull/7".to_string(),
+        user_login: "octocat".to_string(),
+        user_avatar_url: None,
+        repo_owner: "acme".to_string(),
+        repo_name: "widgets".to_string(),
+        head_ref: "feature/review-sync".to_string(),
+        base_ref: "main".to_string(),
+        head_sha: "abc123".to_string(),
+        additions: 12,
+        deletions: 3,
+        changed_files: 2,
+        ci_status: Some("failure".to_string()),
+        mergeable: Some(true),
+        mergeable_state: Some("clean".to_string()),
+        merged_at: None,
+        labels: vec![],
+        created_at: 1,
+        updated_at: 2,
+    })
+    .expect("seed review request");
+    db.mark_review_prs_not_requested(&[])
+        .expect("mark review request as kept");
 }
 
 #[tokio::test]
@@ -101,6 +207,7 @@ async fn manual_refresh_and_background_poll_persist_the_same_rows() {
     assert_eq!(persisted.head_sha, "abc123");
     assert_eq!(persisted.mergeable, Some(false));
     assert_eq!(persisted.mergeable_state.as_deref(), Some("blocked"));
+    assert_eq!(persisted.ci_status.as_deref(), Some("success"));
     assert_eq!(persisted.labels.len(), 1);
     assert_eq!(persisted.labels[0].name, "backend");
     assert_eq!(persisted.created_at, 1_789_374_600);
@@ -119,6 +226,143 @@ async fn manual_refresh_and_background_poll_persist_the_same_rows() {
     };
     assert_eq!(event.event_name, "review-pr-count-changed");
     assert_eq!(event.payload, serde_json::json!(1));
+}
+
+#[tokio::test]
+async fn manual_refresh_and_background_poll_reconcile_the_same_merge_outcome() {
+    let client = merged_review_request_github_client().await;
+    let (manual_db, _manual_temp_dir) = make_test_db("review_pr_manual_merge_reconcile");
+    manual_db
+        .set_config("github_username", "reviewer")
+        .expect("configure manual refresh username");
+    seed_kept_review_request(&manual_db);
+    let manual_db = Arc::new(Mutex::new(manual_db));
+    let (poll_db, _poll_temp_dir) = make_test_db("review_pr_poll_merge_reconcile");
+    poll_db
+        .set_config("github_username", "reviewer")
+        .expect("configure background poll username");
+    seed_kept_review_request(&poll_db);
+    let poll_db = Mutex::new(poll_db);
+    let events = GitHubEventTarget::sidecar(None);
+
+    let manual_rows = crate::github_runtime::fetch_review_prs(&manual_db, &client)
+        .await
+        .expect("manual refresh should reconcile merge outcome");
+    if let Err(error) = poll_review_prs(&client, &poll_db, &events, "token").await {
+        panic!("background poll should reconcile merge outcome: {error}");
+    }
+    let poll_rows = acquire_db(&poll_db)
+        .get_all_review_prs()
+        .expect("read background poll rows");
+
+    assert_eq!(manual_rows[0].state, "merged");
+    assert_eq!(manual_rows[0].merged_at, Some(1_700_000_000));
+    assert_eq!(
+        serde_json::to_value(manual_rows).expect("manual rows should serialize"),
+        serde_json::to_value(poll_rows).expect("poll rows should serialize")
+    );
+}
+
+#[derive(Default)]
+struct OverlappingReviewRefreshState {
+    detail_calls: AtomicUsize,
+    first_search_started: Notify,
+    release_first_search: Notify,
+    search_calls: AtomicUsize,
+    second_search_started: Notify,
+}
+
+async fn overlapping_review_search(
+    State(state): State<Arc<OverlappingReviewRefreshState>>,
+) -> Json<serde_json::Value> {
+    if state.search_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+        state.first_search_started.notify_one();
+        state.release_first_search.notified().await;
+        review_request_search_response().await
+    } else {
+        state.second_search_started.notify_one();
+        empty_review_search_response().await
+    }
+}
+
+async fn overlapping_review_details(
+    State(state): State<Arc<OverlappingReviewRefreshState>>,
+) -> Json<serde_json::Value> {
+    if state.detail_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+        review_request_detail_response().await
+    } else {
+        merged_review_request_detail_response().await
+    }
+}
+
+#[tokio::test]
+async fn overlapping_manual_refreshes_cannot_restore_an_older_open_state() {
+    let state = Arc::new(OverlappingReviewRefreshState::default());
+    let router = Router::new()
+        .route("/search/issues", get(overlapping_review_search))
+        .route(
+            "/repos/acme/widgets/pulls/7",
+            get(overlapping_review_details),
+        )
+        .route(
+            "/repos/acme/widgets/commits/abc123/check-runs",
+            get(review_request_check_runs_response),
+        )
+        .route(
+            "/repos/acme/widgets/commits/abc123/status",
+            get(review_request_combined_status_response),
+        )
+        .with_state(Arc::clone(&state));
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake GitHub API");
+    let address = listener.local_addr().expect("read fake GitHub address");
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve fake GitHub API");
+    });
+    let client = GitHubClient::with_test_token(Ok(Some("token".to_string())))
+        .with_test_api_base_url(format!("http://{address}"));
+    let (db, _temp_dir) = make_test_db("overlapping_review_refreshes");
+    db.set_config("github_username", "reviewer")
+        .expect("configure manual refresh username");
+    let db = Arc::new(Mutex::new(db));
+
+    let first_refresh = tokio::spawn({
+        let client = client.clone();
+        let db = Arc::clone(&db);
+        async move { crate::github_runtime::fetch_review_prs(&db, &client).await }
+    });
+    state.first_search_started.notified().await;
+
+    let second_refresh = tokio::spawn({
+        let client = client.clone();
+        let db = Arc::clone(&db);
+        async move { crate::github_runtime::fetch_review_prs(&db, &client).await }
+    });
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            state.second_search_started.notified(),
+        )
+        .await
+        .is_err(),
+        "a second refresh reached GitHub before the first refresh finished"
+    );
+
+    state.release_first_search.notify_one();
+    first_refresh
+        .await
+        .expect("join first refresh")
+        .expect("complete first refresh");
+    let rows = second_refresh
+        .await
+        .expect("join second refresh")
+        .expect("complete second refresh");
+
+    assert_eq!(rows[0].state, "merged");
+    assert_eq!(rows[0].merged_at, Some(1_700_000_000));
 }
 
 fn make_stale_detail(state: &str, extra: serde_json::Value) -> PullRequest {
@@ -154,8 +398,8 @@ fn test_stale_authored_pr_terminal_state_marks_merged_from_merged_at() {
     );
 
     assert_eq!(
-        terminal_state_for_pr_details(&details),
-        Some(StaleAuthoredPrTerminalState::Merged(Some(1704067200)))
+        details.terminal_state(),
+        Some(PullRequestTerminalState::Merged(Some(1704067200)))
     );
 }
 
@@ -170,8 +414,8 @@ fn test_stale_authored_pr_terminal_state_marks_closed_without_merged_evidence() 
     );
 
     assert_eq!(
-        terminal_state_for_pr_details(&details),
-        Some(StaleAuthoredPrTerminalState::Closed)
+        details.terminal_state(),
+        Some(PullRequestTerminalState::Closed)
     );
 }
 
@@ -179,7 +423,7 @@ fn test_stale_authored_pr_terminal_state_marks_closed_without_merged_evidence() 
 fn test_stale_authored_pr_terminal_state_leaves_open_pr_open() {
     let details = make_stale_detail("open", serde_json::json!({ "merged": false }));
 
-    assert_eq!(terminal_state_for_pr_details(&details), None);
+    assert_eq!(details.terminal_state(), None);
 }
 
 #[test]

@@ -1,7 +1,6 @@
 use crate::db::{acquire_db, Database};
 use crate::github_client::{
-    CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubError, PrReview, PullRequest,
-    SearchPrResult,
+    CiSignal, GitHubClient, GitHubError, PrReview, PullRequest, SearchPrResult,
 };
 use std::sync::Mutex;
 
@@ -62,17 +61,11 @@ impl EnrichedAuthoredPr {
     }
 }
 
-fn aggregate_ci(
-    check_runs: CheckRunsResponse,
-    combined_status: CombinedStatusResponse,
-    enriched: &mut EnrichedAuthoredPr,
-) {
-    enriched.ci_status = Some(crate::github_client::aggregate_ci_status(
-        &check_runs,
-        &combined_status,
-    ));
-    enriched.ci_check_runs =
-        Some(serde_json::to_string(&check_runs.check_runs).unwrap_or_else(|_| "[]".to_string()));
+fn aggregate_ci(signal: CiSignal, enriched: &mut EnrichedAuthoredPr) {
+    enriched.ci_status = Some(signal.status);
+    enriched.ci_check_runs = Some(
+        serde_json::to_string(&signal.check_runs.check_runs).unwrap_or_else(|_| "[]".to_string()),
+    );
 }
 
 fn aggregate_reviews(reviews: Vec<PrReview>, enriched: &mut EnrichedAuthoredPr) {
@@ -99,8 +92,7 @@ fn aggregate_details(
 
 fn aggregate_authored_pr_enrichment(
     pr: SearchPrResult,
-    check_runs_result: Result<CheckRunsResponse, GitHubError>,
-    combined_status_result: Result<CombinedStatusResponse, GitHubError>,
+    ci_signal_result: Result<CiSignal, GitHubError>,
     reviews_result: Result<Vec<PrReview>, GitHubError>,
     details_result: Result<PullRequest, GitHubError>,
     policy: AuthoredPrEnrichmentPolicy,
@@ -109,15 +101,13 @@ fn aggregate_authored_pr_enrichment(
 
     match policy {
         AuthoredPrEnrichmentPolicy::RequireComplete => {
-            aggregate_ci(check_runs_result?, combined_status_result?, &mut enriched);
+            aggregate_ci(ci_signal_result?, &mut enriched);
             aggregate_reviews(reviews_result?, &mut enriched);
             aggregate_details(details_result?, policy, &mut enriched);
         }
         AuthoredPrEnrichmentPolicy::BestEffort => {
-            if let (Ok(check_runs), Ok(combined_status)) =
-                (check_runs_result, combined_status_result)
-            {
-                aggregate_ci(check_runs, combined_status, &mut enriched);
+            if let Ok(ci_signal) = ci_signal_result {
+                aggregate_ci(ci_signal, &mut enriched);
             }
             if let Ok(reviews) = reviews_result {
                 aggregate_reviews(reviews, &mut enriched);
@@ -137,19 +127,13 @@ async fn enrich_authored_pr(
     pr: SearchPrResult,
     policy: AuthoredPrEnrichmentPolicy,
 ) -> Result<EnrichedAuthoredPr, AuthoredPrSyncError> {
-    let (check_runs, combined_status, reviews, details) = tokio::join!(
-        github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
-        github_client.get_combined_status(
-            &pr.repo_owner,
-            &pr.repo_name,
-            &pr.head_sha,
-            github_token
-        ),
+    let (ci_signal, reviews, details) = tokio::join!(
+        github_client.get_ci_signal(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
         github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
         github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
     );
 
-    aggregate_authored_pr_enrichment(pr, check_runs, combined_status, reviews, details, policy)
+    aggregate_authored_pr_enrichment(pr, ci_signal, reviews, details, policy)
 }
 
 fn persist_authored_prs(
@@ -299,6 +283,15 @@ mod tests {
         }
     }
 
+    fn ci_signal(id: i64) -> CiSignal {
+        let check_runs = check_runs(id);
+        let combined_status = combined_status(id);
+        CiSignal {
+            status: crate::github_client::aggregate_ci_status(&check_runs, &combined_status),
+            check_runs,
+        }
+    }
+
     fn reviews(id: i64) -> Vec<PrReview> {
         vec![PrReview {
             id,
@@ -345,7 +338,6 @@ mod tests {
     fn strict_enrichment_fails_when_any_github_signal_is_unavailable() {
         let result = aggregate_authored_pr_enrichment(
             search_pr(71),
-            Ok(check_runs(71)),
             Err(network_error()),
             Ok(reviews(71)),
             Ok(details(71)),
@@ -359,8 +351,7 @@ mod tests {
     fn complete_enrichment_aggregates_ci_review_queue_and_detail_mergeability() {
         let enriched = aggregate_authored_pr_enrichment(
             search_pr(73),
-            Ok(check_runs(73)),
-            Ok(combined_status(73)),
+            Ok(ci_signal(73)),
             Ok(reviews(73)),
             Ok(details(73)),
             AuthoredPrEnrichmentPolicy::RequireComplete,
@@ -394,7 +385,6 @@ mod tests {
     fn best_effort_enrichment_persists_available_signals_and_search_mergeability() {
         let enriched = aggregate_authored_pr_enrichment(
             search_pr(72),
-            Ok(check_runs(72)),
             Err(network_error()),
             Ok(reviews(72)),
             Err(network_error()),
@@ -416,8 +406,7 @@ mod tests {
         let first = EnrichedAuthoredPr::from_search_result(search_pr(81));
         let second = aggregate_authored_pr_enrichment(
             search_pr(82),
-            Ok(check_runs(82)),
-            Ok(combined_status(82)),
+            Ok(ci_signal(82)),
             Ok(reviews(82)),
             Ok(details(82)),
             AuthoredPrEnrichmentPolicy::RequireComplete,
