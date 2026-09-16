@@ -119,11 +119,29 @@ fn test_get_existing_comment_ids() {
 }
 
 #[test]
-fn test_unaddressed_comment_count_subquery() {
-    let (db, _temp_dir) = make_test_db("unaddressed_count");
-    insert_test_task(&db);
+fn unaddressed_comment_count_agrees_across_pull_request_and_project_queries() {
+    let (db, _temp_dir) = make_test_db("unaddressed_count_agreement");
+    let project = db
+        .create_project("Project", "/tmp/project")
+        .expect("create project failed");
+    let task = db
+        .create_task("Task", "doing", Some(&project.id), Some("Task"), None)
+        .expect("create task failed");
+    let other_project = db
+        .create_project("Other project", "/tmp/other-project")
+        .expect("create other project failed");
+    let other_task = db
+        .create_task(
+            "Other task",
+            "doing",
+            Some(&other_project.id),
+            Some("Other task"),
+            None,
+        )
+        .expect("create other task failed");
 
     PullRequestFixture::new(101)
+        .ticket_id(&task.id)
         .title("PR 1")
         .url("https://example.com/1")
         .insert(&db)
@@ -139,22 +157,49 @@ fn test_unaddressed_comment_count_subquery() {
         .insert(&db)
         .expect("insert comment 2 failed");
     PrCommentFixture::new(713, 101, "Also fix that")
+        .addressed(true)
         .created_at(2002)
         .insert(&db)
         .expect("insert comment 3 failed");
-
     PullRequestFixture::new(102)
-        .title("PR 2")
+        .ticket_id(&other_task.id)
+        .title("Other PR")
         .url("https://example.com/2")
         .insert(&db)
-        .expect("insert pr 2 failed");
+        .expect("insert other PR failed");
+    PrCommentFixture::new(714, 102, "Unrelated comment")
+        .created_at(2003)
+        .insert(&db)
+        .expect("insert unrelated comment failed");
 
-    let prs = db.get_all_pull_requests().expect("get prs failed");
-    let pr1 = prs.iter().find(|p| p.id == 101).expect("pr 1 not found");
-    let pr2 = prs.iter().find(|p| p.id == 102).expect("pr 2 not found");
+    let open_pull_request_count = db
+        .get_open_prs()
+        .expect("get open PRs failed")
+        .into_iter()
+        .find(|pull_request| pull_request.id == 101)
+        .expect("open PR not found")
+        .unaddressed_comment_count;
+    let task_pull_request_count = db
+        .get_pull_requests_for_task(&task.id)
+        .expect("get task PRs failed")
+        .into_iter()
+        .find(|pull_request| pull_request.id == 101)
+        .expect("task PR not found")
+        .unaddressed_comment_count;
+    let project_attention_count = db
+        .get_project_attention_for_project(&project.id)
+        .expect("get project attention failed")
+        .expect("project attention not found")
+        .unaddressed_comments;
 
-    assert_eq!(pr1.unaddressed_comment_count, 3);
-    assert_eq!(pr2.unaddressed_comment_count, 0);
+    assert_eq!(
+        [
+            open_pull_request_count,
+            task_pull_request_count,
+            project_attention_count,
+        ],
+        [2, 2, 2]
+    );
 
     drop(db);
 }

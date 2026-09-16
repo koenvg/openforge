@@ -161,10 +161,11 @@ fn unrelated_requests_remain_responsive_during_transcription() {
             .build()
             .expect("test runtime should build");
         runtime.block_on(async move {
-            let (mut state, _temp_dir) = test_state("app_invoke_whisper_blocking_responsiveness");
+            let (mut state, temp_dir) = test_state("app_invoke_whisper_blocking_responsiveness");
             state.whisper = Some(std::sync::Arc::new(
                 crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                     crate::whisper_manager::WhisperModelSize::Small,
+                    temp_dir.path().join("whisper-models"),
                     move |_| {
                         blocking_started_tx
                             .send(())
@@ -237,10 +238,11 @@ fn unrelated_requests_remain_responsive_during_transcription() {
 async fn transcription_inference_runs_off_the_tokio_request_executor() {
     let request_thread = std::thread::current().id();
     let (inference_thread_tx, inference_thread_rx) = std::sync::mpsc::channel();
-    let (mut state, _temp_dir) = test_state("app_invoke_whisper_worker_thread");
+    let (mut state, temp_dir) = test_state("app_invoke_whisper_worker_thread");
     state.whisper = Some(std::sync::Arc::new(
         crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
             crate::whisper_manager::WhisperModelSize::Small,
+            temp_dir.path().join("whisper-models"),
             move |_| {
                 inference_thread_tx
                     .send(std::thread::current().id())
@@ -288,10 +290,11 @@ fn queued_transcriptions_do_not_consume_tokio_blocking_threads() {
             .build()
             .expect("test runtime should build");
         runtime.block_on(async move {
-            let (mut state, _temp_dir) = test_state("app_invoke_whisper_bounded_admission");
+            let (mut state, temp_dir) = test_state("app_invoke_whisper_bounded_admission");
             state.whisper = Some(std::sync::Arc::new(
                 crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                     crate::whisper_manager::WhisperModelSize::Small,
+                    temp_dir.path().join("whisper-models"),
                     move |_| {
                         let active = active_transcriptions_for_inference
                             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
@@ -383,10 +386,11 @@ fn cancelling_queued_transcription_does_not_start_inference() {
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
 
-        let (mut state, _temp_dir) = test_state("app_invoke_whisper_cancelled_admission");
+        let (mut state, temp_dir) = test_state("app_invoke_whisper_cancelled_admission");
         state.whisper = Some(std::sync::Arc::new(
             crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                 crate::whisper_manager::WhisperModelSize::Small,
+                temp_dir.path().join("whisper-models"),
                 move |_| {
                     call_count_for_inference.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     first_started_for_inference.notify_one();
@@ -454,10 +458,11 @@ fn cancelling_queued_transcription_does_not_start_inference() {
 
 #[tokio::test]
 async fn downloads_model_publishes_progress_and_persists_path() {
-    let (mut state, _temp_dir) = test_state("app_invoke_whisper_download");
+    let (mut state, temp_dir) = test_state("app_invoke_whisper_download");
     state.whisper = Some(std::sync::Arc::new(
         crate::whisper_manager::WhisperManager::with_download_override_for_test(
             crate::whisper_manager::WhisperModelSize::Small,
+            temp_dir.path().join("whisper-models"),
             |size, on_progress| {
                 assert_eq!(size, crate::whisper_manager::WhisperModelSize::Tiny);
                 on_progress(crate::whisper_manager::WhisperDownloadProgress {

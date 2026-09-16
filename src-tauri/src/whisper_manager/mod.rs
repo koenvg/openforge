@@ -12,6 +12,7 @@ use crate::idle_resource::IdleResource;
 use reqwest::Client;
 use std::error::Error as StdError;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
 const MAX_CONCURRENT_TRANSCRIPTIONS: usize = 1;
@@ -88,6 +89,7 @@ pub struct WhisperManager {
     active_model: RwLock<WhisperModelSize>,
     client: Client,
     idle_reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    model_directory: Option<PathBuf>,
     #[cfg(test)]
     download_override: Option<Arc<TestDownloadOverride>>,
     #[cfg(test)]

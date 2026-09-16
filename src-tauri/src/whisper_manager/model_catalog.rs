@@ -6,6 +6,10 @@ use std::path::PathBuf;
 const APP_DIR_NAME: &str = "openforge";
 const MODELS_SUBDIR: &str = "models";
 
+pub(super) fn default_model_directory() -> Option<PathBuf> {
+    dirs::data_dir().map(|directory| directory.join(APP_DIR_NAME).join(MODELS_SUBDIR))
+}
+
 /// Available Whisper model sizes, ordered from smallest to largest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -163,16 +167,11 @@ impl WhisperModelStatus {
 }
 
 impl WhisperManager {
-    /// Return the expected on-disk path for a model file of the given size.
-    ///
-    /// Path: `$DATA_DIR/openforge/models/<filename>`
-    pub(super) fn model_file_path_for(size: WhisperModelSize) -> Option<PathBuf> {
+    pub(super) fn model_file_path_for(&self, size: WhisperModelSize) -> Option<PathBuf> {
         let spec = size.spec();
-        dirs::data_dir().map(|dir| {
-            dir.join(APP_DIR_NAME)
-                .join(MODELS_SUBDIR)
-                .join(spec.filename)
-        })
+        self.model_directory
+            .as_ref()
+            .map(|directory| directory.join(spec.filename))
     }
 
     /// Return the status of the currently active model.
@@ -183,7 +182,7 @@ impl WhisperManager {
     /// Return the status of a specific model size.
     pub fn get_model_status_for(&self, size: WhisperModelSize) -> WhisperModelStatus {
         let active = self.get_active_model();
-        let (downloaded, model_path, model_size_bytes) = match Self::model_file_path_for(size) {
+        let (downloaded, model_path, model_size_bytes) = match self.model_file_path_for(size) {
             None => (false, None, None),
             Some(path) if path.exists() => {
                 let file_size = std::fs::metadata(&path).ok().map(|metadata| metadata.len());

@@ -1,6 +1,14 @@
 use super::download::sha1_digest_to_lower_hex;
+use super::model_catalog::default_model_directory;
 use super::*;
 use sha1::{Digest, Sha1};
+
+fn manager_with_model_directory(size: WhisperModelSize) -> (WhisperManager, tempfile::TempDir) {
+    let temp_dir = tempfile::tempdir().expect("temp model directory");
+    let manager =
+        WhisperManager::with_model_directory_for_test(size, temp_dir.path().join("models"));
+    (manager, temp_dir)
+}
 
 #[test]
 fn test_sha1_digest_to_lower_hex_preserves_expected_format() {
@@ -15,7 +23,7 @@ fn test_sha1_digest_to_lower_hex_preserves_expected_format() {
 
 #[test]
 fn test_manager_with_active_model() {
-    let mgr = WhisperManager::with_active_model(WhisperModelSize::Tiny);
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Tiny);
     assert_eq!(mgr.get_active_model(), WhisperModelSize::Tiny);
 }
 
@@ -101,17 +109,26 @@ fn test_model_spec_large() {
 
 #[test]
 fn test_model_file_path_contains_model_name() {
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
     for size in WhisperModelSize::all() {
         let spec = size.spec();
-        if let Some(path) = WhisperManager::model_file_path_for(*size) {
+        if let Some(path) = mgr.model_file_path_for(*size) {
             assert!(path.to_string_lossy().contains(spec.filename));
         }
     }
 }
 
 #[test]
+fn production_model_directory_preserves_the_application_data_path() {
+    assert_eq!(
+        default_model_directory(),
+        dirs::data_dir().map(|directory| directory.join("openforge").join("models"))
+    );
+}
+
+#[test]
 fn test_get_model_status_returns_correct_info() {
-    let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
     let status = mgr.get_model_status();
     assert_eq!(status.size, "small");
     assert_eq!(status.display_name, "Small");
@@ -121,7 +138,7 @@ fn test_get_model_status_returns_correct_info() {
 
 #[test]
 fn test_get_all_model_statuses() {
-    let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
     let statuses = mgr.get_all_model_statuses();
     assert_eq!(statuses.len(), 5);
     assert_eq!(statuses[0].size, "tiny");
@@ -137,7 +154,7 @@ fn test_get_all_model_statuses() {
 
 #[test]
 fn test_set_active_model() {
-    let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
     assert_eq!(mgr.get_active_model(), WhisperModelSize::Small);
 
     mgr.set_active_model(WhisperModelSize::Tiny);
@@ -184,35 +201,26 @@ fn test_error_display_context_load_error() {
 
 #[test]
 fn test_ensure_loaded_returns_not_found_when_missing() {
-    let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
-    if WhisperManager::model_file_path_for(WhisperModelSize::Small)
-        .map(|path| !path.exists())
-        .unwrap_or(true)
-    {
-        let result = mgr.ensure_loaded();
-        assert!(matches!(result, Err(WhisperError::ModelNotFound)));
-    }
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
+
+    let result = mgr.ensure_loaded();
+
+    assert!(matches!(result, Err(WhisperError::ModelNotFound)));
 }
 
 #[test]
 fn test_get_model_status_downloaded_when_file_exists() {
-    if let Some(path) = WhisperManager::model_file_path_for(WhisperModelSize::Small) {
-        let created = if !path.exists() {
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            std::fs::File::create(&path).is_ok()
-        } else {
-            false
-        };
-        let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
-        let status = mgr.get_model_status();
-        assert!(status.downloaded);
-        assert!(status.model_size_bytes.is_some());
-        if created {
-            let _ = std::fs::remove_file(&path);
-        }
-    }
+    let (mgr, _temp_dir) = manager_with_model_directory(WhisperModelSize::Small);
+    let path = mgr
+        .model_file_path_for(WhisperModelSize::Small)
+        .expect("test model path");
+    std::fs::create_dir_all(path.parent().expect("model parent")).expect("create model directory");
+    std::fs::write(&path, b"model").expect("write test model");
+
+    let status = mgr.get_model_status();
+
+    assert!(status.downloaded);
+    assert_eq!(status.model_size_bytes, Some(5));
 }
 
 #[test]

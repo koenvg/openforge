@@ -36,8 +36,9 @@ pub(crate) fn test_state(
             plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: Some(app_event_tx),
             app_event_bus: None,
-            whisper: Some(Arc::new(WhisperManager::with_active_model(
+            whisper: Some(Arc::new(WhisperManager::with_model_directory_for_test(
                 WhisperModelSize::Small,
+                temp_dir.path().join("whisper-models"),
             ))),
             sidecar_readiness: SidecarReadinessState::new(),
             companion_gateway: None,

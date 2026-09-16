@@ -1,6 +1,8 @@
 use rusqlite::Result;
 use serde::Serialize;
 
+use super::pull_requests::UNADDRESSED_COMMENT_COUNT_SQL;
+
 /// Attention summary for a project (cross-domain aggregation)
 #[derive(Debug, Clone, Serialize)]
 pub struct ProjectAttentionRow {
@@ -96,18 +98,19 @@ impl super::Database {
 
         // Query 2: PR attention for open PRs
         {
-            let mut stmt = conn.prepare(
+            let sql = format!(
                 "SELECT
                     t.project_id,
                     COUNT(DISTINCT CASE WHEN pr.ci_status = 'failure' THEN pr.id END),
                     COALESCE(SUM(
-                        (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pr.id AND addressed = 0)
+                        {UNADDRESSED_COMMENT_COUNT_SQL}
                     ), 0)
                 FROM pull_requests pr
                 JOIN tasks t ON t.id = pr.ticket_id
                 WHERE t.project_id IS NOT NULL AND pr.state = 'open'
                 GROUP BY t.project_id",
-            )?;
+            );
+            let mut stmt = conn.prepare(&sql)?;
 
             let rows = stmt.query_map([], |row| {
                 Ok((
