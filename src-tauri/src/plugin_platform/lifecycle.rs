@@ -241,7 +241,9 @@ impl PluginPlatform<'_> {
         };
 
         drop(db);
-        result.map_err(PluginPlatformError::internal)
+        result.map_err(PluginPlatformError::internal)?;
+        self.schedule_scoped_workspace_release(plugin_id, None);
+        Ok(())
     }
 
     pub(crate) fn plugin(&self, plugin_id: &str) -> PluginPlatformResult<Option<db::PluginRow>> {
@@ -355,6 +357,7 @@ mod tests {
                         Some(install_app_data_dir),
                         None,
                         install_lifecycle_locks,
+                        None,
                     );
                     platform.finalize_plugin_installation_with(
                         prepared,
@@ -386,6 +389,7 @@ mod tests {
                         Some(uninstall_app_data_dir),
                         None,
                         uninstall_lifecycle_locks,
+                        None,
                     );
                     platform.uninstall_plugin(MANAGED_PLUGIN_ID)
                 });
@@ -430,6 +434,7 @@ mod tests {
             Some(app_data_dir.path().to_path_buf()),
             None,
             &lifecycle_locks,
+            None,
         );
         assert!(platform
             .plugin(MANAGED_PLUGIN_ID)
@@ -465,6 +470,7 @@ mod tests {
             Some(app_data_dir.path().to_path_buf()),
             None,
             &lifecycle_locks,
+            None,
         );
 
         let error = platform
@@ -501,6 +507,7 @@ mod tests {
             Some(app_data_dir.path().to_path_buf()),
             None,
             &lifecycle_locks,
+            None,
         );
         assert!(platform
             .plugin(MANAGED_PLUGIN_ID)
@@ -540,7 +547,8 @@ mod tests {
             .expect("malformed plugin row should install");
         let database = Mutex::new(database);
         let lifecycle_locks = PluginLifecycleLocks::new();
-        let platform = PluginPlatform::new(&database, Some(app_data_dir), None, &lifecycle_locks);
+        let platform =
+            PluginPlatform::new(&database, Some(app_data_dir), None, &lifecycle_locks, None);
 
         platform
             .uninstall_plugin(MANAGED_PLUGIN_ID)

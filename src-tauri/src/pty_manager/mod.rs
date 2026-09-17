@@ -69,9 +69,11 @@ use events::{
 };
 #[cfg(test)]
 use managed_process::ManagedProcessIdentity;
-pub(crate) use pids::shell_session_key;
 #[cfg(test)]
 use pids::{is_shell_session_key_for_task, shell_pid_file_name, write_managed_process_identity};
+pub(crate) use pids::{
+    scoped_agent_session_key, shell_session_key, SessionScope, SessionScopeError,
+};
 use session::TerminalSessions;
 #[cfg(test)]
 use session::{AgentSpawnGenerations, LifecycleLockRegistry, PtyOutputBuffers, PtySessions};

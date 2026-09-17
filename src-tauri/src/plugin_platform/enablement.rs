@@ -10,10 +10,17 @@ impl PluginPlatform<'_> {
     ) -> PluginPlatformResult<()> {
         let db = db::acquire_db(self.db);
         require_plugin_enablement(&db, plugin_id, PluginEnablement::Project)?;
-        db.set_plugin_enabled(project_id, plugin_id, enabled)
+        let result = db
+            .set_plugin_enabled(project_id, plugin_id, enabled)
             .map_err(|error| {
                 PluginPlatformError::internal(format!("Failed to set plugin enabled: {error}"))
-            })
+            });
+        drop(db);
+        result?;
+        if !enabled {
+            self.schedule_scoped_workspace_release(plugin_id, Some(project_id));
+        }
+        Ok(())
     }
 
     pub(crate) fn enabled_plugins(
@@ -33,10 +40,17 @@ impl PluginPlatform<'_> {
     ) -> PluginPlatformResult<()> {
         let db = db::acquire_db(self.db);
         require_plugin_enablement(&db, plugin_id, PluginEnablement::App)?;
-        db.set_app_plugin_enabled(plugin_id, enabled)
+        let result = db
+            .set_app_plugin_enabled(plugin_id, enabled)
             .map_err(|error| {
                 PluginPlatformError::internal(format!("Failed to set app plugin enabled: {error}"))
-            })
+            });
+        drop(db);
+        result?;
+        if !enabled {
+            self.schedule_scoped_workspace_release(plugin_id, None);
+        }
+        Ok(())
     }
 
     pub(crate) fn enabled_app_plugins(&self) -> PluginPlatformResult<Vec<db::PluginRow>> {

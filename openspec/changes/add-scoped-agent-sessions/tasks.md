@@ -7,10 +7,10 @@
 
 ## 2. Scoped Workspace ownership
 
-- [ ] 2.1 Add `scoped_workspaces` storage and migrations without changing `task_workspaces` or `worktrees`; verify migration and upgrade tests assert the new constraints, lookup indexes, cleanup state, and unchanged Task tables
-- [ ] 2.2 Implement Project and checkout-revision resolution, staged detached-worktree creation, publication, and same-scope reuse; verify tests prove a later turn reuses the same resolved commit and callers cannot provide an arbitrary path
-- [ ] 2.3 Implement revision rotation, explicit release, plugin-deactivation cleanup, startup orphan cleanup, and retryable `cleanup_pending`; verify tests cover successful removal, failed deletion retry, and no partial directory or row after fetch, resolution, checkout, measurement, or publication failure
-- [ ] 2.4 Enforce the 32-workspace and 20-GiB retained-data limits with logical-byte measurement and least-recently-used inactive eviction; verify tests cover count eviction, byte eviction, recreation at the stored commit, oversized single checkout rejection, pending-cleanup accounting, and refusal when only protected workspaces remain
+- [x] 2.1 Add `scoped_workspaces` storage and migrations without changing `task_workspaces` or `worktrees`; verify migration and upgrade tests assert the new constraints, lookup indexes, cleanup state, and unchanged Task tables
+- [x] 2.2 Implement Project and checkout-revision resolution, staged detached-worktree creation, publication, and same-scope reuse; verify tests prove a later turn reuses the same resolved commit and callers cannot provide an arbitrary path
+- [x] 2.3 Implement revision rotation, explicit release, plugin-deactivation cleanup, startup orphan cleanup, and retryable `cleanup_pending`; verify tests cover successful removal, failed deletion retry, and no partial directory or row after fetch, resolution, checkout, measurement, or publication failure
+- [x] 2.4 Enforce the 32-workspace and 20-GiB retained-data limits with logical-byte measurement and least-recently-used inactive eviction; verify tests cover count eviction, byte eviction, recreation at the stored commit, oversized single checkout rejection, pending-cleanup accounting, and refusal when only protected workspaces remain
 
 ## 3. Scoped Agent Session lifecycle and policy
 

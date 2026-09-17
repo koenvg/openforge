@@ -22,11 +22,17 @@ pub(crate) fn plugin_platform_for_state(
         None
     };
 
+    let scoped_workspaces = state.app.as_ref().and_then(|app| {
+        app.try_state::<crate::scoped_workspace_service::ScopedWorkspaceService>()
+            .map(|service| service.inner().clone())
+    });
+
     Ok(PluginPlatform::new(
         state.db.as_ref(),
         app_data_dir,
         state.plugin_host.as_ref(),
         &state.plugin_lifecycle_locks,
+        scoped_workspaces,
     ))
 }
 

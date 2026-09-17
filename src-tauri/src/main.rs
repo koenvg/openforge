@@ -55,6 +55,11 @@ pub mod providers;
 mod pty_manager;
 mod review_pr_sync;
 mod runtime_checks;
+#[allow(
+    dead_code,
+    reason = "the internal Scoped Workspace API is consumed by the later scoped-session integration"
+)]
+mod scoped_workspace_service;
 mod secure_config;
 mod secure_store;
 mod self_review_runtime;
@@ -224,12 +229,17 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
+    let scoped_workspaces = scoped_workspace_service::ScopedWorkspaceService::new(
+        Arc::clone(&db_arc),
+        app_data_dir.join("scoped-workspaces"),
+    );
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
     app.manage(db_arc.clone());
     app.manage(pty_manager.clone());
+    app.manage(scoped_workspaces.clone());
     app.manage(github_client::GitHubClient::new());
 
     info!(
@@ -251,6 +261,17 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
             whisper_manager.start_idle_reaper();
             if let Err(error) = pty_manager.cleanup_stale_pids().await {
                 warn!("[startup] Managed PTY recovery was incomplete: {}", error);
+            }
+            match scoped_workspaces.reconcile_startup().await {
+                Ok(report) if report.deferred > 0 => warn!(
+                    "[startup] Scoped Workspace cleanup deferred for {} checkout(s)",
+                    report.deferred
+                ),
+                Ok(_) => {}
+                Err(error) => warn!(
+                    "[startup] Scoped Workspace reconciliation was incomplete: {}",
+                    error
+                ),
             }
             tokio::spawn(startup_resume::resume_task_sessions(
                 app.clone(),

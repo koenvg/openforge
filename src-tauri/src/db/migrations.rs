@@ -41,6 +41,43 @@ pub(super) const TASK_QUERY_INDEXES_SQL: &str =
          ON tasks(project_id, updated_at DESC)
          WHERE status = 'done';";
 
+pub(super) const SCOPED_WORKSPACES_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS scoped_workspaces (
+    id TEXT PRIMARY KEY,
+    owner_plugin_id TEXT NOT NULL CHECK(length(CAST(owner_plugin_id AS BLOB)) > 0),
+    namespace TEXT NOT NULL
+        CHECK(length(CAST(namespace AS BLOB)) BETWEEN 1 AND 128 AND instr(namespace, char(0)) = 0),
+    target_key TEXT NOT NULL
+        CHECK(length(CAST(target_key AS BLOB)) BETWEEN 1 AND 2048 AND instr(target_key, char(0)) = 0),
+    revision TEXT NOT NULL
+        CHECK(length(CAST(revision AS BLOB)) BETWEEN 1 AND 256 AND instr(revision, char(0)) = 0),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    repo_path TEXT NOT NULL CHECK(length(CAST(repo_path AS BLOB)) > 0),
+    checkout_revision TEXT NOT NULL CHECK(length(CAST(checkout_revision AS BLOB)) > 0),
+    resolved_commit TEXT NOT NULL CHECK(length(CAST(resolved_commit AS BLOB)) > 0),
+    workspace_path TEXT NOT NULL UNIQUE CHECK(length(CAST(workspace_path AS BLOB)) > 0),
+    measured_bytes INTEGER NOT NULL DEFAULT 0 CHECK(measured_bytes >= 0),
+    cleanup_state TEXT NOT NULL
+        CHECK(cleanup_state IN ('reserved', 'ready', 'cleanup_pending')),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL,
+    UNIQUE(namespace, target_key, revision)
+);
+CREATE INDEX IF NOT EXISTS idx_scoped_workspaces_logical_scope
+    ON scoped_workspaces(namespace, target_key);
+CREATE INDEX IF NOT EXISTS idx_scoped_workspaces_cleanup_lru
+    ON scoped_workspaces(cleanup_state, last_used_at, id);
+CREATE INDEX IF NOT EXISTS idx_scoped_workspaces_owner_project
+    ON scoped_workspaces(owner_plugin_id, project_id);
+CREATE INDEX IF NOT EXISTS idx_scoped_workspaces_project
+    ON scoped_workspaces(project_id);
+"#;
+
+pub(super) fn ensure_scoped_workspaces_table(conn: &Connection) -> Result<()> {
+    conn.execute_batch(SCOPED_WORKSPACES_SQL)
+}
+
 macro_rules! define_migrations {
     ($($migration:expr),+ $(,)?) => {
         const MIGRATION_COUNT: usize = [$(define_migrations!(@count $migration)),+].len();
@@ -1924,6 +1961,7 @@ INSERT OR IGNORE INTO config (key, value)
         ensure_no_scoped_agent_task_key_collision(tx)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up(SCOPED_WORKSPACES_SQL),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2742,6 +2780,7 @@ mod tests {
         ReviewPrStatusSignals,
         AuthoredPrMergedTimestampRemoval,
         ScopedAgentKeyReservation,
+        ScopedWorkspaces,
     }
 
     impl MigrationBoundary {
@@ -2765,6 +2804,7 @@ mod tests {
                 Self::ReviewPrStatusSignals => 64,
                 Self::AuthoredPrMergedTimestampRemoval => 65,
                 Self::ScopedAgentKeyReservation => 66,
+                Self::ScopedWorkspaces => 67,
             }
         }
     }
@@ -3370,13 +3410,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage', 'review_threads', 'review_thread_messages')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage', 'review_threads', 'review_thread_messages', 'scoped_workspaces')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 19, "All 19 tables should be created");
+        assert_eq!(table_count, 20, "All 20 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -4969,5 +5009,141 @@ mod tests {
 
         assert!(new_index_exists);
         assert!(!old_index_exists);
+    }
+
+    #[test]
+    fn scoped_workspaces_migration_creates_isolated_constrained_storage() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let project = db
+            .create_project("Repository", "/tmp/repository")
+            .expect("create Project for constraints");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let columns = conn
+            .prepare("SELECT name FROM pragma_table_info('scoped_workspaces') ORDER BY cid")
+            .expect("prepare Scoped Workspace columns")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query Scoped Workspace columns")
+            .collect::<Result<Vec<_>>>()
+            .expect("read Scoped Workspace columns");
+        assert_eq!(
+            columns,
+            [
+                "id",
+                "owner_plugin_id",
+                "namespace",
+                "target_key",
+                "revision",
+                "project_id",
+                "repo_path",
+                "checkout_revision",
+                "resolved_commit",
+                "workspace_path",
+                "measured_bytes",
+                "cleanup_state",
+                "created_at",
+                "updated_at",
+                "last_used_at",
+            ]
+        );
+
+        for index in [
+            "idx_scoped_workspaces_logical_scope",
+            "idx_scoped_workspaces_cleanup_lru",
+            "idx_scoped_workspaces_owner_project",
+            "idx_scoped_workspaces_project",
+        ] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |row| row.get(0),
+                )
+                .expect("check Scoped Workspace index");
+            assert!(exists, "missing index {index}");
+        }
+
+        let invalid_state = conn.execute(
+            "INSERT INTO scoped_workspaces (
+                id, owner_plugin_id, namespace, target_key, revision, project_id, repo_path,
+                checkout_revision, resolved_commit, workspace_path, measured_bytes,
+                cleanup_state, created_at, updated_at, last_used_at
+             ) VALUES (
+                'sw-invalid', 'plugin', 'review', 'owner/repo#1', 'abc', ?1, '/tmp/repository',
+                'abc', 'abc', '/tmp/scoped', 0, 'forgotten', 1, 1, 1
+             )",
+            [&project.id],
+        );
+        assert!(invalid_state.is_err());
+
+        let oversized_namespace = "n".repeat(129);
+        let invalid_scope = conn.execute(
+            "INSERT INTO scoped_workspaces (
+                id, owner_plugin_id, namespace, target_key, revision, project_id, repo_path,
+                checkout_revision, resolved_commit, workspace_path, measured_bytes,
+                cleanup_state, created_at, updated_at, last_used_at
+             ) VALUES (
+                'sw-invalid-scope', 'plugin', ?1, 'owner/repo#1', 'abc', ?2, '/tmp/repository',
+                'abc', 'abc', '/tmp/scoped-invalid', 0, 'ready', 1, 1, 1
+             )",
+            rusqlite::params![oversized_namespace, project.id],
+        );
+        assert!(invalid_scope.is_err());
+
+        for task_table in ["agent_sessions", "task_workspaces", "worktrees"] {
+            let scoped_columns: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{task_table}') \
+                         WHERE name IN ('namespace', 'target_key', 'revision', 'owner_plugin_id')"
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("check Task-owned table isolation");
+            assert_eq!(scoped_columns, 0, "{task_table} must remain Task-owned");
+        }
+    }
+
+    #[test]
+    fn scoped_workspaces_upgrade_adds_only_its_own_table() {
+        let (_temp_dir, path) = temporary_database_path();
+        let task_table_sql = {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock pre-upgrade database");
+            let sql = ["agent_sessions", "task_workspaces", "worktrees"].map(|table| {
+                conn.query_row(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("read Task-owned table SQL")
+            });
+            conn.execute("DROP TABLE scoped_workspaces", [])
+                .expect("remove future Scoped Workspace table");
+            set_user_version_before(&conn, MigrationBoundary::ScopedWorkspaces);
+            sql
+        };
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+        assert!(table_exists(&conn, "scoped_workspaces").expect("check new table"));
+        for (index, table) in ["agent_sessions", "task_workspaces", "worktrees"]
+            .into_iter()
+            .enumerate()
+        {
+            let upgraded_sql: String = conn
+                .query_row(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("read upgraded Task-owned table SQL");
+            assert_eq!(upgraded_sql, task_table_sql[index]);
+        }
     }
 }
