@@ -58,6 +58,7 @@ export function configureTerminalPerformanceTrace(trace: TerminalPerformanceTrac
 export const terminalSessionService = createTerminalSessionService(terminalRuntime)
 export const agentTerminalSessions = terminalSessionService.createClient('agent-terminal-surfaces')
 export const regularTerminalSessions = terminalSessionService.createClient('terminal-plugin-surfaces')
+export const scopedAgentTerminalSessions = terminalSessionService.createClient('scoped-agent-plugin-surfaces')
 export const terminalDiagnostics = terminalRuntime.diagnostics
 
 export function getTerminalRuntimeForTests() {

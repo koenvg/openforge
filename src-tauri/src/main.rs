@@ -61,6 +61,8 @@ mod scoped_agent_session_runtime;
     reason = "the core scoped-session service is exposed through the upcoming Plugin SDK integration"
 )]
 mod scoped_agent_session_service;
+#[cfg(test)]
+mod scoped_agent_session_test_support;
 mod scoped_workspace_service;
 mod secure_config;
 mod secure_store;

@@ -838,8 +838,82 @@ export interface AgentSessionSummaryPage {
   nextCursor: AgentSessionCursor | null
 }
 
+/** Opaque address for one plugin-owned Agent Session subject. */
+export interface SessionScope {
+  namespace: string
+  targetKey: string
+  revision: string
+}
+
+export type ScopedAgentSessionStatus =
+  | 'queued'
+  | 'starting'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'aborted'
+  | 'interrupted'
+
+export type ScopedAgentSessionErrorCode =
+  | 'INVALID_SCOPE'
+  | 'DUPLICATE_SCOPE'
+  | 'CAPACITY'
+  | 'UNSUPPORTED_TOOL_POLICY'
+  | 'INPUT_TOO_LARGE'
+  | 'PROJECT_NOT_FOUND'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'NOT_READY'
+  | 'HOST_UNAVAILABLE'
+  | 'INTERNAL'
+
+export class ScopedAgentSessionError extends Error {
+  readonly code: ScopedAgentSessionErrorCode
+
+  constructor(code: ScopedAgentSessionErrorCode, message: string) {
+    super(message)
+    this.name = 'ScopedAgentSessionError'
+    this.code = code
+  }
+}
+
+export interface StartScopedAgentSessionRequest {
+  scope: SessionScope
+  projectId: string
+  checkoutRevision: string
+  initialInput: string
+  toolPolicy: string
+}
+
+export interface ScopedAgentSessionState {
+  id: string
+  status: ScopedAgentSessionStatus
+  queuePosition: number | null
+  queueReason: string | null
+  acceptsInput: boolean
+  workspaceAvailable: boolean
+  errorCode: string | null
+  errorMessage: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** Coalescible invalidation. Call `status()` to read the latest state. */
+export interface ScopedAgentSessionChangeEvent extends SessionScope {}
+
 export interface AgentSessionsAPI {
   list(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
+  start(request: StartScopedAgentSessionRequest): Promise<ScopedAgentSessionState>
+  status(scope: SessionScope): Promise<ScopedAgentSessionState | null>
+  input(scope: SessionScope, input: string): Promise<ScopedAgentSessionState>
+  abort(scope: SessionScope): Promise<ScopedAgentSessionState>
+  release(scope: SessionScope): Promise<void>
+  onDidChange(scope: SessionScope, handler: (event: ScopedAgentSessionChangeEvent) => void): Disposable
+}
+
+export interface FrontendAgentSessionsAPI extends AgentSessionsAPI {
+  mountTerminal(scope: SessionScope, element: HTMLElement): Promise<Disposable>
 }
 
 export type TaskChangeReason = 'created' | 'updated' | 'completed' | 'attention' | 'execution'
@@ -1071,6 +1145,7 @@ export interface OpenForgeCommonAPI {
 }
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
+  agentSessions: FrontendAgentSessionsAPI
   tasks: TasksAPI
   reviewThreads: ReviewThreadsAPI
   browserSurfaces: BrowserSurfacesAPI

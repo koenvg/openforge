@@ -1,6 +1,40 @@
 use super::*;
 
-pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_json::Value> {
+use crate::scoped_agent_session_service::{
+    OwnedSessionScope, ScopedAgentSessionError, ScopedAgentSessionService, StartScopedAgentSession,
+};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartScopedAgentSessionPayload {
+    plugin_id: String,
+    scope: OwnedSessionScope,
+    project_id: String,
+    checkout_revision: String,
+    initial_input: String,
+    tool_policy: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScopedSessionPayload {
+    plugin_id: String,
+    scope: OwnedSessionScope,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScopedSessionInputPayload {
+    plugin_id: String,
+    scope: OwnedSessionScope,
+    input: String,
+}
+
+pub(super) async fn handle(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<serde_json::Value> {
     match request.command.as_str() {
         "get_session_status" => {
             let session_id = payload_string(&request.payload, "sessionId")?;
@@ -157,9 +191,132 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(changed)
         }
+        "start_scoped_agent_session" => {
+            let payload: StartScopedAgentSessionPayload = scoped_payload(&request.payload)?;
+            let scope = payload.scope.clone();
+            let service = scoped_service(state)?;
+            let result = service
+                .start(StartScopedAgentSession {
+                    owner_plugin_id: payload.plugin_id.clone(),
+                    scope,
+                    project_id: payload.project_id,
+                    checkout_revision: payload.checkout_revision,
+                    initial_input: payload.initial_input,
+                    tool_policy: payload.tool_policy,
+                })
+                .await
+                .map_err(map_scoped_error)?;
+            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
+            json_value(result)
+        }
+        "get_scoped_agent_session_status" => {
+            let payload: ScopedSessionPayload = scoped_payload(&request.payload)?;
+            json_value(
+                scoped_service(state)?
+                    .status(&payload.plugin_id, &payload.scope)
+                    .map_err(map_scoped_error)?,
+            )
+        }
+        "input_scoped_agent_session" => {
+            let payload: ScopedSessionInputPayload = scoped_payload(&request.payload)?;
+            let result = scoped_service(state)?
+                .input(&payload.plugin_id, &payload.scope, &payload.input)
+                .await
+                .map_err(map_scoped_error)?;
+            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
+            json_value(result)
+        }
+        "abort_scoped_agent_session" => {
+            let payload: ScopedSessionPayload = scoped_payload(&request.payload)?;
+            let result = scoped_service(state)?
+                .abort(&payload.plugin_id, &payload.scope)
+                .await
+                .map_err(map_scoped_error)?;
+            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
+            json_value(result)
+        }
+        "release_scoped_agent_session" => {
+            let payload: ScopedSessionPayload = scoped_payload(&request.payload)?;
+            scoped_service(state)?
+                .release(&payload.plugin_id, &payload.scope)
+                .await
+                .map_err(map_scoped_error)?;
+            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
+            json_value(())
+        }
         "finalize_agent_session" => finalize_agent_session(state, request),
         _ => unreachable!("agent session handler only receives agent session commands"),
     }
+}
+
+fn scoped_service(state: &AppState) -> AppResult<ScopedAgentSessionService> {
+    state
+        .app
+        .as_ref()
+        .and_then(|app| app.try_state::<ScopedAgentSessionService>())
+        .map(|service| service.inner().clone())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "HOST_UNAVAILABLE: scoped Agent Session service is unavailable".into(),
+            )
+        })
+}
+
+fn scoped_payload<T: serde::de::DeserializeOwned>(payload: &serde_json::Value) -> AppResult<T> {
+    serde_json::from_value(payload.clone()).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("invalid scoped Agent Session payload: {error}"),
+        )
+    })
+}
+
+fn map_scoped_error(error: ScopedAgentSessionError) -> (StatusCode, String) {
+    use crate::db::ScopedAgentSessionStoreError;
+    let (status, code) = match &error {
+        ScopedAgentSessionError::InvalidScope(_) => (StatusCode::BAD_REQUEST, "INVALID_SCOPE"),
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::LiveSessionExists {
+            ..
+        })
+        | ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::SessionExists {
+            ..
+        }) => (StatusCode::CONFLICT, "DUPLICATE_SCOPE"),
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::QueueFull { .. }) => {
+            (StatusCode::TOO_MANY_REQUESTS, "CAPACITY")
+        }
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::OwnershipConflict {
+            ..
+        }) => (StatusCode::FORBIDDEN, "FORBIDDEN"),
+        ScopedAgentSessionError::ToolPolicy(_) => {
+            (StatusCode::BAD_REQUEST, "UNSUPPORTED_TOOL_POLICY")
+        }
+        ScopedAgentSessionError::InputTooLarge => (StatusCode::BAD_REQUEST, "INPUT_TOO_LARGE"),
+        ScopedAgentSessionError::ProjectNotFound(_) => (StatusCode::NOT_FOUND, "PROJECT_NOT_FOUND"),
+        ScopedAgentSessionError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
+        ScopedAgentSessionError::NotReady(_) => (StatusCode::CONFLICT, "NOT_READY"),
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::NotFound { .. }) => {
+            (StatusCode::NOT_FOUND, "NOT_FOUND")
+        }
+        ScopedAgentSessionError::Storage(_) | ScopedAgentSessionError::Runtime(_) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL")
+        }
+    };
+    (status, format!("{code}: {error}"))
+}
+
+fn publish_scoped_changed(state: &AppState, plugin_id: &str, scope: &OwnedSessionScope) {
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "scoped-agent-session-changed",
+        &serde_json::json!({
+            "pluginId": plugin_id,
+            "namespace": scope.namespace,
+            "targetKey": scope.target_key,
+            "revision": scope.revision,
+        }),
+    );
 }
 
 fn finalize_agent_session(

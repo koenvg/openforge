@@ -14,6 +14,22 @@ impl PluginHost {
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
             "openforge.agentSessions.list" => self.list_agent_sessions_for_host(params),
+            "openforge.agentSessions.start" => {
+                self.start_scoped_agent_session_for_host(params).await
+            }
+            "openforge.agentSessions.status" => self.scoped_agent_session_status_for_host(params),
+            "openforge.agentSessions.observe" => {
+                self.observe_scoped_agent_session_for_host(params).await
+            }
+            "openforge.agentSessions.input" => {
+                self.input_scoped_agent_session_for_host(params).await
+            }
+            "openforge.agentSessions.abort" => {
+                self.abort_scoped_agent_session_for_host(params).await
+            }
+            "openforge.agentSessions.release" => {
+                self.release_scoped_agent_session_for_host(params).await
+            }
             "openforge.tasks.list" => self.list_tasks_for_host(params),
             "openforge.tasks.get" => self.get_task_for_host(params),
             "openforge.tasks.active" => self.active_tasks_for_host(params),

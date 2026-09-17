@@ -1,4 +1,5 @@
 import type { RuntimeHostBridge } from './runtimeContributionTypes'
+import { createPluginAgentSessionHostCapabilities } from './pluginHostAgentSessions'
 import { configCommandHandlers, createPluginConfigHostCapabilities } from './pluginHostConfig'
 import { createPluginHostCommandDispatcher } from './pluginHostCommandRegistry'
 import {
@@ -37,6 +38,7 @@ export const invokePluginHostCommand = createPluginHostCommandDispatcher(
 
 export function createPluginRuntimeHost(pluginId: string) {
   return {
+    ...createPluginAgentSessionHostCapabilities(pluginId),
     ...createPluginTaskHostCapabilities(pluginId),
     ...createPluginReviewThreadHostCapabilities(pluginId),
     ...createPluginProjectHostCapabilities(),

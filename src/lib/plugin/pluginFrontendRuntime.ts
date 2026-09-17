@@ -108,6 +108,13 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     },
     agentSessions: {
       list: unavailable('agentSessions.list'),
+      start: unavailable('agentSessions.start'),
+      status: unavailable('agentSessions.status'),
+      input: unavailable('agentSessions.input'),
+      abort: unavailable('agentSessions.abort'),
+      release: unavailable('agentSessions.release'),
+      onDidChange: () => ({ dispose: () => undefined }),
+      mountTerminal: unavailable('agentSessions.mountTerminal'),
     },
     reviewThreads: {
       onDidChange: () => ({ dispose: () => undefined }),

@@ -121,6 +121,13 @@ const agentSessionSummary = {
 } satisfies AgentSessionSummary
 const agentSessions = null as unknown as AgentSessionsAPI
 const agentSessionPage: Promise<AgentSessionSummaryPage> = agentSessions.list(listAgentSessionsRequest)
+const scopedAgentSessionScope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+void agentSessions.start({ scope: scopedAgentSessionScope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this change', toolPolicy: 'review-read-only' })
+void agentSessions.status(scopedAgentSessionScope)
+void agentSessions.input(scopedAgentSessionScope, 'Continue')
+void agentSessions.abort(scopedAgentSessionScope)
+void agentSessions.release(scopedAgentSessionScope)
+void agentSessions.onDidChange(scopedAgentSessionScope, () => {})
 void agentSessionPage
 // @ts-expect-error Compact Agent Session summaries never expose Task prompts.
 void agentSessionSummary.prompt
@@ -196,6 +203,7 @@ const themeDefinition = {
 const themeRegistration = registry.frontendApi.themes.register(themeDefinition)
 void themeRegistration.dispose()
 void registry.frontendApi.agentSessions.list(listAgentSessionsRequest)
+void registry.frontendApi.agentSessions.mountTerminal(scopedAgentSessionScope, document.createElement('div'))
 void registry.backendApi.agentSessions.list(listAgentSessionsRequest)
 void registry.frontendApi.reviewThreads.list(reviewThreadScope)
 void registry.backendApi.reviewThreads.create(createReviewThreadRequest)

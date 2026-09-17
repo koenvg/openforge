@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ScopedAgentSessionError } from './types'
 
 import type { AgentSession, Task } from './domain'
 import { createMockOpenForgeApi } from './testing'
@@ -185,5 +186,167 @@ describe('CommonAPIFake agentSessions.list', () => {
     await expect(api.agentSessions.list({
       provider: 'pi', overlaps, taskId: 'T-1', pageSize: 1, cursor,
     })).rejects.toThrow('cursor does not match request filters')
+  })
+})
+
+describe('CommonAPIFake scoped Agent Sessions', () => {
+  it('starts and reads one scope without changing task-scoped list results', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+
+    const started = await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review this pull request',
+      toolPolicy: 'review-read-only',
+    })
+
+    expect(started).toMatchObject({ status: 'running', queuePosition: null, acceptsInput: true })
+    await expect(api.agentSessions.status(scope)).resolves.toEqual(started)
+    await expect(api.agentSessions.list({
+      provider: 'claude-code',
+      overlaps: { startInclusive: 0, endExclusive: 100 },
+      pageSize: 25,
+    })).resolves.toEqual({ items: [], nextCursor: null })
+  })
+
+  it('queues the fifth scope and promotes it after an executable session aborts', async () => {
+    const api = createMockOpenForgeApi()
+    const scopes = Array.from({ length: 5 }, (_, index) => ({
+      namespace: 'github-pr',
+      targetKey: `acme/openforge#${index + 1}`,
+      revision: 'head-a',
+    }))
+    const states = []
+    for (const scope of scopes) {
+      states.push(await api.agentSessions.start({
+        scope,
+        projectId: 'P-1',
+        checkoutRevision: 'head-a',
+        initialInput: 'Review',
+        toolPolicy: 'review-read-only',
+      }))
+    }
+
+    expect(states.slice(0, 4).map(state => state.status)).toEqual(['running', 'running', 'running', 'running'])
+    expect(states[4]).toMatchObject({ status: 'queued', queuePosition: 1, workspaceAvailable: false })
+
+    await api.agentSessions.abort(scopes[0])
+    await expect(api.agentSessions.status(scopes[4])).resolves.toMatchObject({
+      status: 'running',
+      queuePosition: null,
+      workspaceAvailable: true,
+    })
+  })
+
+  it('rejects a duplicate live scope and a start beyond the 32-entry queue', async () => {
+    const api = createMockOpenForgeApi()
+    const start = (index: number) => api.agentSessions.start({
+      scope: { namespace: 'github-pr', targetKey: `acme/openforge#${index}`, revision: 'head-a' },
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })
+    await start(0)
+    await expect(start(0)).rejects.toMatchObject<Partial<ScopedAgentSessionError>>({ code: 'DUPLICATE_SCOPE' })
+
+    for (let index = 1; index < 36; index += 1) await start(index)
+    await expect(start(36)).rejects.toMatchObject<Partial<ScopedAgentSessionError>>({ code: 'CAPACITY' })
+  })
+
+  it('replaces an older revision for the same logical scope', async () => {
+    const api = createMockOpenForgeApi()
+    const oldScope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    const newScope = { ...oldScope, revision: 'head-b' }
+    const oldEvents: unknown[] = []
+    api.agentSessions.onDidChange(oldScope, event => oldEvents.push(event))
+
+    await api.agentSessions.start({
+      scope: oldScope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })
+    await api.agentSessions.start({
+      scope: newScope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-b',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })
+
+    await expect(api.agentSessions.status(oldScope)).resolves.toBeNull()
+    await expect(api.agentSessions.status(newScope)).resolves.toMatchObject({ status: 'running' })
+    expect(oldEvents).toEqual([oldScope, oldScope])
+  })
+
+  it('notifies queued scopes when removal changes their queue position', async () => {
+    const api = createMockOpenForgeApi()
+    const scopes = Array.from({ length: 6 }, (_, index) => ({
+      namespace: 'github-pr',
+      targetKey: `acme/openforge#${index + 1}`,
+      revision: 'head-a',
+    }))
+    const events: unknown[] = []
+    api.agentSessions.onDidChange(scopes[5], event => events.push(event))
+    for (const scope of scopes) {
+      await api.agentSessions.start({
+        scope,
+        projectId: 'P-1',
+        checkoutRevision: 'head-a',
+        initialInput: 'Review',
+        toolPolicy: 'review-read-only',
+      })
+    }
+
+    await expect(api.agentSessions.status(scopes[5])).resolves.toMatchObject({ queuePosition: 2 })
+    await api.agentSessions.release(scopes[4])
+    await expect(api.agentSessions.status(scopes[5])).resolves.toMatchObject({ queuePosition: 1 })
+    expect(events).toEqual([scopes[5], scopes[5]])
+  })
+
+  it('notifies only the exact scope and supports deterministic completion', async () => {
+    const api = createMockOpenForgeApi()
+    const first = { namespace: 'github-pr', targetKey: 'acme/openforge#1', revision: 'head-a' }
+    const second = { namespace: 'github-pr', targetKey: 'acme/openforge#2', revision: 'head-a' }
+    const firstEvents: unknown[] = []
+    const secondEvents: unknown[] = []
+    api.agentSessions.onDidChange(first, event => firstEvents.push(event))
+    api.agentSessions.onDidChange(second, event => secondEvents.push(event))
+
+    await api.agentSessions.start({
+      scope: first,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })
+    api.__testing.registry.completeScopedAgentSession(first)
+
+    expect(firstEvents).toEqual([first, first])
+    expect(secondEvents).toEqual([])
+    await expect(api.agentSessions.status(first)).resolves.toMatchObject({ status: 'completed', acceptsInput: true })
+  })
+
+  it('uses generation-safe frontend terminal attachments', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })
+    const first = await api.agentSessions.mountTerminal(scope, document.createElement('div'))
+    const second = await api.agentSessions.mountTerminal(scope, document.createElement('div'))
+
+    await first.dispose()
+    expect(api.__testing.calls.scopedAgentSessionTerminalDetaches).toEqual([])
+    await second.dispose()
+    expect(api.__testing.calls.scopedAgentSessionTerminalDetaches).toEqual([scope])
   })
 })

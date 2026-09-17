@@ -619,6 +619,49 @@ Each item is `{ id, provider, providerSessionId, createdAt, updatedAt, task, wor
 
 The host orders results by `createdAt`, then OpenForge Agent Session ID. Request 1 through 250 rows. Pass each opaque `nextCursor` unchanged with the same provider, interval, and optional Task ID. Changing any bound or filter invalidates the cursor. `tasks.listSessions()` remains the task-scoped, full Agent Session API with its existing newest-first response.
 
+### Scoped Agent Sessions
+
+Plugins can run a read-only Agent Session for an opaque subject without creating a Task. The lifecycle surface is available to frontend and backend plugins; only frontend plugins can mount the host-rendered terminal.
+
+```ts
+const scope = { namespace: 'review', targetKey: 'gh:acme/web#1421', revision: headSha }
+await openforge.agentSessions.start({
+  scope,
+  projectId,
+  checkoutRevision: headSha,
+  initialInput: 'Review this revision and report findings.',
+  toolPolicy: 'review-read-only',
+})
+
+const changes = openforge.agentSessions.onDidChange(scope, async () => {
+  renderStatus(await openforge.agentSessions.status(scope))
+})
+await openforge.agentSessions.input(scope, 'Check the error path too.')
+```
+
+Frontend contributions mount the OpenForge-owned terminal into an element and dispose the attachment when that element is removed:
+
+```ts
+const terminal = await openforge.agentSessions.mountTerminal(scope, terminalElement)
+terminal.dispose()
+changes.dispose()
+```
+
+The host allows one unreleased session per exact scope and four live scoped sessions across the app. Starting a new revision for the same namespace and target key releases the plugin's older revision first. Additional starts return `status: 'queued'` with `queuePosition` and `queueReason`; the queue holds up to 32 sessions. A duplicate scope throws `ScopedAgentSessionError` with code `DUPLICATE_SCOPE`, while a full queue uses `CAPACITY`. Change callbacks are coalescible invalidations, so call `status(scope)` for the latest state. Use `abort(scope)` to stop work and `release(scope)` when the plugin no longer needs the session or workspace. Disposing a mount only detaches the terminal.
+
+Scoped workspaces are retained under a host-wide limit of 32 workspaces and 20 GiB of logical data. OpenForge evicts the least-recently-used inactive workspace when needed and refuses a new checkout if protected workspaces leave no room.
+
+Lifecycle failures throw `ScopedAgentSessionError` with one of these stable codes:
+
+- `INVALID_SCOPE`, `UNSUPPORTED_TOOL_POLICY`, or `INPUT_TOO_LARGE` for invalid requests.
+- `DUPLICATE_SCOPE` or `CAPACITY` when admission is refused.
+- `PROJECT_NOT_FOUND`, `NOT_FOUND`, or `NOT_READY` when the requested host state is unavailable.
+- `FORBIDDEN` when another plugin owns the logical scope.
+- `HOST_UNAVAILABLE` when the desktop host cannot provide the service.
+- `INTERNAL` for an unexpected host failure.
+
+Scopes and session IDs are the only public identities. OpenForge retains the process, PTY key, provider details, input transport, resizing, replay, teardown, and restart reconciliation.
+
 Behavior and limits:
 
 - `projectId` is required for plugin-created Tasks.

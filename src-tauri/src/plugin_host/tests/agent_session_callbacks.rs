@@ -2,6 +2,28 @@ use super::super::*;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
+fn build_host_with_scoped_service() -> (
+    PluginHost,
+    String,
+    Arc<crate::scoped_agent_session_test_support::TestScopedSessionRuntime>,
+    tempfile::TempDir,
+) {
+    let (database, temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_scoped_agent_session_lifecycle");
+    let project = database
+        .create_project("Scoped sessions", "/repo")
+        .expect("create Project fixture");
+    let database = Arc::new(Mutex::new(database));
+    let (service, runtime) =
+        crate::scoped_agent_session_test_support::test_scoped_agent_session_service(
+            database.clone(),
+        );
+    let app = AppHandle::new();
+    app.manage(database);
+    app.manage(service);
+    (PluginHost::new(app), project.id, runtime, temp_dir)
+}
+
 fn build_host_with_agent_session() -> (PluginHost, String) {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_agent_session_list");
@@ -196,4 +218,137 @@ async fn plugin_host_agent_session_list_reports_actionable_invalid_request_error
             "expected {expected:?} in {error:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn plugin_host_scoped_agent_session_callbacks_require_identity_and_scope() {
+    let (host, _task_id) = build_host_with_agent_session();
+    let scope = json!({
+        "namespace": "review",
+        "targetKey": "PR-42",
+        "revision": "sha-1",
+    });
+
+    let missing_identity = host
+        .handle_host_callback("openforge.agentSessions.status", &json!({ "scope": scope }))
+        .await
+        .expect_err("scoped callback without plugin identity must fail");
+    assert!(missing_identity.contains("pluginId"));
+
+    let invalid_scope = host
+        .handle_host_callback(
+            "openforge.agentSessions.status",
+            &json!({
+                "pluginId": "com.example.reviewer",
+                "scope": { "namespace": "review", "targetKey": "PR-42" },
+            }),
+        )
+        .await
+        .expect_err("invalid Session Scope must fail");
+    assert!(invalid_scope.starts_with("INVALID_SCOPE:"));
+}
+
+#[tokio::test]
+async fn plugin_host_scoped_agent_session_callbacks_report_missing_host_service() {
+    let (host, _task_id) = build_host_with_agent_session();
+    let error = host
+        .handle_host_callback(
+            "openforge.agentSessions.status",
+            &json!({
+                "pluginId": "com.example.reviewer",
+                "scope": {
+                    "namespace": "review",
+                    "targetKey": "PR-42",
+                    "revision": "sha-1",
+                },
+            }),
+        )
+        .await
+        .expect_err("missing scoped Agent Session service must fail");
+
+    assert!(error.starts_with("HOST_UNAVAILABLE:"));
+}
+
+#[tokio::test]
+async fn plugin_host_scoped_agent_session_callbacks_round_trip_lifecycle_and_errors() {
+    let (host, project_id, runtime, _temp_dir) = build_host_with_scoped_service();
+    let scope = json!({
+        "namespace": "review",
+        "targetKey": "PR-42",
+        "revision": "sha-1",
+    });
+    let start = json!({
+        "pluginId": "com.example.reviewer",
+        "scope": scope,
+        "projectId": project_id,
+        "checkoutRevision": "main",
+        "initialInput": "Review this",
+        "toolPolicy": "review-read-only",
+    });
+
+    let started = host
+        .handle_host_callback("openforge.agentSessions.start", &start)
+        .await
+        .expect("start scoped Agent Session");
+    assert_eq!(started["status"], "running");
+    assert_eq!(started["queuePosition"], Value::Null);
+    assert_eq!(started["queueReason"], Value::Null);
+    assert_eq!(started["acceptsInput"], true);
+    assert_eq!(started["workspaceAvailable"], true);
+
+    let duplicate = host
+        .handle_host_callback("openforge.agentSessions.start", &start)
+        .await
+        .expect_err("duplicate scope must fail");
+    assert!(duplicate.starts_with("DUPLICATE_SCOPE:"));
+
+    let status_request = json!({
+        "pluginId": "com.example.reviewer",
+        "scope": scope,
+    });
+    let status = host
+        .handle_host_callback("openforge.agentSessions.status", &status_request)
+        .await
+        .expect("read scoped Agent Session status");
+    assert_eq!(status["id"], started["id"]);
+
+    let forbidden = host
+        .handle_host_callback(
+            "openforge.agentSessions.status",
+            &json!({ "pluginId": "com.example.other", "scope": scope }),
+        )
+        .await
+        .expect_err("another plugin must not read the scope");
+    assert!(forbidden.starts_with("FORBIDDEN:"));
+
+    host.handle_host_callback(
+        "openforge.agentSessions.input",
+        &json!({
+            "pluginId": "com.example.reviewer",
+            "scope": scope,
+            "input": "Continue",
+        }),
+    )
+    .await
+    .expect("send scoped Agent Session input");
+    assert_eq!(
+        runtime.inputs.lock().expect("lock inputs").as_slice(),
+        ["Continue"]
+    );
+
+    let aborted = host
+        .handle_host_callback("openforge.agentSessions.abort", &status_request)
+        .await
+        .expect("abort scoped Agent Session");
+    assert_eq!(aborted["status"], "aborted");
+    assert_eq!(runtime.aborts.lock().expect("lock aborts").len(), 1);
+
+    host.handle_host_callback("openforge.agentSessions.release", &status_request)
+        .await
+        .expect("release scoped Agent Session");
+    let released = host
+        .handle_host_callback("openforge.agentSessions.status", &status_request)
+        .await
+        .expect("read released scoped Agent Session status");
+    assert_eq!(released, Value::Null);
 }

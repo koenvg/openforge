@@ -89,7 +89,7 @@ export function listenPluginDesktopEvent(
   eventName: string,
   handler: (event: DesktopEvent<unknown>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn> {
-  return listenRawDesktopEvent(eventName, handler)
+  return listenRawDesktopEvent(eventName, handler, true)
 }
 
 export {}

@@ -9,7 +9,7 @@ use crate::{
     scoped_workspace_service::{AcquireScopedWorkspace, ScopedWorkspaceService},
     session_tool_policy::{SessionToolPolicy, SessionToolPolicyError},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     future::Future,
@@ -25,7 +25,8 @@ pub(crate) const SCOPED_INPUT_LIMIT_BYTES: usize = 64 * 1024;
 pub(crate) type RuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 pub(crate) type ScopedCompletionObserver = Arc<dyn Fn(String, u64, bool) + Send + Sync>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct OwnedSessionScope {
     pub namespace: String,
     pub target_key: String,
@@ -70,6 +71,17 @@ pub(crate) struct AcquiredSessionWorkspace {
     lease: Box<dyn Send + Sync>,
 }
 
+#[cfg(test)]
+impl AcquiredSessionWorkspace {
+    pub(crate) fn for_test(path: PathBuf, resolved_commit: String) -> Self {
+        Self {
+            path,
+            resolved_commit,
+            lease: Box::new(()),
+        }
+    }
+}
+
 pub(crate) trait ScopedSessionWorkspace: Send + Sync {
     fn acquire<'a>(
         &'a self,
@@ -88,6 +100,7 @@ pub(crate) trait ScopedSessionRuntime: Send + Sync {
     fn input<'a>(&'a self, terminal_key: &'a str, input: &'a str) -> RuntimeFuture<'a, ()>;
     fn abort<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()>;
     fn output<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, String>;
+    fn output_revision<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, u64>;
     fn dispose<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()>;
 }
 
@@ -178,6 +191,7 @@ pub(crate) struct ScopedAgentSessionState {
     pub id: String,
     pub status: ScopedAgentSessionStatus,
     pub queue_position: Option<usize>,
+    pub queue_reason: Option<String>,
     pub accepts_input: bool,
     pub workspace_available: bool,
     pub error_code: Option<String>,
@@ -491,6 +505,18 @@ impl ScopedAgentSessionService {
             .map_err(ScopedAgentSessionError::Runtime)
     }
 
+    pub(crate) async fn output_revision(
+        &self,
+        owner: &str,
+        scope: &OwnedSessionScope,
+    ) -> Result<u64, ScopedAgentSessionError> {
+        let row = self.require_owned_scope(owner, scope)?;
+        self.runtime
+            .output_revision(&row.terminal_key)
+            .await
+            .map_err(ScopedAgentSessionError::Runtime)
+    }
+
     pub(crate) async fn release(
         &self,
         owner: &str,
@@ -775,6 +801,8 @@ impl ScopedAgentSessionService {
             id: row.id.clone(),
             status: row.status,
             queue_position: lock(&self.database).scoped_agent_queue_position(&row.id)?,
+            queue_reason: (row.status == ScopedAgentSessionStatus::Queued)
+                .then(|| "Waiting for an available scoped Agent Session slot".to_string()),
             accepts_input: matches!(
                 row.status,
                 ScopedAgentSessionStatus::Running
