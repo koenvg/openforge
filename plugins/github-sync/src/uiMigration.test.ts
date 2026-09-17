@@ -6,6 +6,7 @@ const MIGRATION_TARGETS: readonly {
   relativePath: string
   publicComponents: readonly string[]
 }[] = [
+  { relativePath: 'review/pr/AgentTab.svelte', publicComponents: ['Badge', 'Button', 'Textarea'] },
   { relativePath: 'review/pr/PrReviewDetailSection.svelte', publicComponents: ['Badge', 'Button', 'Tabs'] },
   { relativePath: 'review/pr/PrReviewListSection.svelte', publicComponents: ['Badge', 'Button'] },
   { relativePath: 'review/pr/PrWalkthroughButton.svelte', publicComponents: ['Badge', 'Button'] },

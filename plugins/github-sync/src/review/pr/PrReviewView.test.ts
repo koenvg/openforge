@@ -491,7 +491,7 @@ describe('PrReviewView tab shortcuts', () => {
     vi.clearAllMocks()
   })
 
-  it('switches PR detail tabs with Cmd+1 / Cmd+2 / Cmd+3', async () => {
+  it('keeps Agent on Cmd+3 and reserves Cmd+4 for an available Walkthrough', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff])
 
@@ -508,6 +508,11 @@ describe('PrReviewView tab shortcuts', () => {
     const title = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
     expect((await screen.findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+      'Overview',
+      'Files changed 1',
+      'Agent',
+    ])
 
     // Cmd+2 → Files changed
     await fireEvent.keyDown(window, { key: '2', metaKey: true })
@@ -517,14 +522,14 @@ describe('PrReviewView tab shortcuts', () => {
     await fireEvent.keyDown(window, { key: '1', metaKey: true })
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
 
-    // Cmd+3 targets the Walkthrough tab, but with no ready walkthrough that tab is
-    // hidden, so the view falls back to Overview instead of stranding on a hidden tab.
     await fireEvent.keyDown(window, { key: '3', metaKey: true })
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true'))
-    expect(screen.getByRole('tab', { name: /Files changed/i }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.getByRole('tab', { name: 'Agent' }).getAttribute('aria-selected')).toBe('true')
+
+    await fireEvent.keyDown(window, { key: '4', metaKey: true })
+    expect(screen.getByRole('tab', { name: 'Agent' }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('does not switch tabs on bare 1 / 2 / 3 (Cmd is required)', async () => {
+  it('does not switch tabs on bare 1 / 2 / 3 / 4 (Cmd is required)', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff])
 
@@ -542,6 +547,8 @@ describe('PrReviewView tab shortcuts', () => {
     expect((await screen.findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true')
 
     await fireEvent.keyDown(window, { key: '2' })
+    await fireEvent.keyDown(window, { key: '3' })
+    await fireEvent.keyDown(window, { key: '4' })
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: /Files changed/i }).getAttribute('aria-selected')).toBe('false')
   })
@@ -1340,6 +1347,23 @@ describe('PrReviewView walkthrough generation', () => {
     expect(screen.queryByRole('button', { name: 'Generate walkthrough and AI review' })).toBeNull()
   })
 
+  it('keeps Agent available and explains when the repository has no local Project', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID,
+    })
+    const { resolveProjects } = registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    resolveProjects.mockResolvedValue({})
+
+    renderPrReviewView(registry)
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: 'Agent' }))
+
+    expect(await screen.findByText('Review agent unavailable')).toBeTruthy()
+    expect(screen.getByText(/local OpenForge Project linked to this repository is required/i)).toBeTruthy()
+  })
+
   it('starts a background generation from the card without opening or marking the PR read', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff], [basePr])
@@ -1410,6 +1434,17 @@ describe('PrReviewView walkthrough generation', () => {
 
     // The tab appears once the open PR's status resolves to ready.
     expect(await screen.findByRole('tab', { name: 'Walkthrough' })).toBeTruthy()
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+      'Overview',
+      'Files changed 1',
+      'Agent',
+      'Walkthrough',
+    ])
+
+    await fireEvent.keyDown(window, { key: '3', ctrlKey: true })
+    expect(screen.getByRole('tab', { name: 'Agent' }).getAttribute('aria-selected')).toBe('true')
+    await fireEvent.keyDown(window, { key: '4', ctrlKey: true })
+    expect(screen.getByRole('tab', { name: 'Walkthrough' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('does not initialize an inactive walkthrough tab', async () => {

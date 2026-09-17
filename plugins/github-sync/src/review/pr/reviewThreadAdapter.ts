@@ -11,8 +11,7 @@ import type {
   AiThread,
   AiThreadMessage,
 } from '../../lib/prReviewRecords'
-
-const NAMESPACE = 'github'
+import { reviewScopeForPullRequest } from './reviewScope'
 
 export const adaptedThreadId = {
   agent: (commentId: number) => `agent:${commentId}`,
@@ -44,10 +43,6 @@ export function reviewerStatusForAgentComment(status: ReviewThreadStatus): Agent
 
 export function agentCommentFollowUp(aiThreads: AiThread[], commentId: number): AiThread | undefined {
   return aiThreads.find(thread => thread.anchor.type === 'comment' && thread.anchor.comment_id === commentId)
-}
-
-function targetKeyFor(pr: ReviewPullRequest): string {
-  return `gh:${pr.repo_owner}/${pr.repo_name}#${pr.number}`
 }
 
 function agentCommentStatus(status: AgentReviewCommentStatus): ReviewThreadStatus | null {
@@ -91,9 +86,7 @@ function agentCommentToThread(
 
   return {
     id,
-    namespace: NAMESPACE,
-    targetKey: targetKeyFor(pr),
-    revision: pr.head_sha,
+    ...reviewScopeForPullRequest(pr),
     origin: 'agent',
     anchor: { kind: 'line', filePath: comment.file_path, line: comment.line_number, side: comment.side ?? 'RIGHT' },
     status,
@@ -125,9 +118,7 @@ function aiThreadToThread(pr: ReviewPullRequest, thread: AiThread): ReviewThread
 
   return {
     id,
-    namespace: NAMESPACE,
-    targetKey: targetKeyFor(pr),
-    revision: pr.head_sha,
+    ...reviewScopeForPullRequest(pr),
     origin: 'human',
     anchor: aiThreadAnchor(thread.anchor),
     status: thread.reviewer_status ?? 'open',

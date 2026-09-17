@@ -328,6 +328,21 @@ describe('review workspace', () => {
     await waitFor(() => expect(calls.get('dismissReviewPr')).toContainEqual({ prId: 1 }))
   })
 
+  it('releases an active review Agent Session when its pull request is removed', async () => {
+    const { workspace, registry } = await setup()
+    await workspace.list.onSelectPr(pr)
+    await waitFor(() => expect(workspace.detail!.agentSession.projectId).toBe('project-1'))
+    await workspace.detail!.agentSession.onStart()
+
+    workspace.list.onRemove(pr)
+
+    const scope = { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' }
+    await waitFor(() => {
+      expect(registry.calls.scopedAgentSessionAborts).toContainEqual(scope)
+      expect(registry.calls.scopedAgentSessionReleases).toContainEqual(scope)
+    })
+  })
+
   it('offers keep/remove after an in-app review, keeping the PR on keep', async () => {
     const { workspace, calls } = await setup()
     await workspace.list.onSelectPr(pr)

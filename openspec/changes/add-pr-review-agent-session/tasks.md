@@ -1,14 +1,14 @@
 ## 1. Shared address and stable Agent tab
 
-- [ ] 1.1 Add `reviewScopeForPullRequest` as the only GitHub Sync constructor for `{ namespace: 'github', targetKey: 'gh:<owner>/<repo>#<number>', revision: head_sha }`, replace the adapter's private target-key builder, and verify focused tests prove sessions and Review Threads receive the same exact triple and a new head gets a new revision
-- [ ] 1.2 Add `agent` to both pull request detail tab-id unions, render Agent as the always-present third tab and Walkthrough as conditional fourth, and update keyboard navigation; verify component tests cover no session, no local Project, an available walkthrough, and stable `Cmd/Ctrl+3` and `Cmd/Ctrl+4` behavior
-- [ ] 1.3 Build the Agent tab's empty, unavailable, live, retained-output, failed, and completed states around the scoped Agent Sessions API; verify UI tests prove the tab stays present and reports why a repository without a local Project cannot start
-- [ ] 1.4 Mount the host terminal by logical Session Scope without releasing prop-keyed resources from `$effect` cleanup, dispose only the current attachment from `onDestroy`, and verify rerender, pull-request switch, stale-disposer, and destroy tests cannot detach, resize, abort, or release a replacement session
+- [x] 1.1 Add `reviewScopeForPullRequest` as the only GitHub Sync constructor for `{ namespace: 'github', targetKey: 'gh:<owner>/<repo>#<number>', revision: head_sha }`, replace the adapter's private target-key builder, and verify focused tests prove sessions and Review Threads receive the same exact triple and a new head gets a new revision
+- [x] 1.2 Add `agent` to both pull request detail tab-id unions, render Agent as the always-present third tab and Walkthrough as conditional fourth, and update keyboard navigation; verify component tests cover no session, no local Project, an available walkthrough, and stable `Cmd/Ctrl+3` and `Cmd/Ctrl+4` behavior
+- [x] 1.3 Build the Agent tab's empty, unavailable, live, retained-output, failed, and completed states around the scoped Agent Sessions API; verify UI tests prove the tab stays present and reports why a repository without a local Project cannot start
+- [x] 1.4 Mount the host terminal by logical Session Scope without releasing prop-keyed resources from `$effect` cleanup, dispose only the current attachment from `onDestroy`, and verify rerender, pull-request switch, stale-disposer, and destroy tests cannot detach, resize, abort, or release a replacement session
 
 ## 2. Pull request scoped-session controller
 
-- [ ] 2.1 Add a GitHub Sync controller that starts `review-read-only` in the Project repository at `head_sha`, reads status, subscribes to invalidations, sends later input, aborts active work, and explicitly releases removed or superseded scopes; verify fake-backed tests cover start, queue, live input, completion, failure, abort, pull request removal, and revision rotation
-- [ ] 2.2 Route Agent-tab input through scoped-session input so a completed review continues the same provider conversation and Scoped Workspace; verify a controller test sends two turns to one scope and never starts a second session record
+- [x] 2.1 Add a GitHub Sync controller that starts `review-read-only` in the Project repository at `head_sha`, reads status, subscribes to invalidations, sends later input, aborts active work, and explicitly releases removed or superseded scopes; verify fake-backed tests cover start, queue, live input, completion, failure, abort, pull request removal, and revision rotation
+- [x] 2.2 Route Agent-tab input through scoped-session input so a completed review continues the same provider conversation and Scoped Workspace; verify a controller test sends two turns to one scope and never starts a second session record
 - [ ] 2.3 Add immediate same-session follow-up routing for line and step Review Threads, with the human message stored before session input and the agent directed to answer the exact thread id; verify tests cover a successful reply, input failure without message loss, and no batched headless question run
 
 ## 3. Scope-bound walkthrough command
