@@ -4,10 +4,11 @@ use crate::app_events::RuntimeEventPublisher;
 use std::path::Path;
 
 use super::super::super::commands::PiSessionTarget;
+use super::super::super::events::{PtyExitObserver, PtyExitPolicy};
 use super::super::super::{PtyError, PtyManager, PtySpawnContext, TerminalImageProtocol};
 use super::super::provider_adapter::{
     AgentPtyProviderAdapter, ClaudeCodePtyAdapter, CodexPtyAdapter, GrokPtyAdapter,
-    OpenCodePtyAdapter, PiPtyAdapter,
+    OpenCodePtyAdapter, PiPtyAdapter, ScopedClaudeCodePtyAdapter, ScopedClaudeCodePtyConfig,
 };
 use super::process::{resolve_pty_cwd, AgentProcessRequest, SpawnedPty};
 use super::registration::SessionRegistrationRequest;
@@ -210,17 +211,78 @@ impl PtyManager {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn spawn_scoped_claude_pty(
+        &self,
+        session_key: &str,
+        scoped_session_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        provider_session_id: &str,
+        resume: bool,
+        settings_path: &Path,
+        sandbox_profile: String,
+        credential_path: Option<std::path::PathBuf>,
+        provider_state_dir: std::path::PathBuf,
+        cols: u16,
+        rows: u16,
+        event_publisher: RuntimeEventPublisher,
+        exit_observer: PtyExitObserver,
+    ) -> Result<u64, PtyError> {
+        self.spawn_agent_pty_with_exit_policy(
+            ScopedClaudeCodePtyAdapter::new(ScopedClaudeCodePtyConfig {
+                prompt: prompt.to_string(),
+                provider_session_id: provider_session_id.to_string(),
+                resume,
+                settings_path: settings_path.to_path_buf(),
+                sandbox_profile,
+                credential_path,
+                provider_state_dir,
+                scoped_session_id: scoped_session_id.to_string(),
+            }),
+            PtySpawnContext {
+                task_id: session_key,
+                cwd,
+                cols,
+                rows,
+                event_publisher,
+            },
+            None,
+            PtyExitPolicy::ScopedAgent(exit_observer),
+        )
+        .await
+    }
+
     pub(in crate::pty_manager::session) async fn spawn_agent_pty<A: AgentPtyProviderAdapter>(
+        &self,
+        adapter: A,
+        context: PtySpawnContext<'_>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
+    ) -> Result<u64, PtyError> {
+        self.spawn_agent_pty_with_exit_policy(
+            adapter,
+            context,
+            terminal_image_protocol,
+            PtyExitPolicy::TaskAgent,
+        )
+        .await
+    }
+
+    async fn spawn_agent_pty_with_exit_policy<A: AgentPtyProviderAdapter>(
         &self,
         mut adapter: A,
         context: PtySpawnContext<'_>,
         terminal_image_protocol: Option<TerminalImageProtocol>,
+        exit_policy: PtyExitPolicy,
     ) -> Result<u64, PtyError> {
-        if let Some(bridge) = self
-            .daemon_shells
-            .as_ref()
-            .filter(|bridge| bridge.owns_agent(context.task_id))
-        {
+        let daemon_bridge = match &exit_policy {
+            PtyExitPolicy::TaskAgent => self
+                .daemon_shells
+                .as_ref()
+                .filter(|bridge| bridge.owns_agent(context.task_id)),
+            PtyExitPolicy::Shell | PtyExitPolicy::ScopedAgent(_) => None,
+        };
+        if let Some(bridge) = daemon_bridge {
             if !bridge.selects_provider(context.task_id, adapter.command_name()) {
                 return Err(PtyError::SpawnFailed(
                     "task is selected for another daemon provider".into(),
@@ -320,6 +382,7 @@ impl PtyManager {
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,
             event_publisher,
+            exit_policy,
         })
         .await?;
         self.finish_agent_spawn(task_id, token).await?;

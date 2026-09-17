@@ -55,14 +55,21 @@ pub mod providers;
 mod pty_manager;
 mod review_pr_sync;
 mod runtime_checks;
+mod scoped_agent_session_runtime;
 #[allow(
     dead_code,
-    reason = "the internal Scoped Workspace API is consumed by the later scoped-session integration"
+    reason = "the core scoped-session service is exposed through the upcoming Plugin SDK integration"
 )]
+mod scoped_agent_session_service;
 mod scoped_workspace_service;
 mod secure_config;
 mod secure_store;
 mod self_review_runtime;
+#[allow(
+    dead_code,
+    reason = "policy selection is reached through the upcoming scoped-session Plugin SDK integration"
+)]
+mod session_tool_policy;
 mod sidecar_logger;
 mod startup_resume;
 mod task_attention;
@@ -159,6 +166,15 @@ fn migrate_github_token_to_secure_store(database: &db::Database) {
 
 fn run_database_startup_maintenance(database: &db::Database) {
     migrate_github_token_to_secure_store(database);
+    match database.interrupt_live_scoped_agent_sessions() {
+        Ok(0) => {}
+        Ok(count) => info!(
+            "[startup] Marked {count} Scoped Agent Session(s) interrupted; they are not restart-preserved"
+        ),
+        Err(error) => warn!(
+            "[startup] Failed to interrupt stale Scoped Agent Sessions: {error}"
+        ),
+    }
 }
 
 fn sidecar_app_data_dir() -> Result<PathBuf, String> {
@@ -237,9 +253,30 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
+    let scoped_runtime = Arc::new(scoped_agent_session_service::ScopedClaudeRuntime::new(
+        app.clone(),
+        pty_manager.clone(),
+        app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
+        app_data_dir.join("scoped-session-policies"),
+    ));
+    let scoped_agent_sessions = scoped_agent_session_service::ScopedAgentSessionService::new(
+        Arc::clone(&db_arc),
+        Arc::new(scoped_workspaces.clone()),
+        scoped_runtime.clone(),
+    );
+    let completion_service = scoped_agent_sessions.clone();
+    scoped_runtime.set_completion_observer(Arc::new(move |session_id, instance_id, succeeded| {
+        let service = completion_service.clone();
+        tokio::spawn(async move {
+            if let Err(error) = service.complete(&session_id, instance_id, succeeded).await {
+                warn!("[scoped-agent-session] failed to record provider exit: {error}");
+            }
+        });
+    }));
     app.manage(db_arc.clone());
     app.manage(pty_manager.clone());
     app.manage(scoped_workspaces.clone());
+    app.manage(scoped_agent_sessions);
     app.manage(github_client::GitHubClient::new());
 
     info!(
@@ -293,6 +330,9 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
+    if let Some(exit_code) = session_tool_policy::run_policy_hook_if_requested() {
+        std::process::exit(exit_code);
+    }
     if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
     }

@@ -9,7 +9,7 @@ use axum::{
 
 pub(super) async fn authorize(
     State(state): State<AppState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
     match bearer_identity(&state, request.headers()) {
@@ -35,6 +35,47 @@ pub(super) async fn authorize(
             ) {
                 return (StatusCode::FORBIDDEN, "agent route forbidden").into_response();
             }
+            return next.run(request).await;
+        }
+        BearerIdentity::Scoped(principal) => {
+            if request
+                .headers()
+                .keys()
+                .any(|key| key.as_str().starts_with("x-openforge-"))
+            {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "caller-supplied ownership is forbidden",
+                )
+                    .into_response();
+            }
+            if !openforge_session_protocol::scoped_agent_route_allowed(
+                request.method().as_str(),
+                request.uri().path(),
+            ) {
+                return (StatusCode::FORBIDDEN, "scoped agent route forbidden").into_response();
+            }
+            let session = crate::db::acquire_db(&state.db)
+                .scoped_agent_session_by_id(&principal.session_id)
+                .ok()
+                .flatten();
+            let valid = session.is_some_and(|session| {
+                session.owner_plugin_id == principal.owner_plugin_id
+                    && session.namespace == principal.namespace
+                    && session.target_key == principal.target_key
+                    && session.revision == principal.revision
+                    && session.tool_policy == principal.tool_policy
+                    && matches!(
+                        session.status,
+                        crate::db::ScopedAgentSessionStatus::Starting
+                            | crate::db::ScopedAgentSessionStatus::Running
+                            | crate::db::ScopedAgentSessionStatus::Paused
+                    )
+            });
+            if !valid {
+                return (StatusCode::FORBIDDEN, "scoped agent session unavailable").into_response();
+            }
+            request.extensions_mut().insert(principal);
             return next.run(request).await;
         }
     }
@@ -90,6 +131,7 @@ enum BearerIdentity {
     Absent,
     Controller,
     Generation,
+    Scoped(crate::agent_generation_identity::ScopedAgentPrincipal),
     Unknown,
 }
 
@@ -104,8 +146,14 @@ fn bearer_identity(state: &AppState, headers: &HeaderMap) -> BearerIdentity {
     if state.backend_token.as_deref() == Some(bearer) {
         return BearerIdentity::Controller;
     }
-    if state.agent_generation_identities.authorizes(bearer) {
-        return BearerIdentity::Generation;
+    match state.agent_generation_identities.identity(bearer) {
+        Some(crate::agent_generation_identity::AgentIdentity::HeadlessGeneration) => {
+            return BearerIdentity::Generation
+        }
+        Some(crate::agent_generation_identity::AgentIdentity::Scoped(principal)) => {
+            return BearerIdentity::Scoped(principal)
+        }
+        None => {}
     }
     BearerIdentity::Unknown
 }
@@ -223,5 +271,128 @@ mod tests {
             .unwrap();
         assert_eq!(unknown.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(refusal(unknown).await, "agent authorization rejected");
+    }
+
+    #[tokio::test]
+    async fn scoped_credential_is_exact_scope_and_review_routes_only_then_revoked() {
+        let (state, root) = crate::test_support::test_state("scoped_agent_ingress", |_, _| {});
+        {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db.create_project("Repository", "/tmp/repository").unwrap();
+            db.create_scoped_agent_session(&crate::db::NewScopedAgentSession {
+                id: "sas-1",
+                owner_plugin_id: "com.example.review",
+                namespace: "github-pr",
+                target_key: "owner/repo#42",
+                revision: "head-a",
+                project_id: &project.id,
+                checkout_revision: "head-a",
+                provider: "claude-code",
+                tool_policy: "review-read-only",
+                terminal_key: "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                status: crate::db::ScopedAgentSessionStatus::Starting,
+                queue_sequence: None,
+            }).unwrap();
+            db.mark_scoped_agent_session_running("sas-1", "conversation-1", 7)
+                .unwrap();
+        }
+        let identities = state.agent_generation_identities.clone();
+        identities
+            .activate(root.path().join("agent-generations"), 1)
+            .unwrap();
+        let credential = identities
+            .issue_scoped(crate::agent_generation_identity::ScopedAgentPrincipal {
+                session_id: "sas-1".into(),
+                owner_plugin_id: "com.example.review".into(),
+                namespace: "github-pr".into(),
+                target_key: "owner/repo#42".into(),
+                revision: "head-a".into(),
+                tool_policy: "review-read-only".into(),
+            })
+            .unwrap();
+        let token = credential.token().to_string();
+        let router = super::super::create_router(state);
+
+        let task_route = router
+            .clone()
+            .oneshot(generation_request("/create_task", &token))
+            .await
+            .unwrap();
+        assert_eq!(task_route.status(), StatusCode::FORBIDDEN);
+
+        let request = |target: &str| {
+            Request::builder()
+                .uri("/review_threads/list")
+                .method("POST")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "namespace": "github-pr", "targetKey": target, "revision": "head-a"
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(request("other/repo#1"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(request("owner/repo#42"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+
+        let wrong_plugin = identities
+            .issue_scoped(crate::agent_generation_identity::ScopedAgentPrincipal {
+                session_id: "sas-1".into(),
+                owner_plugin_id: "com.example.other".into(),
+                namespace: "github-pr".into(),
+                target_key: "owner/repo#42".into(),
+                revision: "head-a".into(),
+                tool_policy: "review-read-only".into(),
+            })
+            .unwrap();
+        let wrong_plugin_request = Request::builder()
+            .uri("/review_threads/list")
+            .method("POST")
+            .header("authorization", format!("Bearer {}", wrong_plugin.token()))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "namespace": "github-pr", "targetKey": "owner/repo#42", "revision": "head-a"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(wrong_plugin_request)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+
+        drop(credential);
+        assert_eq!(
+            router
+                .oneshot(request("owner/repo#42"))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
     }
 }

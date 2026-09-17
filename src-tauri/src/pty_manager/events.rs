@@ -334,8 +334,16 @@ pub(super) enum PtyExitAction {
     Cleanup {
         lifecycle_lock: LifecycleLockLease,
         pid_file: PathBuf,
-        emit_agent_exit: bool,
+        policy: PtyExitPolicy,
     },
+}
+
+pub(crate) type PtyExitObserver = Arc<dyn Fn(u64, bool) + Send + Sync>;
+
+pub(super) enum PtyExitPolicy {
+    Shell,
+    TaskAgent,
+    ScopedAgent(PtyExitObserver),
 }
 
 pub(super) struct PtyEventEmitterConfig {
@@ -399,22 +407,27 @@ pub(super) fn spawn_batched_pty_event_emitter(
         }
 
         batcher.flush_pending(&mut emit_pty_event);
-        let (exit_outcome, emit_agent_exit) = match exit_action {
+        let (exit_outcome, emit_agent_exit, observer) = match exit_action {
             PtyExitAction::Cleanup {
                 lifecycle_lock,
                 pid_file,
-                emit_agent_exit,
+                policy,
             } => {
+                let (remove_output, emit_agent_exit, observer) = match policy {
+                    PtyExitPolicy::Shell => (true, false, None),
+                    PtyExitPolicy::TaskAgent => (false, true, None),
+                    PtyExitPolicy::ScopedAgent(observer) => (false, false, Some(observer)),
+                };
                 let outcome = terminal_sessions
                     .finalize_exit(
                         &session_key,
                         instance_id,
                         &lifecycle_lock,
                         &pid_file,
-                        !emit_agent_exit,
+                        remove_output,
                     )
                     .await;
-                (outcome, emit_agent_exit)
+                (outcome, emit_agent_exit, observer)
             }
         };
         if let Some(hub) = attachment_hub.as_ref() {
@@ -428,17 +441,21 @@ pub(super) fn spawn_batched_pty_event_emitter(
             return;
         }
 
+        let success = matches!(
+            exit_outcome,
+            PassiveExitOutcome::Finalized {
+                process_succeeded: true
+            }
+        );
+        if let Some(observer) = observer {
+            observer(instance_id, success);
+        }
+
         info!("[PTY] key={} emitter received exit signal", session_key);
         let exit_event_name = format!("pty-exit-{}", session_key);
         let exit_payload = serde_json::json!({"instance_id": instance_id});
         event_publisher.publish(&exit_event_name, &exit_payload);
         if emit_agent_exit {
-            let success = matches!(
-                exit_outcome,
-                PassiveExitOutcome::Finalized {
-                    process_succeeded: true
-                }
-            );
             let payload = serde_json::json!({
                 "task_id": &session_key,
                 "success": success,

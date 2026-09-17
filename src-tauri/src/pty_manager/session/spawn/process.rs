@@ -260,6 +260,9 @@ impl PtyManager {
             command.arg(arg);
         }
         self.configure_pty_command(&mut command, request.cwd, request.terminal_image_protocol);
+        for key in adapter.removed_env() {
+            command.env_remove(key);
+        }
         for (key, value) in adapter.extra_env(request.task_id, instance_id) {
             command.env(key, value);
         }

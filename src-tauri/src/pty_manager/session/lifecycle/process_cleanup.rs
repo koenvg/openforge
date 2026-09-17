@@ -184,12 +184,18 @@ impl PtyManager {
         }
     }
 
-    pub(in super::super) async fn clear_session_tracking(&self, session_key: &str) {
-        self.terminal_sessions
-            .output_buffers
-            .lock()
-            .await
-            .remove(session_key);
+    pub(in super::super) async fn clear_session_tracking(
+        &self,
+        session_key: &str,
+        remove_output_buffer: bool,
+    ) {
+        if remove_output_buffer {
+            self.terminal_sessions
+                .output_buffers
+                .lock()
+                .await
+                .remove(session_key);
+        }
         self.terminal_sessions
             .attachment_hubs
             .lock()
@@ -229,7 +235,7 @@ impl PtyManager {
                 .await;
             return Err(error);
         }
-        self.clear_session_tracking(session_key).await;
+        self.clear_session_tracking(session_key, true).await;
         Ok(())
     }
 
@@ -238,6 +244,21 @@ impl PtyManager {
     /// # Arguments
     /// * `session_key` - Stable identifier for the current terminal session
     pub async fn kill_pty(&self, session_key: &str) -> Result<(), PtyError> {
+        self.kill_pty_with_output_policy(session_key, true).await
+    }
+
+    pub(crate) async fn kill_pty_retaining_output(
+        &self,
+        session_key: &str,
+    ) -> Result<(), PtyError> {
+        self.kill_pty_with_output_policy(session_key, false).await
+    }
+
+    async fn kill_pty_with_output_policy(
+        &self,
+        session_key: &str,
+        remove_output_buffer: bool,
+    ) -> Result<(), PtyError> {
         if let Some(bridge) = self
             .daemon_shells
             .as_ref()
@@ -276,7 +297,8 @@ impl PtyManager {
             info!("PTY for session {} killed", session_key);
         }
         self.terminate_managed_recoveries(session_key).await?;
-        self.clear_session_tracking(session_key).await;
+        self.clear_session_tracking(session_key, remove_output_buffer)
+            .await;
 
         Ok(())
     }

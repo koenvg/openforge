@@ -160,7 +160,7 @@ impl PtyManager {
                 .await;
             return Err(error);
         }
-        self.clear_session_tracking(task_id).await;
+        self.clear_session_tracking(task_id, true).await;
         Ok(())
     }
 
@@ -234,7 +234,7 @@ impl PtyManager {
                 .await;
             return Err(error);
         }
-        self.clear_session_tracking(session_key).await;
+        self.clear_session_tracking(session_key, true).await;
         Ok(())
     }
 }

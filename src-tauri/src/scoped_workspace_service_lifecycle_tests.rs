@@ -635,6 +635,48 @@ async fn owner_release_can_be_scoped_to_one_project() {
 }
 
 #[tokio::test]
+async fn captured_cleanup_does_not_remove_a_workspace_protected_by_a_new_session() {
+    let (database, temp_dir) = make_test_db("scoped_workspace_captured_generation");
+    let repo = repository(temp_dir.path());
+    let project = database
+        .create_project("Repository", &repo.to_string_lossy())
+        .expect("create project");
+    let database = Arc::new(Mutex::new(database));
+    let service = ScopedWorkspaceService::new(
+        Arc::clone(&database),
+        temp_dir.path().join("scoped-workspaces"),
+    );
+    let scope = SessionScope {
+        namespace: "github-pr",
+        target_key: "owner/repo#protected",
+        revision: "head",
+    };
+    let workspace = service
+        .acquire(AcquireScopedWorkspace {
+            owner_plugin_id: "com.example.review",
+            scope,
+            project_id: &project.id,
+            checkout_revision: "HEAD",
+        })
+        .await
+        .expect("create checkout");
+    let captured = database
+        .lock()
+        .unwrap()
+        .scoped_workspaces_for_owner("com.example.review", None)
+        .expect("capture owned workspaces");
+    let _replacement_lease = service.protect(scope).await.expect("protect replacement");
+
+    let report = service
+        .release_captured("com.example.review", captured)
+        .await
+        .expect("run captured cleanup");
+
+    assert_eq!(report.removed, 0);
+    assert!(workspace.path.exists());
+}
+
+#[tokio::test]
 async fn plugin_uninstall_schedules_owner_cleanup() {
     let (database, temp_dir) = make_test_db("scoped_workspace_plugin_uninstall");
     let repo = repository(temp_dir.path());

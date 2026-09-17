@@ -62,7 +62,7 @@ impl PtyManager {
                     .await;
                 return Err(error);
             }
-            self.clear_session_tracking(session_key).await;
+            self.clear_session_tracking(session_key, true).await;
         }
         Ok(())
     }
@@ -84,7 +84,7 @@ impl PtyManager {
                 self.terminate_or_retain_unregistered_session(session_key, failed_session)
                     .await?;
             }
-            self.clear_session_tracking(session_key).await;
+            self.clear_session_tracking(session_key, true).await;
             return Err(error);
         }
         Ok(())
