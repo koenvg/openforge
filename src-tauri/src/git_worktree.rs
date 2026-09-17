@@ -1214,6 +1214,129 @@ async fn try_create_detached_worktree_inner(
     Ok(())
 }
 
+#[allow(
+    dead_code,
+    reason = "called by the internal Scoped Workspace API before public session wiring"
+)]
+pub(crate) async fn resolve_commit(
+    repo_path: &Path,
+    revision: &str,
+) -> Result<Option<String>, GitWorktreeError> {
+    validate_repository_path_access(repo_path)?;
+    if revision.is_empty()
+        || revision.trim() != revision
+        || revision.contains('\0')
+        || revision.starts_with('-')
+    {
+        return Err(GitWorktreeError::WorktreeAddFailed(
+            "revision must be non-empty, have no surrounding whitespace or NUL, and must not start with '-'"
+                .to_string(),
+        ));
+    }
+
+    let repository = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--git-dir")
+        .output()
+        .await?;
+    if !repository.status.success() {
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "Project path '{}' is not a Git repository: {}",
+            repo_path.display(),
+            String::from_utf8_lossy(&repository.stderr).trim()
+        )));
+    }
+
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--verify")
+        .arg("--end-of-options")
+        .arg(format!("{revision}^{{commit}}"))
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if commit.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(commit))
+}
+
+#[allow(
+    dead_code,
+    reason = "called by the internal Scoped Workspace API before public session wiring"
+)]
+pub(crate) async fn create_detached_worktree(
+    repo_path: &Path,
+    worktree_path: &Path,
+    commit: &str,
+) -> Result<(), GitWorktreeError> {
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+    if let Some(parent) = worktree_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    try_create_detached_worktree_inner(repo_path, worktree_path, commit).await
+}
+
+#[allow(
+    dead_code,
+    reason = "called by the internal Scoped Workspace API before public session wiring"
+)]
+pub(crate) async fn move_worktree(
+    repo_path: &Path,
+    staged_path: &Path,
+    published_path: &Path,
+) -> Result<(), GitWorktreeError> {
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+    if let Some(parent) = published_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("move")
+        .arg(staged_path)
+        .arg(published_path)
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "failed to publish staged worktree: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) async fn prune_worktrees(repo_path: &Path) -> Result<(), GitWorktreeError> {
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+    validate_repository_path_access(repo_path)?;
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("prune")
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(GitWorktreeError::WorktreeRemoveFailed(format!(
+            "failed to prune stale worktrees: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
 async fn try_create_worktree_inner(
     repo_path: &Path,
     worktree_path: &Path,

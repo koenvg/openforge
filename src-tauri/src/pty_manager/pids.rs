@@ -264,7 +264,7 @@ const SCOPED_AGENT_KEY_PREFIX: &str = "scoped-agent-v1-";
 #[allow(dead_code)]
 const SESSION_SCOPE_VERSION: u8 = 1;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) struct SessionScope<'a> {
     pub(crate) namespace: &'a str,
