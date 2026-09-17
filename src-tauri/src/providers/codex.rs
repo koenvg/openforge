@@ -109,77 +109,92 @@ impl CodexProvider {
         &self,
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
+        let codex_home = crate::codex_hooks::codex_home_dir();
+        let home = dirs::home_dir();
+        self.list_commands_from_roots(
+            codex_home.as_deref(),
+            home.as_deref(),
+            project_path.map(Path::new),
+        )
+    }
+
+    fn list_commands_from_roots(
+        &self,
+        codex_home: Option<&Path>,
+        home: Option<&Path>,
+        project_path: Option<&Path>,
+    ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
             enrich_command, scan_skills_directory, trigger_for, CODEX_SKILLS_SOURCE_DIR,
+            GENERIC_SKILLS_SOURCE_DIR,
         };
         use std::collections::HashMap;
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+        let skill_command = |skill: crate::opencode_client::SkillInfo, origin: &str| {
+            let key = format!("skill:{}", skill.name);
+            let mut command = crate::opencode_client::CommandInfo {
+                name: key.clone(),
+                description: skill.description,
+                source: Some("skill".to_string()),
+                agent: skill.agent,
+                extra: serde_json::Map::new(),
+            };
+            enrich_command(
+                &mut command,
+                origin,
+                trigger_for(skill.disable_model_invocation),
+                Some(&skill.source_dir),
+                Some(&skill.source_path),
+                skill.user_invocable,
+            );
+            command.extra.insert(
+                "content".to_string(),
+                skill
+                    .template
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+            (key, command)
+        };
 
-        if let Some(codex_home) = crate::codex_hooks::codex_home_dir() {
+        if let Some(codex_home) = codex_home {
             for skill in
                 scan_skills_directory(&codex_home.join("skills"), "user", CODEX_SKILLS_SOURCE_DIR)
             {
-                let key = format!("skill:{}", skill.name);
-                commands_map.entry(key.clone()).or_insert_with(|| {
-                    let mut cmd = crate::opencode_client::CommandInfo {
-                        name: key,
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    };
-                    enrich_command(
-                        &mut cmd,
-                        "personal",
-                        trigger_for(skill.disable_model_invocation),
-                        Some(&skill.source_dir),
-                        Some(&skill.source_path),
-                        skill.user_invocable,
-                    );
-                    cmd.extra.insert(
-                        "content".to_string(),
-                        skill
-                            .template
-                            .map(serde_json::Value::from)
-                            .unwrap_or(serde_json::Value::Null),
-                    );
-                    cmd
-                });
+                let (key, command) = skill_command(skill, "personal");
+                commands_map.entry(key).or_insert(command);
             }
         }
 
-        if let Some(proj_path) = project_path {
-            let proj = Path::new(proj_path);
+        if let Some(home) = home {
+            for skill in scan_skills_directory(
+                &home.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
+                "user",
+                GENERIC_SKILLS_SOURCE_DIR,
+            ) {
+                let (key, command) = skill_command(skill, "personal");
+                commands_map.entry(key).or_insert(command);
+            }
+        }
+
+        if let Some(proj) = project_path {
+            for skill in scan_skills_directory(
+                &proj.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
+                "project",
+                GENERIC_SKILLS_SOURCE_DIR,
+            ) {
+                let (key, command) = skill_command(skill, "project");
+                commands_map.insert(key, command);
+            }
+
             for skill in scan_skills_directory(
                 &proj.join(CODEX_SKILLS_SOURCE_DIR).join("skills"),
                 "project",
                 CODEX_SKILLS_SOURCE_DIR,
             ) {
-                let key = format!("skill:{}", skill.name);
-                let mut cmd = crate::opencode_client::CommandInfo {
-                    name: key.clone(),
-                    description: skill.description,
-                    source: Some("skill".to_string()),
-                    agent: skill.agent,
-                    extra: serde_json::Map::new(),
-                };
-                enrich_command(
-                    &mut cmd,
-                    "project",
-                    trigger_for(skill.disable_model_invocation),
-                    Some(&skill.source_dir),
-                    Some(&skill.source_path),
-                    skill.user_invocable,
-                );
-                cmd.extra.insert(
-                    "content".to_string(),
-                    skill
-                        .template
-                        .map(serde_json::Value::from)
-                        .unwrap_or(serde_json::Value::Null),
-                );
-                commands_map.insert(key, cmd);
+                let (key, command) = skill_command(skill, "project");
+                commands_map.insert(key, command);
             }
         }
 
@@ -323,6 +338,40 @@ mod tests {
     }
 
     #[test]
+    fn list_commands_includes_user_agents_skills_for_dollar_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let skill_dir = temp_dir.path().join(".agents/skills/personal-review");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: personal-review\ndescription: Review personal changes\n---\n# Review",
+        )
+        .expect("write skill");
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands_from_roots(None, Some(temp_dir.path()), None);
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:personal-review")
+            .expect("personal .agents skill present");
+        assert_eq!(
+            command.description.as_deref(),
+            Some("Review personal changes")
+        );
+        assert_eq!(
+            command.extra.get("origin").and_then(|value| value.as_str()),
+            Some("personal")
+        );
+        assert_eq!(
+            command
+                .extra
+                .get("sourceDir")
+                .and_then(|value| value.as_str()),
+            Some(".agents")
+        );
+    }
+
+    #[test]
     fn concurrent_home_skill_scans_keep_their_own_environment() {
         let start = std::sync::Barrier::new(4);
         std::thread::scope(|scope| {
@@ -387,6 +436,75 @@ mod tests {
             .expect("project skill present");
         assert_eq!(
             command.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
+    }
+
+    #[test]
+    fn list_commands_includes_project_agents_skills_for_dollar_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let skill_dir = temp_dir.path().join(".agents/skills/openspec-explore");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: openspec-explore\ndescription: Explore an OpenSpec change\n---\n# Explore",
+        )
+        .expect("write skill");
+
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands(temp_dir.path().to_str());
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:openspec-explore")
+            .expect("project .agents skill present");
+        assert_eq!(
+            command.description.as_deref(),
+            Some("Explore an OpenSpec change")
+        );
+        assert_eq!(
+            command.extra.get("origin").and_then(|value| value.as_str()),
+            Some("project")
+        );
+        assert_eq!(
+            command
+                .extra
+                .get("sourceDir")
+                .and_then(|value| value.as_str()),
+            Some(".agents")
+        );
+    }
+
+    #[test]
+    fn project_agents_skill_overrides_personal_skill_with_the_same_name() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let personal_skill_dir = temp_dir.path().join(".agents/skills/shared-review");
+        std::fs::create_dir_all(&personal_skill_dir).expect("create personal skill dir");
+        std::fs::write(
+            personal_skill_dir.join("SKILL.md"),
+            "---\nname: shared-review\ndescription: Personal review\n---\n# Personal",
+        )
+        .expect("write personal skill");
+
+        let project = temp_dir.path().join("project");
+        let project_skill_dir = project.join(".agents/skills/shared-review");
+        std::fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
+        std::fs::write(
+            project_skill_dir.join("SKILL.md"),
+            "---\nname: shared-review\ndescription: Project review\n---\n# Project",
+        )
+        .expect("write project skill");
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands =
+            provider.list_commands_from_roots(None, Some(temp_dir.path()), Some(&project));
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:shared-review")
+            .expect("shared project skill present");
+        assert_eq!(command.description.as_deref(), Some("Project review"));
+        assert_eq!(
+            command.extra.get("origin").and_then(|value| value.as_str()),
             Some("project")
         );
     }
