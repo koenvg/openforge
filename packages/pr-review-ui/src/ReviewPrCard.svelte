@@ -2,14 +2,14 @@
   import type { Snippet } from 'svelte'
   import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import { hasDoNotReviewLabel } from '@openforge-app/plugin-sdk/domain'
-  import { Mail, X } from '@lucide/svelte'
+  import { GitPullRequest, Mail, Tags, X } from '@lucide/svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
-  import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
-  import PrStatusChip from './ui/PrStatusChip.svelte'
-  import { labelChipStyle } from './labelColors'
+  import { getPrStatusBadgeStatus, getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import StatusBadge from '@openforge-app/plugin-sdk/ui/StatusBadge.svelte'
+  import { labelMarkerStyle } from './labelColors'
 
   interface Props {
     pr: ReviewPullRequest
@@ -29,6 +29,16 @@
   let overflowCount = $derived(Math.max(0, (pr.labels ?? []).length - MAX_VISIBLE_LABELS))
   // Gray out PRs marked "DO NOT REVIEW"; the label itself is shown in the label row below.
   let doNotReview = $derived(hasDoNotReviewLabel(pr))
+  let statusChips = $derived(getPrStatusChips(pr, 'compact'))
+  let terminalChip = $derived(
+    statusChips.find(candidate => candidate.variant === 'merged' || candidate.variant === 'closed') ?? null,
+  )
+  let isUnread = $derived(!pr.viewed_at && !terminalChip)
+  let showMarkUnread = $derived(Boolean(!terminalChip && pr.viewed_at && onMarkUnread))
+  let titleWeight = $derived(isUnread ? 'font-semibold' : 'font-medium')
+  let headerActionPadding = $derived(
+    onRemove && showMarkUnread ? 'pr-16' : onRemove || showMarkUnread ? 'pr-7' : '',
+  )
 </script>
 
 <div class="relative group">
@@ -44,7 +54,7 @@
     <X size={14} strokeWidth={1.5} aria-hidden="true" />
   </IconButton>
 {/if}
-{#if pr.viewed_at && onMarkUnread}
+{#if showMarkUnread}
   <IconButton
     label="Mark as unread"
     size="xs"
@@ -57,53 +67,80 @@
   </IconButton>
 {/if}
 <Card
-  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {pr.viewed_at || doNotReview ? 'opacity-50' : ''}"
+  class="flex flex-col gap-3 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''}"
   {selected}
   onclick={onClick}
 >
-  <div class="flex items-center gap-2">
-    <Badge variant="info">{pr.repo_owner}/{pr.repo_name}</Badge>
-    {#if pr.draft}
-      <Badge>Draft</Badge>
+  <div class="flex flex-wrap items-center justify-between gap-2 {headerActionPadding}">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="inline-flex items-center gap-1.5 text-xs font-medium text-base-content/70">
+        <GitPullRequest class="size-3.5 text-base-content/50" aria-hidden="true" />
+        {pr.repo_owner}/{pr.repo_name}
+      </span>
+      {#if pr.draft}
+        <Badge>Draft</Badge>
+      {/if}
+    </div>
+    {#if terminalChip}
+      <StatusBadge status={getPrStatusBadgeStatus(terminalChip) ?? 'expired'}>{terminalChip.label}</StatusBadge>
     {/if}
   </div>
 
-  <div class="flex items-start">
-    <h3 class="text-[0.9rem] font-medium text-base-content m-0 leading-snug">{pr.title}</h3>
-  </div>
-
-  <div class="flex items-center gap-2 text-xs text-base-content/50">
-    <span class="font-semibold text-base-content">#{pr.number}</span>
-    <span class="text-base-300">•</span>
-    <span class="font-medium">{pr.user_login}</span>
-    <span class="text-base-300">•</span>
-    <span>{timeAgoFromSeconds(pr.created_at)}</span>
-  </div>
-
-  <div class="flex items-center gap-2 text-xs">
-    {#each getPrStatusChips(pr, 'compact') as chip}
-      {#if chip.type !== 'draft'}
-        <PrStatusChip {chip} />
-        <span class="text-base-300">•</span>
+  <div class="flex flex-col gap-2.5 transition-opacity {doNotReview ? 'opacity-60' : ''}">
+    <div class="flex items-start gap-2">
+      {#if isUnread}
+        <span
+          class="mt-[0.4rem] size-2 shrink-0 rounded-[var(--of-radius-round)] bg-info ring-2 ring-info/15"
+          role="img"
+          aria-label="Unread review request"
+          title="Unread"
+        ></span>
       {/if}
-    {/each}
-    <span class="font-medium text-base-content/50">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
-    <span class="text-base-300">•</span>
-    <span class="font-medium text-success">+{pr.additions}</span>
-    <span class="font-medium text-error">−{pr.deletions}</span>
-  </div>
-
-  {#if visibleLabels.length > 0}
-    <div class="flex flex-wrap items-center gap-1">
-      {#each visibleLabels as label}
-        {@const style = labelChipStyle(label.color)}
-        <Badge style={style} title={label.name}>{label.name}</Badge>
-      {/each}
-      {#if overflowCount > 0}
-        <Badge>+{overflowCount}</Badge>
-      {/if}
+      <h3 class="text-[0.9rem] {titleWeight} text-base-content m-0 leading-snug">{pr.title}</h3>
     </div>
-  {/if}
+
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-base-content/60">
+      <span class="font-semibold text-base-content">#{pr.number}</span>
+      <span class="text-base-300" aria-hidden="true">•</span>
+      <span class="font-medium">{pr.user_login}</span>
+      <span class="text-base-300" aria-hidden="true">•</span>
+      <span>{timeAgoFromSeconds(pr.created_at)}</span>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+      {#each statusChips as chip}
+        {@const status = getPrStatusBadgeStatus(chip)}
+        {#if chip.type !== 'draft' && chip.variant !== 'merged' && chip.variant !== 'closed' && status}
+          <StatusBadge {status}>{chip.label}</StatusBadge>
+        {/if}
+      {/each}
+      <span class="font-medium text-base-content/60">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
+      <span class="text-base-300" aria-hidden="true">•</span>
+      <span class="font-semibold text-success">+{pr.additions}</span>
+      <span class="font-semibold text-error">−{pr.deletions}</span>
+    </div>
+
+    {#if visibleLabels.length > 0}
+      <div class="flex min-w-0 items-start gap-2 text-xs text-base-content/75">
+        <Tags class="mt-0.5 size-3.5 shrink-0 text-base-content/50" aria-hidden="true" />
+        <ul class="m-0 flex min-w-0 list-none flex-wrap items-center gap-x-3 gap-y-1 p-0" aria-label="Pull request labels">
+          {#each visibleLabels as label}
+            <li class="flex min-w-0 items-center gap-1.5">
+              <span
+                class="size-2 shrink-0 rounded-[var(--of-radius-round)] ring-1 ring-base-content/15"
+                style={labelMarkerStyle(label.color)}
+                aria-hidden="true"
+              ></span>
+              <span class="truncate font-medium" title={label.name}>{label.name}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if overflowCount > 0}
+          <span class="shrink-0 font-medium text-base-content/60" aria-label={`${overflowCount} more labels`}>+{overflowCount}</span>
+        {/if}
+      </div>
+    {/if}
+  </div>
 
   {#if footer}
     <div class="mt-0.5">

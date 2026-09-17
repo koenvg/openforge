@@ -11,8 +11,8 @@
     muted: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-[var(--chip-soft-text)]' },
     neutral: { bg: 'bg-[var(--chip-stopped-bg)]', dot: 'bg-[var(--chip-stopped-dot)]', text: 'text-[var(--chip-stopped-text)]' },
     done: { bg: 'bg-[var(--chip-done-bg)]', dot: 'bg-[var(--chip-done-dot)]', text: 'text-[var(--chip-done-text)]' },
-    merged: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-secondary' },
-    closed: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-secondary' }
+    merged: { bg: 'bg-[var(--chip-done-bg)]', dot: '', text: 'text-[var(--chip-done-text)]' },
+    closed: { bg: 'bg-[var(--chip-stopped-bg)]', dot: '', text: 'text-[var(--chip-stopped-text)]' }
   };
 
   const detailClasses: Record<PrStatusChipSpec['variant'], string> = {
@@ -38,10 +38,15 @@
   </span>
 {:else}
   <!-- Compact surface -->
-  <span class="inline-flex items-center gap-1.5 rounded-[var(--of-radius-round)] px-2.5 py-1.5 {variantClasses[chip.variant].bg}">
-    {#if chip.variant !== 'muted'}
+  <span
+    class="inline-flex items-center gap-1.5 rounded-[var(--of-radius-round)] px-2.5 py-1.5 {variantClasses[chip.variant].bg}"
+  >
+    {#if chip.icon === 'check'}<Check class="w-3.5 h-3.5 {variantClasses[chip.variant].text}" aria-hidden="true" />
+    {:else if chip.icon === 'cross'}<X class="w-3.5 h-3.5 {variantClasses[chip.variant].text}" aria-hidden="true" />
+    {:else if chip.icon === 'clock'}<Clock class="w-3.5 h-3.5 {variantClasses[chip.variant].text}" aria-hidden="true" />
+    {:else if chip.variant !== 'muted'}
       <span class="w-1.5 h-1.5 rounded-[var(--of-radius-round)] {variantClasses[chip.variant].dot}"></span>
     {/if}
-    <span class="text-[10px] font-medium {variantClasses[chip.variant].text}">{chip.label}</span>
+    <span class="text-xs font-semibold {variantClasses[chip.variant].text}">{chip.label}</span>
   </span>
 {/if}

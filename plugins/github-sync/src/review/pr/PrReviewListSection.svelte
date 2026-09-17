@@ -1,7 +1,9 @@
 <script lang="ts">
-  import type { AuthoredPullRequest, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import { isClosedOrMergedPullRequest, type AuthoredPullRequest, type PrWalkthrough, type ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
@@ -26,15 +28,20 @@
     error: string | null
     authoredError: string | null
     githubTokenConfigured: boolean | null
-    filteredReviewPrs: ReviewPullRequest[]
+    reviewRequests: {
+      activeCount: number
+      filtered: ReviewPullRequest[]
+      finishedCount: number
+      groupedActive: Map<string, ReviewPullRequest[]>
+      groupedFinished: Map<string, ReviewPullRequest[]>
+      keyboardNavigable: ReviewPullRequest[]
+    }
     filteredAuthoredPrs: AuthoredPullRequest[]
     allReviewPrs: ReviewPullRequest[]
     allAuthoredPrs: AuthoredPullRequest[]
     hiddenReviewRepos: string[]
     hiddenAuthoredRepos: string[]
-    groupedPrs: Map<string, ReviewPullRequest[]>
     groupedAuthoredPrs: Map<string, AuthoredPullRequest[]>
-    flatPrList: ReviewPullRequest[]
     focusedIndex: number
     onToggleFilterDropdown: () => void
     onCloseFilterDropdown: () => void
@@ -76,15 +83,13 @@
     error,
     authoredError,
     githubTokenConfigured,
-    filteredReviewPrs,
+    reviewRequests,
     filteredAuthoredPrs,
     allReviewPrs,
     allAuthoredPrs,
     hiddenReviewRepos,
     hiddenAuthoredRepos,
-    groupedPrs,
     groupedAuthoredPrs,
-    flatPrList,
     focusedIndex,
     onToggleFilterDropdown,
     onCloseFilterDropdown,
@@ -106,7 +111,48 @@
     onGenerateWalkthrough = () => {},
     onStopWalkthrough = () => {},
   }: Props = $props()
+
+  const finishedSectionKey = pluginSectionKey('com.openforge.github-sync', 'finished-review-requests')
 </script>
+
+{#snippet reviewGroups(groups: Map<string, ReviewPullRequest[]>, idPrefix: string, keyboardNavigable: boolean)}
+  {#each [...groups.entries()] as [repo, prs]}
+    {@const repoHeadingId = `${idPrefix}-${repo.replaceAll('/', '-')}`}
+    <section class="mb-6" aria-labelledby={repoHeadingId}>
+      <h3
+        id={repoHeadingId}
+        class="text-xs font-semibold text-base-content/60 m-0 mb-3 uppercase tracking-wider"
+      >{repo}</h3>
+      <div class="flex flex-col gap-3">
+        {#each prs as pr}
+          {@const keyboardIndex = reviewRequests.keyboardNavigable.indexOf(pr)}
+          {@const wtState = walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha)}
+          {@const isFinished = isClosedOrMergedPullRequest(pr.state)}
+          <div
+            data-vim-pr-item={keyboardNavigable ? '' : undefined}
+            class={keyboardNavigable && keyboardIndex === focusedIndex ? 'vim-focus' : ''}
+          >
+            <ReviewPrCard
+              {pr}
+              selected={false}
+              onClick={() => onSelectPr(pr)}
+              onMarkUnread={() => onMarkUnread(pr)}
+              onRemove={() => onRemove(pr)}
+            >
+              {#snippet footer()}
+                {#if wtState === 'generating' || wtState === 'ready' || (!isFinished && canGenerateWalkthrough(pr))}
+                  <div class="pt-1">
+                    <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
+                  </div>
+                {/if}
+              {/snippet}
+            </ReviewPrCard>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/each}
+{/snippet}
 
 <PluginPageShell>
   {#snippet header()}
@@ -144,7 +190,10 @@
         <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
-            <Badge variant="info">{filteredReviewPrs.length}</Badge>
+            <Badge
+              variant="info"
+              aria-label={`${reviewRequests.activeCount} active ${pluralize(reviewRequests.activeCount, 'review request')}`}
+            >{reviewRequests.activeCount}</Badge>
           </div>
           <Button
             variant="ghost"
@@ -159,7 +208,7 @@
         </div>
 
         <div class="flex-1 overflow-y-auto p-5 pb-8">
-          {#if isLoading && filteredReviewPrs.length === 0}
+          {#if isLoading && reviewRequests.filtered.length === 0}
             <PluginViewState loading loadingLabel="Loading PRs..." />
           {:else if error}
             <PluginViewState error={error} errorTitle="Unable to load review requests">
@@ -168,7 +217,7 @@
                 <Button variant="ghost" size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
-          {:else if filteredReviewPrs.length === 0 && allReviewPrs.length > 0 && hiddenReviewRepos.length > 0}
+          {:else if reviewRequests.filtered.length === 0 && allReviewPrs.length > 0 && hiddenReviewRepos.length > 0}
             <PluginViewState
               empty
               emptyTitle="All review requests are hidden by filters"
@@ -178,7 +227,7 @@
                 <Button size="sm" onclick={onOpenRepositoryFilters}>Review repository filters</Button>
               {/snippet}
             </PluginViewState>
-          {:else if filteredReviewPrs.length === 0 && githubTokenConfigured === false}
+          {:else if reviewRequests.filtered.length === 0 && githubTokenConfigured === false}
             <PluginViewState
               empty
               emptyTitle="Connect GitHub to check review requests"
@@ -188,7 +237,7 @@
                 <Button size="sm" onclick={onOpenGithubSettings}>Open GitHub settings</Button>
               {/snippet}
             </PluginViewState>
-          {:else if filteredReviewPrs.length === 0}
+          {:else if reviewRequests.filtered.length === 0}
             <PluginViewState
               empty
               emptyTitle="No PRs requesting your review"
@@ -202,34 +251,22 @@
               {/snippet}
             </PluginViewState>
           {:else}
-            {#each [...groupedPrs.entries()] as [repo, prs]}
-              <div class="mb-6">
-                <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-                <div class="flex flex-col gap-3">
-                  {#each prs as pr}
-                    {@const flatIdx = flatPrList.indexOf(pr)}
-                    {@const wtState = walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha)}
-                    <div data-vim-pr-item class={flatIdx === focusedIndex ? 'vim-focus' : ''}>
-                      <ReviewPrCard
-                        {pr}
-                        selected={false}
-                        onClick={() => onSelectPr(pr)}
-                        onMarkUnread={() => onMarkUnread(pr)}
-                        onRemove={() => onRemove(pr)}
-                      >
-                        {#snippet footer()}
-                          {#if wtState === 'generating' || wtState === 'ready' || canGenerateWalkthrough(pr)}
-                            <div class="pt-1">
-                              <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
-                            </div>
-                          {/if}
-                        {/snippet}
-                      </ReviewPrCard>
-                    </div>
-                  {/each}
-                </div>
+            {@render reviewGroups(reviewRequests.groupedActive, 'active-review-repo', true)}
+
+            {#if reviewRequests.finishedCount > 0}
+              <div class="mt-2">
+                <CollapsibleSection
+                  sectionKey={finishedSectionKey}
+                  title={`Finished (${reviewRequests.finishedCount})`}
+                  label="Finished review requests"
+                  cardId="finished-review-requests"
+                >
+                  <div class="pt-4">
+                    {@render reviewGroups(reviewRequests.groupedFinished, 'finished-review-repo', false)}
+                  </div>
+                </CollapsibleSection>
               </div>
-            {/each}
+            {/if}
           {/if}
         </div>
       </div>

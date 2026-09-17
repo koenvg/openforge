@@ -5007,5 +5007,27 @@
     },
     "ready": "[data-schedule-ready=\"components-task-schedules--deleting-dialog\"]",
     "expectedErrors": []
+  },
+  {
+    "catalog": "components",
+    "story": "components-github-sync-review-requests--active-and-finished",
+    "theme": "openforge-light",
+    "viewport": {
+      "width": 1280,
+      "height": 1200
+    },
+    "ready": "[aria-label=\"Finished review requests\"] button[aria-expanded=\"true\"]",
+    "expectedErrors": []
+  },
+  {
+    "catalog": "components",
+    "story": "components-github-sync-review-requests--active-and-finished",
+    "theme": "openforge-dark",
+    "viewport": {
+      "width": 1280,
+      "height": 1200
+    },
+    "ready": "[aria-label=\"Finished review requests\"] button[aria-expanded=\"true\"]",
+    "expectedErrors": []
   }
 ]

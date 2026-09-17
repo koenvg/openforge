@@ -394,6 +394,41 @@ describe('PrReviewView mark as unread', () => {
   })
 })
 
+describe('PrReviewView finished review requests', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('keeps active requests in the main list and puts merged requests in an expanded Finished section', async () => {
+    const mergedPr: ReviewPullRequest = {
+      ...secondPr,
+      title: 'Already merged change',
+      state: 'merged',
+      merged_at: 1_700_000_100,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr, mergedPr])
+
+    renderPrReviewView(registry)
+
+    expect(await screen.findByText(basePr.title)).toBeTruthy()
+    const mergedTitle = screen.getByText(mergedPr.title)
+    expect(mergedTitle).toBeTruthy()
+    expect(mergedTitle.closest('.vim-focus')).toBeNull()
+    expect(screen.getByLabelText('1 active review request').textContent).toBe('1')
+    expect(screen.getAllByRole('button', { name: 'Generate walkthrough and AI review' })).toHaveLength(1)
+
+    const finishedToggle = screen.getByRole('button', { name: 'Finished (1)' })
+    expect(finishedToggle.getAttribute('aria-expanded')).toBe('true')
+
+    await fireEvent.click(finishedToggle)
+
+    expect(screen.getByText(basePr.title)).toBeTruthy()
+    expect(screen.queryByText(mergedPr.title)).toBeNull()
+  })
+})
+
 describe('PrReviewView view re-invocation', () => {
   beforeEach(() => {
     resetStores()

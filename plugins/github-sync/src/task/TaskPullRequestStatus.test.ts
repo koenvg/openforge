@@ -318,7 +318,7 @@ describe('GitHub Sync Task pull request section', () => {
     renderSection(invoke)
 
     expect(await screen.findByText('Test PR')).toBeTruthy()
-    expect(screen.getByText('merged')).toBeTruthy()
+    expect(screen.getByText('Merged')).toBeTruthy()
     expect(screen.queryByText('Pull request is already merged.')).toBeNull()
   })
 

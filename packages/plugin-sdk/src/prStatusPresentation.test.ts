@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPrStatusChips, type PrInput } from '@openforge-app/plugin-sdk/prStatusPresentation'
+import { getPrStatusBadgeStatus, getPrStatusChips, type PrInput, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 describe('getPrStatusChips shared package API', () => {
@@ -46,7 +46,7 @@ describe('getPrStatusChips shared package API', () => {
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }))
 
     expect(getPrStatusChips({ ...basePr, state: 'closed' }, 'compact'))
-      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'closed', variant: 'closed' }))
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }))
 
     expect(getPrStatusChips({ ...basePr, state: 'merged' }, 'detail'))
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }))
@@ -100,7 +100,7 @@ describe('getPrStatusChips shared package API', () => {
       ci_status: 'failure',
       mergeable_state: 'clean',
     }, 'compact')).toEqual([
-      expect.objectContaining({ type: 'merge', label: 'merged' }),
+      expect.objectContaining({ type: 'merge', label: 'Merged', icon: 'check' }),
     ])
     expect(getPrStatusChips({
       ...reviewPr,
@@ -108,7 +108,23 @@ describe('getPrStatusChips shared package API', () => {
       ci_status: 'pending',
       mergeable_state: 'clean',
     }, 'compact')).toEqual([
-      expect.objectContaining({ type: 'merge', label: 'closed' }),
+      expect.objectContaining({ type: 'merge', label: 'Closed', icon: 'cross' }),
     ])
+  })
+
+  it('maps pull request signals onto SDK status badge states', () => {
+    const chip = (type: PrStatusChipSpec['type'], variant: PrStatusChipSpec['variant']): PrStatusChipSpec => ({
+      type,
+      variant,
+      label: 'Status',
+      surface: 'compact',
+    })
+
+    expect(getPrStatusBadgeStatus(chip('ci', 'pending'))).toBe('in-progress')
+    expect(getPrStatusBadgeStatus(chip('ci', 'error'))).toBe('failed')
+    expect(getPrStatusBadgeStatus(chip('review', 'neutral'))).toBe('in-review')
+    expect(getPrStatusBadgeStatus(chip('merge', 'done'))).toBe('success')
+    expect(getPrStatusBadgeStatus(chip('merge', 'closed'))).toBe('expired')
+    expect(getPrStatusBadgeStatus(chip('draft', 'muted'))).toBeNull()
   })
 })

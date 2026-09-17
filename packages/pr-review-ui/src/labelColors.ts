@@ -27,3 +27,9 @@ export function labelChipStyle(color: string): string {
   if (!normalized) return ''
   return `background-color: #${normalized}33; border-color: #${normalized};`
 }
+
+export function labelMarkerStyle(color: string): string {
+  const normalized = normalizeLabelColor(color)
+  if (!normalized) return ''
+  return `background-color: #${normalized};`
+}

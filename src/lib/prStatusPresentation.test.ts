@@ -99,7 +99,7 @@ describe('getPrStatusChips', () => {
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }));
 
     expect(getPrStatusChips({ ...basePr, state: 'closed', merged_at: null }, 'compact'))
-      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'closed', variant: 'closed' }));
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Closed', variant: 'closed', icon: 'cross' }));
   });
 
   it('keeps merged pull request presentation as merged/done status', () => {
@@ -107,7 +107,7 @@ describe('getPrStatusChips', () => {
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }));
 
     expect(getPrStatusChips({ ...basePr, state: 'merged', merged_at: 3000 }, 'compact'))
-      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'merged', variant: 'merged' }));
+      .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }));
   });
 
   it('ignores null and none statuses', () => {
