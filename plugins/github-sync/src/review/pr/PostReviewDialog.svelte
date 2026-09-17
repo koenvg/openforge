@@ -17,7 +17,7 @@
   {#snippet header()}
     <h2 class="m-0 text-base font-semibold text-base-content">You reviewed this pull request</h2>
   {/snippet}
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-4 p-5">
     <p class="m-0 text-sm text-base-content/70">
       Your review of
       <span class="font-medium text-base-content">{pr.repo_owner}/{pr.repo_name} #{pr.number}</span>
