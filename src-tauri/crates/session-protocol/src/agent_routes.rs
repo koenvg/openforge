@@ -52,9 +52,20 @@ pub fn agent_route_allowed(method: &str, path: &str) -> bool {
     }
 }
 
+pub fn scoped_agent_route_allowed(method: &str, path: &str) -> bool {
+    method == "POST"
+        && matches!(
+            path,
+            "/review_threads/list"
+                | "/review_threads/create"
+                | "/review_threads/reply"
+                | "/review_threads/status"
+        )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::agent_route_allowed;
+    use super::{agent_route_allowed, scoped_agent_route_allowed};
 
     #[test]
     fn the_review_thread_write_and_read_routes_are_reachable_by_an_agent() {
@@ -65,6 +76,19 @@ mod tests {
             "/review_threads/status",
         ] {
             assert!(agent_route_allowed("POST", path), "{path}");
+        }
+    }
+
+    #[test]
+    fn scoped_agents_get_only_named_review_thread_routes() {
+        assert!(scoped_agent_route_allowed("POST", "/review_threads/create"));
+        for (method, path) in [
+            ("POST", "/create_task"),
+            ("POST", "/plugin_commands/invoke"),
+            ("GET", "/tasks"),
+            ("GET", "/review_threads/list"),
+        ] {
+            assert!(!scoped_agent_route_allowed(method, path), "{method} {path}");
         }
     }
 

@@ -113,7 +113,7 @@ impl HostBackend for ExistingBackend {
                 manager.retain_failed_current_cleanup(key, session).await;
                 return Err(backend_error(error));
             }
-            manager.clear_session_tracking(key).await;
+            manager.clear_session_tracking(key, true).await;
         }
         Ok(())
     }

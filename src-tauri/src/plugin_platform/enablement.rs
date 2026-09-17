@@ -18,7 +18,7 @@ impl PluginPlatform<'_> {
         drop(db);
         result?;
         if !enabled {
-            self.schedule_scoped_workspace_release(plugin_id, Some(project_id));
+            self.schedule_scoped_resource_release(plugin_id, Some(project_id));
         }
         Ok(())
     }
@@ -48,7 +48,7 @@ impl PluginPlatform<'_> {
         drop(db);
         result?;
         if !enabled {
-            self.schedule_scoped_workspace_release(plugin_id, None);
+            self.schedule_scoped_resource_release(plugin_id, None);
         }
         Ok(())
     }

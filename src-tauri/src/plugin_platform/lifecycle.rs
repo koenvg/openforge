@@ -242,7 +242,7 @@ impl PluginPlatform<'_> {
 
         drop(db);
         result.map_err(PluginPlatformError::internal)?;
-        self.schedule_scoped_workspace_release(plugin_id, None);
+        self.schedule_scoped_resource_release(plugin_id, None);
         Ok(())
     }
 

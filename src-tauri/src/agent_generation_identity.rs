@@ -1,7 +1,7 @@
 //! Agent identity for headless generations, which have no PTY to borrow one from.
 use serde::Serialize;
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fs::{self, DirBuilder, OpenOptions, Permissions},
     os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
@@ -31,7 +31,23 @@ struct Endpoint {
 #[derive(Default)]
 struct Inner {
     endpoint: Option<Endpoint>,
-    live: HashSet<String>,
+    live: HashMap<String, AgentIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScopedAgentPrincipal {
+    pub session_id: String,
+    pub owner_plugin_id: String,
+    pub namespace: String,
+    pub target_key: String,
+    pub revision: String,
+    pub tool_policy: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AgentIdentity {
+    HeadlessGeneration,
+    Scoped(ScopedAgentPrincipal),
 }
 
 #[derive(Clone, Default)]
@@ -74,6 +90,17 @@ impl GenerationIdentities {
     }
 
     pub(crate) fn issue(&self) -> Result<GenerationCredential, String> {
+        self.issue_identity(AgentIdentity::HeadlessGeneration)
+    }
+
+    pub(crate) fn issue_scoped(
+        &self,
+        principal: ScopedAgentPrincipal,
+    ) -> Result<GenerationCredential, String> {
+        self.issue_identity(AgentIdentity::Scoped(principal))
+    }
+
+    fn issue_identity(&self, identity: AgentIdentity) -> Result<GenerationCredential, String> {
         let (directory, port) = {
             let inner = lock(&self.0);
             let endpoint = inner
@@ -96,7 +123,7 @@ impl GenerationIdentities {
                 token: &token,
             },
         )?;
-        lock(&self.0).live.insert(token.clone());
+        lock(&self.0).live.insert(token.clone(), identity);
         Ok(GenerationCredential {
             path,
             token,
@@ -104,11 +131,15 @@ impl GenerationIdentities {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn authorizes(&self, token: &str) -> bool {
-        lock(&self.0)
-            .live
-            .iter()
-            .any(|live| bool::from(live.as_bytes().ct_eq(token.as_bytes())))
+        self.identity(token).is_some()
+    }
+
+    pub(crate) fn identity(&self, token: &str) -> Option<AgentIdentity> {
+        lock(&self.0).live.iter().find_map(|(live, identity)| {
+            bool::from(live.as_bytes().ct_eq(token.as_bytes())).then(|| identity.clone())
+        })
     }
 }
 
@@ -217,6 +248,28 @@ mod tests {
         assert_ne!(credential.token(), other.token());
         assert_ne!(credential.config_path(), other.config_path());
         assert!(!identities.authorizes("f".repeat(64).as_str()));
+    }
+
+    #[test]
+    fn scoped_identity_is_bound_to_plugin_session_and_exact_scope() {
+        let (identities, _root) = activated(1);
+        let principal = ScopedAgentPrincipal {
+            session_id: "sas-1".into(),
+            owner_plugin_id: "com.example.review".into(),
+            namespace: "github-pr".into(),
+            target_key: "owner/repo#42".into(),
+            revision: "head-a".into(),
+            tool_policy: "review-read-only".into(),
+        };
+        let credential = identities
+            .issue_scoped(principal.clone())
+            .expect("issue scoped");
+        assert_eq!(
+            identities.identity(credential.token()),
+            Some(AgentIdentity::Scoped(principal))
+        );
+        drop(credential);
+        assert_eq!(identities.identity("revoked"), None);
     }
 
     #[test]

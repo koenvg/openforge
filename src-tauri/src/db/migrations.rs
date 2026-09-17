@@ -78,6 +78,47 @@ pub(super) fn ensure_scoped_workspaces_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(SCOPED_WORKSPACES_SQL)
 }
 
+pub(super) const SCOPED_AGENT_SESSIONS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS scoped_agent_sessions (
+    id TEXT PRIMARY KEY CHECK(length(CAST(id AS BLOB)) > 0),
+    owner_plugin_id TEXT NOT NULL CHECK(length(CAST(owner_plugin_id AS BLOB)) > 0),
+    namespace TEXT NOT NULL
+        CHECK(length(CAST(namespace AS BLOB)) BETWEEN 1 AND 128 AND instr(namespace, char(0)) = 0),
+    target_key TEXT NOT NULL
+        CHECK(length(CAST(target_key AS BLOB)) BETWEEN 1 AND 2048 AND instr(target_key, char(0)) = 0),
+    revision TEXT NOT NULL
+        CHECK(length(CAST(revision AS BLOB)) BETWEEN 1 AND 256 AND instr(revision, char(0)) = 0),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    checkout_revision TEXT NOT NULL CHECK(length(CAST(checkout_revision AS BLOB)) > 0),
+    resolved_commit TEXT,
+    provider TEXT NOT NULL CHECK(length(CAST(provider AS BLOB)) > 0),
+    provider_session_id TEXT,
+    tool_policy TEXT NOT NULL CHECK(length(CAST(tool_policy AS BLOB)) > 0),
+    terminal_key TEXT NOT NULL UNIQUE CHECK(length(CAST(terminal_key AS BLOB)) > 0),
+    pty_instance_id INTEGER CHECK(pty_instance_id IS NULL OR pty_instance_id >= 0),
+    status TEXT NOT NULL CHECK(status IN (
+        'queued', 'starting', 'running', 'paused', 'completed', 'failed', 'aborted', 'interrupted'
+    )),
+    queue_sequence INTEGER CHECK(queue_sequence IS NULL OR queue_sequence > 0),
+    error_code TEXT,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL,
+    UNIQUE(namespace, target_key, revision)
+);
+CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_logical_scope
+    ON scoped_agent_sessions(namespace, target_key);
+CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_scheduler
+    ON scoped_agent_sessions(status, queue_sequence, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_owner_project
+    ON scoped_agent_sessions(owner_plugin_id, project_id);
+"#;
+
+pub(super) fn ensure_scoped_agent_sessions_table(conn: &Connection) -> Result<()> {
+    conn.execute_batch(SCOPED_AGENT_SESSIONS_SQL)
+}
+
 macro_rules! define_migrations {
     ($($migration:expr),+ $(,)?) => {
         const MIGRATION_COUNT: usize = [$(define_migrations!(@count $migration)),+].len();
@@ -1962,6 +2003,7 @@ INSERT OR IGNORE INTO config (key, value)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
     M::up(SCOPED_WORKSPACES_SQL),
+    M::up(SCOPED_AGENT_SESSIONS_SQL),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2781,6 +2823,7 @@ mod tests {
         AuthoredPrMergedTimestampRemoval,
         ScopedAgentKeyReservation,
         ScopedWorkspaces,
+        ScopedAgentSessions,
     }
 
     impl MigrationBoundary {
@@ -2805,6 +2848,7 @@ mod tests {
                 Self::AuthoredPrMergedTimestampRemoval => 65,
                 Self::ScopedAgentKeyReservation => 66,
                 Self::ScopedWorkspaces => 67,
+                Self::ScopedAgentSessions => 68,
             }
         }
     }
@@ -5145,5 +5189,89 @@ mod tests {
                 .expect("read upgraded Task-owned table SQL");
             assert_eq!(upgraded_sql, task_table_sql[index]);
         }
+    }
+
+    #[test]
+    fn scoped_agent_sessions_migration_creates_isolated_constrained_storage() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        assert!(table_exists(&conn, "scoped_agent_sessions").expect("check table"));
+        let columns = conn
+            .prepare("SELECT name FROM pragma_table_info('scoped_agent_sessions') ORDER BY cid")
+            .expect("prepare Scoped Agent Session columns")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query Scoped Agent Session columns")
+            .collect::<Result<Vec<_>>>()
+            .expect("read Scoped Agent Session columns");
+        assert_eq!(
+            columns,
+            [
+                "id",
+                "owner_plugin_id",
+                "namespace",
+                "target_key",
+                "revision",
+                "project_id",
+                "checkout_revision",
+                "resolved_commit",
+                "provider",
+                "provider_session_id",
+                "tool_policy",
+                "terminal_key",
+                "pty_instance_id",
+                "status",
+                "queue_sequence",
+                "error_code",
+                "error_message",
+                "created_at",
+                "updated_at",
+                "last_used_at",
+            ]
+        );
+
+        let task_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('agent_sessions')
+                 WHERE name IN ('namespace', 'target_key', 'revision', 'owner_plugin_id', 'tool_policy')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check Task Agent Session isolation");
+        assert_eq!(task_columns, 0);
+    }
+
+    #[test]
+    fn scoped_agent_sessions_upgrade_does_not_rewrite_task_sessions() {
+        let (_temp_dir, path) = temporary_database_path();
+        let task_table_sql = {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock pre-upgrade database");
+            let sql: String = conn.query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_sessions'",
+                [],
+                |row| row.get(0),
+            ).expect("read Task Agent Session table");
+            conn.execute("DROP TABLE scoped_agent_sessions", [])
+                .expect("remove future table");
+            set_user_version_before(&conn, MigrationBoundary::ScopedAgentSessions);
+            sql
+        };
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+        assert!(table_exists(&conn, "scoped_agent_sessions").expect("check new table"));
+        let upgraded_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read upgraded Task Agent Session table");
+        assert_eq!(upgraded_sql, task_table_sql);
     }
 }

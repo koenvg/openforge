@@ -9,7 +9,7 @@ use std::sync::Arc;
 use super::super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
 use super::super::super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
-    ReadyPtyOutputReader, RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
+    PtyExitPolicy, ReadyPtyOutputReader, RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 use super::super::super::{PtyError, PtyManager};
 use super::super::lifecycle::LifecycleLockLease;
@@ -43,6 +43,7 @@ pub(super) struct AgentEventStreamRequest<'a> {
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
     pub(super) event_publisher: RuntimeEventPublisher,
+    pub(super) exit_policy: PtyExitPolicy,
 }
 
 pub(super) struct ShellStreamState {
@@ -202,6 +203,7 @@ impl PtyManager {
             lifecycle_lock,
             pid_file,
             event_publisher,
+            exit_policy,
         } = request;
         if let Err(error) = self
             .require_current_agent_spawn_and_session(
@@ -229,7 +231,7 @@ impl PtyManager {
                 exit_action: PtyExitAction::Cleanup {
                     lifecycle_lock,
                     pid_file,
-                    emit_agent_exit: true,
+                    policy: exit_policy,
                 },
             },
         );
@@ -291,7 +293,7 @@ impl PtyManager {
                 exit_action: PtyExitAction::Cleanup {
                     lifecycle_lock,
                     pid_file,
-                    emit_agent_exit: false,
+                    policy: PtyExitPolicy::Shell,
                 },
             },
         );

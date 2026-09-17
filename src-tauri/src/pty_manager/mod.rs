@@ -8,6 +8,7 @@ pub(crate) mod daemon_shells;
 mod daemon_transport;
 pub(crate) use commands::PiSessionTarget;
 mod events;
+pub(crate) use events::PtyExitObserver;
 pub(crate) mod host;
 mod managed_process;
 mod ordered_writer;

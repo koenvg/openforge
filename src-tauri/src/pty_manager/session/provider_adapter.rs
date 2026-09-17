@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::super::commands::{
     build_claude_args, build_codex_args, build_grok_args, build_opencode_tui_args, build_pi_args,
-    PiSessionTarget,
+    build_scoped_claude_args, PiSessionTarget,
 };
 use super::super::PtyError;
 use super::invalid_workspace_cwd;
@@ -16,6 +16,9 @@ pub(super) trait AgentPtyProviderAdapter {
     fn command_args(&self) -> Vec<String>;
     fn prepare(&mut self, cwd: &Path) -> Result<(), PtyError>;
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String>;
+    fn removed_env(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn pid_file_name(&self, task_id: &str) -> String;
 }
 
@@ -89,6 +92,109 @@ impl AgentPtyProviderAdapter for ClaudeCodePtyAdapter {
 
     fn pid_file_name(&self, task_id: &str) -> String {
         format!("{}-claude.pid", task_id)
+    }
+}
+
+pub(super) struct ScopedClaudeCodePtyAdapter {
+    prompt: String,
+    provider_session_id: String,
+    resume: bool,
+    settings_path: PathBuf,
+    sandbox_profile: String,
+    credential_path: Option<PathBuf>,
+    provider_state_dir: PathBuf,
+    scoped_session_id: String,
+}
+
+pub(super) struct ScopedClaudeCodePtyConfig {
+    pub prompt: String,
+    pub provider_session_id: String,
+    pub resume: bool,
+    pub settings_path: PathBuf,
+    pub sandbox_profile: String,
+    pub credential_path: Option<PathBuf>,
+    pub provider_state_dir: PathBuf,
+    pub scoped_session_id: String,
+}
+
+impl ScopedClaudeCodePtyAdapter {
+    pub(super) fn new(config: ScopedClaudeCodePtyConfig) -> Self {
+        Self {
+            prompt: config.prompt,
+            provider_session_id: config.provider_session_id,
+            resume: config.resume,
+            settings_path: config.settings_path,
+            sandbox_profile: config.sandbox_profile,
+            credential_path: config.credential_path,
+            provider_state_dir: config.provider_state_dir,
+            scoped_session_id: config.scoped_session_id,
+        }
+    }
+}
+
+impl AgentPtyProviderAdapter for ScopedClaudeCodePtyAdapter {
+    fn label(&self) -> &'static str {
+        "Scoped Claude"
+    }
+    fn command_name(&self) -> &str {
+        "/usr/bin/sandbox-exec"
+    }
+    fn command_args(&self) -> Vec<String> {
+        build_scoped_claude_args(
+            &self.prompt,
+            &self.provider_session_id,
+            self.resume,
+            &self.settings_path,
+            &self.sandbox_profile,
+        )
+    }
+    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+        Ok(())
+    }
+    fn extra_env(&self, _session_key: &str, instance_id: u64) -> HashMap<String, String> {
+        let mut environment = HashMap::from([
+            (
+                "OPENFORGE_SCOPED_SESSION_ID".to_string(),
+                self.scoped_session_id.clone(),
+            ),
+            (
+                "OPENFORGE_PTY_INSTANCE_ID".to_string(),
+                instance_id.to_string(),
+            ),
+            ("GIT_PAGER".to_string(), "cat".to_string()),
+            ("GIT_EXTERNAL_DIFF".to_string(), String::new()),
+            ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
+            (
+                "CLAUDE_CONFIG_DIR".to_string(),
+                self.provider_state_dir.to_string_lossy().into_owned(),
+            ),
+            (
+                "TMPDIR".to_string(),
+                self.provider_state_dir
+                    .join("tmp")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+        ]);
+        if let Some(path) = &self.credential_path {
+            environment.insert(
+                "OPENFORGE_AGENT_CONFIG".to_string(),
+                path.to_string_lossy().into_owned(),
+            );
+        }
+        environment
+    }
+    fn removed_env(&self) -> &'static [&'static str] {
+        &[
+            "CLAUDE_TASK_ID",
+            "OPENFORGE_AGENT_CONFIG",
+            "OPENFORGE_AGENT_TOKEN",
+            "OPENFORGE_BACKEND_TOKEN",
+            "OPENFORGE_TASK_ID",
+        ]
+    }
+    fn pid_file_name(&self, session_key: &str) -> String {
+        format!("{session_key}-claude.pid")
     }
 }
 

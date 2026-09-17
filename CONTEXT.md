@@ -37,8 +37,24 @@ An agent-driven attempt to work on a **Task** in a task workspace, identified to
 _Avoid_: Agent run when referring to the task-scoped OpenForge concept, provider port
 
 **Agent Session**:
-The provider-specific conversation or PTY process attached to an **Implementation Run**.
-_Avoid_: Run, task
+The provider-specific conversation or PTY process owned either by an **Implementation Run** or a **Session Scope**.
+_Avoid_: Run, task, Implementation Run when referring to a scope-owned session
+
+**Session Scope**:
+The opaque namespace, target key, and revision triple that addresses a **Scoped Agent Session**. The host stores and compares the strings without interpreting the subject.
+_Avoid_: Task id, plugin id, parsed subject
+
+**Scoped Agent Session**:
+An **Agent Session** owned by a **Session Scope** rather than by an **Implementation Run**.
+_Avoid_: Hidden Task, Implementation Run, headless generation
+
+**Scoped Workspace**:
+A host-owned repository checkout for one **Session Scope** and resolved revision, reused across that session's turns.
+_Avoid_: Plugin workspace, Task workspace, caller-owned checkout
+
+**Session Tool Policy**:
+A named host rule set that fixes which tools and host routes a **Scoped Agent Session** can use.
+_Avoid_: Permission mode, provider flags, plugin tool configuration
 
 **In-Flight Task**:
 A **Task** with pending work that does not currently need user attention, including work started from **Out of Focus**.
@@ -406,7 +422,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Board tab counts for **Focus**, **In-Flight Tasks**, and **Out of Focus** count **Tasks** that need user attention, not total visible Tasks.
 - **Out of Focus** uses the same board-tab styling as **Focus**, **In-Flight Tasks**, and backlog; its meaning comes from placement and action language, not special visual treatment.
 - **Out of Focus** is part of the core **Task** board because it protects the default attention-only **Focus** promise; custom board workflows may later belong to **Trusted Plugins** when OpenForge exposes explicit capabilities for them.
-- An **Implementation Run** uses exactly one **Agent Session** at a time.
+- An **Implementation Run** uses exactly one Task-owned **Agent Session** at a time.
 - The **Companion Agent Terminal** is the first delivery slice of the **Companion Terminal**; later slices may include ordinary shell sessions.
 - A **Companion Terminal Attachment** connects to an existing terminal session without creating, resuming, aborting, replacing, or otherwise owning that session.
 - Ending a **Companion Terminal Attachment** does not end its desktop-owned terminal session.
@@ -491,6 +507,10 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Shell Session Key** may select a succession of distinct **Terminal Sessions** over time; replacing the current session ends it and creates another under the same key.
 - A **Task** with unmet dependencies cannot start an **Implementation Run**.
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
+- A **Scoped Agent Session** belongs to exactly one **Session Scope** and no **Implementation Run**.
+- One live **Scoped Agent Session** may exist per **Session Scope**.
+- A **Scoped Workspace** is host-owned and can outlive one provider process so the next turn can reuse it.
+- A plugin selects a **Session Tool Policy** by name and cannot widen it with provider options or user approval.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as the initial prompt.

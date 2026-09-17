@@ -322,6 +322,11 @@ fn insert_message(
 }
 
 impl super::Database {
+    pub(crate) fn review_thread(&self, thread_id: &str) -> ReviewThreadResult<ReviewThreadRow> {
+        let conn = self.lock_conn()?;
+        read_thread(&conn, thread_id)
+    }
+
     pub fn list_review_threads(
         &self,
         scope: &ReviewThreadScope,

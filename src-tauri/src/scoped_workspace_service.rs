@@ -247,6 +247,16 @@ impl ScopedWorkspaceService {
         })
     }
 
+    pub(crate) fn is_available(
+        &self,
+        scope: SessionScope<'_>,
+    ) -> Result<bool, ScopedWorkspaceError> {
+        scoped_agent_session_key(scope)?;
+        Ok(self.exact_workspace(scope)?.is_some_and(|workspace| {
+            workspace.cleanup_state == "ready" && Path::new(&workspace.workspace_path).is_dir()
+        }))
+    }
+
     pub(crate) async fn acquire(
         &self,
         request: AcquireScopedWorkspace<'_>,
@@ -273,18 +283,50 @@ impl ScopedWorkspaceService {
         self.cleanup_row(&workspace).await
     }
 
+    #[allow(
+        dead_code,
+        reason = "direct owner cleanup is exercised by lifecycle tests"
+    )]
     pub(crate) async fn release_owner(
         &self,
         owner_plugin_id: &str,
         project_id: Option<&str>,
     ) -> Result<ScopedWorkspaceCleanupReport, ScopedWorkspaceError> {
-        let _mutation = self.mutation_lock.lock().await;
         let workspaces = self.with_database(|database| {
             database.scoped_workspaces_for_owner(owner_plugin_id, project_id)
         })?;
-        Ok(self.cleanup_rows(workspaces).await)
+        self.release_captured(owner_plugin_id, workspaces).await
     }
 
+    pub(crate) async fn release_captured(
+        &self,
+        owner_plugin_id: &str,
+        workspaces: Vec<ScopedWorkspaceRow>,
+    ) -> Result<ScopedWorkspaceCleanupReport, ScopedWorkspaceError> {
+        let _mutation = self.mutation_lock.lock().await;
+        let mut current = Vec::new();
+        for captured in workspaces {
+            let workspace = self.exact_workspace(SessionScope {
+                namespace: &captured.namespace,
+                target_key: &captured.target_key,
+                revision: &captured.revision,
+            })?;
+            if let Some(workspace) = workspace {
+                if workspace.id == captured.id
+                    && workspace.owner_plugin_id == owner_plugin_id
+                    && !self.is_protected(&workspace.id)
+                {
+                    current.push(workspace);
+                }
+            }
+        }
+        Ok(self.cleanup_rows(current).await)
+    }
+
+    #[allow(
+        dead_code,
+        reason = "explicit cleanup retry remains available for the upcoming public session host"
+    )]
     pub(crate) async fn retry_pending_cleanup(
         &self,
     ) -> Result<ScopedWorkspaceCleanupReport, ScopedWorkspaceError> {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::pty_manager::events::PtyExitPolicy;
 
 #[tokio::test]
 async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_share_bus() {
@@ -35,7 +36,7 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
-                emit_agent_exit: false,
+                policy: PtyExitPolicy::Shell,
             },
         },
     );
@@ -197,7 +198,7 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
-                emit_agent_exit: false,
+                policy: PtyExitPolicy::Shell,
             },
         },
     );
@@ -251,7 +252,7 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
-                emit_agent_exit: true,
+                policy: PtyExitPolicy::TaskAgent,
             },
         },
     );
@@ -275,6 +276,59 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
         .expect("agent-pty-exited event should be received");
     assert_eq!(agent_event.payload["task_id"], "agent-dedupe-exit");
     assert_eq!(agent_event.payload["success"], false);
+}
+
+#[tokio::test]
+async fn test_scoped_agent_exit_retains_output_without_emitting_task_exit() {
+    let manager = PtyManager::new();
+    let key = "plugin:review:project:project-1:session:session-1";
+    register_emitter_test_session(&manager, key, 11, "scoped-agent.pid").await;
+    let bus = crate::app_events::AppEventBus::new(16, 16);
+    let mut events = bus.subscribe(None).expect("subscribe should work");
+    let (output_tx, output_rx) = pty_output_channel();
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+    manager
+        .output_buffers
+        .lock()
+        .await
+        .insert(key.to_string(), Arc::clone(&ring));
+    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let (observer_tx, observer_rx) = tokio::sync::oneshot::channel();
+    let observer_tx = Arc::new(std::sync::Mutex::new(Some(observer_tx)));
+
+    spawn_batched_pty_event_emitter(
+        output_rx,
+        PtyEventEmitterConfig {
+            session_key: key.to_string(),
+            instance_id: 11,
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                None,
+                Some(bus.sender()),
+            ),
+            ring_buffer: ring,
+            attachment_hub: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
+            exit_action: PtyExitAction::Cleanup {
+                lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
+                pid_file: tmp_dir.path().join("scoped-agent.pid"),
+                policy: PtyExitPolicy::ScopedAgent(Arc::new(move |instance_id, success| {
+                    if let Some(sender) = observer_tx.lock().expect("observer lock").take() {
+                        let _ = sender.send((instance_id, success));
+                    }
+                })),
+            },
+        },
+    );
+
+    output_tx.try_send(None).expect("exit signal should send");
+    let observed = tokio::time::timeout(tokio::time::Duration::from_secs(1), observer_rx)
+        .await
+        .expect("observer should run")
+        .expect("observer should send");
+    assert_eq!(observed, (11, false));
+    let received = collect_bus_events_until_quiet(&mut events).await;
+    assert_eq!(count_events(&received, "agent-pty-exited"), 0);
+    assert!(manager.output_buffers.lock().await.contains_key(key));
 }
 
 #[tokio::test]
@@ -308,7 +362,7 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
-                emit_agent_exit: true,
+                policy: PtyExitPolicy::TaskAgent,
             },
         },
     );
@@ -414,7 +468,7 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: pid_file.clone(),
-                emit_agent_exit: false,
+                policy: PtyExitPolicy::Shell,
             },
         },
     );

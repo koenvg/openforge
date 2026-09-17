@@ -27,6 +27,9 @@ impl PtyManager {
                 .into_iter()
                 .map(|(key, value)| (key.into(), value.into())),
         );
+        for key in adapter.removed_env() {
+            env.remove(*key);
+        }
         // The daemon replaces the placeholder with its allocated instance before exec.
         env.extend(adapter.extra_env(context.task_id, 0));
         bridge

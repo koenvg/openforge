@@ -290,7 +290,7 @@ fn disposition_for_status(status: &str) -> Option<AgentFollowUpDisposition> {
     }
 }
 
-fn terminal_follow_up_input(message: &str) -> Vec<u8> {
+pub(crate) fn terminal_follow_up_input(message: &str) -> Vec<u8> {
     let sanitized: String = message
         .chars()
         .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))

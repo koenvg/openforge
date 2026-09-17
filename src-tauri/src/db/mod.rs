@@ -27,6 +27,11 @@ mod review;
 mod review_threads;
 #[allow(
     dead_code,
+    reason = "the core scoped-session repository is exposed through the upcoming Plugin SDK integration"
+)]
+mod scoped_agent_sessions;
+#[allow(
+    dead_code,
     reason = "the Scoped Workspace repository is consumed through the internal service before public session wiring"
 )]
 mod scoped_workspaces;
@@ -69,6 +74,10 @@ pub use review::{ReviewPrRow, ReviewPrUpsert};
 pub use review_threads::{
     CreateReviewThread, ReplyToReviewThread, ReviewThreadError, ReviewThreadRow, ReviewThreadScope,
     ReviewThreadWrite, SetReviewThreadAwaiting, SetReviewThreadStatus,
+};
+pub(crate) use scoped_agent_sessions::{
+    NewScopedAgentSession, ScopedAgentSessionRow, ScopedAgentSessionStatus,
+    ScopedAgentSessionStoreError,
 };
 pub(crate) use scoped_workspaces::{NewScopedWorkspace, ScopedWorkspaceRow};
 #[cfg(test)]
@@ -177,6 +186,7 @@ impl Database {
         migrations::ensure_review_thread_tables(&conn)?;
         migrations::ensure_review_thread_seen_sequence_column(&conn)?;
         migrations::ensure_scoped_workspaces_table(&conn)?;
+        migrations::ensure_scoped_agent_sessions_table(&conn)?;
         // After ensure_plugin_tables: global_plugins has a foreign key onto plugins.
         migrations::ensure_hierarchy_tables(&conn)?;
 
