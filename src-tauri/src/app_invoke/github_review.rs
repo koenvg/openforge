@@ -5,6 +5,7 @@ use crate::{
     app_events::publish_app_event_to_runtime, http_server::AppInvokeRequest, http_server::AppState,
 };
 use axum::http::StatusCode;
+use log::warn;
 use serde::Serialize;
 
 fn runtime_error(error: String) -> (StatusCode, String) {
@@ -423,18 +424,21 @@ pub(super) async fn handle_app_github_review_command(
             let pr_number = payload_i64(&request.payload, "prNumber")?;
             let comment_id = payload_i64(&request.payload, "commentId")?;
             let body = payload_string(&request.payload, "body")?;
-            to_app_value(
-                crate::github_runtime::create_review_comment_reply(
-                    &state.github_client,
-                    &owner,
-                    &repo,
-                    pr_number,
-                    comment_id,
-                    &body,
-                )
-                .await
-                .map_err(runtime_error)?,
-            )?
+            let reply = crate::github_runtime::create_review_comment_reply(
+                &state.github_client,
+                &owner,
+                &repo,
+                pr_number,
+                comment_id,
+                &body,
+            )
+            .await
+            .map_err(runtime_error)?;
+            match crate::github_runtime::mark_comment_addressed(&state.db, comment_id) {
+                Ok(()) => publish_comment_addressed(state),
+                Err(error) => warn!("{error}"),
+            }
+            to_app_value(reply)?
         }
         "create_review_comment" => {
             let owner = payload_string(&request.payload, "owner")?;

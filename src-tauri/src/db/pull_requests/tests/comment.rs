@@ -78,6 +78,38 @@ fn reply_parent_round_trips_through_comment_reads() {
         .expect("get reply by id failed");
     assert_eq!(by_id[0].in_reply_to_id, Some(501));
 }
+
+#[test]
+fn replying_three_levels_deep_marks_the_thread_root_addressed() {
+    let (db, _temp_dir) = make_test_db("mark_deep_reply_thread_addressed");
+    insert_test_task(&db);
+    PullRequestFixture::new(10)
+        .insert(&db)
+        .expect("insert pr failed");
+
+    PrCommentFixture::new(501, 10, "Root")
+        .insert(&db)
+        .expect("insert root failed");
+    for (id, parent_id) in [(502, 501), (503, 502), (504, 503)] {
+        PrCommentFixture::new(id, 10, "Reply")
+            .in_reply_to_id(parent_id)
+            .insert(&db)
+            .expect("insert reply failed");
+    }
+
+    db.mark_comment_addressed(504)
+        .expect("mark thread addressed failed");
+
+    let comments = db.get_comments_for_pr(10).expect("get comments failed");
+    assert_eq!(
+        comments
+            .iter()
+            .map(|comment| (comment.id, comment.addressed))
+            .collect::<Vec<_>>(),
+        [(501, 1), (502, 0), (503, 0), (504, 0)]
+    );
+}
+
 #[test]
 fn test_mark_comments_addressed_batch() {
     let (db, _temp_dir) = make_test_db("mark_batch_addressed");

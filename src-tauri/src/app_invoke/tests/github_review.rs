@@ -1,4 +1,243 @@
 use super::*;
+use axum::{routing::post, Json, Router};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+
+async fn reply_test_github_client(
+    status: StatusCode,
+    request_count: Arc<AtomicUsize>,
+) -> crate::github_client::GitHubClient {
+    let router = Router::new().route(
+        "/repos/acme/widgets/pulls/7/comments/503/replies",
+        post(move || {
+            let request_count = Arc::clone(&request_count);
+            async move {
+                request_count.fetch_add(1, Ordering::SeqCst);
+                (
+                    status,
+                    Json(json!({
+                        "id": 504,
+                        "path": "src/lib.rs",
+                        "line": 10,
+                        "side": "RIGHT",
+                        "body": "Applied, thanks",
+                        "user": { "login": "author" },
+                        "created_at": "2026-09-17T08:00:00Z",
+                        "in_reply_to_id": 503
+                    })),
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake GitHub API");
+    let address = listener.local_addr().expect("read fake GitHub address");
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve fake GitHub API");
+    });
+
+    crate::github_client::GitHubClient::with_test_token(Ok(Some("token".to_string())))
+        .with_test_api_base_url(format!("http://{address}"))
+}
+
+fn seed_reply_thread(state: &crate::http_server::AppState) {
+    let db = state.db.lock().expect("db lock");
+    let task = db
+        .create_task("Reply task", "doing", None, None, None)
+        .expect("create task");
+    db.insert_pull_request_with_number(
+        70,
+        7,
+        &task.id,
+        "acme",
+        "widgets",
+        "Reply test",
+        "https://github.com/acme/widgets/pull/7",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert PR");
+    db.insert_pr_comment(
+        501,
+        70,
+        "reviewer",
+        "Root",
+        "review_comment",
+        Some("src/lib.rs"),
+        Some(10),
+        None,
+        false,
+        1000,
+    )
+    .expect("insert root");
+    for (id, parent_id) in [(502, 501), (503, 502)] {
+        db.insert_pr_comment(
+            id,
+            70,
+            "reviewer",
+            "Reply",
+            "review_comment",
+            Some("src/lib.rs"),
+            Some(10),
+            Some(parent_id),
+            false,
+            id,
+        )
+        .expect("insert reply");
+    }
+}
+
+#[tokio::test]
+async fn replying_to_a_deep_reply_addresses_its_thread_root() {
+    let (mut state, _temp_dir) = test_state("app_invoke_reply_addresses_root");
+    seed_reply_thread(&state);
+    let request_count = Arc::new(AtomicUsize::new(0));
+    state.github_client =
+        reply_test_github_client(StatusCode::CREATED, Arc::clone(&request_count)).await;
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+
+    let reply = invoke_ok(
+        &state,
+        "create_review_comment_reply",
+        json!({
+            "owner": "acme",
+            "repo": "widgets",
+            "prNumber": 7,
+            "commentId": 503,
+            "body": "Applied, thanks",
+        }),
+    )
+    .await;
+
+    assert_eq!(reply["id"], 504);
+    assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    let comments = invoke_ok(&state, "get_pr_comments", json!({ "prId": 70 })).await;
+    let root = comments
+        .as_array()
+        .expect("comments array")
+        .iter()
+        .find(|comment| comment["id"] == 501)
+        .expect("thread root");
+    assert_eq!(root["addressed"], 1);
+    assert_eq!(
+        invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await[0]
+            ["unaddressed_comment_count"],
+        0
+    );
+    assert_eq!(
+        events
+            .recv()
+            .await
+            .expect("comment addressed event")
+            .event_name,
+        "comment-addressed"
+    );
+}
+
+#[tokio::test]
+async fn an_addressed_write_failure_does_not_turn_an_accepted_reply_into_a_failed_post() {
+    let (mut state, _temp_dir) = test_state("app_invoke_reply_address_write_failure");
+    seed_reply_thread(&state);
+    {
+        let db = state.db.lock().expect("db lock");
+        db.connection()
+            .lock()
+            .expect("connection lock")
+            .execute_batch("PRAGMA query_only = ON")
+            .expect("make database read-only");
+    }
+    let request_count = Arc::new(AtomicUsize::new(0));
+    state.github_client =
+        reply_test_github_client(StatusCode::CREATED, Arc::clone(&request_count)).await;
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+
+    let reply = invoke_ok(
+        &state,
+        "create_review_comment_reply",
+        json!({
+            "owner": "acme",
+            "repo": "widgets",
+            "prNumber": 7,
+            "commentId": 503,
+            "body": "Applied, thanks",
+        }),
+    )
+    .await;
+
+    assert_eq!(reply["id"], 504);
+    assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    let comments = invoke_ok(&state, "get_pr_comments", json!({ "prId": 70 })).await;
+    let root = comments
+        .as_array()
+        .expect("comments array")
+        .iter()
+        .find(|comment| comment["id"] == 501)
+        .expect("thread root");
+    assert_eq!(root["addressed"], 0);
+    assert!(matches!(
+        events.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+}
+
+#[tokio::test]
+async fn a_rejected_reply_leaves_the_thread_unaddressed() {
+    let (mut state, _temp_dir) = test_state("app_invoke_reply_rejected");
+    seed_reply_thread(&state);
+    let request_count = Arc::new(AtomicUsize::new(0));
+    state.github_client =
+        reply_test_github_client(StatusCode::UNPROCESSABLE_ENTITY, Arc::clone(&request_count))
+            .await;
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+
+    let error = invoke(
+        &state,
+        "create_review_comment_reply",
+        json!({
+            "owner": "acme",
+            "repo": "widgets",
+            "prNumber": 7,
+            "commentId": 503,
+            "body": "Applied, thanks",
+        }),
+    )
+    .await
+    .expect_err("GitHub rejection must fail the reply");
+
+    assert_eq!(error.0, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(request_count.load(Ordering::SeqCst), 1);
+    let comments = invoke_ok(&state, "get_pr_comments", json!({ "prId": 70 })).await;
+    let root = comments
+        .as_array()
+        .expect("comments array")
+        .iter()
+        .find(|comment| comment["id"] == 501)
+        .expect("thread root");
+    assert_eq!(root["addressed"], 0);
+    assert!(matches!(
+        events.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+}
 
 #[tokio::test]
 async fn handler_uses_shared_boundary() {

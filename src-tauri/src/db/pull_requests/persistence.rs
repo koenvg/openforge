@@ -21,8 +21,68 @@ impl Database {
         addressed: bool,
         created_at: i64,
     ) -> Result<()> {
-        let conn = self.lock_conn()?;
-        conn.execute(
+        self.insert_pr_comment_with_thread_reopen(
+            id,
+            pr_id,
+            author,
+            body,
+            comment_type,
+            file_path,
+            line_number,
+            in_reply_to_id,
+            addressed,
+            created_at,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_pr_comment_reopening_thread(
+        &self,
+        id: i64,
+        pr_id: i64,
+        author: &str,
+        body: &str,
+        comment_type: &str,
+        file_path: Option<&str>,
+        line_number: Option<i32>,
+        in_reply_to_id: Option<i64>,
+        addressed: bool,
+        created_at: i64,
+    ) -> Result<()> {
+        self.insert_pr_comment_with_thread_reopen(
+            id,
+            pr_id,
+            author,
+            body,
+            comment_type,
+            file_path,
+            line_number,
+            in_reply_to_id,
+            addressed,
+            created_at,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_pr_comment_with_thread_reopen(
+        &self,
+        id: i64,
+        pr_id: i64,
+        author: &str,
+        body: &str,
+        comment_type: &str,
+        file_path: Option<&str>,
+        line_number: Option<i32>,
+        in_reply_to_id: Option<i64>,
+        addressed: bool,
+        created_at: i64,
+        reopen_thread: bool,
+    ) -> Result<()> {
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        tx.execute(
             "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, in_reply_to_id, addressed, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
@@ -38,6 +98,10 @@ impl Database {
                 created_at,
             ],
         )?;
+        if reopen_thread {
+            Self::set_comment_thread_addressed_on(&tx, id, false)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -318,8 +382,34 @@ impl Database {
     }
 
     pub fn mark_comment_addressed(&self, id: i64) -> Result<()> {
+        self.set_comment_thread_addressed(id, true)
+    }
+
+    fn set_comment_thread_addressed(&self, comment_id: i64, addressed: bool) -> Result<()> {
         let conn = self.lock_conn()?;
-        conn.execute("UPDATE pr_comments SET addressed = 1 WHERE id = ?1", [id])?;
+        Self::set_comment_thread_addressed_on(&conn, comment_id, addressed)
+    }
+
+    fn set_comment_thread_addressed_on(
+        conn: &rusqlite::Connection,
+        comment_id: i64,
+        addressed: bool,
+    ) -> Result<()> {
+        conn.execute(
+            "WITH RECURSIVE thread(id, in_reply_to_id) AS (
+                SELECT id, in_reply_to_id FROM pr_comments WHERE id = ?1
+                UNION
+                SELECT parent.id, parent.in_reply_to_id
+                FROM pr_comments parent
+                JOIN thread child ON parent.id = child.in_reply_to_id
+             )
+             UPDATE pr_comments
+             SET addressed = ?2
+             WHERE id = (
+                SELECT id FROM thread WHERE in_reply_to_id IS NULL LIMIT 1
+             )",
+            rusqlite::params![comment_id, if addressed { 1 } else { 0 }],
+        )?;
         Ok(())
     }
 
