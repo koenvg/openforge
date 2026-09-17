@@ -13,6 +13,7 @@ vi.mock('../desktopIpc', () => ({
 import {
   clearPluginHostSubscriptions,
   subscribeToPluginHostEvent,
+  waitForPluginHostEventSubscription,
 } from './pluginHostEvents'
 
 const pluginId = 'com.openforge.contract-test'
@@ -55,5 +56,31 @@ describe('plugin desktop event channels', () => {
     expect(producerSource).toContain('const SIDECAR_EXITED_EVENT: &str = "plugin:sidecar-exited"')
     expect(producerSource).toContain('self.publish_sidecar_event(SIDECAR_EXITED_EVENT, &payload)')
     expect(producerSource).toContain('let payload = SidecarExitPayload {')
+  })
+
+  it('keeps a replacement listener subscribed when registration is still pending', async () => {
+    const unlisten = vi.fn()
+    let relay: ((event: { payload: unknown }) => void) | undefined
+    let resolveRegistration!: (unlisten: () => void) => void
+    listenPluginDesktopEventMock.mockImplementation((_eventName, handler) => {
+      relay = handler
+      return new Promise(resolve => { resolveRegistration = resolve })
+    })
+    const firstHandler = vi.fn()
+    const secondHandler = vi.fn()
+
+    const unsubscribeFirst = subscribeToPluginHostEvent(pluginId, 'pty-output-scoped-key', firstHandler)
+    unsubscribeFirst()
+    const unsubscribeSecond = subscribeToPluginHostEvent(pluginId, 'pty-output-scoped-key', secondHandler)
+    resolveRegistration(unlisten)
+    await waitForPluginHostEventSubscription('pty-output-scoped-key')
+
+    relay?.({ payload: { data: 'after registration' } })
+    expect(firstHandler).not.toHaveBeenCalled()
+    expect(secondHandler).toHaveBeenCalledWith({ data: 'after registration' })
+    expect(unlisten).not.toHaveBeenCalled()
+
+    unsubscribeSecond()
+    expect(unlisten).toHaveBeenCalledOnce()
   })
 })

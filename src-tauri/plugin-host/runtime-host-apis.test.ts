@@ -807,4 +807,103 @@ describe('plugin-host backend host APIs', () => {
       params: { qualifiedId: 'openforge.forceGithubSync', payload: { force: true }, callerPluginId: 'com.openforge.github-sync' },
     })
   })
+
+  it('routes scoped Agent Session lifecycle calls through the packaged backend runtime', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('scopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              const started = await openforge.agentSessions.start({ scope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this', toolPolicy: 'review-read-only' })
+              const status = await openforge.agentSessions.status(scope)
+              const input = await openforge.agentSessions.input(scope, 'Continue')
+              const aborted = await openforge.agentSessions.abort(scope)
+              await openforge.agentSessions.release(scope)
+              return { started, status, input, aborted }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const running = { id: 'sas-1', status: 'running', queuePosition: null, queueReason: null, acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 2 }
+    const hostCallbacks = vi.fn(async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.agentSessions.release') return null
+      if (request.method === 'openforge.agentSessions.abort') return { ...running, status: 'aborted', acceptsInput: false }
+      return running
+    })
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'scopedSession' })).resolves.toEqual({
+      started: running, status: running, input: running,
+      aborted: { ...running, status: 'aborted', acceptsInput: false },
+    })
+    expect(calls.map(call => [call.method, call.params.pluginId])).toEqual([
+      ['openforge.agentSessions.start', 'com.example.reviewer'],
+      ['openforge.agentSessions.status', 'com.example.reviewer'],
+      ['openforge.agentSessions.input', 'com.example.reviewer'],
+      ['openforge.agentSessions.abort', 'com.example.reviewer'],
+      ['openforge.agentSessions.release', 'com.example.reviewer'],
+    ])
+  })
+
+  it('delivers scoped Agent Session output invalidations through the packaged backend runtime', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('watchScopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timed out waiting for invalidation')), 4000)
+                const events = []
+                const handlerCalls = [0, 0]
+                const subscriptions = [
+                  openforge.agentSessions.onDidChange(scope, event => {
+                    handlerCalls[0] += 1
+                    if (handlerCalls[0] > 1) events.push(event)
+                    if (events.length === 2) finish()
+                  }),
+                  openforge.agentSessions.onDidChange(scope, event => {
+                    handlerCalls[1] += 1
+                    if (handlerCalls[1] > 1) events.push(event)
+                    if (events.length === 2) finish()
+                  })
+                ]
+                function finish() {
+                  clearTimeout(timeout)
+                  subscriptions.forEach(subscription => subscription.dispose())
+                  resolve(events)
+                }
+              })
+            }
+          }))
+        }
+      }
+    `)
+    let revision = 0
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = vi.fn(async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      revision += 1
+      return {
+        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
+        outputRevision: revision,
+      }
+    })
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'com.example.reviewer',
+      backendPath,
+      command: 'watchScopedSession',
+    })).resolves.toEqual([
+      { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' },
+      { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' },
+    ])
+    expect(calls).toHaveLength(2)
+    expect(calls.every(call => call.method === 'openforge.agentSessions.observe'
+      && call.params.pluginId === 'com.example.reviewer')).toBe(true)
+  }, 5_000)
 })

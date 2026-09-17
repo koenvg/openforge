@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { invokeDesktopCommand, listenDesktopEvent } from './desktopIpc'
+import { invokeDesktopCommand, listenDesktopEvent, listenPluginDesktopEvent } from './desktopIpc'
 
 describe('desktop IPC transport', () => {
   beforeEach(() => {
@@ -62,6 +62,23 @@ describe('desktop IPC transport', () => {
     const unlisten = await listenDesktopEvent('pty-model-output-T-1-shell-0', handler)
 
     expect(onEventReady).toHaveBeenCalledWith('pty-model-output-T-1-shell-0', expect.any(Function))
+    unlisten()
+    expect(unsubscribe).toHaveBeenCalledOnce()
+  })
+
+  it('waits for Electron main to retain dynamic plugin event subscriptions', async () => {
+    const unsubscribe = vi.fn()
+    const onEventReady = vi.fn().mockResolvedValue(unsubscribe)
+    window.openforge = {
+      version: 1,
+      invoke: vi.fn(),
+      onEvent: vi.fn(),
+      onEventReady,
+    }
+
+    const unlisten = await listenPluginDesktopEvent('pty-output-scoped-key', vi.fn())
+
+    expect(onEventReady).toHaveBeenCalledWith('pty-output-scoped-key', expect.any(Function))
     unlisten()
     expect(unsubscribe).toHaveBeenCalledOnce()
   })

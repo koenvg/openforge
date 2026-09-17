@@ -194,6 +194,9 @@ impl ScopedSessionRuntime for ScopedClaudeRuntime {
                 .unwrap_or_default())
         })
     }
+    fn output_revision<'a>(&'a self, key: &'a str) -> RuntimeFuture<'a, u64> {
+        Box::pin(async move { Ok(self.pty_manager.pty_output_revision(key).await) })
+    }
     fn dispose<'a>(&'a self, key: &'a str) -> RuntimeFuture<'a, ()> {
         Box::pin(async move {
             lock(&self.credentials).remove(key);

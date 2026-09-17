@@ -178,6 +178,9 @@ impl ScopedSessionRuntime for FakeRuntime {
             Ok(lock(&self.output).get(key).cloned().unwrap_or_default())
         })
     }
+    fn output_revision<'a>(&'a self, key: &'a str) -> RuntimeFuture<'a, u64> {
+        Box::pin(async move { Ok(lock(&self.output).get(key).map_or(0, |_| 1)) })
+    }
     fn dispose<'a>(&'a self, key: &'a str) -> RuntimeFuture<'a, ()> {
         Box::pin(async move {
             lock(&self.disposed).push(key.into());
@@ -217,6 +220,10 @@ impl ScopedSessionRuntime for InvalidatingRuntime {
 
     fn output<'a>(&'a self, _key: &'a str) -> RuntimeFuture<'a, String> {
         Box::pin(async { Ok(String::new()) })
+    }
+
+    fn output_revision<'a>(&'a self, _key: &'a str) -> RuntimeFuture<'a, u64> {
+        Box::pin(async { Ok(0) })
     }
 
     fn dispose<'a>(&'a self, _key: &'a str) -> RuntimeFuture<'a, ()> {

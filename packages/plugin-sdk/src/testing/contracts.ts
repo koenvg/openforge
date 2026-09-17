@@ -16,6 +16,8 @@ import type {
   InjectionPointLocation,
   AgentSessionWorkspace,
   ListAgentSessionsRequest,
+  SessionScope,
+  StartScopedAgentSessionRequest,
   ListTaskSessionsRequest,
   JsonValue,
   NotificationRequest,
@@ -126,6 +128,13 @@ export interface TestingOpenForgeApiCalls {
   taskCompletedRequests: Array<{ projectId: string } & CompletedTaskQuery>
   taskDetailRequests: Array<{ projectId: string; taskId: string }>
   agentSessionListRequests: ListAgentSessionsRequest[]
+  scopedAgentSessionStarts: StartScopedAgentSessionRequest[]
+  scopedAgentSessionStatuses: SessionScope[]
+  scopedAgentSessionInputs: Array<{ scope: SessionScope; input: string }>
+  scopedAgentSessionAborts: SessionScope[]
+  scopedAgentSessionReleases: SessionScope[]
+  scopedAgentSessionTerminalMounts: Array<{ scope: SessionScope; element: HTMLElement }>
+  scopedAgentSessionTerminalDetaches: SessionScope[]
   taskSessionListRequests: ListTaskSessionsRequest[]
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>

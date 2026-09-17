@@ -79,6 +79,10 @@ async function waitForDesktopEventSubscription(event: string): Promise<void> {
   await desktopEventSubscriptions.get(event)?.ready
 }
 
+export async function waitForPluginHostEventSubscription(event: string): Promise<void> {
+  await waitForDesktopEventSubscription(event)
+}
+
 export async function waitForTerminalEventSubscriptions(
   commandPayload: { taskId?: unknown; terminalIndex?: unknown } | undefined,
 ): Promise<void> {
@@ -114,6 +118,7 @@ export function subscribeToPluginHostEvent(pluginId: string, event: string, hand
     }
   } else {
     const subscription = ensureDesktopEventSubscription(event)
+    subscription.disposed = false
     subscription.listeners.add(handler)
     unsubscribe = () => removeDesktopEventListener(event, handler)
   }

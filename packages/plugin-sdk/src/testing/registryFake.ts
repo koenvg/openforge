@@ -6,6 +6,7 @@ import type {
   FrontendPluginContext,
   OpenForgePackageMetadata,
   ReviewThreadChangeEvent,
+  SessionScope,
   TaskChangeEvent,
   PluginStorage,
 } from '../types.js'
@@ -74,8 +75,14 @@ export class TestingOpenForgeRegistryFake {
   createFrontendApi(): MockFrontendOpenForgeAPI {
     if (this.cachedFrontendApi) return this.cachedFrontendApi
 
+    const commonApi = this.commonApi.createApi()
     const api = {
-      ...this.commonApi.createApi(),
+      ...commonApi,
+      agentSessions: {
+        ...commonApi.agentSessions,
+        mountTerminal: async (scope: SessionScope, element: HTMLElement) =>
+          this.commonApi.mountScopedAgentTerminal(scope, element),
+      },
       ...this.frontendContributions.createApi(),
       __testing: {
         calls: this.calls,
@@ -127,6 +134,10 @@ export class TestingOpenForgeRegistryFake {
 
   emitReviewThreadChange(event: ReviewThreadChangeEvent): void {
     this.commonApi.emitReviewThreadChange(event)
+  }
+
+  completeScopedAgentSession(scope: SessionScope, succeeded = true): void {
+    this.commonApi.completeScopedAgentSession(scope, succeeded)
   }
 
   setBrowserSurfaceState(taskId: string, id: string, patch: Partial<TaskBrowserSurfaceState>): void {

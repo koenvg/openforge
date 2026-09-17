@@ -2,9 +2,140 @@ use super::callbacks::{
     optional_param_string, optional_param_u64, optional_param_usize, required_param_string,
 };
 use super::PluginHost;
+use crate::scoped_agent_session_service::{
+    OwnedSessionScope, ScopedAgentSessionError, ScopedAgentSessionService, StartScopedAgentSession,
+};
 use serde_json::Value;
 
 impl PluginHost {
+    fn scoped_agent_session_service_for_host(&self) -> Result<ScopedAgentSessionService, String> {
+        self.app_handle
+            .try_state::<ScopedAgentSessionService>()
+            .map(|service| service.inner().clone())
+            .ok_or_else(|| {
+                "HOST_UNAVAILABLE: scoped Agent Session service is unavailable".to_string()
+            })
+    }
+
+    fn scoped_session_scope(params: &Value) -> Result<OwnedSessionScope, String> {
+        let value = params.get("scope").ok_or_else(|| {
+            "INVALID_SCOPE: plugin host callback missing object param: scope".to_string()
+        })?;
+        serde_json::from_value(value.clone())
+            .map_err(|error| format!("INVALID_SCOPE: invalid Session Scope: {error}"))
+    }
+
+    fn publish_scoped_session_change(&self, plugin_id: &str, scope: &OwnedSessionScope) {
+        let _ = self.app_handle.emit(
+            "scoped-agent-session-changed",
+            serde_json::json!({
+                "pluginId": plugin_id,
+                "namespace": scope.namespace,
+                "targetKey": scope.target_key,
+                "revision": scope.revision,
+            }),
+        );
+    }
+
+    pub(super) async fn start_scoped_agent_session_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        let state = self
+            .scoped_agent_session_service_for_host()?
+            .start(StartScopedAgentSession {
+                owner_plugin_id: plugin_id.clone(),
+                scope: scope.clone(),
+                project_id: required_param_string(params, "projectId")?,
+                checkout_revision: required_param_string(params, "checkoutRevision")?,
+                initial_input: required_param_string(params, "initialInput")?,
+                tool_policy: required_param_string(params, "toolPolicy")?,
+            })
+            .await
+            .map_err(scoped_error)?;
+        self.publish_scoped_session_change(&plugin_id, &scope);
+        serde_json::to_value(state).map_err(|error| error.to_string())
+    }
+
+    pub(super) fn scoped_agent_session_status_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        let state = self
+            .scoped_agent_session_service_for_host()?
+            .status(&plugin_id, &scope)
+            .map_err(scoped_error)?;
+        serde_json::to_value(state).map_err(|error| error.to_string())
+    }
+
+    pub(super) async fn observe_scoped_agent_session_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        let service = self.scoped_agent_session_service_for_host()?;
+        let state = service.status(&plugin_id, &scope).map_err(scoped_error)?;
+        let output_revision = if state.is_some() {
+            service.output_revision(&plugin_id, &scope).await.ok()
+        } else {
+            None
+        };
+        Ok(serde_json::json!({
+            "state": state,
+            "outputRevision": output_revision,
+        }))
+    }
+
+    pub(super) async fn input_scoped_agent_session_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        let input = required_param_string(params, "input")?;
+        let state = self
+            .scoped_agent_session_service_for_host()?
+            .input(&plugin_id, &scope, &input)
+            .await
+            .map_err(scoped_error)?;
+        self.publish_scoped_session_change(&plugin_id, &scope);
+        serde_json::to_value(state).map_err(|error| error.to_string())
+    }
+
+    pub(super) async fn abort_scoped_agent_session_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        let state = self
+            .scoped_agent_session_service_for_host()?
+            .abort(&plugin_id, &scope)
+            .await
+            .map_err(scoped_error)?;
+        self.publish_scoped_session_change(&plugin_id, &scope);
+        serde_json::to_value(state).map_err(|error| error.to_string())
+    }
+
+    pub(super) async fn release_scoped_agent_session_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = Self::scoped_session_scope(params)?;
+        self.scoped_agent_session_service_for_host()?
+            .release(&plugin_id, &scope)
+            .await
+            .map_err(scoped_error)?;
+        self.publish_scoped_session_change(&plugin_id, &scope);
+        Ok(Value::Null)
+    }
+
     pub(super) fn list_agent_sessions_for_host(&self, params: &Value) -> Result<Value, String> {
         let _plugin_id = required_param_string(params, "pluginId")?;
         let provider = required_param_string(params, "provider")?;
@@ -57,4 +188,33 @@ impl PluginHost {
         serde_json::to_value(page)
             .map_err(|error| format!("failed to serialize Agent Sessions: {error}"))
     }
+}
+
+fn scoped_error(error: ScopedAgentSessionError) -> String {
+    use crate::db::ScopedAgentSessionStoreError;
+    let code = match &error {
+        ScopedAgentSessionError::InvalidScope(_) => "INVALID_SCOPE",
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::LiveSessionExists {
+            ..
+        })
+        | ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::SessionExists {
+            ..
+        }) => "DUPLICATE_SCOPE",
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::QueueFull { .. }) => {
+            "CAPACITY"
+        }
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::OwnershipConflict {
+            ..
+        })
+        | ScopedAgentSessionError::Forbidden => "FORBIDDEN",
+        ScopedAgentSessionError::ToolPolicy(_) => "UNSUPPORTED_TOOL_POLICY",
+        ScopedAgentSessionError::InputTooLarge => "INPUT_TOO_LARGE",
+        ScopedAgentSessionError::ProjectNotFound(_) => "PROJECT_NOT_FOUND",
+        ScopedAgentSessionError::NotReady(_) => "NOT_READY",
+        ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::NotFound { .. }) => {
+            "NOT_FOUND"
+        }
+        ScopedAgentSessionError::Storage(_) | ScopedAgentSessionError::Runtime(_) => "INTERNAL",
+    };
+    format!("{code}: {error}")
 }

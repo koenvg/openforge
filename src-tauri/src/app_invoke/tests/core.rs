@@ -1,6 +1,87 @@
 use super::*;
 
 #[tokio::test]
+async fn scoped_agent_session_desktop_commands_round_trip_camel_case_lifecycle() {
+    let (state, _db_temp_dir, _app_dir) =
+        test_state_with_backend_app("app_invoke_scoped_agent_session_lifecycle");
+    let project_id = crate::db::acquire_db(&state.db)
+        .create_project("Scoped sessions", "/repo")
+        .expect("create Project fixture")
+        .id;
+    let (service, runtime) =
+        crate::scoped_agent_session_test_support::test_scoped_agent_session_service(
+            state.db.clone(),
+        );
+    state.app.as_ref().expect("backend app").manage(service);
+    let scope = json!({
+        "namespace": "review",
+        "targetKey": "PR-42",
+        "revision": "sha-1",
+    });
+    let start_payload = json!({
+        "pluginId": "com.example.reviewer",
+        "scope": scope,
+        "projectId": project_id,
+        "checkoutRevision": "main",
+        "initialInput": "Review this",
+        "toolPolicy": "review-read-only",
+    });
+
+    let started = invoke_ok(&state, "start_scoped_agent_session", start_payload.clone()).await;
+    assert_eq!(started["status"], "running");
+    assert_eq!(started["queuePosition"], serde_json::Value::Null);
+    assert_eq!(started["workspaceAvailable"], true);
+
+    let duplicate = invoke(&state, "start_scoped_agent_session", start_payload)
+        .await
+        .expect_err("duplicate exact scope must fail");
+    assert_eq!(duplicate.0, StatusCode::CONFLICT);
+    assert!(duplicate.1.starts_with("DUPLICATE_SCOPE:"));
+
+    let status_payload = json!({
+        "pluginId": "com.example.reviewer",
+        "scope": scope,
+    });
+    let status = invoke_ok(
+        &state,
+        "get_scoped_agent_session_status",
+        status_payload.clone(),
+    )
+    .await;
+    assert_eq!(status["id"], started["id"]);
+
+    invoke_ok(
+        &state,
+        "input_scoped_agent_session",
+        json!({
+            "pluginId": "com.example.reviewer",
+            "scope": scope,
+            "input": "Continue",
+        }),
+    )
+    .await;
+    assert_eq!(
+        runtime.inputs.lock().expect("lock inputs").as_slice(),
+        ["Continue"]
+    );
+
+    let aborted = invoke_ok(&state, "abort_scoped_agent_session", status_payload.clone()).await;
+    assert_eq!(aborted["status"], "aborted");
+    assert_eq!(runtime.aborts.lock().expect("lock aborts").len(), 1);
+
+    invoke_ok(
+        &state,
+        "release_scoped_agent_session",
+        status_payload.clone(),
+    )
+    .await;
+    assert_eq!(
+        invoke_ok(&state, "get_scoped_agent_session_status", status_payload).await,
+        serde_json::Value::Null,
+    );
+}
+
+#[tokio::test]
 async fn lists_filtered_agent_sessions_for_a_task() {
     let (state, _temp_dir) = test_state("app_invoke_agent_session_history");
     let task_id = {

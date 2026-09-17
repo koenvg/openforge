@@ -1,5 +1,5 @@
 import { createBackendShellApi } from './backend-shell-api'
-import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'
+import { resolveExternalTextFileChunkSize, ScopedAgentSessionError } from '@openforge-app/plugin-sdk'
 import type {
   ActiveTasks,
   AgentSession,
@@ -34,6 +34,11 @@ import type {
   TaskWorkspaceInfo,
   UserDataFileAppendResult,
   WritableBoardStatus,
+  ScopedAgentSessionChangeEvent,
+  ScopedAgentSessionErrorCode,
+  ScopedAgentSessionState,
+  SessionScope,
+  StartScopedAgentSessionRequest,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { ContributionRegistry } from './contribution-registry'
@@ -227,6 +232,79 @@ export function createBackendApi(
     return await invokeHostCallback<T>(runtime.hostCallbacks, method, params, options)
   }
 
+  const scopedHostCallback = async <T>(method: string, params: Record<string, unknown>): Promise<T> => {
+    try {
+      return await hostCallback<T>(method, { ...params, pluginId: state.pluginId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const match = message.match(/(?:^|\b)(INVALID_SCOPE|DUPLICATE_SCOPE|CAPACITY|UNSUPPORTED_TOOL_POLICY|INPUT_TOO_LARGE|PROJECT_NOT_FOUND|FORBIDDEN|NOT_FOUND|NOT_READY|HOST_UNAVAILABLE|INTERNAL):\s*(.*)$/s)
+      if (!match) throw error
+      throw new ScopedAgentSessionError(match[1] as ScopedAgentSessionErrorCode, match[2] || message)
+    }
+  }
+
+  type ScopedSessionObserver = {
+    disposed: boolean
+    polling: boolean
+    previous: string
+    handlers: Set<(event: ScopedAgentSessionChangeEvent) => void>
+    interval: ReturnType<typeof setInterval> | null
+  }
+  const scopedSessionObservers = new Map<string, ScopedSessionObserver>()
+  const subscribeScopedSession = (
+    scope: SessionScope,
+    handler: (event: ScopedAgentSessionChangeEvent) => void,
+  ) => {
+    const key = JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
+    let observer = scopedSessionObservers.get(key)
+    if (!observer) {
+      const created: ScopedSessionObserver = {
+        disposed: false,
+        polling: false,
+        previous: '',
+        handlers: new Set(),
+        interval: null,
+      }
+      const poll = async () => {
+        if (created.disposed || created.polling) return
+        created.polling = true
+        try {
+          const current = await scopedHostCallback<unknown>(
+            'openforge.agentSessions.observe', { scope },
+          )
+          if (created.disposed) return
+          const next = JSON.stringify(current)
+          if (!created.previous || created.previous !== next) {
+            const event = { ...scope }
+            for (const currentHandler of [...created.handlers]) currentHandler(event)
+          }
+          created.previous = next
+        } catch {
+          // Direct operations retain structured failures; this is an invalidation poll.
+        } finally {
+          created.polling = false
+        }
+      }
+      void poll()
+      created.interval = setInterval(() => { void poll() }, 1_000)
+      observer = created
+      scopedSessionObservers.set(key, observer)
+    }
+    observer.handlers.add(handler)
+    let disposed = false
+    return {
+      dispose: () => {
+        if (disposed) return
+        disposed = true
+        observer.handlers.delete(handler)
+        if (observer.handlers.size > 0) return
+        observer.disposed = true
+        if (observer.interval) clearInterval(observer.interval)
+        scopedSessionObservers.delete(key)
+      },
+    }
+  }
+
   let didWarnLegacyTaskReads = false
   const warnLegacyTaskReads = (): void => {
     if (didWarnLegacyTaskReads) return
@@ -262,6 +340,22 @@ export function createBackendApi(
         'openforge.agentSessions.list',
         { ...objectCallbackParams(request), pluginId: state.pluginId },
       ),
+      start: async (request: StartScopedAgentSessionRequest) => await scopedHostCallback<ScopedAgentSessionState>(
+        'openforge.agentSessions.start', objectCallbackParams(request),
+      ),
+      status: async (scope: SessionScope) => await scopedHostCallback<ScopedAgentSessionState | null>(
+        'openforge.agentSessions.status', { scope },
+      ),
+      input: async (scope: SessionScope, input: string) => await scopedHostCallback<ScopedAgentSessionState>(
+        'openforge.agentSessions.input', { scope, input },
+      ),
+      abort: async (scope: SessionScope) => await scopedHostCallback<ScopedAgentSessionState>(
+        'openforge.agentSessions.abort', { scope },
+      ),
+      release: async (scope: SessionScope) => { await scopedHostCallback<void>(
+        'openforge.agentSessions.release', { scope },
+      ) },
+      onDidChange: subscribeScopedSession,
     },
     reviewThreads: {
       list: async (scope: ReviewThreadScope) => await hostCallback<ReviewThread[]>(

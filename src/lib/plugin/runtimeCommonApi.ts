@@ -1,4 +1,5 @@
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
+import { ScopedAgentSessionError } from '@openforge-app/plugin-sdk'
 import type {
   AgentCommandDescriptor,
   AgentCommandMetadata,
@@ -10,6 +11,7 @@ import type {
   OpenForgeContextSnapshot,
   PluginCommandInvocationContext,
   ReviewThreadScope,
+  SessionScope,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
@@ -101,6 +103,24 @@ function assertReviewThreadScope(scope: unknown): asserts scope is ReviewThreadS
   }
 }
 
+function assertSessionScope(scope: unknown): asserts scope is SessionScope {
+  const candidate = scope as Partial<SessionScope> | null
+  const limits = { namespace: 128, targetKey: 2_048, revision: 256 } as const
+  const encoder = new TextEncoder()
+  for (const field of Object.keys(limits) as Array<keyof typeof limits>) {
+    const value = candidate?.[field]
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new ScopedAgentSessionError('INVALID_SCOPE', `Session Scope field '${field}' must not be empty`)
+    }
+    if (value.includes('\0')) {
+      throw new ScopedAgentSessionError('INVALID_SCOPE', `Session Scope field '${field}' must not contain NUL`)
+    }
+    if (encoder.encode(value).byteLength > limits[field]) {
+      throw new ScopedAgentSessionError('INVALID_SCOPE', `Session Scope field '${field}' exceeds the ${limits[field]}-byte limit`)
+    }
+  }
+}
+
 function unavailableCapability(name: string): never {
   throw new Error(`OpenForge host capability is unavailable: ${name}`)
 }
@@ -154,6 +174,44 @@ export class RuntimeCommonApiRegistry {
         list: async (request) => this.services.host.listAgentSessions
           ? this.services.host.listAgentSessions(request)
           : unavailableCapability('agentSessions.list'),
+        start: async (request) => {
+          assertSessionScope(request?.scope)
+          return this.services.host.startScopedAgentSession
+            ? this.services.host.startScopedAgentSession(request)
+            : unavailableCapability('agentSessions.start')
+        },
+        status: async (scope) => {
+          assertSessionScope(scope)
+          return this.services.host.getScopedAgentSessionStatus
+            ? this.services.host.getScopedAgentSessionStatus(scope)
+            : unavailableCapability('agentSessions.status')
+        },
+        input: async (scope, input) => {
+          assertSessionScope(scope)
+          return this.services.host.inputScopedAgentSession
+            ? this.services.host.inputScopedAgentSession(scope, input)
+            : unavailableCapability('agentSessions.input')
+        },
+        abort: async (scope) => {
+          assertSessionScope(scope)
+          return this.services.host.abortScopedAgentSession
+            ? this.services.host.abortScopedAgentSession(scope)
+            : unavailableCapability('agentSessions.abort')
+        },
+        release: async (scope) => {
+          assertSessionScope(scope)
+          return this.services.host.releaseScopedAgentSession
+            ? this.services.host.releaseScopedAgentSession(scope)
+            : unavailableCapability('agentSessions.release')
+        },
+        onDidChange: (scope, handler) => {
+          assertSessionScope(scope)
+          assertHandler('events', handler)
+          const subscription = this.services.host.subscribeScopedAgentSessionChanges
+            ? this.services.host.subscribeScopedAgentSessionChanges(scope, handler)
+            : unavailableCapability('agentSessions.onDidChange')
+          return this.services.trackDisposable(subscription)
+        },
       },
       reviewThreads: {
         onDidChange: (scope, handler) => {
@@ -278,6 +336,28 @@ export class RuntimeCommonApiRegistry {
     }
 
     return api
+  }
+
+  createFrontendApi(): RuntimeCommonApi & Pick<FrontendOpenForgeAPI, 'agentSessions'> {
+    const api = this.createApi()
+    return {
+      ...api,
+      agentSessions: {
+        ...api.agentSessions,
+        mountTerminal: async (scope, element) => {
+          assertSessionScope(scope)
+          if (!(element instanceof HTMLElement)) {
+            throw new TypeError('Scoped Agent Session terminal mount requires an HTMLElement')
+          }
+          if (!this.services.host.mountScopedAgentSessionTerminal) {
+            return unavailableCapability('agentSessions.mountTerminal')
+          }
+          return this.services.trackDisposable(
+            await this.services.host.mountScopedAgentSessionTerminal(scope, element),
+          )
+        },
+      },
+    }
   }
 
   createBackendApi(): RuntimeBackendCommonApi {

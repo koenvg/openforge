@@ -1,4 +1,8 @@
-import { MAX_AGENT_SESSION_PAGE_SIZE, resolveExternalTextFileChunkSize } from '../types.js'
+import {
+  MAX_AGENT_SESSION_PAGE_SIZE,
+  ScopedAgentSessionError,
+  resolveExternalTextFileChunkSize,
+} from '../types.js'
 import type { FileEntry } from '../domain.js'
 import type {
   BackendOpenForgeAPI,
@@ -17,6 +21,9 @@ import type {
   ReviewThreadAnchor,
   ReviewThreadChangeEvent,
   ReviewThreadScope,
+  ScopedAgentSessionChangeEvent,
+  ScopedAgentSessionState,
+  SessionScope,
   SetReviewThreadAwaitingRequest,
   SetReviewThreadStatusRequest,
 } from '../types.js'
@@ -153,6 +160,52 @@ function providerSessionId(session: {
 function assertNonNegativeSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`)
+  }
+}
+
+const SCOPED_EXECUTION_LIMIT = 4
+const SCOPED_QUEUE_LIMIT = 32
+const SCOPED_INPUT_LIMIT_BYTES = 64 * 1024
+const SESSION_SCOPE_LIMITS = {
+  namespace: 128,
+  targetKey: 2_048,
+  revision: 256,
+} as const
+
+type TestingScopedAgentSession = ScopedAgentSessionState & {
+  scope: SessionScope
+  ownerPluginId: string
+  queueSequence: number | null
+}
+
+function sessionScopeKey(scope: SessionScope): string {
+  return JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
+}
+
+function assertSessionScope(scope: SessionScope): void {
+  for (const field of ['namespace', 'targetKey', 'revision'] as const) {
+    const value = scope?.[field]
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new ScopedAgentSessionError('INVALID_SCOPE', `Session Scope field '${field}' must not be empty`)
+    }
+    if (value.includes('\0')) {
+      throw new ScopedAgentSessionError('INVALID_SCOPE', `Session Scope field '${field}' must not contain NUL`)
+    }
+    if (UTF8_ENCODER.encode(value).byteLength > SESSION_SCOPE_LIMITS[field]) {
+      throw new ScopedAgentSessionError(
+        'INVALID_SCOPE',
+        `Session Scope field '${field}' exceeds the ${SESSION_SCOPE_LIMITS[field]}-byte limit`,
+      )
+    }
+  }
+}
+
+function assertScopedInput(input: string): void {
+  if (typeof input !== 'string') {
+    throw new ScopedAgentSessionError('NOT_READY', 'Scoped Agent Session input must be a string')
+  }
+  if (UTF8_ENCODER.encode(input).byteLength > SCOPED_INPUT_LIMIT_BYTES) {
+    throw new ScopedAgentSessionError('INPUT_TOO_LARGE', `Scoped Agent Session input exceeds the ${SCOPED_INPUT_LIMIT_BYTES}-byte limit`)
   }
 }
 
@@ -431,7 +484,12 @@ export class TestingCommonApiFake {
   private readonly reviewThreads: StoredReviewThread[] = []
   private readonly reviewThreadSeenCounts = new Map<string, number>()
   private readonly reviewThreadChangeHandlers = new Map<string, Set<(event: ReviewThreadChangeEvent) => void>>()
+  private readonly scopedAgentSessions = new Map<string, TestingScopedAgentSession>()
+  private readonly scopedAgentSessionChangeHandlers = new Map<string, Set<(event: ScopedAgentSessionChangeEvent) => void>>()
   private reviewThreadSequence = 0
+  private scopedAgentSessionSequence = 0
+  private scopedAgentSessionClock = 0
+  private readonly scopedAgentSessionAttachmentGenerations = new Map<string, number>()
   private eventListenerSequence = 0
 
   constructor(private readonly services: TestingRegistryServices) {}
@@ -446,6 +504,36 @@ export class TestingCommonApiFake {
     for (const handler of this.reviewThreadChangeHandlers.get(reviewThreadScopeKey(event)) ?? []) {
       handler({ namespace: event.namespace, targetKey: event.targetKey, revision: event.revision })
     }
+  }
+
+  completeScopedAgentSession(scope: SessionScope, succeeded = true): void {
+    const previousQueuePositions = this.scopedQueuePositions()
+    const session = this.requireScopedAgentSession(scope)
+    session.status = succeeded ? 'completed' : 'failed'
+    session.acceptsInput = succeeded
+    session.errorCode = succeeded ? null : 'PROVIDER_EXITED'
+    session.errorMessage = succeeded ? null : 'Provider process exited unsuccessfully'
+    session.updatedAt = this.nextScopedAgentSessionTime()
+    this.promoteQueuedScopedAgentSession()
+    this.emitScopedAgentSessionChange(scope)
+    this.emitChangedScopedQueuePositions(previousQueuePositions)
+  }
+
+  mountScopedAgentTerminal(scope: SessionScope, element: HTMLElement): Disposable {
+    assertSessionScope(scope)
+    this.requireScopedAgentSession(scope)
+    if (!(element instanceof HTMLElement)) {
+      throw new TypeError('Scoped Agent Session terminal mount requires an HTMLElement')
+    }
+    const key = sessionScopeKey(scope)
+    const generation = (this.scopedAgentSessionAttachmentGenerations.get(key) ?? 0) + 1
+    this.scopedAgentSessionAttachmentGenerations.set(key, generation)
+    this.services.calls.scopedAgentSessionTerminalMounts.push({ scope: { ...scope }, element })
+    return createDisposable(() => {
+      if (this.scopedAgentSessionAttachmentGenerations.get(key) !== generation) return
+      this.scopedAgentSessionAttachmentGenerations.delete(key)
+      this.services.calls.scopedAgentSessionTerminalDetaches.push({ ...scope })
+    })
   }
   createApi(runtime: AgentCommandRuntime = 'frontend'): TestingCommonApi {
     const api: TestingCommonApi = {
@@ -559,6 +647,136 @@ export class TestingCommonApiFake {
                 })
               : null,
           }
+        },
+        start: async (request) => {
+          assertSessionScope(request.scope)
+          assertScopedInput(request.initialInput)
+          if (typeof request.projectId !== 'string' || request.projectId.length === 0) {
+            throw new ScopedAgentSessionError('PROJECT_NOT_FOUND', 'Scoped Agent Session requires a Project')
+          }
+          if (request.toolPolicy !== 'review-read-only') {
+            throw new ScopedAgentSessionError('UNSUPPORTED_TOOL_POLICY', `Unsupported Session Tool Policy: ${request.toolPolicy}`)
+          }
+          const key = sessionScopeKey(request.scope)
+          this.services.calls.scopedAgentSessionStarts.push({ ...request, scope: { ...request.scope } })
+          const previousQueuePositions = this.scopedQueuePositions()
+          const previousRevisions = [...this.scopedAgentSessions.values()].filter(session =>
+            session.scope.namespace === request.scope.namespace
+            && session.scope.targetKey === request.scope.targetKey
+            && session.scope.revision !== request.scope.revision)
+          for (const previous of previousRevisions) {
+            this.assertScopedAgentSessionOwner(previous)
+            const freedSlot = ['starting', 'running', 'paused'].includes(previous.status)
+            this.scopedAgentSessions.delete(sessionScopeKey(previous.scope))
+            if (freedSlot) this.promoteQueuedScopedAgentSession()
+            this.emitScopedAgentSessionChange(previous.scope)
+          }
+          this.emitChangedScopedQueuePositions(previousQueuePositions)
+          const existing = this.scopedAgentSessions.get(key)
+          if (existing && ['queued', 'starting', 'running', 'paused'].includes(existing.status)) {
+            throw new ScopedAgentSessionError(
+              'DUPLICATE_SCOPE',
+              `Session Scope already has live Scoped Agent Session ${existing.id}`,
+            )
+          }
+          if (existing) {
+            throw new ScopedAgentSessionError('DUPLICATE_SCOPE', 'Release the existing Scoped Agent Session before starting another')
+          }
+
+          const executionCount = this.scopedExecutionCount()
+          const queuedCount = this.scopedQueuedSessions().length
+          if (executionCount >= SCOPED_EXECUTION_LIMIT && queuedCount >= SCOPED_QUEUE_LIMIT) {
+            throw new ScopedAgentSessionError('CAPACITY', 'Scoped Agent Session queue is full')
+          }
+          const queued = executionCount >= SCOPED_EXECUTION_LIMIT
+          const createdAt = this.nextScopedAgentSessionTime()
+          const session: TestingScopedAgentSession = {
+            id: `sas-${++this.scopedAgentSessionSequence}`,
+            scope: { ...request.scope },
+            ownerPluginId: this.services.pluginId,
+            status: queued ? 'queued' : 'running',
+            queueSequence: queued ? this.scopedAgentSessionSequence : null,
+            queuePosition: null,
+            queueReason: queued ? 'Waiting for an available scoped Agent Session slot' : null,
+            acceptsInput: !queued,
+            workspaceAvailable: !queued,
+            errorCode: null,
+            errorMessage: null,
+            createdAt,
+            updatedAt: createdAt,
+          }
+          this.scopedAgentSessions.set(key, session)
+          this.emitScopedAgentSessionChange(request.scope)
+          return this.scopedAgentSessionState(session)
+        },
+        status: async (scope) => {
+          assertSessionScope(scope)
+          this.services.calls.scopedAgentSessionStatuses.push({ ...scope })
+          const session = this.scopedAgentSessions.get(sessionScopeKey(scope))
+          if (!session) return null
+          this.assertScopedAgentSessionOwner(session)
+          return this.scopedAgentSessionState(session)
+        },
+        input: async (scope, input) => {
+          assertSessionScope(scope)
+          assertScopedInput(input)
+          this.services.calls.scopedAgentSessionInputs.push({ scope: { ...scope }, input })
+          const session = this.requireScopedAgentSession(scope)
+          if (session.status === 'completed') {
+            const queued = this.scopedExecutionCount() >= SCOPED_EXECUTION_LIMIT
+            if (queued && this.scopedQueuedSessions().length >= SCOPED_QUEUE_LIMIT) {
+              throw new ScopedAgentSessionError('CAPACITY', 'Scoped Agent Session queue is full')
+            }
+            session.status = queued ? 'queued' : 'running'
+            session.queueSequence = queued ? ++this.scopedAgentSessionSequence : null
+            session.queueReason = queued ? 'Waiting for an available scoped Agent Session slot' : null
+            session.workspaceAvailable = !queued
+          } else if (session.status !== 'running' && session.status !== 'paused') {
+            throw new ScopedAgentSessionError('NOT_READY', `Scoped Agent Session is not ready for input in status ${session.status}`)
+          }
+          session.acceptsInput = session.status !== 'queued'
+          session.updatedAt = this.nextScopedAgentSessionTime()
+          this.emitScopedAgentSessionChange(scope)
+          return this.scopedAgentSessionState(session)
+        },
+        abort: async (scope) => {
+          assertSessionScope(scope)
+          this.services.calls.scopedAgentSessionAborts.push({ ...scope })
+          const session = this.requireScopedAgentSession(scope)
+          const previousQueuePositions = this.scopedQueuePositions()
+          const freedSlot = ['starting', 'running', 'paused'].includes(session.status)
+          session.status = 'aborted'
+          session.queueSequence = null
+          session.queueReason = null
+          session.acceptsInput = false
+          session.updatedAt = this.nextScopedAgentSessionTime()
+          if (freedSlot) this.promoteQueuedScopedAgentSession()
+          this.emitScopedAgentSessionChange(scope)
+          this.emitChangedScopedQueuePositions(previousQueuePositions)
+          return this.scopedAgentSessionState(session)
+        },
+        release: async (scope) => {
+          assertSessionScope(scope)
+          this.services.calls.scopedAgentSessionReleases.push({ ...scope })
+          const session = this.requireScopedAgentSession(scope)
+          const previousQueuePositions = this.scopedQueuePositions()
+          const freedSlot = ['starting', 'running', 'paused'].includes(session.status)
+          this.scopedAgentSessions.delete(sessionScopeKey(scope))
+          if (freedSlot) this.promoteQueuedScopedAgentSession()
+          this.emitScopedAgentSessionChange(scope)
+          this.emitChangedScopedQueuePositions(previousQueuePositions)
+        },
+        onDidChange: (scope, handler) => {
+          assertSessionScope(scope)
+          assertFunction('events', 'handler', handler)
+          const key = sessionScopeKey(scope)
+          const handlers = this.scopedAgentSessionChangeHandlers.get(key) ?? new Set()
+          handlers.add(handler)
+          this.scopedAgentSessionChangeHandlers.set(key, handlers)
+          return createDisposable(() => {
+            handlers.delete(handler)
+            if (handlers.size === 0) this.scopedAgentSessionChangeHandlers.delete(key)
+          })
         },
       },
       reviewThreads: {
@@ -823,6 +1041,85 @@ export class TestingCommonApiFake {
     }
 
     return api
+  }
+
+  private nextScopedAgentSessionTime(): number {
+    this.scopedAgentSessionClock += 1
+    return this.scopedAgentSessionClock
+  }
+
+  private scopedExecutionCount(): number {
+    return [...this.scopedAgentSessions.values()]
+      .filter(session => ['starting', 'running', 'paused'].includes(session.status)).length
+  }
+
+  private scopedQueuedSessions(): TestingScopedAgentSession[] {
+    return [...this.scopedAgentSessions.values()]
+      .filter(session => session.status === 'queued')
+      .sort((left, right) => (left.queueSequence ?? 0) - (right.queueSequence ?? 0))
+  }
+
+  private scopedQueuePositions(): Map<string, number> {
+    return new Map(this.scopedQueuedSessions().map((session, index) => [sessionScopeKey(session.scope), index + 1]))
+  }
+
+  private emitChangedScopedQueuePositions(previous: Map<string, number>): void {
+    for (const [key, position] of this.scopedQueuePositions()) {
+      if (!previous.has(key) || previous.get(key) === position) continue
+      const session = this.scopedAgentSessions.get(key)
+      if (session) this.emitScopedAgentSessionChange(session.scope)
+    }
+  }
+
+  private scopedAgentSessionState(session: TestingScopedAgentSession): ScopedAgentSessionState {
+    const queuePosition = session.status === 'queued'
+      ? this.scopedQueuedSessions().findIndex(candidate => candidate.id === session.id) + 1
+      : null
+    return {
+      id: session.id,
+      status: session.status,
+      queuePosition,
+      queueReason: session.queueReason,
+      acceptsInput: session.acceptsInput,
+      workspaceAvailable: session.workspaceAvailable,
+      errorCode: session.errorCode,
+      errorMessage: session.errorMessage,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }
+  }
+
+  private assertScopedAgentSessionOwner(session: TestingScopedAgentSession): void {
+    if (session.ownerPluginId !== this.services.pluginId) {
+      throw new ScopedAgentSessionError('FORBIDDEN', 'Scoped Agent Session belongs to another plugin')
+    }
+  }
+
+  private requireScopedAgentSession(scope: SessionScope): TestingScopedAgentSession {
+    const session = this.scopedAgentSessions.get(sessionScopeKey(scope))
+    if (!session) throw new ScopedAgentSessionError('NOT_FOUND', 'Scoped Agent Session not found')
+    this.assertScopedAgentSessionOwner(session)
+    return session
+  }
+
+  private emitScopedAgentSessionChange(scope: SessionScope): void {
+    const event = { ...scope }
+    for (const handler of this.scopedAgentSessionChangeHandlers.get(sessionScopeKey(scope)) ?? []) {
+      handler(event)
+    }
+  }
+
+  private promoteQueuedScopedAgentSession(): void {
+    if (this.scopedExecutionCount() >= SCOPED_EXECUTION_LIMIT) return
+    const session = this.scopedQueuedSessions()[0]
+    if (!session) return
+    session.status = 'running'
+    session.queueSequence = null
+    session.queueReason = null
+    session.acceptsInput = true
+    session.workspaceAvailable = true
+    session.updatedAt = this.nextScopedAgentSessionTime()
+    this.emitScopedAgentSessionChange(session.scope)
   }
 
   createBackendApi(): TestingCommonApi & Pick<BackendOpenForgeAPI, 'fs'> {

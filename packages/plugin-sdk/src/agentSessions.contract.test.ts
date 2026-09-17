@@ -4,7 +4,13 @@ import type {
   AgentSessionSummary,
   AgentSessionSummaryPage,
   AgentSessionsAPI,
+  BackendOpenForgeAPI,
+  FrontendOpenForgeAPI,
   ListAgentSessionsRequest,
+  ScopedAgentSessionChangeEvent,
+  ScopedAgentSessionState,
+  SessionScope,
+  StartScopedAgentSessionRequest,
 } from './types'
 import { createMockOpenForgeApi } from './testing'
 
@@ -54,6 +60,57 @@ describe('Agent Sessions public SDK contract', () => {
       items: [],
       nextCursor: null,
     })
+  })
+
+  it('exposes scope-addressed lifecycle operations without changing list', async () => {
+    const scope = {
+      namespace: 'github-pr',
+      targetKey: 'acme/openforge#42',
+      revision: 'head-sha',
+    } satisfies SessionScope
+    const startRequest = {
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-sha',
+      initialInput: 'Review this pull request',
+      toolPolicy: 'review-read-only',
+    } satisfies StartScopedAgentSessionRequest
+    const state = {
+      id: 'sas-1',
+      status: 'running',
+      queuePosition: null,
+      queueReason: null,
+      acceptsInput: true,
+      workspaceAvailable: true,
+      errorCode: null,
+      errorMessage: null,
+      createdAt: 10,
+      updatedAt: 11,
+    } satisfies ScopedAgentSessionState
+    const api = {
+      list: async () => page,
+      start: async () => state,
+      status: async () => state,
+      input: async () => state,
+      abort: async () => ({ ...state, status: 'aborted' as const, acceptsInput: false }),
+      release: async () => undefined,
+      onDidChange: () => ({ dispose: () => undefined }),
+    } satisfies AgentSessionsAPI
+
+    await expect(api.list(request)).resolves.toEqual(page)
+    await expect(api.start(startRequest)).resolves.toEqual(state)
+    await expect(api.status(scope)).resolves.toEqual(state)
+    await expect(api.input(scope, 'Follow up')).resolves.toEqual(state)
+    await expect(api.abort(scope)).resolves.toMatchObject({ status: 'aborted' })
+    await expect(api.release(scope)).resolves.toBeUndefined()
+
+    const handler = (_event: ScopedAgentSessionChangeEvent) => undefined
+    expect(api.onDidChange(scope, handler)).toHaveProperty('dispose')
+  })
+
+  it('keeps terminal mounting frontend-only', () => {
+    expectTypeOf<FrontendOpenForgeAPI['agentSessions']['mountTerminal']>().toBeFunction()
+    expectTypeOf<BackendOpenForgeAPI['agentSessions']>().not.toHaveProperty('mountTerminal')
   })
 
   it.each([

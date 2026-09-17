@@ -5,6 +5,7 @@ use std::io::Read;
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use super::attachment::PtyAttachmentHub;
@@ -46,10 +47,12 @@ pub(super) async fn finalize_pty_exit(
 // ============================================================================
 
 pub(super) const CLAUDE_BUFFER_CAPACITY: usize = 262_144; // 256KB
+static NEXT_OUTPUT_REVISION: AtomicU64 = AtomicU64::new(1);
 
 pub(super) struct RingBuffer {
     data: Vec<u8>,
     capacity: usize,
+    revision: u64,
 }
 
 impl RingBuffer {
@@ -57,11 +60,16 @@ impl RingBuffer {
         Self {
             data: Vec::with_capacity(capacity),
             capacity,
+            revision: 0,
         }
     }
 
     pub(super) fn push(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
         self.data.extend_from_slice(bytes);
+        self.revision = NEXT_OUTPUT_REVISION.fetch_add(1, Ordering::Relaxed);
         if self.data.len() > self.capacity {
             let mut remove = self.data.len() - self.capacity;
             while remove < self.data.len() && self.data[remove] & 0b1100_0000 == 0b1000_0000 {
@@ -79,6 +87,10 @@ impl RingBuffer {
         String::from_utf8_lossy(&self.data)
             .into_owned()
             .into_bytes()
+    }
+
+    pub(super) fn revision(&self) -> u64 {
+        self.revision
     }
 }
 

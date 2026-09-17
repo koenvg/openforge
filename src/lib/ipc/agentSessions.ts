@@ -1,4 +1,12 @@
-import type { AgentSessionSummaryPage, ListAgentSessionsRequest, ListTaskSessionsRequest, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
+import type {
+  AgentSessionSummaryPage,
+  ListAgentSessionsRequest,
+  ListTaskSessionsRequest,
+  ScopedAgentSessionState,
+  SessionScope,
+  StartScopedAgentSessionRequest,
+  TaskFollowUpReceipt,
+} from '@openforge-app/plugin-sdk'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { AgentSession, AutocompleteAgentInfo, CommandInfo, ProviderModelInfo } from '../types'
 
@@ -64,4 +72,44 @@ export async function listOpenCodeModels(projectId: string): Promise<ProviderMod
 
 export async function finalizeAgentSession(taskId: string, success: boolean, ptyInstanceId: number): Promise<void> {
   return invoke<void>("finalize_agent_session", { taskId, success, ptyInstanceId });
+}
+
+export function startScopedAgentSession(
+  pluginId: string,
+  request: StartScopedAgentSessionRequest,
+): Promise<ScopedAgentSessionState> {
+  return invoke('start_scoped_agent_session', {
+    pluginId,
+    scope: request.scope,
+    projectId: request.projectId,
+    checkoutRevision: request.checkoutRevision,
+    initialInput: request.initialInput,
+    toolPolicy: request.toolPolicy,
+  })
+}
+
+export function getScopedAgentSessionStatus(
+  pluginId: string,
+  scope: SessionScope,
+): Promise<ScopedAgentSessionState | null> {
+  return invoke('get_scoped_agent_session_status', { pluginId, scope })
+}
+
+export function inputScopedAgentSession(
+  pluginId: string,
+  scope: SessionScope,
+  input: string,
+): Promise<ScopedAgentSessionState> {
+  return invoke('input_scoped_agent_session', { pluginId, scope, input })
+}
+
+export function abortScopedAgentSession(
+  pluginId: string,
+  scope: SessionScope,
+): Promise<ScopedAgentSessionState> {
+  return invoke('abort_scoped_agent_session', { pluginId, scope })
+}
+
+export function releaseScopedAgentSession(pluginId: string, scope: SessionScope): Promise<void> {
+  return invoke('release_scoped_agent_session', { pluginId, scope })
 }

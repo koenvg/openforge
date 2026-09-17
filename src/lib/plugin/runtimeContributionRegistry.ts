@@ -176,7 +176,7 @@ class RuntimeContributionRegistry {
   getFrontendApi(): FrontendOpenForgeAPI {
     if (!this.frontendApi) {
       this.frontendApi = {
-        ...this.commonApi.createApi(),
+        ...this.commonApi.createFrontendApi(),
         ...this.frontendContributions.createApi(),
       }
     }

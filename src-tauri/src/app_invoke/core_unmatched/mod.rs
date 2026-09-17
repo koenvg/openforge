@@ -61,6 +61,11 @@ fn command_domain(command: &str) -> Option<CommandDomain> {
         | "list_agent_sessions"
         | "get_latest_sessions"
         | "mark_agent_output_viewed"
+        | "start_scoped_agent_session"
+        | "get_scoped_agent_session_status"
+        | "input_scoped_agent_session"
+        | "abort_scoped_agent_session"
+        | "release_scoped_agent_session"
         | "finalize_agent_session" => Some(CommandDomain::AgentSession),
         "get_project_task_labels"
         | "create_task_label"
@@ -84,7 +89,7 @@ pub(super) async fn handle_app_unmatched_command(
         Some(CommandDomain::BrowserSession) => browser_sessions::handle(state, request),
         Some(CommandDomain::Project) => projects::handle(state, request),
         Some(CommandDomain::Task) => tasks::handle(state, request),
-        Some(CommandDomain::AgentSession) => agent_sessions::handle(state, request),
+        Some(CommandDomain::AgentSession) => agent_sessions::handle(state, request).await,
         Some(CommandDomain::TaskLabel) => task_labels::handle(state, request),
         Some(CommandDomain::App) => app::handle(state, request),
         None => Err((
@@ -150,6 +155,14 @@ mod tests {
             ("list_agent_sessions", CommandDomain::AgentSession),
             ("get_latest_sessions", CommandDomain::AgentSession),
             ("mark_agent_output_viewed", CommandDomain::AgentSession),
+            ("start_scoped_agent_session", CommandDomain::AgentSession),
+            (
+                "get_scoped_agent_session_status",
+                CommandDomain::AgentSession,
+            ),
+            ("input_scoped_agent_session", CommandDomain::AgentSession),
+            ("abort_scoped_agent_session", CommandDomain::AgentSession),
+            ("release_scoped_agent_session", CommandDomain::AgentSession),
             ("finalize_agent_session", CommandDomain::AgentSession),
             ("get_project_task_labels", CommandDomain::TaskLabel),
             ("create_task_label", CommandDomain::TaskLabel),

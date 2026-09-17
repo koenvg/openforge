@@ -33,6 +33,10 @@ import type {
   ListTaskSessionsRequest,
   AgentSessionSummaryPage,
   ListAgentSessionsRequest,
+  ScopedAgentSessionChangeEvent,
+  ScopedAgentSessionState,
+  SessionScope,
+  StartScopedAgentSessionRequest,
   InjectionPointLocation,
   JsonSchema,
   OpenForgeNavigationRequest,
@@ -79,6 +83,13 @@ export type RuntimeHostBridge = {
   getProject?(projectId: string): Promise<Project | null>
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
+  startScopedAgentSession?(request: StartScopedAgentSessionRequest): Promise<ScopedAgentSessionState>
+  getScopedAgentSessionStatus?(scope: SessionScope): Promise<ScopedAgentSessionState | null>
+  inputScopedAgentSession?(scope: SessionScope, input: string): Promise<ScopedAgentSessionState>
+  abortScopedAgentSession?(scope: SessionScope): Promise<ScopedAgentSessionState>
+  releaseScopedAgentSession?(scope: SessionScope): Promise<void>
+  subscribeScopedAgentSessionChanges?(scope: SessionScope, handler: (event: ScopedAgentSessionChangeEvent) => void): Disposable
+  mountScopedAgentSessionTerminal?(scope: SessionScope, element: HTMLElement): Promise<Disposable>
   subscribeTaskChanges?(projectId: string, handler: (event: TaskChangeEvent) => void): Disposable
   listReviewThreads?(scope: ReviewThreadScope): Promise<ReviewThread[]>
   createReviewThread?(request: CreateReviewThreadRequest): Promise<ReviewThread>

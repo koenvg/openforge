@@ -210,6 +210,56 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(listAgentSessions).toHaveBeenCalledWith(request)
   })
 
+  it('binds scoped Agent Session lifecycle and invalidations to the plugin runtime host', async () => {
+    const scope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    const state = {
+      id: 'sas-1', status: 'running' as const, queuePosition: null, queueReason: null,
+      acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null,
+      createdAt: 1, updatedAt: 2,
+    }
+    const startScopedAgentSession = vi.fn().mockResolvedValue(state)
+    const getScopedAgentSessionStatus = vi.fn().mockResolvedValue(state)
+    const inputScopedAgentSession = vi.fn().mockResolvedValue(state)
+    const abortScopedAgentSession = vi.fn().mockResolvedValue({ ...state, status: 'aborted' })
+    const releaseScopedAgentSession = vi.fn().mockResolvedValue(undefined)
+    const unsubscribe = vi.fn()
+    const subscribeScopedAgentSessionChanges = vi.fn((_scope, handler) => {
+      handler(scope)
+      return { dispose: unsubscribe }
+    })
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'github',
+      projectId: 'P-1',
+      host: {
+        startScopedAgentSession,
+        getScopedAgentSessionStatus,
+        inputScopedAgentSession,
+        abortScopedAgentSession,
+        releaseScopedAgentSession,
+        subscribeScopedAgentSessionChanges,
+      },
+    }))
+    const api = registry.createApi().agentSessions
+    const startRequest = {
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    }
+
+    await expect(api.start(startRequest)).resolves.toBe(state)
+    await expect(api.status(scope)).resolves.toBe(state)
+    await expect(api.input(scope, 'Follow up')).resolves.toBe(state)
+    await expect(api.abort(scope)).resolves.toMatchObject({ status: 'aborted' })
+    await expect(api.release(scope)).resolves.toBeUndefined()
+    const handler = vi.fn()
+    const subscription = api.onDidChange(scope, handler)
+    expect(handler).toHaveBeenCalledWith(scope)
+    await subscription.dispose()
+    expect(unsubscribe).toHaveBeenCalledOnce()
+  })
+
   it('warns once per activation while preserving every legacy Task list result', async () => {
     const legacyTasks = [{ id: 'T-1' }, { id: 'T-2' }] as never
     const listTasks = vi.fn().mockResolvedValue(legacyTasks)

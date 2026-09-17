@@ -3,9 +3,13 @@ use super::*;
 #[test]
 fn test_ring_buffer_push_within_capacity() {
     let mut buf = RingBuffer::new(100);
+    assert_eq!(buf.revision(), 0);
     buf.push(b"hello");
+    let first_revision = buf.revision();
+    assert!(first_revision > 0);
     buf.push(b" world");
     assert_eq!(buf.snapshot(), "hello world");
+    assert!(buf.revision() > first_revision);
 }
 
 #[test]
