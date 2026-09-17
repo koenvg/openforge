@@ -231,9 +231,9 @@ describe('InlineCommentThread review threads', () => {
     expect(screen.getByText('Plugin')).toBeTruthy()
   })
 
-  it('offers resolve and dismiss on an open thread', async () => {
+  it('offers resolve and dismiss on an open reviewer thread', async () => {
     const onSetThreadStatus = vi.fn()
-    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()), onSetThreadStatus })
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ origin: 'human' })), onSetThreadStatus })
     render(InlineCommentThread, { props: setup.props })
 
     await fireEvent.click(screen.getByRole('button', { name: 'Resolve review thread' }))
@@ -242,10 +242,10 @@ describe('InlineCommentThread review threads', () => {
     expect(onSetThreadStatus.mock.calls).toEqual([['rt_1', 'resolved'], ['rt_1', 'dismissed']])
   })
 
-  it('keeps a dismissed thread readable and offers to reopen it', async () => {
+  it('keeps a dismissed reviewer thread readable and offers to reopen it', async () => {
     const onSetThreadStatus = vi.fn()
     const setup = makeProps({
-      data: makeReviewThreadData(makeReviewThread({ status: 'dismissed' })),
+      data: makeReviewThreadData(makeReviewThread({ origin: 'human', status: 'dismissed' })),
       onSetThreadStatus,
     })
     render(InlineCommentThread, { props: setup.props })
@@ -258,23 +258,49 @@ describe('InlineCommentThread review threads', () => {
     expect(onSetThreadStatus).toHaveBeenCalledWith('rt_1', 'open')
   })
 
+  it('offers include-in-review and dismiss on an open agent suggestion', async () => {
+    const onSetThreadStatus = vi.fn()
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ origin: 'agent' })), onSetThreadStatus })
+    render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: /include in review/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /dismiss suggestion/i }))
+
+    expect(onSetThreadStatus.mock.calls).toEqual([['rt_1', 'resolved'], ['rt_1', 'dismissed']])
+  })
+
+  it('shows an approved agent suggestion as included in the review, with a way to take it back', async () => {
+    const onSetThreadStatus = vi.fn()
+    const setup = makeProps({
+      data: makeReviewThreadData(makeReviewThread({ origin: 'agent', status: 'resolved' })),
+      onSetThreadStatus,
+    })
+    render(InlineCommentThread, { props: setup.props })
+
+    expect(screen.getByText('Included in review')).toBeTruthy()
+    expect(screen.queryByText('Resolved')).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: /remove from review/i }))
+
+    expect(onSetThreadStatus).toHaveBeenCalledWith('rt_1', 'open')
+  })
+
   it('hides the status actions when the embedding surface supplies no status callback', () => {
-    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread()) })
+    const setup = makeProps({ data: makeReviewThreadData(makeReviewThread({ origin: 'human' })) })
 
     render(InlineCommentThread, { props: setup.props })
 
     expect(screen.queryByRole('button', { name: 'Resolve review thread' })).toBeNull()
   })
 
-  it('reports a resolved thread whose agent turn failed as both', () => {
+  it('reports a resolved agent suggestion whose agent turn failed as both', () => {
     const setup = makeProps({
-      data: makeReviewThreadData(makeReviewThread({ status: 'resolved', awaiting: 'error' })),
+      data: makeReviewThreadData(makeReviewThread({ origin: 'agent', status: 'resolved', awaiting: 'error' })),
       onSetThreadStatus: vi.fn(),
     })
 
     render(InlineCommentThread, { props: setup.props })
 
-    expect(screen.getByText('Resolved')).toBeTruthy()
+    expect(screen.getByText('Included in review')).toBeTruthy()
     expect(screen.getByText('Agent reply failed')).toBeTruthy()
   })
 

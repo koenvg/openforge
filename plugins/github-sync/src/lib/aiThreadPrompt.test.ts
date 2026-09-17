@@ -22,6 +22,14 @@ describe('aiThreadPrompt', () => {
     expect(prompt).toContain('why a Map here?')
     expect(prompt).toContain('a.ts')
   })
+  it('answers as the agent that produced the review, not as the PR author', () => {
+    // A follow-up resumes the review session, so the responder must own the review
+    // it wrote. Casting it as "the author" made it disclaim the review and refuse
+    // questions about what it did (AVIV-396).
+    const prompt = buildQuestionsPrompt(threads, [], [])
+    expect(prompt).not.toMatch(/author of this pull request/i)
+    expect(prompt).toMatch(/generated this pull request['’]s walkthrough and review/i)
+  })
   it('tells a resumed agent to re-read files relative to the current directory', () => {
     // On a follow-up the session is resumed but the checkout path has changed, so
     // the prompt must steer the agent away from paths it remembers from the review.
