@@ -1,10 +1,11 @@
 import { onDestroy, onMount } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type {
-  AuthoredPullRequest,
-  PrWalkthrough,
-  ReviewPullRequest,
+import {
+  isClosedOrMergedPullRequest,
+  type AuthoredPullRequest,
+  type PrWalkthrough,
+  type ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
 import {
@@ -97,8 +98,15 @@ export function usePrReviewListState(options: Options) {
   let sortedReviewPrs = $derived(
     sortDoNotReviewLast(walkthroughReadyFirst(filteredReviewPrs, readyReviewPrIds)),
   )
+  let activeReviewPrs = $derived(
+    sortedReviewPrs.filter(pr => !isClosedOrMergedPullRequest(pr.state)),
+  )
+  let finishedReviewPrs = $derived(
+    sortedReviewPrs.filter(pr => isClosedOrMergedPullRequest(pr.state)),
+  )
   let sortedAuthoredPrs = $derived(filteredAuthoredPrs)
-  let groupedPrs = $derived(groupByRepo(sortedReviewPrs))
+  let groupedPrs = $derived(groupByRepo(activeReviewPrs))
+  let groupedFinishedPrs = $derived(groupByRepo(finishedReviewPrs))
   let groupedAuthoredPrs = $derived(groupAuthoredByRepo(sortedAuthoredPrs))
   let hiddenReviewRepos = $derived(showFilters ? getHiddenRepos(pullRequests.current) : [])
   let hiddenAuthoredRepos = $derived(showFilters ? getHiddenRepos(authoredPullRequests.current) : [])
@@ -108,12 +116,10 @@ export function usePrReviewListState(options: Options) {
     for (const pr of authoredPullRequests.current) repos.add(`${pr.repo_owner}/${pr.repo_name}`)
     return [...repos].filter(repo => !excludedRepos.has(repo)).sort()
   })
-  let flatPrList = $derived(sortedReviewPrs)
-
   const vimList = useVimNavigation({
-    getItemCount: () => selectedPr.current ? 0 : flatPrList.length,
+    getItemCount: () => selectedPr.current ? 0 : activeReviewPrs.length,
     onSelect: (index) => {
-      const pr = flatPrList[index]
+      const pr = activeReviewPrs[index]
       if (pr) options.onSelectPr(pr)
     },
     onBack: () => {
@@ -367,13 +373,20 @@ export function usePrReviewListState(options: Options) {
     get error() { return error },
     get authoredError() { return authoredError },
     get githubTokenConfigured() { return githubTokenConfigured },
-    get filteredReviewPrs() { return filteredReviewPrs },
+    get reviewRequests() {
+      return {
+        activeCount: activeReviewPrs.length,
+        filtered: filteredReviewPrs,
+        finishedCount: finishedReviewPrs.length,
+        groupedActive: groupedPrs,
+        groupedFinished: groupedFinishedPrs,
+        keyboardNavigable: activeReviewPrs,
+      }
+    },
     get filteredAuthoredPrs() { return filteredAuthoredPrs },
     get hiddenReviewRepos() { return hiddenReviewRepos },
     get hiddenAuthoredRepos() { return hiddenAuthoredRepos },
-    get groupedPrs() { return groupedPrs },
     get groupedAuthoredPrs() { return groupedAuthoredPrs },
-    get flatPrList() { return flatPrList },
     get focusedIndex() { return vimList.focusedIndex },
     setShowFilterDropdown: (value: boolean) => { showFilterDropdown = value },
     setNewRepoInput: (value: string) => { newRepoInput = value },

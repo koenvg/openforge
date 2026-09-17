@@ -65,7 +65,7 @@ async function setup(
   let workspace!: ReviewWorkspace
   const rendered = render(Harness, { api: registry.frontendApi, onWorkspace: (value: ReviewWorkspace) => { workspace = value } })
   workspaces.push(workspace)
-  await waitFor(() => expect(workspace.list.filteredReviewPrs).toHaveLength(1))
+  await waitFor(() => expect(workspace.list.reviewRequests.filtered).toHaveLength(1))
   return { workspace, registry, responses, calls, unmount: rendered.unmount }
 }
 
@@ -79,14 +79,14 @@ afterEach(() => {
 describe('review workspace', () => {
   it('loads, filters and refreshes pull requests through the same model used by the view', async () => {
     const { workspace, registry } = await setup()
-    expect(workspace.list.filteredReviewPrs[0].title).toBe('Fix login')
+    expect(workspace.list.reviewRequests.filtered[0].title).toBe('Fix login')
     await workspace.list.onAddExcludedRepo(' acme/app ')
-    expect(workspace.list.filteredReviewPrs).toEqual([])
+    expect(workspace.list.reviewRequests.filtered).toEqual([])
     expect(workspace.list.hiddenReviewRepos).toEqual(['acme/app'])
     expect(await registry.frontendApi.config.get('pr_excluded_repos')).toBe('["acme/app"]')
     await workspace.list.onRefreshPrs()
     await workspace.list.onRemoveExcludedRepo('acme/app')
-    expect(workspace.list.filteredReviewPrs[0].title).toBe('Updated login')
+    expect(workspace.list.reviewRequests.filtered[0].title).toBe('Updated login')
   })
 
   it('restricts project reviews to their resolved repository, independently of global exclusions', async () => {
@@ -94,7 +94,7 @@ describe('review workspace', () => {
     responses.set('fetchReviewPrs', [pr, { ...pr, id: 2, repo_name: 'other' }])
     await workspace.list.onAddExcludedRepo('acme/app')
     await workspace.list.onRefreshPrs()
-    expect(workspace.list.filteredReviewPrs.map(value => value.repo_name)).toEqual(['app'])
+    expect(workspace.list.reviewRequests.filtered.map(value => value.repo_name)).toEqual(['app'])
     expect(workspace.list.showFilters).toBe(false)
   })
 
@@ -102,13 +102,13 @@ describe('review workspace', () => {
     const { workspace, responses, registry } = await setup()
     responses.set('getReviewPrs', [{ ...pr, title: 'Changed by sync' }])
     await registry.frontendApi.events.emitGlobal('openforge.review-pr-count-changed', {})
-    await waitFor(() => expect(workspace.list.filteredReviewPrs[0].title).toBe('Changed by sync'))
+    await waitFor(() => expect(workspace.list.reviewRequests.filtered[0].title).toBe('Changed by sync'))
     responses.set('fetchReviewPrs', () => { throw new Error('offline') })
     vi.spyOn(console, 'error').mockImplementation(() => {})
     await workspace.list.onRefreshPrs()
     expect(workspace.list.error).toContain('offline')
     expect(workspace.list.isLoading).toBe(false)
-    expect(workspace.list.filteredReviewPrs[0].title).toBe('Changed by sync')
+    expect(workspace.list.reviewRequests.filtered[0].title).toBe('Changed by sync')
   })
 
   it('marks selection viewed and ignores a previous selection completing late', async () => {
@@ -324,7 +324,7 @@ describe('review workspace', () => {
 
     workspace.list.onRemove(pr)
 
-    expect(workspace.list.filteredReviewPrs).toEqual([])
+    expect(workspace.list.reviewRequests.filtered).toEqual([])
     await waitFor(() => expect(calls.get('dismissReviewPr')).toContainEqual({ prId: 1 }))
   })
 
@@ -341,7 +341,7 @@ describe('review workspace', () => {
     workspace.postReview!.onKeep()
     expect(workspace.postReview).toBeNull()
     expect(workspace.detail).toBeNull()
-    expect(workspace.list.filteredReviewPrs).toHaveLength(1)
+    expect(workspace.list.reviewRequests.filtered).toHaveLength(1)
     expect(calls.get('dismissReviewPr')).toBeUndefined()
   })
 
@@ -358,7 +358,7 @@ describe('review workspace', () => {
     workspace.postReview!.onRemove()
     expect(workspace.postReview).toBeNull()
     expect(workspace.detail).toBeNull()
-    expect(workspace.list.filteredReviewPrs).toEqual([])
+    expect(workspace.list.reviewRequests.filtered).toEqual([])
     await waitFor(() => expect(calls.get('dismissReviewPr')).toContainEqual({ prId: 1 }))
   })
 

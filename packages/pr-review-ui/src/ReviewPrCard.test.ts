@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import ReviewPrCard from './ReviewPrCard.svelte'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
@@ -45,7 +45,7 @@ describe('ReviewPrCard', () => {
     expect(screen.getByText('#42')).toBeTruthy()
   })
 
-  it('renders repo badge with owner and name', () => {
+  it('renders repository owner and name', () => {
     const onClick = () => {}
     render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick } })
     expect(screen.getByText('acme/repo')).toBeTruthy()
@@ -109,6 +109,19 @@ describe('ReviewPrCard', () => {
     expect(screen.getByText('CI Passed')).toBeTruthy()
   })
 
+  it('uses the SDK status presentation for review request states', () => {
+    render(ReviewPrCard, {
+      props: {
+        pr: { ...basePr, ci_status: 'success', mergeable: true, mergeable_state: 'clean' },
+        selected: false,
+        onClick: () => {},
+      },
+    })
+
+    expect(screen.getByText('CI Passed').closest('[data-status-badge]')).toBeTruthy()
+    expect(screen.getByText('Ready to Merge').closest('[data-status-badge]')).toBeTruthy()
+  })
+
   it('shows only the finished state after a review request merges', () => {
     render(ReviewPrCard, {
       props: {
@@ -123,7 +136,9 @@ describe('ReviewPrCard', () => {
         onClick: () => {},
       },
     })
-    expect(screen.getByText('merged')).toBeTruthy()
+    const mergedStatus = screen.getByText('Merged')
+    expect(mergedStatus).toBeTruthy()
+    expect(mergedStatus.parentElement?.querySelector('svg')).toBeTruthy()
     expect(screen.queryByText('CI Failed')).toBeNull()
     expect(screen.queryByText('Ready to Merge')).toBeNull()
   })
@@ -136,7 +151,7 @@ describe('ReviewPrCard', () => {
         onClick: () => {},
       },
     })
-    expect(screen.getByText('closed')).toBeTruthy()
+    expect(screen.getByText('Closed')).toBeTruthy()
     expect(screen.queryByText('CI Pending')).toBeNull()
     expect(screen.queryByText('Ready to Merge')).toBeNull()
   })
@@ -165,6 +180,20 @@ describe('ReviewPrCard', () => {
     expect(screen.getByText('bug')).toBeTruthy()
   })
 
+  it('presents GitHub labels as one readable list', () => {
+    const labeledPr = {
+      ...basePr,
+      labels: [
+        { name: 'frontend', color: '1d76db' },
+        { name: 'accessibility', color: '7057ff' },
+      ],
+    }
+    render(ReviewPrCard, { props: { pr: labeledPr, selected: false, onClick: () => {} } })
+
+    const labels = screen.getByRole('list', { name: 'Pull request labels' })
+    expect(within(labels).getAllByRole('listitem')).toHaveLength(2)
+  })
+
   it('renders no label badges when the PR has no labels', () => {
     render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick: () => {} } })
     expect(screen.queryByText('DO NOT REVIEW')).toBeNull()
@@ -190,6 +219,34 @@ describe('ReviewPrCard', () => {
   })
 
   const viewedPr: ReviewPullRequest = { ...basePr, viewed_at: 1_700_000_000, viewed_head_sha: 'abc123' }
+
+  it('marks an unseen active review request as unread and leaves viewed requests unmarked', () => {
+    const { unmount } = render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick: () => {} } })
+    expect(screen.getByLabelText('Unread review request')).toBeTruthy()
+
+    unmount()
+    render(ReviewPrCard, { props: { pr: viewedPr, selected: false, onClick: () => {} } })
+    expect(screen.queryByLabelText('Unread review request')).toBeNull()
+  })
+
+  it('does not expose unread behavior after a review request is finished', () => {
+    const finishedPr: ReviewPullRequest = {
+      ...viewedPr,
+      state: 'closed',
+      merged_at: 1_700_000_100,
+    }
+    render(ReviewPrCard, {
+      props: {
+        pr: finishedPr,
+        selected: false,
+        onClick: () => {},
+        onMarkUnread: () => {},
+      },
+    })
+
+    expect(screen.queryByLabelText('Unread review request')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Mark as unread' })).toBeNull()
+  })
 
   it('renders a Mark as unread control for a read PR when onMarkUnread is provided', () => {
     render(ReviewPrCard, { props: { pr: viewedPr, selected: false, onClick: () => {}, onMarkUnread: () => {} } })

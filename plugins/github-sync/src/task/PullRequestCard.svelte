@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, getUnaddressedPrCommentThreadRoots, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
-  import { getPrReviewerRows, getPrStatusChips, getPullRequestMergeActionLabel, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import { getPrReviewerRows, getPrStatusBadgeStatus, getPrStatusChips, getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -86,26 +86,6 @@
     return 'Skipped'
   }
 
-  function chipStatus(chip: PrStatusChipSpec): StatusBadgeStatus | null {
-    if (chip.type === 'ci') {
-      if (chip.variant === 'success') return 'success'
-      if (chip.variant === 'error') return 'failed'
-      if (chip.variant === 'pending') return 'in-progress'
-      return 'expired'
-    }
-    if (chip.type === 'review') {
-      if (chip.variant === 'success') return 'success'
-      if (chip.variant === 'pending') return 'pending'
-      if (chip.variant === 'neutral') return 'in-review'
-    }
-    if (chip.type === 'merge') {
-      if (chip.variant === 'done' || chip.variant === 'merged') return 'success'
-      if (chip.variant === 'error') return 'failed'
-      if (chip.variant === 'neutral') return 'in-review'
-      if (chip.variant === 'closed') return 'expired'
-    }
-    return null
-  }
 </script>
 
 <article class="rounded-[var(--of-radius-container)] border border-l-2 {isClosedOrMergedPullRequest(pr.state) ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'} overflow-hidden" aria-label={cardLabel(pr)}>
@@ -152,7 +132,7 @@
 
       <div class="flex flex-wrap items-center gap-1.5 px-2.5 pb-5" aria-label="Pull request signals">
         {#each chips as chip (`${pr.id}-${chip.type}-${chip.label}`)}
-          {@const status = chipStatus(chip)}
+          {@const status = getPrStatusBadgeStatus(chip)}
           {#if status}
             <StatusBadge status={status} aria-label={chip.label} title={chip.label} class="github-sync-compact-chip github-sync-signal-status">{chip.label}</StatusBadge>
           {:else}

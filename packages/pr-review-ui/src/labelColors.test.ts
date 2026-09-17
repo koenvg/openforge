@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeLabelColor, labelChipStyle } from './labelColors'
+import { normalizeLabelColor, labelChipStyle, labelMarkerStyle } from './labelColors'
 
 describe('normalizeLabelColor', () => {
   it('returns lowercase hex for a valid 6-digit color', () => {
@@ -26,5 +26,15 @@ describe('labelChipStyle', () => {
   it('returns an empty string for invalid colors so callers can fall back', () => {
     expect(labelChipStyle('')).toBe('')
     expect(labelChipStyle('not-a-color')).toBe('')
+  })
+})
+
+describe('labelMarkerStyle', () => {
+  it('keeps a valid GitHub colour on the marker', () => {
+    expect(labelMarkerStyle('7057FF')).toBe('background-color: #7057ff;')
+  })
+
+  it('falls back to the default marker treatment for invalid colours', () => {
+    expect(labelMarkerStyle('not-a-color')).toBe('')
   })
 })

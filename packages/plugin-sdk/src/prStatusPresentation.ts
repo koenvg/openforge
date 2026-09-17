@@ -5,6 +5,7 @@ export type PrChipSurface = 'compact' | 'detail'
 export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral' | 'done' | 'merged' | 'closed'
 export type PrChipType = 'draft' | 'ci' | 'review' | 'merge'
 export type PrChipIcon = 'check' | 'cross' | 'clock' | null
+export type PrStatusBadgeStatus = 'pending' | 'failed' | 'success' | 'in-progress' | 'in-review' | 'expired'
 
 const PULL_REQUEST_MERGE_ACTION_LABELS: Record<PullRequestMergeMethod, string> = {
   merge: 'Create a merge commit',
@@ -25,6 +26,27 @@ export interface PrStatusChipSpec {
   surface: PrChipSurface
   icon?: PrChipIcon
   pulse?: boolean
+}
+
+export function getPrStatusBadgeStatus(chip: PrStatusChipSpec): PrStatusBadgeStatus | null {
+  if (chip.type === 'ci') {
+    if (chip.variant === 'success') return 'success'
+    if (chip.variant === 'error') return 'failed'
+    if (chip.variant === 'pending') return 'in-progress'
+    return 'expired'
+  }
+  if (chip.type === 'review') {
+    if (chip.variant === 'success') return 'success'
+    if (chip.variant === 'pending') return 'pending'
+    if (chip.variant === 'neutral') return 'in-review'
+  }
+  if (chip.type === 'merge') {
+    if (chip.variant === 'done' || chip.variant === 'merged') return 'success'
+    if (chip.variant === 'error') return 'failed'
+    if (chip.variant === 'neutral') return 'in-review'
+    if (chip.variant === 'closed') return 'expired'
+  }
+  return null
 }
 
 export interface PrInput extends MergeStatusInfo {
@@ -131,17 +153,17 @@ export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusC
   if (isMergedPullRequest(pr)) {
     chips.push({
       type: 'merge',
-      label: surface === 'compact' ? 'merged' : 'Merged',
+      label: 'Merged',
       variant: 'merged',
-      icon: surface === 'detail' ? 'check' : undefined,
+      icon: 'check',
       surface,
     })
   } else if (isClosedUnmergedPullRequest(pr)) {
     chips.push({
       type: 'merge',
-      label: surface === 'compact' ? 'closed' : 'Closed',
+      label: 'Closed',
       variant: 'closed',
-      icon: surface === 'detail' ? 'cross' : undefined,
+      icon: 'cross',
       surface,
     })
   } else if (pr.state === 'open') {

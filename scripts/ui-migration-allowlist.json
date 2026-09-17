@@ -68,6 +68,15 @@
     {"tag":"div","context":"class=\"w-7 h-7 rounded-[var(--of-radius-round)] bg-base-300 flex items-center justify-center text-xs font-bold text-base-content/70 shrink-0\"","tokens":["w-7","h-7"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."},
     {"tag":"div","context":"class=\"flex items-center gap-2 text-sm flex-wrap flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
+  "packages/pr-review-ui/src/ReviewPrCard.svelte": [
+    {"tag":"GitPullRequest","context":"class=\"size-3.5 text-base-content/50\"","tokens":["size-3.5"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
+    {"tag":"span","context":"class=\"mt-[0.4rem] size-2 shrink-0 rounded-[var(--of-radius-round)] bg-info ring-2 ring-info/15\"","tokens":["size-2"],"count":1,"reason":"Domain unread-status dot dimensions; roundness follows the theme token."},
+    {"tag":"div","context":"class=\"flex min-w-0 items-start gap-2 text-xs text-base-content/75\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex child shrink rather than overflow the review card."},
+    {"tag":"Tags","context":"class=\"mt-0.5 size-3.5 shrink-0 text-base-content/50\"","tokens":["size-3.5"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
+    {"tag":"ul","context":"class=\"m-0 flex min-w-0 list-none flex-wrap items-center gap-x-3 gap-y-1 p-0\"","tokens":["min-w-0"],"count":1,"reason":"Let the label list shrink and wrap rather than overflow the review card."},
+    {"tag":"li","context":"class=\"flex min-w-0 items-center gap-1.5\"","tokens":["min-w-0"],"count":1,"reason":"Let long label text truncate rather than overflow the review card."},
+    {"tag":"span","context":"class=\"size-2 shrink-0 rounded-[var(--of-radius-round)] ring-1 ring-base-content/15\"","tokens":["size-2"],"count":1,"reason":"Domain label-colour marker dimensions; roundness follows the theme token."}
+  ],
   "packages/pr-review-ui/src/ReviewVideoPreview.svelte": [
     {"tag":"video","context":"class=\"max-h-96 max-w-full rounded-[var(--of-radius-container)] bg-black object-contain\"","tokens":["max-h-96"],"count":1,"reason":"Bound the media preview to its available viewport while preserving aspect ratio."}
   ],
@@ -79,6 +88,9 @@
     {"tag":"Check","context":"class=\"w-3 h-3\"","tokens":["w-3","h-3"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
     {"tag":"X","context":"class=\"w-3 h-3\"","tokens":["w-3","h-3"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
     {"tag":"Clock","context":"class=\"w-3 h-3\"","tokens":["w-3","h-3"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
+    {"tag":"Check","context":"class=\"w-3.5 h-3.5 {variantClasses[chip.variant].text}\"","tokens":["w-3.5","h-3.5"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
+    {"tag":"X","context":"class=\"w-3.5 h-3.5 {variantClasses[chip.variant].text}\"","tokens":["w-3.5","h-3.5"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
+    {"tag":"Clock","context":"class=\"w-3.5 h-3.5 {variantClasses[chip.variant].text}\"","tokens":["w-3.5","h-3.5"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
     {"tag":"span","context":"class=\"w-1.5 h-1.5 rounded-[var(--of-radius-round)] {variantClasses[chip.variant].dot}\"","tokens":["w-1.5","h-1.5"],"count":1,"reason":"Domain status dot or author-avatar dimensions; roundness follows the theme token."}
   ],
   "packages/terminal-runtime/src/TaskTerminalSurface.svelte": [
