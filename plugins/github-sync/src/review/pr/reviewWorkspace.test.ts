@@ -10,7 +10,7 @@ const pr: ReviewPullRequest = {
   html_url: 'https://github.com/acme/app/pull/42', user_login: 'alice', user_avatar_url: null,
   repo_owner: 'acme', repo_name: 'app', head_ref: 'fix', base_ref: 'main', head_sha: 'head',
   additions: 1, deletions: 0, changed_files: 1, ci_status: null, mergeable: null, mergeable_state: null, merged_at: null,
-  created_at: 1, updated_at: 1, viewed_at: null, viewed_head_sha: null, labels: [],
+  created_at: 1, updated_at: 1, viewed_at: null, viewed_head_sha: null, viewer_review_state: null, labels: [],
 }
 const file: PrFileDiff = {
   sha: 'file-sha', filename: 'login.ts', status: 'modified', additions: 1, deletions: 0,

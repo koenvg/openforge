@@ -55,6 +55,7 @@ const pr: ReviewPullRequest = {
   updated_at: 1,
   viewed_at: null,
   viewed_head_sha: null,
+  viewer_review_state: null,
   labels: [],
 }
 

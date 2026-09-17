@@ -52,6 +52,28 @@ describe('getPrStatusChips shared package API', () => {
       .toContainEqual(expect.objectContaining({ type: 'merge', label: 'Merged', variant: 'merged', icon: 'check' }))
   })
 
+  it('surfaces the viewer\'s own review verdict as a chip', () => {
+    expect(getPrStatusChips({ ...basePr, viewer_review_state: 'approved' }, 'compact'))
+      .toContainEqual(expect.objectContaining({ type: 'viewer_review', label: 'You approved', variant: 'success' }))
+
+    expect(getPrStatusChips({ ...basePr, viewer_review_state: 'changes_requested' }, 'compact'))
+      .toContainEqual(expect.objectContaining({ type: 'viewer_review', label: 'You requested changes', variant: 'pending' }))
+
+    expect(getPrStatusChips({ ...basePr, viewer_review_state: 'changes_requested' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'viewer_review', label: 'You requested changes', variant: 'pending', icon: 'cross' }))
+
+    expect(getPrStatusChips({ ...basePr, viewer_review_state: 'approved' }, 'detail'))
+      .toContainEqual(expect.objectContaining({ type: 'viewer_review', label: 'You approved', icon: 'check' }))
+  })
+
+  it('shows no viewer verdict chip when the viewer has not reviewed', () => {
+    expect(getPrStatusChips({ ...basePr, viewer_review_state: null }, 'compact'))
+      .not.toContainEqual(expect.objectContaining({ type: 'viewer_review' }))
+
+    expect(getPrStatusChips(basePr, 'compact'))
+      .not.toContainEqual(expect.objectContaining({ type: 'viewer_review' }))
+  })
+
   it('presents review-request CI and terminal outcomes through the shared helper', () => {
     const reviewPr: ReviewPullRequest = {
       id: 42,
@@ -79,6 +101,7 @@ describe('getPrStatusChips shared package API', () => {
       updated_at: 2,
       viewed_at: null,
       viewed_head_sha: null,
+      viewer_review_state: null,
       labels: [],
     }
 

@@ -39,7 +39,7 @@ pub use error::GitHubError;
 pub use events::{dedupe_pr_refs, extract_authored_pr_refs_from_user_events};
 pub use graphql::EnqueuePullRequestRequest;
 pub use response_cache::GitHubResponseCacheDiagnostics;
-pub use reviews::{aggregate_review_status, build_pr_reviewers};
+pub use reviews::{aggregate_review_status, build_pr_reviewers, viewer_review_state};
 pub use types::*;
 
 use reqwest::Client;

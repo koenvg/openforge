@@ -233,7 +233,7 @@ describe('attention overview interaction', () => {
       html_url: 'https://github.com/owner/repo/pull/1', user_login: 'author', user_avatar_url: null,
       repo_owner: 'owner', repo_name: 'repo', head_ref: 'feature', base_ref: 'main', head_sha: 'abc',
       additions: 1, deletions: 0, changed_files: 1, ci_status: null, mergeable: null, mergeable_state: null, merged_at: null,
-      created_at: 0, updated_at: 0, viewed_at: null, viewed_head_sha: null, labels: [],
+      created_at: 0, updated_at: 0, viewed_at: null, viewed_head_sha: null, viewer_review_state: null, labels: [],
     }
     const otherPr = { ...pr, id: 2, number: 2, repo_name: 'other' }
     const data = overview([])

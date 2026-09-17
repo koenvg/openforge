@@ -84,6 +84,7 @@ function reviewPr(id: number, owner: string, name: string, title: string): Revie
     updated_at: id,
     viewed_at: null,
     viewed_head_sha: null,
+    viewer_review_state: null,
     labels: [],
   }
 }

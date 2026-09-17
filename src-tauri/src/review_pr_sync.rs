@@ -20,6 +20,7 @@ fn review_ci_status(result: Result<CiSignal, GitHubError>) -> Option<String> {
 async fn review_pr_upsert(
     github_client: &GitHubClient,
     github_token: &str,
+    viewer_login: &str,
     pr: SearchPrResult,
 ) -> ReviewPrUpsert {
     let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
@@ -33,6 +34,23 @@ async fn review_pr_upsert(
             .get_ci_signal(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token)
             .await,
     );
+    // Unlike CI (preserved on a failed fetch via COALESCE), the viewer's verdict
+    // is written straight through: a dismissed review must be able to clear a
+    // stale "approved"/"changes_requested". A failed fetch drops the chip for one
+    // sync; the next poll restores it.
+    let viewer_review_state = match github_client
+        .get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
+        .await
+    {
+        Ok(reviews) => crate::github_client::viewer_review_state(&reviews, viewer_login),
+        Err(error) => {
+            warn!(
+                "[GitHub] Clearing the review PR viewer verdict after a failed reviews fetch: {}",
+                error.sanitized_log_message()
+            );
+            None
+        }
+    };
 
     ReviewPrUpsert {
         id: pr.id,
@@ -56,6 +74,7 @@ async fn review_pr_upsert(
         mergeable: pr.mergeable,
         mergeable_state: pr.mergeable_state,
         merged_at: None,
+        viewer_review_state,
         labels: pr.labels,
         created_at,
         updated_at,
@@ -109,6 +128,7 @@ pub(crate) async fn enrich_and_persist_review_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     github_token: &str,
+    viewer_login: &str,
     prs: Vec<SearchPrResult>,
     all_search_ids: &[i64],
 ) -> Result<Vec<ReviewPrRow>, String> {
@@ -116,7 +136,7 @@ pub(crate) async fn enrich_and_persist_review_prs(
     let should_reconcile = !all_search_ids.is_empty() || search_is_empty;
     let rows = join_all(
         prs.into_iter()
-            .map(|pr| review_pr_upsert(github_client, github_token, pr)),
+            .map(|pr| review_pr_upsert(github_client, github_token, viewer_login, pr)),
     )
     .await;
 
@@ -331,6 +351,7 @@ mod tests {
             &client,
             &db,
             "token",
+            "reviewer",
             vec![search_pr("sha-green")],
             &[42],
         )
@@ -338,16 +359,23 @@ mod tests {
         .expect("persist passing CI");
         assert_eq!(rows[0].ci_status.as_deref(), Some("success"));
 
-        let rows =
-            enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-red")], &[42])
-                .await
-                .expect("persist failing CI on the new head");
+        let rows = enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            "reviewer",
+            vec![search_pr("sha-red")],
+            &[42],
+        )
+        .await
+        .expect("persist failing CI on the new head");
         assert_eq!(rows[0].ci_status.as_deref(), Some("failure"));
 
         let rows = enrich_and_persist_review_prs(
             &client,
             &db,
             "token",
+            "reviewer",
             vec![search_pr("sha-error")],
             &[42],
         )
@@ -360,6 +388,7 @@ mod tests {
             &client,
             &db,
             "token",
+            "reviewer",
             vec![search_pr("sha-status-error")],
             &[42],
         )
@@ -400,10 +429,17 @@ mod tests {
         let (db, _temp_dir) = crate::db::test_helpers::make_test_db("review_pr_merge_reconcile");
         let db = Mutex::new(db);
 
-        enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-green")], &[42])
-            .await
-            .expect("seed requested PR");
-        let rows = enrich_and_persist_review_prs(&client, &db, "token", vec![], &[])
+        enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            "reviewer",
+            vec![search_pr("sha-green")],
+            &[42],
+        )
+        .await
+        .expect("seed requested PR");
+        let rows = enrich_and_persist_review_prs(&client, &db, "token", "reviewer", vec![], &[])
             .await
             .expect("reconcile kept PR");
 
@@ -434,10 +470,17 @@ mod tests {
         let (db, _temp_dir) = crate::db::test_helpers::make_test_db("review_pr_failed_reconcile");
         let db = Mutex::new(db);
 
-        enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-green")], &[42])
-            .await
-            .expect("seed requested PR");
-        let rows = enrich_and_persist_review_prs(&client, &db, "token", vec![], &[])
+        enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            "reviewer",
+            vec![search_pr("sha-green")],
+            &[42],
+        )
+        .await
+        .expect("seed requested PR");
+        let rows = enrich_and_persist_review_prs(&client, &db, "token", "reviewer", vec![], &[])
             .await
             .expect("keep PR after failed terminal fetch");
 
@@ -512,6 +555,7 @@ mod tests {
                 &client,
                 &db,
                 "token",
+                "reviewer",
                 vec![search_pr("sha-green")],
                 &[42],
             )
@@ -521,5 +565,48 @@ mod tests {
 
         assert_eq!(counts.check_runs.load(Ordering::SeqCst), 1);
         assert_eq!(counts.combined_status.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn sync_records_the_viewers_own_approval() {
+        let router = Router::new()
+            .route(
+                "/repos/acme/widgets/commits/sha-green/check-runs",
+                get(|| async { Json(check_runs_response("completed", Some("success"))) }),
+            )
+            .route(
+                "/repos/acme/widgets/commits/sha-green/status",
+                get(|| async { Json(combined_status_response("sha-green")) }),
+            )
+            .route(
+                "/repos/acme/widgets/pulls/7/reviews",
+                get(|| async {
+                    Json(serde_json::json!([
+                        {
+                            "id": 1,
+                            "user": { "login": "reviewer" },
+                            "state": "APPROVED",
+                            "body": null,
+                            "submitted_at": "2026-09-15T10:00:00Z"
+                        }
+                    ]))
+                }),
+            );
+        let client = test_client(router).await;
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("review_pr_viewer_verdict");
+        let db = Mutex::new(db);
+
+        let rows = enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            "reviewer",
+            vec![search_pr("sha-green")],
+            &[42],
+        )
+        .await
+        .expect("persist review PR with viewer verdict");
+
+        assert_eq!(rows[0].viewer_review_state.as_deref(), Some("approved"));
     }
 }

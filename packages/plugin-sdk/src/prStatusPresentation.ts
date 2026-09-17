@@ -3,7 +3,7 @@ import { getMergeReadiness, isClosedUnmergedPullRequest, parseJsonListColumn, is
 export type PrChipSurface = 'compact' | 'detail'
 
 export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral' | 'done' | 'merged' | 'closed'
-export type PrChipType = 'draft' | 'ci' | 'review' | 'merge'
+export type PrChipType = 'draft' | 'ci' | 'review' | 'merge' | 'viewer_review'
 export type PrChipIcon = 'check' | 'cross' | 'clock' | null
 
 const PULL_REQUEST_MERGE_ACTION_LABELS: Record<PullRequestMergeMethod, string> = {
@@ -32,6 +32,8 @@ export interface PrInput extends MergeStatusInfo {
   is_queued?: boolean
   ci_status?: string | null
   review_status?: string | null
+  /** The signed-in user's own standing verdict: 'approved' | 'changes_requested' | null. */
+  viewer_review_state?: string | null
   merged_at?: number | null
   head_sha?: string | null
   updated_at?: number | null
@@ -46,6 +48,20 @@ export interface PrInput extends MergeStatusInfo {
 
 export function getPrStatusChips(pr: PrInput, surface: PrChipSurface): PrStatusChipSpec[] {
   const chips: PrStatusChipSpec[] = []
+
+  // The viewer's own verdict comes first so "You approved" / "You requested
+  // changes" reads before the CI and merge signals. Only a decisive verdict
+  // shows; a viewer who has not reviewed gets no chip.
+  if (pr.viewer_review_state === 'approved' || pr.viewer_review_state === 'changes_requested') {
+    const approved = pr.viewer_review_state === 'approved'
+    chips.push({
+      type: 'viewer_review',
+      label: approved ? 'You approved' : 'You requested changes',
+      variant: approved ? 'success' : 'pending',
+      icon: surface === 'detail' ? (approved ? 'check' : 'cross') : undefined,
+      surface,
+    })
+  }
 
   if (pr.draft && pr.state === 'open') {
     chips.push({

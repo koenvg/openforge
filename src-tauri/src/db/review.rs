@@ -30,6 +30,10 @@ pub struct ReviewPrRow {
     pub updated_at: i64,
     pub viewed_at: Option<i64>,
     pub viewed_head_sha: Option<String>,
+    /// The signed-in user's own standing verdict on this PR ("approved" or
+    /// "changes_requested"), or None when they hold none. Drives the "you
+    /// reviewed this" chip on the review list card.
+    pub viewer_review_state: Option<String>,
     /// GitHub labels on the PR. Serialized to the frontend as an array; empty
     /// when the PR has no labels. Persisted as a nullable JSON-TEXT column.
     pub labels: Vec<PrLabel>,
@@ -58,6 +62,10 @@ pub struct ReviewPrUpsert {
     pub mergeable: Option<bool>,
     pub mergeable_state: Option<String>,
     pub merged_at: Option<i64>,
+    /// The signed-in user's own standing verdict ("approved" /
+    /// "changes_requested" / None). Recomputed each sync from the PR's reviews;
+    /// written straight through so a dismissal clears a stale verdict.
+    pub viewer_review_state: Option<String>,
     pub labels: Vec<PrLabel>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -76,8 +84,8 @@ impl super::Database {
         let labels_json = super::serialize_json_list_column(&row.labels);
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, mergeable, mergeable_state, merged_at, labels, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, mergeable, mergeable_state, merged_at, viewer_review_state, labels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -99,6 +107,7 @@ impl super::Database {
                   mergeable = excluded.mergeable,
                   mergeable_state = excluded.mergeable_state,
                   merged_at = excluded.merged_at,
+                  viewer_review_state = excluded.viewer_review_state,
                   labels = excluded.labels,
                   created_at = excluded.created_at,
                   updated_at = excluded.updated_at,
@@ -129,6 +138,7 @@ impl super::Database {
                 row.mergeable,
                 row.mergeable_state,
                 row.merged_at,
+                row.viewer_review_state,
                 labels_json,
                 row.created_at,
                 row.updated_at,
@@ -142,7 +152,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, ci_status, mergeable, mergeable_state, merged_at, created_at, updated_at, viewed_at, viewed_head_sha, labels
+                    changed_files, ci_status, mergeable, mergeable_state, merged_at, created_at, updated_at, viewed_at, viewed_head_sha, viewer_review_state, labels
              FROM review_prs
              WHERE dismissed_at IS NULL
              ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
@@ -174,7 +184,8 @@ impl super::Database {
                 updated_at: row.get(22)?,
                 viewed_at: row.get(23)?,
                 viewed_head_sha: row.get(24)?,
-                labels: super::parse_labels_column(row.get(25)?),
+                viewer_review_state: row.get(25)?,
+                labels: super::parse_labels_column(row.get(26)?),
             })
         })?;
         let mut result = Vec::new();
@@ -349,6 +360,7 @@ mod tests {
             mergeable: None,
             mergeable_state: None,
             merged_at: None,
+            viewer_review_state: None,
             labels: vec![],
             created_at: 1000,
             updated_at,
@@ -461,6 +473,31 @@ mod tests {
         let prs = db.get_all_review_prs().expect("get_all failed");
         assert_eq!(prs.len(), 1);
         assert!(prs[0].labels.is_empty());
+
+        drop(db);
+    }
+
+    #[test]
+    fn test_review_pr_viewer_review_state_round_trip() {
+        let (db, _temp_dir) = make_test_db("review_pr_viewer_review_state");
+
+        db.upsert_review_pr(&ReviewPrUpsert {
+            viewer_review_state: Some("approved".to_string()),
+            ..review_pr_row(1, 10, "sha1", 1000)
+        })
+        .expect("persist viewer verdict");
+        let prs = db.get_all_review_prs().expect("read review PRs");
+        assert_eq!(prs[0].viewer_review_state.as_deref(), Some("approved"));
+
+        // A later sync where the viewer holds no verdict clears a stale one
+        // (e.g. their review was dismissed). Written straight through, not COALESCEd.
+        db.upsert_review_pr(&ReviewPrUpsert {
+            viewer_review_state: None,
+            ..review_pr_row(1, 10, "sha1", 2000)
+        })
+        .expect("clear viewer verdict");
+        let prs = db.get_all_review_prs().expect("read review PRs again");
+        assert!(prs[0].viewer_review_state.is_none());
 
         drop(db);
     }

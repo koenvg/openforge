@@ -368,13 +368,19 @@ pub(super) async fn poll_review_prs(
         .await
         .map_err(PollPhaseError::GitHub)?;
 
-    let count =
-        enrich_and_persist_review_prs(github_client, db, github_token, prs, &all_search_ids)
-            .await
-            .map_err(PollPhaseError::Db)?
-            .iter()
-            .filter(|pr| pr.viewed_at.is_none())
-            .count();
+    let count = enrich_and_persist_review_prs(
+        github_client,
+        db,
+        github_token,
+        &username,
+        prs,
+        &all_search_ids,
+    )
+    .await
+    .map_err(PollPhaseError::Db)?
+    .iter()
+    .filter(|pr| pr.viewed_at.is_none())
+    .count();
     events.emit("review-pr-count-changed", serde_json::json!(count));
 
     Ok(())

@@ -28,6 +28,9 @@
   --chip-starting-bg: #F1EFFF;
   --chip-starting-dot: #6D61F0;
   --chip-starting-text: #4A2ED4;
+  --chip-merged-bg: #F1EFFF;
+  --chip-merged-dot: #8957E5;
+  --chip-merged-text: #6E40C9;
 }
 /* Chip color tokens — dark theme */
 [data-theme="openforge-dark"] {
@@ -49,6 +52,9 @@
   --chip-starting-bg: #1E1B2E;
   --chip-starting-dot: #8B82E0;
   --chip-starting-text: #A5A0ED;
+  --chip-merged-bg: #211D2E;
+  --chip-merged-dot: #A371F7;
+  --chip-merged-text: #C4A7F7;
 }
 
 /* Status border indicators — left-border accent, no gradients */
