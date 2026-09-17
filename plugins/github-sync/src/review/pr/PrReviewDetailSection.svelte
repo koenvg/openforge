@@ -20,10 +20,13 @@
   import { buildQuestionsIndex, type QuestionItem } from '../../lib/questionsIndex'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
-  import { tick } from 'svelte'
+  import { tick, type ComponentProps } from 'svelte'
   import { ListChecks } from '@lucide/svelte'
+  import AgentTab from './AgentTab.svelte'
 
-  type PrDetailTab = 'overview' | 'files' | 'walkthrough'
+  type PrDetailTab = 'overview' | 'files' | 'agent' | 'walkthrough'
+
+  type AgentSessionProps = ComponentProps<typeof AgentTab>
 
   interface Props {
     walkthrough: WalkthroughReview
@@ -54,6 +57,7 @@
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void>
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
+    agentSession: AgentSessionProps
     // The Walkthrough tab is only offered once a walkthrough for the current head
     // sha has finished generating (owned by PrReviewView). Optional so the section
     // renders (tab hidden) before the parent wires status in.
@@ -124,6 +128,7 @@
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
     onToggleFileReviewed,
+    agentSession,
     onRemove,
     walkthroughReady = false,
     aiThreads = [],
@@ -213,11 +218,12 @@
   let detailTabs = $derived([
     { value: 'overview', label: 'Overview' },
     { value: 'files', label: `Files changed ${files.length}` },
+    { value: 'agent', label: 'Agent' },
     ...(walkthroughReady ? [{ value: 'walkthrough', label: 'Walkthrough' }] : []),
   ])
 
   function changeActiveTab(value: string): void {
-    if (value === 'overview' || value === 'files' || value === 'walkthrough') {
+    if (value === 'overview' || value === 'files' || value === 'agent' || value === 'walkthrough') {
       onActiveTabChange(value)
     }
   }
@@ -308,6 +314,8 @@
           {resolveRemoteMedia}
           {onOpenUrl}
         />
+      {:else if tab === 'agent'}
+        <AgentTab {...agentSession} />
       {:else if tab === 'walkthrough'}
         <WalkthroughTab
           workspace={walkthrough}

@@ -1,3 +1,4 @@
+import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
@@ -12,6 +13,7 @@ import { useReviewedFilesState } from './review-workspace/useReviewedFilesState.
 import { useSelectedPrReview } from './review-workspace/useSelectedPrReview.svelte'
 import { useWalkthroughPolling } from './review-workspace/useWalkthroughPolling.svelte'
 import { createWalkthroughReview } from './review-workspace/walkthroughReview.svelte'
+import { createPrReviewAgentSessionController } from './review-workspace/usePrReviewAgentSession.svelte'
 export type { WalkthroughReview } from './review-workspace/walkthroughReview.svelte'
 
 export interface ReviewWorkspaceContext {
@@ -38,7 +40,8 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const authoredPrs = fromStore(stores.authoredPrs)
   const ai = useAiThreadState(api, githubSync)
   const walkthroughs = useWalkthroughPolling(api, githubSync)
-  const selection = useSelectedPrReview(api, githubSync, ai, walkthroughs)
+  const agentSession = createPrReviewAgentSessionController(api)
+  const selection = useSelectedPrReview(api, githubSync, ai, walkthroughs, agentSession)
   const walkthrough = createWalkthroughReview(
     walkthroughs, githubSync, () => selectedPr.current, () => files.current,
     () => selection.activeTab === 'walkthrough',
@@ -55,6 +58,8 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   })
 
   $effect(() => { stores.activeProjectId.set(getContext().projectId) })
+  $effect(() => { void agentSession.observe(selectedPr.current) })
+  onDestroy(agentSession.dispose)
 
   const openUrl = (url: string) => api.system.openUrl(url)
   const openSettings = () => api.navigation.navigate({ viewId: 'global_settings' })
@@ -189,6 +194,20 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onUpdateAgentCommentStatus: selection.updateAgentCommentStatus,
     onToggleFileReviewed: reviewedFiles.toggle,
     walkthroughReady: walkthrough.available,
+    agentSession: {
+      scope: agentSession.scope,
+      projectResolved: agentSession.projectResolved,
+      projectId: agentSession.projectId,
+      status: agentSession.status,
+      isLoading: agentSession.isLoading,
+      actionPending: agentSession.actionPending,
+      error: agentSession.error,
+      mountTerminal: api.agentSessions.mountTerminal,
+      onStart: agentSession.start,
+      onAbort: agentSession.abort,
+      onRestart: agentSession.restart,
+      onSendInput: agentSession.sendInput,
+    },
     reviewThreads,
     onCreateReviewThread: createReviewThread,
     onReplyToReviewThread: replyToReviewThread,

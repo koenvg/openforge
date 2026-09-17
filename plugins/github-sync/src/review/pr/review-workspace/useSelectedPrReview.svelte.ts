@@ -28,7 +28,7 @@ import { resolveProjectIdForRepo } from '../../../lib/projectRepoResolution'
 import { fetchGithubFileContents } from '../githubFileContents'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
-export type PrDetailTab = 'overview' | 'files' | 'walkthrough'
+export type PrDetailTab = 'overview' | 'files' | 'agent' | 'walkthrough'
 
 const PR_REVIEW_VIEW = 'plugin:com.openforge.github-sync:pr_review'
 const PR_REVIEW_GLOBAL_VIEW = 'plugin:com.openforge.github-sync:pr_review_global'
@@ -43,11 +43,16 @@ type WalkthroughState = {
   refreshStatus(pr: ReviewPullRequest): Promise<unknown>
 }
 
+type AgentSessionLifecycle = {
+  releaseForPullRequest(pr: ReviewPullRequest): Promise<void>
+}
+
 export function useSelectedPrReview(
   api: FrontendOpenForgeAPI,
   githubSync: GithubSyncPrReviewClient,
   aiThreadState: AiThreadState,
   walkthroughState: WalkthroughState,
+  agentSessionLifecycle?: AgentSessionLifecycle,
 ) {
   const agentCommentsStore = fromStore(agentReviewComments)
   const manualComments = fromStore(pendingManualComments)
@@ -162,6 +167,9 @@ export function useSelectedPrReview(
    */
   function removeReviewPr(pr: ReviewPullRequest): void {
     pullRequests.current = pullRequests.current.filter(candidate => candidate.id !== pr.id)
+    void agentSessionLifecycle?.releaseForPullRequest(pr).catch(cause => {
+      console.error('Failed to release pull request review agent session:', cause)
+    })
     // Discard the persisted AI review session too; it is useless once the PR is
     // gone. Best-effort and independent of the removal itself.
     githubSync.deleteReviewSession({ prId: pr.id })
@@ -222,6 +230,11 @@ export function useSelectedPrReview(
         return
       }
       if (event.key === '3') {
+        event.preventDefault()
+        activeTab = 'agent'
+        return
+      }
+      if (event.key === '4') {
         event.preventDefault()
         if (walkthroughState.selectedReady) activeTab = 'walkthrough'
         return

@@ -140,6 +140,14 @@
   "plugins/file-viewer/src/MarkdownFilePreview.svelte": [
     {"tag":"div","context":"class=\"flex-1 min-h-0 overflow-auto p-6\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
+  "plugins/github-sync/src/review/pr/AgentTab.svelte": [
+    {"tag":"section","context":"class=\"flex h-full min-h-0 flex-col bg-base-100\"","tokens":["min-h-0"],"count":1,"reason":"Let the agent workspace shrink within the pull request detail pane without overflowing it."},
+    {"tag":"div","context":"class=\"m-auto max-w-lg px-6 text-center\"","tokens":["max-w-lg"],"count":1,"reason":"Keep the loading message readable instead of spanning the full review workspace."},
+    {"tag":"div","context":"class=\"m-auto flex max-w-lg flex-col items-center gap-3 px-6 text-center\"","tokens":["max-w-lg"],"count":1,"reason":"Keep the empty and unavailable messages readable instead of spanning the full review workspace."},
+    {"tag":"div","context":"class=\"min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let the session status text shrink beside its action without overflowing the header."},
+    {"tag":"div","context":"class=\"min-h-0 flex-1 bg-base-300\"","tokens":["min-h-0"],"count":1,"reason":"Let the terminal fill and shrink within the remaining review workspace height."},
+    {"tag":"div","context":"class=\"min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let the follow-up field shrink beside the Send action without overflowing the footer."}
+  ],
   "plugins/github-sync/src/review/pr/PrReviewDetailSection.svelte": [
     {"tag":"div","context":"class=\"relative flex h-full min-h-0 flex-col overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane; positioned so the questions slide-over anchors to the section."},
     {"tag":"div","context":"class=\"flex items-center gap-2 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
