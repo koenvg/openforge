@@ -162,6 +162,7 @@ fn seed_kept_review_request(db: &Database) {
         mergeable: Some(true),
         mergeable_state: Some("clean".to_string()),
         merged_at: None,
+        viewer_review_state: None,
         labels: vec![],
         created_at: 1,
         updated_at: 2,

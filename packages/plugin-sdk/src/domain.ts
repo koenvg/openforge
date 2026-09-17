@@ -962,6 +962,12 @@ export interface ReviewPullRequest {
   updated_at: number;
   viewed_at: number | null;
   viewed_head_sha: string | null;
+  /**
+   * The signed-in user's own standing verdict on this PR: 'approved',
+   * 'changes_requested', or null when they hold none. Drives the "you reviewed
+   * this" chip on the review list card.
+   */
+  viewer_review_state: string | null;
   /** GitHub labels on the PR. Empty when the PR has no labels. */
   labels: PrLabel[];
 }

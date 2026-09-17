@@ -73,7 +73,7 @@ pub async fn fetch_review_prs(
         .await
         .map_err(|e| format!("Failed to search review PRs: {e}"))?;
 
-    enrich_and_persist_review_prs(github_client, db, &token, prs, &all_search_ids).await
+    enrich_and_persist_review_prs(github_client, db, &token, &username, prs, &all_search_ids).await
 }
 
 fn should_fallback_to_search(

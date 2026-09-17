@@ -330,6 +330,32 @@ pub fn build_pr_reviewers(
         .collect()
 }
 
+/// The signed-in viewer's own standing verdict on a PR, for the review list's
+/// "you reviewed this" chip. Only a decisive review counts: the latest APPROVED
+/// or CHANGES_REQUESTED the viewer submitted. A later dismissal clears it, and
+/// plain comments never establish or override a verdict. Returns "approved",
+/// "changes_requested", or None when the viewer holds no standing verdict.
+/// Login matching is case-insensitive, since GitHub logins are.
+pub fn viewer_review_state(reviews: &[PrReview], viewer_login: &str) -> Option<String> {
+    let mut decision: Option<&str> = None;
+    for review in reviews {
+        if !review.user.login.eq_ignore_ascii_case(viewer_login) {
+            continue;
+        }
+        if matches!(
+            review.state.as_str(),
+            "APPROVED" | "CHANGES_REQUESTED" | "DISMISSED"
+        ) {
+            decision = Some(review.state.as_str());
+        }
+    }
+    match decision {
+        Some("APPROVED") => Some("approved".to_string()),
+        Some("CHANGES_REQUESTED") => Some("changes_requested".to_string()),
+        _ => None,
+    }
+}
+
 /// Aggregate review status from PR reviews and requested reviewers
 ///
 /// Determines the overall review status by examining submitted reviews.
@@ -608,6 +634,89 @@ mod tests {
                 ("platform", PrReviewerState::Pending),
                 ("zoe", PrReviewerState::Approved),
             ]
+        );
+    }
+
+    #[test]
+    fn viewer_state_is_none_without_any_review() {
+        assert_eq!(viewer_review_state(&[], "alice"), None);
+    }
+
+    #[test]
+    fn viewer_approval_reads_as_approved() {
+        let reviews = vec![make_review("alice", "APPROVED")];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("approved")
+        );
+    }
+
+    #[test]
+    fn viewer_changes_request_reads_as_changes_requested() {
+        let reviews = vec![make_review("alice", "CHANGES_REQUESTED")];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("changes_requested")
+        );
+    }
+
+    #[test]
+    fn a_viewer_who_only_commented_holds_no_verdict() {
+        let reviews = vec![make_review("alice", "COMMENTED")];
+        assert_eq!(viewer_review_state(&reviews, "alice"), None);
+    }
+
+    #[test]
+    fn a_later_comment_does_not_erase_the_viewers_verdict() {
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("alice", "COMMENTED"),
+        ];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("approved")
+        );
+    }
+
+    #[test]
+    fn the_viewers_latest_verdict_wins() {
+        let reviews = vec![
+            make_review("alice", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROVED"),
+        ];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("approved")
+        );
+    }
+
+    #[test]
+    fn a_dismissed_verdict_clears_the_viewer_state() {
+        let reviews = vec![
+            make_review("alice", "APPROVED"),
+            make_review("alice", "DISMISSED"),
+        ];
+        assert_eq!(viewer_review_state(&reviews, "alice"), None);
+    }
+
+    #[test]
+    fn only_the_viewers_own_reviews_count() {
+        let reviews = vec![
+            make_review("bob", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROVED"),
+        ];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("approved")
+        );
+    }
+
+    #[test]
+    fn viewer_login_matches_case_insensitively() {
+        let reviews = vec![make_review("Alice", "APPROVED")];
+        assert_eq!(
+            viewer_review_state(&reviews, "alice").as_deref(),
+            Some("approved")
         );
     }
 

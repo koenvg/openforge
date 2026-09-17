@@ -2004,6 +2004,10 @@ INSERT OR IGNORE INTO config (key, value)
     }),
     M::up(SCOPED_WORKSPACES_SQL),
     M::up(SCOPED_AGENT_SESSIONS_SQL),
+    M::up_with_hook("", |tx| {
+        ensure_review_pr_viewer_review_state_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2781,6 +2785,26 @@ pub(super) fn ensure_review_pr_status_signal_columns(conn: &Connection) -> Resul
         }
     }
 
+    Ok(())
+}
+
+/// Adds the review list's per-viewer verdict column ("you reviewed this" chip).
+pub(super) fn ensure_review_pr_viewer_review_state_column(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "review_prs")? {
+        return Ok(());
+    }
+
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = 'viewer_review_state'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute(
+            "ALTER TABLE review_prs ADD COLUMN viewer_review_state TEXT",
+            [],
+        )?;
+    }
     Ok(())
 }
 

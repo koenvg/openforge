@@ -644,6 +644,7 @@ async fn handles_db_backed_commands_and_events() {
             mergeable: None,
             mergeable_state: None,
             merged_at: None,
+            viewer_review_state: None,
             labels: vec![],
             created_at: 1000,
             updated_at: 2000,

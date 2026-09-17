@@ -29,10 +29,31 @@ const basePr: ReviewPullRequest = {
   updated_at: Date.now(),
   viewed_at: null,
   viewed_head_sha: null,
+  viewer_review_state: null,
   labels: [],
 }
 
 describe('ReviewPrCard', () => {
+  it('shows a "You approved" chip when the viewer has approved the PR', () => {
+    render(ReviewPrCard, {
+      props: { pr: { ...basePr, viewer_review_state: 'approved' }, selected: false, onClick: () => {} },
+    })
+    expect(screen.getByText('You approved')).toBeTruthy()
+  })
+
+  it('shows a "You requested changes" chip when the viewer requested changes', () => {
+    render(ReviewPrCard, {
+      props: { pr: { ...basePr, viewer_review_state: 'changes_requested' }, selected: false, onClick: () => {} },
+    })
+    expect(screen.getByText('You requested changes')).toBeTruthy()
+  })
+
+  it('shows no viewer verdict chip when the viewer has not reviewed', () => {
+    render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick: () => {} } })
+    expect(screen.queryByText('You approved')).toBeNull()
+    expect(screen.queryByText('You requested changes')).toBeNull()
+  })
+
   it('renders PR title', () => {
     const onClick = () => {}
     render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick } })
