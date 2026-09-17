@@ -68,10 +68,14 @@ pub(super) fn persist_polled_comments(
     result: &PollSinglePrResult,
     existing_ids: &HashSet<i64>,
     now: i64,
+    configured_github_username: Option<&str>,
     mut on_new_comment: impl FnMut(i64),
 ) -> PersistCommentsResult {
     let mut persist_result = PersistCommentsResult::default();
     let mut inserted_this_batch: HashSet<i64> = HashSet::new();
+    let configured_github_username = configured_github_username
+        .map(str::trim)
+        .filter(|username| !username.is_empty());
 
     for comment in &result.comments {
         let already_seen =
@@ -79,19 +83,42 @@ pub(super) fn persist_polled_comments(
 
         if !already_seen {
             let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
+            if comment.in_reply_to_id.is_some() && configured_github_username.is_none() {
+                continue;
+            }
+            let is_reply_from_signed_in_user = configured_github_username
+                .is_some_and(|username| username.eq_ignore_ascii_case(&comment.user.login));
+            let should_reopen_thread =
+                comment.in_reply_to_id.is_some() && !is_reply_from_signed_in_user;
+            let insert_result = if should_reopen_thread {
+                db.insert_pr_comment_reopening_thread(
+                    comment.id,
+                    result.pr_id,
+                    &comment.user.login,
+                    &comment.body,
+                    &comment.comment_type,
+                    comment.path.as_deref(),
+                    comment.line,
+                    comment.in_reply_to_id,
+                    false,
+                    created_at,
+                )
+            } else {
+                db.insert_pr_comment(
+                    comment.id,
+                    result.pr_id,
+                    &comment.user.login,
+                    &comment.body,
+                    &comment.comment_type,
+                    comment.path.as_deref(),
+                    comment.line,
+                    comment.in_reply_to_id,
+                    false,
+                    created_at,
+                )
+            };
 
-            if let Err(e) = db.insert_pr_comment(
-                comment.id,
-                result.pr_id,
-                &comment.user.login,
-                &comment.body,
-                &comment.comment_type,
-                comment.path.as_deref(),
-                comment.line,
-                comment.in_reply_to_id,
-                false,
-                created_at,
-            ) {
+            if let Err(e) = insert_result {
                 error!(
                     "[GitHub Poller] Failed to insert comment {}: {}",
                     comment.id, e
@@ -214,7 +241,7 @@ pub(super) async fn poll_prs_for_project(
     };
 
     let db_lock = acquire_db(db);
-    persist_poll_results(events, &db_lock, results, now).into_tuple()
+    persist_poll_results(events, &db_lock, results, now, configured_github_username).into_tuple()
 }
 
 fn load_pr_metadata(
@@ -317,10 +344,17 @@ fn persist_poll_results(
     db: &Database,
     results: Vec<PollSinglePrResult>,
     now: i64,
+    configured_github_username: Option<&str>,
 ) -> PollPersistenceCounts {
     let mut counts = PollPersistenceCounts::default();
     for result in results {
-        counts.absorb(persist_poll_result(events, db, &result, now));
+        counts.absorb(persist_poll_result(
+            events,
+            db,
+            &result,
+            now,
+            configured_github_username,
+        ));
     }
     counts
 }
@@ -330,6 +364,7 @@ fn persist_poll_result(
     db: &Database,
     result: &PollSinglePrResult,
     now: i64,
+    configured_github_username: Option<&str>,
 ) -> PollPersistenceCounts {
     let mut counts = PollPersistenceCounts::default();
     if let Some(error) = &result.error {
@@ -352,17 +387,19 @@ fn persist_poll_result(
             None
         }
     };
-    let comments = match persist_comments_and_publish_new(events, db, result, now) {
-        Ok(comments) => comments,
-        Err(error) => {
-            error!(
-                "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
-                result.pr_id, error
-            );
-            counts.errors += 1;
-            return counts;
-        }
-    };
+    let comments =
+        match persist_comments_and_publish_new(events, db, result, now, configured_github_username)
+        {
+            Ok(comments) => comments,
+            Err(error) => {
+                error!(
+                    "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
+                    result.pr_id, error
+                );
+                counts.errors += 1;
+                return counts;
+            }
+        };
 
     counts.new_comments += comments.new_comment_count;
     counts.errors += comments.error_count;
@@ -394,6 +431,7 @@ fn persist_comments_and_publish_new(
     db: &Database,
     result: &PollSinglePrResult,
     now: i64,
+    configured_github_username: Option<&str>,
 ) -> rusqlite::Result<PersistCommentsResult> {
     let existing_ids = db.get_existing_comment_ids(result.pr_id)?;
     Ok(persist_polled_comments(
@@ -401,6 +439,7 @@ fn persist_comments_and_publish_new(
         result,
         &existing_ids,
         now,
+        configured_github_username,
         |comment_id| {
             emit_new_pr_comment(events, &result.ticket_id, comment_id);
         },

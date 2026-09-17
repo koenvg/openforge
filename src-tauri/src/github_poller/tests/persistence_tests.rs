@@ -130,7 +130,8 @@ fn poll_comment_persistence_records_database_failures() {
     let (db, _temp_dir) = make_test_db("persist_comment_database_failure");
     let result = make_review_comment_poll_result(999, 900, false);
 
-    let persist_result = persist_polled_comments(&db, &result, &HashSet::new(), 1_000, |_| {});
+    let persist_result =
+        persist_polled_comments(&db, &result, &HashSet::new(), 1_000, Some("author"), |_| {});
 
     assert_eq!(persist_result.new_comment_count, 0);
     assert_eq!(persist_result.failed_insert_count, 1);
@@ -158,7 +159,7 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     // First poll: the comment arrives outdated.
     let result = make_review_comment_poll_result(142, 900, true);
     let existing = db.get_existing_comment_ids(142).expect("existing ids");
-    let first = persist_polled_comments(&db, &result, &existing, 1000, |_| {});
+    let first = persist_polled_comments(&db, &result, &existing, 1000, Some("author"), |_| {});
     assert_eq!(first.new_comment_count, 1);
     let comments = db.get_comments_for_pr(142).expect("get comments");
     assert_eq!(comments.len(), 1);
@@ -179,7 +180,7 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     // Second poll: the line came back, comment is no longer outdated.
     let result2 = make_review_comment_poll_result(142, 900, false);
     let existing2 = db.get_existing_comment_ids(142).expect("existing ids 2");
-    let second = persist_polled_comments(&db, &result2, &existing2, 2000, |_| {});
+    let second = persist_polled_comments(&db, &result2, &existing2, 2000, Some("author"), |_| {});
     assert_eq!(
         second.new_comment_count, 0,
         "existing comment is not re-counted"
@@ -197,6 +198,178 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     );
 
     drop(db);
+}
+
+#[test]
+fn a_new_reviewer_reply_reopens_an_addressed_thread_once() {
+    let (db, _temp_dir) = make_test_db("reviewer_reply_reopens_thread");
+    insert_test_task(&db);
+    db.insert_pull_request(
+        142,
+        "T-100",
+        "acme",
+        "repo",
+        "Reviewer reply test",
+        "https://example.com/pr/142",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert pr failed");
+    db.insert_pr_comment(
+        800,
+        142,
+        "reviewer",
+        "Root",
+        "review_comment",
+        Some("src/lib.rs"),
+        Some(10),
+        None,
+        true,
+        1000,
+    )
+    .expect("insert root failed");
+    db.insert_pr_comment(
+        801,
+        142,
+        "author",
+        "First reply",
+        "review_comment",
+        Some("src/lib.rs"),
+        Some(10),
+        Some(800),
+        false,
+        1001,
+    )
+    .expect("insert first reply failed");
+
+    let mut result = make_review_comment_poll_result(142, 802, false);
+    result.comments[0].user.login = "second-reviewer".to_string();
+    result.comments[0].in_reply_to_id = Some(801);
+    let existing = db.get_existing_comment_ids(142).expect("existing ids");
+
+    let persisted = persist_polled_comments(&db, &result, &existing, 1002, Some("author"), |_| {});
+
+    assert_eq!(persisted.new_comment_count, 1);
+    let comments = db.get_comments_for_pr(142).expect("get comments");
+    assert_eq!(comments[0].addressed, 0);
+    assert_eq!(comments[1].addressed, 0);
+    assert_eq!(comments[2].addressed, 0);
+    assert_eq!(
+        db.get_pull_requests_for_task("T-100")
+            .expect("get task PRs failed")[0]
+            .unaddressed_comment_count,
+        1
+    );
+}
+
+#[test]
+fn a_new_reply_by_the_signed_in_user_leaves_the_thread_addressed() {
+    let (db, _temp_dir) = make_test_db("own_reply_keeps_thread_addressed");
+    insert_test_task(&db);
+    db.insert_pull_request(
+        142,
+        "T-100",
+        "acme",
+        "repo",
+        "Own reply test",
+        "https://example.com/pr/142",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert pr failed");
+    db.insert_pr_comment(
+        800,
+        142,
+        "reviewer",
+        "Root",
+        "review_comment",
+        Some("src/lib.rs"),
+        Some(10),
+        None,
+        true,
+        1000,
+    )
+    .expect("insert root failed");
+
+    let mut result = make_review_comment_poll_result(142, 801, false);
+    result.comments[0].user.login = "AUTHOR".to_string();
+    result.comments[0].in_reply_to_id = Some(800);
+    let existing = db.get_existing_comment_ids(142).expect("existing ids");
+
+    let persisted = persist_polled_comments(&db, &result, &existing, 1001, Some("author"), |_| {});
+
+    assert_eq!(persisted.new_comment_count, 1);
+    let comments = db.get_comments_for_pr(142).expect("get comments");
+    assert_eq!(comments[0].addressed, 1);
+    assert_eq!(
+        db.get_pull_requests_for_task("T-100")
+            .expect("get task PRs failed")[0]
+            .unaddressed_comment_count,
+        0
+    );
+}
+
+#[test]
+fn replies_wait_for_identity_before_classifying_their_author() {
+    for (case, reply_author, expected_addressed) in
+        [("external", "second-reviewer", 0), ("own", "author", 1)]
+    {
+        let (db, _temp_dir) = make_test_db(&format!("deferred_reply_identity_{case}"));
+        insert_test_task(&db);
+        db.insert_pull_request(
+            142,
+            "T-100",
+            "acme",
+            "repo",
+            "Deferred identity test",
+            "https://example.com/pr/142",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert pr failed");
+        db.insert_pr_comment(
+            800,
+            142,
+            "reviewer",
+            "Root",
+            "review_comment",
+            Some("src/lib.rs"),
+            Some(10),
+            None,
+            true,
+            1000,
+        )
+        .expect("insert root failed");
+
+        let mut result = make_review_comment_poll_result(142, 801, false);
+        result.comments[0].user.login = reply_author.to_string();
+        result.comments[0].in_reply_to_id = Some(800);
+        let existing = db.get_existing_comment_ids(142).expect("existing ids");
+
+        let deferred = persist_polled_comments(&db, &result, &existing, 1001, None, |_| {});
+
+        assert_eq!(deferred.new_comment_count, 0, "{case}");
+        let comments = db.get_comments_for_pr(142).expect("get deferred comments");
+        assert_eq!(comments.len(), 1, "{case}");
+        assert_eq!(comments[0].addressed, 1, "{case}");
+
+        let existing = db.get_existing_comment_ids(142).expect("existing ids");
+        let classified =
+            persist_polled_comments(&db, &result, &existing, 1002, Some("author"), |_| {});
+
+        assert_eq!(classified.new_comment_count, 1, "{case}");
+        let comments = db
+            .get_comments_for_pr(142)
+            .expect("get classified comments");
+        assert_eq!(comments.len(), 2, "{case}");
+        assert_eq!(comments[0].addressed, expected_addressed, "{case}");
+    }
 }
 
 #[test]
@@ -222,7 +395,7 @@ fn test_persist_polled_comments_does_not_fail_when_review_body_exists_in_both_so
         .get_existing_comment_ids(42)
         .expect("get existing ids failed");
 
-    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, |_| {});
+    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, None, |_| {});
     let comments = db.get_comments_for_pr(42).expect("get comments failed");
 
     assert_eq!(persist_result.failed_insert_count, 0);
@@ -257,12 +430,14 @@ fn test_persist_polled_comments_is_idempotent_across_poll_cycles_for_review_bodi
     let first_existing_ids = db
         .get_existing_comment_ids(84)
         .expect("get initial existing ids failed");
-    let first_persist = persist_polled_comments(&db, &result, &first_existing_ids, 1000, |_| {});
+    let first_persist =
+        persist_polled_comments(&db, &result, &first_existing_ids, 1000, None, |_| {});
 
     let second_existing_ids = db
         .get_existing_comment_ids(84)
         .expect("get second existing ids failed");
-    let second_persist = persist_polled_comments(&db, &result, &second_existing_ids, 1000, |_| {});
+    let second_persist =
+        persist_polled_comments(&db, &result, &second_existing_ids, 1000, None, |_| {});
 
     let comments = db.get_comments_for_pr(84).expect("get comments failed");
 
@@ -307,7 +482,7 @@ fn test_persist_polled_comments_deduplicates_repeated_ids_within_batch() {
         .get_existing_comment_ids(126)
         .expect("get existing ids failed");
 
-    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, |_| {});
+    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, None, |_| {});
     let comments = db.get_comments_for_pr(126).expect("get comments failed");
 
     assert_eq!(persist_result.failed_insert_count, 0);

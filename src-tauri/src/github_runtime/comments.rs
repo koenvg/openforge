@@ -286,7 +286,10 @@ pub async fn create_review_comment_reply(
     comment_id: i64,
     body: &str,
 ) -> Result<FrontendReviewComment, String> {
-    let token = github_token().await?;
+    let token = github_client
+        .github_token()
+        .await?
+        .ok_or_else(|| "github_token not configured".to_string())?;
     let reply = github_client
         .create_review_comment_reply(owner, repo, pr_number, comment_id, body, &token)
         .await
