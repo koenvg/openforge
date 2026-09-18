@@ -8,10 +8,11 @@
     threads: OrphanedReviewThread[]
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkThreadSeen?: (threadId: string) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let { threads, onReplyToThread, onSetThreadStatus, onOpenUrl }: Props = $props()
+  let { threads, onReplyToThread, onSetThreadStatus, onMarkThreadSeen, onOpenUrl }: Props = $props()
 
   const REASON_LABELS = {
     'file-not-in-diff': 'File is not in this diff',
@@ -42,6 +43,7 @@
           comment={{ type: 'thread', thread: entry.thread }}
           {onReplyToThread}
           {onSetThreadStatus}
+          {onMarkThreadSeen}
           {onOpenUrl}
         />
       </div>

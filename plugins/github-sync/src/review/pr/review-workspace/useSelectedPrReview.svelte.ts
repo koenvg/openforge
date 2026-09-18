@@ -9,11 +9,9 @@ import type {
   ReviewSubmissionComment,
 } from '@openforge-app/plugin-sdk/domain'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
-import type { AgentReviewCommentStatus } from '../../../lib/prReviewRecords'
 import { getImagePreviewDataUrl, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 import { isGitHubAttachmentUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
 import {
-  agentReviewComments,
   pendingManualComments,
   pendingReplies,
   pendingReviewPrOpen,
@@ -55,7 +53,6 @@ export function useSelectedPrReview(
   walkthroughState: WalkthroughState,
   agentSessionLifecycle?: AgentSessionLifecycle,
 ) {
-  const agentCommentsStore = fromStore(agentReviewComments)
   const manualComments = fromStore(pendingManualComments)
   const replies = fromStore(pendingReplies)
   const pendingPrOpen = fromStore(pendingReviewPrOpen)
@@ -89,7 +86,6 @@ export function useSelectedPrReview(
     manualComments.current = []
     replies.current = []
     overviewComments.current = []
-    agentCommentsStore.current = []
     reviewThreadFollowUps.clear()
   }
 
@@ -128,13 +124,6 @@ export function useSelectedPrReview(
       if (!isCurrentLoad(sequence, pr)) return
       reviewCommentsStore.current = comments
 
-      const agentComments = await githubSync.getPrAiReviewComments({
-        reviewPrId: pr.id,
-        headSha: pr.head_sha,
-      })
-      if (!isCurrentLoad(sequence, pr)) return
-      agentCommentsStore.current = agentComments
-
       await reviewThreadFollowUps.load(pr)
     } catch (cause) {
       if (!isCurrentLoad(sequence, pr)) return
@@ -171,10 +160,6 @@ export function useSelectedPrReview(
     void agentSessionLifecycle?.releaseForPullRequest(pr).catch(cause => {
       console.error('Failed to release pull request review agent session:', cause)
     })
-    // Discard the persisted AI review session too; it is useless once the PR is
-    // gone. Best-effort and independent of the removal itself.
-    githubSync.deleteReviewSession({ prId: pr.id })
-      .catch(cause => console.error('Failed to delete review session:', cause))
     githubSync.removeReviewPullRequest({ prId: pr.id })
       .catch(cause => console.error('Failed to remove PR from list:', cause))
   }
@@ -539,17 +524,6 @@ export function useSelectedPrReview(
     }
   }
 
-  function updateAgentCommentStatus(commentId: number, status: AgentReviewCommentStatus): Promise<void> | undefined {
-    const pr = selectedPr.current
-    if (!pr) return
-    return githubSync.updatePrAiReviewCommentStatus({
-      reviewPrId: pr.id,
-      headSha: pr.head_sha,
-      commentId,
-      status,
-    })
-  }
-
   function openOnGitHub(): void {
     if (selectedPr.current) api.system.openUrl(selectedPr.current.html_url)
   }
@@ -602,7 +576,6 @@ export function useSelectedPrReview(
     fetchFileContents,
     resolveRepositoryImage,
     resolveRemoteMedia,
-    updateAgentCommentStatus,
     openOnGitHub,
   }
 }

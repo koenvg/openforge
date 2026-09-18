@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { PrFileDiff, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
 vi.mock('@openforge-app/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((options: { getCount: () => number }) => ({
@@ -71,22 +72,21 @@ const videoFile: PrFileDiff = {
   patch_line_count: null,
 }
 
-const walkthrough: PrWalkthrough = {
-  pr_id: pr.id,
-  head_sha: pr.head_sha,
-  walkthrough_session_key: null,
-  status: 'ready',
-  steps_json: JSON.stringify({
-    steps: [{
-      id: 'video-step',
-      title: 'Review the recording',
-      summary: 'Compare both video revisions.',
-      files: [{ filename: videoFile.filename, hunk_indexes: null }],
-    }],
-  }),
-  error_message: null,
-  created_at: 0,
-  updated_at: 0,
+const walkthrough: WalkthroughRecordV1 = {
+  version: 1,
+  prId: pr.id,
+  scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: pr.head_sha },
+  attemptId: 'attempt-1',
+  state: 'ready',
+  steps: [{
+    id: 'video-step',
+    title: 'Review the recording',
+    summary: 'Compare both video revisions.',
+    files: [{ filename: videoFile.filename, hunk_indexes: null }],
+  }],
+  error: null,
+  createdAt: 0,
+  updatedAt: 0,
 }
 
 describe('WalkthroughTab media viewer integration', () => {
@@ -113,9 +113,6 @@ describe('WalkthroughTab media viewer integration', () => {
         existingComments: [],
         pendingComments: [],
         onPendingCommentsChange: vi.fn(),
-        agentComments: [],
-        onAgentCommentsChange: vi.fn(),
-        onUpdateAgentCommentStatus: vi.fn(),
         onOpenUrl: vi.fn(),
         onSubmitReview: vi.fn(async () => {}),
       },

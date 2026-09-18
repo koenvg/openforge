@@ -445,6 +445,23 @@ async fn rejects_legacy_coordinate_only_pull_request_commands() {
 }
 
 #[tokio::test]
+async fn rejects_retired_headless_generation_commands() {
+    let (state, _temp_dir) = test_state("app_invoke_retired_headless_generation");
+
+    for command in [
+        "agent_generate",
+        "agent_generate_in_repo",
+        "abort_agent_generate",
+        "delete_agent_session",
+    ] {
+        let error = invoke(&state, command, serde_json::Value::Null)
+            .await
+            .expect_err("retired generation command should be rejected");
+        assert_eq!(error.0, StatusCode::NOT_IMPLEMENTED, "{command}");
+    }
+}
+
+#[tokio::test]
 async fn create_task_dependency_domain_errors_keep_the_existing_bad_request_contract() {
     let (state, _temp_dir) = test_state("app_invoke_create_task_dependency_error");
     let project = invoke_ok(
@@ -1186,89 +1203,6 @@ async fn resolve_ai_provider_reports_unreadable_project_config() {
     .expect_err("unreadable project provider must fail");
 
     assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
-}
-
-#[tokio::test]
-async fn agent_generate_reports_unreadable_global_provider_config() {
-    let (state, _temp_dir) = test_state("agent_generate_unreadable_global_provider");
-    insert_unreadable_global_config(&state, "ai_provider");
-
-    let error = invoke(
-        &state,
-        "agent_generate",
-        json!({ "sessionKey": "generation-1", "prompt": "Summarize" }),
-    )
-    .await
-    .expect_err("unreadable global provider must fail");
-
-    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
-}
-
-#[tokio::test]
-async fn repo_agent_generate_reports_unreadable_project_provider_config() {
-    let (state, _temp_dir) = test_state("repo_agent_generate_unreadable_project_provider");
-    let project_id = {
-        let db = crate::db::acquire_db(&state.db);
-        db.create_project(
-            "Unreadable provider",
-            "/tmp/repo-generation-unreadable-provider",
-        )
-        .expect("create project")
-        .id
-    };
-    insert_unreadable_project_config(&state, &project_id, "ai_provider");
-
-    let error = invoke(
-        &state,
-        "agent_generate_in_repo",
-        json!({
-            "sessionKey": "repo-generation-1",
-            "prompt": "Summarize",
-            "projectId": project_id,
-            "owner": "acme",
-            "repo": "app",
-            "prNumber": 42,
-            "headSha": "abc123",
-        }),
-    )
-    .await
-    .expect_err("unreadable project provider must fail");
-
-    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
-}
-
-#[tokio::test]
-async fn repo_agent_generate_rejects_a_project_for_another_repository() {
-    let (state, temp_dir) = test_state("repo_agent_generate_repository_mismatch");
-    let repo_path = temp_dir.path().join("other-repository");
-    let repository = git2::Repository::init(&repo_path).expect("initialize repository");
-    repository
-        .remote("origin", "https://github.com/acme/other.git")
-        .expect("configure origin");
-    let project_id = crate::db::acquire_db(&state.db)
-        .create_project("Other repository", repo_path.to_string_lossy().as_ref())
-        .expect("create project")
-        .id;
-
-    let (status, message) = invoke(
-        &state,
-        "agent_generate_in_repo",
-        json!({
-            "sessionKey": "repo-generation-mismatch",
-            "prompt": "Summarize",
-            "projectId": project_id,
-            "owner": "acme",
-            "repo": "app",
-            "prNumber": 42,
-            "headSha": "abc123",
-        }),
-    )
-    .await
-    .expect_err("a project for another repository must be rejected");
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(message.contains("acme/other"));
-    assert!(message.contains("acme/app"));
 }
 
 #[tokio::test]

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
-  import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import PrWalkthroughButton from './PrWalkthroughButton.svelte'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { resolveProjectIdForRepo } from '../../lib/projectRepoResolution'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
+  import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -21,7 +22,7 @@
   const POLL_INTERVAL_MS = 2500
 
   let githubSync = $derived(createGithubSyncPrReviewClient(api))
-  let walkthrough = $state<PrWalkthrough | null>(null)
+  let walkthrough = $state<WalkthroughRecordV1 | null>(null)
   let resolvedProjectId = $state<string | null>(null)
   let actionError = $state<string | null>(null)
   let buttonState = $derived(walkthroughButtonState(walkthrough, pr.head_sha))
@@ -45,7 +46,7 @@
     pollTimer = null
   }
 
-  async function loadWalkthrough(subject: ReviewPullRequest): Promise<PrWalkthrough | null> {
+  async function loadWalkthrough(subject: ReviewPullRequest): Promise<WalkthroughRecordV1 | null> {
     try {
       const loaded = await githubSync.getPrWalkthrough({ reviewPrId: subject.id, headSha: subject.head_sha })
       // A slow request can land after the row moved on to a new commit; drop it rather than
@@ -64,7 +65,7 @@
     if (pollTimer !== null) return
     pollTimer = setInterval(async () => {
       const loaded = await loadWalkthrough(subject)
-      if (loaded === null || loaded.status !== 'generating') stopPolling()
+      if (loaded === null || loaded.state !== 'generating') stopPolling()
     }, POLL_INTERVAL_MS)
   }
 
@@ -100,11 +101,11 @@
 
   async function stop(): Promise<void> {
     const subject = pr
-    const sessionKey = walkthrough?.walkthrough_session_key
+    const attemptId = walkthrough?.attemptId
     actionError = null
-    if (sessionKey) {
+    if (attemptId) {
       try {
-        await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
+        await githubSync.abortAgentWalkthrough({ attemptId })
       } catch (e) {
         actionError = 'Could not stop walkthrough generation. Try again.'
         console.error('Failed to stop walkthrough generation:', e)
@@ -116,9 +117,9 @@
     if (subjectKey(subject) === subjectKey(pr) && walkthrough) {
       walkthrough = {
         ...walkthrough,
-        status: 'aborted',
-        error_message: 'Walkthrough generation was stopped.',
-        updated_at: Math.floor(Date.now() / 1000),
+        state: 'aborted',
+        error: { code: 'generation-aborted', message: 'Walkthrough generation was stopped.' },
+        updatedAt: Math.floor(Date.now() / 1000),
       }
     }
   }
@@ -143,7 +144,7 @@
     void loadWalkthrough(subject).then((loaded) => {
       // Someone else's generation (the PR review view, a previous session) may already be
       // running for this commit; pick it up so the row tracks it to completion.
-      if (loaded?.status === 'generating') startPolling(subject)
+      if (loaded?.state === 'generating') startPolling(subject)
     })
   })
 

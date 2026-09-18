@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
@@ -310,6 +310,18 @@ describe('InlineCommentThread review threads', () => {
     render(InlineCommentThread, { props: setup.props })
 
     expect(screen.getByText('Waiting for agent')).toBeTruthy()
+  })
+
+  it('marks an unread agent answer seen when its thread is rendered', async () => {
+    const onMarkThreadSeen = vi.fn()
+    const setup = makeProps({
+      data: makeReviewThreadData(makeReviewThread({ hasUnreadAgentMessage: true })),
+      onMarkThreadSeen,
+    })
+
+    render(InlineCommentThread, { props: setup.props })
+
+    await waitFor(() => expect(onMarkThreadSeen).toHaveBeenCalledWith('rt_1'))
   })
 
   it('never attributes a stored message to the reading user', () => {

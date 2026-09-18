@@ -1,16 +1,11 @@
 <script lang="ts">
   import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import type { AgentReviewComment, AgentReviewCommentStatus } from '../../lib/prReviewRecords'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
-  import {
-    agentCommentToSubmission,
-    approvedInlineAgentComments,
-    dismissSubmittedAgentComments,
-  } from './agentCommentSubmission'
+  import { resolvedAgentThreadSubmissions } from './reviewThreadSubmission'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { CoverageFinding } from '../../lib/ticketCoverage'
 
@@ -23,14 +18,12 @@
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    agentComments: AgentReviewComment[]
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
     reviewThreads: ReviewThread[]
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToReviewThread?: (threadId: string, body: string) => void
     onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkReviewThreadSeen?: (threadId: string) => void
     onCommentNow?: (
       filename: string,
       line: number,
@@ -52,7 +45,7 @@
       body: string
       comments: ReviewSubmissionComment[]
       commitId: string
-    }) => Promise<void>
+    }, submittedReviewThreadIds?: string[]) => Promise<void>
   }
 
   let {
@@ -64,14 +57,12 @@
     existingComments,
     pendingComments,
     onPendingCommentsChange,
-    agentComments,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
     onOpenUrl,
     reviewThreads,
     onCreateReviewThread,
     onReplyToReviewThread,
     onSetReviewThreadStatus,
+    onMarkReviewThreadSeen,
     onCommentNow,
     onReplyToExistingComment,
     pendingReplies,
@@ -84,20 +75,14 @@
   }: Props = $props()
 
   let diffViewer = $state<DiffViewer>()
-  let approvedAgentSubmissionComments = $derived(
-    approvedInlineAgentComments(agentComments).map(agentCommentToSubmission),
-  )
+  let resolvedAgentSubmissions = $derived(resolvedAgentThreadSubmissions(files, reviewThreads))
 
   function handleFileSelect(filename: string): void {
     diffViewer?.scrollToFile(filename)
   }
 
-  async function handleApprovedAgentCommentsSubmitted(): Promise<void> {
-    try {
-      await dismissSubmittedAgentComments(agentComments, onUpdateAgentCommentStatus, onAgentCommentsChange)
-    } catch (error) {
-      console.error('Failed to mark submitted AI review comments as handled:', error)
-    }
+  function submitReview(request: Parameters<Props['onSubmitReview']>[0]): Promise<void> {
+    return onSubmitReview(request, resolvedAgentSubmissions.map(submission => submission.threadId))
   }
 </script>
 
@@ -123,6 +108,7 @@
       onCreateThread={onCreateReviewThread}
       onReplyToThread={onReplyToReviewThread}
       onSetThreadStatus={onSetReviewThreadStatus}
+      onMarkThreadSeen={onMarkReviewThreadSeen}
       {onCommentNow}
       {onReplyToExistingComment}
       {pendingReplies}
@@ -137,14 +123,13 @@
             prNumber={pr.number}
             commitId={pr.head_sha}
             {pendingComments}
-            approvedAgentComments={approvedAgentSubmissionComments}
+            resolvedAgentComments={resolvedAgentSubmissions.map(submission => submission.comment)}
             pendingReplyCount={pendingReplies.length}
             includedFindings={includedCoverageFindings}
             {onPendingCommentsChange}
-            onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
             {onRemoveIncludedFinding}
             {onIncludedFindingsSubmitted}
-            {onSubmitReview}
+            onSubmitReview={submitReview}
           />
         {/if}
       {/snippet}

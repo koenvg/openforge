@@ -186,15 +186,15 @@ describe('ReviewSubmitPanel', () => {
     expect(onSubmitReview).not.toHaveBeenCalled()
   })
 
-  it('counts approved AI comments alongside pending comments', () => {
+  it('counts resolved agent comments alongside pending comments', () => {
     const pending: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 10, side: 'RIGHT', body: 'manual' },
     ]
-    const approvedAgentComments: ReviewSubmissionComment[] = [
+    const resolvedAgentComments: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 20, side: 'RIGHT', body: 'approved AI' },
       { path: 'file.ts', line: 30, side: 'LEFT', body: 'approved AI 2' },
     ]
-    renderPanel({ pendingComments: pending, approvedAgentComments })
+    renderPanel({ pendingComments: pending, resolvedAgentComments })
 
     expect(screen.getByText('3 comments will be submitted')).toBeTruthy()
   })
@@ -205,38 +205,35 @@ describe('ReviewSubmitPanel', () => {
     expect(screen.getByText('Comment').closest('button')?.disabled).toBe(false)
   })
 
-  it('enables submitting when only approved AI comments exist (no summary, no pending)', async () => {
-    const approvedAgentComments: ReviewSubmissionComment[] = [
+  it('enables submitting when only resolved agent comments exist (no summary, no pending)', async () => {
+    const resolvedAgentComments: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 20, side: 'RIGHT', body: 'approved AI' },
     ]
-    renderPanel({ approvedAgentComments })
+    renderPanel({ resolvedAgentComments })
 
     expect(screen.getByText('Comment').closest('button')?.disabled).toBe(false)
   })
 
-  it('includes approved AI comments in the submission payload and notifies the parent', async () => {
+  it('includes resolved agent comments in the submission payload', async () => {
     const pending: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 10, side: 'RIGHT', body: 'manual' },
     ]
-    const approvedAgentComments: ReviewSubmissionComment[] = [
+    const resolvedAgentComments: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 20, side: 'RIGHT', body: 'approved AI' },
     ]
-    const onApprovedAgentCommentsSubmitted = vi.fn()
     const { onSubmitReview, onPendingCommentsChange } = renderPanel({
       pendingComments: pending,
-      approvedAgentComments,
-      onApprovedAgentCommentsSubmitted,
+      resolvedAgentComments,
     })
 
     await fireEvent.click(screen.getByText('Approve'))
 
     expect(onSubmitReview).toHaveBeenCalledWith(expect.objectContaining({
       event: 'APPROVE',
-      comments: [...pending, ...approvedAgentComments],
+      comments: [...pending, ...resolvedAgentComments],
     }))
     await waitFor(() => {
       expect(onPendingCommentsChange).toHaveBeenCalledWith([])
-      expect(onApprovedAgentCommentsSubmitted).toHaveBeenCalledOnce()
     })
   })
 

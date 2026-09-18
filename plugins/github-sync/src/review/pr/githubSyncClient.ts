@@ -1,8 +1,8 @@
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
-import type { AuthoredPullRequest, PollResult, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
+import type { AuthoredPullRequest, PollResult, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { TicketSnapshot } from '../../lib/ticketCoverage'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
 export type PullRequestRepositoryRequest = {
   owner: string
@@ -67,8 +67,6 @@ export interface GithubSyncPrReviewClient {
   markReviewPullRequestUnviewed(request: { prId: number }): Promise<void>
   /** Remove a PR from the review list (manual "Remove from list" action). */
   removeReviewPullRequest(request: { prId: number }): Promise<void>
-  /** Delete the persisted AI review session for a PR (paired with removal). */
-  deleteReviewSession(request: { prId: number }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
   getFileContent(request: FileContentRequest): Promise<string>
   getFileContentBase64(request: FileContentRequest): Promise<Base64FileContentResult>
@@ -80,9 +78,7 @@ export interface GithubSyncPrReviewClient {
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
   replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<ReviewComment>
   createReviewComment(request: CreateReviewCommentRequest): Promise<void>
-  getPrAiReviewComments(request: { reviewPrId: number; headSha: string }): Promise<AgentReviewComment[]>
-  updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: AgentReviewCommentStatus }): Promise<void>
-  getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<PrWalkthrough | null>
+  getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<WalkthroughRecordV1 | null>
   deletePrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<void>
   /** The Jira ticket resolved for this PR, plus whether Jira is configured at all. */
   getPrTicket(request: { reviewPrId: number; headSha: string }): Promise<{
@@ -104,11 +100,8 @@ export interface GithubSyncPrReviewClient {
     projectId: string
     reviewGuidance: string
     walkthroughGuidance: string
-  }): Promise<{ walkthrough_session_key: string }>
-  abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
-  getAiThreads(request: { reviewPrId: number; headSha: string }): Promise<AiThread[]>
-  saveAiThread(request: { reviewPrId: number; headSha: string; thread: AiThread }): Promise<void>
-  deleteAiThread(request: { reviewPrId: number; headSha: string; threadId: string }): Promise<void>
+  }): Promise<{ attemptId: string }>
+  abortAgentWalkthrough(request: { attemptId: string }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable
   onReviewPullRequestCountChanged(handler: () => void): Disposable
   onViewInvoked(handler: (payload: { view: string }) => void): Disposable
@@ -152,7 +145,6 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
     markReviewPullRequestUnviewed: ({ prId }) => invokeBackend<void>(api, 'markReviewPrUnviewed', { prId }),
     removeReviewPullRequest: ({ prId }) => invokeBackend<void>(api, 'dismissReviewPr', { prId }),
-    deleteReviewSession: ({ prId }) => invokeBackend<void>(api, 'deleteReviewSession', { prId }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),
     getFileContentBase64: (request) => invokeBackend<Base64FileContentResult>(api, 'getFileContentBase64', request),
@@ -187,17 +179,12 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
       side,
       body,
     }),
-    getPrAiReviewComments: ({ reviewPrId, headSha }) => invokeBackend<AgentReviewComment[]>(api, 'getPrAiReviewComments', { reviewPrId, headSha }),
-    updatePrAiReviewCommentStatus: ({ reviewPrId, headSha, commentId, status }) => invokeBackend<void>(api, 'updatePrAiReviewCommentStatus', { reviewPrId, headSha, commentId, status }),
-    getPrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<PrWalkthrough | null>(api, 'getPrWalkthrough', { reviewPrId, headSha }),
+    getPrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<WalkthroughRecordV1 | null>(api, 'getPrWalkthrough', { reviewPrId, headSha }),
     deletePrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<void>(api, 'deletePrWalkthrough', { reviewPrId, headSha }),
     getPrTicket: ({ reviewPrId, headSha }) => invokeBackend<{ snapshot: TicketSnapshot | null; jiraConfigured: boolean }>(api, 'getPrTicket', { reviewPrId, headSha }),
     setPrJiraKey: ({ reviewPrId, issueKey }) => invokeBackend<void>(api, 'setPrJiraKey', { reviewPrId, issueKey }),
-    startAgentWalkthrough: (request) => invokeBackend<{ walkthrough_session_key: string }>(api, 'startAgentWalkthrough', request),
-    abortAgentWalkthrough: ({ walkthroughSessionKey }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { walkthroughSessionKey }),
-    getAiThreads: ({ reviewPrId, headSha }) => invokeBackend<AiThread[]>(api, 'getAiThreads', { reviewPrId, headSha }),
-    saveAiThread: ({ reviewPrId, headSha, thread }) => invokeBackend<void>(api, 'saveAiThread', { reviewPrId, headSha, thread }),
-    deleteAiThread: ({ reviewPrId, headSha, threadId }) => invokeBackend<void>(api, 'deleteAiThread', { reviewPrId, headSha, threadId }),
+    startAgentWalkthrough: (request) => invokeBackend<{ attemptId: string }>(api, 'startAgentWalkthrough', request),
+    abortAgentWalkthrough: ({ attemptId }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { attemptId }),
     onAuthoredPullRequestsUpdated: (handler) => api.events.onGlobal(hostEventId('authored-prs-updated'), handler),
     onReviewPullRequestCountChanged: (handler) => api.events.onGlobal(hostEventId('review-pr-count-changed'), handler),
     onViewInvoked: (handler) => api.events.onGlobal<{ view: string }>(hostEventId('view-invoked'), handler),

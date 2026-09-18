@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
 vi.mock('@openforge-app/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
@@ -53,14 +54,12 @@ vi.mock('../../lib/stores', () => ({
   pendingManualComments: writable([]),
   pendingReplies: writable([]),
   prOverviewComments: writable([]),
-  agentReviewComments: writable([]),
 }))
 
 import PrReviewView from './PrReviewView.svelte'
 import PrReviewViewBoundaryHarness from './__fixtures__/PrReviewViewBoundaryHarness.svelte'
 import {
   activeProjectId,
-  agentReviewComments,
   authoredPrs,
   pendingManualComments,
   pendingReplies,
@@ -164,7 +163,6 @@ function resetStores() {
   pendingManualComments.set([])
   pendingReplies.set([])
   prOverviewComments.set([])
-  agentReviewComments.set([])
 }
 
 function registerPrReviewBackends(
@@ -174,7 +172,7 @@ function registerPrReviewBackends(
   reviewCommentResults: ReviewComment[] | (() => ReviewComment[] | Promise<ReviewComment[]>) = [],
   submitReview: () => Promise<void> = async () => undefined,
   fileContent = '',
-  getWalkthrough: () => PrWalkthrough | null | Promise<PrWalkthrough | null> = () => null,
+  getWalkthrough: () => WalkthroughRecordV1 | null | Promise<WalkthroughRecordV1 | null> = () => null,
 ) {
   let getOverviewComments: () => PrOverviewComment[] | Promise<PrOverviewComment[]> = () => []
   registry.frontendApi.projects.list = vi.fn(async () => [{
@@ -203,11 +201,9 @@ function registerPrReviewBackends(
       : reviewCommentResults,
   })
   backend.registerMethod('getPrOverviewComments', { handler: () => getOverviewComments() })
-  backend.registerMethod('getPrAiReviewComments', { handler: async () => [] })
-  backend.registerMethod('updatePrAiReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getPrWalkthrough', { handler: async () => getWalkthrough() })
   backend.registerMethod('getPrTicket', { handler: async () => ({ snapshot: null, jiraConfigured: false }) })
-  backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ walkthrough_session_key: 'session-key' }) })
+  backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ attemptId: 'attempt-1' }) })
   backend.registerMethod('deletePrWalkthrough', { handler: async () => undefined })
   backend.registerMethod('abortAgentWalkthrough', { handler: async () => undefined })
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
@@ -1350,7 +1346,7 @@ describe('PrReviewView walkthrough generation', () => {
     await fireEvent.click(await screen.findByRole('tab', { name: 'Agent' }))
 
     expect(await screen.findByText('Review agent unavailable')).toBeTruthy()
-    expect(screen.getByText(/local OpenForge Project linked to this repository is required/i)).toBeTruthy()
+    expect(screen.getByText('A local OpenForge Project linked to this repository is required to start the review agent.')).toBeTruthy()
   })
 
   it('starts a background generation from the card without opening or marking the PR read', async () => {
@@ -1386,15 +1382,16 @@ describe('PrReviewView walkthrough generation', () => {
   })
 
   it('stops an in-flight generation from the card without deleting its attempt record', async () => {
-    const generating: PrWalkthrough = {
-      pr_id: basePr.id,
-      head_sha: basePr.head_sha,
-      walkthrough_session_key: 'session-key',
-      status: 'generating',
-      steps_json: null,
-      error_message: null,
-      created_at: 0,
-      updated_at: 0,
+    const generating: WalkthroughRecordV1 = {
+      version: 1,
+      prId: basePr.id,
+      scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: basePr.head_sha },
+      attemptId: 'attempt-1',
+      state: 'generating',
+      steps: [],
+      error: null,
+      createdAt: 0,
+      updatedAt: 0,
     }
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', () => generating)
@@ -1408,7 +1405,7 @@ describe('PrReviewView walkthrough generation', () => {
       expect(registry.calls.backendInvocations.some((c) => c.method === 'abortAgentWalkthrough')).toBe(true),
     )
     const abortCall = registry.calls.backendInvocations.find((c) => c.method === 'abortAgentWalkthrough')
-    expect(abortCall?.payload).toMatchObject({ walkthroughSessionKey: 'session-key' })
+    expect(abortCall?.payload).toMatchObject({ attemptId: 'attempt-1' })
     expect(registry.calls.backendInvocations.some((c) => c.method === 'deletePrWalkthrough')).toBe(false)
   })
 
@@ -1516,23 +1513,22 @@ describe('PrReviewView walkthrough generation', () => {
     expect(pressArrowRight().defaultPrevented).toBe(false)
   })
 
-  function readyWalkthrough(stepTitles: readonly string[]): PrWalkthrough {
+  function readyWalkthrough(stepTitles: readonly string[]): WalkthroughRecordV1 {
     return {
-      pr_id: basePr.id,
-      head_sha: basePr.head_sha,
-      walkthrough_session_key: 'k',
-      status: 'ready',
-      steps_json: JSON.stringify({
-        steps: stepTitles.map((title, index) => ({
-          id: `s${index + 1}`,
-          title,
-          summary: 'x',
-          files: [{ filename: 'src/main.rs', hunk_indexes: null }],
-        })),
-      }),
-      error_message: null,
-      created_at: 0,
-      updated_at: 0,
+      version: 1,
+      prId: basePr.id,
+      scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: basePr.head_sha },
+      attemptId: 'attempt-1',
+      state: 'ready',
+      steps: stepTitles.map((title, index) => ({
+        id: `s${index + 1}`,
+        title,
+        summary: 'x',
+        files: [{ filename: 'src/main.rs', hunk_indexes: null }],
+      })),
+      error: null,
+      createdAt: 0,
+      updatedAt: 0,
     }
   }
 
@@ -1543,7 +1539,7 @@ describe('PrReviewView walkthrough generation', () => {
   }
 
   async function openWalkthroughTab(
-    getWalkthrough: () => PrWalkthrough | null = () => readyWalkthrough(['Step one', 'Step two']),
+    getWalkthrough: () => WalkthroughRecordV1 | null = () => readyWalkthrough(['Step one', 'Step two']),
   ) {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', getWalkthrough)

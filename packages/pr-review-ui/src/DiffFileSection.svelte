@@ -62,6 +62,7 @@
     onCreateThread,
     onReplyToThread,
     onSetThreadStatus,
+    onMarkThreadSeen,
     onReplyToExistingComment,
     pendingReplies,
     onAddReplyToReview,
@@ -124,6 +125,7 @@
       {onCreateThread}
       {onReplyToThread}
       {onSetThreadStatus}
+      {onMarkThreadSeen}
       {onReplyToExistingComment}
       {pendingReplies}
       {onAddReplyToReview}

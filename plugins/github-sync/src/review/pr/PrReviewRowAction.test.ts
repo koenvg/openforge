@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
-import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
 const client = {
   getPrWalkthrough: vi.fn(),
-  startAgentWalkthrough: vi.fn(async () => ({ walkthrough_session_key: 'k' })),
+  startAgentWalkthrough: vi.fn(async () => ({ attemptId: 'k' })),
   abortAgentWalkthrough: vi.fn(async () => {}),
   deletePrWalkthrough: vi.fn(async () => {}),
 }
@@ -36,15 +37,16 @@ const pr = {
   base_ref: 'main',
 } as unknown as ReviewPullRequest
 
-const generatingRow: PrWalkthrough = {
-  pr_id: 1,
-  head_sha: 'sha-1',
-  walkthrough_session_key: 'sess-1',
-  status: 'generating',
-  steps_json: null,
-  error_message: null,
-  created_at: 0,
-  updated_at: 0,
+const generatingRow: WalkthroughRecordV1 = {
+  version: 1,
+  prId: 1,
+  scope: { namespace: 'github', targetKey: 'gh:acme/repo#7', revision: 'sha-1' },
+  attemptId: 'attempt-1',
+  state: 'generating',
+  steps: [],
+  error: null,
+  createdAt: 0,
+  updatedAt: 0,
 }
 
 function apiWithProjects(reposByProject: Record<string, string>): FrontendOpenForgeAPI {
@@ -103,7 +105,7 @@ describe('PrReviewRowAction stop', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: /stop walkthrough generation/i }))
 
-    expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+    expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ attemptId: 'attempt-1' })
     expect(client.deletePrWalkthrough).not.toHaveBeenCalled()
     expect(await screen.findByRole('button', { name: /generate walkthrough and ai review/i })).toBeTruthy()
   })
@@ -116,7 +118,7 @@ describe('PrReviewRowAction stop', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: /stop walkthrough generation/i }))
 
-    expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+    expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ attemptId: 'attempt-1' })
     expect(await screen.findByRole('button', { name: /stop walkthrough generation/i })).toBeTruthy()
     expect(screen.getByRole('alert').textContent).toBe('Could not stop walkthrough generation. Try again.')
     expect(client.deletePrWalkthrough).not.toHaveBeenCalled()

@@ -57,7 +57,7 @@ const fileA: PrFileDiff = {
 function makeGithubSync(overrides: Partial<GithubSyncPrReviewClient> = {}): GithubSyncPrReviewClient {
   return {
     getPrWalkthrough: vi.fn(async () => null),
-    startAgentWalkthrough: vi.fn(async () => ({ walkthrough_session_key: 'k' })),
+    startAgentWalkthrough: vi.fn(async () => ({ attemptId: 'k' })),
     abortAgentWalkthrough: vi.fn(async () => {}),
     deletePrWalkthrough: vi.fn(async () => {}),
     ...overrides,
@@ -76,9 +76,6 @@ function renderWalkthrough(githubSync: GithubSyncPrReviewClient) {
       existingComments: [],
       pendingComments: [] as ReviewSubmissionComment[],
       onPendingCommentsChange: vi.fn(),
-      agentComments: [],
-      onAgentCommentsChange: vi.fn(),
-      onUpdateAgentCommentStatus: vi.fn(),
       onOpenUrl: vi.fn(),
       onSubmitReview: vi.fn(async () => {}),
     },
@@ -88,7 +85,7 @@ function renderWalkthrough(githubSync: GithubSyncPrReviewClient) {
 describe('WalkthroughTab does not auto-generate', () => {
   it('loads the cached walkthrough but never starts generation on open', async () => {
     const getPrWalkthrough = vi.fn(async () => null)
-    const startAgentWalkthrough = vi.fn(async () => ({ walkthrough_session_key: 'k' }))
+    const startAgentWalkthrough = vi.fn(async () => ({ attemptId: 'k' }))
     const githubSync = makeGithubSync({ getPrWalkthrough, startAgentWalkthrough })
 
     renderWalkthrough(githubSync)

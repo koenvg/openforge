@@ -201,6 +201,13 @@ function exportTargets(value) {
   return Object.values(value).flatMap(exportTargets)
 }
 
+function filesUnder(root) {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(root, entry.name)
+    return entry.isDirectory() ? filesUnder(path) : [path]
+  })
+}
+
 function parseVersion(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version)
   if (!match) fail(`Plugin SDK package version is not valid semver: ${version}`)
@@ -323,6 +330,18 @@ try {
   for (const target of new Set(targets.filter(value => typeof value === 'string'))) {
     const targetPath = join(installedPackageRoot, target.replace(/^\.\//, ''))
     if (!existsSync(targetPath)) fail(`Packed export target is missing: ${target}`)
+  }
+
+  const declarations = filesUnder(join(installedPackageRoot, 'dist'))
+    .filter(path => path.endsWith('.d.ts'))
+    .map(path => readFileSync(path, 'utf8'))
+    .join('\n')
+  for (const [name, pattern] of [
+    ['PrWalkthrough', /\bPrWalkthrough\b/u],
+    ['steps_json', /\bsteps_json\b/u],
+    ['walkthrough_session_key', /\bwalkthrough_session_key\b/u],
+  ]) {
+    if (pattern.test(declarations)) fail(`Packed Plugin SDK still exposes retired walkthrough contract: ${name}`)
   }
 
   const packedSvelteExports = new Set(

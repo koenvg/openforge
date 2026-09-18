@@ -1058,20 +1058,6 @@ export interface PrWalkthroughStep {
   files: PrWalkthroughStepFile[];
 }
 
-/** A cached AI-generated walkthrough of a PR, keyed by (pr_id, head_sha).
- * `steps_json` is the agent's raw structured response. Parse + validate it
- * against the live PR diffs before rendering (see walkthroughParse). */
-export interface PrWalkthrough {
-  pr_id: number;
-  head_sha: string;
-  walkthrough_session_key: string | null;
-  status: 'generating' | 'ready' | 'no-submissions' | 'failed' | 'aborted';
-  steps_json: string | null;
-  error_message: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
 /** App-level view for top-bar navigation */
 export type CoreAppView = 'board' | 'settings' | 'global_settings' | 'files'
 

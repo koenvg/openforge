@@ -4,6 +4,7 @@ import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { PrFileDiff, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewWorkspace } from './reviewWorkspace.svelte'
 import { WALKTHROUGH_INVALIDATED_EVENT } from '../../lib/walkthroughEvents'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 import Harness from './__fixtures__/ReviewWorkspaceHarness.svelte'
 
 const pr: ReviewPullRequest = {
@@ -22,9 +23,16 @@ const comment: ReviewComment = {
   id: 12, pr_number: 42, repo_owner: 'acme', repo_name: 'app', path: 'login.ts', line: 2,
   side: 'RIGHT', body: 'Check this', author: 'alice', created_at: '2026-01-01', in_reply_to_id: null,
 }
-const readyWalkthrough = {
-  pr_id: pr.id, head_sha: pr.head_sha, status: 'ready', steps_json: '{"steps":[]}',
-  walkthrough_session_key: 'session-1', error_message: null, created_at: 1, updated_at: 2,
+const readyWalkthrough: WalkthroughRecordV1 = {
+  version: 1,
+  prId: pr.id,
+  scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: pr.head_sha },
+  attemptId: 'attempt-1',
+  state: 'ready',
+  steps: [],
+  error: null,
+  createdAt: 1,
+  updatedAt: 2,
 }
 const workspaces: ReviewWorkspace[] = []
 
@@ -48,10 +56,8 @@ async function setup(
     getReviewPrs: [pr], fetchReviewPrs: [{ ...pr, title: 'Updated login' }],
     getAuthoredPrs: [], fetchAuthoredPrs: [], getPrWalkthrough: null,
     markReviewPrViewed: null, markReviewPrUnviewed: null, dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
-    getPrAiReviewComments: [], updatePrAiReviewCommentStatus: null,
-    getAiThreads: [], saveAiThread: null,
     getPrTicket: { snapshot: null, jiraConfigured: false },
-    startAgentWalkthrough: { walkthrough_session_key: 'session-1' },
+    startAgentWalkthrough: { attemptId: 'attempt-1' },
     deletePrWalkthrough: null, abortAgentWalkthrough: null,
     createReviewComment: null, replyToReviewComment: null, submitPrReview: null,
   }))
@@ -405,31 +411,32 @@ describe('review workspace', () => {
     expect(calls.get('askAgentQuestions')).toBeUndefined()
   })
 
-  it('renders its stored agent comments through the review-thread input', async () => {
-    const { workspace, responses } = await setup()
-    responses.set('getPrAiReviewComments', [{
-      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
-      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
-      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
-    }])
+  it('renders live agent findings from the exact pull request Review Thread scope', async () => {
+    const { workspace, registry } = await setup()
+    const thread = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Needs a null check',
+    })
+    await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'other-head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Unrelated revision',
+    })
     await workspace.list.onSelectPr(pr)
 
     await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
-    const [thread] = workspace.detail!.reviewThreads
-    expect(thread.id).toBe('agent:100')
-    expect(thread.origin).toBe('agent')
-    expect(thread.targetKey).toBe('gh:acme/app#42')
-    expect(thread.revision).toBe('head')
-    expect(thread.messages.map(message => message.body)).toEqual(['Needs a null check'])
+    expect(workspace.detail!.reviewThreads[0].id).toBe(thread.id)
+    expect(workspace.detail!.reviewThreads[0].messages.map(message => message.body)).toEqual(['Needs a null check'])
   })
 
-  it('routes a reply on a legacy agent comment through a new scoped Review Thread', async () => {
-    const { workspace, responses, registry } = await setup()
-    responses.set('getPrAiReviewComments', [{
-      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
-      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
-      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
-    }])
+  it('replies to an agent finding in the same Review Thread and conversation', async () => {
+    const { workspace, registry } = await setup()
+    const thread = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Needs a null check',
+    })
     await workspace.list.onSelectPr(pr)
     await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
     await registry.frontendApi.agentSessions.start({
@@ -441,31 +448,60 @@ describe('review workspace', () => {
     })
     await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
 
-    workspace.detail!.onReplyToReviewThread!('agent:100', 'Why is that unsafe?')
-    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(2))
+    workspace.detail!.onReplyToReviewThread!(thread.id, 'Why is that unsafe?')
+    await waitFor(() => expect(workspace.detail!.reviewThreads[0].messages).toHaveLength(2))
 
-    const followUp = workspace.detail!.reviewThreads.find(thread => thread.id !== 'agent:100')
-    expect(followUp?.anchor).toEqual({ kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' })
-    expect(followUp?.messages.map(message => message.body)).toEqual(['Why is that unsafe?'])
-    expect(registry.calls.scopedAgentSessionInputs.at(-1)?.input).toContain(`Review Thread ${followUp?.id}`)
+    expect(workspace.detail!.reviewThreads[0].messages.map(message => message.body)).toEqual([
+      'Needs a null check',
+      'Why is that unsafe?',
+    ])
+    expect(registry.calls.scopedAgentSessionInputs.at(-1)?.input).toContain(`Review Thread ${thread.id}`)
   })
 
-  it('records a reviewer decision on an agent comment through its own storage', async () => {
-    const { workspace, responses, calls } = await setup()
-    responses.set('getPrAiReviewComments', [{
-      id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
-      file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
-      status: 'pending', opencode_session_id: null, created_at: 1, updated_at: 1,
-    }])
+  it('records a reviewer decision directly on the Review Thread', async () => {
+    const { workspace, registry } = await setup()
+    const thread = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Needs a null check',
+    })
     await workspace.list.onSelectPr(pr)
     await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
 
-    workspace.detail!.onSetReviewThreadStatus('agent:100', 'resolved')
+    workspace.detail!.onSetReviewThreadStatus(thread.id, 'resolved')
 
     await waitFor(() => expect(workspace.detail!.reviewThreads[0].status).toBe('resolved'))
-    expect(calls.get('updatePrAiReviewCommentStatus')).toContainEqual({
-      reviewPrId: pr.id, headSha: 'head', commentId: 100, status: 'approved',
+  })
+
+  it('dismisses exactly the resolved agent threads included in a successful GitHub review', async () => {
+    const { workspace, registry, calls } = await setup()
+    const submitted = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Needs a null check',
     })
+    const retained = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 1, side: 'RIGHT' },
+      origin: 'agent', body: 'Keep this open',
+    })
+    await registry.frontendApi.reviewThreads.setStatus({ threadId: submitted.id, status: 'resolved' })
+    await workspace.list.onSelectPr(pr)
+
+    await workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'COMMENT', body: 'Reviewed',
+      comments: [{ path: 'login.ts', line: 2, side: 'RIGHT', body: 'Needs a null check' }],
+    }, [submitted.id])
+
+    expect(calls.get('submitPrReview')).toContainEqual(expect.objectContaining({
+      comments: [{ path: 'login.ts', line: 2, side: 'RIGHT', body: 'Needs a null check' }],
+    }))
+    const listed = await registry.frontendApi.reviewThreads.list({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+    })
+    expect(listed.find(thread => thread.id === submitted.id)?.status).toBe('dismissed')
+    expect(listed.find(thread => thread.id === retained.id)?.status).toBe('open')
   })
 
   it('renders stored core question threads through the review-thread input', async () => {
@@ -506,13 +542,13 @@ describe('review workspace', () => {
     expect(walkthrough.walkthrough).toBeNull()
     vi.useFakeTimers()
     await walkthrough.generate()
-    expect(walkthrough.walkthrough?.status).toBe('generating')
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('generating')
+    expect(walkthrough.walkthrough?.state).toBe('generating')
+    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('generating')
     responses.set('getPrWalkthrough', readyWalkthrough)
     await vi.advanceTimersByTimeAsync(2500)
-    expect(walkthrough.walkthrough?.status).toBe('ready')
+    expect(walkthrough.walkthrough?.state).toBe('ready')
     expect(workspace.detail!.walkthroughReady).toBe(true)
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('ready')
+    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('ready')
   })
 
   it('re-reads an active walkthrough immediately after a submitted step is persisted', async () => {
@@ -527,7 +563,7 @@ describe('review workspace', () => {
     })
 
     await waitFor(() => expect(calls.get('getPrWalkthrough')).toHaveLength(readsBefore + 1))
-    await waitFor(() => expect(workspace.detail!.walkthrough.walkthrough?.status).toBe('ready'))
+    await waitFor(() => expect(workspace.detail!.walkthrough.walkthrough?.state).toBe('ready'))
   })
 
   it('generates in the project matched to the pull request repository', async () => {
@@ -584,11 +620,11 @@ describe('review workspace', () => {
     responses.set('getPrWalkthrough', () => new Promise(resolve => { finish = resolve }))
     await vi.advanceTimersByTimeAsync(2500)
     await walkthrough.stop()
-    expect(calls.get('abortAgentWalkthrough')).toEqual([{ walkthroughSessionKey: 'session-1' }])
+    expect(calls.get('abortAgentWalkthrough')).toEqual([{ attemptId: 'attempt-1' }])
     finish(readyWalkthrough)
     await vi.advanceTimersByTimeAsync(2500)
-    expect(walkthrough.walkthrough?.status).toBe('aborted')
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('aborted')
+    expect(walkthrough.walkthrough?.state).toBe('aborted')
+    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('aborted')
     expect(vi.getTimerCount()).toBe(0)
   })
 
@@ -602,7 +638,7 @@ describe('review workspace', () => {
 
     await walkthrough.stop()
 
-    expect(walkthrough.walkthrough?.status).toBe('generating')
+    expect(walkthrough.walkthrough?.state).toBe('generating')
     expect(walkthrough.loadError).toBe('Could not stop walkthrough generation. Try stopping it again.')
   })
 
@@ -619,7 +655,7 @@ describe('review workspace', () => {
     const requestCount = calls.get('getPrWalkthrough')!.length
     finish(readyWalkthrough)
     await vi.advanceTimersByTimeAsync(10000)
-    expect(walkthrough.walkthrough?.status).toBe('generating')
+    expect(walkthrough.walkthrough?.state).toBe('generating')
     expect(calls.get('getPrWalkthrough')).toHaveLength(requestCount)
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -633,7 +669,7 @@ describe('review workspace', () => {
     await workspace.detail!.walkthrough.regenerate()
     expect(workspace.detail!.walkthroughReady).toBe(true)
     expect(workspace.detail!.activeTab).toBe('walkthrough')
-    expect(workspace.detail!.walkthrough.walkthrough?.status).toBe('generating')
+    expect(workspace.detail!.walkthrough.walkthrough?.state).toBe('generating')
   })
 
   it('retires an older head poll when a new head of the same PR is opened', async () => {
@@ -644,13 +680,13 @@ describe('review workspace', () => {
     let finish!: (value: unknown) => void
     responses.set('getPrWalkthrough', () => new Promise(resolve => { finish = resolve }))
     await vi.advanceTimersByTimeAsync(2500)
-    responses.set('getPrWalkthrough', { ...readyWalkthrough, head_sha: 'new-head' })
+    responses.set('getPrWalkthrough', { ...readyWalkthrough, scope: { ...readyWalkthrough.scope, revision: 'new-head' } })
     await workspace.list.onSelectPr({ ...pr, head_sha: 'new-head' })
-    finish({ ...readyWalkthrough, status: 'generating' })
+    finish({ ...readyWalkthrough, state: 'generating' })
     responses.set('getPrWalkthrough', readyWalkthrough)
     await vi.advanceTimersByTimeAsync(5000)
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.head_sha).toBe('new-head')
-    expect(workspace.detail!.walkthrough.walkthrough?.head_sha).toBe('new-head')
+    expect(workspace.list.walkthroughByPr.get(pr.id)?.scope.revision).toBe('new-head')
+    expect(workspace.detail!.walkthrough.walkthrough?.scope.revision).toBe('new-head')
   })
 
   it('does not show a previous pull request ticket after switching reviews', async () => {

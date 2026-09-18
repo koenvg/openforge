@@ -320,4 +320,26 @@ describe('legacy walkthrough conversion', () => {
     expect(await readWalkthroughRecord(registry.backendApi, { prId: 42, snapshot }, () => 4))
       .toMatchObject({ version: 1, state: 'failed', steps: [], error: { code: 'legacy-walkthrough-invalid' } })
   })
+
+  it('converts the former combined walkthrough, review-comment, and ticket-coverage envelope', async () => {
+    const registry = new TestingOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync' })
+    const snapshot = await buildWalkthroughValidationSnapshot(scope, async () => 'head-a', async () => [diff('src/app.ts')])
+    await registry.backendApi.storage.global.set(walkthroughStorageKey(42, 'head-a'), {
+      pr_id: 42,
+      head_sha: 'head-a',
+      walkthrough_session_key: 'old-session',
+      status: 'ready',
+      steps_json: JSON.stringify({
+        steps: [step()],
+        review_comments: [{ filename: 'src/app.ts', line: 1, side: 'RIGHT', body: 'Old finding' }],
+        ticket_coverage: { verdict: 'complete', summary: 'Covered', criteria: [] },
+      }),
+      error_message: null,
+      created_at: 1,
+      updated_at: 2,
+    })
+
+    expect(await readWalkthroughRecord(registry.backendApi, { prId: 42, snapshot }, () => 3))
+      .toMatchObject({ version: 1, state: 'ready', steps: [step()] })
+  })
 })

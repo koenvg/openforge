@@ -1,7 +1,6 @@
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import type { AuthoredPullRequest, PollResult, PullRequestMergeMethod, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from './lib/prReviewRecords'
+import type { AuthoredPullRequest, PollResult, PullRequestMergeMethod, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 import type { Base64FileContentResult, CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, GithubAssetRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
@@ -16,18 +15,6 @@ import {
   readWalkthrough,
   removeWalkthrough,
 } from './lib/walkthroughStore'
-import {
-  readAiReviewComments,
-  removeAiReviewComments,
-  updateAiReviewCommentStatus,
-} from './lib/reviewCommentsStore'
-import {
-  readAiThreads,
-  removeAiThreads,
-  upsertThread,
-  writeAiThreads,
-} from './lib/aiThreadStore'
-import { cleanupReviewSession } from './lib/reviewSessionLifecycle'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
 import {
   EMPTY_JIRA_CONFIG,
@@ -46,6 +33,7 @@ import {
   buildWalkthroughValidationSnapshot,
   submitWalkthroughStep,
   type SubmitWalkthroughStepInput,
+  type WalkthroughRecordV1,
   type WalkthroughSubmissionResult,
 } from './lib/walkthroughRecord'
 import { reviewScopeForPullRequest } from './review/pr/reviewScope'
@@ -285,7 +273,7 @@ export default defineBackendPlugin({
 
     // The walkthrough feature is owned entirely by this plugin. Its cache lives
     // in plugin storage and generation runs in the scope-bound Agent Session.
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, PrWalkthrough | null>('getPrWalkthrough', {
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, WalkthroughRecordV1 | null>('getPrWalkthrough', {
       handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha, {
         scope: async () => {
           const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'getReviewPrs'))
@@ -316,54 +304,7 @@ export default defineBackendPlugin({
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
-      handler: async (request) => {
-        // Clear the walkthrough, its AI review comments, and any Q&A threads so a
-        // regenerate for the same commit starts from a clean slate.
-        await removeWalkthrough(openforge, request.reviewPrId, request.headSha)
-        await removeAiReviewComments(openforge, request.reviewPrId, request.headSha)
-        await removeAiThreads(openforge, request.reviewPrId, request.headSha)
-      },
-    }))
-
-    // AI review comments produced by the combined pass live in local plugin
-    // storage keyed per commit (never pushed to GitHub).
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AgentReviewComment[]>('getPrAiReviewComments', {
-      handler: (request) => readAiReviewComments(openforge, request.reviewPrId, request.headSha),
-    }))
-
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: AgentReviewCommentStatus }, void>('updatePrAiReviewCommentStatus', {
-      handler: (request) => updateAiReviewCommentStatus(openforge, request.reviewPrId, request.headSha, request.commentId, request.status),
-    }))
-
-    // Local, per-commit "Ask the AI author" Q&A threads. Never pushed to GitHub.
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AiThread[]>('getAiThreads', {
-      handler: (request) => readAiThreads(openforge, request.reviewPrId, request.headSha),
-    }))
-
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; thread: AiThread }, void>('saveAiThread', {
-      handler: async (request) => {
-        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
-        await writeAiThreads(openforge, request.reviewPrId, request.headSha, upsertThread(threads, request.thread))
-      },
-    }))
-
-    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; threadId: string }, void>('deleteAiThread', {
-      handler: async (request) => {
-        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
-        await writeAiThreads(openforge, request.reviewPrId, request.headSha, threads.filter(t => t.id !== request.threadId))
-      },
-    }))
-
-    // Called when a PR leaves the review list: drop the persisted review session
-    // so its transcript stops taking up disk. Best-effort; never blocks removal.
-    context.subscriptions.add(openforge.backend.registerMethod<{ prId: number }, void>('deleteReviewSession', {
-      handler: async (request) => {
-        await cleanupReviewSession(openforge, {
-          prId: request.prId,
-          deleteSession: (sessionId) =>
-            invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
-        })
-      },
+      handler: request => removeWalkthrough(openforge, request.reviewPrId, request.headSha),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{
@@ -379,7 +320,7 @@ export default defineBackendPlugin({
       projectId: string
       reviewGuidance: string
       walkthroughGuidance: string
-    }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
+    }, { attemptId: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const scope = reviewScopeForPullRequest({
           repo_owner: request.repoOwner,
@@ -434,7 +375,7 @@ export default defineBackendPlugin({
             scope,
           }),
         })
-        return { walkthrough_session_key: attemptId }
+        return { attemptId }
       },
     }))
 
@@ -518,8 +459,8 @@ export default defineBackendPlugin({
       handler: request => writeJiraKeyOverride(openforge, request.reviewPrId, request.issueKey),
     }))
 
-    context.subscriptions.add(openforge.backend.registerMethod<{ walkthroughSessionKey: string }, void>('abortAgentWalkthrough', {
-      handler: request => walkthroughGeneration.stopAttempt(request.walkthroughSessionKey),
+    context.subscriptions.add(openforge.backend.registerMethod<{ attemptId: string }, void>('abortAgentWalkthrough', {
+      handler: request => walkthroughGeneration.stopAttempt(request.attemptId),
     }))
     context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>('listTaskPullRequests', {
       handler: (request) => invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>(openforge, 'getPullRequests', request),

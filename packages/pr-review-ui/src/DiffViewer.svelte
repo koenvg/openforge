@@ -69,13 +69,14 @@
     onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkThreadSeen?: (threadId: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     pendingReplies?: { commentId: number; body: string }[]
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
   }
   type Props = BaseProps
-  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, pendingComments, onPendingCommentsChange, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, onCommentNow, threads = [], onCreateThread, onReplyToThread, onSetThreadStatus, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
+  let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, onCopyFilePath, footer, includeCommitted = true, includeUncommitted = false, pendingComments, onPendingCommentsChange, onOpenUrl, onOpenImage, onOpenMedia, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, appearance, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, onCommentNow, threads = [], onCreateThread, onReplyToThread, onSetThreadStatus, onMarkThreadSeen, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
@@ -421,7 +422,7 @@
     {/if}
   </div>
 
-  <OrphanedReviewThreads threads={threadPlacement.orphaned} {onReplyToThread} {onSetThreadStatus} {onOpenUrl} />
+  <OrphanedReviewThreads threads={threadPlacement.orphaned} {onReplyToThread} {onSetThreadStatus} {onMarkThreadSeen} {onOpenUrl} />
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
@@ -492,6 +493,7 @@
               {onCreateThread}
               {onReplyToThread}
               {onSetThreadStatus}
+              {onMarkThreadSeen}
               {onReplyToExistingComment}
               {pendingReplies}
               {onAddReplyToReview}

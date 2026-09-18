@@ -1,8 +1,8 @@
 import { onDestroy } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-import { agentReviewComments, selectedReviewPr } from '../../../lib/stores'
+import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import { selectedReviewPr } from '../../../lib/stores'
 import { projectRepoKey, resolveProjectIdsByRepo } from '../../../lib/projectRepoResolution'
 import { walkthroughButtonState } from '../../../lib/walkthroughButtonState'
 import { resolveWalkthroughGuidance } from '../../../lib/walkthroughGuidance'
@@ -11,9 +11,11 @@ import {
   type WalkthroughInvalidatedEvent,
 } from '../../../lib/walkthroughEvents'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
+import { reviewScopeForPullRequest } from '../reviewScope'
+import type { WalkthroughRecordV1 } from '../../../lib/walkthroughRecord'
 
 type Status = {
-  walkthrough: PrWalkthrough | null
+  walkthrough: WalkthroughRecordV1 | null
   isLoading: boolean
   isStarting: boolean
   loadError: string | null
@@ -25,13 +27,12 @@ const keyOf = (pr: ReviewPullRequest) => `${pr.id}:${pr.head_sha}`
 /** One poll owner per PR head, shared by list buttons and the walkthrough model. */
 export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: GithubSyncPrReviewClient) {
   const selectedPr = fromStore(selectedReviewPr)
-  const agentComments = fromStore(agentReviewComments)
   let statuses = $state<Map<string, Status>>(new Map())
-  let byPr = $state<Map<number, PrWalkthrough | null>>(new Map())
+  let byPr = $state<Map<number, WalkthroughRecordV1 | null>>(new Map())
   let projectIdsByRepo = $state<Map<string, string>>(new Map())
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const versions = new Map<string, number>()
-  const requests = new Map<string, Promise<PrWalkthrough | null>>()
+  const requests = new Map<string, Promise<WalkthroughRecordV1 | null>>()
   const latestHeads = new Map<number, string>()
   const latestPullRequests = new Map<number, ReviewPullRequest>()
   let disposed = false
@@ -80,7 +81,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
 
   function schedule(pr: ReviewPullRequest): void {
     const key = keyOf(pr)
-    if (disposed || latestHeads.get(pr.id) !== pr.head_sha || timers.has(key) || status(pr).walkthrough?.status !== 'generating') return
+    if (disposed || latestHeads.get(pr.id) !== pr.head_sha || timers.has(key) || status(pr).walkthrough?.state !== 'generating') return
     timers.set(key, setTimeout(async () => {
       timers.delete(key)
       await refreshStatus(pr)
@@ -88,33 +89,19 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     }, 2500))
   }
 
-  async function reloadAgentComments(pr: ReviewPullRequest): Promise<void> {
-    if (selectedPr.current?.id !== pr.id || selectedPr.current.head_sha !== pr.head_sha) return
-    try {
-      const comments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
-      if (!disposed && selectedPr.current?.id === pr.id && selectedPr.current.head_sha === pr.head_sha) {
-        agentComments.current = comments
-      }
-    } catch (error) {
-      console.error('Failed to reload AI review comments after generation:', error)
-    }
-  }
-
-  function refreshStatus(pr: ReviewPullRequest): Promise<PrWalkthrough | null> {
+  function refreshStatus(pr: ReviewPullRequest): Promise<WalkthroughRecordV1 | null> {
     if (disposed) return Promise.resolve(null)
     activate(pr)
     const key = keyOf(pr)
     const existing = requests.get(key)
     if (existing) return existing
     const version = versions.get(key) ?? 0
-    const wasGenerating = status(pr).walkthrough?.status === 'generating'
     update(pr, { isLoading: true, loadError: null })
     const request = (async () => {
       try {
         const walkthrough = await githubSync.getPrWalkthrough({ reviewPrId: pr.id, headSha: pr.head_sha })
         if (!current(pr, version)) return null
         update(pr, { walkthrough, revision: status(pr).revision + 1 })
-        if (wasGenerating && walkthrough?.status === 'ready') await reloadAgentComments(pr)
         return walkthrough
       } catch (error) {
         if (current(pr, version)) {
@@ -151,23 +138,24 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     try {
       const guidance = await resolveWalkthroughGuidance(api, projectId)
       if (!current(pr, version)) return
-      const { walkthrough_session_key } = await githubSync.startAgentWalkthrough({
+      const { attemptId } = await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner, repoName: pr.repo_name, prNumber: pr.number,
         headRef: pr.head_ref, baseRef: pr.base_ref, prTitle: pr.title, prBody: pr.body,
         headSha: pr.head_sha, reviewPrId: pr.id, projectId, ...guidance,
       })
       if (!current(pr, version)) return
-      if (status(pr).walkthrough?.status !== 'generating') {
+      if (status(pr).walkthrough?.state !== 'generating') {
         const now = Math.floor(Date.now() / 1000)
         update(pr, { walkthrough: {
-          pr_id: pr.id,
-          head_sha: pr.head_sha,
-          walkthrough_session_key,
-          status: 'generating',
-          steps_json: null,
-          error_message: null,
-          created_at: now,
-          updated_at: now,
+          version: 1,
+          prId: pr.id,
+          scope: reviewScopeForPullRequest(pr),
+          attemptId,
+          state: 'generating',
+          steps: [],
+          error: null,
+          createdAt: now,
+          updatedAt: now,
         } })
       }
       schedule(pr)
@@ -184,9 +172,9 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
   async function stop(pr: ReviewPullRequest): Promise<void> {
     const walkthrough = status(pr).walkthrough
     const version = cancel(pr)
-    if (walkthrough?.walkthrough_session_key) {
+    if (walkthrough?.attemptId) {
       try {
-        await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: walkthrough.walkthrough_session_key })
+        await githubSync.abortAgentWalkthrough({ attemptId: walkthrough.attemptId })
       } catch (error) {
         if (current(pr, version)) {
           update(pr, {
@@ -204,9 +192,9 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
       update(pr, {
         walkthrough: {
           ...walkthrough,
-          status: 'aborted',
-          error_message: 'Walkthrough generation was stopped.',
-          updated_at: Math.floor(Date.now() / 1000),
+          state: 'aborted',
+          error: { code: 'generation-aborted', message: 'Walkthrough generation was stopped.' },
+          updatedAt: Math.floor(Date.now() / 1000),
         },
         isLoading: false,
         isStarting: false,
@@ -245,7 +233,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     get selectedAvailable() {
       const pr = selectedPr.current
       const walkthrough = pr ? status(pr).walkthrough : null
-      return !!pr && (walkthroughButtonState(walkthrough, pr.head_sha) === 'ready' || !!walkthrough?.steps_json)
+      return !!pr && (walkthroughButtonState(walkthrough, pr.head_sha) === 'ready' || (walkthrough?.steps.length ?? 0) > 0)
     },
     canGenerate,
     refreshStatus,
