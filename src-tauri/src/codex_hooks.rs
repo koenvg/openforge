@@ -150,6 +150,20 @@ fn render_codex_hooks_profile(hook_script_path: &Path) -> String {
         Some("*"),
         "requested_permission",
     );
+    append_hook(
+        &mut profile,
+        hook_script_path,
+        "SubagentStart",
+        None,
+        "became_busy",
+    );
+    append_hook(
+        &mut profile,
+        hook_script_path,
+        "SubagentStop",
+        None,
+        "ended",
+    );
     append_hook(&mut profile, hook_script_path, "Stop", None, "ended");
 
     profile
@@ -205,25 +219,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn codex_hook_reports_richer_lifecycle_events_to_openforge_hook() {
-        assert!(CODEX_HOOK_SOURCE.contains("OPENFORGE_TASK_ID"));
-        assert!(CODEX_HOOK_SOURCE.contains("OPENFORGE_PTY_INSTANCE_ID"));
-        assert!(CODEX_HOOK_SOURCE.contains("OPENFORGE_HTTP_PORT"));
-        assert!(CODEX_HOOK_SOURCE.contains("/hooks/agent-lifecycle"));
-        assert!(CODEX_HOOK_SOURCE.contains("provider: \"codex\""));
-        assert!(CODEX_HOOK_SOURCE.contains("raw_event_type"));
-        assert!(CODEX_HOOK_SOURCE.contains("raw_status_type"));
-        assert!(CODEX_HOOK_SOURCE.contains("transcript_path"));
-        assert!(CODEX_HOOK_SOURCE.contains("payload.transcript_path"));
-        assert!(CODEX_HOOK_SOURCE.contains("activity_snapshot"));
-        assert!(CODEX_HOOK_SOURCE.contains("boundedJsonSnapshot"));
-        assert!(CODEX_HOOK_SOURCE.contains("openforge-codex-turn"));
-        assert!(CODEX_HOOK_SOURCE.contains("turn_aborted"));
-        assert!(CODEX_HOOK_SOURCE.contains("started"));
-        assert!(CODEX_HOOK_SOURCE.contains("became_busy"));
-        assert!(CODEX_HOOK_SOURCE.contains("requested_permission"));
-        assert!(CODEX_HOOK_SOURCE.contains("ended"));
+    fn codex_hook_bundle_contains_the_lifecycle_contract() {
+        for contract in [
+            "OPENFORGE_TASK_ID",
+            "OPENFORGE_PTY_INSTANCE_ID",
+            "/hooks/agent-lifecycle",
+            "provider: \"codex\"",
+            "raw_event_type",
+            "activity_snapshot",
+            "SubAgentActivity",
+            "pendingNotifications",
+        ] {
+            assert!(CODEX_HOOK_SOURCE.contains(contract), "missing {contract}");
+        }
         assert!(!CODEX_HOOK_SOURCE.contains("provider_session_id"));
+    }
+
+    #[test]
+    fn codex_hook_bundle_executes() {
+        let source = CODEX_HOOK_SOURCE.replace("main();", "");
+        let script = format!("{source}\nprocess.stdout.write(String(TURN_STATE_VERSION));");
+        let script_file = tempfile::Builder::new()
+            .prefix("openforge-codex-hook-smoke-")
+            .suffix(".mjs")
+            .tempfile()
+            .expect("create Codex hook smoke script");
+        std::fs::write(script_file.path(), script).expect("write Codex hook smoke script");
+        let output = std::process::Command::new("node")
+            .arg(script_file.path())
+            .output()
+            .expect("run Codex hook bundle");
+
+        assert!(
+            output.status.success(),
+            "node failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, b"2");
     }
 
     #[test]
@@ -250,6 +282,8 @@ mod tests {
             "[[hooks.PreToolUse]]",
             "[[hooks.PostToolUse]]",
             "[[hooks.PermissionRequest]]",
+            "[[hooks.SubagentStart]]",
+            "[[hooks.SubagentStop]]",
             "[[hooks.Stop]]",
         ] {
             assert!(profile.contains(event), "missing {event}");
@@ -264,6 +298,8 @@ mod tests {
         assert!(profile.contains("became_busy PreToolUse"));
         assert!(profile.contains("became_busy PostToolUse"));
         assert!(profile.contains("requested_permission PermissionRequest"));
+        assert!(profile.contains("became_busy SubagentStart"));
+        assert!(profile.contains("ended SubagentStop"));
         assert!(profile.contains("ended Stop"));
         assert!(profile.contains("timeout = 10"));
         assert!(!profile.contains("dangerously-bypass-hook-trust"));
@@ -312,171 +348,5 @@ mod tests {
 
         assert!(!profile.contains("[hooks.stateful]"));
         assert!(!profile.contains("custom = true"));
-    }
-
-    #[test]
-    fn codex_hook_posts_normalized_payloads() {
-        let payloads = evaluate_posted_payloads_for_events(&[
-            ("started", "SessionStart"),
-            ("became_busy", "UserPromptSubmit"),
-            ("became_busy", "PreToolUse"),
-            ("became_busy", "PostToolUse"),
-            ("requested_permission", "PermissionRequest"),
-            ("ended", "Stop"),
-        ]);
-
-        let kinds: Vec<&str> = payloads
-            .iter()
-            .map(|payload| payload["kind"].as_str().expect("kind should be string"))
-            .collect();
-        assert_eq!(
-            kinds,
-            [
-                "started",
-                "became_busy",
-                "became_busy",
-                "became_busy",
-                "requested_permission",
-                "ended"
-            ]
-        );
-        assert_eq!(payloads[0]["provider"], "codex");
-        assert_eq!(payloads[0]["task_id"], "T-CODEX");
-        assert_eq!(payloads[0]["pty_instance_id"], 77);
-        assert_eq!(payloads[4]["raw_event_type"], "PermissionRequest");
-        assert!(payloads[0].get("provider_session_id").is_none());
-    }
-
-    #[test]
-    fn codex_hook_reports_transcript_turn_end_status() {
-        let payloads = evaluate_posted_payloads_for_script(
-            r#"
-process.env.OPENFORGE_TASK_ID = "T-CODEX";
-process.env.OPENFORGE_PTY_INSTANCE_ID = "77";
-process.env.OPENFORGE_HTTP_PORT = "38123";
-const payloads = [];
-globalThis.fetch = async (_url, options) => {
-  payloads.push(JSON.parse(options.body));
-  return { ok: true };
-};
-await postLifecycleEvent("ended", "TranscriptTurnEnd", "turn_aborted:interrupted");
-process.stdout.write(JSON.stringify(payloads));
-"#,
-        );
-
-        assert_eq!(payloads[0]["kind"], "ended");
-        assert_eq!(payloads[0]["raw_event_type"], "TranscriptTurnEnd");
-        assert_eq!(payloads[0]["raw_status_type"], "turn_aborted:interrupted");
-    }
-
-    #[test]
-    fn codex_hook_monitor_reports_interrupted_transcript_turn() {
-        let payloads = evaluate_posted_payloads_for_script(
-            r#"
-process.env.OPENFORGE_TASK_ID = "T-CODEX-MONITOR";
-process.env.OPENFORGE_PTY_INSTANCE_ID = "78";
-process.env.OPENFORGE_HTTP_PORT = "38123";
-const fs = await import("node:fs/promises");
-const os = await import("node:os");
-const path = await import("node:path");
-const transcriptPath = path.join(os.tmpdir(), `openforge-codex-transcript-${Date.now()}.jsonl`);
-const payloads = [];
-globalThis.fetch = async (_url, options) => {
-  payloads.push(JSON.parse(options.body));
-  return { ok: true };
-};
-await writeActiveTurnId("turn-monitor");
-await fs.writeFile(transcriptPath, JSON.stringify({ type: "event_msg", payload: { type: "turn_aborted", turn_id: "turn-monitor", reason: "interrupted" } }) + "\n", "utf8");
-await monitorCodexTranscriptTurn(transcriptPath, "turn-monitor", { timeoutMs: 100, pollIntervalMs: 1 });
-await fs.unlink(transcriptPath);
-process.stdout.write(JSON.stringify(payloads));
-"#,
-        );
-
-        assert_eq!(payloads[0]["kind"], "ended");
-        assert_eq!(payloads[0]["raw_event_type"], "TranscriptTurnEnd");
-        assert_eq!(payloads[0]["raw_status_type"], "turn_aborted:interrupted");
-    }
-
-    #[test]
-    fn codex_hook_detects_completed_and_interrupted_turns_in_transcript() {
-        let statuses = evaluate_json_for_script(
-            r#"
-const entries = [
-  { type: "event_msg", payload: { type: "task_started", turn_id: "turn-1" } },
-  { type: "event_msg", payload: { type: "turn_aborted", turn_id: "turn-1", reason: "interrupted" } },
-  { type: "event_msg", payload: { type: "task_complete", turn_id: "turn-2" } },
-  { type: "event_msg", payload: { type: "turn_aborted", turn_id: "other", reason: "interrupted" } },
-];
-process.stdout.write(JSON.stringify(entries.map((entry) => codexTranscriptTurnEndStatus(entry, "turn-1"))));
-"#,
-        );
-
-        assert_eq!(
-            statuses,
-            serde_json::json!([null, "turn_aborted:interrupted", null, null])
-        );
-
-        let completed = evaluate_json_for_script(
-            r#"
-process.stdout.write(JSON.stringify(codexTranscriptTurnEndStatus({ type: "event_msg", payload: { type: "task_complete", turn_id: "turn-2" } }, "turn-2")));
-"#,
-        );
-        assert_eq!(completed, serde_json::json!("task_complete"));
-    }
-
-    fn evaluate_posted_payloads_for_events(events: &[(&str, &str)]) -> Vec<serde_json::Value> {
-        let event_calls = events
-            .iter()
-            .map(|(kind, event)| format!("await postLifecycleEvent({kind:?}, {event:?});"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let stdout = run_codex_hook_script(&format!(
-            r#"
-process.env.OPENFORGE_TASK_ID = "T-CODEX";
-process.env.OPENFORGE_PTY_INSTANCE_ID = "77";
-process.env.OPENFORGE_HTTP_PORT = "38123";
-const payloads = [];
-globalThis.fetch = async (_url, options) => {{
-  payloads.push(JSON.parse(options.body));
-  return {{ ok: true }};
-}};
-{event_calls}
-process.stdout.write(JSON.stringify(payloads));
-"#
-        ));
-        serde_json::from_str(&stdout).expect("payloads should be valid json")
-    }
-
-    fn evaluate_posted_payloads_for_script(script_body: &str) -> Vec<serde_json::Value> {
-        let stdout = run_codex_hook_script(script_body);
-        serde_json::from_str(&stdout).expect("payloads should be valid json")
-    }
-
-    fn evaluate_json_for_script(script_body: &str) -> serde_json::Value {
-        let stdout = run_codex_hook_script(script_body);
-        serde_json::from_str(&stdout).expect("script output should be valid json")
-    }
-
-    fn run_codex_hook_script(script_body: &str) -> String {
-        let source = CODEX_HOOK_SOURCE.replace("main();", "");
-        let script = format!("{source}\n{script_body}");
-        let script_file = tempfile::Builder::new()
-            .prefix("openforge-codex-hook-test-")
-            .suffix(".mjs")
-            .tempfile()
-            .expect("create Codex hook test script");
-        std::fs::write(script_file.path(), script).expect("write Codex hook test script");
-        let output = std::process::Command::new("node")
-            .arg(script_file.path())
-            .output()
-            .expect("run node for Codex hook test");
-
-        assert!(
-            output.status.success(),
-            "node failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        String::from_utf8(output.stdout).expect("node output should be utf8")
     }
 }

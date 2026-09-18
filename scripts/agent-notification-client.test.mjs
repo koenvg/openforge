@@ -151,6 +151,15 @@ describe("provider lifecycle transport", () => {
     await expect(send({ provider: "pi", kind: "ended", task_id: "T-1", pty_instance_id: 42 }, "unused")).rejects.toThrow("notification acceptance failed");
     expect(received).toHaveLength(1);
   });
+  it("reuses a caller-provided ID when a durable sender replays later", async () => {
+    const { send, received } = await fixture([503, 503, 503, 503, 202]);
+    const payload = { provider: "codex", kind: "ended", task_id: "T-1", pty_instance_id: 42 };
+    const notificationId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    await expect(send(payload, "unused", undefined, notificationId)).rejects.toThrow("notification acceptance failed");
+    await send(payload, "unused", undefined, notificationId);
+    expect(received).toHaveLength(5);
+    expect(received.every(request => request.body.id === notificationId)).toBe(true);
+  });
   it("reports the legacy event from the generated argument order without touching stdout", async () => {
     const { received, stdout } = await runShellHook("grok", JSON.stringify({ session_id: "grok-stdin-session" }));
     expect(received).toHaveLength(1);
