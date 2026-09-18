@@ -9,6 +9,7 @@ import type {
   SessionScope,
   TaskChangeEvent,
   PluginStorage,
+  PluginCommandInvocationContext,
 } from '../types.js'
 import { TestingBackendServicesFake } from './backendServicesFake.js'
 import { TestingCommonApiFake } from './commonApiFake.js'
@@ -138,6 +139,14 @@ export class TestingOpenForgeRegistryFake {
 
   completeScopedAgentSession(scope: SessionScope, succeeded = true): void {
     this.commonApi.completeScopedAgentSession(scope, succeeded)
+  }
+
+  invokeAgentCommand<TOutput>(
+    qualifiedId: string,
+    payload: unknown,
+    context: PluginCommandInvocationContext,
+  ): Promise<TOutput> {
+    return this.commonApi.invokeAgentCommand<TOutput>(qualifiedId, payload, context)
   }
 
   setBrowserSurfaceState(taskId: string, id: string, patch: Partial<TaskBrowserSurfaceState>): void {

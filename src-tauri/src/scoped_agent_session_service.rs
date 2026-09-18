@@ -56,6 +56,7 @@ pub(crate) struct StartScopedAgentSession {
 pub(crate) struct ScopedLaunchRequest {
     pub session_id: String,
     pub owner_plugin_id: String,
+    pub project_id: String,
     pub scope: OwnedSessionScope,
     pub tool_policy: String,
     pub terminal_key: String,
@@ -660,6 +661,7 @@ impl ScopedAgentSessionService {
                 .launch(ScopedLaunchRequest {
                     session_id: row.id.clone(),
                     owner_plugin_id: row.owner_plugin_id.clone(),
+                    project_id: row.project_id.clone(),
                     scope: OwnedSessionScope {
                         namespace: row.namespace.clone(),
                         target_key: row.target_key.clone(),

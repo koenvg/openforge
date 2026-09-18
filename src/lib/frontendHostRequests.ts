@@ -61,12 +61,24 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function invocationContext(value: unknown, projectId: string): value is PluginCommandInvocationContext {
+function invocationContext(value: unknown, projectId: string, pluginId: string): value is PluginCommandInvocationContext {
   if (typeof value !== 'object' || value === null) return false
   const context = value as Partial<PluginCommandInvocationContext>
-  return (context.taskId === null || nonEmptyString(context.taskId))
+  if (!((context.taskId === null || nonEmptyString(context.taskId))
     && context.projectId === projectId
-    && context.source === 'agent-cli'
+    && context.source === 'agent-cli')) return false
+  if (context.scopedSession === undefined) return true
+  const scoped = context.scopedSession
+  return typeof scoped === 'object'
+    && scoped !== null
+    && nonEmptyString(scoped.sessionId)
+    && scoped.ownerPluginId === pluginId
+    && scoped.projectId === projectId
+    && typeof scoped.scope === 'object'
+    && scoped.scope !== null
+    && nonEmptyString(scoped.scope.namespace)
+    && nonEmptyString(scoped.scope.targetKey)
+    && nonEmptyString(scoped.scope.revision)
 }
 
 const WORKTREE_SOURCES = new Set<WorktreeSource>(['newBranchFromMain', 'existingBranch', 'disabled'])
@@ -109,7 +121,7 @@ function parsePluginCommandRequest(
   }
   if (request.operation === 'invoke'
     && nonEmptyString(request.commandId)
-    && invocationContext(request.context, request.projectId)) {
+    && invocationContext(request.context, request.projectId, request.pluginId)) {
     return {
       operation: 'invoke',
       correlationId,

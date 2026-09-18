@@ -4,11 +4,12 @@ use crate::{
     db,
     plugin_command_broker::{
         PluginCommandBroker, PluginCommandDiscoveryContext, PluginCommandDiscoveryError,
+        ScopedPluginCommandInvocation,
     },
     plugin_platform::PluginPlatformError,
 };
 use axum::{
-    extract::{Json, State},
+    extract::{Extension, Json, State},
     http::StatusCode,
     routing::post,
     Router,
@@ -73,7 +74,7 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InvokePluginCommandRequest {
     pub command_id: String,
     pub task_id: Option<String>,
@@ -147,7 +148,8 @@ fn map_plugin_command_error(error: PluginCommandDiscoveryError) -> (StatusCode, 
         | PluginCommandDiscoveryError::ProjectNotFound { .. }
         | PluginCommandDiscoveryError::PluginNotInstalled { .. }
         | PluginCommandDiscoveryError::CommandNotFound { .. } => StatusCode::NOT_FOUND,
-        PluginCommandDiscoveryError::PluginDisabled { .. } => StatusCode::FORBIDDEN,
+        PluginCommandDiscoveryError::PluginDisabled { .. }
+        | PluginCommandDiscoveryError::ScopedInvocationForbidden { .. } => StatusCode::FORBIDDEN,
         PluginCommandDiscoveryError::FrontendUnavailable { .. }
         | PluginCommandDiscoveryError::Runtime(_) => StatusCode::SERVICE_UNAVAILABLE,
         PluginCommandDiscoveryError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -195,6 +197,7 @@ async fn describe_plugin_command_handler(
 
 async fn invoke_plugin_command_handler(
     State(state): State<AppState>,
+    principal: Option<Extension<crate::agent_generation_identity::ScopedAgentPrincipal>>,
     Json(request): Json<InvokePluginCommandRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let platform = http_plugin_platform(&state, false)?;
@@ -203,12 +206,51 @@ async fn invoke_plugin_command_handler(
         &platform,
         &state.frontend_host_requests,
     );
-    let context = PluginCommandDiscoveryContext {
-        task_id: request.task_id,
-        project_id: request.project_id,
-    };
+    if let Some(Extension(principal)) = principal {
+        if principal.tool_policy != crate::session_tool_policy::REVIEW_READ_ONLY {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "scoped agent policy forbids Plugin Commands".to_string(),
+            ));
+        }
+        if request.task_id.is_some() || request.project_id.is_some() {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "scoped Plugin Command targeting is host-owned".to_string(),
+            ));
+        }
+        if request.command_id != "com.openforge.github-sync.submit-walkthrough-step" {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "scoped agent command forbidden".to_string(),
+            ));
+        }
+        return broker
+            .invoke_scoped(
+                &ScopedPluginCommandInvocation {
+                    session_id: principal.session_id,
+                    owner_plugin_id: principal.owner_plugin_id,
+                    project_id: principal.project_id,
+                    namespace: principal.namespace,
+                    target_key: principal.target_key,
+                    revision: principal.revision,
+                },
+                &request.command_id,
+                request.input,
+            )
+            .await
+            .map(Json)
+            .map_err(map_plugin_command_error);
+    }
     broker
-        .invoke(&context, &request.command_id, request.input)
+        .invoke(
+            &PluginCommandDiscoveryContext {
+                task_id: request.task_id,
+                project_id: request.project_id,
+            },
+            &request.command_id,
+            request.input,
+        )
         .await
         .map(Json)
         .map_err(map_plugin_command_error)

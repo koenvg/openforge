@@ -299,6 +299,14 @@ export class IsolatedPluginHostRuntime {
           params: { pluginId: worker.pluginId, event, payload: request.params.payload },
         })))
       const failed = responses.find(response => response.error)
+      await this.hostCallbacks({
+        method: 'openforge.plugins.publishGlobalEvent',
+        params: {
+          event,
+          payload: request.params.payload ?? null,
+          sourcePluginId,
+        },
+      }, options)
       if (failed?.error) throw new Error(failed.error.message)
       return undefined
     }

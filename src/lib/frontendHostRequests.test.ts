@@ -95,6 +95,58 @@ describe('frontend host renderer requests', () => {
     })
   })
 
+  it('accepts an atomic host-owned scoped context and rejects plugin or Project mismatches', async () => {
+    const invoke = vi.fn(async () => ({ accepted: true }))
+    const acknowledge = vi.fn(async () => true)
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: { list: vi.fn(async () => []), invoke },
+      composeTask: vi.fn(async () => null),
+      acknowledge,
+    })
+    const scoped = {
+      ...invokeRequest('scoped', 'com.openforge.github-sync'),
+      context: {
+        taskId: null,
+        projectId: 'P-1',
+        source: 'agent-cli' as const,
+        scopedSession: {
+          sessionId: 'sas-1',
+          ownerPluginId: 'com.openforge.github-sync',
+          projectId: 'P-1',
+          scope: { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' },
+        },
+      },
+    }
+    await handler.handle(scoped)
+    await handler.handle({
+      ...scoped,
+      correlationId: 'wrong-plugin',
+      context: { ...scoped.context, scopedSession: { ...scoped.context.scopedSession, ownerPluginId: 'com.example.other' } },
+    })
+    await handler.handle({
+      ...scoped,
+      correlationId: 'wrong-project',
+      context: { ...scoped.context, scopedSession: { ...scoped.context.scopedSession, projectId: 'P-2' } },
+    })
+
+    expect(invoke).toHaveBeenCalledOnce()
+    expect(invoke).toHaveBeenCalledWith(
+      'com.openforge.github-sync',
+      'P-1',
+      'com.openforge.github-sync.open',
+      scoped.input,
+      scoped.context,
+    )
+    expect(acknowledge).toHaveBeenNthCalledWith(2, {
+      correlationId: 'wrong-plugin',
+      outcome: { status: 'error', error: 'invalid frontend host request' },
+    })
+    expect(acknowledge).toHaveBeenNthCalledWith(3, {
+      correlationId: 'wrong-project',
+      outcome: { status: 'error', error: 'invalid frontend host request' },
+    })
+  })
+
   it('routes correlated task compose requests to the host dialog', async () => {
     const result = {
       task: {

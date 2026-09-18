@@ -92,14 +92,7 @@ pub(crate) fn authorize_review_read_only(tool_name: &str, tool_input: &Value) ->
 }
 
 fn authorize_shell_command(command: &str) -> ToolDecision {
-    if command.is_empty()
-        || command.chars().any(|character| {
-            matches!(
-                character,
-                '\n' | '\r' | ';' | '|' | '&' | '>' | '<' | '`' | '$'
-            )
-        })
-    {
+    if command.is_empty() || contains_active_shell_syntax(command) {
         return ToolDecision::Deny("Shell operators and expansion are forbidden".to_string());
     }
     let tokens = match shell_words::split(command) {
@@ -111,6 +104,54 @@ fn authorize_shell_command(command: &str) -> ToolDecision {
         "openforge" => authorize_openforge(&tokens[1..]),
         _ => ToolDecision::Deny("Command is outside the read-only allowlist".to_string()),
     }
+}
+
+fn contains_active_shell_syntax(command: &str) -> bool {
+    #[derive(Clone, Copy)]
+    enum Quote {
+        None,
+        Single,
+        Double,
+    }
+    let mut quote = Quote::None;
+    let mut escaped = false;
+    for character in command.chars() {
+        if matches!(character, '\n' | '\r') {
+            return true;
+        }
+        match quote {
+            Quote::Single => {
+                if character == '\'' {
+                    quote = Quote::None;
+                }
+            }
+            Quote::Double => {
+                if escaped {
+                    escaped = false;
+                } else if character == '\\' {
+                    escaped = true;
+                } else if character == '"' {
+                    quote = Quote::None;
+                } else if matches!(character, '$' | '`') {
+                    return true;
+                }
+            }
+            Quote::None => {
+                if escaped {
+                    escaped = false;
+                } else if character == '\\' {
+                    escaped = true;
+                } else if character == '\'' {
+                    quote = Quote::Single;
+                } else if character == '"' {
+                    quote = Quote::Double;
+                } else if matches!(character, ';' | '|' | '&' | '>' | '<' | '`' | '$') {
+                    return true;
+                }
+            }
+        }
+    }
+    escaped || !matches!(quote, Quote::None)
 }
 
 fn authorize_git(arguments: &[String]) -> ToolDecision {
@@ -150,10 +191,22 @@ fn authorize_openforge(arguments: &[String]) -> ToolDecision {
             "list" | "create" | "reply" | "status"
         )
     {
-        ToolDecision::Allow
-    } else {
-        ToolDecision::Deny("Only Review Thread commands are allowed".to_string())
+        return ToolDecision::Allow;
     }
+    if arguments.len() == 7
+        && arguments[0] == "plugin"
+        && arguments[1] == "command"
+        && arguments[2] == "invoke"
+        && arguments[3] == "--command-id"
+        && arguments[4] == "com.openforge.github-sync.submit-walkthrough-step"
+        && arguments[5] == "--input"
+        && serde_json::from_str::<Value>(&arguments[6]).is_ok()
+    {
+        return ToolDecision::Allow;
+    }
+    ToolDecision::Deny(
+        "Only Review Thread commands and walkthrough step submission are allowed".to_string(),
+    )
 }
 
 pub(crate) fn generate_review_read_only_settings(
@@ -312,6 +365,30 @@ mod tests {
                 ),
                 "{command}"
             );
+        }
+    }
+
+    #[test]
+    fn review_read_only_allows_only_the_walkthrough_plugin_command() {
+        let accepted = json!({
+            "command": "openforge plugin command invoke --command-id com.openforge.github-sync.submit-walkthrough-step --input '{\"attemptId\":\"attempt-1\",\"summary\":\"cost $5; compare a < b & c > d\"}'"
+        });
+        assert_eq!(
+            authorize_review_read_only("Bash", &accepted),
+            ToolDecision::Allow
+        );
+
+        for command in [
+            "openforge plugin command invoke --command-id com.openforge.github-sync.other --input '{}'",
+            "openforge plugin command invoke --command-id com.example.submit-walkthrough-step --input '{}'",
+            "openforge plugin command invoke --command-id com.openforge.github-sync.submit-walkthrough-step --project-id P-2 --input '{}'",
+            "openforge plugin command invoke --input '{}' --command-id com.openforge.github-sync.submit-walkthrough-step",
+            "openforge plugin command invoke --command-id com.openforge.github-sync.submit-walkthrough-step; touch /tmp/escape",
+        ] {
+            assert!(matches!(
+                authorize_review_read_only("Bash", &json!({ "command": command })),
+                ToolDecision::Deny(_)
+            ));
         }
     }
 

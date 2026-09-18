@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { PrFileDiff, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewWorkspace } from './reviewWorkspace.svelte'
+import { WALKTHROUGH_INVALIDATED_EVENT } from '../../lib/walkthroughEvents'
 import Harness from './__fixtures__/ReviewWorkspaceHarness.svelte'
 
 const pr: ReviewPullRequest = {
@@ -483,6 +484,21 @@ describe('review workspace', () => {
     expect(walkthrough.walkthrough?.status).toBe('ready')
     expect(workspace.detail!.walkthroughReady).toBe(true)
     expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('ready')
+  })
+
+  it('re-reads an active walkthrough immediately after a submitted step is persisted', async () => {
+    const { workspace, registry, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    const readsBefore = calls.get('getPrWalkthrough')!.length
+    responses.set('getPrWalkthrough', readyWalkthrough)
+
+    await registry.frontendApi.events.emitGlobal(WALKTHROUGH_INVALIDATED_EVENT, {
+      prId: pr.id,
+      scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: pr.head_sha },
+    })
+
+    await waitFor(() => expect(calls.get('getPrWalkthrough')).toHaveLength(readsBefore + 1))
+    await waitFor(() => expect(workspace.detail!.walkthrough.walkthrough?.status).toBe('ready'))
   })
 
   it('generates in the project matched to the pull request repository', async () => {

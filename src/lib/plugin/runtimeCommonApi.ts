@@ -37,6 +37,12 @@ export type RuntimeBackendCommonApi = RuntimeCommonApi & Pick<BackendOpenForgeAP
 const globalCommands = new Map<string, RuntimeCommandContribution>()
 const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
 
+export function publishPluginGlobalEvent(qualifiedEvent: string, payload: unknown): void {
+  for (const handler of Array.from(globalEventHandlers.get(qualifiedEvent) ?? [])) {
+    handler(payload)
+  }
+}
+
 function isJsonValue(value: unknown): value is JsonValue {
   if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return true
   if (Array.isArray(value)) return value.every(isJsonValue)

@@ -49,7 +49,11 @@ export function normalizeAgentMetadata(metadata: unknown): AgentCommandMetadata 
   }
 }
 
-export function requireAgentInvocationContext(value: unknown, projectId: string | null | undefined): PluginCommandInvocationContext {
+export function requireAgentInvocationContext(
+  value: unknown,
+  projectId: string | null | undefined,
+  pluginId?: string,
+): PluginCommandInvocationContext {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new RuntimeValidationError('commands', 'agent invocation context must be an object')
   }
@@ -66,10 +70,26 @@ export function requireAgentInvocationContext(value: unknown, projectId: string 
   if (projectId !== context.projectId) {
     throw new RuntimeValidationError('commands', `agent invocation context Project ${context.projectId} does not match activated Project ${projectId ?? 'none'}`)
   }
+  if (context.scopedSession !== undefined) {
+    const scoped = context.scopedSession
+    if (!scoped || typeof scoped !== 'object'
+      || !isNonEmptyString(scoped.sessionId)
+      || !isNonEmptyString(scoped.ownerPluginId)
+      || scoped.ownerPluginId !== pluginId
+      || scoped.projectId !== context.projectId
+      || !scoped.scope
+      || typeof scoped.scope !== 'object'
+      || !isNonEmptyString(scoped.scope.namespace)
+      || !isNonEmptyString(scoped.scope.targetKey)
+      || !isNonEmptyString(scoped.scope.revision)) {
+      throw new RuntimeValidationError('commands', 'agent scoped invocation context does not match the activated Plugin and Project')
+    }
+  }
   return {
     taskId: context.taskId,
     projectId: context.projectId,
     source: context.source,
+    ...(context.scopedSession === undefined ? {} : { scopedSession: context.scopedSession }),
   }
 }
 

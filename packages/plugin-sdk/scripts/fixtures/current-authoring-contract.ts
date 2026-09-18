@@ -62,6 +62,12 @@ const invocation: PluginCommandInvocationContext = {
   taskId: 'KVG-3423',
   projectId: 'P-4',
   source: 'agent-cli',
+  scopedSession: {
+    sessionId: 'sas-1',
+    ownerPluginId: 'com.example.sync',
+    projectId: 'P-4',
+    scope: { namespace: 'github-pr', targetKey: 'acme/web#42', revision: 'head-a' },
+  },
 }
 
 const testingCommand = null as unknown as TestingCommandContribution

@@ -101,6 +101,7 @@ impl PluginHost {
             "openforge.notifications.notify" => {
                 self.emit_host_app_event("openforge.notification", params)
             }
+            "openforge.plugins.publishGlobalEvent" => self.publish_plugin_global_event(params),
             "openforge.attention.listProjects" => self.list_project_attention_for_host(),
             "openforge.system.openUrl" => self.emit_host_app_event("openforge.open-url", params),
             "openforge.system.writeClipboardText" => {

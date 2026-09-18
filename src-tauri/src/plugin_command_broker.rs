@@ -59,6 +59,35 @@ pub struct PluginCommandInvocationContext {
     pub task_id: Option<String>,
     pub project_id: String,
     pub source: PluginCommandInvocationSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scoped_session: Option<PluginCommandScopedSessionContext>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCommandSessionScope {
+    pub namespace: String,
+    pub target_key: String,
+    pub revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCommandScopedSessionContext {
+    pub session_id: String,
+    pub owner_plugin_id: String,
+    pub project_id: String,
+    pub scope: PluginCommandSessionScope,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedPluginCommandInvocation {
+    pub session_id: String,
+    pub owner_plugin_id: String,
+    pub project_id: String,
+    pub namespace: String,
+    pub target_key: String,
+    pub revision: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +127,9 @@ pub enum PluginCommandDiscoveryError {
     CommandNotFound {
         command_id: String,
     },
+    ScopedInvocationForbidden {
+        command_id: String,
+    },
     Database(String),
     Runtime(String),
 }
@@ -123,6 +155,10 @@ impl fmt::Display for PluginCommandDiscoveryError {
             Self::CommandNotFound { command_id } => {
                 write!(formatter, "Unknown agent-facing Plugin Command: {command_id}")
             }
+            Self::ScopedInvocationForbidden { command_id } => write!(
+                formatter,
+                "Scoped Agent Session cannot invoke Plugin Command {command_id}"
+            ),
             Self::Database(message) | Self::Runtime(message) => formatter.write_str(message),
         }
     }
@@ -372,21 +408,78 @@ where
             task_id: resolved.task_id,
             project_id: resolved.project_id.clone(),
             source: PluginCommandInvocationSource::AgentCli,
+            scoped_session: None,
         };
+        self.dispatch(descriptor, resolved.project_id, input, invocation_context)
+            .await
+    }
+
+    pub async fn invoke_scoped(
+        &self,
+        scoped: &ScopedPluginCommandInvocation,
+        command_id: &str,
+        input: Option<Value>,
+    ) -> Result<Value, PluginCommandDiscoveryError> {
+        let descriptor = self
+            .describe(
+                &PluginCommandDiscoveryContext {
+                    task_id: None,
+                    project_id: Some(scoped.project_id.clone()),
+                },
+                command_id,
+            )
+            .await?;
+        if descriptor.plugin_id != scoped.owner_plugin_id {
+            return Err(PluginCommandDiscoveryError::ScopedInvocationForbidden {
+                command_id: command_id.to_string(),
+            });
+        }
+        let invocation_context = PluginCommandInvocationContext {
+            task_id: None,
+            project_id: scoped.project_id.clone(),
+            source: PluginCommandInvocationSource::AgentCli,
+            scoped_session: Some(PluginCommandScopedSessionContext {
+                session_id: scoped.session_id.clone(),
+                owner_plugin_id: scoped.owner_plugin_id.clone(),
+                project_id: scoped.project_id.clone(),
+                scope: PluginCommandSessionScope {
+                    namespace: scoped.namespace.clone(),
+                    target_key: scoped.target_key.clone(),
+                    revision: scoped.revision.clone(),
+                },
+            }),
+        };
+        self.dispatch(
+            descriptor,
+            scoped.project_id.clone(),
+            input,
+            invocation_context,
+        )
+        .await
+    }
+
+    async fn dispatch(
+        &self,
+        descriptor: AgentCommandDescriptor,
+        project_id: String,
+        input: Option<Value>,
+        invocation_context: PluginCommandInvocationContext,
+    ) -> Result<Value, PluginCommandDiscoveryError> {
         match descriptor.runtime {
             AgentCommandRuntime::Backend => self
                 .backend
                 .invoke_agent_command(
                     &descriptor.plugin_id,
-                    &resolved.project_id,
-                    command_id,
+                    &project_id,
+                    &descriptor.qualified_id,
                     input,
                     invocation_context,
                 )
                 .await
                 .map_err(|error| {
                     PluginCommandDiscoveryError::Runtime(format!(
-                        "Failed to invoke backend Plugin Command {command_id}: {error}"
+                        "Failed to invoke backend Plugin Command {}: {error}",
+                        descriptor.qualified_id
                     ))
                 }),
             AgentCommandRuntime::Frontend => {
@@ -399,8 +492,8 @@ where
                 frontend
                     .invoke_frontend_agent_command(
                         &descriptor.plugin_id,
-                        &resolved.project_id,
-                        command_id,
+                        &project_id,
+                        &descriptor.qualified_id,
                         input,
                         invocation_context,
                     )
@@ -836,8 +929,67 @@ mod tests {
                     task_id: Some(task.id),
                     project_id: project.id,
                     source: PluginCommandInvocationSource::AgentCli,
+                    scoped_session: None,
                 },
             }]
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_invocation_uses_only_the_host_owned_session_context() {
+        let (database, _temp_dir) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_scoped_invoke");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        seed_plugin(&database, "com.example.sync", true);
+        database
+            .set_plugin_enabled(&project.id, "com.example.sync", true)
+            .expect("enable plugin");
+        let runtime = FakeBackendCatalog {
+            descriptors: HashMap::from([(
+                "com.example.sync".to_string(),
+                vec![descriptor("com.example.sync", "hidden", false)],
+            )]),
+            invocation_result: json!({ "accepted": true }),
+            ..Default::default()
+        };
+        let broker = backend_only_broker(Arc::new(Mutex::new(database)), &runtime);
+        let scoped = ScopedPluginCommandInvocation {
+            session_id: "sas-1".to_string(),
+            owner_plugin_id: "com.example.sync".to_string(),
+            project_id: project.id.clone(),
+            namespace: "github".to_string(),
+            target_key: "gh:acme/web#42".to_string(),
+            revision: "head-a".to_string(),
+        };
+
+        broker
+            .invoke_scoped(
+                &scoped,
+                "com.example.sync.hidden",
+                Some(json!({ "step": "one" })),
+            )
+            .await
+            .expect("invoke scoped command");
+
+        assert_eq!(
+            runtime.invocations.lock().expect("invocations")[0].context,
+            PluginCommandInvocationContext {
+                task_id: None,
+                project_id: project.id.clone(),
+                source: PluginCommandInvocationSource::AgentCli,
+                scoped_session: Some(PluginCommandScopedSessionContext {
+                    session_id: "sas-1".to_string(),
+                    owner_plugin_id: "com.example.sync".to_string(),
+                    project_id: project.id,
+                    scope: PluginCommandSessionScope {
+                        namespace: "github".to_string(),
+                        target_key: "gh:acme/web#42".to_string(),
+                        revision: "head-a".to_string(),
+                    },
+                }),
+            }
         );
     }
 
@@ -1075,6 +1227,7 @@ mod tests {
                 task_id: Some(task.id),
                 project_id: project.id,
                 source: PluginCommandInvocationSource::AgentCli,
+                scoped_session: None,
             }
         );
     }
