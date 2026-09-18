@@ -184,7 +184,7 @@
   }
 </script>
 
-<div class="relative flex h-full min-h-0 flex-col overflow-hidden">
+<div class="flex h-full min-h-0 flex-col overflow-hidden">
   {#if replyPostingError || isPostingReplies}
     <div class="flex items-center gap-3 border-b border-base-300 px-4 py-2 text-sm text-error" role="alert">
       <span>{isPostingReplies ? 'Posting queued replies…' : replyPostingError}</span>
