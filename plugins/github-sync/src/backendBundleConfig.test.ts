@@ -6,6 +6,7 @@ describe('GitHub Sync backend bundle config', () => {
   it('emits an isolated ESM backend artifact', () => {
     const config = backendViteConfig as UserConfig
 
+    expect(config.ssr?.noExternal).toContain('zod')
     expect(config.build?.rollupOptions?.output).toMatchObject({
       entryFileNames: 'backend.mjs',
       chunkFileNames: '[name]-[hash].mjs',
