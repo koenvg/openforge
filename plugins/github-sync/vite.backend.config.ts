@@ -14,7 +14,9 @@ export default defineConfig({
       },
     },
   },
+  // Packaged apps copy dist/ without this package's node_modules, so runtime
+  // dependencies must live inside backend.mjs.
   ssr: {
-    noExternal: ['@openforge-app/plugin-sdk', '@openforge-app/pr-review-ui'],
+    noExternal: ['@openforge-app/plugin-sdk', '@openforge-app/pr-review-ui', 'zod'],
   },
 })
