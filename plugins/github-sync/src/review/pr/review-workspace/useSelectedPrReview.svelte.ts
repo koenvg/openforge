@@ -40,6 +40,7 @@ type AiThreadState = {
 
 type WalkthroughState = {
   readonly selectedReady: boolean
+  readonly selectedAvailable: boolean
   refreshStatus(pr: ReviewPullRequest): Promise<unknown>
 }
 
@@ -236,7 +237,7 @@ export function useSelectedPrReview(
       }
       if (event.key === '4') {
         event.preventDefault()
-        if (walkthroughState.selectedReady) activeTab = 'walkthrough'
+        if (walkthroughState.selectedAvailable) activeTab = 'walkthrough'
         return
       }
     }

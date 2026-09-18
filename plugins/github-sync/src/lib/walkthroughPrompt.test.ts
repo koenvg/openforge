@@ -40,6 +40,30 @@ function makeFile(over: Partial<PrFileDiff>): PrFileDiff {
 }
 
 describe('compileWalkthroughPrompt', () => {
+  it('directs the scoped review agent to submit steps and threads through the CLI', () => {
+    const out = compileWalkthroughPrompt({
+      title: 't',
+      body: null,
+      files: [makeFile({ filename: 'src/app.ts', patch: '@@ -1,1 +1,2 @@\n line\n+added' })],
+      attemptId: 'attempt-opaque-42',
+      scope: {
+        namespace: 'github',
+        targetKey: 'gh:acme/web#42',
+        revision: 'head-abc123',
+      },
+    })
+
+    expect(out).toContain('attempt-opaque-42')
+    expect(out).toContain('openforge plugin command invoke --command-id com.openforge.github-sync.submit-walkthrough-step')
+    expect(out).toContain('"attemptId":"attempt-opaque-42"')
+    expect(out).toContain('openforge review thread create --namespace github --target "gh:acme/web#42" --revision "head-abc123"')
+    expect(out).toMatch(/stable.*--key/i)
+    expect(out).toMatch(/at least one.*accepted/i)
+    expect(out).not.toContain('Respond with a single JSON object')
+    expect(out).not.toContain('Output the JSON object only')
+    expect(out).not.toContain('"review_comments"')
+  })
+
   it('includes the PR title', () => {
     const out = compileWalkthroughPrompt({
       title: 'Add user_id to sessions',
@@ -123,14 +147,14 @@ describe('compileWalkthroughPrompt', () => {
     expect(out).toContain('oldname.ts → renamed.ts')
   })
 
-  it('asks for a JSON object with steps[] containing id/title/summary/files', () => {
+  it('shows the complete step shape inside the CLI command input', () => {
     const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
-    expect(out).toContain('"steps"')
     expect(out).toContain('"id"')
     expect(out).toContain('"title"')
     expect(out).toContain('"summary"')
     expect(out).toContain('"files"')
     expect(out).toContain('"hunk_indexes"')
+    expect(out).not.toContain('Respond with a single JSON object')
   })
 
   it('instructs the agent to slice changes by concept, not by file', () => {
@@ -186,12 +210,12 @@ describe('compileWalkthroughPrompt', () => {
       expect(out).toContain('Story')
     })
 
-    it('asks for ticket_coverage only when a ticket is present', () => {
+    it('keeps ticket context without restoring a final-output schema', () => {
       const withTicket = compileWalkthroughPrompt({ title: 't', body: null, files: [], ticket })
-      const without = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
 
-      expect(withTicket).toContain('ticket_coverage')
-      expect(without).not.toContain('ticket_coverage')
+      expect(withTicket).toContain('AVIV-304')
+      expect(withTicket).not.toContain('ticket_coverage')
+      expect(withTicket).not.toContain('SAME JSON object')
     })
 
     it('leaves no placeholder or stray heading behind when there is no ticket', () => {
@@ -201,13 +225,11 @@ describe('compileWalkthroughPrompt', () => {
       expect(out).not.toContain('Source Ticket')
     })
 
-    it('tells the agent to exclude refactors from out_of_scope', () => {
-      // The narrowing rule is the whole reason out_of_scope is usable; without
-      // it the model reports every rename it sees.
+    it('still submits ticket-related findings as Review Threads', () => {
       const out = compileWalkthroughPrompt({ title: 't', body: null, files: [], ticket })
 
-      expect(out).toContain('out_of_scope')
-      expect(out.toLowerCase()).toContain('refactor')
+      expect(out).toContain('## Submit review findings')
+      expect(out).toContain('openforge review thread create')
     })
 
     it('handles a ticket with no description', () => {
@@ -320,8 +342,8 @@ describe('compileWalkthroughPrompt', () => {
       expect(out).not.toContain('{{WALKTHROUGH_GUIDANCE}}')
     })
 
-    // The reason the slots exist: whatever a user writes, the contract survives.
-    it('keeps the output contract intact whatever the guidance says', () => {
+    // The reason the slots exist: whatever a user writes, the command contract survives.
+    it('keeps the CLI submission contract intact whatever the guidance says', () => {
       const out = compileWalkthroughPrompt({
         ...base,
         title: 'T',
@@ -331,25 +353,26 @@ describe('compileWalkthroughPrompt', () => {
       })
 
       expect(out).toContain('hunk_index: 0')
-      expect(out).toContain('"review_comments"')
-      expect(out).toContain('Output the JSON object only.')
+      expect(out).toContain('submit-walkthrough-step')
+      expect(out).toContain('openforge review thread create')
+      expect(out).toContain('Do not encode walkthrough steps or review findings in the final text.')
       expect(out).toContain('Do not invent line numbers.')
     })
 
-    it('frames guidance as content-only so it does not fight the schema', () => {
+    it('frames guidance as content-only so it does not fight the command contract', () => {
       const out = compileWalkthroughPrompt({ ...base, reviewGuidance: 'Be strict.' })
 
-      expect(out).toContain('It does not change the output format or the rules below.')
+      expect(out).toContain('It does not change the CLI submission contract or the rules below.')
     })
 
     it('places each guidance block before the rules that constrain it', () => {
       const out = compileWalkthroughPrompt(base)
 
       expect(out.indexOf('## Review Instructions')).toBeLessThan(
-        out.indexOf('Additional rules for `review_comments`'),
+        out.indexOf('## Submit review findings'),
       )
       expect(out.indexOf('## Walkthrough Guidelines')).toBeLessThan(
-        out.indexOf('Output the JSON object only.'),
+        out.indexOf('## Submit walkthrough steps'),
       )
     })
   })

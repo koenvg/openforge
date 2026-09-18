@@ -489,6 +489,7 @@ export class TestingCommonApiFake {
   private readonly scopedAgentSessionChangeHandlers = new Map<string, Set<(event: ScopedAgentSessionChangeEvent) => void>>()
   private reviewThreadSequence = 0
   private scopedAgentSessionSequence = 0
+  private scopedAgentTurnSequence = 0
   private scopedAgentSessionClock = 0
   private readonly scopedAgentSessionAttachmentGenerations = new Map<string, number>()
   private eventListenerSequence = 0
@@ -511,7 +512,7 @@ export class TestingCommonApiFake {
     const previousQueuePositions = this.scopedQueuePositions()
     const session = this.requireScopedAgentSession(scope)
     session.status = succeeded ? 'completed' : 'failed'
-    session.acceptsInput = succeeded
+    session.acceptsInput = true
     session.errorCode = succeeded ? null : 'PROVIDER_EXITED'
     session.errorMessage = succeeded ? null : 'Provider process exited unsuccessfully'
     session.updatedAt = this.nextScopedAgentSessionTime()
@@ -693,6 +694,7 @@ export class TestingCommonApiFake {
           const createdAt = this.nextScopedAgentSessionTime()
           const session: TestingScopedAgentSession = {
             id: `sas-${++this.scopedAgentSessionSequence}`,
+            turnId: queued ? null : this.nextScopedAgentTurnId(),
             scope: { ...request.scope },
             ownerPluginId: this.services.pluginId,
             status: queued ? 'queued' : 'running',
@@ -723,7 +725,7 @@ export class TestingCommonApiFake {
           assertScopedInput(input)
           this.services.calls.scopedAgentSessionInputs.push({ scope: { ...scope }, input })
           const session = this.requireScopedAgentSession(scope)
-          if (session.status === 'completed') {
+          if (['completed', 'failed', 'aborted', 'interrupted'].includes(session.status)) {
             const queued = this.scopedExecutionCount() >= SCOPED_EXECUTION_LIMIT
             if (queued && this.scopedQueuedSessions().length >= SCOPED_QUEUE_LIMIT) {
               throw new ScopedAgentSessionError('CAPACITY', 'Scoped Agent Session queue is full')
@@ -732,6 +734,9 @@ export class TestingCommonApiFake {
             session.queueSequence = queued ? ++this.scopedAgentSessionSequence : null
             session.queueReason = queued ? 'Waiting for an available scoped Agent Session slot' : null
             session.workspaceAvailable = !queued
+            session.errorCode = null
+            session.errorMessage = null
+            session.turnId = queued ? null : this.nextScopedAgentTurnId()
           } else if (session.status !== 'running' && session.status !== 'paused') {
             throw new ScopedAgentSessionError('NOT_READY', `Scoped Agent Session is not ready for input in status ${session.status}`)
           }
@@ -749,7 +754,7 @@ export class TestingCommonApiFake {
           session.status = 'aborted'
           session.queueSequence = null
           session.queueReason = null
-          session.acceptsInput = false
+          session.acceptsInput = true
           session.updatedAt = this.nextScopedAgentSessionTime()
           if (freedSlot) this.promoteQueuedScopedAgentSession()
           this.emitScopedAgentSessionChange(scope)
@@ -1049,6 +1054,11 @@ export class TestingCommonApiFake {
     return this.scopedAgentSessionClock
   }
 
+  private nextScopedAgentTurnId(): string {
+    this.scopedAgentTurnSequence += 1
+    return `turn-${this.scopedAgentTurnSequence}`
+  }
+
   private scopedExecutionCount(): number {
     return [...this.scopedAgentSessions.values()]
       .filter(session => ['starting', 'running', 'paused'].includes(session.status)).length
@@ -1078,6 +1088,7 @@ export class TestingCommonApiFake {
       : null
     return {
       id: session.id,
+      turnId: session.turnId,
       status: session.status,
       queuePosition,
       queueReason: session.queueReason,
@@ -1104,7 +1115,11 @@ export class TestingCommonApiFake {
   }
 
   private emitScopedAgentSessionChange(scope: SessionScope): void {
-    const event = { ...scope }
+    const session = this.scopedAgentSessions.get(sessionScopeKey(scope))
+    const event = {
+      ...scope,
+      state: session ? this.scopedAgentSessionState(session) : null,
+    }
     for (const handler of this.scopedAgentSessionChangeHandlers.get(sessionScopeKey(scope)) ?? []) {
       handler(event)
     }
@@ -1119,6 +1134,7 @@ export class TestingCommonApiFake {
     session.queueReason = null
     session.acceptsInput = true
     session.workspaceAvailable = true
+    session.turnId = this.nextScopedAgentTurnId()
     session.updatedAt = this.nextScopedAgentSessionTime()
     this.emitScopedAgentSessionChange(session.scope)
   }

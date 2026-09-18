@@ -190,6 +190,7 @@ pub(crate) use crate::scoped_agent_session_runtime::ScopedClaudeRuntime;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ScopedAgentSessionState {
     pub id: String,
+    pub turn_id: Option<String>,
     pub status: ScopedAgentSessionStatus,
     pub queue_position: Option<usize>,
     pub queue_reason: Option<String>,
@@ -395,7 +396,10 @@ impl ScopedAgentSessionService {
                 .input(&row.terminal_key, input)
                 .await
                 .map_err(ScopedAgentSessionError::Runtime)?,
-            ScopedAgentSessionStatus::Completed => {
+            ScopedAgentSessionStatus::Completed
+            | ScopedAgentSessionStatus::Failed
+            | ScopedAgentSessionStatus::Aborted
+            | ScopedAgentSessionStatus::Interrupted => {
                 let lease = self
                     .workspaces
                     .protect(&row)
@@ -410,7 +414,7 @@ impl ScopedAgentSessionService {
                     row.id.clone(),
                     PendingLaunch {
                         input: input.to_string(),
-                        resume: true,
+                        resume: row.provider_session_id.is_some(),
                     },
                 );
                 lock(&self.workspace_leases).insert(row.id.clone(), lease);
@@ -801,6 +805,7 @@ impl ScopedAgentSessionService {
     ) -> Result<ScopedAgentSessionState, ScopedAgentSessionError> {
         Ok(ScopedAgentSessionState {
             id: row.id.clone(),
+            turn_id: row.pty_instance_id.map(|instance| instance.to_string()),
             status: row.status,
             queue_position: lock(&self.database).scoped_agent_queue_position(&row.id)?,
             queue_reason: (row.status == ScopedAgentSessionStatus::Queued)
@@ -810,6 +815,9 @@ impl ScopedAgentSessionService {
                 ScopedAgentSessionStatus::Running
                     | ScopedAgentSessionStatus::Paused
                     | ScopedAgentSessionStatus::Completed
+                    | ScopedAgentSessionStatus::Failed
+                    | ScopedAgentSessionStatus::Aborted
+                    | ScopedAgentSessionStatus::Interrupted
             ),
             workspace_available: self
                 .workspaces

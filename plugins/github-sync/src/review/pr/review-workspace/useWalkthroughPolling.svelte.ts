@@ -157,11 +157,19 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
         headSha: pr.head_sha, reviewPrId: pr.id, projectId, ...guidance,
       })
       if (!current(pr, version)) return
-      const now = Math.floor(Date.now() / 1000)
-      update(pr, { walkthrough: {
-        pr_id: pr.id, head_sha: pr.head_sha, walkthrough_session_key, status: 'generating',
-        steps_json: null, error_message: null, created_at: now, updated_at: now,
-      } })
+      if (status(pr).walkthrough?.status !== 'generating') {
+        const now = Math.floor(Date.now() / 1000)
+        update(pr, { walkthrough: {
+          pr_id: pr.id,
+          head_sha: pr.head_sha,
+          walkthrough_session_key,
+          status: 'generating',
+          steps_json: null,
+          error_message: null,
+          created_at: now,
+          updated_at: now,
+        } })
+      }
       schedule(pr)
     } catch (error) {
       if (current(pr, version)) {
@@ -173,22 +181,37 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     }
   }
 
-  async function remove(pr: ReviewPullRequest, abort: boolean): Promise<void> {
+  async function stop(pr: ReviewPullRequest): Promise<void> {
     const walkthrough = status(pr).walkthrough
     const version = cancel(pr)
-    if (abort && walkthrough?.walkthrough_session_key) {
+    if (walkthrough?.walkthrough_session_key) {
       try {
         await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: walkthrough.walkthrough_session_key })
       } catch (error) {
+        if (current(pr, version)) {
+          update(pr, {
+            loadError: 'Could not stop walkthrough generation. Try stopping it again.',
+            isLoading: false,
+            isStarting: false,
+          })
+          schedule(pr)
+        }
         console.error('Failed to stop walkthrough generation:', error)
+        return
       }
     }
-    try {
-      await githubSync.deletePrWalkthrough({ reviewPrId: pr.id, headSha: walkthrough?.head_sha ?? pr.head_sha })
-    } catch (error) {
-      console.error('Failed to clear the stopped walkthrough:', error)
+    if (current(pr, version) && walkthrough) {
+      update(pr, {
+        walkthrough: {
+          ...walkthrough,
+          status: 'aborted',
+          error_message: 'Walkthrough generation was stopped.',
+          updated_at: Math.floor(Date.now() / 1000),
+        },
+        isLoading: false,
+        isStarting: false,
+      })
     }
-    if (current(pr, version)) update(pr, { walkthrough: null, isLoading: false, isStarting: false })
   }
 
   onDestroy(() => {
@@ -219,12 +242,17 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
       const pr = selectedPr.current
       return !!pr && walkthroughButtonState(status(pr).walkthrough, pr.head_sha) === 'ready'
     },
+    get selectedAvailable() {
+      const pr = selectedPr.current
+      const walkthrough = pr ? status(pr).walkthrough : null
+      return !!pr && (walkthroughButtonState(walkthrough, pr.head_sha) === 'ready' || !!walkthrough?.steps_json)
+    },
     canGenerate,
     refreshStatus,
     async refreshVisible(prs: ReviewPullRequest[]) { await Promise.all(prs.map(refreshStatus)) },
     generate,
-    stop: (pr: ReviewPullRequest) => remove(pr, true),
-    async regenerate(pr: ReviewPullRequest) { await remove(pr, false); await generate(pr) },
+    stop,
+    regenerate: generate,
     reportError: (pr: ReviewPullRequest, message: string) => update(pr, { loadError: message }),
   }
 }

@@ -15,9 +15,11 @@ describe('walkthroughButtonState', () => {
     expect(walkthroughButtonState(null, 'sha1')).toBe('idle')
     expect(walkthroughButtonState(undefined, 'sha1')).toBe('idle')
   })
-  it('reflects generating and error status', () => {
+  it('reflects generating and distinct terminal status', () => {
     expect(walkthroughButtonState(wt({ status: 'generating' }), 'sha1')).toBe('generating')
-    expect(walkthroughButtonState(wt({ status: 'error' }), 'sha1')).toBe('error')
+    expect(walkthroughButtonState(wt({ status: 'failed' }), 'sha1')).toBe('failed')
+    expect(walkthroughButtonState(wt({ status: 'aborted' }), 'sha1')).toBe('aborted')
+    expect(walkthroughButtonState(wt({ status: 'no-submissions' }), 'sha1')).toBe('no-submissions')
   })
   it('is ready only when the ready walkthrough matches the current head sha', () => {
     expect(walkthroughButtonState(wt({ status: 'ready', head_sha: 'sha1' }), 'sha1')).toBe('ready')

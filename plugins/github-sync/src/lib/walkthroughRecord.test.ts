@@ -4,6 +4,7 @@ import type { PluginCommandInvocationContext, SessionScope } from '@openforge-ap
 import type { PrFileDiff, PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
 import {
   buildWalkthroughValidationSnapshot,
+  finishWalkthroughAttempt,
   readWalkthroughRecord,
   startWalkthroughAttempt,
   submitWalkthroughStep,
@@ -149,6 +150,25 @@ describe('versioned walkthrough storage', () => {
 })
 
 describe('walkthrough step submission', () => {
+  it('settles completion from accepted steps and fences older attempts', async () => {
+    const { api } = await activeFixture()
+    await submitWalkthroughStep(api, {
+      attemptId: 'attempt-1',
+      step: step(),
+    }, scopedContext())
+
+    await expect(finishWalkthroughAttempt(api, {
+      scope,
+      attemptId: 'older-attempt',
+      outcome: { status: 'completed' },
+    }, () => 20)).resolves.toBeNull()
+    await expect(finishWalkthroughAttempt(api, {
+      scope,
+      attemptId: 'attempt-1',
+      outcome: { status: 'completed' },
+    }, () => 21)).resolves.toMatchObject({ state: 'ready', steps: [step()], updatedAt: 21 })
+  })
+
   it.each([
     ['step.id', { ...step(), id: ' ' }, { code: 'invalid-step-field', rejectedValue: ' ', constraint: 'must be a non-empty string' }],
     ['step.title', { ...step(), title: '' }, { code: 'invalid-step-field', rejectedValue: '', constraint: 'must be a non-empty string' }],

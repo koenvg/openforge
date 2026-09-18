@@ -5,6 +5,7 @@
     ScopedAgentSessionState,
     SessionScope,
   } from '@openforge-app/plugin-sdk'
+  import type { PrWalkthrough } from '@openforge-app/plugin-sdk/domain'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
@@ -17,6 +18,8 @@
     isLoading: boolean
     actionPending: boolean
     error: string | null
+    walkthroughStatus?: PrWalkthrough['status'] | null
+    acceptedStepCount?: number
     mountTerminal: (scope: SessionScope, element: HTMLElement) => Promise<Disposable>
     onStart: () => Promise<unknown>
     onAbort: () => Promise<unknown>
@@ -32,6 +35,8 @@
     isLoading,
     actionPending,
     error,
+    walkthroughStatus = null,
+    acceptedStepCount = 0,
     mountTerminal,
     onStart,
     onAbort,
@@ -152,7 +157,29 @@
   }
 
   function canRestart(state: ScopedAgentSessionState): boolean {
-    return state.status === 'failed' || state.status === 'aborted' || state.status === 'interrupted'
+    return walkthroughStatus === 'no-submissions'
+      || walkthroughStatus === 'failed'
+      || walkthroughStatus === 'aborted'
+      || state.status === 'failed'
+      || state.status === 'aborted'
+      || state.status === 'interrupted'
+  }
+
+  function generationMessage(): string | null {
+    if (walkthroughStatus === 'generating') {
+      return acceptedStepCount === 0
+        ? 'Generating walkthrough. No steps accepted yet.'
+        : `Generating walkthrough. ${acceptedStepCount} step${acceptedStepCount === 1 ? '' : 's'} accepted so far.`
+    }
+    if (walkthroughStatus === 'ready') {
+      return `Walkthrough ready with ${acceptedStepCount} accepted step${acceptedStepCount === 1 ? '' : 's'}.`
+    }
+    if (walkthroughStatus === 'no-submissions') {
+      return 'The agent finished without submitting a walkthrough. Ask it to try again and submit each step through the OpenForge CLI.'
+    }
+    if (walkthroughStatus === 'failed') return 'Walkthrough generation failed. Review the diagnostic below and try again.'
+    if (walkthroughStatus === 'aborted') return 'Walkthrough generation was stopped. Accepted steps remain provisional.'
+    return null
   }
 
   async function sendMessage(): Promise<void> {
@@ -182,14 +209,14 @@
         <p class="m-0 text-sm text-base-content/70">
           A local OpenForge Project linked to this repository is required to start the review agent.
         </p>
-        <Button disabled>Start review agent</Button>
+        <Button disabled>Generate walkthrough</Button>
       {:else}
-        <h3 class="m-0 text-base font-semibold text-base-content">No review agent session yet.</h3>
+        <h3 class="m-0 text-base font-semibold text-base-content">No walkthrough session yet.</h3>
         <p class="m-0 text-sm text-base-content/70">
-          Start a review in a host-owned, read-only checkout of this pull request head.
+          Generate a walkthrough in a host-owned, read-only checkout of this pull request head.
         </p>
         <Button disabled={actionPending} onclick={() => { void onStart().catch(() => undefined) }}>
-          Start review agent
+          Generate walkthrough
         </Button>
       {/if}
       {#if error}
@@ -209,14 +236,19 @@
         {#if status.queueReason}
           <p class="mt-1 mb-0 text-xs text-base-content/60">{status.queueReason}</p>
         {/if}
+        {#if generationMessage()}
+          <p class="mt-1 mb-0 text-xs text-base-content/80" role="status" aria-live="polite" aria-atomic="true">
+            {generationMessage()}
+          </p>
+        {/if}
       </div>
       {#if isActive(status)}
         <Button variant="ghost" size="sm" disabled={actionPending} onclick={() => { void onAbort().catch(() => undefined) }}>
-          Stop review agent
+          {walkthroughStatus === 'generating' ? 'Stop generation' : 'Stop review agent'}
         </Button>
       {:else if canRestart(status)}
         <Button size="sm" disabled={actionPending} onclick={() => { void onRestart().catch(() => undefined) }}>
-          Start again
+          Generate again
         </Button>
       {/if}
     </header>

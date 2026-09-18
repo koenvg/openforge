@@ -897,6 +897,8 @@ export interface StartScopedAgentSessionRequest {
 
 export interface ScopedAgentSessionState {
   id: string
+  /** Opaque identity of the current or most recently completed provider turn. */
+  turnId: string | null
   status: ScopedAgentSessionStatus
   queuePosition: number | null
   queueReason: string | null
@@ -908,8 +910,13 @@ export interface ScopedAgentSessionState {
   updatedAt: number
 }
 
-/** Coalescible invalidation. Call `status()` to read the latest state. */
-export interface ScopedAgentSessionChangeEvent extends SessionScope {}
+/**
+ * Coalescible session change. Backend observers include the state snapshot that
+ * caused the event so consumers can bind terminal handling to an exact turn.
+ */
+export interface ScopedAgentSessionChangeEvent extends SessionScope {
+  state?: ScopedAgentSessionState | null
+}
 
 export interface AgentSessionsAPI {
   list(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>

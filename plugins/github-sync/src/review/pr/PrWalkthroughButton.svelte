@@ -14,10 +14,12 @@
 
   // The label carries the reason to press it, so a stale walkthrough reads as
   // "new commits" rather than an unexplained second Generate.
-  const IDLE_LABELS: Record<'idle' | 'stale' | 'error', string> = {
+  const IDLE_LABELS: Record<'idle' | 'stale' | 'no-submissions' | 'failed' | 'aborted', string> = {
     idle: 'Generate Walkthrough + AI Review',
-    stale: 'Regenerate — new commits',
-    error: 'Retry — generation failed',
+    stale: 'Regenerate: new commits',
+    'no-submissions': 'Retry: no steps submitted',
+    failed: 'Retry: generation failed',
+    aborted: 'Generate again',
   }
 </script>
 

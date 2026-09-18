@@ -1452,7 +1452,7 @@ describe('PrReviewView walkthrough generation', () => {
     expect(registry.calls.backendInvocations.some((c) => c.method === 'markReviewPrViewed')).toBe(false)
   })
 
-  it('stops an in-flight generation from the card, aborting and clearing it', async () => {
+  it('stops an in-flight generation from the card without deleting its attempt record', async () => {
     const generating: PrWalkthrough = {
       pr_id: basePr.id,
       head_sha: basePr.head_sha,
@@ -1476,7 +1476,7 @@ describe('PrReviewView walkthrough generation', () => {
     )
     const abortCall = registry.calls.backendInvocations.find((c) => c.method === 'abortAgentWalkthrough')
     expect(abortCall?.payload).toMatchObject({ walkthroughSessionKey: 'session-key' })
-    expect(registry.calls.backendInvocations.some((c) => c.method === 'deletePrWalkthrough')).toBe(true)
+    expect(registry.calls.backendInvocations.some((c) => c.method === 'deletePrWalkthrough')).toBe(false)
   })
 
   it('reveals the Walkthrough tab only for a PR whose walkthrough is ready for the current head sha', async () => {

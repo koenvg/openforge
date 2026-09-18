@@ -827,17 +827,17 @@ describe('plugin-host backend host APIs', () => {
       }
     `)
     const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    const running = { id: 'sas-1', status: 'running', queuePosition: null, queueReason: null, acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 2 }
+    const running = { id: 'sas-1', turnId: 'turn-1', status: 'running', queuePosition: null, queueReason: null, acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 2 }
     const hostCallbacks = vi.fn(async (request: { method: string; params: Record<string, unknown> }) => {
       calls.push(request)
       if (request.method === 'openforge.agentSessions.release') return null
-      if (request.method === 'openforge.agentSessions.abort') return { ...running, status: 'aborted', acceptsInput: false }
+      if (request.method === 'openforge.agentSessions.abort') return { ...running, status: 'aborted', acceptsInput: true }
       return running
     })
 
     await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'scopedSession' })).resolves.toEqual({
       started: running, status: running, input: running,
-      aborted: { ...running, status: 'aborted', acceptsInput: false },
+      aborted: { ...running, status: 'aborted', acceptsInput: true },
     })
     expect(calls.map(call => [call.method, call.params.pluginId])).toEqual([
       ['openforge.agentSessions.start', 'com.example.reviewer'],
@@ -899,8 +899,14 @@ describe('plugin-host backend host APIs', () => {
       backendPath,
       command: 'watchScopedSession',
     })).resolves.toEqual([
-      { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' },
-      { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' },
+      {
+        namespace: 'review', targetKey: 'PR-42', revision: 'sha-1',
+        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
+      },
+      {
+        namespace: 'review', targetKey: 'PR-42', revision: 'sha-1',
+        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
+      },
     ])
     expect(calls).toHaveLength(2)
     expect(calls.every(call => call.method === 'openforge.agentSessions.observe'

@@ -22,7 +22,7 @@ import { createPluginAgentSessionHostCapabilities } from './pluginHostAgentSessi
 
 const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
 const running = {
-  id: 'sas-1', status: 'running' as const, queuePosition: null, queueReason: null,
+  id: 'sas-1', turnId: 'turn-1', status: 'running' as const, queuePosition: null, queueReason: null,
   acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null,
   createdAt: 1, updatedAt: 2,
 }

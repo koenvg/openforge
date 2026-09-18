@@ -7,7 +7,7 @@ import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 import type { Walkthroughs } from './useWalkthroughPolling.svelte'
 import { useWalkthroughTicketCoverage } from './useWalkthroughTicketCoverage.svelte'
 
-export type WalkthroughView = 'loading' | 'loadError' | 'absent' | 'generating' | 'failed' | 'unaligned' | 'ready'
+export type WalkthroughView = 'loading' | 'loadError' | 'absent' | 'generating' | 'provisional' | 'no-submissions' | 'failed' | 'aborted' | 'unaligned' | 'ready'
 
 export function createWalkthroughReview(
   walkthroughs: Walkthroughs,
@@ -22,18 +22,25 @@ export function createWalkthroughReview(
   // Separate derived: polling replaces the status object every tick, which would re-parse an unchanged diff.
   let walkthrough = $derived(walkthroughs.status(getPr()).walkthrough)
   let steps = $derived(
-    walkthrough?.status === 'ready'
+    walkthrough?.steps_json
       ? parseAndValidateWalkthroughSteps(walkthrough.steps_json, getFiles())
       : null,
   )
-  let stepEntries = $derived(steps ? buildWalkthroughStepList(steps) : [])
+  let stepEntries = $derived(steps
+    ? walkthrough?.status === 'ready'
+      ? buildWalkthroughStepList(steps)
+      : steps.map(step => ({ kind: 'concept' as const, step }))
+    : [])
   let view = $derived.by<WalkthroughView>(() => {
     const status = walkthroughs.status(getPr())
     if ((status.isLoading || status.isStarting) && !walkthrough) return 'loading'
     if (status.loadError) return 'loadError'
     if (!walkthrough) return 'absent'
+    if (steps && walkthrough.status !== 'ready') return 'provisional'
     if (walkthrough.status === 'generating') return 'generating'
-    if (walkthrough.status === 'error') return 'failed'
+    if (walkthrough.status === 'no-submissions') return 'no-submissions'
+    if (walkthrough.status === 'failed') return 'failed'
+    if (walkthrough.status === 'aborted') return 'aborted'
     return steps ? 'ready' : 'unaligned'
   })
   const prKey = () => {
@@ -66,7 +73,7 @@ export function createWalkthroughReview(
   async function regenerate() {
     const pr = getPr()
     // Regeneration must not remove the tab that displays its progress and Stop action.
-    if (walkthroughs.selectedReady) retainedHead = prKey()
+    if (walkthroughs.selectedAvailable) retainedHead = prKey()
     activeStepIndex = 0
     if (pr) await walkthroughs.regenerate(pr)
   }
@@ -101,14 +108,14 @@ export function createWalkthroughReview(
   })
 
   $effect(() => {
-    if (!isVisible() || !getPr()) return
+    if (!isVisible() || !getPr() || walkthrough?.status !== 'ready') return
     const revision = walkthroughs.status(getPr()).revision
     void revision
     untrack(() => { void ticketCoverage.load() })
   })
 
   function handleKeydown(event: KeyboardEvent): boolean {
-    if (view !== 'ready' || !isVisible() || isInputFocused()) return false
+    if ((view !== 'ready' && view !== 'provisional') || !isVisible() || isInputFocused()) return false
     if (event.metaKey || event.ctrlKey || event.altKey) return false
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return false
     event.preventDefault()
@@ -117,7 +124,8 @@ export function createWalkthroughReview(
   }
 
   return {
-    get available() { return walkthroughs.selectedReady || (!!retainedHead && retainedHead === prKey()) },
+    get available() { return walkthroughs.selectedAvailable || (!!retainedHead && retainedHead === prKey()) },
+    get ready() { return walkthroughs.selectedReady },
     get walkthrough() { return walkthroughs.status(getPr()).walkthrough },
     get isStarting() { return walkthroughs.status(getPr()).isStarting },
     get loadError() { return walkthroughs.status(getPr()).loadError },

@@ -417,6 +417,7 @@ async fn abort_and_continuation_keep_identity_and_filter_stale_exit() {
     let f = fixture("scoped_abort");
     let req = request(&f.project_id, 1);
     let first = f.service.start(req.clone()).await.unwrap();
+    assert_eq!(first.turn_id.as_deref(), Some("1"));
     f.service.complete(&first.id, 1, true).await.unwrap();
     f.service
         .input(&req.owner_plugin_id, &req.scope, "continue")
@@ -431,16 +432,22 @@ async fn abort_and_continuation_keep_identity_and_filter_stale_exit() {
             launches[1].provider_session_id
         );
     }
-    assert_eq!(
-        f.service
-            .abort(&req.owner_plugin_id, &req.scope)
-            .await
-            .unwrap()
-            .status,
-        ScopedAgentSessionStatus::Aborted
-    );
+    let aborted = f
+        .service
+        .abort(&req.owner_plugin_id, &req.scope)
+        .await
+        .unwrap();
+    assert_eq!(aborted.status, ScopedAgentSessionStatus::Aborted);
+    assert_eq!(aborted.turn_id.as_deref(), Some("2"));
     assert_eq!(lock(&f.runtime.aborted).len(), 1);
-    assert!(!f.service.complete(&first.id, 1, true).await.unwrap());
+    let retried = f
+        .service
+        .input(&req.owner_plugin_id, &req.scope, "retry")
+        .await
+        .unwrap();
+    assert_eq!(retried.id, first.id);
+    assert_eq!(retried.turn_id.as_deref(), Some("3"));
+    assert!(!f.service.complete(&first.id, 2, true).await.unwrap());
 }
 
 #[tokio::test]

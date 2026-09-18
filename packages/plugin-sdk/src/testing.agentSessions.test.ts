@@ -280,7 +280,11 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
 
     await expect(api.agentSessions.status(oldScope)).resolves.toBeNull()
     await expect(api.agentSessions.status(newScope)).resolves.toMatchObject({ status: 'running' })
-    expect(oldEvents).toEqual([oldScope, oldScope])
+    expect(oldEvents).toHaveLength(2)
+    expect(oldEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining(oldScope),
+      expect.objectContaining(oldScope),
+    ]))
   })
 
   it('notifies queued scopes when removal changes their queue position', async () => {
@@ -305,7 +309,11 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     await expect(api.agentSessions.status(scopes[5])).resolves.toMatchObject({ queuePosition: 2 })
     await api.agentSessions.release(scopes[4])
     await expect(api.agentSessions.status(scopes[5])).resolves.toMatchObject({ queuePosition: 1 })
-    expect(events).toEqual([scopes[5], scopes[5]])
+    expect(events).toHaveLength(2)
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining(scopes[5]),
+      expect.objectContaining(scopes[5]),
+    ]))
   })
 
   it('notifies only the exact scope and supports deterministic completion', async () => {
@@ -326,9 +334,53 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     })
     api.__testing.registry.completeScopedAgentSession(first)
 
-    expect(firstEvents).toEqual([first, first])
+    expect(firstEvents).toHaveLength(2)
+    expect(firstEvents.at(-1)).toMatchObject({ ...first, state: { status: 'completed' } })
     expect(secondEvents).toEqual([])
     await expect(api.agentSessions.status(first)).resolves.toMatchObject({ status: 'completed', acceptsInput: true })
+  })
+
+  it('continues an aborted turn in the same scoped session with a new turn id', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
+    const started = await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Generate the walkthrough',
+      toolPolicy: 'review-read-only',
+    })
+
+    const aborted = await api.agentSessions.abort(scope)
+    const retried = await api.agentSessions.input(scope, 'Retry the walkthrough')
+
+    expect(started.turnId).toEqual(expect.any(String))
+    expect(aborted).toMatchObject({
+      id: started.id, status: 'aborted', turnId: started.turnId, acceptsInput: true,
+    })
+    expect(retried.id).toBe(started.id)
+    expect(retried.turnId).toEqual(expect.any(String))
+    expect(retried.turnId).not.toBe(started.turnId)
+  })
+
+  it('allows continuation after a failed turn', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
+    const started = await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Generate the walkthrough',
+      toolPolicy: 'review-read-only',
+    })
+
+    api.__testing.registry.completeScopedAgentSession(scope, false)
+    await expect(api.agentSessions.status(scope)).resolves.toMatchObject({
+      status: 'failed', acceptsInput: true,
+    })
+    await expect(api.agentSessions.input(scope, 'Retry the walkthrough')).resolves.toMatchObject({
+      id: started.id, status: 'running', acceptsInput: true,
+    })
   })
 
   it('uses generation-safe frontend terminal attachments', async () => {
