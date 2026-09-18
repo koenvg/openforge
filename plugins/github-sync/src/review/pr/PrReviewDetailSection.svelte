@@ -2,7 +2,7 @@
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
+  import type { AgentReviewComment, AgentReviewCommentStatus } from '../../lib/prReviewRecords'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
@@ -16,12 +16,9 @@
   import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import WalkthroughTab from './WalkthroughTab.svelte'
-  import QuestionsPanel from './QuestionsPanel.svelte'
-  import { buildQuestionsIndex, type QuestionItem } from '../../lib/questionsIndex'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
-  import { tick, type ComponentProps } from 'svelte'
-  import { ListChecks } from '@lucide/svelte'
+  import type { ComponentProps } from 'svelte'
   import AgentTab from './AgentTab.svelte'
 
   type PrDetailTab = 'overview' | 'files' | 'agent' | 'walkthrough'
@@ -62,17 +59,13 @@
     // sha has finished generating (owned by PrReviewView). Optional so the section
     // renders (tab hidden) before the parent wires status in.
     walkthroughReady?: boolean
-    // Local "Ask the AI author" Q&A threads + handlers (owned by PrReviewView).
-    aiThreads?: AiThread[]
-    aiThreadsPendingCount?: number
-    canSendQuestionsToAgent?: boolean
     // Stored agent comments and question threads as review threads (owned by PrReviewView).
     reviewThreads?: ReviewThread[]
+    reviewFollowUpUnavailableReason?: string | null
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToReviewThread?: (threadId: string, body: string) => void
     onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
-    onReplyToThread?: (threadId: string, body: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
     replyPostingError?: string | null
@@ -81,13 +74,6 @@
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
-    onEditThread?: (threadId: string, body: string) => void
-    onDeleteThread?: (threadId: string) => void
-    onSendQuestionsToAgent?: () => void
-    // Marks an answered thread as read (owned by PrReviewView, persists seen_at).
-    onMarkThreadSeen?: (threadId: string) => void
-    // Rail-matching labels for step-anchored questions ("Step 2 · <title>").
-    stepLabelById?: Map<string, { number: number; title: string }>
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -131,15 +117,12 @@
     agentSession,
     onRemove,
     walkthroughReady = false,
-    aiThreads = [],
-    aiThreadsPendingCount = 0,
-    canSendQuestionsToAgent = false,
     reviewThreads = [],
+    reviewFollowUpUnavailableReason = null,
     onCreateReviewThread,
     onReplyToReviewThread,
     onSetReviewThreadStatus,
     onCommentNow,
-    onReplyToThread,
     onReplyToExistingComment,
     pendingReplies = [],
     replyPostingError = null,
@@ -148,41 +131,9 @@
     onAddReplyToReview,
     onRemovePendingReply,
     onAskAgentStep,
-    onEditThread,
-    onDeleteThread,
-    onSendQuestionsToAgent,
-    onMarkThreadSeen,
-    stepLabelById,
     onSubmitReview,
     onOpenUrl,
   }: Props = $props()
-
-  // The questions panel: one collected view of every place still wanting the
-  // reviewer's attention (their questions + undecided AI suggestions), each row
-  // deep-linking to its anchor. Data comes straight from the props already here.
-  let questionsPanelOpen = $state(false)
-  let focusStepId = $state<string | null>(null)
-  let questionsIndex = $derived(buildQuestionsIndex(aiThreads, agentReviewComments))
-
-  async function handleSelectQuestion(item: QuestionItem) {
-    questionsPanelOpen = false
-    // Auto-mark-on-open: jumping to an answer counts as reading it.
-    if (item.source.kind === 'thread' && item.group === 'answers_to_read') {
-      onMarkThreadSeen?.(item.source.thread.id)
-    }
-    if (item.target.kind === 'step') {
-      onActiveTabChange('walkthrough')
-      focusStepId = item.target.stepId
-      return
-    }
-    const { filename, line } = item.target
-    onActiveTabChange('files')
-    // Wait for the tab switch so the DiffViewer instance is bound; scrollToComment
-    // then polls for the row itself, so a still-mounting diff resolves on its own.
-    await tick()
-    if (line != null) void diffViewer?.scrollToComment(filename, line)
-    else diffViewer?.scrollToFile(filename)
-  }
 
   // Approved AI review comments are submitted with the review directly (approving
   // no longer copies them into the manual pending list), so map them to
@@ -247,31 +198,6 @@
       <Button variant="ghost" size="xs" class="shrink-0 text-base-content/50" onclick={onBackToList}>← Back</Button>
       <Badge variant="info" class="shrink-0">{pr.repo_owner}/{pr.repo_name}</Badge>
       <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{pr.title}</h2>
-      {#if questionsIndex.totalCount > 0}
-        <Button
-          variant="ghost"
-          size="xs"
-          class="shrink-0 gap-1"
-          onclick={() => { questionsPanelOpen = true }}
-          title="Find all your questions and undecided AI suggestions in one place"
-        >
-          <ListChecks size={14} aria-hidden="true" />
-          Questions
-          {#if questionsIndex.actionableCount > 0}
-            <Badge variant="info" class="ml-1">{questionsIndex.actionableCount}</Badge>
-          {/if}
-        </Button>
-      {/if}
-      {#if aiThreadsPendingCount > 0 && canSendQuestionsToAgent}
-        <Button
-          size="xs"
-          class="mr-2"
-          onclick={() => onSendQuestionsToAgent?.()}
-          title="Send your unanswered questions to the AI author (stays local, never posted to GitHub)"
-        >
-          Send {aiThreadsPendingCount} question{aiThreadsPendingCount === 1 ? '' : 's'} to AI
-        </Button>
-      {/if}
       <Button
         variant="ghost"
         size="xs"
@@ -294,6 +220,11 @@
       <span class="text-base-300">•</span>
       <span>{timeAgoFromSeconds(pr.created_at)}</span>
     </div>
+    {#if reviewFollowUpUnavailableReason}
+      <p class="m-0 text-xs text-base-content/60" role="status">
+        AI follow-ups are unavailable. {reviewFollowUpUnavailableReason}
+      </p>
+    {/if}
   </div>
 
   <Tabs
@@ -330,22 +261,18 @@
           onAgentCommentsChange={onAgentCommentsChange}
           onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           {onOpenUrl}
-          aiThreads={aiThreads}
           reviewThreads={reviewThreads}
+          {reviewFollowUpUnavailableReason}
           onCreateReviewThread={onCreateReviewThread}
           onReplyToReviewThread={onReplyToReviewThread}
           onSetReviewThreadStatus={onSetReviewThreadStatus}
           onCommentNow={onCommentNow}
-          onReplyToThread={onReplyToThread}
           onReplyToExistingComment={onReplyToExistingComment}
           pendingReplies={pendingReplies}
           onAddReplyToReview={onAddReplyToReview}
           onRemovePendingReply={onRemovePendingReply}
           onAskAgentStep={onAskAgentStep}
-          onEditThread={onEditThread}
-          onDeleteThread={onDeleteThread}
           onSubmitReview={onSubmitReview}
-          {focusStepId}
         />
       {:else}
         <div class="flex h-full min-h-0 overflow-hidden">
@@ -425,13 +352,4 @@
       {/if}
     {/snippet}
   </Tabs>
-
-  {#if questionsPanelOpen}
-    <QuestionsPanel
-      index={questionsIndex}
-      {stepLabelById}
-      onSelect={handleSelectQuestion}
-      onClose={() => { questionsPanelOpen = false }}
-    />
-  {/if}
 </div>

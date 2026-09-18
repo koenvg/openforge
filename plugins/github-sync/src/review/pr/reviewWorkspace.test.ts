@@ -49,7 +49,7 @@ async function setup(
     getAuthoredPrs: [], fetchAuthoredPrs: [], getPrWalkthrough: null,
     markReviewPrViewed: null, markReviewPrUnviewed: null, dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
     getPrAiReviewComments: [], updatePrAiReviewCommentStatus: null,
-    getAiThreads: [], saveAiThread: null, askAgentQuestions: null,
+    getAiThreads: [], saveAiThread: null,
     getPrTicket: { snapshot: null, jiraConfigured: false },
     startAgentWalkthrough: { walkthrough_session_key: 'session-1' },
     deletePrWalkthrough: null, abortAgentWalkthrough: null,
@@ -384,17 +384,25 @@ describe('review workspace', () => {
     await waitFor(() => expect(calls.get('dismissReviewPr')).toContainEqual({ prId: 1 }))
   })
 
-  it('keeps AI questions local and exposes replies through the selected review', async () => {
-    const { workspace, calls } = await setup()
+  it('stores an inline follow-up and sends it immediately through the existing review session', async () => {
+    const { workspace, calls, registry } = await setup()
     await workspace.list.onSelectPr(pr)
-    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
-    expect(workspace.detail!.aiThreadsPendingCount).toBe(1)
-    const threadId = workspace.detail!.reviewThreads[0].id
-    workspace.detail!.onReplyToReviewThread(threadId, 'More detail please')
-    await waitFor(() => expect(workspace.detail!.aiThreads[0].messages.map(value => value.body))
-      .toEqual(['Why this change?', 'More detail please']))
+    await registry.frontendApi.agentSessions.start({
+      scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' },
+      projectId: 'project-1',
+      checkoutRevision: 'head',
+      initialInput: 'Review this pull request.',
+      toolPolicy: 'review-read-only',
+    })
+    await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
+
+    workspace.detail!.onCreateReviewThread!('login.ts', 2, 'RIGHT', 'Why this change?')
+
+    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
+    expect(workspace.detail!.reviewThreads[0].messages.map(value => value.body)).toEqual(['Why this change?'])
+    expect(registry.calls.scopedAgentSessionInputs[0]?.input).toContain(`Review Thread ${workspace.detail!.reviewThreads[0].id}`)
     expect(calls.get('createReviewComment')).toBeUndefined()
-    expect(calls.get('saveAiThread')).toHaveLength(2)
+    expect(calls.get('askAgentQuestions')).toBeUndefined()
   })
 
   it('renders its stored agent comments through the review-thread input', async () => {
@@ -415,8 +423,8 @@ describe('review workspace', () => {
     expect(thread.messages.map(message => message.body)).toEqual(['Needs a null check'])
   })
 
-  it('appends a reply to the agent comment thread it was written in', async () => {
-    const { workspace, responses } = await setup()
+  it('routes a reply on a legacy agent comment through a new scoped Review Thread', async () => {
+    const { workspace, responses, registry } = await setup()
     responses.set('getPrAiReviewComments', [{
       id: 100, review_pr_id: pr.id, review_session_key: 'session-1', comment_type: 'inline',
       file_path: 'login.ts', line_number: 2, side: 'RIGHT', body: 'Needs a null check',
@@ -424,15 +432,22 @@ describe('review workspace', () => {
     }])
     await workspace.list.onSelectPr(pr)
     await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(1))
+    await registry.frontendApi.agentSessions.start({
+      scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' },
+      projectId: 'project-1',
+      checkoutRevision: 'head',
+      initialInput: 'Review this pull request.',
+      toolPolicy: 'review-read-only',
+    })
+    await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
 
-    workspace.detail!.onReplyToReviewThread('agent:100', 'Why is that unsafe?')
-    await waitFor(() => expect(workspace.detail!.reviewThreads[0].messages).toHaveLength(2))
-    workspace.detail!.onReplyToReviewThread('agent:100', 'Still unclear')
+    workspace.detail!.onReplyToReviewThread!('agent:100', 'Why is that unsafe?')
+    await waitFor(() => expect(workspace.detail!.reviewThreads).toHaveLength(2))
 
-    await waitFor(() => expect(workspace.detail!.reviewThreads[0].messages.map(message => message.body))
-      .toEqual(['Needs a null check', 'Why is that unsafe?', 'Still unclear']))
-    expect(workspace.detail!.reviewThreads).toHaveLength(1)
-    expect(workspace.detail!.reviewThreads[0].id).toBe('agent:100')
+    const followUp = workspace.detail!.reviewThreads.find(thread => thread.id !== 'agent:100')
+    expect(followUp?.anchor).toEqual({ kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' })
+    expect(followUp?.messages.map(message => message.body)).toEqual(['Why is that unsafe?'])
+    expect(registry.calls.scopedAgentSessionInputs.at(-1)?.input).toContain(`Review Thread ${followUp?.id}`)
   })
 
   it('records a reviewer decision on an agent comment through its own storage', async () => {
@@ -453,10 +468,15 @@ describe('review workspace', () => {
     })
   })
 
-  it('renders its stored question threads through the review-thread input', async () => {
-    const { workspace } = await setup()
+  it('renders stored core question threads through the review-thread input', async () => {
+    const { workspace, registry } = await setup()
+    const created = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'human', body: 'Why this change?',
+    })
+    await registry.frontendApi.reviewThreads.setAwaiting({ threadId: created.id, awaiting: 'agent' })
     await workspace.list.onSelectPr(pr)
-    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
 
     const [thread] = workspace.detail!.reviewThreads
     expect(thread.origin).toBe('human')
@@ -465,15 +485,18 @@ describe('review workspace', () => {
     expect(thread.messages.map(message => message.body)).toEqual(['Why this change?'])
   })
 
-  it('records a reviewer decision on a question thread', async () => {
-    const { workspace, calls } = await setup()
+  it('records a reviewer decision on a core question thread', async () => {
+    const { workspace, registry } = await setup()
+    const created = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head',
+      anchor: { kind: 'line', filePath: 'login.ts', line: 2, side: 'RIGHT' },
+      origin: 'human', body: 'Why this change?',
+    })
     await workspace.list.onSelectPr(pr)
-    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
 
-    workspace.detail!.onSetReviewThreadStatus(workspace.detail!.reviewThreads[0].id, 'resolved')
+    workspace.detail!.onSetReviewThreadStatus(created.id, 'resolved')
 
     await waitFor(() => expect(workspace.detail!.reviewThreads[0].status).toBe('resolved'))
-    expect(calls.get('saveAiThread')).toHaveLength(2)
   })
 
   it('shares walkthrough generation and polling between the list and selected review', async () => {
@@ -520,28 +543,35 @@ describe('review workspace', () => {
     }))
   })
 
-  it('asks follow-up questions in the project matched to the pull request repository', async () => {
-    const { workspace, calls } = await setup('global', {
+  it('does not offer a batching path or start a fresh session for a follow-up', async () => {
+    const { workspace, calls, registry } = await setup('global', {
       'project-1': 'acme/other',
       'project-2': 'acme/app',
     })
     await workspace.list.onSelectPr(pr)
-    expect(workspace.detail!.canSendQuestionsToAgent).toBe(true)
-    workspace.detail!.onCreateReviewThread('login.ts', 2, 'RIGHT', 'Why this change?')
-
-    await workspace.detail!.onSendQuestionsToAgent()
-
-    expect(calls.get('askAgentQuestions')).toContainEqual(expect.objectContaining({
+    await registry.frontendApi.agentSessions.start({
+      scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' },
       projectId: 'project-2',
-    }))
+      checkoutRevision: 'head',
+      initialInput: 'Review this pull request.',
+      toolPolicy: 'review-read-only',
+    })
+    await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
+    workspace.detail!.onCreateReviewThread!('login.ts', 2, 'RIGHT', 'Why this change?')
+
+    await waitFor(() => expect(registry.calls.scopedAgentSessionInputs).toHaveLength(1))
+    expect(registry.calls.scopedAgentSessionStarts).toHaveLength(1)
+    expect(calls.get('askAgentQuestions')).toBeUndefined()
   })
 
-  it('does not offer follow-up question submission without a matching local project', async () => {
+  it('explains why follow-up questions are unavailable without a matching local project', async () => {
     const { workspace } = await setup('global', { 'project-1': 'acme/other' })
 
     await workspace.list.onSelectPr(pr)
 
-    expect(workspace.detail!.canSendQuestionsToAgent).toBe(false)
+    await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason)
+      .toBe('A local OpenForge Project linked to this repository is required for follow-up questions.'))
+    expect(workspace.detail!.onCreateReviewThread).toBeUndefined()
   })
 
   it('does not restore a stopped walkthrough from an in-flight poll', async () => {

@@ -4,7 +4,6 @@ import { tick } from 'svelte'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
-import type { AiThread } from '../../lib/prReviewRecords'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
 
 // Replace the heavy diff renderer with a stub that records the props WalkthroughTab
@@ -363,6 +362,18 @@ describe('WalkthroughTab ticket coverage → review', () => {
 })
 
 describe('WalkthroughTab step-details collapse', () => {
+  it('explains why a step follow-up is blocked without a usable session', async () => {
+    globalThis.localStorage?.clear()
+    renderWalkthrough({
+      reviewFollowUpUnavailableReason: 'Generate a walkthrough in the Agent tab before asking a follow-up question.',
+    })
+    await goToStep(2)
+    await screen.findByText('Step one')
+
+    expect(screen.getByText(/AI follow-ups are unavailable.*Generate a walkthrough in the Agent tab/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '+ Ask about this step' })).toBeNull()
+  })
+
   it('hides the step summary so the diff gets the vertical space back, and remembers the choice', async () => {
     globalThis.localStorage?.clear()
     const { unmount } = renderWalkthrough()
@@ -386,21 +397,30 @@ describe('WalkthroughTab step-details collapse', () => {
 
   it('keeps unsent AI question and reply drafts when step details are collapsed', async () => {
     globalThis.localStorage?.clear()
-    const thread: AiThread = {
+    const thread: ReviewThread = {
       id: 'thread-1',
-      anchor: { type: 'step', step_id: 's1' },
-      status: 'answered',
+      namespace: 'github',
+      targetKey: 'gh:acme/repo#42',
+      revision: 'head-sha',
+      runId: null,
+      origin: 'human',
+      anchor: { kind: 'custom', key: 'step:s1' },
+      status: 'open',
+      awaiting: 'none',
+      idempotencyKey: null,
+      seenAt: null,
+      hasUnreadAgentMessage: true,
       messages: [
-        { role: 'user', body: 'Why this change?', created_at: 1 },
-        { role: 'ai', body: 'Because it fixes the flow.', created_at: 2 },
+        { id: 'message-1', role: 'human', body: 'Why this change?', createdAt: 1 },
+        { id: 'message-2', role: 'agent', body: 'Because it fixes the flow.', createdAt: 2 },
       ],
-      created_at: 1,
-      updated_at: 2,
+      createdAt: 1,
+      updatedAt: 2,
     }
     renderWalkthrough({
-      aiThreads: [thread],
+      reviewThreads: [thread],
       onAskAgentStep: vi.fn(),
-      onReplyToThread: vi.fn(),
+      onReplyToReviewThread: vi.fn(),
     })
     await goToStep(2)
     await screen.findByText('Step one')

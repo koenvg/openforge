@@ -134,17 +134,6 @@ export function createWalkthroughReview(
     get stepEntries() { return stepEntries },
     get activeStepIndex() { return clampStepIndex(activeStepIndex, stepEntries.length) },
     set activeStepIndex(value: number) { setActiveStepIndex(value) },
-    // Rail-matching labels for step-anchored questions ("Step 2 · <title>"). Numbers
-    // match the walkthrough rail exactly (ticket is step 1, so the first concept is
-    // step 2) by reusing the same entry list the rail builds. Consumed by the
-    // questions panel; missing ids fall back to a generic label there.
-    get stepLabelById() {
-      const labels = new Map<string, { number: number; title: string }>()
-      stepEntries.forEach((entry, index) => {
-        if (entry.kind === 'concept') labels.set(entry.step.id, { number: index + 1, title: entry.step.title })
-      })
-      return labels
-    },
     ticketCoverage,
     loadCached, generate, stop, regenerate, setIssueKey, handleKeydown,
   }
