@@ -2,7 +2,7 @@
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { PrFileDiff, PrWalkthroughStep, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import type { AgentReviewComment, AgentReviewCommentStatus, AiThread } from '../../lib/prReviewRecords'
+  import type { AgentReviewComment, AgentReviewCommentStatus } from '../../lib/prReviewRecords'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -30,20 +30,17 @@
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
-    aiThreads?: AiThread[]
     reviewThreads?: ReviewThread[]
+    reviewFollowUpUnavailableReason?: string | null
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToReviewThread?: (threadId: string, body: string) => void
     onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
-    onReplyToThread?: (threadId: string, body: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
-    onEditThread?: (threadId: string, body: string) => void
-    onDeleteThread?: (threadId: string) => void
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -62,7 +59,6 @@
   let lifecycle = $derived(props.workspace)
   let ticketCoverage = $derived(props.workspace.ticketCoverage)
 
-  let aiThreads = $derived(props.aiThreads ?? [])
   let pendingReplies = $derived(props.pendingReplies ?? [])
   let stepEntries = $derived(lifecycle.stepEntries)
   let totalSteps = $derived(stepEntries.length)
@@ -220,12 +216,11 @@
             <WalkthroughAiQuestions
               {activeStep}
               visible={stepDetailsExpanded}
-              {aiThreads}
+              reviewThreads={props.reviewThreads ?? []}
               onOpenUrl={props.onOpenUrl}
+              unavailableReason={props.reviewFollowUpUnavailableReason}
               onAskAgentStep={props.onAskAgentStep}
-              onReplyToThread={props.onReplyToThread}
-              onEditThread={props.onEditThread}
-              onDeleteThread={props.onDeleteThread}
+              onReplyToThread={props.onReplyToReviewThread}
             />
           {/if}
         </div>

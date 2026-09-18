@@ -24,13 +24,10 @@ import {
 import {
   readAiThreads,
   removeAiThreads,
-  threadsNeedingAnswer,
   upsertThread,
   writeAiThreads,
 } from './lib/aiThreadStore'
-import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
 import { cleanupReviewSession } from './lib/reviewSessionLifecycle'
-import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
 import {
   EMPTY_JIRA_CONFIG,
@@ -55,9 +52,6 @@ import { reviewScopeForPullRequest } from './review/pr/reviewScope'
 import { WalkthroughGenerationCoordinator } from './lib/walkthroughGeneration'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
-
-// Model used by the remaining legacy headless question-answering flow.
-const WALKTHROUGH_MODEL = 'sonnet'
 
 type HostCommandPayload = Record<string, unknown> | null
 
@@ -369,69 +363,6 @@ export default defineBackendPlugin({
           deleteSession: (sessionId) =>
             invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
         })
-      },
-    }))
-
-    // Answer every unanswered thread in one repo-aware agent pass. Fire-and-forget:
-    // mark the pending threads immediately (so the UI shows "thinking"), then run
-    // the agent in the background and merge its answers back (poll from the UI).
-    context.subscriptions.add(openforge.backend.registerMethod<{
-      reviewPrId: number
-      headSha: string
-      repoOwner: string
-      repoName: string
-      prNumber: number
-      projectId: string
-    }, void>('askAgentQuestions', {
-      handler: async (request) => {
-        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
-        const pending = threadsNeedingAnswer(threads)
-        if (pending.length === 0) return
-
-        const pendingIds = new Set(pending.map(t => t.id))
-        const marked = threads.map(t => (pendingIds.has(t.id) ? { ...t, status: 'pending' as const } : t))
-        await writeAiThreads(openforge, request.reviewPrId, request.headSha, marked)
-
-        // Fetch diffs + the walkthrough steps server-side to anchor each question.
-        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
-          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-        })
-        const walkthrough = await readWalkthrough(openforge, request.reviewPrId, request.headSha)
-        const steps = parseAndValidateWalkthroughSteps(walkthrough?.steps_json ?? null, files) ?? []
-        // Include the AI review comments so a "comment"-anchored follow-up thread can
-        // quote the exact suggestion it's asking about.
-        const agentComments = await readAiReviewComments(openforge, request.reviewPrId, request.headSha)
-        const prompt = buildQuestionsPrompt(pending, files, steps, agentComments)
-
-        void (async () => {
-          const sessionKey = randomUUID()
-          try {
-            const result = await invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
-              sessionKey,
-              prompt,
-              model: WALKTHROUGH_MODEL,
-              projectId: request.projectId,
-              owner: request.repoOwner,
-              repo: request.repoName,
-              prNumber: request.prNumber,
-              headSha: request.headSha,
-              // Resume the review's session so the agent recalls its own reasoning.
-              // Null for older reviews or non-Claude providers → clean one-shot.
-              resumeSessionId: walkthrough?.walkthrough_session_key ?? undefined,
-              outputSchema: AI_ANSWERS_JSON_SCHEMA,
-            })
-            const answered = mapAnswersToThreads(result?.text ?? '', pending)
-            // Re-read (guard against a concurrent change) and merge the answers back.
-            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
-            let merged = latest
-            for (const t of answered) merged = upsertThread(merged, t)
-            await writeAiThreads(openforge, request.reviewPrId, request.headSha, merged)
-          } catch {
-            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
-            const errored = latest.map(t => (pendingIds.has(t.id) ? { ...t, status: 'error' as const } : t))
-            await writeAiThreads(openforge, request.reviewPrId, request.headSha, errored)
-          }
-        })()
       },
     }))
 

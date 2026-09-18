@@ -9,7 +9,7 @@
 
 - [x] 2.1 Add a GitHub Sync controller that starts `review-read-only` in the Project repository at `head_sha`, reads status, subscribes to invalidations, sends later input, aborts active work, and explicitly releases removed or superseded scopes; verify fake-backed tests cover start, queue, live input, completion, failure, abort, pull request removal, and revision rotation
 - [x] 2.2 Route Agent-tab input through scoped-session input so a completed review continues the same provider conversation and Scoped Workspace; verify a controller test sends two turns to one scope and never starts a second session record
-- [ ] 2.3 Add immediate same-session follow-up routing for line and step Review Threads, with the human message stored before session input and the agent directed to answer the exact thread id; verify tests cover a successful reply, input failure without message loss, and no batched headless question run
+- [x] 2.3 Add immediate same-session follow-up routing for line and step Review Threads, with the human message stored before session input and the agent directed to answer the exact thread id; verify tests cover a successful reply, input failure without message loss, and no batched headless question run
 
 ## 3. Scope-bound walkthrough command
 
@@ -35,7 +35,7 @@
 ## 6. Review Threads migration and parse-path removal
 
 - [ ] 6.1 Replace GitHub Sync's adapted `AgentReviewComment` and `AiThread` reads with `api.reviewThreads.list`, scope-specific invalidations, reply, status, awaiting, and seen operations; verify workspace and diff-viewer tests cover live agent comments, person replies, status changes, step anchors, unread answers, unrelated-scope isolation, and orphan rendering
-- [ ] 6.2 Remove the local Questions batching flow and send terminal or inline follow-up questions through the same scoped session; verify no call to `askAgentQuestions` or `agentGenerateInRepo` remains in the follow-up path and focused tests preserve each user message across a failed send
+- [x] 6.2 Remove the local Questions batching flow and send terminal or inline follow-up questions through the same scoped session; verify no call to `askAgentQuestions` or `agentGenerateInRepo` remains in the follow-up path and focused tests preserve each user message across a failed send
 - [ ] 6.3 Remove headless walkthrough generation, `walkthroughSchema.ts`, final-output extraction, `reviewCommentsParse.ts`, the review-thread adapter, obsolete records and Svelte stores, and their backend/client methods; verify negative contract tests prove the removed methods and output-schema path are no longer registered, exported, or packaged
 - [ ] 6.4 Retire all reads and writes for `pr-ai-review:<pr-id>:<head-sha>`, `pr-ai-threads:<pr-id>:<head-sha>`, and `pr-review-session:<pr-id>` while leaving Jira and walkthrough keys intact; verify upgrade tests show old comments and question threads are not imported or rendered and new runs create none of the retired values
 - [ ] 6.5 Preserve GitHub review submission from resolved agent-authored Review Threads and remove the legacy approved-comment mapping only after parity is covered; verify submission tests include approved inline findings once, exclude open and dismissed findings, and mark submitted threads with the agreed post-submit status

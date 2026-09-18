@@ -33,7 +33,7 @@ export type PrDetailTab = 'overview' | 'files' | 'agent' | 'walkthrough'
 const PR_REVIEW_VIEW = 'plugin:com.openforge.github-sync:pr_review'
 const PR_REVIEW_GLOBAL_VIEW = 'plugin:com.openforge.github-sync:pr_review_global'
 
-type AiThreadState = {
+type ReviewThreadFollowUpState = {
   load(pr: ReviewPullRequest): Promise<void>
   clear(): void
 }
@@ -51,7 +51,7 @@ type AgentSessionLifecycle = {
 export function useSelectedPrReview(
   api: FrontendOpenForgeAPI,
   githubSync: GithubSyncPrReviewClient,
-  aiThreadState: AiThreadState,
+  reviewThreadFollowUps: ReviewThreadFollowUpState,
   walkthroughState: WalkthroughState,
   agentSessionLifecycle?: AgentSessionLifecycle,
 ) {
@@ -90,7 +90,7 @@ export function useSelectedPrReview(
     replies.current = []
     overviewComments.current = []
     agentCommentsStore.current = []
-    aiThreadState.clear()
+    reviewThreadFollowUps.clear()
   }
 
   async function select(pr: ReviewPullRequest): Promise<void> {
@@ -135,7 +135,7 @@ export function useSelectedPrReview(
       if (!isCurrentLoad(sequence, pr)) return
       agentCommentsStore.current = agentComments
 
-      await aiThreadState.load(pr)
+      await reviewThreadFollowUps.load(pr)
     } catch (cause) {
       if (!isCurrentLoad(sequence, pr)) return
       console.error('Failed to load PR diffs:', cause)

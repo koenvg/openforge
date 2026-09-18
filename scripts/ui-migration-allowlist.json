@@ -149,17 +149,12 @@
     {"tag":"div","context":"class=\"min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let the follow-up field shrink beside the Send action without overflowing the footer."}
   ],
   "plugins/github-sync/src/review/pr/PrReviewDetailSection.svelte": [
-    {"tag":"div","context":"class=\"relative flex h-full min-h-0 flex-col overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane; positioned so the questions slide-over anchors to the section."},
+    {"tag":"div","context":"class=\"flex h-full min-h-0 flex-col overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let the review detail column shrink within its workspace instead of overflowing it."},
     {"tag":"div","context":"class=\"flex items-center gap-2 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex h-full min-h-0 overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "plugins/github-sync/src/review/pr/PrReviewView.svelte": [
     {"tag":"div","context":"class=\"flex flex-col w-full h-full min-h-0 overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
-  ],
-  "plugins/github-sync/src/review/pr/QuestionsPanel.svelte": [
-    {"tag":"aside","context":"class=\"relative flex flex-col h-full w-96 max-w-full bg-base-100 border-l border-base-300 shadow-xl\"","tokens":["w-96"],"count":1,"reason":"Fixed-width slide-over panel docked to the right edge of the review section."},
-    {"tag":"div","context":"class=\"flex-1 min-h-0 overflow-y-auto\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"w-2 h-2 rounded-full {GROUP_META[groupKey].dot} shrink-0\"","tokens":["w-2","h-2","rounded-full"],"count":1,"reason":"Small circular status dot that colour-codes each question group."}
   ],
   "plugins/github-sync/src/review/pr/RepositoryFilterSection.svelte": [
     {"tag":"Panel","context":"class=\"absolute right-0 top-full z-50 mt-1 w-[320px]\"","tokens":["w-[320px]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},

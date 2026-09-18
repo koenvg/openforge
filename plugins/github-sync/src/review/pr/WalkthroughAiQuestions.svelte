@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
-  import type { AiThread } from '../../lib/prReviewRecords'
+  import type { ReviewThread } from '@openforge-app/plugin-sdk'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
@@ -11,45 +11,32 @@
   interface Props {
     activeStep: PrWalkthroughStep | null
     visible: boolean
-    aiThreads: AiThread[]
+    reviewThreads: ReviewThread[]
     onOpenUrl: (url: string) => void | Promise<void>
+    unavailableReason?: string | null
     onAskAgentStep?: (stepId: string, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
-    onEditThread?: (threadId: string, body: string) => void
-    onDeleteThread?: (threadId: string) => void
   }
 
   let {
     activeStep,
     visible,
-    aiThreads,
+    reviewThreads,
     onOpenUrl,
+    unavailableReason = null,
     onAskAgentStep,
     onReplyToThread,
-    onEditThread,
-    onDeleteThread,
   }: Props = $props()
 
   let questionOpen = $state(false)
   let questionText = $state('')
   let replyDrafts = $state<Record<string, string>>({})
-  let editingThreadId = $state<string | null>(null)
-  let editText = $state('')
   let activeThreads = $derived.by(() => {
     if (!activeStep) return []
-    return aiThreads.filter(
-      thread => thread.anchor.type === 'step' && thread.anchor.step_id === activeStep?.id,
+    return reviewThreads.filter(
+      thread => thread.anchor.kind === 'custom' && thread.anchor.key === `step:${activeStep?.id}`,
     )
   })
-
-  // An unsent question or reply: the latest message is still the reviewer's and it
-  // hasn't been dispatched. These are the only threads that can be edited or deleted.
-  function isUnsentThread(thread: AiThread): boolean {
-    return thread.status !== 'pending' && thread.messages.at(-1)?.role === 'user'
-  }
-  // While a step has an unsent draft, "Ask about this step" hides so the reviewer
-  // refines that draft instead of stacking a second unsent question.
-  let hasUnsentStepDraft = $derived(activeThreads.some(isUnsentThread))
 
   function submitQuestion(): void {
     const text = questionText.trim()
@@ -73,103 +60,54 @@
     replyDrafts = next
   }
 
-  function startEditThread(thread: AiThread): void {
-    editingThreadId = thread.id
-    editText = thread.messages.at(-1)?.body ?? ''
-  }
-  function saveEditThread(): void {
-    const id = editingThreadId
-    const text = editText.trim()
-    if (!id || !text) return
-    onEditThread?.(id, text)
-    editingThreadId = null
-    editText = ''
-  }
-  function cancelEditThread(): void {
-    editingThreadId = null
-    editText = ''
-  }
-  function handleDeleteThread(threadId: string): void {
-    if (editingThreadId === threadId) cancelEditThread()
-    onDeleteThread?.(threadId)
-  }
-
 </script>
 
-{#if visible && activeStep && onAskAgentStep}
+{#if visible && activeStep}
   <div class="flex flex-col gap-2">
     {#each activeThreads as thread}
       <Panel class="border-l-4 border-l-info text-[0.8rem]">
         <div class="flex items-center gap-2 mb-1">
           <Badge variant="info">Ask the AI</Badge>
-          {#if thread.status === 'pending'}
+          {#if thread.awaiting === 'agent'}
             <span class="loading loading-spinner loading-xs"></span>
             <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
           {/if}
-          {#if thread.status === 'error'}
-            <span class="text-error text-[0.7rem]">failed — send again</span>
+          {#if thread.awaiting === 'error'}
+            <span class="text-error text-[0.7rem]">Send failed. Your question is saved.</span>
           {/if}
         </div>
-        {#if editingThreadId === thread.id}
-          <Textarea
-            label="Edit your question"
-            rows={2}
-            class="w-full resize-y text-[0.8rem]"
-            bind:value={editText}
-            onkeydown={(event: KeyboardEvent) => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault()
-                saveEditThread()
-              }
-            }}
-          />
-          <div class="flex justify-end gap-2 mt-1">
-            <Button type="button" variant="ghost" size="xs" onclick={cancelEditThread}>Cancel</Button>
-            <Button type="button" size="xs" onclick={saveEditThread}>Save</Button>
+        {#each thread.messages as message}
+          <div class="mb-1">
+            <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'human' ? 'font-semibold' : ''}">{message.role === 'agent' ? 'AI author' : 'You'}</span>
+            <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
           </div>
-        {:else}
-          {#each thread.messages as message}
-            <div class="mb-1">
-              <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'user' ? 'font-semibold' : ''}">{message.role === 'ai' ? 'AI author' : 'You'}</span>
-              <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
+        {/each}
+        {#if onReplyToThread && thread.awaiting !== 'agent'}
+          <div class="mt-1 flex items-end gap-2">
+            <div class="min-w-0 flex-1">
+              <TextField
+                label="Reply to the AI author"
+                placeholder="Reply…"
+                value={replyDrafts[thread.id] ?? ''}
+                onValueChange={(value) => {
+                  replyDrafts = { ...replyDrafts, [thread.id]: value }
+                }}
+                onkeydown={(event: KeyboardEvent) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    submitReply(thread.id)
+                  }
+                }}
+              />
             </div>
-          {/each}
-          {#if isUnsentThread(thread)}
-            <div class="flex gap-2 mt-1">
-              <Button type="button" variant="ghost" size="xs" onclick={() => startEditThread(thread)}>Edit</Button>
-              {#if thread.messages.length === 1}
-                <!-- Only a never-sent question can be deleted; a thread with an AI answer keeps its history. -->
-                <Button type="button" variant="ghost" size="xs" class="text-error" onclick={() => handleDeleteThread(thread.id)}>Delete</Button>
-              {/if}
-            </div>
-          {/if}
-          {#if thread.status === 'answered'}
-            <div class="mt-1 flex items-end gap-2">
-              <div class="min-w-0 flex-1">
-                <TextField
-                  label="Reply to the AI author"
-                  placeholder="Reply…"
-                  value={replyDrafts[thread.id] ?? ''}
-                  onValueChange={(value) => {
-                    replyDrafts = { ...replyDrafts, [thread.id]: value }
-                  }}
-                  onkeydown={(event: KeyboardEvent) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      submitReply(thread.id)
-                    }
-                  }}
-                />
-              </div>
-              <Button type="button" size="xs" onclick={() => submitReply(thread.id)}>Reply</Button>
-            </div>
-          {/if}
+            <Button type="button" size="xs" onclick={() => submitReply(thread.id)}>Reply</Button>
+          </div>
         {/if}
       </Panel>
     {/each}
 
-    {#if hasUnsentStepDraft}
-      <!-- An unsent draft already exists on this step; edit it above instead of stacking another. -->
+    {#if unavailableReason}
+      <p class="m-0 text-xs text-base-content/60">AI follow-ups are unavailable. {unavailableReason}</p>
     {:else if questionOpen}
       <div>
         <Textarea
@@ -190,7 +128,7 @@
           <Button type="button" size="xs" onclick={submitQuestion}>Ask</Button>
         </div>
       </div>
-    {:else}
+    {:else if onAskAgentStep}
       <Button type="button" variant="ghost" size="xs" class="self-start text-info" onclick={() => { questionOpen = true }}>+ Ask about this step</Button>
     {/if}
   </div>
