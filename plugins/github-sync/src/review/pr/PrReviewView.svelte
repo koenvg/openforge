@@ -20,7 +20,8 @@
 
 <div class="flex flex-col w-full h-full min-h-0 overflow-hidden">
   {#if workspace.detail}
-    <PrReviewDetailSection {...workspace.detail} />
+    {@const detail = workspace.detail}
+    <PrReviewDetailSection {...detail} />
   {:else}
     <PrReviewListSection {...workspace.list} />
   {/if}

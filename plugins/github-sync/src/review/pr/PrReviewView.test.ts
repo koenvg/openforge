@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { AiThread } from '../../lib/prReviewRecords'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
@@ -59,6 +59,7 @@ vi.mock('../../lib/stores', () => ({
 }))
 
 import PrReviewView from './PrReviewView.svelte'
+import PrReviewViewBoundaryHarness from './__fixtures__/PrReviewViewBoundaryHarness.svelte'
 import {
   activeProjectId,
   agentReviewComments,
@@ -180,6 +181,7 @@ function registerPrReviewBackends(
   getWalkthrough: () => PrWalkthrough | null | Promise<PrWalkthrough | null> = () => null,
   getAiThreads: () => AiThread[] | Promise<AiThread[]> = () => [],
 ) {
+  let getOverviewComments: () => PrOverviewComment[] | Promise<PrOverviewComment[]> = () => []
   registry.frontendApi.projects.list = vi.fn(async () => [{
     id: 'project-1', name: 'Project 1', path: '/project-1', created_at: 1, updated_at: 1,
   }])
@@ -205,7 +207,7 @@ function registerPrReviewBackends(
       ? reviewCommentResults()
       : reviewCommentResults,
   })
-  backend.registerMethod('getPrOverviewComments', { handler: async () => [] })
+  backend.registerMethod('getPrOverviewComments', { handler: () => getOverviewComments() })
   backend.registerMethod('getPrAiReviewComments', { handler: async () => [] })
   backend.registerMethod('updatePrAiReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getPrWalkthrough', { handler: async () => getWalkthrough() })
@@ -220,7 +222,12 @@ function registerPrReviewBackends(
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })
-  return { resolveProjects }
+  return {
+    resolveProjects,
+    setOverviewCommentsHandler(handler: typeof getOverviewComments) {
+      getOverviewComments = handler
+    },
+  }
 }
 
 async function openFilesTab(registry: TestingOpenForgeRegistryFake) {
@@ -1250,6 +1257,55 @@ describe('PrReviewView non-application file filter', () => {
       expect(screen.queryByLabelText('Mark README.md reviewed')).toBeNull()
     })
     expect(screen.getByText('(1 hidden)')).toBeTruthy()
+  })
+
+  it('returns to the pull request list from filtered Files without stale detail errors', async () => {
+    const reported: string[] = []
+    const collect = (event: ErrorEvent) => { reported.push(event.message) }
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    window.addEventListener('error', collect)
+
+    try {
+      let resolveOverviewComments: (comments: PrOverviewComment[]) => void = () => {}
+      const overviewComments = new Promise<PrOverviewComment[]>((resolve) => { resolveOverviewComments = resolve })
+      const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+      const { setOverviewCommentsHandler } = registerPrReviewBackends(registry, () => [baseDiff, docDiff])
+      setOverviewCommentsHandler(() => overviewComments)
+
+      render(PrReviewViewBoundaryHarness, {
+        props: {
+          api: registry.frontendApi,
+          context: registry.frontendApi.context.getSnapshot(),
+          projectName: 'Demo Project',
+          projectId: 'project-1',
+        },
+      })
+      const title = await screen.findByText('Fix authentication middleware')
+      await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+      await waitFor(() => expect(
+        registry.calls.backendInvocations.some(({ method }) => method === 'getPrOverviewComments'),
+      ).toBe(true))
+      await fireEvent.click(await screen.findByRole('tab', { name: /Files changed/i }))
+      await screen.findByLabelText('Mark README.md reviewed')
+      await fireEvent.click(requireElement(
+        screen.getByRole('checkbox', { name: /Also include non-application files/i }),
+        HTMLInputElement,
+      ))
+      await waitFor(() => expect(screen.queryByLabelText('Mark README.md reviewed')).toBeNull())
+
+      await fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+      resolveOverviewComments([])
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(get(selectedReviewPr)).toBeNull()
+      expect(await screen.findByText('Fix authentication middleware')).toBeTruthy()
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(reported).toEqual([])
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('error', collect)
+      consoleError.mockRestore()
+    }
   })
 
   it('resets to showing all files when a different PR is opened', async () => {
