@@ -8,6 +8,12 @@ const SUPPORTED_OPENFORGE_LIFECYCLE_KINDS = new Set([
 const TURN_MONITOR_ARG = "--monitor-turn";
 const TURN_MONITOR_TIMEOUT_MS = 12 * 60 * 60 * 1000;
 const TURN_MONITOR_POLL_INTERVAL_MS = 500;
+const TURN_STATE_VERSION = 2;
+const TURN_STATE_LOCK_TIMEOUT_MS = 2000;
+const TURN_STATE_LOCK_POLL_INTERVAL_MS = 10;
+const TURN_STATE_LOCK_STALE_MS = 30_000;
+const TURN_DELIVERY_LOCK_TIMEOUT_MS = 100;
+const MAX_PENDING_NOTIFICATIONS = 64;
 const MAX_ACTIVITY_SNAPSHOT_CHARS = 8000;
 
 function boundedJsonSnapshot(value) {
@@ -21,7 +27,7 @@ function boundedJsonSnapshot(value) {
     : json;
 }
 
-async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hookInput = null) {
+function lifecyclePayload(kind, rawEventType, rawStatusType = null, hookInput = null) {
   const taskId = process.env.OPENFORGE_TASK_ID;
   const ptyInstanceId = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
   const port = process.env.OPENFORGE_HTTP_PORT;
@@ -33,7 +39,7 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hook
     !SUPPORTED_OPENFORGE_LIFECYCLE_KINDS.has(kind) ||
     !rawEventType
   ) {
-    return;
+    return null;
   }
 
   const payload = {
@@ -57,9 +63,15 @@ async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hook
     payload.activity_snapshot = activitySnapshot;
   }
 
-  await sendOpenForgeNotification(payload, `http://127.0.0.1:${port}/hooks/agent-lifecycle`);
+  return payload;
 }
 
+async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hookInput = null) {
+  const payload = lifecyclePayload(kind, rawEventType, rawStatusType, hookInput);
+  if (!payload) return;
+  const port = process.env.OPENFORGE_HTTP_PORT;
+  await sendOpenForgeNotification(payload, `http://127.0.0.1:${port}/hooks/agent-lifecycle`);
+}
 
 async function readStdinJson() {
   const chunks = [];
@@ -84,8 +96,6 @@ async function maybeStartTurnCompletionMonitor(kind, rawEventType, hookInput) {
   if (!hookInput || typeof hookInput !== "object") return;
   if (typeof hookInput.transcript_path !== "string" || !hookInput.transcript_path) return;
   if (typeof hookInput.turn_id !== "string" || !hookInput.turn_id) return;
-
-  await writeActiveTurnId(hookInput.turn_id);
 
   const childProcess = await import("node:child_process");
   const child = childProcess.spawn(
@@ -112,84 +122,444 @@ async function activeTurnStatePath() {
   return path.join(os.tmpdir(), `openforge-codex-turn-${taskId}-${ptyInstanceId}.json`);
 }
 
-async function writeActiveTurnId(turnId) {
-  const fs = await import("node:fs/promises");
-  const statePath = await activeTurnStatePath();
-  await fs.writeFile(statePath, JSON.stringify({ turnId }), "utf8");
+async function codexTurnStateLockPath() {
+  return `${await activeTurnStatePath()}.lock`;
 }
 
-async function readActiveTurnId() {
+async function codexTurnDeliveryLockPath() {
+  return `${await activeTurnStatePath()}.delivery.lock`;
+}
+
+function waitForCodexTurnStateLock(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function codexLockOwnerIsAlive(owner) {
+  if (!owner || !Number.isInteger(owner.pid) || owner.pid <= 0) return false;
+  try {
+    process.kill(owner.pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+async function recoverStaleCodexTurnStateLock(lockPath, staleMs) {
+  const fs = await import("node:fs/promises");
+  let stat;
+  try {
+    stat = await fs.stat(lockPath);
+  } catch (error) {
+    return error?.code === "ENOENT";
+  }
+  if (Date.now() - stat.mtimeMs <= staleMs) return false;
+
+  let owner = null;
+  try {
+    owner = JSON.parse(await fs.readFile(`${lockPath}/owner.json`, "utf8"));
+  } catch (_error) {
+    // A stale lock without readable owner metadata is safe to replace.
+  }
+  if (codexLockOwnerIsAlive(owner)) return false;
+
+  try {
+    await fs.rm(lockPath, { recursive: true, force: true });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function withCodexDirectoryLock(lockPath, callback, options = {}) {
+  const fs = await import("node:fs/promises");
+  const timeoutMs = options.timeoutMs ?? TURN_STATE_LOCK_TIMEOUT_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? TURN_STATE_LOCK_POLL_INTERVAL_MS;
+  const staleMs = options.staleMs ?? TURN_STATE_LOCK_STALE_MS;
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    try {
+      await fs.mkdir(lockPath, { mode: 0o700 });
+      try {
+        await fs.writeFile(
+          `${lockPath}/owner.json`,
+          JSON.stringify({ pid: process.pid, createdAt: Date.now() }),
+          { encoding: "utf8", mode: 0o600 },
+        );
+      } catch (error) {
+        await fs.rm(lockPath, { recursive: true, force: true });
+        throw error;
+      }
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      if (await recoverStaleCodexTurnStateLock(lockPath, staleMs)) continue;
+      if (Date.now() >= deadline) throw new Error("Codex turn state lock timed out");
+      await waitForCodexTurnStateLock(pollIntervalMs);
+    }
+  }
+
+  try {
+    return await callback();
+  } finally {
+    await fs.rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+async function withCodexTurnStateLock(callback, options = {}) {
+  return withCodexDirectoryLock(await codexTurnStateLockPath(), callback, options);
+}
+
+async function withCodexTurnDeliveryLock(callback) {
+  return withCodexDirectoryLock(await codexTurnDeliveryLockPath(), callback, {
+    timeoutMs: TURN_DELIVERY_LOCK_TIMEOUT_MS,
+  });
+}
+
+function isLifecyclePayload(value) {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && value.provider === "codex"
+      && typeof value.task_id === "string"
+      && Number.isFinite(value.pty_instance_id)
+      && SUPPORTED_OPENFORGE_LIFECYCLE_KINDS.has(value.kind)
+      && typeof value.raw_event_type === "string"
+      && value.raw_event_type,
+  );
+}
+
+function isPendingNotification(value) {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && typeof value.id === "string"
+      && /^[a-f0-9-]{36}$/.test(value.id)
+      && isLifecyclePayload(value.payload),
+  );
+}
+
+function isCodexTurnState(value) {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && value.version === TURN_STATE_VERSION
+      && typeof value.turnId === "string"
+      && value.turnId
+      && (value.parentStatus === "active" || value.parentStatus === "ended")
+      && Array.isArray(value.activeAgentIds)
+      && value.activeAgentIds.every((agentId) => typeof agentId === "string" && agentId)
+      && Array.isArray(value.pendingNotifications)
+      && value.pendingNotifications.length <= MAX_PENDING_NOTIFICATIONS
+      && value.pendingNotifications.every(isPendingNotification),
+  );
+}
+
+async function readCodexTurnState() {
   const fs = await import("node:fs/promises");
   try {
-    const statePath = await activeTurnStatePath();
-    const state = JSON.parse(await fs.readFile(statePath, "utf8"));
-    return typeof state.turnId === "string" ? state.turnId : null;
+    const state = JSON.parse(await fs.readFile(await activeTurnStatePath(), "utf8"));
+    return isCodexTurnState(state) ? state : null;
   } catch (_error) {
     return null;
   }
 }
 
-async function clearActiveTurnId(turnId) {
+async function writeCodexTurnState(state) {
   const fs = await import("node:fs/promises");
+  const crypto = await import("node:crypto");
   const statePath = await activeTurnStatePath();
-  const activeTurnId = await readActiveTurnId();
-  if (activeTurnId !== turnId) return;
+  const temporaryPath = `${statePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
   try {
-    await fs.unlink(statePath);
-  } catch (_error) {
-    // Another hook process may already have cleaned this up.
+    await fs.writeFile(temporaryPath, JSON.stringify(state), { encoding: "utf8", mode: 0o600 });
+    await fs.rename(temporaryPath, statePath);
+  } finally {
+    await fs.rm(temporaryPath, { force: true });
   }
 }
 
-function codexTranscriptTurnEndStatus(entry, turnId) {
+function codexHookIdentity(hookInput) {
+  if (!hookInput || typeof hookInput !== "object") return null;
+  return typeof hookInput.turn_id === "string" && hookInput.turn_id
+    ? hookInput.turn_id
+    : null;
+}
+
+async function enqueueLifecycleNotification(state, kind, rawEventType, rawStatusType, hookInput) {
+  const payload = lifecyclePayload(kind, rawEventType, rawStatusType, hookInput);
+  if (!payload) return state;
+
+  if (
+    state.pendingNotifications.length >= MAX_PENDING_NOTIFICATIONS
+      && kind !== "ended"
+  ) return state;
+
+  const crypto = await import("node:crypto");
+  const pendingNotifications = [...state.pendingNotifications];
+  if (pendingNotifications.length >= MAX_PENDING_NOTIFICATIONS) {
+    const expendableIndex = pendingNotifications.findIndex(
+      notification => notification.payload.kind !== "ended",
+    );
+    if (expendableIndex < 0) return state;
+    pendingNotifications.splice(expendableIndex, 1);
+  }
+  pendingNotifications.push({ id: crypto.randomUUID(), payload });
+  return { ...state, pendingNotifications };
+}
+
+async function drainLifecycleNotifications() {
+  try {
+    await withCodexTurnDeliveryLock(async () => {
+      for (;;) {
+        const pending = await withCodexTurnStateLock(async () => {
+          const state = await readCodexTurnState();
+          return state?.pendingNotifications[0] ?? null;
+        });
+        if (!pending) return;
+
+        const port = process.env.OPENFORGE_HTTP_PORT;
+        await sendOpenForgeNotification(
+          pending.payload,
+          `http://127.0.0.1:${port}/hooks/agent-lifecycle`,
+          undefined,
+          pending.id,
+        );
+
+        await withCodexTurnStateLock(async () => {
+          const state = await readCodexTurnState();
+          if (!state || state.pendingNotifications[0]?.id !== pending.id) return;
+          await writeCodexTurnState({
+            ...state,
+            pendingNotifications: state.pendingNotifications.slice(1),
+          });
+        });
+      }
+    });
+    return true;
+  } catch (error) {
+    // Another hook process owns delivery and will drain notifications appended behind its item.
+    if (error?.message === "Codex turn state lock timed out") return true;
+    return false;
+  }
+}
+
+async function processCodexLifecycleEventUnlocked(kind, rawEventType, rawStatusType, hookInput) {
+  const turnId = codexHookIdentity(hookInput);
+
+  if (rawEventType === "SessionStart") {
+    const state = await readCodexTurnState();
+    if (state?.parentStatus === "ended") return null;
+    if (!state) return lifecyclePayload(kind, rawEventType, rawStatusType, hookInput);
+    await writeCodexTurnState(
+      await enqueueLifecycleNotification(state, kind, rawEventType, rawStatusType, hookInput),
+    );
+    return null;
+  }
+
+  if (rawEventType === "UserPromptSubmit") {
+    if (!turnId) return null;
+    const previous = await readCodexTurnState();
+    const nextState = {
+      version: TURN_STATE_VERSION,
+      turnId,
+      parentStatus: "active",
+      activeAgentIds: previous?.turnId === turnId ? previous.activeAgentIds : [],
+      pendingNotifications: previous?.pendingNotifications ?? [],
+    };
+    await writeCodexTurnState(
+      await enqueueLifecycleNotification(nextState, kind, rawEventType, rawStatusType, hookInput),
+    );
+    return null;
+  }
+
+  if (rawEventType === "SubagentStart" || rawEventType === "TranscriptSubagentEnd") {
+    const agentId = typeof hookInput?.agent_id === "string" && hookInput.agent_id
+      ? hookInput.agent_id
+      : null;
+    if (!turnId || !agentId) return null;
+
+    const state = await readCodexTurnState();
+    if (!state || state.turnId !== turnId) return null;
+
+    const activeAgentIds = new Set(state.activeAgentIds);
+    if (rawEventType === "SubagentStart") {
+      if (
+        (state.parentStatus !== "active" && activeAgentIds.size === 0)
+          || activeAgentIds.has(agentId)
+      ) return null;
+      activeAgentIds.add(agentId);
+      const nextState = await enqueueLifecycleNotification(
+        { ...state, activeAgentIds: [...activeAgentIds] },
+        "became_busy",
+        rawEventType,
+        rawStatusType,
+        hookInput,
+      );
+      await writeCodexTurnState(nextState);
+      return null;
+    }
+
+    if (!activeAgentIds.delete(agentId)) return null;
+    let nextState = { ...state, activeAgentIds: [...activeAgentIds] };
+    if (nextState.parentStatus === "ended" && nextState.activeAgentIds.length === 0) {
+      nextState = await enqueueLifecycleNotification(
+        nextState,
+        "ended",
+        rawEventType,
+        rawStatusType,
+        hookInput,
+      );
+    }
+    await writeCodexTurnState(nextState);
+    return null;
+  }
+
+  if (rawEventType === "Stop" || rawEventType === "SubagentStop") {
+    // These hooks run before Codex combines blocking decisions from every matching hook.
+    return null;
+  }
+
+  if (rawEventType === "TranscriptTurnEnd") {
+    if (!turnId) return null;
+    const state = await readCodexTurnState();
+    if (!state || state.turnId !== turnId || state.parentStatus === "ended") return null;
+    let nextState = { ...state, parentStatus: "ended" };
+    if (nextState.activeAgentIds.length === 0) {
+      nextState = await enqueueLifecycleNotification(
+        nextState,
+        "ended",
+        rawEventType,
+        rawStatusType,
+        hookInput,
+      );
+    }
+    await writeCodexTurnState(nextState);
+    return null;
+  }
+
+  if (
+    rawEventType === "PreToolUse"
+      || rawEventType === "PostToolUse"
+      || rawEventType === "PermissionRequest"
+  ) {
+    if (!turnId) return null;
+    const state = await readCodexTurnState();
+    if (!state || state.turnId !== turnId || state.parentStatus !== "active") return null;
+    await writeCodexTurnState(
+      await enqueueLifecycleNotification(state, kind, rawEventType, rawStatusType, hookInput),
+    );
+    return null;
+  }
+
+  return lifecyclePayload(kind, rawEventType, rawStatusType, hookInput);
+}
+
+async function processCodexLifecycleEvent(kind, rawEventType, rawStatusType, hookInput) {
+  if (!process.env.OPENFORGE_TASK_ID || !Number.isFinite(Number(process.env.OPENFORGE_PTY_INSTANCE_ID))) {
+    return true;
+  }
+
+  const directPayload = await withCodexTurnStateLock(
+    () => processCodexLifecycleEventUnlocked(kind, rawEventType, rawStatusType, hookInput),
+  );
+  if (directPayload) {
+    const port = process.env.OPENFORGE_HTTP_PORT;
+    try {
+      await sendOpenForgeNotification(
+        directPayload,
+        `http://127.0.0.1:${port}/hooks/agent-lifecycle`,
+      );
+    } catch (_error) {
+      return false;
+    }
+  }
+  return drainLifecycleNotifications();
+}
+
+function codexTranscriptLifecycleEvent(entry, turnId) {
   if (!entry || typeof entry !== "object" || entry.type !== "event_msg") return null;
 
   const payload = entry.payload;
   if (!payload || typeof payload !== "object" || payload.turn_id !== turnId) return null;
 
-  if (payload.type === "task_complete") return "task_complete";
+  if (payload.type === "task_complete") {
+    return { type: "parent_ended", statusType: "task_complete" };
+  }
   if (payload.type === "turn_aborted") {
-    return typeof payload.reason === "string"
-      ? `turn_aborted:${payload.reason}`
-      : "turn_aborted";
+    return {
+      type: "parent_ended",
+      statusType: typeof payload.reason === "string"
+        ? `turn_aborted:${payload.reason}`
+        : "turn_aborted",
+    };
+  }
+
+  const item = payload.type === "item_completed" ? payload.item : null;
+  if (
+    item?.type === "SubAgentActivity"
+      && item.kind === "completed"
+      && typeof item.agent_thread_id === "string"
+      && item.agent_thread_id
+  ) {
+    return { type: "child_ended", agentId: item.agent_thread_id };
   }
 
   return null;
 }
 
-async function findCodexTranscriptTurnEnd(transcriptPath, turnId, offset) {
+async function findCodexTranscriptLifecycleEvents(transcriptPath, turnId, offset) {
   const fs = await import("node:fs/promises");
   let file;
   try {
     file = await fs.open(transcriptPath, "r");
   } catch (_error) {
-    return { offset, statusType: null };
+    return { offset, events: [] };
   }
 
   try {
     const stat = await file.stat();
-    const start = Math.min(offset, stat.size);
+    const start = offset <= stat.size ? offset : 0;
     const length = stat.size - start;
-    if (length <= 0) return { offset: stat.size, statusType: null };
+    if (length <= 0) return { offset: start, events: [] };
 
     const buffer = Buffer.alloc(length);
     await file.read(buffer, 0, length, start);
-    const lines = buffer.toString("utf8").split("\n");
+    const lastNewline = buffer.lastIndexOf(0x0a);
+    if (lastNewline < 0) return { offset: start, events: [] };
+    const lines = buffer.subarray(0, lastNewline + 1).toString("utf8").split("\n");
+    const events = [];
 
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        const statusType = codexTranscriptTurnEndStatus(JSON.parse(line), turnId);
-        if (statusType) return { offset: stat.size, statusType };
+        const event = codexTranscriptLifecycleEvent(JSON.parse(line), turnId);
+        if (event) events.push(event);
       } catch (_error) {
         // Ignore partial or unrelated transcript lines while the file is growing.
       }
     }
 
-    return { offset: stat.size, statusType: null };
+    return { offset: start + lastNewline + 1, events };
   } finally {
     await file.close();
   }
+}
+
+async function codexTurnMonitorCanExit(turnId) {
+  return withCodexTurnStateLock(async () => {
+    const state = await readCodexTurnState();
+    return Boolean(
+      state
+        && (
+          state.turnId !== turnId
+            || (
+              state.parentStatus === "ended"
+                && state.activeAgentIds.length === 0
+                && state.pendingNotifications.length === 0
+            )
+        ),
+    );
+  });
 }
 
 async function monitorCodexTranscriptTurn(transcriptPath, turnId, options = {}) {
@@ -199,17 +569,29 @@ async function monitorCodexTranscriptTurn(transcriptPath, turnId, options = {}) 
   let offset = 0;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const result = await findCodexTranscriptTurnEnd(transcriptPath, turnId, offset);
+    const result = await findCodexTranscriptLifecycleEvents(transcriptPath, turnId, offset);
     offset = result.offset;
 
-    if (result.statusType) {
-      const activeTurnId = await readActiveTurnId();
-      if (activeTurnId === turnId) {
-        await postLifecycleEvent("ended", "TranscriptTurnEnd", result.statusType);
-        await clearActiveTurnId(turnId);
+    for (const event of result.events) {
+      if (event.type === "parent_ended") {
+        await processCodexLifecycleEvent(
+          "ended",
+          "TranscriptTurnEnd",
+          event.statusType,
+          { turn_id: turnId, transcript_path: transcriptPath },
+        );
+      } else {
+        await processCodexLifecycleEvent(
+          "ended",
+          "TranscriptSubagentEnd",
+          "completed",
+          { turn_id: turnId, agent_id: event.agentId, transcript_path: transcriptPath },
+        );
       }
-      return true;
     }
+
+    await drainLifecycleNotifications();
+    if (await codexTurnMonitorCanExit(turnId)) return true;
 
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
@@ -228,8 +610,9 @@ async function main() {
     const kind = firstArg;
     const rawEventType = secondArg;
     const hookInput = await readStdinJson();
-    await postLifecycleEvent(kind, rawEventType, null, hookInput);
+    const accepted = await processCodexLifecycleEvent(kind, rawEventType, null, hookInput);
     await maybeStartTurnCompletionMonitor(kind, rawEventType, hookInput);
+    if (!accepted) throw new Error("Codex lifecycle delivery remains pending");
   } catch (_error) {
     console.error("[openforge] Codex notification acceptance failed");
   }
