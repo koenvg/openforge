@@ -35,6 +35,7 @@
   items={menuItems}
   bind:open
   align="end"
+  triggerButton={{ size: 'sm', variant: 'secondary' }}
   ariaDescribedby={selectedCount > 0 ? summaryId : undefined}
   onSelect={handleSelect}
 >
