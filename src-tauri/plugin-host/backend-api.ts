@@ -269,13 +269,16 @@ export function createBackendApi(
         if (created.disposed || created.polling) return
         created.polling = true
         try {
-          const current = await scopedHostCallback<unknown>(
+          const current = await scopedHostCallback<{
+            state: ScopedAgentSessionState | null
+            outputRevision: number | null
+          }>(
             'openforge.agentSessions.observe', { scope },
           )
           if (created.disposed) return
           const next = JSON.stringify(current)
           if (!created.previous || created.previous !== next) {
-            const event = { ...scope }
+            const event = { ...scope, state: current.state }
             for (const currentHandler of [...created.handlers]) currentHandler(event)
           }
           created.previous = next

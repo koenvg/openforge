@@ -97,14 +97,28 @@ describe('PrReviewRowAction availability', () => {
 })
 
 describe('PrReviewRowAction stop', () => {
-  it('stops an in-flight generation and resets the row to idle', async () => {
+  it('stops an in-flight generation without deleting its attempt', async () => {
     client.getPrWalkthrough.mockResolvedValue(generatingRow)
     renderRow()
 
     await fireEvent.click(await screen.findByRole('button', { name: /stop walkthrough generation/i }))
 
     expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
-    expect(client.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: 1, headSha: 'sha-1' })
+    expect(client.deletePrWalkthrough).not.toHaveBeenCalled()
     expect(await screen.findByRole('button', { name: /generate walkthrough and ai review/i })).toBeTruthy()
+  })
+
+  it('keeps the generation active when stopping fails', async () => {
+    client.getPrWalkthrough.mockResolvedValue(generatingRow)
+    client.abortAgentWalkthrough.mockRejectedValueOnce(new Error('abort unavailable'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderRow()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /stop walkthrough generation/i }))
+
+    expect(client.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+    expect(await screen.findByRole('button', { name: /stop walkthrough generation/i })).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe('Could not stop walkthrough generation. Try again.')
+    expect(client.deletePrWalkthrough).not.toHaveBeenCalled()
   })
 })

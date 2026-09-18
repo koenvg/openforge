@@ -112,6 +112,11 @@ export interface SubmitWalkthroughStepInput {
   step: PrWalkthroughStep
 }
 
+export type WalkthroughAttemptOutcome =
+  | { status: 'completed' }
+  | { status: 'failed'; code?: string | null; message?: string | null }
+  | { status: 'aborted'; code?: string | null; message?: string | null }
+
 export interface WalkthroughSubmissionRejection {
   code: string
   attemptId: string | null
@@ -492,6 +497,56 @@ export async function submitWalkthroughStep(
       position: replaced ? position : steps.length - 1,
       replaced,
     }
+  })
+}
+
+export async function finishWalkthroughAttempt(
+  openforge: BackendOpenForgeAPI,
+  params: {
+    scope: SessionScope
+    attemptId: string
+    outcome: WalkthroughAttemptOutcome
+  },
+  now: () => number = () => Math.floor(Date.now() / 1000),
+): Promise<WalkthroughRecordV1 | null> {
+  const key = scopeKey(params.scope)
+  return serialized(key, async () => {
+    const active = activeAttempts.get(key)
+    if (!active || active.attemptId !== params.attemptId) return null
+    const stored = await openforge.storage.global.get<JsonValue>(
+      walkthroughStorageKey(active.prId, params.scope.revision),
+    )
+    const record = parseWalkthroughRecord(stored)
+    if (!record
+      || record.state !== 'generating'
+      || record.attemptId !== params.attemptId
+      || !sameScope(record.scope, params.scope)) {
+      return null
+    }
+
+    const state: WalkthroughAttemptState = params.outcome.status === 'completed'
+      ? record.steps.length > 0 ? 'ready' : 'no-submissions'
+      : params.outcome.status
+    const error = params.outcome.status === 'completed'
+      ? null
+      : {
+          code: params.outcome.code || `generation-${params.outcome.status}`,
+          message: params.outcome.message
+            || (params.outcome.status === 'aborted'
+              ? 'Walkthrough generation was stopped.'
+              : 'Walkthrough generation failed. Try again.'),
+        }
+    const settled: WalkthroughRecordV1 = {
+      ...record,
+      state,
+      updatedAt: now(),
+      error,
+    }
+    await writeWalkthroughRecord(openforge, settled)
+    if (activeAttempts.get(key)?.attemptId === params.attemptId) {
+      activeAttempts.delete(key)
+    }
+    return settled
   })
 }
 

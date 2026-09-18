@@ -77,6 +77,7 @@ describe('Agent Sessions public SDK contract', () => {
     } satisfies StartScopedAgentSessionRequest
     const state = {
       id: 'sas-1',
+      turnId: 'turn-1',
       status: 'running',
       queuePosition: null,
       queueReason: null,
@@ -92,7 +93,7 @@ describe('Agent Sessions public SDK contract', () => {
       start: async () => state,
       status: async () => state,
       input: async () => state,
-      abort: async () => ({ ...state, status: 'aborted' as const, acceptsInput: false }),
+      abort: async () => ({ ...state, status: 'aborted' as const, acceptsInput: true }),
       release: async () => undefined,
       onDidChange: () => ({ dispose: () => undefined }),
     } satisfies AgentSessionsAPI

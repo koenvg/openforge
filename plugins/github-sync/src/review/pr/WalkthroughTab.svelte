@@ -113,8 +113,7 @@
     const conceptIndex = steps.findIndex(s => s.id === id)
     if (conceptIndex === -1) return
     lastFocusedStepId = id
-    // Step entries are [ticket, ...concepts, submit]; the ticket occupies index 0.
-    lifecycle.activeStepIndex = conceptIndex + 1
+    lifecycle.activeStepIndex = conceptIndex + (lifecycle.ready ? 1 : 0)
   })
 
   function toggleStepDetails(): void {
@@ -140,7 +139,7 @@
     <div class="flex flex-col items-center justify-center flex-1 gap-4 text-center p-8 max-w-xl mx-auto">
       <h3 class="text-lg font-semibold text-base-content m-0">Walk me through this PR</h3>
       <p class="text-sm text-base-content/60 m-0">
-        Have an AI scan the {props.files.length} changed file{props.files.length === 1 ? '' : 's'} ({props.pr.additions + props.pr.deletions} lines) and break the change into ordered, concept-sized steps — as if the author had landed several small commits.
+        Have an AI scan the {props.files.length} changed file{props.files.length === 1 ? '' : 's'} ({props.pr.additions + props.pr.deletions} lines) and break the change into ordered, concept-sized steps, as if the author had landed several small commits.
       </p>
       <Button size="sm" onclick={lifecycle.generate} disabled={lifecycle.isStarting || props.files.length === 0}>
         {lifecycle.isStarting ? 'Starting…' : 'Generate walkthrough'}
@@ -161,12 +160,39 @@
       <span>{lifecycle.walkthrough?.error_message ?? 'The walkthrough failed.'}</span>
       <Button variant="ghost" size="sm" onclick={lifecycle.regenerate}>Try again</Button>
     </div>
+  {:else if lifecycle.view === 'no-submissions'}
+    <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/70 text-sm text-center p-5">
+      <p class="m-0">The agent finished without submitting a walkthrough.</p>
+      <p class="m-0">Try again and watch the Agent tab for rejected step submissions.</p>
+      <Button variant="ghost" size="sm" onclick={lifecycle.regenerate}>Generate again</Button>
+    </div>
+  {:else if lifecycle.view === 'aborted'}
+    <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/70 text-sm text-center p-5">
+      <p class="m-0">Walkthrough generation was stopped.</p>
+      <Button variant="ghost" size="sm" onclick={lifecycle.regenerate}>Generate again</Button>
+    </div>
   {:else if lifecycle.view === 'unaligned'}
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/60 text-sm text-center p-5">
       <p class="m-0">The walkthrough was generated but couldn't be aligned with the current diff.</p>
       <Button variant="ghost" size="sm" onclick={lifecycle.regenerate}>Regenerate</Button>
     </div>
   {:else}
+    {#if lifecycle.view === 'provisional'}
+      <div class="flex items-center justify-between gap-3 px-4 py-2 bg-info/10 border-b border-info/30 text-xs" role="status" aria-live="polite" aria-atomic="true">
+        <span>
+          {#if lifecycle.walkthrough?.status === 'generating'}
+            {lifecycle.steps?.length ?? 0} accepted step{lifecycle.steps?.length === 1 ? '' : 's'} so far. These steps remain provisional until the agent finishes.
+          {:else}
+            {lifecycle.walkthrough?.error_message ?? `Generation ended ${lifecycle.walkthrough?.status}.`} Accepted steps remain provisional.
+          {/if}
+        </span>
+        {#if lifecycle.walkthrough?.status === 'generating'}
+          <Button variant="danger" size="xs" onclick={lifecycle.stop}>Stop</Button>
+        {:else}
+          <Button variant="ghost" size="xs" onclick={lifecycle.regenerate}>Generate again</Button>
+        {/if}
+      </div>
+    {/if}
     {#if stale}
       <div class="flex items-center justify-between gap-3 px-4 py-2 bg-warning/10 border-b border-warning/30 text-xs">
         <span class="text-warning-content/80">
@@ -190,21 +216,23 @@
           {#if stepDetailsExpanded && stepSummary}
             <p class="text-sm leading-relaxed text-base-content/80 m-0">{stepSummary}</p>
           {/if}
-          <WalkthroughAiQuestions
-            {activeStep}
-            visible={stepDetailsExpanded}
-            {aiThreads}
-            onOpenUrl={props.onOpenUrl}
-            onAskAgentStep={props.onAskAgentStep}
-            onReplyToThread={props.onReplyToThread}
-            onEditThread={props.onEditThread}
-            onDeleteThread={props.onDeleteThread}
-          />
+          {#if lifecycle.ready}
+            <WalkthroughAiQuestions
+              {activeStep}
+              visible={stepDetailsExpanded}
+              {aiThreads}
+              onOpenUrl={props.onOpenUrl}
+              onAskAgentStep={props.onAskAgentStep}
+              onReplyToThread={props.onReplyToThread}
+              onEditThread={props.onEditThread}
+              onDeleteThread={props.onDeleteThread}
+            />
+          {/if}
         </div>
       </div>
 
       <div class="flex items-center gap-0.5 shrink-0">
-        {#if !stale}
+        {#if lifecycle.ready && !stale}
           <IconButton
             variant="ghost"
             size="xs"

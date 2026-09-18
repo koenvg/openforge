@@ -23,6 +23,7 @@
   let githubSync = $derived(createGithubSyncPrReviewClient(api))
   let walkthrough = $state<PrWalkthrough | null>(null)
   let resolvedProjectId = $state<string | null>(null)
+  let actionError = $state<string | null>(null)
   let buttonState = $derived(walkthroughButtonState(walkthrough, pr.head_sha))
   let actionAvailable = $derived(
     buttonState === 'generating' || buttonState === 'ready' || resolvedProjectId !== null,
@@ -71,6 +72,7 @@
     const subject = pr
     const projectId = resolvedProjectId
     if (!projectId) return
+    actionError = null
     try {
       const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, projectId)
       await githubSync.startAgentWalkthrough({
@@ -99,22 +101,26 @@
   async function stop(): Promise<void> {
     const subject = pr
     const sessionKey = walkthrough?.walkthrough_session_key
+    actionError = null
     if (sessionKey) {
       try {
         await githubSync.abortAgentWalkthrough({ walkthroughSessionKey: sessionKey })
       } catch (e) {
+        actionError = 'Could not stop walkthrough generation. Try again.'
         console.error('Failed to stop walkthrough generation:', e)
+        startPolling(subject)
+        return
       }
     }
-    // Drop the stopped run so the row falls back to "Generate", not an error.
-    // The store's session guard stops the killed run from rewriting the row.
-    try {
-      await githubSync.deletePrWalkthrough({ reviewPrId: subject.id, headSha: subject.head_sha })
-    } catch (e) {
-      console.error('Failed to clear the stopped walkthrough:', e)
-    }
     stopPolling()
-    if (subjectKey(subject) === subjectKey(pr)) walkthrough = null
+    if (subjectKey(subject) === subjectKey(pr) && walkthrough) {
+      walkthrough = {
+        ...walkthrough,
+        status: 'aborted',
+        error_message: 'Walkthrough generation was stopped.',
+        updated_at: Math.floor(Date.now() / 1000),
+      }
+    }
   }
 
   $effect(() => {
@@ -124,6 +130,7 @@
     stopPolling()
     walkthrough = null
     resolvedProjectId = null
+    actionError = null
 
     const subject = pr
     void resolveProjectIdForRepo(api, subject.repo_owner, subject.repo_name)
@@ -146,5 +153,10 @@
 </script>
 
 {#if actionAvailable}
-  <PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} onStop={() => void stop()} />
+  <div class="flex flex-col items-end gap-1">
+    <PrWalkthroughButton state={buttonState} onGenerate={() => void generate()} onStop={() => void stop()} />
+    {#if actionError}
+      <span role="alert" class="text-xs text-error text-right">{actionError}</span>
+    {/if}
+  </div>
 {/if}

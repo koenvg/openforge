@@ -14,7 +14,6 @@ function getPackageMetadata() {
 interface BackendHarnessOptions {
   fileDiffError?: Error
   store?: Map<string, unknown>
-  agentGenerate?: () => Promise<{ text: string }>
 }
 
 function makeBackendHarness(options: BackendHarnessOptions = {}) {
@@ -31,9 +30,6 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
       if (options.fileDiffError) throw options.fileDiffError
       return []
     }
-    if (id === 'openforge.agentGenerateInRepo') {
-      return options.agentGenerate?.() ?? { text: '{"steps":[]}' }
-    }
     if (id === 'openforge.getProjectRepo') {
       return projectRepos[(payload as { projectId: string }).projectId] ?? null
     }
@@ -44,6 +40,19 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
     handler: (input: unknown, context: PluginCommandInvocationContext) => Promise<unknown>
     [key: string]: unknown
   }>()
+  const agentSessions = {
+    start: vi.fn(async () => ({
+      id: 'sas-1', turnId: 'turn-1', status: 'running', queuePosition: null,
+      queueReason: null, acceptsInput: true, workspaceAvailable: true,
+      errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 1,
+    })),
+    status: vi.fn(async () => null),
+    input: vi.fn(),
+    abort: vi.fn(),
+    release: vi.fn(),
+    list: vi.fn(),
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+  }
   const openforge = {
     backend: {
       registerMethod: vi.fn((name: string, def: { handler: (request: unknown) => Promise<unknown> }) => {
@@ -62,7 +71,8 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
         return { dispose: vi.fn() }
       }),
     },
-    events: { emit: vi.fn(async () => undefined) },
+    events: { emit: vi.fn(async () => undefined), emitGlobal: vi.fn(async () => undefined) },
+    agentSessions,
     projects: {
       list: vi.fn(async () => Object.keys(projectRepos).map(id => ({
         id, name: id, path: `/${id}`, created_at: 1, updated_at: 1,
@@ -80,12 +90,12 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
       },
     },
   }
-  return { openforge, invokeGlobal, handlers, projectRepos, commandRegistrations, store }
+  return { openforge, invokeGlobal, handlers, projectRepos, commandRegistrations, store, agentSessions }
 }
 
 async function activateBackend(options: BackendHarnessOptions = {}) {
   const { default: backend } = await import('./backend')
-  const { openforge, invokeGlobal, handlers, commandRegistrations, store } = makeBackendHarness(options)
+  const { openforge, invokeGlobal, handlers, commandRegistrations, store, agentSessions } = makeBackendHarness(options)
   const packageMetadata = getPackageMetadata()
   await backend.activate(openforge as never, {
     pluginId: packageMetadata.id,
@@ -93,7 +103,7 @@ async function activateBackend(options: BackendHarnessOptions = {}) {
     packageMetadata,
     subscriptions: { add: vi.fn() },
   } as never)
-  return { openforge, invokeGlobal, handlers, commandRegistrations, store }
+  return { openforge, invokeGlobal, handlers, commandRegistrations, store, agentSessions }
 }
 
 const walkthroughRequest = (overrides: Record<string, unknown> = {}) => ({
@@ -166,33 +176,17 @@ describe('walkthrough submission command', () => {
 })
 
 describe('startAgentWalkthrough backend handler', () => {
-  it('records a readable error when setup fails after generation starts', async () => {
+  it('reports setup failures before starting an Agent session', async () => {
     const { handlers } = await activateBackend({
       fileDiffError: new Error('Received 304 but no cached response found'),
     })
     const start = handlers.get('startAgentWalkthrough')!
-    const get = handlers.get('getPrWalkthrough')!
-
-    await expect(start(walkthroughRequest())).resolves.toEqual({
-      walkthrough_session_key: expect.any(String),
-    })
-
-    await expect(get({ reviewPrId: 42, headSha: 'sha123' })).resolves.toMatchObject({
-      status: 'error',
-      error_message: 'Received 304 but no cached response found',
-    })
+    await expect(start(walkthroughRequest())).rejects.toThrow('Received 304 but no cached response found')
   })
 
   it('turns generation interrupted by an app restart into a readable error', async () => {
     const persisted = new Map<string, unknown>()
-    let resolveGeneration!: (result: { text: string }) => void
-    const generation = new Promise<{ text: string }>((resolve) => {
-      resolveGeneration = resolve
-    })
-    const first = await activateBackend({
-      store: persisted,
-      agentGenerate: () => generation,
-    })
+    const first = await activateBackend({ store: persisted })
 
     await first.handlers.get('startAgentWalkthrough')!(walkthroughRequest())
     await expect(first.handlers.get('getPrWalkthrough')!({
@@ -207,42 +201,38 @@ describe('startAgentWalkthrough backend handler', () => {
       headSha: 'sha123',
     })
     await expect(getRestartedWalkthrough()).resolves.toMatchObject({
-      status: 'error',
+      status: 'aborted',
       error_message: 'Walkthrough generation stopped because OpenForge restarted. Try again.',
     })
 
-    resolveGeneration({ text: '{"steps":[]}' })
-    await vi.waitFor(async () => {
-      await expect(getRestartedWalkthrough()).resolves.toMatchObject({ status: 'error' })
-    })
+    await expect(getRestartedWalkthrough()).resolves.toMatchObject({ status: 'aborted' })
   })
 
-  it('forwards the project id to agentGenerateInRepo so the per-project provider is used', async () => {
-    const { invokeGlobal, handlers } = await activateBackend()
+  it('starts the visible scoped Agent session for the project without parsed output generation', async () => {
+    const { invokeGlobal, handlers, agentSessions } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')
     expect(handler).toBeTypeOf('function')
 
     await handler!(walkthroughRequest({ projectId: 'project-frontend' }))
 
-    await vi.waitFor(() => {
-      expect(invokeGlobal).toHaveBeenCalledWith(
-        'openforge.agentGenerateInRepo',
-        expect.objectContaining({ projectId: 'project-frontend' }),
-      )
-    })
+    expect(agentSessions.start).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-frontend',
+      scope: { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
+      initialInput: expect.stringContaining('submit-walkthrough-step'),
+    }))
+    expect(invokeGlobal).not.toHaveBeenCalledWith('openforge.agentGenerateInRepo', expect.anything())
   })
 
-  it('forwards the pull request repository used to verify the local project', async () => {
+  it('loads the pull request repository used to create the validation snapshot', async () => {
     const { invokeGlobal, handlers } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')!
 
     await handler(walkthroughRequest())
 
     await vi.waitFor(() => {
-      expect(invokeGlobal).toHaveBeenCalledWith(
-        'openforge.agentGenerateInRepo',
-        expect.objectContaining({ owner: 'octo', repo: 'frontend' }),
-      )
+      expect(invokeGlobal).toHaveBeenCalledWith('openforge.getPrFileDiffs', {
+        owner: 'octo', repo: 'frontend', prNumber: 7,
+      })
     })
   })
 })

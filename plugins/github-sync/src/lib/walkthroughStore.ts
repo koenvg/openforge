@@ -92,7 +92,7 @@ export async function readWalkthrough(
   const interrupted: PrWalkthrough = {
     ...walkthrough,
     walkthrough_session_key: null,
-    status: 'error',
+    status: 'failed',
     steps_json: null,
     error_message: WALKTHROUGH_INTERRUPTED_MESSAGE,
     updated_at: nowSeconds(),
@@ -106,7 +106,7 @@ function projectVersionedWalkthrough(record: WalkthroughRecordV1): PrWalkthrough
     pr_id: record.prId,
     head_sha: record.scope.revision,
     walkthrough_session_key: record.attemptId,
-    status: record.state === 'generating' ? 'generating' : record.state === 'ready' ? 'ready' : 'error',
+    status: record.state,
     steps_json: record.steps.length > 0 ? JSON.stringify({ steps: record.steps }) : null,
     error_message: record.error?.message ?? null,
     created_at: record.createdAt,
@@ -133,7 +133,7 @@ export async function writeWalkthrough(
     attemptId: currentRecord
       ? currentRecord.attemptId
       : walkthrough.walkthrough_session_key ?? `legacy-${walkthrough.pr_id}-${walkthrough.head_sha}`,
-    state: walkthrough.status === 'generating' ? 'generating' : walkthrough.status === 'ready' ? 'ready' : 'failed',
+    state: walkthrough.status,
     steps,
     createdAt: walkthrough.created_at,
     updatedAt: walkthrough.updated_at,
@@ -238,7 +238,7 @@ export async function failWalkthroughGeneration(
 
   await writeWalkthrough(openforge, {
     ...current,
-    status: 'error',
+    status: 'failed',
     steps_json: null,
     error_message: error instanceof Error ? error.message : String(error),
     updated_at: now(),
@@ -270,11 +270,11 @@ export async function runWalkthroughGeneration(
     if (stepsJson) {
       await persist({ status: 'ready', steps_json: stepsJson, error_message: null })
     } else {
-      await persist({ status: 'error', steps_json: null, error_message: WALKTHROUGH_INVALID_JSON_MESSAGE })
+      await persist({ status: 'failed', steps_json: null, error_message: WALKTHROUGH_INVALID_JSON_MESSAGE })
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await persist({ status: 'error', steps_json: null, error_message: message })
+    await persist({ status: 'failed', steps_json: null, error_message: message })
   }
 }
 
@@ -312,10 +312,10 @@ export async function runWalkthroughAndReviewGeneration(
     if (stepsJson) {
       await persist({ status: 'ready', steps_json: stepsJson, error_message: null })
     } else {
-      await persist({ status: 'error', steps_json: null, error_message: WALKTHROUGH_INVALID_JSON_MESSAGE })
+      await persist({ status: 'failed', steps_json: null, error_message: WALKTHROUGH_INVALID_JSON_MESSAGE })
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await persist({ status: 'error', steps_json: null, error_message: message })
+    await persist({ status: 'failed', steps_json: null, error_message: message })
   }
 }

@@ -27,10 +27,10 @@
 
 ## 5. Generation attempt lifecycle
 
-- [ ] 5.1 Change walkthrough generation to create a fresh attempt and send one scoped-session prompt containing its opaque attempt id, exact step-command example, exact Review Thread address, and stable idempotency guidance; verify prompt tests contain no JSON output schema or instruction to encode results in final text
-- [ ] 5.2 Implement `generating -> ready | no-submissions | failed | aborted` transitions fenced by attempt id and generation turn, with rejected steps excluded from the accepted count; verify deterministic tests cover normal completion with steps, zero commands, only rejected commands, provider failure, stop, stale completion, and an unrelated later conversation turn
-- [ ] 5.3 Render accepted steps as provisional while generation runs, expose normal walkthrough and ticket-coverage behavior only for `ready`, and show the exact no-submissions message with a retry action while retaining the terminal; verify component tests cover live arrival, partial failure, empty completion, successful completion, and retry
-- [ ] 5.4 Make Stop abort the current generation turn, mark only that attempt `aborted`, retain readable terminal output, and allow a clean new attempt in the same scoped conversation; verify tests prove partial steps never become ready and a retry cannot be overwritten by the stopped attempt
+- [x] 5.1 Change walkthrough generation to create a fresh attempt and send one scoped-session prompt containing its opaque attempt id, exact step-command example, exact Review Thread address, and stable idempotency guidance; verify prompt tests contain no JSON output schema or instruction to encode results in final text
+- [x] 5.2 Implement `generating -> ready | no-submissions | failed | aborted` transitions fenced by attempt id and generation turn, with rejected steps excluded from the accepted count; verify deterministic tests cover normal completion with steps, zero commands, only rejected commands, provider failure, stop, stale completion, and an unrelated later conversation turn
+- [x] 5.3 Render accepted steps as provisional while generation runs, expose normal walkthrough and ticket-coverage behavior only for `ready`, and show the exact no-submissions message with a retry action while retaining the terminal; verify component tests cover live arrival, partial failure, empty completion, successful completion, and retry
+- [x] 5.4 Make Stop abort the current generation turn, mark only that attempt `aborted`, retain readable terminal output, and allow a clean new attempt in the same scoped conversation; verify tests prove partial steps never become ready and a retry cannot be overwritten by the stopped attempt
 
 ## 6. Review Threads migration and parse-path removal
 

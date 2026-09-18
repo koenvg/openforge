@@ -517,7 +517,13 @@ impl super::Database {
             .ok_or_else(|| ScopedAgentSessionStoreError::NotFound {
                 session_id: id.to_string(),
             })?;
-        if current.status != ScopedAgentSessionStatus::Completed {
+        if !matches!(
+            current.status,
+            ScopedAgentSessionStatus::Completed
+                | ScopedAgentSessionStatus::Failed
+                | ScopedAgentSessionStatus::Aborted
+                | ScopedAgentSessionStatus::Interrupted
+        ) {
             return Err(ScopedAgentSessionStoreError::InvalidStatusTransition {
                 status: "continue".to_string(),
             });
@@ -560,8 +566,9 @@ impl super::Database {
         let now = super::current_unix_timestamp()?;
         tx.execute(
             "UPDATE scoped_agent_sessions SET status = ?2, queue_sequence = ?3,
-                    error_code = NULL, error_message = NULL, updated_at = ?4,
-                    last_used_at = ?4 WHERE id = ?1 AND status = 'completed'",
+                    pty_instance_id = NULL, error_code = NULL, error_message = NULL,
+                    updated_at = ?4, last_used_at = ?4
+              WHERE id = ?1 AND status IN ('completed', 'failed', 'aborted', 'interrupted')",
             params![
                 id,
                 status.as_str(),

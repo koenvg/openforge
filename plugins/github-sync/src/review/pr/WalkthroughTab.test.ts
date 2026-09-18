@@ -171,6 +171,33 @@ async function waitForInitialWalkthroughLoad(githubSync: GithubSyncPrReviewClien
 }
 
 describe('WalkthroughTab comment sync', () => {
+  it('renders accepted steps provisionally without ticket coverage or review submission', async () => {
+    const provisional = { ...makeWalkthrough(), status: 'generating' as const }
+    const githubSync = makeGithubSync()
+    githubSync.getPrWalkthrough = vi.fn(async () => provisional)
+    renderWalkthrough({ githubSync })
+
+    expect(await screen.findByText(/2 accepted steps so far/i)).toBeTruthy()
+    expect(screen.getByText('Step one')).toBeTruthy()
+    expect(screen.queryByText('Ticket coverage')).toBeNull()
+    expect(screen.queryByText('Review & submit')).toBeNull()
+  })
+
+  it('keeps accepted steps provisional when generation fails', async () => {
+    const partialFailure = {
+      ...makeWalkthrough(),
+      status: 'failed' as const,
+      error_message: 'Provider connection failed.',
+    }
+    const githubSync = makeGithubSync()
+    githubSync.getPrWalkthrough = vi.fn(async () => partialFailure)
+    renderWalkthrough({ githubSync })
+
+    expect(await screen.findByText(/Provider connection failed\. Accepted steps remain provisional/i)).toBeTruthy()
+    expect(screen.getAllByText('Step one').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Review & submit')).toBeNull()
+  })
+
   it('forwards the shared pending-comment change handler to the per-step diff viewer', async () => {
     const { onPendingCommentsChange } = renderWalkthrough()
     await goToStep(2)
@@ -398,8 +425,18 @@ describe('WalkthroughTab stop generation', () => {
   // used to be a no-op.
   function makeGeneratingSync(): GithubSyncPrReviewClient {
     const sync = makeGithubSync()
-    sync.getPrWalkthrough = vi.fn(async () => null)
-    sync.startAgentWalkthrough = vi.fn(async () => ({ walkthrough_session_key: 'sess-1' }))
+    let current: PrWalkthrough | null = null
+    sync.getPrWalkthrough = vi.fn(async () => current)
+    sync.startAgentWalkthrough = vi.fn(async () => {
+      current = {
+        pr_id: basePr.id, head_sha: basePr.head_sha, walkthrough_session_key: 'sess-1',
+        status: 'generating', steps_json: null, error_message: null, created_at: 1, updated_at: 1,
+      }
+      return { walkthrough_session_key: 'sess-1' }
+    })
+    sync.abortAgentWalkthrough = vi.fn(async () => {
+      if (current) current = { ...current, status: 'aborted', error_message: 'Walkthrough generation was stopped.' }
+    })
     return sync
   }
 
@@ -416,7 +453,7 @@ describe('WalkthroughTab stop generation', () => {
     })
   })
 
-  it('returns to the Generate state after stopping, not an error screen', async () => {
+  it('keeps the aborted attempt and offers generation again after stopping', async () => {
     const githubSync = makeGeneratingSync()
     renderWalkthrough({ githubSync })
 
@@ -424,10 +461,7 @@ describe('WalkthroughTab stop generation', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /generate walkthrough/i }))
     await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
 
-    expect(await screen.findByRole('button', { name: /generate walkthrough/i })).toBeTruthy()
-    await waitFor(() => {
-      expect(githubSync.deletePrWalkthrough).toHaveBeenCalledWith({ reviewPrId: basePr.id, headSha: basePr.head_sha })
-    })
-    expect(screen.queryByText(/aborted/i)).toBeNull()
+    expect(await screen.findByRole('button', { name: /generate again/i })).toBeTruthy()
+    expect(githubSync.deletePrWalkthrough).not.toHaveBeenCalled()
   })
 })

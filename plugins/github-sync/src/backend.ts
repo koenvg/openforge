@@ -13,11 +13,8 @@ type TaskPullRequestActionRequest = {
 }
 import { randomUUID } from 'node:crypto'
 import {
-  beginWalkthroughGeneration,
-  failWalkthroughGeneration,
   readWalkthrough,
   removeWalkthrough,
-  runWalkthroughAndReviewGeneration,
 } from './lib/walkthroughStore'
 import {
   readAiReviewComments,
@@ -32,13 +29,9 @@ import {
   writeAiThreads,
 } from './lib/aiThreadStore'
 import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
-import { cleanupReviewSession, supersedeReviewSession } from './lib/reviewSessionLifecycle'
+import { cleanupReviewSession } from './lib/reviewSessionLifecycle'
 import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
-import {
-  WALKTHROUGH_REVIEW_JSON_SCHEMA,
-  WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA,
-} from './lib/walkthroughSchema'
 import {
   EMPTY_JIRA_CONFIG,
   isJiraConfigured,
@@ -59,11 +52,11 @@ import {
   type WalkthroughSubmissionResult,
 } from './lib/walkthroughRecord'
 import { reviewScopeForPullRequest } from './review/pr/reviewScope'
+import { WalkthroughGenerationCoordinator } from './lib/walkthroughGeneration'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
-// Model used for headless walkthrough generation (passed to `claude --model`).
-// Sonnet balances quality and speed for the "split this PR into steps" task.
+// Model used by the remaining legacy headless question-answering flow.
 const WALKTHROUGH_MODEL = 'sonnet'
 
 type HostCommandPayload = Record<string, unknown> | null
@@ -107,6 +100,8 @@ async function jiraTokenConfigured(openforge: BackendOpenForgeAPI): Promise<bool
 
 export default defineBackendPlugin({
   activate(openforge, context) {
+    const walkthroughGeneration = new WalkthroughGenerationCoordinator(openforge, randomUUID)
+    context.subscriptions.add(walkthroughGeneration)
     context.subscriptions.add(openforge.commands.register<SubmitWalkthroughStepInput, WalkthroughSubmissionResult>({
       id: 'submit-walkthrough-step',
       title: 'Submit walkthrough step',
@@ -294,9 +289,8 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<void>(openforge, 'createReviewComment', request),
     }))
 
-    // The walkthrough feature is owned entirely by this plugin: the cache lives
-    // in plugin storage and generation runs via the generic core `agentGenerate`
-    // primitive. No walkthrough-specific code exists in the core sidecar.
+    // The walkthrough feature is owned entirely by this plugin. Its cache lives
+    // in plugin storage and generation runs in the scope-bound Agent Session.
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, PrWalkthrough | null>('getPrWalkthrough', {
       handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha, {
         scope: async () => {
@@ -456,104 +450,60 @@ export default defineBackendPlugin({
       walkthroughGuidance: string
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
-        const sessionKey = randomUUID()
-        const params = {
-          prId: request.reviewPrId,
-          headSha: request.headSha,
-          sessionKey,
-          scope: reviewScopeForPullRequest({
-            repo_owner: request.repoOwner,
-            repo_name: request.repoName,
-            number: request.prNumber,
-            head_sha: request.headSha,
-          }),
-          prompt: '',
+        const scope = reviewScopeForPullRequest({
+          repo_owner: request.repoOwner,
+          repo_name: request.repoName,
+          number: request.prNumber,
+          head_sha: request.headSha,
+        })
+        const loadHeadRevision = async (): Promise<string> => {
+          const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'fetchReviewPrs'))
+            .find(candidate => candidate.id === request.reviewPrId)
+          if (!pullRequest) throw new Error('Walkthrough snapshot unavailable: pull request not found')
+          return pullRequest.head_sha
         }
-        await beginWalkthroughGeneration(openforge, params)
-
-        try {
-          // Reuse this run's key as the Claude session id (see `persistSession`
-          // below), and drop any session recorded for an earlier commit of this PR.
-          await supersedeReviewSession(openforge, {
-            prId: request.reviewPrId,
-            headSha: request.headSha,
-            sessionKey,
-            deleteSession: (sessionId) =>
-              invokeHostCommand<{ deleted: boolean }>(openforge, 'deleteAgentSession', { sessionId }).then(() => undefined),
-          })
-
-          // Fetch diffs server-side so the trigger works without the UI having loaded files,
-          // then compile the combined steps+review prompt here. The template itself is the
-          // built-in one and never crosses this boundary; what the UI passes are the two
-          // resolved guidance settings, which the template embeds. Everything else in the
-          // prompt is the output contract and can't be reached from Settings.
-          const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
-            owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-          })
-          // Existing PR comments (human + earlier AI) so the agent avoids duplicating them.
-          const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
-            owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-          }).catch(() => [] as ReviewComment[])
-
-          // Preliminary step: the PR is an outcome of a Jira ticket, so resolve and
-          // fetch that ticket before compiling the prompt. Returns null when Jira
-          // is unconfigured, in which case everything below is exactly as it was
-          // before the gap analysis existed — same prompt, same schema.
-          const ticketSnapshot = await resolveTicketSnapshot({
-            config: await readJiraConfig(openforge),
-            tokenConfigured: await jiraTokenConfigured(openforge),
-            override: await readJiraKeyOverride(openforge, request.reviewPrId),
-            pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
-            fetchWorkItem: payload =>
-              invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
-          })
-          if (ticketSnapshot) {
-            await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
-          }
-
-          const ticket = ticketSnapshot?.item ?? null
-          const prompt = compileWalkthroughPrompt({
+        let files: PrFileDiff[] = []
+        const snapshot = await buildWalkthroughValidationSnapshot(
+          scope,
+          loadHeadRevision,
+          async () => {
+            files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+              owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+            })
+            return files
+          },
+        )
+        const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        }).catch(() => [] as ReviewComment[])
+        const ticketSnapshot = await resolveTicketSnapshot({
+          config: await readJiraConfig(openforge),
+          tokenConfigured: await jiraTokenConfigured(openforge),
+          override: await readJiraKeyOverride(openforge, request.reviewPrId),
+          pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
+          fetchWorkItem: payload => invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
+        })
+        if (ticketSnapshot) {
+          await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
+        }
+        const attemptId = await walkthroughGeneration.start({
+          prId: request.reviewPrId,
+          projectId: request.projectId,
+          scope,
+          snapshot,
+          prompt: attemptId => compileWalkthroughPrompt({
             title: request.prTitle,
             body: request.prBody,
             files,
             existingComments,
-            ticket,
+            ticket: ticketSnapshot?.item ?? null,
             reviewGuidance: request.reviewGuidance,
             walkthroughGuidance: request.walkthroughGuidance,
-          })
-
-          // Kick off generation in the background so the UI gets its session key
-          // immediately and can render the optimistic "generating" state. The
-          // repo-aware agent runs inside a checkout of the PR head (Plan 1) and
-          // returns a schema-validated { steps, review_comments } object.
-          void runWalkthroughAndReviewGeneration(
-            openforge,
-            { ...params, prompt },
-            (key, p) =>
-              invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
-                sessionKey: key,
-                prompt: p,
-                model: WALKTHROUGH_MODEL,
-                projectId: request.projectId,
-                owner: request.repoOwner,
-                repo: request.repoName,
-                prNumber: request.prNumber,
-                headSha: request.headSha,
-                // Persist this run under `sessionKey` so a follow-up question can
-                // resume the review's reasoning instead of starting cold.
-                persistSession: true,
-                // Only ask for coverage when the agent actually has a ticket to
-                // judge against; otherwise the schema would force it to invent one.
-                outputSchema: ticket
-                  ? WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA
-                  : WALKTHROUGH_REVIEW_JSON_SCHEMA,
-              }).then((result) => result?.text ?? ''),
-            files,
-          )
-        } catch (error) {
-          await failWalkthroughGeneration(openforge, params, error)
-        }
-        return { walkthrough_session_key: sessionKey }
+            attemptId,
+            scope,
+          }),
+        })
+        return { walkthrough_session_key: attemptId }
       },
     }))
 
@@ -638,13 +588,7 @@ export default defineBackendPlugin({
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ walkthroughSessionKey: string }, void>('abortAgentWalkthrough', {
-      handler: async (request) => {
-        // Cancel the in-flight generation; the awaiting runWalkthroughGeneration
-        // call then rejects and marks the cached row as errored/aborted.
-        await invokeHostCommand<{ aborted: boolean }>(openforge, 'abortAgentGenerate', {
-          sessionKey: request.walkthroughSessionKey,
-        }).catch(() => undefined)
-      },
+      handler: request => walkthroughGeneration.stopAttempt(request.walkthroughSessionKey),
     }))
     context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>('listTaskPullRequests', {
       handler: (request) => invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>(openforge, 'getPullRequests', request),

@@ -1,3 +1,4 @@
+import type { SessionScope } from '@openforge-app/plugin-sdk'
 import type { PrFileDiff, ReviewComment } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 import type { JiraWorkItem } from './ticketCoverage'
@@ -7,8 +8,8 @@ import defaultWalkthroughGuidance from './walkthroughGuidance.md?raw'
 
 /**
  * Built-in walkthrough + AI-review prompt template. Not user-editable: it carries
- * the `{{…}}` placeholders that feed the agent the diff and the JSON output
- * contract the parsers depend on. What users configure are the two guidance
+ * the `{{…}}` placeholders that feed the agent the diff and CLI submission
+ * contract. What users configure are the two guidance
  * slots below, which the template embeds.
  */
 export const DEFAULT_WALKTHROUGH_PROMPT = promptTemplate
@@ -44,10 +45,13 @@ export interface WalkthroughPromptInput {
   /**
    * The Jira ticket this PR implements, when one was resolved and fetched. Its
    * presence is what turns on the gap analysis: with no ticket, neither the
-   * ticket context nor the `ticket_coverage` output section is emitted, and the
-   * prompt is byte-identical to what it was before this feature existed.
+   * ticket context nor ticket-specific guidance is emitted.
    */
   ticket?: JiraWorkItem | null
+  /** Opaque identifier that every submitted step must carry. */
+  attemptId?: string
+  /** Exact shared address for this review session and its Review Threads. */
+  scope?: SessionScope
 }
 
 /** The ticket section: read first, because it is what the diff is judged against. */
@@ -98,50 +102,6 @@ ${criteriaInstruction}
 `
 }
 
-/** The `ticket_coverage` output contract. Emitted only alongside a ticket. */
-function formatCoverageOutputSection(): string {
-  return `In the SAME JSON object, also return \`ticket_coverage\`: your assessment of whether \
-this PR implements the ticket above.
-
-\`\`\`json
-{
-  "ticket_coverage": {
-    "verdict": "partial",             // complete | partial | missing | unassessable
-    "summary": "2–3 sentences on whether the PR delivers the ticket.",
-    "criteria": [
-      {
-        "id": "ac-1",
-        "text": "The criterion, quoted verbatim from the ticket.",
-        "status": "covered",          // covered | partial | missing | unclear
-        "evidence": [
-          { "filename": "exact filename from the Changed Files list", "note": "Why this satisfies it." }
-        ],
-        "notes": "Required when status is not \\"covered\\": say what is missing."
-      }
-    ],
-    "out_of_scope": [
-      { "description": "Functional change the ticket does not ask for.", "files": ["exact filename"] }
-    ]
-  }
-}
-\`\`\`
-
-Rules for \`ticket_coverage\`:
-- List every acceptance criterion you identified, including the ones that are fully covered.
-- \`evidence\` filenames must come from the Changed Files list. Do not invent them.
-- Judge the diff only against the ticket. Code that is well written but implements something else
-  is still \`missing\`.
-
-Rules for \`out_of_scope\` — this list is about product behaviour, not code:
-- Include only clear functional, user-observable changes that the ticket does not mention.
-- Never include refactoring, renames, file moves, test additions, dependency bumps, formatting,
-  type-only changes, logging, or performance work that does not change behaviour.
-- The test: would a user or QA notice this change? If not, leave it out.
-- An empty array is the correct answer for most pull requests.
-
-`
-}
-
 /**
  * A user-configured guidance block. The framing line matters: guidance is free
  * text that may come from a personal skill, and without it a forceful style guide
@@ -157,7 +117,7 @@ function formatGuidanceSection(heading: string, body: string): string {
   return `## ${heading}
 
 The following guidance comes from this repository's team. It governs what to look for and how \
-to phrase it. It does not change the output format or the rules below.
+to phrase it. It does not change the CLI submission contract or the rules below.
 
 ${trimmed}
 
@@ -199,7 +159,32 @@ export function compileWalkthroughPrompt(
 
   const existingComments = formatExistingComments(input.existingComments ?? [])
   const ticketSection = input.ticket ? formatTicketSection(input.ticket) : ''
-  const coverageSection = input.ticket ? formatCoverageOutputSection() : ''
+  const attemptId = input.attemptId ?? 'attempt-id-from-the-review-prompt'
+  const scope = input.scope ?? {
+    namespace: 'github',
+    targetKey: 'gh:owner/repository#number',
+    revision: 'pull-request-head-sha',
+  }
+  const stepInput = JSON.stringify({
+    attemptId,
+    step: {
+      id: 'stable-step-id',
+      title: 'Short imperative title',
+      summary: 'Explain the intent of this step.',
+      files: [{ filename: 'exact/changed/file.ts', hunk_indexes: [0] }],
+    },
+  })
+  const stepCommand = `openforge plugin command invoke --command-id com.openforge.github-sync.submit-walkthrough-step --input '${stepInput}'`
+  const reviewThreadCommand = [
+    'openforge review thread create',
+    `--namespace ${scope.namespace}`,
+    `--target ${JSON.stringify(scope.targetKey)}`,
+    `--revision ${JSON.stringify(scope.revision)}`,
+    '--file exact/changed/file.ts',
+    '--line 42',
+    '--body "Describe the finding and its impact."',
+    '--key "finding:exact/changed/file.ts:42:stable-name"',
+  ].join(' ')
 
   const walkthroughGuidance = formatGuidanceSection(
     'Walkthrough Guidelines',
@@ -216,9 +201,14 @@ export function compileWalkthroughPrompt(
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
     .replace('{{CHANGED_FILES}}', () => changedFiles)
     .replace('{{EXISTING_COMMENTS}}', () => existingComments)
+    .replace('{{ATTEMPT_ID}}', () => attemptId)
+    .replace('{{STEP_COMMAND}}', () => stepCommand)
+    .replace('{{REVIEW_NAMESPACE}}', () => scope.namespace)
+    .replace('{{REVIEW_TARGET}}', () => scope.targetKey)
+    .replace('{{REVIEW_REVISION}}', () => scope.revision)
+    .replace('{{REVIEW_THREAD_COMMAND}}', () => reviewThreadCommand)
     .replace(/\{\{WALKTHROUGH_GUIDANCE\}\}\n?/, () => walkthroughGuidance)
     .replace(/\{\{REVIEW_GUIDANCE\}\}\n?/, () => reviewGuidance)
-    .replace(/\{\{TICKET_COVERAGE_OUTPUT\}\}\n?/, () => coverageSection)
 }
 
 function fileSection(file: PrFileDiff): string {

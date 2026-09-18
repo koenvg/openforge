@@ -333,7 +333,13 @@ describe('review workspace', () => {
     const { workspace, registry } = await setup()
     await workspace.list.onSelectPr(pr)
     await waitFor(() => expect(workspace.detail!.agentSession.projectId).toBe('project-1'))
-    await workspace.detail!.agentSession.onStart()
+    await registry.frontendApi.agentSessions.start({
+      scope: { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' },
+      projectId: 'project-1',
+      checkoutRevision: 'head',
+      initialInput: 'Review this pull request',
+      toolPolicy: 'review-read-only',
+    })
 
     workspace.list.onRemove(pr)
 
@@ -551,9 +557,23 @@ describe('review workspace', () => {
     expect(calls.get('abortAgentWalkthrough')).toEqual([{ walkthroughSessionKey: 'session-1' }])
     finish(readyWalkthrough)
     await vi.advanceTimersByTimeAsync(2500)
-    expect(walkthrough.walkthrough).toBeNull()
-    expect(workspace.list.walkthroughByPr.get(pr.id)).toBeNull()
+    expect(walkthrough.walkthrough?.status).toBe('aborted')
+    expect(workspace.list.walkthroughByPr.get(pr.id)?.status).toBe('aborted')
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps a walkthrough generating and reports an actionable error when stop fails', async () => {
+    const { workspace, responses } = await setup()
+    await workspace.list.onSelectPr(pr)
+    const walkthrough = workspace.detail!.walkthrough
+    await walkthrough.generate()
+    responses.set('abortAgentWalkthrough', () => { throw new Error('abort unavailable') })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await walkthrough.stop()
+
+    expect(walkthrough.walkthrough?.status).toBe('generating')
+    expect(walkthrough.loadError).toBe('Could not stop walkthrough generation. Try stopping it again.')
   })
 
   it('releases polling on destruction and ignores late results', async () => {
@@ -605,6 +625,7 @@ describe('review workspace', () => {
 
   it('does not show a previous pull request ticket after switching reviews', async () => {
     const { workspace, responses, calls } = await setup()
+    responses.set('getPrWalkthrough', readyWalkthrough)
     let finish!: (value: unknown) => void
     const pending = new Promise(resolve => { finish = resolve })
     responses.set('getPrTicket', () => pending)

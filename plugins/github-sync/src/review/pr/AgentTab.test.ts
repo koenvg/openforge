@@ -15,6 +15,7 @@ function sessionState(
 ): ScopedAgentSessionState {
   return {
     id: 'sas-1',
+    turnId: 'turn-1',
     status,
     queuePosition: null,
     queueReason: null,
@@ -32,6 +33,8 @@ function renderAgentTab(overrides: {
   projectResolved?: boolean
   projectId?: string | null
   status?: ScopedAgentSessionState | null
+  walkthroughStatus?: 'generating' | 'ready' | 'no-submissions' | 'failed' | 'aborted' | null
+  acceptedStepCount?: number
 } = {}) {
   const onStart = vi.fn(async () => undefined)
   const onAbort = vi.fn(async () => undefined)
@@ -48,6 +51,8 @@ function renderAgentTab(overrides: {
       isLoading: false,
       actionPending: false,
       error: null,
+      walkthroughStatus: overrides.walkthroughStatus ?? null,
+      acceptedStepCount: overrides.acceptedStepCount ?? 0,
       mountTerminal,
       onStart,
       onAbort,
@@ -62,12 +67,12 @@ function renderAgentTab(overrides: {
 describe('AgentTab', () => {
   afterEach(cleanup)
 
-  it('offers to start a read-only review when no session exists', async () => {
+  it('offers to generate a walkthrough when no session exists', async () => {
     const { onStart, mountTerminal } = renderAgentTab()
 
-    expect(screen.getByText('No review agent session yet.')).toBeTruthy()
+    expect(screen.getByText('No walkthrough session yet.')).toBeTruthy()
     expect(screen.getByText(/read-only checkout/i)).toBeTruthy()
-    await fireEvent.click(screen.getByRole('button', { name: 'Start review agent' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Generate walkthrough' }))
 
     expect(onStart).toHaveBeenCalledOnce()
     expect(mountTerminal).not.toHaveBeenCalled()
@@ -78,7 +83,7 @@ describe('AgentTab', () => {
 
     expect(screen.getByText('Review agent unavailable')).toBeTruthy()
     expect(screen.getByText(/local OpenForge Project linked to this repository is required/i)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Start review agent' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Generate walkthrough' })).toHaveProperty('disabled', true)
     expect(onStart).not.toHaveBeenCalled()
   })
 
@@ -96,6 +101,17 @@ describe('AgentTab', () => {
     expect(screen.getByText(message)).toBeTruthy()
     expect(screen.getByTestId('review-agent-terminal')).toBeTruthy()
     await waitFor(() => expect(mountTerminal).toHaveBeenCalledWith(scope, expect.any(HTMLElement)))
+  })
+
+  it('explains a completed attempt with no accepted steps and offers a retry', async () => {
+    const { onRestart } = renderAgentTab({
+      status: sessionState('completed'),
+      walkthroughStatus: 'no-submissions',
+    })
+
+    expect(screen.getByText('The agent finished without submitting a walkthrough. Ask it to try again and submit each step through the OpenForge CLI.')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Generate again' }))
+    expect(onRestart).toHaveBeenCalledOnce()
   })
 
   it('sends follow-up input from a completed session and clears it only after success', async () => {
