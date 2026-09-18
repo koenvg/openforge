@@ -15,6 +15,6 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: ['@openforge-app/plugin-sdk', '@openforge-app/pr-review-ui'],
+    noExternal: ['@openforge-app/plugin-sdk', '@openforge-app/pr-review-ui', 'zod'],
   },
 })
