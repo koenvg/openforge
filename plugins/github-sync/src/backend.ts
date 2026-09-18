@@ -52,6 +52,13 @@ import {
 } from './lib/jiraStore'
 import { resolveTicketSnapshot } from './lib/jiraTicket'
 import type { JiraWorkItem, TicketSnapshot } from './lib/ticketCoverage'
+import {
+  buildWalkthroughValidationSnapshot,
+  submitWalkthroughStep,
+  type SubmitWalkthroughStepInput,
+  type WalkthroughSubmissionResult,
+} from './lib/walkthroughRecord'
+import { reviewScopeForPullRequest } from './review/pr/reviewScope'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
@@ -100,6 +107,113 @@ async function jiraTokenConfigured(openforge: BackendOpenForgeAPI): Promise<bool
 
 export default defineBackendPlugin({
   activate(openforge, context) {
+    context.subscriptions.add(openforge.commands.register<SubmitWalkthroughStepInput, WalkthroughSubmissionResult>({
+      id: 'submit-walkthrough-step',
+      title: 'Submit walkthrough step',
+      discoverable: false,
+      agent: {
+        description: 'Submit one complete pull request walkthrough step for the active review attempt. Correct the reported field and retry the same step id when rejected.',
+        discoverable: false,
+        examples: [{
+          attemptId: 'attempt-id-from-the-review-prompt',
+          step: {
+            id: 'setup',
+            title: 'Set up the new flow',
+            summary: 'Introduces the entry point and supporting state.',
+            files: [{ filename: 'src/feature.ts', hunk_indexes: [0] }],
+          },
+        }],
+      },
+      input: {
+        type: 'object',
+        required: ['attemptId', 'step'],
+        additionalProperties: false,
+        properties: {
+          attemptId: { type: 'string' },
+          step: {
+            type: 'object',
+            required: ['id', 'title', 'summary', 'files'],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              summary: { type: 'string' },
+              files: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['filename', 'hunk_indexes'],
+                  additionalProperties: false,
+                  properties: {
+                    filename: { type: 'string' },
+                    hunk_indexes: {
+                      oneOf: [
+                        { type: 'null' },
+                        { type: 'array', items: { type: 'integer' } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      output: {
+        oneOf: [
+          {
+            type: 'object',
+            required: ['accepted', 'attemptId', 'stepId', 'scopeRevision', 'position', 'replaced'],
+            additionalProperties: false,
+            properties: {
+              accepted: { const: true },
+              attemptId: { type: 'string' },
+              stepId: { type: 'string' },
+              scopeRevision: { type: 'string' },
+              position: { type: 'integer' },
+              replaced: { type: 'boolean' },
+            },
+          },
+          {
+            type: 'object',
+            required: ['accepted', 'rejection'],
+            additionalProperties: false,
+            properties: {
+              accepted: { const: false },
+              rejection: {
+                type: 'object',
+                required: ['code', 'attemptId', 'stepId', 'scopeRevision', 'field', 'rejectedValue', 'constraint'],
+                additionalProperties: false,
+                properties: {
+                  code: { type: 'string' },
+                  attemptId: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                  stepId: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                  scopeRevision: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                  field: { type: 'string' },
+                  constraint: { type: 'string' },
+                  rejectedValue: {},
+                  file: { type: 'string' },
+                  hunkCount: { type: 'integer' },
+                  validHunkRange: {
+                    oneOf: [
+                      { type: 'null' },
+                      {
+                        type: 'object',
+                        required: ['min', 'max'],
+                        additionalProperties: false,
+                        properties: { min: { type: 'integer' }, max: { type: 'integer' } },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+      handler: (input, invocation) => submitWalkthroughStep(openforge, input, invocation),
+    }))
+
     context.subscriptions.add(openforge.backend.registerMethod<null, Record<string, string>>('resolveProjectIdsByRepo', {
       handler: () => resolveProjectIdsByRepo(openforge),
     }))
@@ -184,7 +298,33 @@ export default defineBackendPlugin({
     // in plugin storage and generation runs via the generic core `agentGenerate`
     // primitive. No walkthrough-specific code exists in the core sidecar.
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, PrWalkthrough | null>('getPrWalkthrough', {
-      handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha),
+      handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha, {
+        scope: async () => {
+          const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'getReviewPrs'))
+            .find(candidate => candidate.id === request.reviewPrId)
+          if (!pullRequest) throw new Error('Walkthrough scope unavailable: pull request not found')
+          return { ...reviewScopeForPullRequest(pullRequest), revision: request.headSha }
+        },
+        snapshot: async () => {
+          const loadPullRequest = async (): Promise<ReviewPullRequest> => {
+            const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'fetchReviewPrs'))
+              .find(candidate => candidate.id === request.reviewPrId)
+            if (!pullRequest) throw new Error('Walkthrough snapshot unavailable: pull request not found')
+            return pullRequest
+          }
+          const pullRequest = await loadPullRequest()
+          const scope = { ...reviewScopeForPullRequest(pullRequest), revision: request.headSha }
+          return buildWalkthroughValidationSnapshot(
+            scope,
+            async () => (await loadPullRequest()).head_sha,
+            () => invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+              owner: pullRequest.repo_owner,
+              repo: pullRequest.repo_name,
+              prNumber: pullRequest.number,
+            }),
+          )
+        },
+      }),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
@@ -317,7 +457,18 @@ export default defineBackendPlugin({
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
-        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: '' }
+        const params = {
+          prId: request.reviewPrId,
+          headSha: request.headSha,
+          sessionKey,
+          scope: reviewScopeForPullRequest({
+            repo_owner: request.repoOwner,
+            repo_name: request.repoName,
+            number: request.prNumber,
+            head_sha: request.headSha,
+          }),
+          prompt: '',
+        }
         await beginWalkthroughGeneration(openforge, params)
 
         try {

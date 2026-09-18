@@ -540,6 +540,7 @@ async fn acknowledges_frontend_plugin_commands_exactly_once() {
                     task_id: Some("T-1".to_string()),
                     project_id: "P-1".to_string(),
                     source: PluginCommandInvocationSource::AgentCli,
+                    scoped_session: None,
                 },
             )
             .await

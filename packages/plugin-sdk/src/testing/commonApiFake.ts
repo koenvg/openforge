@@ -14,6 +14,7 @@ import type {
   JsonValue,
   TaskChangeEvent,
   OpenForgeCommonAPI,
+  PluginCommandInvocationContext,
   CreateReviewThreadRequest,
   MarkReviewThreadSeenRequest,
   ReplyToReviewThreadRequest,
@@ -1237,6 +1238,16 @@ export class TestingCommonApiFake {
         : []),
       eventListeners: Array.from(this.eventListeners.values()),
     }
+  }
+
+  async invokeAgentCommand<TOutput>(
+    qualifiedId: string,
+    payload: unknown,
+    context: PluginCommandInvocationContext,
+  ): Promise<TOutput> {
+    const command = this.commands.get(qualifiedId)
+    if (!command?.agent) throw new Error(`Unknown agent-facing Plugin Command: ${qualifiedId}`)
+    return await command.handler(payload, context) as TOutput
   }
 
   private createReviewThread(request: CreateReviewThreadRequest): ReviewThread {

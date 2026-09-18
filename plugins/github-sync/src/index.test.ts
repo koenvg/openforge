@@ -348,7 +348,10 @@ describe('github-sync plugin', () => {
     const subscriptions = { add: vi.fn() }
     const api = {
       backend: { registerMethod: vi.fn(() => ({ dispose: vi.fn() })) },
-      commands: { invokeGlobal: vi.fn(async () => null) },
+      commands: {
+        invokeGlobal: vi.fn(async () => null),
+        register: vi.fn(() => ({ dispose: vi.fn() })),
+      },
     }
 
     await backend.activate(api as never, makePluginContext(subscriptions))
@@ -391,7 +394,7 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrTicket', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('setPrJiraKey', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('resolveProjectIdsByRepo', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(43)
+    expect(subscriptions.add).toHaveBeenCalledTimes(44)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {
@@ -402,7 +405,10 @@ describe('github-sync plugin', () => {
       if (method === 'listTaskPullRequests') listTaskPullRequests = registration.handler
       return { dispose: vi.fn() }
     })
-    const api = { backend: { registerMethod }, commands: { invokeGlobal } }
+    const api = {
+      backend: { registerMethod },
+      commands: { invokeGlobal, register: vi.fn(() => ({ dispose: vi.fn() })) },
+    }
     await backend.activate(api as never, makePluginContext(subscriptions))
     await listTaskPullRequests?.({ taskId: 'T-42' })
 

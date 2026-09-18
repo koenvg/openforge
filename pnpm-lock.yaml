@@ -429,6 +429,9 @@ importers:
       '@openforge-app/pr-review-ui':
         specifier: workspace:*
         version: link:../../packages/pr-review-ui
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: 'catalog:'

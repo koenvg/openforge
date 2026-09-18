@@ -11,7 +11,8 @@
   "dependencies": {
     "@lucide/svelte": "catalog:",
     "@openforge-app/plugin-sdk": "workspace:*",
-    "@openforge-app/pr-review-ui": "workspace:*"
+    "@openforge-app/pr-review-ui": "workspace:*",
+    "zod": "^4.5.4"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

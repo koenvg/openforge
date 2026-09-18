@@ -102,6 +102,7 @@ impl ScopedSessionRuntime for ScopedClaudeRuntime {
                 crate::agent_generation_identity::ScopedAgentPrincipal {
                     session_id: request.session_id.clone(),
                     owner_plugin_id: request.owner_plugin_id.clone(),
+                    project_id: request.project_id.clone(),
                     namespace: request.scope.namespace.clone(),
                     target_key: request.scope.target_key.clone(),
                     revision: request.scope.revision.clone(),

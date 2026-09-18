@@ -46,6 +46,7 @@ export function createAppDesktopEventListenerRegistrations(deps: AppDesktopEvent
     frontendHostRequestListener,
     pluginSystemListeners.openUrl,
     pluginSystemListeners.writeClipboardText,
+    pluginSystemListeners.pluginGlobalEvent,
     pluginListeners.pluginInstallationChanged,
     pluginListeners.appPluginEnablementChanged,
     pluginListeners.projectPluginEnablementChanged,

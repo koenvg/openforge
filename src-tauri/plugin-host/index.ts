@@ -109,7 +109,7 @@ export class PluginHostRuntime {
     if (!command || command.qualifiedId !== input.commandId || !command.agent) {
       throw new Error(`Unknown agent-facing Plugin Command: ${input.commandId}`)
     }
-    const invocationContext = requireAgentInvocationContext(input.context, input.projectId)
+    const invocationContext = requireAgentInvocationContext(input.context, input.projectId, input.pluginId)
     validateSchemaValue(command.input, input.input, `${input.commandId} input`)
     try {
       const result = await withPluginConsole(command.pluginId, async () => await command.handler(input.input as never, invocationContext))
@@ -162,13 +162,19 @@ export class PluginHostRuntime {
   }
 
   async emitGlobalEvent(event: string, payload: unknown, sourcePluginId: string): Promise<void> {
-    await globalContributionRegistry.emitEvent(event, payload)
+    let localError: unknown
+    try {
+      await globalContributionRegistry.emitEvent(event, payload)
+    } catch (error) {
+      localError = error
+    }
     if (this.coordinatorCallbacks) {
       await this.coordinatorCallbacks({
         method: 'openforge.plugins.emitGlobalEvent',
         params: { event, payload: payload ?? null, sourcePluginId },
       })
     }
+    if (localError !== undefined) throw localError
   }
 
   async listAgentCommands(input: ActivateBackendInput): Promise<AgentCommandDescriptor[]> {

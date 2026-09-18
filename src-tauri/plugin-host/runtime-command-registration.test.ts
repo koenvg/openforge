@@ -139,7 +139,7 @@ describe('plugin-host backend command registration', () => {
                   type: 'object',
                   required: ['taskId', 'projectId', 'source'],
                   properties: {
-                    taskId: { type: 'string' },
+                    taskId: { oneOf: [{ type: 'string' }, { type: 'null' }] },
                     projectId: { type: 'string' },
                     source: { const: 'agent-cli' }
                   }
@@ -193,6 +193,39 @@ describe('plugin-host backend command registration', () => {
         input: { force: true },
         context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
       },
+    })
+
+    const scopedContext = {
+      taskId: null,
+      projectId: 'P-1',
+      source: 'agent-cli',
+      scopedSession: {
+        sessionId: 'sas-1',
+        ownerPluginId: 'backend',
+        projectId: 'P-1',
+        scope: { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' },
+      },
+    }
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0', id: 107, method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend', backendPath, projectId: 'P-1', commandId: 'backend.sync',
+        input: { force: true }, context: scopedContext,
+      },
+    })).resolves.toMatchObject({ result: { context: scopedContext } })
+
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0', id: 108, method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend', backendPath, projectId: 'P-1', commandId: 'backend.sync',
+        input: { force: true },
+        context: {
+          ...scopedContext,
+          scopedSession: { ...scopedContext.scopedSession, ownerPluginId: 'other' },
+        },
+      },
+    })).resolves.toMatchObject({
+      error: { message: expect.stringContaining('scoped invocation context does not match') },
     })
 
     await expect(runtime.handleJsonRpcRequest({

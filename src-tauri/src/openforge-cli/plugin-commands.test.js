@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -159,6 +159,42 @@ describe('OpenForge Plugin Commands', () => {
     });
 
     expect(result).toEqual({ ready: true });
+  });
+
+  it('invokes from a scoped Agent Session without caller-supplied Task or Project context', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'openforge-scoped-command-'));
+    const configPath = join(root, 'agent.json');
+    let seenBody = null;
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        seenBody = JSON.parse(body);
+        expect(req.headers.authorization).toBe(`Bearer ${'a'.repeat(64)}`);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ accepted: true }));
+      });
+    });
+    const port = await listen(server);
+    await writeFile(configPath, JSON.stringify({ version: 1, port, token: 'a'.repeat(64) }), { mode: 0o600 });
+    await chmod(root, 0o700);
+    await chmod(configPath, 0o600);
+
+    try {
+      const { stdout } = await runCli([
+        'plugin', 'command', 'invoke',
+        '--command-id', 'com.openforge.github-sync.submit-walkthrough-step',
+        '--input', '{"attemptId":"attempt-1"}',
+      ], { OPENFORGE_AGENT_CONFIG: configPath, OPENFORGE_TASK_ID: '' });
+      expect(JSON.parse(stdout)).toEqual({ accepted: true });
+      expect(seenBody).toEqual({
+        commandId: 'com.openforge.github-sync.submit-walkthrough-step',
+        input: { attemptId: 'attempt-1' },
+      });
+    } finally {
+      await close(server);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('rejects invalid Plugin Command context and JSON before contacting the bridge', async () => {

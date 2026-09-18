@@ -6,6 +6,10 @@ import { agentReviewComments, selectedReviewPr } from '../../../lib/stores'
 import { projectRepoKey, resolveProjectIdsByRepo } from '../../../lib/projectRepoResolution'
 import { walkthroughButtonState } from '../../../lib/walkthroughButtonState'
 import { resolveWalkthroughGuidance } from '../../../lib/walkthroughGuidance'
+import {
+  WALKTHROUGH_INVALIDATED_EVENT,
+  type WalkthroughInvalidatedEvent,
+} from '../../../lib/walkthroughEvents'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 
 type Status = {
@@ -29,6 +33,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
   const versions = new Map<string, number>()
   const requests = new Map<string, Promise<PrWalkthrough | null>>()
   const latestHeads = new Map<number, string>()
+  const latestPullRequests = new Map<number, ReviewPullRequest>()
   let disposed = false
 
   async function refreshProjectIds(): Promise<Map<string, string>> {
@@ -66,6 +71,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     const previousHead = latestHeads.get(pr.id)
     if (previousHead && previousHead !== pr.head_sha) cancel({ ...pr, head_sha: previousHead })
     latestHeads.set(pr.id, pr.head_sha)
+    latestPullRequests.set(pr.id, pr)
   }
 
   function current(pr: ReviewPullRequest, version: number): boolean {
@@ -187,10 +193,20 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
 
   onDestroy(() => {
     disposed = true
+    walkthroughInvalidation.dispose()
     for (const timer of timers.values()) clearTimeout(timer)
     timers.clear()
     requests.clear()
   })
+
+  const walkthroughInvalidation = api.events.onGlobal<WalkthroughInvalidatedEvent>(
+    WALKTHROUGH_INVALIDATED_EVENT,
+    (event) => {
+      const pr = latestPullRequests.get(event.prId)
+      if (!pr || pr.head_sha !== event.scope.revision) return
+      void refreshStatus(pr)
+    },
+  )
 
   void refreshProjectIds().catch((error) => {
     console.error('Failed to resolve local projects for walkthrough generation:', error)

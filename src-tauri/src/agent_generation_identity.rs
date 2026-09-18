@@ -38,6 +38,7 @@ struct Inner {
 pub(crate) struct ScopedAgentPrincipal {
     pub session_id: String,
     pub owner_plugin_id: String,
+    pub project_id: String,
     pub namespace: String,
     pub target_key: String,
     pub revision: String,
@@ -256,6 +257,7 @@ mod tests {
         let principal = ScopedAgentPrincipal {
             session_id: "sas-1".into(),
             owner_plugin_id: "com.example.review".into(),
+            project_id: "project-1".into(),
             namespace: "github-pr".into(),
             target_key: "owner/repo#42".into(),
             revision: "head-a".into(),

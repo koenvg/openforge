@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+import type { PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
+import { buildWalkthroughValidationSnapshot, startWalkthroughAttempt } from './lib/walkthroughRecord'
 import packageJson from '../package.json'
 
 function getPackageMetadata() {
@@ -22,6 +24,9 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
     'project-app': { owner: 'acme', name: 'app' },
   }
   const invokeGlobal = vi.fn(async (id: string, payload?: unknown) => {
+    if (id === 'openforge.getReviewPrs' || id === 'openforge.fetchReviewPrs') {
+      return [{ id: 42, repo_owner: 'octo', repo_name: 'frontend', number: 7, head_sha: 'sha123' }]
+    }
     if (id === 'openforge.getPrFileDiffs') {
       if (options.fileDiffError) throw options.fileDiffError
       return []
@@ -35,6 +40,10 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
     return null
   })
   const handlers = new Map<string, (request: unknown) => Promise<unknown>>()
+  const commandRegistrations = new Map<string, {
+    handler: (input: unknown, context: PluginCommandInvocationContext) => Promise<unknown>
+    [key: string]: unknown
+  }>()
   const openforge = {
     backend: {
       registerMethod: vi.fn((name: string, def: { handler: (request: unknown) => Promise<unknown> }) => {
@@ -42,7 +51,18 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
         return { dispose: vi.fn() }
       }),
     },
-    commands: { invokeGlobal },
+    commands: {
+      invokeGlobal,
+      register: vi.fn((registration: {
+        id: string
+        handler: (input: unknown, context: PluginCommandInvocationContext) => Promise<unknown>
+        [key: string]: unknown
+      }) => {
+        commandRegistrations.set(registration.id, registration)
+        return { dispose: vi.fn() }
+      }),
+    },
+    events: { emit: vi.fn(async () => undefined) },
     projects: {
       list: vi.fn(async () => Object.keys(projectRepos).map(id => ({
         id, name: id, path: `/${id}`, created_at: 1, updated_at: 1,
@@ -60,12 +80,12 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
       },
     },
   }
-  return { openforge, invokeGlobal, handlers, projectRepos }
+  return { openforge, invokeGlobal, handlers, projectRepos, commandRegistrations, store }
 }
 
 async function activateBackend(options: BackendHarnessOptions = {}) {
   const { default: backend } = await import('./backend')
-  const { openforge, invokeGlobal, handlers } = makeBackendHarness(options)
+  const { openforge, invokeGlobal, handlers, commandRegistrations, store } = makeBackendHarness(options)
   const packageMetadata = getPackageMetadata()
   await backend.activate(openforge as never, {
     pluginId: packageMetadata.id,
@@ -73,7 +93,7 @@ async function activateBackend(options: BackendHarnessOptions = {}) {
     packageMetadata,
     subscriptions: { add: vi.fn() },
   } as never)
-  return { invokeGlobal, handlers }
+  return { openforge, invokeGlobal, handlers, commandRegistrations, store }
 }
 
 const walkthroughRequest = (overrides: Record<string, unknown> = {}) => ({
@@ -88,6 +108,61 @@ const walkthroughRequest = (overrides: Record<string, unknown> = {}) => ({
   reviewPrId: 42,
   projectId: 'project-frontend',
   ...overrides,
+})
+
+describe('walkthrough submission command', () => {
+  it('is agent-enabled, hidden, schema-bound, and requires trusted scoped context', async () => {
+    const { commandRegistrations } = await activateBackend()
+    const command = commandRegistrations.get('submit-walkthrough-step')!
+    expect(command).toMatchObject({
+      discoverable: false,
+      agent: { discoverable: false, examples: [expect.any(Object)] },
+      input: { type: 'object', additionalProperties: false },
+      output: { oneOf: expect.any(Array) },
+    })
+    await expect(command.handler({ attemptId: 'attempt-1', step: { id: 'one', title: 'One', summary: 'Summary', files: [] } }, {
+      taskId: null,
+      projectId: 'P-1',
+      source: 'agent-cli',
+    })).resolves.toMatchObject({ accepted: false, rejection: { code: 'missing-scoped-context' } })
+  })
+
+  it('rejects a stale attempt and accepts a valid scoped call', async () => {
+    const { openforge, commandRegistrations } = await activateBackend()
+    const validationScope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
+    const snapshot = await buildWalkthroughValidationSnapshot(
+      validationScope,
+      async () => 'head-a',
+      async () => [{
+        sha: 'file-sha', filename: 'src/app.ts', status: 'modified', additions: 1,
+        deletions: 1, changes: 2, patch: '@@ -1 +1 @@\n-old\n+new', previous_filename: null,
+        is_truncated: false, patch_line_count: 3,
+      }],
+    )
+    await startWalkthroughAttempt(openforge as never, {
+      prId: 42,
+      projectId: 'P-1',
+      attemptId: 'attempt-1',
+      snapshot,
+    })
+    const context: PluginCommandInvocationContext = {
+      taskId: null,
+      projectId: 'P-1',
+      source: 'agent-cli',
+      scopedSession: {
+        sessionId: 'sas-1', ownerPluginId: 'com.openforge.github-sync', projectId: 'P-1', scope: validationScope,
+      },
+    }
+    const handler = commandRegistrations.get('submit-walkthrough-step')!.handler
+    const input = {
+      attemptId: 'attempt-1',
+      step: { id: 'one', title: 'One', summary: 'Summary', files: [{ filename: 'src/app.ts', hunk_indexes: [0] }] },
+    }
+    await expect(handler({ ...input, attemptId: 'stale' }, context))
+      .resolves.toMatchObject({ accepted: false, rejection: { code: 'stale-attempt' } })
+    await expect(handler(input, context))
+      .resolves.toMatchObject({ accepted: true, stepId: 'one', position: 0 })
+  })
 })
 
 describe('startAgentWalkthrough backend handler', () => {

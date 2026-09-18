@@ -132,6 +132,7 @@ export type {
   OpenForgePluginContext,
   OpenForgePluginPackageJson,
   PluginCommandInvocationContext,
+  PluginCommandScopedSessionContext,
   PluginCommandInvocationSource,
   PluginComponentLoader,
   PluginComponentModule,

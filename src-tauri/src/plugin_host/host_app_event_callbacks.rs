@@ -16,4 +16,13 @@ impl PluginHost {
         );
         Ok(Value::Null)
     }
+
+    pub(super) fn publish_plugin_global_event(&self, params: &Value) -> Result<Value, String> {
+        super::callbacks::required_param_string(params, "event")?;
+        super::callbacks::required_param_string(params, "sourcePluginId")?;
+        if params.get("payload").is_none() {
+            return Err("plugin host callback missing param: payload".to_string());
+        }
+        self.emit_host_app_event("plugin-global-event", params)
+    }
 }

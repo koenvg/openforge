@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
@@ -335,5 +335,35 @@ describe('plugin SDK testing utilities', () => {
       agent: { description: '   ' },
       handler: async () => null,
     })).toThrow('commands registration agent metadata requires a non-empty description')
+  })
+
+  it('passes trusted scoped invocation context through the testing registry fake', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'sync', projectId: 'P-1' })
+    const handler = vi.fn(async (_input, context) => context)
+    registry.backendApi.commands.register({
+      id: 'submit',
+      title: 'Submit',
+      agent: { description: 'Submit one result.' },
+      handler,
+    })
+    const context = {
+      taskId: null,
+      projectId: 'P-1',
+      source: 'agent-cli' as const,
+      scopedSession: {
+        sessionId: 'sas-1',
+        ownerPluginId: 'sync',
+        projectId: 'P-1',
+        scope: { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' },
+      },
+    }
+
+    await expect(registry.invokeAgentCommand('sync.submit', { id: 'one' }, context)).resolves.toEqual(context)
+    expect(handler).toHaveBeenCalledWith({ id: 'one' }, context)
+    await expect(registry.backendApi.commands.invoke('submit', { id: 'one' })).resolves.toMatchObject({
+      source: 'plugin',
+      taskId: null,
+      projectId: 'P-1',
+    })
   })
 })

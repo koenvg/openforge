@@ -34,7 +34,10 @@ function makeBackendHarness(options: { agentText?: string; agentThrows?: boolean
         return { dispose: vi.fn() }
       }),
     },
-    commands: { invokeGlobal },
+    commands: {
+      invokeGlobal,
+      register: vi.fn(() => ({ dispose: vi.fn() })),
+    },
     storage: {
       global: {
         get: vi.fn(async (key: string) => store.get(key) ?? null),

@@ -224,11 +224,20 @@ export interface AgentCommandDescriptor {
 
 export type PluginCommandInvocationSource = 'agent-cli' | 'plugin'
 
+export interface PluginCommandScopedSessionContext {
+  sessionId: string
+  ownerPluginId: string
+  projectId: string
+  scope: SessionScope
+}
+
 /** Host-resolved targeting information supplied separately from plugin-owned command input. */
 export interface PluginCommandInvocationContext {
   taskId: string | null
   projectId: string | null
   source: PluginCommandInvocationSource
+  /** Present only for a host-authorized scope-bound Agent Session. */
+  scopedSession?: PluginCommandScopedSessionContext
 }
 
 export interface CommandRegistration<TInput = unknown, TOutput = unknown> {

@@ -61,6 +61,7 @@ pub(super) async fn authorize(
                 .flatten();
             let valid = session.is_some_and(|session| {
                 session.owner_plugin_id == principal.owner_plugin_id
+                    && session.project_id == principal.project_id
                     && session.namespace == principal.namespace
                     && session.target_key == principal.target_key
                     && session.revision == principal.revision
@@ -276,12 +277,12 @@ mod tests {
     #[tokio::test]
     async fn scoped_credential_is_exact_scope_and_review_routes_only_then_revoked() {
         let (state, root) = crate::test_support::test_state("scoped_agent_ingress", |_, _| {});
-        {
+        let project_id = {
             let db = crate::db::acquire_db(&state.db);
             let project = db.create_project("Repository", "/tmp/repository").unwrap();
             db.create_scoped_agent_session(&crate::db::NewScopedAgentSession {
                 id: "sas-1",
-                owner_plugin_id: "com.example.review",
+                owner_plugin_id: "com.openforge.github-sync",
                 namespace: "github-pr",
                 target_key: "owner/repo#42",
                 revision: "head-a",
@@ -295,7 +296,8 @@ mod tests {
             }).unwrap();
             db.mark_scoped_agent_session_running("sas-1", "conversation-1", 7)
                 .unwrap();
-        }
+            project.id
+        };
         let identities = state.agent_generation_identities.clone();
         identities
             .activate(root.path().join("agent-generations"), 1)
@@ -303,7 +305,8 @@ mod tests {
         let credential = identities
             .issue_scoped(crate::agent_generation_identity::ScopedAgentPrincipal {
                 session_id: "sas-1".into(),
-                owner_plugin_id: "com.example.review".into(),
+                owner_plugin_id: "com.openforge.github-sync".into(),
+                project_id: project_id.clone(),
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),
@@ -353,10 +356,140 @@ mod tests {
             StatusCode::OK
         );
 
+        let plugin_command = |command_id: &str, project_id: Option<&str>| {
+            let mut body = serde_json::json!({
+                "commandId": command_id,
+                "input": {"attemptId": "attempt-1"}
+            });
+            if let Some(project_id) = project_id {
+                body["projectId"] = serde_json::json!(project_id);
+            }
+            Request::builder()
+                .uri("/plugin_commands/invoke")
+                .method("POST")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(plugin_command("com.example.other", None))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(plugin_command(
+                    "com.openforge.github-sync.submit-walkthrough-step",
+                    Some("caller-project"),
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        let supplied_scope = Request::builder()
+            .uri("/plugin_commands/invoke")
+            .method("POST")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "commandId": "com.openforge.github-sync.submit-walkthrough-step",
+                    "scope": {
+                        "namespace": "github-pr",
+                        "targetKey": "other/repo#1",
+                        "revision": "head-b"
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(supplied_scope)
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(plugin_command(
+                    "com.openforge.github-sync.submit-walkthrough-step",
+                    None,
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+
+        for invalid_principal in [
+            crate::agent_generation_identity::ScopedAgentPrincipal {
+                session_id: "other-session".into(),
+                owner_plugin_id: "com.openforge.github-sync".into(),
+                project_id: project_id.clone(),
+                namespace: "github-pr".into(),
+                target_key: "owner/repo#42".into(),
+                revision: "head-a".into(),
+                tool_policy: "review-read-only".into(),
+            },
+            crate::agent_generation_identity::ScopedAgentPrincipal {
+                session_id: "sas-1".into(),
+                owner_plugin_id: "com.openforge.github-sync".into(),
+                project_id: "other-project".into(),
+                namespace: "github-pr".into(),
+                target_key: "owner/repo#42".into(),
+                revision: "head-a".into(),
+                tool_policy: "review-read-only".into(),
+            },
+            crate::agent_generation_identity::ScopedAgentPrincipal {
+                session_id: "sas-1".into(),
+                owner_plugin_id: "com.openforge.github-sync".into(),
+                project_id: project_id.clone(),
+                namespace: "github-pr".into(),
+                target_key: "other/repo#1".into(),
+                revision: "head-a".into(),
+                tool_policy: "review-read-only".into(),
+            },
+        ] {
+            let invalid = identities.issue_scoped(invalid_principal).unwrap();
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/review_threads/list")
+                        .method("POST")
+                        .header("authorization", format!("Bearer {}", invalid.token()))
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            serde_json::json!({
+                                "namespace": "github-pr",
+                                "targetKey": "owner/repo#42",
+                                "revision": "head-a"
+                            })
+                            .to_string(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+
         let wrong_plugin = identities
             .issue_scoped(crate::agent_generation_identity::ScopedAgentPrincipal {
                 session_id: "sas-1".into(),
                 owner_plugin_id: "com.example.other".into(),
+                project_id: project_id.clone(),
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),

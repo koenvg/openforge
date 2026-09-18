@@ -1,7 +1,7 @@
 import { optionalString, requireFlag } from './command-line.js';
 import { printJson, requestJson } from './http-transport.js';
 
-function pluginCommandContext(flags) {
+function pluginCommandContext(flags, allowScopedAgent = false) {
   const projectId = optionalString(flags, 'projectId');
   const explicitTaskId = optionalString(flags, 'taskId');
   const environmentTaskId = typeof process.env.OPENFORGE_TASK_ID === 'string' && process.env.OPENFORGE_TASK_ID.length > 0
@@ -9,6 +9,7 @@ function pluginCommandContext(flags) {
     : undefined;
   const taskId = explicitTaskId ?? (projectId === undefined ? environmentTaskId : undefined);
   if (!taskId && !projectId) {
+    if (allowScopedAgent && process.env.OPENFORGE_AGENT_CONFIG) return {};
     throw new Error('plugin command discovery requires --task-id or --project-id');
   }
   return { taskId, projectId };
@@ -48,7 +49,7 @@ function optionalJsonInput(flags) {
 async function invokePluginCommand(flags) {
   const payload = {
     commandId: requireFlag(flags, 'commandId'),
-    ...pluginCommandContext(flags),
+    ...pluginCommandContext(flags, true),
   };
   const input = optionalJsonInput(flags);
   if (input !== undefined) payload.input = input;

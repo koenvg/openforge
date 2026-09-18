@@ -37,7 +37,7 @@ enum FrontendHostRequest {
         project_id: String,
         command_id: String,
         input: Option<Value>,
-        context: PluginCommandInvocationContext,
+        context: Box<PluginCommandInvocationContext>,
     },
 }
 
@@ -218,7 +218,7 @@ impl FrontendAgentCommandCatalog for FrontendHostRequestTransport {
                 project_id: project_id.to_string(),
                 command_id: command_id.to_string(),
                 input,
-                context,
+                context: Box::new(context),
             })
             .await
         })
@@ -239,6 +239,7 @@ mod tests {
             task_id: Some("T-1".to_string()),
             project_id: project_id.to_string(),
             source: PluginCommandInvocationSource::AgentCli,
+            scoped_session: None,
         }
     }
 

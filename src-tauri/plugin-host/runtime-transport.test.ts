@@ -146,6 +146,12 @@ describe('plugin-host JSON-RPC and stdio transport', () => {
     `)
 
     const host = await BuiltPluginHostTestHarness.start()
+    const publishedEvents: unknown[] = []
+    const stopHostCallbacks = host.onMessage((message) => {
+      if (!('method' in message) || message.method !== 'openforge.plugins.publishGlobalEvent') return
+      publishedEvents.push(message.params)
+      host.send({ jsonrpc: '2.0', id: message.id, result: null })
+    })
 
     try {
       await expect(host.request({
@@ -185,7 +191,13 @@ describe('plugin-host JSON-RPC and stdio transport', () => {
       expect(listed.result).toEqual(expect.arrayContaining([
         expect.objectContaining({ qualifiedId: 'target.echo' }),
       ]))
+      expect(publishedEvents).toEqual([{
+        event: 'shared.event',
+        payload: 'broadcast',
+        sourcePluginId: 'source',
+      }])
     } finally {
+      stopHostCallbacks()
       await host.stop()
     }
   })

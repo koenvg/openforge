@@ -21,6 +21,15 @@ async fn host_app_event_callbacks_emit_once_with_production_adapter_and_sender()
             "openforge.write-clipboard-text",
             json!({ "text": "Reviewer brief" }),
         ),
+        (
+            "openforge.plugins.publishGlobalEvent",
+            "plugin-global-event",
+            json!({
+                "event": "com.openforge.github-sync.walkthrough-changed",
+                "payload": { "prId": 42 },
+                "sourcePluginId": "com.openforge.github-sync"
+            }),
+        ),
     ] {
         let app = AppHandle::new();
         let bus = crate::app_events::AppEventBus::new(16, 8);

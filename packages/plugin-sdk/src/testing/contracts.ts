@@ -24,6 +24,7 @@ import type {
   OpenForgeNavigationRequest,
   OpenForgePackageMetadata,
   PluginSettingsSectionRegistration,
+  PluginCommandInvocationContext,
   PluginStorage,
   PluginTaskPaneTabRegistration,
   PluginReviewRowActionRegistration,
@@ -47,7 +48,10 @@ import type { AgentSession, FileContent, FileEntry, Task, TaskLabel } from '../d
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'viewReplacements' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'themes' | 'backend' | 'background'
 export type TestingMaybePromise<T> = T | Promise<T>
-export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
+export type TestingCommandHandler = (
+  payload: unknown,
+  context: PluginCommandInvocationContext,
+) => TestingMaybePromise<unknown>
 export type TestingEventHandler = (payload: unknown) => void
 
 export interface TestingExternalTextFile extends ExternalReadFileRequest {
