@@ -248,8 +248,8 @@ pub async fn start_http_sidecar_server(
     .await
 }
 
-/// A failure costs headless generations their Review Thread CLI writes rather
-/// than blocking startup, so it is warned about and not propagated.
+/// A failure prevents scope-bound agent sessions from reaching their allowed
+/// sidecar routes rather than blocking startup, so it is warned and not propagated.
 fn activate_agent_generation_identities(state: &AppState, port: u16) {
     let activated = state
         .app
@@ -263,7 +263,7 @@ fn activate_agent_generation_identities(state: &AppState, port: u16) {
             )
         });
     if let Err(error) = activated {
-        warn!("[http_server] headless generations have no agent identity: {error}");
+        warn!("[http_server] scoped agent sessions have no agent identity: {error}");
     }
 }
 

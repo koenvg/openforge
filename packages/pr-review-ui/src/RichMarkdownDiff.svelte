@@ -38,6 +38,7 @@
     onCreateThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkThreadSeen?: (threadId: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
@@ -65,6 +66,7 @@
     onCreateThread,
     onReplyToThread,
     onSetThreadStatus,
+    onMarkThreadSeen,
     onReplyToExistingComment,
     onAddReplyToReview,
     onRemovePendingReply,
@@ -137,6 +139,7 @@
       {onOpenUrl}
       {onReplyToThread}
       {onSetThreadStatus}
+      {onMarkThreadSeen}
       {onReplyToExistingComment}
       {onAddReplyToReview}
       {onRemovePendingReply}

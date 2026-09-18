@@ -36,6 +36,7 @@
     "./reviewFileIdentity": "./src/reviewFileIdentity.ts",
     "./reviewMedia": "./src/reviewMedia.ts",
     "./reviewImages": "./src/reviewImages.ts",
+    "./reviewThreadAnchors": "./src/reviewThreadAnchors.ts",
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {

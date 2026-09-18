@@ -17,26 +17,6 @@ pub(super) async fn authorize(
         BearerIdentity::Unknown => {
             return (StatusCode::UNAUTHORIZED, "agent authorization rejected").into_response()
         }
-        BearerIdentity::Generation => {
-            if request
-                .headers()
-                .keys()
-                .any(|key| key.as_str().starts_with("x-openforge-"))
-            {
-                return (
-                    StatusCode::FORBIDDEN,
-                    "caller-supplied ownership is forbidden",
-                )
-                    .into_response();
-            }
-            if !openforge_session_protocol::agent_route_allowed(
-                request.method().as_str(),
-                request.uri().path(),
-            ) {
-                return (StatusCode::FORBIDDEN, "agent route forbidden").into_response();
-            }
-            return next.run(request).await;
-        }
         BearerIdentity::Scoped(principal) => {
             if request
                 .headers()
@@ -131,7 +111,6 @@ pub(super) async fn authorize(
 enum BearerIdentity {
     Absent,
     Controller,
-    Generation,
     Scoped(crate::agent_generation_identity::ScopedAgentPrincipal),
     Unknown,
 }
@@ -148,9 +127,6 @@ fn bearer_identity(state: &AppState, headers: &HeaderMap) -> BearerIdentity {
         return BearerIdentity::Controller;
     }
     match state.agent_generation_identities.identity(bearer) {
-        Some(crate::agent_generation_identity::AgentIdentity::HeadlessGeneration) => {
-            return BearerIdentity::Generation
-        }
         Some(crate::agent_generation_identity::AgentIdentity::Scoped(principal)) => {
             return BearerIdentity::Scoped(principal)
         }
@@ -226,52 +202,6 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from("{}"))
             .unwrap()
-    }
-
-    async fn refusal(response: axum::response::Response) -> String {
-        String::from_utf8_lossy(
-            &axum::body::to_bytes(response.into_body(), usize::MAX)
-                .await
-                .unwrap(),
-        )
-        .into_owned()
-    }
-
-    #[tokio::test]
-    async fn a_generation_credential_is_refused_off_route_and_with_ownership_headers() {
-        let (state, root) = crate::test_support::test_state("generation_ingress", |_, _| {});
-        let identities = state.agent_generation_identities.clone();
-        identities
-            .activate(root.path().join("agent-generations"), 1)
-            .expect("activate generation identities");
-        let credential = identities.issue().expect("generation credential");
-        let router = super::super::create_router(state);
-
-        let off_route = router
-            .clone()
-            .oneshot(generation_request("/delete_project", credential.token()))
-            .await
-            .unwrap();
-        assert_eq!(off_route.status(), StatusCode::FORBIDDEN);
-        assert_eq!(refusal(off_route).await, "agent route forbidden");
-
-        let mut forged = generation_request("/review_threads/list", credential.token());
-        forged
-            .headers_mut()
-            .insert("x-openforge-agent-task", "T-forged".parse().unwrap());
-        let refused = router.clone().oneshot(forged).await.unwrap();
-        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
-        assert_eq!(
-            refusal(refused).await,
-            "caller-supplied ownership is forbidden"
-        );
-
-        let unknown = router
-            .oneshot(generation_request("/review_threads/list", &"f".repeat(64)))
-            .await
-            .unwrap();
-        assert_eq!(unknown.status(), StatusCode::UNAUTHORIZED);
-        assert_eq!(refusal(unknown).await, "agent authorization rejected");
     }
 
     #[tokio::test]

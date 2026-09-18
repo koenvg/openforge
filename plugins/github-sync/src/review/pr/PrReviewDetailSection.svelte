@@ -2,12 +2,11 @@
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import type { AgentReviewComment, AgentReviewCommentStatus } from '../../lib/prReviewRecords'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
-  import { agentCommentToSubmission, approvedInlineAgentComments, dismissSubmittedAgentComments } from './agentCommentSubmission'
+  import { resolvedAgentThreadSubmissions } from './reviewThreadSubmission'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -35,7 +34,6 @@
     reviewComments: ReviewComment[]
     pendingManualComments: ReviewSubmissionComment[]
     overviewComments: PrOverviewComment[]
-    agentReviewComments: AgentReviewComment[]
     fileTreeVisible: boolean
     reviewedFileShas: Map<string, string>
     includeNonApplicationFiles: boolean
@@ -51,8 +49,6 @@
     resolveRemoteMedia: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onToggleFileTree: () => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void>
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
     agentSession: AgentSessionProps
     // The Walkthrough tab is only offered once a walkthrough for the current head
@@ -65,6 +61,7 @@
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToReviewThread?: (threadId: string, body: string) => void
     onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkReviewThreadSeen?: (threadId: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
@@ -82,7 +79,7 @@
       body: string
       comments: ReviewSubmissionComment[]
       commitId: string
-    }) => Promise<void>
+    }, submittedReviewThreadIds?: string[]) => Promise<void>
     onOpenUrl: (url: string) => void
   }
 
@@ -96,7 +93,6 @@
     reviewComments,
     pendingManualComments,
     overviewComments,
-    agentReviewComments,
     fileTreeVisible,
     reviewedFileShas,
     includeNonApplicationFiles,
@@ -111,8 +107,6 @@
     resolveRemoteMedia,
     onToggleFileTree,
     onPendingCommentsChange,
-    onAgentCommentsChange,
-    onUpdateAgentCommentStatus,
     onToggleFileReviewed,
     agentSession,
     onRemove,
@@ -122,6 +116,7 @@
     onCreateReviewThread,
     onReplyToReviewThread,
     onSetReviewThreadStatus,
+    onMarkReviewThreadSeen,
     onCommentNow,
     onReplyToExistingComment,
     pendingReplies = [],
@@ -135,19 +130,10 @@
     onOpenUrl,
   }: Props = $props()
 
-  // Approved AI review comments are submitted with the review directly (approving
-  // no longer copies them into the manual pending list), so map them to
-  // submission shape for ReviewSubmitPanel.
-  let approvedAgentSubmissionComments = $derived(
-    approvedInlineAgentComments(agentReviewComments).map(agentCommentToSubmission),
-  )
+  let resolvedAgentSubmissions = $derived(resolvedAgentThreadSubmissions(files, reviewThreads))
 
-  async function handleApprovedAgentCommentsSubmitted() {
-    try {
-      await dismissSubmittedAgentComments(agentReviewComments, onUpdateAgentCommentStatus, onAgentCommentsChange)
-    } catch (error) {
-      console.error('Failed to mark submitted AI review comments as handled:', error)
-    }
+  function submitReview(request: Parameters<Props['onSubmitReview']>[0]): Promise<void> {
+    return onSubmitReview(request, resolvedAgentSubmissions.map(submission => submission.threadId))
   }
 
   let diffViewer = $state<DiffViewer>()
@@ -255,24 +241,22 @@
           {fetchFileContents}
           {resolveRepositoryImage}
           existingComments={reviewComments}
-          agentComments={agentReviewComments}
           pendingComments={pendingManualComments}
           onPendingCommentsChange={onPendingCommentsChange}
-          onAgentCommentsChange={onAgentCommentsChange}
-          onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           {onOpenUrl}
           reviewThreads={reviewThreads}
           {reviewFollowUpUnavailableReason}
           onCreateReviewThread={onCreateReviewThread}
           onReplyToReviewThread={onReplyToReviewThread}
           onSetReviewThreadStatus={onSetReviewThreadStatus}
+          onMarkReviewThreadSeen={onMarkReviewThreadSeen}
           onCommentNow={onCommentNow}
           onReplyToExistingComment={onReplyToExistingComment}
           pendingReplies={pendingReplies}
           onAddReplyToReview={onAddReplyToReview}
           onRemovePendingReply={onRemovePendingReply}
           onAskAgentStep={onAskAgentStep}
-          onSubmitReview={onSubmitReview}
+          onSubmitReview={submitReview}
         />
       {:else}
         <div class="flex h-full min-h-0 overflow-hidden">
@@ -321,6 +305,7 @@
               onCreateThread={onCreateReviewThread}
               onReplyToThread={onReplyToReviewThread}
               onSetThreadStatus={onSetReviewThreadStatus}
+              onMarkThreadSeen={onMarkReviewThreadSeen}
               onCommentNow={onCommentNow}
               onReplyToExistingComment={onReplyToExistingComment}
               pendingReplies={pendingReplies}
@@ -338,11 +323,10 @@
                   prNumber={pr.number}
                   commitId={pr.head_sha}
                   pendingComments={pendingManualComments}
-                  approvedAgentComments={approvedAgentSubmissionComments}
+                  resolvedAgentComments={resolvedAgentSubmissions.map(submission => submission.comment)}
                   pendingReplyCount={pendingReplies.length}
                   onPendingCommentsChange={onPendingCommentsChange}
-                  onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
-                  onSubmitReview={onSubmitReview}
+                  onSubmitReview={submitReview}
                 />
               {/snippet}
             </DiffViewer>

@@ -12,12 +12,17 @@
     comment: ThreadCommentDisplayData
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkThreadSeen?: (threadId: string) => void
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let { comment, onReplyToThread, onSetThreadStatus, onOpenUrl }: Props = $props()
+  let { comment, onReplyToThread, onSetThreadStatus, onMarkThreadSeen, onOpenUrl }: Props = $props()
 
   let replyDraft = $state('')
+
+  $effect(() => {
+    if (comment.thread.hasUnreadAgentMessage) onMarkThreadSeen?.(comment.thread.id)
+  })
 
   const ORIGIN_LABELS = { agent: 'Agent', plugin: 'Plugin', human: 'Reviewer' } as const
   // On the GitHub PR review, an agent thread is a suggestion the reviewer accepts

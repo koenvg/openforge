@@ -9,6 +9,7 @@ import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import { reviewScopeForPullRequest } from '../reviewScope'
 import type { PrReviewAgentSessionController } from './usePrReviewAgentSession.svelte'
+import { dismissSubmittedReviewThreads } from '../reviewThreadSubmission'
 
 function sameScope(left: SessionScope | null, right: SessionScope): boolean {
   return left !== null
@@ -171,6 +172,17 @@ export function createReviewThreadFollowUpController(
     storeThread(updated)
   }
 
+  async function markSeen(threadId: string): Promise<void> {
+    const updated = await api.reviewThreads.markSeen({ threadId })
+    storeThread(updated)
+  }
+
+  async function dismissSubmitted(threadIds: string[]): Promise<void> {
+    await dismissSubmittedReviewThreads(threadIds, async (threadId, status) => {
+      await setStatus(threadId, status)
+    })
+  }
+
   function dispose(): void {
     disposed = true
     clear()
@@ -185,6 +197,8 @@ export function createReviewThreadFollowUpController(
     askStep,
     reply,
     setStatus,
+    markSeen,
+    dismissSubmitted,
     dispose,
   }
 }

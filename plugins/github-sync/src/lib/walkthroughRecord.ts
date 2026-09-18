@@ -71,9 +71,9 @@ const walkthroughRecordSchema = z.strictObject({
   }).nullable(),
 }) satisfies z.ZodType<WalkthroughRecordV1>
 
-const walkthroughStepsEnvelopeSchema = z.strictObject({
+const walkthroughStepsEnvelopeSchema = z.object({
   steps: z.array(walkthroughStepSchema),
-})
+}).passthrough()
 
 const legacyWalkthroughRecordSchema = z.strictObject({
   pr_id: z.number().int().nonnegative(),

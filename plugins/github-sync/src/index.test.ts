@@ -365,8 +365,6 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('resolveGithubAsset', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getReviewComments', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('submitPrReview', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrAiReviewComments', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('updatePrAiReviewCommentStatus', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('deletePrWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('startAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
@@ -380,10 +378,6 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('markTaskPrCommentAddressed', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('mergeTaskPullRequest', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('enqueueTaskPullRequest', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('getAiThreads', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('saveAiThread', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('deleteAiThread', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(api.backend.registerMethod).toHaveBeenCalledWith('deleteReviewSession', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('replyToReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('createReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
     // Jira ticket gap analysis.
@@ -393,7 +387,17 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrTicket', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('setPrJiraKey', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('resolveProjectIdsByRepo', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(44)
+    const registeredNames = api.backend.registerMethod.mock.calls.map((args) => (args as unknown[])[0])
+    expect(registeredNames).not.toEqual(expect.arrayContaining([
+      'getPrAiReviewComments',
+      'updatePrAiReviewCommentStatus',
+      'getAiThreads',
+      'saveAiThread',
+      'deleteAiThread',
+      'deleteReviewSession',
+      'askAgentQuestions',
+    ]))
+    expect(subscriptions.add).toHaveBeenCalledTimes(38)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {

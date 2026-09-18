@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { describe, expect, it, vi } from 'vitest'
 import { tick } from 'svelte'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { PrFileDiff, PrWalkthrough, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import type { GithubSyncPrReviewClient } from './githubSyncClient'
+import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
 // Replace the heavy diff renderer with a stub that records the props WalkthroughTab
 // forwards, and renders the footer snippet (where the submit panel lives in Task 3).
@@ -76,21 +77,20 @@ const fileB: PrFileDiff = {
   patch_line_count: null,
 }
 
-function makeWalkthrough(): PrWalkthrough {
+function makeWalkthrough(): WalkthroughRecordV1 {
   return {
-    pr_id: basePr.id,
-    head_sha: basePr.head_sha,
-    walkthrough_session_key: null,
-    status: 'ready',
-    steps_json: JSON.stringify({
-      steps: [
-        { id: 's1', title: 'Step one', summary: 'First concept', files: [{ filename: 'src/main.rs', hunk_indexes: null }] },
-        { id: 's2', title: 'Step two', summary: 'Second concept', files: [{ filename: 'src/checkout.ts', hunk_indexes: null }] },
-      ],
-    }),
-    error_message: null,
-    created_at: 0,
-    updated_at: 0,
+    version: 1,
+    prId: basePr.id,
+    scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: basePr.head_sha },
+    attemptId: 'attempt-1',
+    state: 'ready',
+    steps: [
+      { id: 's1', title: 'Step one', summary: 'First concept', files: [{ filename: 'src/main.rs', hunk_indexes: null }] },
+      { id: 's2', title: 'Step two', summary: 'Second concept', files: [{ filename: 'src/checkout.ts', hunk_indexes: null }] },
+    ],
+    error: null,
+    createdAt: 0,
+    updatedAt: 0,
   }
 }
 
@@ -99,7 +99,7 @@ function makeGithubSync(): GithubSyncPrReviewClient {
     getPrWalkthrough: vi.fn(async () => makeWalkthrough()),
     getPrTicket: vi.fn(async () => ({ snapshot: null, jiraConfigured: false })),
     setPrJiraKey: vi.fn(async () => {}),
-    startAgentWalkthrough: vi.fn(async () => ({ walkthrough_session_key: 'k' })),
+    startAgentWalkthrough: vi.fn(async () => ({ attemptId: 'k' })),
     abortAgentWalkthrough: vi.fn(async () => {}),
     deletePrWalkthrough: vi.fn(async () => {}),
   } as unknown as GithubSyncPrReviewClient
@@ -148,9 +148,6 @@ function renderWalkthrough(overrides: Record<string, unknown> = {}) {
       existingComments: [],
       pendingComments: [] as ReviewSubmissionComment[],
       onPendingCommentsChange,
-      agentComments: [],
-      onAgentCommentsChange: vi.fn(),
-      onUpdateAgentCommentStatus: vi.fn(),
       onOpenUrl: vi.fn(),
       onSubmitReview,
       ...overrides,
@@ -171,7 +168,7 @@ async function waitForInitialWalkthroughLoad(githubSync: GithubSyncPrReviewClien
 
 describe('WalkthroughTab comment sync', () => {
   it('renders accepted steps provisionally without ticket coverage or review submission', async () => {
-    const provisional = { ...makeWalkthrough(), status: 'generating' as const }
+    const provisional = { ...makeWalkthrough(), state: 'generating' as const }
     const githubSync = makeGithubSync()
     githubSync.getPrWalkthrough = vi.fn(async () => provisional)
     renderWalkthrough({ githubSync })
@@ -185,8 +182,8 @@ describe('WalkthroughTab comment sync', () => {
   it('keeps accepted steps provisional when generation fails', async () => {
     const partialFailure = {
       ...makeWalkthrough(),
-      status: 'failed' as const,
-      error_message: 'Provider connection failed.',
+      state: 'failed' as const,
+      error: { code: 'provider-failed', message: 'Provider connection failed.' },
     }
     const githubSync = makeGithubSync()
     githubSync.getPrWalkthrough = vi.fn(async () => partialFailure)
@@ -283,81 +280,8 @@ describe('WalkthroughTab review/submit step', () => {
         repoOwner: basePr.repo_owner,
         repoName: basePr.repo_name,
       }),
+      [],
     )
-  })
-})
-
-describe('WalkthroughTab ticket coverage → review', () => {
-  function makeWalkthroughWithCoverage(): PrWalkthrough {
-    const walkthrough = makeWalkthrough()
-    return {
-      ...walkthrough,
-      steps_json: JSON.stringify({
-        ...JSON.parse(walkthrough.steps_json!),
-        ticket_coverage: {
-          verdict: 'partial',
-          summary: 'Login lands, but a label went singular.',
-          criteria: [
-            {
-              id: 'ac-1',
-              text: 'Domains label stays plural',
-              status: 'partial',
-              evidence: [],
-              notes: 'Tooltip dropped.',
-            },
-          ],
-          out_of_scope: [],
-        },
-      }),
-    }
-  }
-
-  function renderWithCoverage(overrides: Record<string, unknown> = {}) {
-    const githubSync = makeGithubSync()
-    githubSync.getPrWalkthrough = vi.fn(async () => makeWalkthroughWithCoverage())
-    githubSync.getPrTicket = vi.fn(async () => ({
-      snapshot: { issue_key: 'AVIV-1', item: null, error: null, fetched_at: 0 },
-      jiraConfigured: true,
-    }))
-    return renderWalkthrough({ githubSync, ...overrides })
-  }
-
-  it('folds a flagged ticket-coverage gap into the submitted review body, then clears it', async () => {
-    const { onSubmitReview } = renderWithCoverage()
-
-    await fireEvent.click(await screen.findByRole('button', { name: /^add to review$/i }))
-
-    await goToStep(4)
-    await screen.findByText('Review & submit')
-    expect(screen.getByText('Partial')).toBeTruthy()
-
-    const textarea = screen.getByRole('textbox', { name: 'Review summary comment' })
-    await fireEvent.input(textarea, { target: { value: 'Otherwise fine.' } })
-    await fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
-
-    expect(onSubmitReview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        body: 'Ticket coverage gaps:\n- **Partial**: Jira ticket mentions "Domains label stays plural", but Tooltip dropped.\n\nOtherwise fine.',
-      }),
-    )
-
-    // Submitting clears the flagged finding, so the ticket step reverts to unflagged.
-    await goToStep(1)
-    expect(await screen.findByRole('button', { name: /^add to review$/i })).toBeTruthy()
-  })
-
-  it('lets the reviewer remove a flagged finding before submitting', async () => {
-    renderWithCoverage()
-
-    await fireEvent.click(await screen.findByRole('button', { name: /^add to review$/i }))
-    await goToStep(4)
-    await screen.findByText('Review & submit')
-    expect(screen.getByText('Partial')).toBeTruthy()
-
-    await fireEvent.click(screen.getByLabelText('Remove "Partial" from review'))
-
-    expect(screen.queryByText('Partial')).toBeNull()
-    expect((screen.getByRole('button', { name: 'Comment' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
@@ -445,17 +369,24 @@ describe('WalkthroughTab stop generation', () => {
   // used to be a no-op.
   function makeGeneratingSync(): GithubSyncPrReviewClient {
     const sync = makeGithubSync()
-    let current: PrWalkthrough | null = null
+    let current: WalkthroughRecordV1 | null = null
     sync.getPrWalkthrough = vi.fn(async () => current)
     sync.startAgentWalkthrough = vi.fn(async () => {
       current = {
-        pr_id: basePr.id, head_sha: basePr.head_sha, walkthrough_session_key: 'sess-1',
-        status: 'generating', steps_json: null, error_message: null, created_at: 1, updated_at: 1,
+        version: 1,
+        prId: basePr.id,
+        scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: basePr.head_sha },
+        attemptId: 'attempt-1',
+        state: 'generating',
+        steps: [],
+        error: null,
+        createdAt: 1,
+        updatedAt: 1,
       }
-      return { walkthrough_session_key: 'sess-1' }
+      return { attemptId: 'attempt-1' }
     })
     sync.abortAgentWalkthrough = vi.fn(async () => {
-      if (current) current = { ...current, status: 'aborted', error_message: 'Walkthrough generation was stopped.' }
+      if (current) current = { ...current, state: 'aborted', error: { code: 'generation-aborted', message: 'Walkthrough generation was stopped.' } }
     })
     return sync
   }
@@ -469,7 +400,7 @@ describe('WalkthroughTab stop generation', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /^stop$/i }))
 
     await waitFor(() => {
-      expect(githubSync.abortAgentWalkthrough).toHaveBeenCalledWith({ walkthroughSessionKey: 'sess-1' })
+      expect(githubSync.abortAgentWalkthrough).toHaveBeenCalledWith({ attemptId: 'attempt-1' })
     })
   })
 

@@ -17,6 +17,7 @@
     onOpenUrl?: (url: string) => void | Promise<void>
     onReplyToThread?: (threadId: string, body: string) => void
     onSetThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkThreadSeen?: (threadId: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void | Promise<void>
     onAddReplyToReview?: (commentId: number, body: string) => void
     onRemovePendingReply?: (commentId: number) => void
@@ -29,6 +30,7 @@
     onOpenUrl,
     onReplyToThread,
     onSetThreadStatus,
+    onMarkThreadSeen,
     onReplyToExistingComment,
     onAddReplyToReview,
     onRemovePendingReply,
@@ -73,7 +75,7 @@
           {onOpenUrl}
         />
       {:else if comment.type === 'thread'}
-        <InlineReviewThread {comment} {onReplyToThread} {onSetThreadStatus} {onOpenUrl} />
+        <InlineReviewThread {comment} {onReplyToThread} {onSetThreadStatus} {onMarkThreadSeen} {onOpenUrl} />
       {:else if comment.type === 'pending-reply'}
         <div class="flex items-center gap-2 mb-1.5">
           <Badge variant="warning">Pending reply</Badge>

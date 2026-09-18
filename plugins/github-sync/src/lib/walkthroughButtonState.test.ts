@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { walkthroughButtonState } from './walkthroughButtonState'
-import type { PrWalkthrough } from '@openforge-app/plugin-sdk/domain'
+import type { WalkthroughRecordV1 } from './walkthroughRecord'
 
-function wt(partial: Partial<PrWalkthrough>): PrWalkthrough {
+function wt(partial: Partial<WalkthroughRecordV1>): WalkthroughRecordV1 {
   return {
-    pr_id: 1, head_sha: 'sha1', walkthrough_session_key: null,
-    status: 'ready', steps_json: null, error_message: null,
-    created_at: 0, updated_at: 0, ...partial,
+    version: 1,
+    prId: 1,
+    scope: { namespace: 'github', targetKey: 'gh:o/r#1', revision: 'sha1' },
+    attemptId: 'attempt-1',
+    state: 'ready',
+    steps: [],
+    error: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...partial,
   }
 }
 
@@ -16,15 +23,15 @@ describe('walkthroughButtonState', () => {
     expect(walkthroughButtonState(undefined, 'sha1')).toBe('idle')
   })
   it('reflects generating and distinct terminal status', () => {
-    expect(walkthroughButtonState(wt({ status: 'generating' }), 'sha1')).toBe('generating')
-    expect(walkthroughButtonState(wt({ status: 'failed' }), 'sha1')).toBe('failed')
-    expect(walkthroughButtonState(wt({ status: 'aborted' }), 'sha1')).toBe('aborted')
-    expect(walkthroughButtonState(wt({ status: 'no-submissions' }), 'sha1')).toBe('no-submissions')
+    expect(walkthroughButtonState(wt({ state: 'generating' }), 'sha1')).toBe('generating')
+    expect(walkthroughButtonState(wt({ state: 'failed' }), 'sha1')).toBe('failed')
+    expect(walkthroughButtonState(wt({ state: 'aborted' }), 'sha1')).toBe('aborted')
+    expect(walkthroughButtonState(wt({ state: 'no-submissions' }), 'sha1')).toBe('no-submissions')
   })
   it('is ready only when the ready walkthrough matches the current head sha', () => {
-    expect(walkthroughButtonState(wt({ status: 'ready', head_sha: 'sha1' }), 'sha1')).toBe('ready')
+    expect(walkthroughButtonState(wt({ state: 'ready' }), 'sha1')).toBe('ready')
   })
   it('is stale when a ready walkthrough is for an older commit', () => {
-    expect(walkthroughButtonState(wt({ status: 'ready', head_sha: 'old' }), 'sha1')).toBe('stale')
+    expect(walkthroughButtonState(wt({ state: 'ready', scope: { namespace: 'github', targetKey: 'gh:o/r#1', revision: 'old' } }), 'sha1')).toBe('stale')
   })
 })

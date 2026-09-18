@@ -1,11 +1,11 @@
 import type {
   PrFileDiff,
-  PrWalkthrough,
   PrWalkthroughStep,
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import { buildPatchFromHunks, parseHunks, selectHunksByIndex } from './hunkParser'
 import type { CoverageFinding } from './ticketCoverage'
+import type { WalkthroughRecordV1 } from './walkthroughRecord'
 
 /** PR-size thresholds at which the Walkthrough tab shows a hint badge. */
 export const WALKTHROUGH_HINT_FILE_THRESHOLD = 10
@@ -102,11 +102,11 @@ export function buildWalkthroughStepList(steps: PrWalkthroughStep[]): Walkthroug
 }
 
 export function isWalkthroughStale(
-  walkthrough: PrWalkthrough | null,
+  walkthrough: WalkthroughRecordV1 | null,
   pr: ReviewPullRequest,
 ): boolean {
   if (!walkthrough) return false
-  return walkthrough.head_sha !== pr.head_sha
+  return walkthrough.scope.revision !== pr.head_sha
 }
 
 /**

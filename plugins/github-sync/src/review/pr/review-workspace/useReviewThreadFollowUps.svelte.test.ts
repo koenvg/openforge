@@ -138,6 +138,58 @@ describe('pull request Review Thread follow-ups', () => {
     })
   })
 
+  it('marks an unread agent answer seen through the Review Threads API', async () => {
+    const { registry, agentSession, followUps } = setup()
+
+    await agentSession.observe(pullRequest)
+    await agentSession.start()
+    const created = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github',
+      targetKey: 'gh:acme/web#1421',
+      revision: 'head-a',
+      anchor: { kind: 'custom', key: 'step:validation' },
+      origin: 'human',
+      body: 'What happens on retry?',
+    })
+    await registry.frontendApi.reviewThreads.reply({
+      threadId: created.id,
+      role: 'agent',
+      body: 'The retry starts a new attempt.',
+      awaiting: 'none',
+    })
+    await followUps.load(pullRequest)
+    expect(followUps.threads[0].hasUnreadAgentMessage).toBe(true)
+
+    await followUps.markSeen(created.id)
+
+    expect(followUps.threads[0].hasUnreadAgentMessage).toBe(false)
+    expect(followUps.threads[0].seenAt).not.toBeNull()
+  })
+
+  it('updates only submitted threads after GitHub accepts them', async () => {
+    const { registry, agentSession, followUps } = setup()
+
+    await agentSession.observe(pullRequest)
+    const first = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'head-a',
+      anchor: { kind: 'line', filePath: 'src/a.ts', line: 1, side: 'RIGHT' },
+      origin: 'agent', body: 'First',
+    })
+    const second = await registry.frontendApi.reviewThreads.create({
+      namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'head-a',
+      anchor: { kind: 'line', filePath: 'src/b.ts', line: 2, side: 'RIGHT' },
+      origin: 'agent', body: 'Second',
+    })
+    await registry.frontendApi.reviewThreads.setStatus({ threadId: first.id, status: 'resolved' })
+    await registry.frontendApi.reviewThreads.setStatus({ threadId: second.id, status: 'resolved' })
+    await followUps.load(pullRequest)
+
+    await followUps.dismissSubmitted([first.id])
+
+    expect(followUps.threads.find(thread => thread.id === first.id)?.status).toBe('dismissed')
+    expect(followUps.threads.find(thread => thread.id === second.id)?.status).toBe('resolved')
+  })
+
   it('keeps the newest thread state when invalidation reads resolve out of order', async () => {
     const { registry, agentSession, followUps } = setup()
 

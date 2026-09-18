@@ -1,4 +1,4 @@
-//! Agent identity for headless generations, which have no PTY to borrow one from.
+//! Short-lived credentials for scope-bound agent sessions.
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -47,7 +47,6 @@ pub(crate) struct ScopedAgentPrincipal {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AgentIdentity {
-    HeadlessGeneration,
     Scoped(ScopedAgentPrincipal),
 }
 
@@ -88,10 +87,6 @@ impl GenerationIdentities {
         }
         lock(&self.0).endpoint = Some(Endpoint { directory, port });
         Ok(())
-    }
-
-    pub(crate) fn issue(&self) -> Result<GenerationCredential, String> {
-        self.issue_identity(AgentIdentity::HeadlessGeneration)
     }
 
     pub(crate) fn issue_scoped(
@@ -215,10 +210,22 @@ mod tests {
         fs::metadata(path).expect("metadata").permissions().mode() & 0o777
     }
 
+    fn principal(session_id: &str) -> ScopedAgentPrincipal {
+        ScopedAgentPrincipal {
+            session_id: session_id.into(),
+            owner_plugin_id: "com.example.review".into(),
+            project_id: "project-1".into(),
+            namespace: "github-pr".into(),
+            target_key: "owner/repo#42".into(),
+            revision: "head-a".into(),
+            tool_policy: "review-read-only".into(),
+        }
+    }
+
     #[test]
     fn an_issued_credential_is_readable_by_the_cli_agent_transport() {
         let (identities, _root) = activated(41234);
-        let credential = identities.issue().expect("issue");
+        let credential = identities.issue_scoped(principal("sas-1")).expect("issue");
 
         let config = parsed(&credential);
         assert_eq!(config["version"], 1);
@@ -241,8 +248,10 @@ mod tests {
     #[test]
     fn a_live_credential_authorizes_only_its_own_token() {
         let (identities, _root) = activated(1);
-        let credential = identities.issue().expect("issue");
-        let other = identities.issue().expect("second issue");
+        let credential = identities.issue_scoped(principal("sas-1")).expect("issue");
+        let other = identities
+            .issue_scoped(principal("sas-2"))
+            .expect("second issue");
 
         assert!(identities.authorizes(credential.token()));
         assert!(identities.authorizes(other.token()));
@@ -254,15 +263,7 @@ mod tests {
     #[test]
     fn scoped_identity_is_bound_to_plugin_session_and_exact_scope() {
         let (identities, _root) = activated(1);
-        let principal = ScopedAgentPrincipal {
-            session_id: "sas-1".into(),
-            owner_plugin_id: "com.example.review".into(),
-            project_id: "project-1".into(),
-            namespace: "github-pr".into(),
-            target_key: "owner/repo#42".into(),
-            revision: "head-a".into(),
-            tool_policy: "review-read-only".into(),
-        };
+        let principal = principal("sas-1");
         let credential = identities
             .issue_scoped(principal.clone())
             .expect("issue scoped");
@@ -277,7 +278,7 @@ mod tests {
     #[test]
     fn dropping_a_credential_revokes_the_token_and_deletes_the_file() {
         let (identities, _root) = activated(1);
-        let credential = identities.issue().expect("issue");
+        let credential = identities.issue_scoped(principal("sas-1")).expect("issue");
         let token = credential.token().to_string();
         let path = credential.config_path().to_path_buf();
 
@@ -290,7 +291,7 @@ mod tests {
     #[test]
     fn an_inactive_registry_issues_nothing_and_authorizes_nothing() {
         let identities = GenerationIdentities::default();
-        assert!(identities.issue().is_err());
+        assert!(identities.issue_scoped(principal("sas-1")).is_err());
         assert!(!identities.authorizes(""));
         assert!(!identities.authorizes(&"a".repeat(64)));
     }
@@ -340,6 +341,6 @@ mod tests {
 
         assert!(victim.exists());
         assert_eq!(mode_of(&target), 0o755);
-        assert!(identities.issue().is_err());
+        assert!(identities.issue_scoped(principal("sas-1")).is_err());
     }
 }

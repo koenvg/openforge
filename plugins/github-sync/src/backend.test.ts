@@ -192,7 +192,7 @@ describe('startAgentWalkthrough backend handler', () => {
     await expect(first.handlers.get('getPrWalkthrough')!({
       reviewPrId: 42,
       headSha: 'sha123',
-    })).resolves.toMatchObject({ status: 'generating' })
+    })).resolves.toMatchObject({ state: 'generating' })
     vi.resetModules()
 
     const restarted = await activateBackend({ store: persisted })
@@ -201,11 +201,11 @@ describe('startAgentWalkthrough backend handler', () => {
       headSha: 'sha123',
     })
     await expect(getRestartedWalkthrough()).resolves.toMatchObject({
-      status: 'aborted',
-      error_message: 'Walkthrough generation stopped because OpenForge restarted. Try again.',
+      state: 'aborted',
+      error: { message: 'Walkthrough generation stopped because OpenForge restarted. Try again.' },
     })
 
-    await expect(getRestartedWalkthrough()).resolves.toMatchObject({ status: 'aborted' })
+    await expect(getRestartedWalkthrough()).resolves.toMatchObject({ state: 'aborted' })
   })
 
   it('starts the visible scoped Agent session for the project without parsed output generation', async () => {
@@ -234,6 +234,29 @@ describe('startAgentWalkthrough backend handler', () => {
         owner: 'octo', repo: 'frontend', prNumber: 7,
       })
     })
+  })
+
+  it('never reads, writes, or deletes retired local review data', async () => {
+    const retired = new Map<string, unknown>([
+      ['pr-ai-review:42:sha123', [{ body: 'old local finding' }]],
+      ['pr-ai-threads:42:sha123', [{ body: 'old local question' }]],
+      ['pr-review-session:42', { sessionKey: 'old-session' }],
+    ])
+    const { openforge, handlers } = await activateBackend({ store: retired })
+
+    await handlers.get('startAgentWalkthrough')!(walkthroughRequest())
+    await handlers.get('deletePrWalkthrough')!({ reviewPrId: 42, headSha: 'sha123' })
+
+    const touchedKeys = [
+      ...openforge.storage.global.get.mock.calls,
+      ...openforge.storage.global.set.mock.calls,
+      ...openforge.storage.global.delete.mock.calls,
+    ].map(([key]) => key)
+    expect(touchedKeys.some(key => /^(?:pr-ai-review|pr-ai-threads|pr-review-session):/u.test(key))).toBe(false)
+    expect(openforge.storage.global.delete).toHaveBeenCalledWith('walkthrough:42:sha123')
+    expect(retired.get('pr-ai-review:42:sha123')).toEqual([{ body: 'old local finding' }])
+    expect(retired.get('pr-ai-threads:42:sha123')).toEqual([{ body: 'old local question' }])
+    expect(retired.get('pr-review-session:42')).toEqual({ sessionKey: 'old-session' })
   })
 })
 

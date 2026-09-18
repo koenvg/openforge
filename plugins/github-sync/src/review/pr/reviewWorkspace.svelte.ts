@@ -3,8 +3,6 @@ import { fromStore } from 'svelte/store'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
 import type { PrOverviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-import type { AgentReviewComment } from '../../lib/prReviewRecords'
-import { parseAdaptedThreadId, reviewerStatusForAgentComment, toReviewThreads } from './reviewThreadAdapter'
 import * as stores from '../../lib/stores'
 import { createGithubSyncPrReviewClient } from './githubSyncClient'
 import { usePrReviewListState } from './review-workspace/usePrReviewListState.svelte'
@@ -34,7 +32,6 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const comments = fromStore(stores.reviewComments)
   const pendingComments = fromStore(stores.pendingManualComments)
   const overviewComments = fromStore(stores.prOverviewComments)
-  const agentComments = fromStore(stores.agentReviewComments)
   const replies = fromStore(stores.pendingReplies)
   const reviewPrs = fromStore(stores.reviewPrs)
   const authoredPrs = fromStore(stores.authoredPrs)
@@ -67,19 +64,9 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const openUrl = (url: string) => api.system.openUrl(url)
   const openSettings = () => api.navigation.navigate({ viewId: 'global_settings' })
   const setPendingComments = (value: ReviewSubmissionComment[]) => { pendingComments.current = value }
-  const setAgentComments = (value: AgentReviewComment[]) => { agentComments.current = value }
   const setOverviewComments = (value: PrOverviewComment[]) => { overviewComments.current = value }
 
-  let reviewThreads = $derived(selectedPr.current
-    ? [
-        ...toReviewThreads({
-          pr: selectedPr.current,
-          agentComments: agentComments.current,
-          aiThreads: [],
-        }),
-        ...followUps.threads,
-      ]
-    : [])
+  let reviewThreads = $derived(selectedPr.current ? followUps.threads : [])
 
   function createReviewThread(filePath: string, line: number, side: ReviewThreadSide, body: string): void {
     void followUps.askLine(filePath, line, side, body).catch(error => {
@@ -88,34 +75,34 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   }
 
   function replyToReviewThread(threadId: string, body: string): void {
-    if (followUps.threads.some(thread => thread.id === threadId)) {
-      void followUps.reply(threadId, body).catch(error => {
-        console.error('Failed to send the review thread follow-up:', error)
-      })
-      return
-    }
-    const ref = parseAdaptedThreadId(threadId)
-    if (!ref || ref.kind === 'ai') return
-    const comment = agentComments.current.find(candidate => candidate.id === ref.commentId)
-    if (!comment || comment.file_path === null || comment.line_number === null) return
-    createReviewThread(comment.file_path, comment.line_number, comment.side ?? 'RIGHT', body)
+    void followUps.reply(threadId, body).catch(error => {
+      console.error('Failed to send the review thread follow-up:', error)
+    })
   }
 
   async function setReviewThreadStatus(threadId: string, status: ReviewThreadStatus): Promise<void> {
     try {
-      if (followUps.threads.some(thread => thread.id === threadId)) {
-        await followUps.setStatus(threadId, status)
-        return
-      }
-      const ref = parseAdaptedThreadId(threadId)
-      if (!ref || ref.kind === 'ai') return
-      const storedStatus = reviewerStatusForAgentComment(status)
-      await selection.updateAgentCommentStatus(ref.commentId, storedStatus)
-      setAgentComments(agentComments.current.map(comment => (
-        comment.id === ref.commentId ? { ...comment, status: storedStatus } : comment
-      )))
+      await followUps.setStatus(threadId, status)
     } catch (error) {
       console.error('Failed to record the reviewer decision:', error)
+    }
+  }
+
+  function markReviewThreadSeen(threadId: string): void {
+    void followUps.markSeen(threadId).catch(error => {
+      console.error('Failed to mark the review thread seen:', error)
+    })
+  }
+
+  async function submitReview(
+    request: Parameters<typeof selection.submitReview>[0],
+    submittedReviewThreadIds: string[] = [],
+  ): Promise<void> {
+    await selection.submitReview(request)
+    try {
+      await followUps.dismissSubmitted(submittedReviewThreadIds)
+    } catch (error) {
+      console.error('Review submitted, but its Review Threads could not be dismissed:', error)
     }
   }
 
@@ -173,7 +160,6 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     reviewComments: comments.current,
     pendingManualComments: pendingComments.current,
     overviewComments: overviewComments.current,
-    agentReviewComments: agentComments.current,
     fileTreeVisible: selection.fileTreeVisible,
     reviewedFileShas: reviewedFiles.reviewedFileShas,
     includeNonApplicationFiles: selection.includeNonApplicationFiles,
@@ -189,8 +175,6 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     resolveRemoteMedia: selection.resolveRemoteMedia,
     onToggleFileTree: selection.toggleFileTree,
     onPendingCommentsChange: setPendingComments,
-    onAgentCommentsChange: setAgentComments,
-    onUpdateAgentCommentStatus: selection.updateAgentCommentStatus,
     onToggleFileReviewed: reviewedFiles.toggle,
     walkthroughReady: walkthrough.available,
     agentSession: {
@@ -201,11 +185,11 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
       isLoading: agentSession.isLoading,
       actionPending: agentSession.actionPending || walkthrough.isStarting,
       error: agentSession.error,
-      walkthroughStatus: walkthrough.walkthrough?.status ?? null,
+      walkthroughStatus: walkthrough.walkthrough?.state ?? null,
       acceptedStepCount: walkthrough.steps?.length ?? 0,
       mountTerminal: api.agentSessions.mountTerminal,
       onStart: walkthrough.generate,
-      onAbort: walkthrough.walkthrough?.status === 'generating' ? walkthrough.stop : agentSession.abort,
+      onAbort: walkthrough.walkthrough?.state === 'generating' ? walkthrough.stop : agentSession.abort,
       onRestart: walkthrough.regenerate,
       onSendInput: agentSession.sendInput,
     },
@@ -214,6 +198,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onCreateReviewThread: followUps.unavailableReason === null ? createReviewThread : undefined,
     onReplyToReviewThread: followUps.unavailableReason === null ? replyToReviewThread : undefined,
     onSetReviewThreadStatus: setReviewThreadStatus,
+    onMarkReviewThreadSeen: markReviewThreadSeen,
     onCommentNow: selection.commentNow,
     onReplyToExistingComment: selection.replyToExistingComment,
     pendingReplies: replies.current,
@@ -229,7 +214,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
           })
         }
       : undefined,
-    onSubmitReview: selection.submitReview,
+    onSubmitReview: submitReview,
     onOpenUrl: openUrl,
   } : null)
 

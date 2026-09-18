@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildSyntheticStepFiles, buildWalkthroughStepList, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint, toggleCoverageFinding } from './walkthroughViewState'
-import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import type { CoverageFinding } from './ticketCoverage'
+import type { WalkthroughRecordV1 } from './walkthroughRecord'
 
 function file(filename: string, hunks: number, extra: Partial<PrFileDiff> = {}): PrFileDiff {
   const parts: string[] = []
@@ -58,16 +59,17 @@ function makePr(over: Partial<ReviewPullRequest>): ReviewPullRequest {
   }
 }
 
-function makeWalkthrough(over: Partial<PrWalkthrough>): PrWalkthrough {
+function makeWalkthrough(over: Partial<WalkthroughRecordV1>): WalkthroughRecordV1 {
   return {
-    pr_id: 1,
-    head_sha: 'sha-current',
-    walkthrough_session_key: null,
-    status: 'ready',
-    steps_json: null,
-    error_message: null,
-    created_at: 0,
-    updated_at: 0,
+    version: 1,
+    prId: 1,
+    scope: { namespace: 'github', targetKey: 'gh:o/r#1', revision: 'sha-current' },
+    attemptId: 'attempt-1',
+    state: 'ready',
+    steps: [],
+    error: null,
+    createdAt: 0,
+    updatedAt: 0,
     ...over,
   }
 }
@@ -173,17 +175,17 @@ describe('isWalkthroughStale', () => {
   })
 
   it('returns false when head_sha matches current PR', () => {
-    const w = makeWalkthrough({ head_sha: 'sha-current' })
+    const w = makeWalkthrough({ scope: { namespace: 'github', targetKey: 'gh:o/r#1', revision: 'sha-current' } })
     expect(isWalkthroughStale(w, makePr({ head_sha: 'sha-current' }))).toBe(false)
   })
 
   it('returns true when PR head_sha has advanced', () => {
-    const w = makeWalkthrough({ head_sha: 'sha-old' })
+    const w = makeWalkthrough({ scope: { namespace: 'github', targetKey: 'gh:o/r#1', revision: 'sha-old' } })
     expect(isWalkthroughStale(w, makePr({ head_sha: 'sha-new' }))).toBe(true)
   })
 
   it('returns false for a generating walkthrough even if shas match — caller should use status', () => {
-    const w = makeWalkthrough({ head_sha: 'sha-current', status: 'generating' })
+    const w = makeWalkthrough({ state: 'generating' })
     expect(isWalkthroughStale(w, makePr({ head_sha: 'sha-current' }))).toBe(false)
   })
 })

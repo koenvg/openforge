@@ -2,7 +2,6 @@
   import type { WalkthroughReview } from './reviewWorkspace.svelte'
   import type { ReviewThread, ReviewThreadSide, ReviewThreadStatus } from '@openforge-app/plugin-sdk'
   import type { PrFileDiff, PrWalkthroughStep, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import type { AgentReviewComment, AgentReviewCommentStatus } from '../../lib/prReviewRecords'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
@@ -26,15 +25,13 @@
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    agentComments: AgentReviewComment[]
-    onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: AgentReviewCommentStatus) => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
     reviewThreads?: ReviewThread[]
     reviewFollowUpUnavailableReason?: string | null
     onCreateReviewThread?: (filePath: string, line: number, side: ReviewThreadSide, body: string) => void
     onReplyToReviewThread?: (threadId: string, body: string) => void
     onSetReviewThreadStatus?: (threadId: string, status: ReviewThreadStatus) => void
+    onMarkReviewThreadSeen?: (threadId: string) => void
     onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
     pendingReplies?: { commentId: number; body: string }[]
@@ -49,7 +46,7 @@
       body: string
       comments: ReviewSubmissionComment[]
       commitId: string
-    }) => Promise<void>
+    }, submittedReviewThreadIds?: string[]) => Promise<void>
     // Requests the walkthrough jump to the step with this id (set by the questions panel).
     focusStepId?: string | null
   }
@@ -153,7 +150,7 @@
   {:else if lifecycle.view === 'failed'}
     <div class="flex flex-col items-center justify-center flex-1 gap-3 text-error text-sm text-center p-5">
       <span class="text-5xl">⚠</span>
-      <span>{lifecycle.walkthrough?.error_message ?? 'The walkthrough failed.'}</span>
+      <span>{lifecycle.walkthrough?.error?.message ?? 'The walkthrough failed.'}</span>
       <Button variant="ghost" size="sm" onclick={lifecycle.regenerate}>Try again</Button>
     </div>
   {:else if lifecycle.view === 'no-submissions'}
@@ -176,13 +173,13 @@
     {#if lifecycle.view === 'provisional'}
       <div class="flex items-center justify-between gap-3 px-4 py-2 bg-info/10 border-b border-info/30 text-xs" role="status" aria-live="polite" aria-atomic="true">
         <span>
-          {#if lifecycle.walkthrough?.status === 'generating'}
+          {#if lifecycle.walkthrough?.state === 'generating'}
             {lifecycle.steps?.length ?? 0} accepted step{lifecycle.steps?.length === 1 ? '' : 's'} so far. These steps remain provisional until the agent finishes.
           {:else}
-            {lifecycle.walkthrough?.error_message ?? `Generation ended ${lifecycle.walkthrough?.status}.`} Accepted steps remain provisional.
+            {lifecycle.walkthrough?.error?.message ?? `Generation ended ${lifecycle.walkthrough?.state}.`} Accepted steps remain provisional.
           {/if}
         </span>
-        {#if lifecycle.walkthrough?.status === 'generating'}
+        {#if lifecycle.walkthrough?.state === 'generating'}
           <Button variant="danger" size="xs" onclick={lifecycle.stop}>Stop</Button>
         {:else}
           <Button variant="ghost" size="xs" onclick={lifecycle.regenerate}>Generate again</Button>
@@ -221,6 +218,7 @@
               unavailableReason={props.reviewFollowUpUnavailableReason}
               onAskAgentStep={props.onAskAgentStep}
               onReplyToThread={props.onReplyToReviewThread}
+              onMarkThreadSeen={props.onMarkReviewThreadSeen}
             />
           {/if}
         </div>
@@ -280,14 +278,12 @@
         existingComments={props.existingComments}
         pendingComments={props.pendingComments}
         onPendingCommentsChange={props.onPendingCommentsChange}
-        agentComments={props.agentComments}
-        onAgentCommentsChange={props.onAgentCommentsChange}
-        onUpdateAgentCommentStatus={props.onUpdateAgentCommentStatus}
         onOpenUrl={props.onOpenUrl}
         reviewThreads={stepReviewThreads}
         onCreateReviewThread={props.onCreateReviewThread}
         onReplyToReviewThread={props.onReplyToReviewThread}
         onSetReviewThreadStatus={props.onSetReviewThreadStatus}
+        onMarkReviewThreadSeen={props.onMarkReviewThreadSeen}
         onCommentNow={props.onCommentNow}
         onReplyToExistingComment={props.onReplyToExistingComment}
         {pendingReplies}

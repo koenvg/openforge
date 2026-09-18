@@ -5,7 +5,7 @@
     ScopedAgentSessionState,
     SessionScope,
   } from '@openforge-app/plugin-sdk'
-  import type { PrWalkthrough } from '@openforge-app/plugin-sdk/domain'
+  import type { WalkthroughAttemptState } from '../../lib/walkthroughRecord'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
@@ -18,7 +18,7 @@
     isLoading: boolean
     actionPending: boolean
     error: string | null
-    walkthroughStatus?: PrWalkthrough['status'] | null
+    walkthroughStatus?: WalkthroughAttemptState | null
     acceptedStepCount?: number
     mountTerminal: (scope: SessionScope, element: HTMLElement) => Promise<Disposable>
     onStart: () => Promise<unknown>

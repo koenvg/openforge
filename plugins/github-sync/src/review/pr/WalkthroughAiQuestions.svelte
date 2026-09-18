@@ -16,6 +16,7 @@
     unavailableReason?: string | null
     onAskAgentStep?: (stepId: string, body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
+    onMarkThreadSeen?: (threadId: string) => void
   }
 
   let {
@@ -26,6 +27,7 @@
     unavailableReason = null,
     onAskAgentStep,
     onReplyToThread,
+    onMarkThreadSeen,
   }: Props = $props()
 
   let questionOpen = $state(false)
@@ -36,6 +38,13 @@
     return reviewThreads.filter(
       thread => thread.anchor.kind === 'custom' && thread.anchor.key === `step:${activeStep?.id}`,
     )
+  })
+
+  $effect(() => {
+    if (!visible) return
+    for (const thread of activeThreads) {
+      if (thread.hasUnreadAgentMessage) onMarkThreadSeen?.(thread.id)
+    }
   })
 
   function submitQuestion(): void {

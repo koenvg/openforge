@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isClosedOrMergedPullRequest, type AuthoredPullRequest, type PrWalkthrough, type ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import { isClosedOrMergedPullRequest, type AuthoredPullRequest, type ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -12,6 +12,7 @@
   import RepositoryFilterSection from './RepositoryFilterSection.svelte'
   import PrWalkthroughButton from './PrWalkthroughButton.svelte'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
+  import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
   interface Props {
     headerTitle: string
@@ -61,7 +62,7 @@
     // Per-PR walkthrough status (owned by PrReviewView) and the trigger to start
     // a background walkthrough+AI-review generation from the card. Optional so the
     // list renders (all cards 'idle') before the parent wires generation.
-    walkthroughByPr?: Map<number, PrWalkthrough | null>
+    walkthroughByPr?: Map<number, WalkthroughRecordV1 | null>
     canGenerateWalkthrough?: (pr: ReviewPullRequest) => boolean
     onGenerateWalkthrough?: (pr: ReviewPullRequest) => void
     /** Stops an in-flight generation for this PR. Optional; a no-op until wired. */

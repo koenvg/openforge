@@ -7,7 +7,6 @@ const GITHUB_SYNC_PLUGIN_ID: &str = "com.openforge.github-sync";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GlobalCommandHandler {
     GithubReview,
-    AgentGenerate,
     Jira,
 }
 
@@ -22,13 +21,6 @@ impl ResolvedGlobalCommand {
         Self {
             app_command,
             handler: GlobalCommandHandler::GithubReview,
-        }
-    }
-
-    const fn agent_generate(app_command: &'static str) -> Self {
-        Self {
-            app_command,
-            handler: GlobalCommandHandler::AgentGenerate,
         }
     }
 
@@ -95,16 +87,6 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "createReviewComment" => Ok(ResolvedGlobalCommand::github_review(
             "create_review_comment",
         )),
-        "agentGenerate" => Ok(ResolvedGlobalCommand::agent_generate("agent_generate")),
-        "abortAgentGenerate" => Ok(ResolvedGlobalCommand::agent_generate(
-            "abort_agent_generate",
-        )),
-        "agentGenerateInRepo" => Ok(ResolvedGlobalCommand::agent_generate(
-            "agent_generate_in_repo",
-        )),
-        "deleteAgentSession" => Ok(ResolvedGlobalCommand::agent_generate(
-            "delete_agent_session",
-        )),
         "setJiraApiToken" => Ok(ResolvedGlobalCommand::jira("set_jira_api_token")),
         "clearJiraApiToken" => Ok(ResolvedGlobalCommand::jira("clear_jira_api_token")),
         "getJiraApiTokenStatus" => Ok(ResolvedGlobalCommand::jira("get_jira_api_token_status")),
@@ -169,9 +151,6 @@ impl PluginHost {
             GlobalCommandHandler::GithubReview => {
                 crate::app_invoke::handle_github_review_command(&state, &request).await
             }
-            GlobalCommandHandler::AgentGenerate => {
-                crate::app_invoke::handle_agent_generate_command(&state, &request).await
-            }
             GlobalCommandHandler::Jira => {
                 crate::app_invoke::handle_jira_command(&state, &request).await
             }
@@ -201,16 +180,6 @@ mod tests {
                 "openforge.getProjectRepo",
                 "get_project_repo",
                 GlobalCommandHandler::GithubReview,
-            ),
-            (
-                "openforge.agentGenerateInRepo",
-                "agent_generate_in_repo",
-                GlobalCommandHandler::AgentGenerate,
-            ),
-            (
-                "openforge.deleteAgentSession",
-                "delete_agent_session",
-                GlobalCommandHandler::AgentGenerate,
             ),
             (
                 "openforge.replyToReviewComment",
@@ -264,10 +233,14 @@ mod tests {
     }
 
     #[test]
-    fn agent_review_comment_commands_no_longer_resolve() {
+    fn retired_review_generation_commands_no_longer_resolve() {
         for qualified_id in [
             "openforge.getAgentReviewComments",
             "openforge.updateAgentReviewCommentStatus",
+            "openforge.agentGenerate",
+            "openforge.abortAgentGenerate",
+            "openforge.agentGenerateInRepo",
+            "openforge.deleteAgentSession",
         ] {
             assert_eq!(
                 resolve_openforge_global_command(qualified_id).unwrap_err(),

@@ -1,7 +1,6 @@
 import { untrack } from 'svelte'
 import type { PrFileDiff, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import { isInputFocused } from '../../../lib/domUtils'
-import { parseAndValidateWalkthroughSteps } from '../../../lib/walkthroughParse'
 import { buildWalkthroughStepList, clampStepIndex } from '../../../lib/walkthroughViewState'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 import type { Walkthroughs } from './useWalkthroughPolling.svelte'
@@ -21,13 +20,9 @@ export function createWalkthroughReview(
   let lastPrKey = ''
   // Separate derived: polling replaces the status object every tick, which would re-parse an unchanged diff.
   let walkthrough = $derived(walkthroughs.status(getPr()).walkthrough)
-  let steps = $derived(
-    walkthrough?.steps_json
-      ? parseAndValidateWalkthroughSteps(walkthrough.steps_json, getFiles())
-      : null,
-  )
+  let steps = $derived(walkthrough?.steps.length ? walkthrough.steps : null)
   let stepEntries = $derived(steps
-    ? walkthrough?.status === 'ready'
+    ? walkthrough?.state === 'ready'
       ? buildWalkthroughStepList(steps)
       : steps.map(step => ({ kind: 'concept' as const, step }))
     : [])
@@ -36,11 +31,11 @@ export function createWalkthroughReview(
     if ((status.isLoading || status.isStarting) && !walkthrough) return 'loading'
     if (status.loadError) return 'loadError'
     if (!walkthrough) return 'absent'
-    if (steps && walkthrough.status !== 'ready') return 'provisional'
-    if (walkthrough.status === 'generating') return 'generating'
-    if (walkthrough.status === 'no-submissions') return 'no-submissions'
-    if (walkthrough.status === 'failed') return 'failed'
-    if (walkthrough.status === 'aborted') return 'aborted'
+    if (steps && walkthrough.state !== 'ready') return 'provisional'
+    if (walkthrough.state === 'generating') return 'generating'
+    if (walkthrough.state === 'no-submissions') return 'no-submissions'
+    if (walkthrough.state === 'failed') return 'failed'
+    if (walkthrough.state === 'aborted') return 'aborted'
     return steps ? 'ready' : 'unaligned'
   })
   const prKey = () => {
@@ -50,8 +45,6 @@ export function createWalkthroughReview(
   const ticketCoverage = useWalkthroughTicketCoverage({
     getGithubSync: () => githubSync,
     getPullRequest: getPr,
-    getFiles,
-    getWalkthrough: () => walkthroughs.status(getPr()).walkthrough,
   })
 
   async function loadCached() {
@@ -108,7 +101,7 @@ export function createWalkthroughReview(
   })
 
   $effect(() => {
-    if (!isVisible() || !getPr() || walkthrough?.status !== 'ready') return
+    if (!isVisible() || !getPr() || walkthrough?.state !== 'ready') return
     const revision = walkthroughs.status(getPr()).revision
     void revision
     untrack(() => { void ticketCoverage.load() })

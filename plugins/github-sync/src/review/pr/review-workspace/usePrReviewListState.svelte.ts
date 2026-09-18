@@ -4,7 +4,6 @@ import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk
 import {
   isClosedOrMergedPullRequest,
   type AuthoredPullRequest,
-  type PrWalkthrough,
   type ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
@@ -19,11 +18,12 @@ import { walkthroughButtonState } from '../../../lib/walkthroughButtonState'
 import { walkthroughReadyFirst } from '../../../lib/reviewListSort'
 import { composeRequestForAuthoredPr } from '../authoredPrTaskCompose'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
+import type { WalkthroughRecordV1 } from '../../../lib/walkthroughRecord'
 
 type ReviewScope = 'repo' | 'global'
 
 type WalkthroughListState = {
-  readonly byPr: Map<number, PrWalkthrough | null>
+  readonly byPr: Map<number, WalkthroughRecordV1 | null>
   refreshVisible(prs: ReviewPullRequest[]): Promise<void>
 }
 

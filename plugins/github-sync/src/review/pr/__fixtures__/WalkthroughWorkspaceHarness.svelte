@@ -24,7 +24,6 @@
   backend.registerMethod('markReviewPrViewed', { handler: async () => {} })
   backend.registerMethod('getPrFileDiffs', { handler: async () => props.files })
   backend.registerMethod('getReviewComments', { handler: async () => props.existingComments })
-  backend.registerMethod('getPrAiReviewComments', { handler: async () => props.agentComments })
   backend.registerMethod('getPrWalkthrough', { handler: async (request) => props.githubSync.getPrWalkthrough(request as Parameters<GithubSyncPrReviewClient['getPrWalkthrough']>[0]) })
   backend.registerMethod('getPrTicket', { handler: async (request) => props.githubSync.getPrTicket?.(request as Parameters<GithubSyncPrReviewClient['getPrTicket']>[0]) ?? { snapshot: null, jiraConfigured: false } })
   backend.registerMethod('setPrJiraKey', { handler: async (request) => props.githubSync.setPrJiraKey(request as Parameters<GithubSyncPrReviewClient['setPrJiraKey']>[0]) })

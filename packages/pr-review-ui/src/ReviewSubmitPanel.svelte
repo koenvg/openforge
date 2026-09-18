@@ -25,19 +25,12 @@
     prNumber: number
     commitId: string
     pendingComments?: ReviewSubmissionComment[]
-    /**
-     * Approved AI review comments, pre-mapped to submission shape. They are
-     * submitted alongside the manual pending comments (approving no longer copies
-     * them into the pending list), so they must be counted and posted here too.
-     */
-    approvedAgentComments?: ReviewSubmissionComment[]
+    resolvedAgentComments?: ReviewSubmissionComment[]
     /** Replies queued for the pending review; counted here, posted by onSubmitReview. */
     pendingReplyCount?: number
     /** Ticket-coverage findings the reviewer flagged to fold into the review body. */
     includedFindings?: IncludedFinding[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    /** Called after a successful submit so the parent can clear the approved AI comments it just posted. */
-    onApprovedAgentCommentsSubmitted?: () => void
     onRemoveIncludedFinding?: (id: string) => void
     /** Called after a successful submit so the parent can clear the findings it just posted. */
     onIncludedFindingsSubmitted?: () => void
@@ -50,19 +43,16 @@
     prNumber,
     commitId,
     pendingComments = [],
-    approvedAgentComments = [],
+    resolvedAgentComments = [],
     pendingReplyCount = 0,
     includedFindings = [],
     onPendingCommentsChange,
-    onApprovedAgentCommentsSubmitted,
     onRemoveIncludedFinding,
     onIncludedFindingsSubmitted,
     onSubmitReview,
   }: Props = $props()
 
-  // Everything that will be posted with the review: manual pending comments plus
-  // approved AI review comments.
-  let submissionComments = $derived([...pendingComments, ...approvedAgentComments])
+  let submissionComments = $derived([...pendingComments, ...resolvedAgentComments])
   // Total items that submit will post, including queued replies (posted separately).
   let totalPendingCount = $derived(submissionComments.length + pendingReplyCount)
 
@@ -96,7 +86,6 @@
       })
 
       onPendingCommentsChange([])
-      onApprovedAgentCommentsSubmitted?.()
       onIncludedFindingsSubmitted?.()
       summary = ''
       successMessage = `Review submitted successfully (${event === 'APPROVE' ? 'Approved' : event === 'REQUEST_CHANGES' ? 'Changes Requested' : 'Commented'})`
