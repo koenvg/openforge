@@ -279,7 +279,8 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     app.manage(pty_manager.clone());
     app.manage(scoped_workspaces.clone());
     app.manage(scoped_agent_sessions);
-    app.manage(github_client::GitHubClient::new());
+    let github_client = github_client::GitHubClient::new();
+    app.manage(github_client.clone());
 
     info!(
         "[electron-sidecar] using database filename={} app_data_dir_resolved=true",
@@ -297,6 +298,13 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(async move {
+            pty_manager.configure_pr_discovery(
+                github_runtime::task_pr_discovery::Discovery::start(
+                    db_arc.clone(),
+                    github_client,
+                    app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
+                ),
+            );
             whisper_manager.start_idle_reaper();
             if let Err(error) = pty_manager.cleanup_stale_pids().await {
                 warn!("[startup] Managed PTY recovery was incomplete: {}", error);

@@ -1,8 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPullRequestAttentionEventListeners } from './pullRequestAttentionEventListeners'
 import { createAppDesktopEventHarness, registerEventListenerGroup } from './testUtils'
+import { get } from 'svelte/store'
+import { selectedTaskId } from '../stores'
 
 describe('createPullRequestAttentionEventListeners', () => {
+  it('refreshes the first verified link while another task remains selected, without a poll or remount', async () => {
+    const { deps, handlers, listen } = createAppDesktopEventHarness()
+    selectedTaskId.set('T-other')
+    let displayed: number[] = []
+    const persisted = [542]
+    const loadPullRequests = vi.fn(async () => { displayed = [...persisted] })
+    const publishTaskInvalidation = vi.fn(async () => undefined)
+    await registerEventListenerGroup(
+      createPullRequestAttentionEventListeners({ ...deps, loadPullRequests, publishTaskInvalidation }),
+      deps.listen!,
+    )
+    const registrations = listen.mock.calls.length
+    expect(displayed).toEqual([])
+
+    await handlers.get('task-pull-request-updated')?.({
+      payload: { task_id: 'T-new', pr_id: 542, action: 'linked' },
+    })
+
+    expect(displayed).toEqual([542])
+    expect(loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+    expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
+    expect(publishTaskInvalidation).toHaveBeenCalledWith({ taskId: 'T-new', reason: 'attention' })
+    expect(get(selectedTaskId)).toBe('T-other')
+    expect(deps.loadTasks).not.toHaveBeenCalled()
+    expect(listen).toHaveBeenCalledTimes(registrations)
+    selectedTaskId.set(null)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

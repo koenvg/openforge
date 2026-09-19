@@ -1,3 +1,4 @@
+mod automatic;
 mod comment;
 mod fixtures;
 mod migration;

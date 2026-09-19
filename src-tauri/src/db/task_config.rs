@@ -1,6 +1,15 @@
 use rusqlite::Result;
 
 impl super::Database {
+    /// Narrow discovery read: completed, deleted, and projectless Tasks are ineligible.
+    pub(crate) fn active_task_project_id(&self, task_id: &str) -> Result<Option<String>> {
+        use rusqlite::OptionalExtension;
+        self.lock_conn()?.query_row(
+            "SELECT project_id FROM tasks WHERE id = ?1 AND status <> 'done' AND project_id IS NOT NULL",
+            [task_id], |row| row.get(0),
+        ).optional()
+    }
+
     /// Get a task-scoped config value.
     pub fn get_task_config(&self, task_id: &str, key: &str) -> Result<Option<String>> {
         let conn = self.lock_conn()?;

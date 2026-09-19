@@ -199,21 +199,23 @@ pub(super) async fn sync_authored_task_prs(
             if let Some(task_id) =
                 find_authoritative_task_id(&pr.title, &pr.head_ref, pr.body.as_deref(), &task_ids)
             {
-                db_lock
-                    .insert_pull_request_with_number(
-                        pr.id,
-                        pr.number,
-                        &task_id,
-                        &pr.repo_owner,
-                        &pr.repo_name,
-                        &pr.title,
-                        &pr.html_url,
-                        &pr.state,
+                let outcome = db_lock
+                    .associate_pull_request_automatically(crate::db::AutomaticPr {
+                        id: pr.id,
+                        number: pr.number,
+                        task_id: &task_id,
+                        owner: &pr.repo_owner,
+                        repo: &pr.repo_name,
+                        title: &pr.title,
+                        url: &pr.html_url,
+                        state: &pr.state,
                         now,
-                        now,
-                        pr.draft,
-                    )
+                        draft: pr.draft,
+                    })
                     .map_err(|e| SyncOpenPrsError::Db(format!("Failed to upsert PR: {}", e)))?;
+                if outcome == crate::db::AutomaticAssociation::OwnershipConflict {
+                    continue;
+                }
                 db_lock
                     .update_pr_head_sha(pr.id, &pr.head_sha)
                     .map_err(|e| {

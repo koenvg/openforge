@@ -3,6 +3,7 @@ mod comments;
 mod polling;
 mod pr_actions;
 mod repo_resolution;
+pub(crate) mod task_pr_discovery;
 
 pub use auth::{github_token, github_username};
 pub use comments::{
