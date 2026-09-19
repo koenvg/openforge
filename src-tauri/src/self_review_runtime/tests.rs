@@ -319,6 +319,110 @@ async fn test_task_diff_uncommitted_only_excludes_committed() {
 }
 
 #[tokio::test]
+async fn test_task_diff_untracked_paths_are_exact_and_resolve_file_contents() {
+    let repo = init_git_repo();
+    write_repo_file(repo.path(), "tracked.txt", "base\n");
+    commit_all(repo.path(), "base commit");
+    let directory = "03 Projects/Brussels Apartment Search";
+    fs::create_dir_all(repo.path().join(directory)).expect("create nested directory");
+    let expected = [
+        format!("{directory}/Application email - Avenue de l'Orée 26.md"),
+        format!("{directory}/ordinary.md"),
+        format!("{directory}/proposal \"final\" \\notes.md"),
+    ];
+    for (index, path) in expected.iter().enumerate() {
+        write_repo_file(repo.path(), path, &format!("content {index}\n"));
+    }
+
+    let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false, true)
+        .await
+        .expect("untracked diff");
+    let mut actual_paths = diffs
+        .iter()
+        .map(|diff| diff.filename.as_str())
+        .collect::<Vec<_>>();
+    actual_paths.sort_unstable();
+    let mut expected_paths = expected.iter().map(String::as_str).collect::<Vec<_>>();
+    expected_paths.sort_unstable();
+
+    assert_eq!(actual_paths, expected_paths);
+    for (index, path) in expected.iter().enumerate() {
+        let diff = diffs
+            .iter()
+            .find(|diff| diff.filename == *path)
+            .expect("exact path in diff");
+        let contents = get_task_file_contents_for_workspace(
+            repo.path().to_str().unwrap(),
+            &diff.filename,
+            None,
+            &diff.status,
+            false,
+            true,
+        )
+        .await
+        .expect("file contents for returned path");
+        assert_eq!(contents.new_content, format!("content {index}\n"));
+    }
+}
+
+#[tokio::test]
+async fn test_task_diff_tracked_and_renamed_paths_are_exact() {
+    let repo = init_git_repo();
+    let unicode_path = "folder/Café notes.md";
+    let literal_path = "folder/literal \"quote\" \\slash.md";
+    let old_path = "folder/old Orée \"quote\" \\path.md";
+    let new_path = "folder/new Orée \"quote\" \\path.md";
+    for path in [unicode_path, literal_path, old_path] {
+        fs::create_dir_all(repo.path().join(path).parent().unwrap())
+            .expect("create tracked parent directory");
+        write_repo_file(repo.path(), path, "base\n");
+    }
+    commit_all(repo.path(), "base commit");
+    write_repo_file(repo.path(), unicode_path, "unicode changed\n");
+    write_repo_file(repo.path(), literal_path, "literal changed\n");
+    fs::rename(repo.path().join(old_path), repo.path().join(new_path)).expect("rename file");
+    run_git(repo.path(), &["add", "-A"]);
+
+    let diffs = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false, true)
+        .await
+        .expect("tracked diff");
+
+    let unicode = diffs
+        .iter()
+        .find(|diff| diff.filename == unicode_path)
+        .expect("exact Unicode path");
+    assert_eq!(unicode.status, "modified");
+    let literal = diffs
+        .iter()
+        .find(|diff| diff.filename == literal_path)
+        .expect("exact literal quote and backslash path");
+    assert_eq!(literal.status, "modified");
+    let renamed = diffs
+        .iter()
+        .find(|diff| diff.filename == new_path)
+        .expect("exact renamed path");
+    assert_eq!(renamed.status, "renamed");
+    assert_eq!(renamed.previous_filename.as_deref(), Some(old_path));
+
+    for (diff, expected_content) in [
+        (unicode, "unicode changed\n"),
+        (literal, "literal changed\n"),
+        (renamed, "base\n"),
+    ] {
+        let contents = get_task_file_contents_for_workspace(
+            repo.path().to_str().unwrap(),
+            &diff.filename,
+            diff.previous_filename.as_deref(),
+            &diff.status,
+            false,
+            true,
+        )
+        .await
+        .expect("file contents for decoded tracked path");
+        assert_eq!(contents.new_content, expected_content);
+    }
+}
+#[tokio::test]
 async fn test_task_diff_neither_scope_is_empty() {
     let repo = setup_committed_and_uncommitted_repo();
 

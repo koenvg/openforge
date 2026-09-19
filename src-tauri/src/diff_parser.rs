@@ -36,7 +36,7 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
 
     for line in diff_output.lines() {
         // Start of a new file diff
-        if line.starts_with("diff --git a/") {
+        if line.starts_with("diff --git ") {
             // Save previous file if exists
             finalize_current_file(&mut current_file, &mut patch_lines, truncate, &mut diffs);
 
@@ -61,11 +61,16 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
                 file.status = "added".to_string();
             } else if line.starts_with("deleted file mode") {
                 file.status = "removed".to_string();
-            } else if line.starts_with("rename from ") {
-                file.previous_filename =
-                    Some(line.strip_prefix("rename from ").unwrap_or("").to_string());
-            } else if line.starts_with("rename to ") {
+            } else if let Some(path) = line.strip_prefix("rename from ") {
+                file.previous_filename = Some(decode_git_path(path));
+            } else if let Some(path) = line.strip_prefix("rename to ") {
+                file.filename = decode_git_path(path);
                 file.status = "renamed".to_string();
+            } else if let Some(path) = line.strip_prefix("copy from ") {
+                file.previous_filename = Some(decode_git_path(path));
+            } else if let Some(path) = line.strip_prefix("copy to ") {
+                file.filename = decode_git_path(path);
+                file.status = "copied".to_string();
             } else if line.starts_with("Binary files") {
                 if file.status == "modified" {
                     file.status = "binary".to_string();
@@ -127,15 +132,102 @@ fn finalize_current_file(
     }
 }
 
-/// Extract filename from "diff --git a/path b/path" line
+/// Extract the destination filename from a `diff --git` header.
 fn extract_filename_from_diff_header(line: &str) -> String {
-    // Format: "diff --git a/path b/path"
-    // We want the path after "b/"
-    if let Some(b_start) = line.rfind(" b/") {
-        line[b_start + 3..].to_string()
+    let Some(paths) = line.strip_prefix("diff --git ") else {
+        return String::new();
+    };
+    let destination = if paths.starts_with('"') {
+        quoted_git_path_end(paths)
+            .map(|end| paths[end..].trim_start())
+            .unwrap_or_default()
+    } else if let Some(start) = paths.rfind(" \"b/") {
+        &paths[start + 1..]
+    } else if let Some(start) = paths.rfind(" b/") {
+        &paths[start + 1..]
     } else {
-        String::new()
+        return String::new();
+    };
+
+    decode_git_path(destination)
+        .strip_prefix("b/")
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn quoted_git_path_end(path: &str) -> Option<usize> {
+    let bytes = path.as_bytes();
+    if bytes.first() != Some(&b'"') {
+        return None;
     }
+
+    let mut escaped = false;
+    for (index, byte) in bytes.iter().enumerate().skip(1) {
+        if escaped {
+            escaped = false;
+        } else if *byte == b'\\' {
+            escaped = true;
+        } else if *byte == b'"' {
+            return Some(index + 1);
+        }
+    }
+    None
+}
+
+fn decode_git_path(path: &str) -> String {
+    if !path.starts_with('"') {
+        return path.to_string();
+    }
+
+    let bytes = path.as_bytes();
+    let end = quoted_git_path_end(path).unwrap_or(bytes.len());
+    let mut decoded = Vec::with_capacity(end.saturating_sub(2));
+    let mut index = 1;
+    while index < end.saturating_sub(1) {
+        let byte = bytes[index];
+        if byte != b'\\' {
+            decoded.push(byte);
+            index += 1;
+            continue;
+        }
+
+        index += 1;
+        if index >= end.saturating_sub(1) {
+            decoded.push(b'\\');
+            break;
+        }
+        let escaped = bytes[index];
+        if (b'0'..=b'7').contains(&escaped) {
+            let mut value = 0u8;
+            let mut digits = 0;
+            while index < end.saturating_sub(1)
+                && digits < 3
+                && (b'0'..=b'7').contains(&bytes[index])
+            {
+                value = value.saturating_mul(8).saturating_add(bytes[index] - b'0');
+                index += 1;
+                digits += 1;
+            }
+            decoded.push(value);
+            continue;
+        }
+
+        decoded.push(match escaped {
+            b'a' => 0x07,
+            b'b' => 0x08,
+            b't' => b'\t',
+            b'n' => b'\n',
+            b'v' => 0x0b,
+            b'f' => 0x0c,
+            b'r' => b'\r',
+            b'"' => b'"',
+            b'\\' => b'\\',
+            other => other,
+        });
+        index += 1;
+    }
+
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
 #[cfg(test)]
@@ -231,6 +323,25 @@ rename to src/new_name.rs
         );
         assert_eq!(result[0].additions, 0);
         assert_eq!(result[0].deletions, 0);
+    }
+
+    #[test]
+    fn test_file_copied_with_c_quoted_paths() {
+        let diff = r#"diff --git "a/folder/source Caf\303\251 \"q\" \\x.md" "b/folder/copy Or\303\251e \"q\" \\y.md"
+similarity index 100%
+copy from "folder/source Caf\303\251 \"q\" \\x.md"
+copy to "folder/copy Or\303\251e \"q\" \\y.md"
+"#;
+
+        let result = parse_unified_diff(diff, true);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].filename, "folder/copy Orée \"q\" \\y.md");
+        assert_eq!(result[0].status, "copied");
+        assert_eq!(
+            result[0].previous_filename.as_deref(),
+            Some("folder/source Café \"q\" \\x.md")
+        );
     }
 
     #[test]
