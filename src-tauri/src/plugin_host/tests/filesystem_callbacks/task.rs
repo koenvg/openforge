@@ -21,6 +21,23 @@ async fn host_filesystem_callbacks_route_to_resolved_task_workspace() {
         .expect("write project fixture");
     std::fs::write(container.path().join("secret.txt"), "outside")
         .expect("write traversal fixture");
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        std::fs::write(workspace_path.join("actual.txt"), "inside").expect("inside fixture");
+        std::os::unix::fs::symlink("actual.txt", workspace_path.join("linked.txt"))
+            .expect("inside symlink");
+        std::os::unix::fs::symlink(
+            container.path().join("secret.txt"),
+            workspace_path.join("escape.txt"),
+        )
+        .expect("outside symlink");
+        let fifo = workspace_path.join("preview.txt");
+        let fifo_path = std::ffi::CString::new(fifo.as_os_str().as_bytes()).expect("fifo path");
+        // SAFETY: fifo_path is NUL-terminated and the mode is a valid permission mask.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+    }
     let repo = git2::Repository::init(&workspace_path).expect("init workspace repo");
     let mut index = repo.index().expect("workspace index");
     index
@@ -96,6 +113,38 @@ async fn host_filesystem_callbacks_route_to_resolved_task_workspace() {
     assert_eq!(file["type"], "image");
     assert_eq!(file["mimeType"], "image/png");
 
+    #[cfg(unix)]
+    {
+        let linked = host
+            .handle_host_callback(
+                "openforge.fs.task.readFile",
+                &json!({ "taskId": task.id, "path": "linked.txt" }),
+            )
+            .await
+            .expect("inside-root symlink remains readable");
+        assert_eq!(linked["content"], "inside");
+
+        let outside = host
+            .handle_host_callback(
+                "openforge.fs.task.readFile",
+                &json!({ "taskId": task.id, "path": "escape.txt" }),
+            )
+            .await
+            .expect_err("outside-root symlink must fail");
+        assert!(outside.contains("Path traversal detected"));
+
+        let special = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            host.handle_host_callback(
+                "openforge.fs.task.readFile",
+                &json!({ "taskId": task.id, "path": "preview.txt" }),
+            ),
+        )
+        .await
+        .expect("special-file rejection must not wait for a writer")
+        .expect_err("special file must fail");
+        assert!(special.contains("not a regular file"));
+    }
     let search = host
         .handle_host_callback(
             "openforge.fs.task.searchFiles",

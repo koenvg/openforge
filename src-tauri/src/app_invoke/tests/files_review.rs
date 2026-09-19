@@ -66,6 +66,115 @@ async fn handles_project_filesystem_commands() {
     .any(|value| value == "src/main.rs"));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn app_invoke_project_and_task_previews_preserve_safe_symlinks_and_reject_special_files() {
+    use std::os::unix::ffi::OsStrExt;
+
+    fn prepare_root(root: &std::path::Path, outside_file: &std::path::Path) {
+        std::fs::write(root.join("actual.txt"), "inside").expect("inside fixture");
+        std::os::unix::fs::symlink("actual.txt", root.join("linked.txt")).expect("inside symlink");
+        std::os::unix::fs::symlink(outside_file, root.join("escape.txt")).expect("outside symlink");
+        let fifo = root.join("preview.txt");
+        let fifo_path = std::ffi::CString::new(fifo.as_os_str().as_bytes()).expect("fifo path");
+        // SAFETY: fifo_path is NUL-terminated and the mode is a valid permission mask.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+    }
+
+    let (state, _temp_dir) = test_state("app_invoke_authorized_file_previews");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace dir");
+    let outside_dir = tempfile::tempdir().expect("outside dir");
+    let outside_file = outside_dir.path().join("secret.txt");
+    std::fs::write(&outside_file, "outside").expect("outside fixture");
+    prepare_root(project_dir.path(), &outside_file);
+    prepare_root(workspace_dir.path(), &outside_file);
+
+    let (project_id, task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let project = db
+            .create_project(
+                "Authorized previews",
+                project_dir.path().to_str().expect("project path is UTF-8"),
+            )
+            .expect("project fixture");
+        let task = db
+            .create_task(
+                "Authorized task previews",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("task fixture");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            workspace_dir
+                .path()
+                .to_str()
+                .expect("workspace path is UTF-8"),
+            project_dir.path().to_str().expect("project path is UTF-8"),
+            "git_worktree",
+            Some("authorized-previews"),
+            "pi",
+        )
+        .expect("workspace fixture");
+        (project.id, task.id)
+    };
+
+    let project_link = invoke_ok(
+        &state,
+        "fs_read_file",
+        json!({ "projectId": project_id, "filePath": "linked.txt" }),
+    )
+    .await;
+    assert_eq!(project_link["content"], "inside");
+    let task_link = invoke_ok(
+        &state,
+        "task_fs_read_file",
+        json!({ "taskId": task_id, "filePath": "linked.txt" }),
+    )
+    .await;
+    assert_eq!(task_link["content"], "inside");
+
+    for (command, payload) in [
+        (
+            "fs_read_file",
+            json!({ "projectId": project_id, "filePath": "escape.txt" }),
+        ),
+        (
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": "escape.txt" }),
+        ),
+    ] {
+        let (status, _) = invoke(&state, command, payload)
+            .await
+            .expect_err("outside-root symlink must fail");
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    for (command, payload) in [
+        (
+            "fs_read_file",
+            json!({ "projectId": project_id, "filePath": "preview.txt" }),
+        ),
+        (
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": "preview.txt" }),
+        ),
+    ] {
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            invoke(&state, command, payload),
+        )
+        .await
+        .expect("special-file rejection must not wait for a writer");
+        let (status, _) = result.expect_err("special file must fail");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
+
 #[tokio::test]
 async fn exposes_classified_task_workspace_files_through_app_invoke() {
     let (state, _temp_dir) = test_state("app_invoke_task_workspace_filesystem");
