@@ -41,6 +41,45 @@ impl ScopedSessionWorkspace for FakeWorkspace {
     }
 }
 
+struct LockCheckingWorkspace {
+    database: Arc<Mutex<Database>>,
+}
+
+impl ScopedSessionWorkspace for LockCheckingWorkspace {
+    fn acquire<'a>(
+        &'a self,
+        _row: &'a ScopedAgentSessionRow,
+    ) -> RuntimeFuture<'a, AcquiredSessionWorkspace> {
+        Box::pin(async {
+            Ok(AcquiredSessionWorkspace {
+                path: PathBuf::from("/tmp/scoped-workspace"),
+                resolved_commit: "a".repeat(40),
+                lease: Box::new(()),
+            })
+        })
+    }
+
+    fn protect<'a>(
+        &'a self,
+        _row: &'a ScopedAgentSessionRow,
+    ) -> RuntimeFuture<'a, Box<dyn Send + Sync>> {
+        Box::pin(async { Ok(Box::new(()) as Box<dyn Send + Sync>) })
+    }
+
+    fn is_available(&self, _row: &ScopedAgentSessionRow) -> Result<bool, String> {
+        match self.database.try_lock() {
+            Ok(_) | Err(std::sync::TryLockError::Poisoned(_)) => Ok(true),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                Err("database lock remained held while checking workspace availability".into())
+            }
+        }
+    }
+
+    fn release<'a>(&'a self, _row: &'a ScopedAgentSessionRow) -> RuntimeFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
 #[derive(Default)]
 struct GatedWorkspace {
     acquired: Mutex<Vec<String>>,
@@ -272,6 +311,31 @@ fn request(project: &str, index: usize) -> StartScopedAgentSession {
         initial_input: format!("review {index}"),
         tool_policy: "review-read-only".into(),
     }
+}
+
+#[tokio::test]
+async fn session_state_releases_database_before_checking_workspace_availability() {
+    let (db, _temp) = make_test_db("scoped_session_state_lock_scope");
+    let project = db.create_project("Repository", "/tmp/repository").unwrap();
+    db.set_project_config(&project.id, "ai_provider", "claude-code")
+        .unwrap();
+    let database = Arc::new(Mutex::new(db));
+    let workspace = Arc::new(LockCheckingWorkspace {
+        database: database.clone(),
+    });
+    let service =
+        ScopedAgentSessionService::new(database, workspace, Arc::new(FakeRuntime::default()));
+
+    let state = service.start(request(&project.id, 1)).await.unwrap();
+
+    assert!(state.workspace_available);
+    assert!(
+        service
+            .status("com.example.review", &request(&project.id, 1).scope)
+            .unwrap()
+            .unwrap()
+            .workspace_available
+    );
 }
 
 #[tokio::test]
