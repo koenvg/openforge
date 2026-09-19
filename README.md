@@ -37,6 +37,10 @@ Open Forge is a macOS desktop app for running AI coding agents across one or mor
 | **Voice input** | Dictate instructions with on-device Whisper transcription. |
 | **OpenForge CLI** | Let agents and scripts read and update tasks through the local Open Forge bridge. |
 
+When a task's local agent terminal or task shell prints a GitHub PR URL, Open Forge verifies the open PR against the current worktree repository and branch before linking it. Hidden terminals work too. GitHub credentials are required; unrelated PRs and PRs assigned to another task are not automatically linked. Project-only shells and review-only scoped sessions do not create links.
+
+Periodic discovery and remote CI/review status polling keep their existing schedules. Daemon-backed terminal discovery and agent-completion lookup are not included yet.
+
 ## Quick install
 
 Install the latest prebuilt macOS release:

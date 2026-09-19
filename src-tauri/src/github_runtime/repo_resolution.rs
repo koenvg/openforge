@@ -5,7 +5,7 @@ use std::sync::Mutex;
 /// Parse a git `origin` remote URL into `(owner, repo)`, supporting the common
 /// GitHub forms (https, ssh `git@`, `ssh://`, `git://`, and `user@host` variants).
 /// Returns `None` for non-GitHub or unparseable remotes.
-fn parse_git_remote_repo(remote_url: &str) -> Option<(String, String)> {
+pub(super) fn parse_git_remote_repo(remote_url: &str) -> Option<(String, String)> {
     let trimmed = remote_url.trim();
 
     let after_host = if let Some(rest) = trimmed.strip_prefix("git@github.com:") {
@@ -29,10 +29,19 @@ fn parse_git_remote_repo(remote_url: &str) -> Option<(String, String)> {
 
     let path = after_host.trim_matches('/');
     let path = path.strip_suffix(".git").unwrap_or(path);
-    let mut segments = path.split('/').filter(|segment| !segment.is_empty());
+    let mut segments = path.split('/');
     let owner = segments.next()?.to_string();
     let repo = segments.next()?.to_string();
-    if owner.is_empty() || repo.is_empty() {
+    if segments.next().is_some()
+        || owner.is_empty()
+        || repo.is_empty()
+        || !owner
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        || !repo
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    {
         return None;
     }
     Some((owner, repo))

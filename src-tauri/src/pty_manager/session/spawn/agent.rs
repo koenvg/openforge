@@ -357,6 +357,17 @@ impl PtyManager {
         self.persist_session_identity(task_id, &pid_file, &managed_process)
             .await?;
 
+        if matches!(exit_policy, PtyExitPolicy::TaskAgent) {
+            let generations = self.terminal_sessions.agent_spawn_generations.lock().await;
+            if generations.get(task_id) == Some(&token.generation) {
+                self.terminal_sessions.pr_discovery.register(
+                    task_id,
+                    task_id,
+                    resolved_cwd.clone(),
+                    instance_id,
+                );
+            }
+        }
         let stream_state = AgentStreamState::new(instance_id);
         let output = self
             .start_agent_output_reader(task_id, reader, terminal_model_feeder, &stream_state)

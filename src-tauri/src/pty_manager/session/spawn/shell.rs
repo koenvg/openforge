@@ -94,6 +94,17 @@ impl PtyManager {
         self.persist_session_identity(&session_key, &pid_file, &managed_process)
             .await?;
 
+        {
+            let generations = self.terminal_sessions.agent_spawn_generations.lock().await;
+            if generations.get(&session_key) == Some(&token.generation) {
+                self.terminal_sessions.pr_discovery.register(
+                    &session_key,
+                    task_id,
+                    resolved_cwd.clone(),
+                    instance_id,
+                );
+            }
+        }
         let stream_state = self.register_shell_stream_state(&session_key).await;
         self.start_shell_event_stream(ShellEventStreamRequest {
             session_key,
