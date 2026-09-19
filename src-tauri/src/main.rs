@@ -7,6 +7,7 @@ mod agent_lifecycle;
 mod app_events;
 mod app_invoke;
 mod authored_pr_sync;
+mod authorized_fs;
 mod backend_runtime;
 mod builtin_plugins;
 mod claude_authoritative;

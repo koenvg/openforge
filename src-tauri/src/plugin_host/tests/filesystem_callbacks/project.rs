@@ -13,6 +13,24 @@ async fn host_filesystem_callbacks_route_to_project_services() {
     std::fs::write(project_dir.path().join(".gitignore"), "target/\n").expect("gitignore fixture");
     std::fs::write(src_dir.join("main.ts"), "export const plugin = true").expect("source fixture");
     std::fs::write(src_dir.join("main.py"), "print('plugin')").expect("python fixture");
+    #[cfg(unix)]
+    let _outside_dir = {
+        use std::os::unix::ffi::OsStrExt;
+
+        let outside_dir = tempfile::tempdir().expect("outside dir");
+        let outside_file = outside_dir.path().join("secret.txt");
+        std::fs::write(&outside_file, "outside").expect("outside fixture");
+        std::fs::write(project_dir.path().join("actual.txt"), "inside").expect("inside fixture");
+        std::os::unix::fs::symlink("actual.txt", project_dir.path().join("linked.txt"))
+            .expect("inside symlink");
+        std::os::unix::fs::symlink(&outside_file, project_dir.path().join("escape.txt"))
+            .expect("outside symlink");
+        let fifo = project_dir.path().join("preview.txt");
+        let fifo_path = std::ffi::CString::new(fifo.as_os_str().as_bytes()).expect("fifo path");
+        // SAFETY: fifo_path is NUL-terminated and the mode is a valid permission mask.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+        outside_dir
+    };
     std::process::Command::new("git")
         .args(["init"])
         .current_dir(project_dir.path())
@@ -74,6 +92,38 @@ async fn host_filesystem_callbacks_route_to_project_services() {
         .expect("read python callback");
     assert_eq!(python["mimeType"], "text/python");
 
+    #[cfg(unix)]
+    {
+        let linked = host
+            .handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": "linked.txt" }),
+            )
+            .await
+            .expect("inside-root symlink remains readable");
+        assert_eq!(linked["content"], "inside");
+
+        let outside = host
+            .handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": "escape.txt" }),
+            )
+            .await
+            .expect_err("outside-root symlink must fail");
+        assert!(outside.contains("Path traversal detected"));
+
+        let special = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            host.handle_host_callback(
+                "openforge.fs.readFile",
+                &json!({ "projectId": project.id, "path": "preview.txt" }),
+            ),
+        )
+        .await
+        .expect("special-file rejection must not wait for a writer")
+        .expect_err("special file must fail");
+        assert!(special.contains("not a regular file"));
+    }
     let search = host
         .handle_host_callback(
             "openforge.fs.searchFiles",
