@@ -59,6 +59,133 @@ async fn project_and_task_image_preview_apis_return_metadata_above_limit() {
 }
 
 #[tokio::test]
+async fn project_and_task_non_image_preview_apis_enforce_inclusive_boundaries() {
+    let (state, _db_dir) = test_state("app_non_image_preview_limits");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace dir");
+    let (project_id, task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let project = db
+            .create_project(
+                "Non-image limits",
+                project_dir.path().to_str().expect("project path is UTF-8"),
+            )
+            .expect("project fixture");
+        let task = db
+            .create_task("Non-image limits", "doing", Some(&project.id), None, None)
+            .expect("task fixture");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            workspace_dir
+                .path()
+                .to_str()
+                .expect("workspace path is UTF-8"),
+            project_dir.path().to_str().expect("project path is UTF-8"),
+            "git_worktree",
+            Some("non-image-limits"),
+            "pi",
+        )
+        .expect("workspace fixture");
+        (project.id, task.id)
+    };
+
+    std::fs::write(project_dir.path().join("exact.txt"), vec![b'a'; 1_048_576])
+        .expect("exact text fixture");
+    let exact_text = invoke_ok(
+        &state,
+        "fs_read_file",
+        json!({ "projectId": project_id, "filePath": "exact.txt" }),
+    )
+    .await;
+    assert_eq!(exact_text["type"], "text");
+    assert_eq!(exact_text["size"], 1_048_576);
+    assert_eq!(exact_text["mimeType"], "text/plain");
+    assert_eq!(
+        exact_text["content"]
+            .as_str()
+            .expect("text content is a string")
+            .len(),
+        1_048_576
+    );
+
+    std::fs::File::create(workspace_dir.path().join("oversized.txt"))
+        .expect("oversized text fixture")
+        .set_len(1_048_577)
+        .expect("oversized text length");
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": "oversized.txt" }),
+        )
+        .await,
+        json!({ "type": "large-file", "content": "", "mimeType": "text/plain", "size": 1_048_577 }),
+    );
+
+    std::fs::File::create(project_dir.path().join("oversized.mp4"))
+        .expect("oversized video fixture")
+        .set_len(26_214_401)
+        .expect("oversized video length");
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "fs_read_file",
+            json!({ "projectId": project_id, "filePath": "oversized.mp4" }),
+        )
+        .await,
+        json!({ "type": "large-file", "content": "", "mimeType": "video/mp4", "size": 26_214_401 }),
+    );
+
+    std::fs::File::create(workspace_dir.path().join("exact.mp4"))
+        .expect("exact video fixture")
+        .set_len(26_214_400)
+        .expect("exact video length");
+    let exact_video = invoke_ok(
+        &state,
+        "task_fs_read_file",
+        json!({ "taskId": task_id, "filePath": "exact.mp4" }),
+    )
+    .await;
+    assert_eq!(exact_video["type"], "video");
+    assert_eq!(exact_video["size"], 26_214_400);
+    assert_eq!(exact_video["mimeType"], "video/mp4");
+    assert_eq!(
+        exact_video["content"]
+            .as_str()
+            .expect("video content is a string")
+            .len(),
+        34_952_536
+    );
+
+    std::fs::File::create(project_dir.path().join("artifact"))
+        .expect("exact binary fixture")
+        .set_len(1_048_576)
+        .expect("exact binary length");
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "fs_read_file",
+            json!({ "projectId": project_id, "filePath": "artifact" }),
+        )
+        .await,
+        json!({ "type": "binary", "content": "", "mimeType": null, "size": 1_048_576 }),
+    );
+
+    std::fs::write(workspace_dir.path().join("NOTICE"), vec![b'a'; 1_048_577])
+        .expect("oversized extensionless text fixture");
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": "NOTICE" }),
+        )
+        .await,
+        json!({ "type": "large-file", "content": "", "mimeType": "text/plain", "size": 1_048_577 }),
+    );
+}
+
+#[tokio::test]
 async fn handles_project_filesystem_commands() {
     let (state, _temp_dir) = test_state("app_invoke_files_project_filesystem");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
