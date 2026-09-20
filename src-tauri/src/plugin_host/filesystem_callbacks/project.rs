@@ -22,6 +22,25 @@ impl PluginHost {
         .map_err(|error| format!("failed to serialize directory entries: {error}"))
     }
 
+    pub(in crate::plugin_host) async fn read_project_document_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct DocumentRequest {
+            project_id: String,
+            path: String,
+        }
+        let request: DocumentRequest = serde_json::from_value(params.clone())
+            .map_err(|_| "DOCUMENT_PREVIEW_BAD_REQUEST: expected projectId and path".to_string())?;
+        let database = self.database_state_for_host().map_err(|_| {
+            "DOCUMENT_PREVIEW_UNAVAILABLE_HOST: project documents are unavailable".to_string()
+        })?;
+        crate::document_preview::read_project_document(&database, &request.project_id, request.path)
+            .await
+    }
+
     pub(in crate::plugin_host) async fn read_project_file_for_host(
         &self,
         params: &Value,

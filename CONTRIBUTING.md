@@ -5,7 +5,7 @@ This document covers the repository's developer workflows. Open Forge is source-
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) 1.77 or newer
-- [Node.js](https://nodejs.org/) 22.12 or newer (the root `package.json` `engines.node` constraint is authoritative)
+- [Node.js](https://nodejs.org/) 22.13 or newer (the root `package.json` `engines.node` constraint is authoritative; PDF.js requires 22.13+)
 - [pnpm](https://pnpm.io/) 10 or newer
 - [Bun](https://bun.sh/) 1.3 or newer, used by the Plugin SDK release-contract test
 - macOS with Xcode Command Line Tools for Electron packaging and Metal/Whisper support

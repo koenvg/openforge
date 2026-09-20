@@ -2,6 +2,12 @@ import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { CommitInfo, FileContent, FileEntry, GitStatusSummary, PrFileDiff } from '../types'
 import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
+import type { DocumentPreviewRead } from '@openforge-app/plugin-sdk'
+
+export async function fsReadDocument(projectId: string, filePath: string): Promise<DocumentPreviewRead> {
+  return invoke<DocumentPreviewRead>('fs_read_document', { projectId, filePath })
+}
+
 export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeCommitted, includeUncommitted });
 }

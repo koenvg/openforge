@@ -115,6 +115,7 @@ export type RuntimeHostBridge = {
   listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
+  readDocument?(request: { projectId: string; path: string }): Promise<import('@openforge-app/plugin-sdk').DocumentPreviewRead>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
   readTaskDir?(request: { taskId: string; path?: string | null }): Promise<FileEntry[]>

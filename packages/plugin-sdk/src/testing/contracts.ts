@@ -93,6 +93,8 @@ export interface TestingOpenForgeApiOptions {
   userDataTextFiles?: UserDataFileWriteRequest[]
   /** File contents returned by `fs.readFile`, keyed by project-relative path. */
   projectFileContents?: Readonly<Record<string, FileContent>>
+  /** Explicit document results keyed first by project ID, then relative path. */
+  projectDocuments?: Readonly<Record<string, Readonly<Record<string, import('../domain.js').DocumentPreviewRead>>>>
   /** Task workspaces exposed through `fs.task`, keyed by Task ID. Missing IDs reject. */
   taskWorkspaces?: Readonly<Record<string, TestingTaskWorkspaceFixture>>
   /**

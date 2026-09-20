@@ -21,6 +21,7 @@ mod data_identity;
 mod db;
 mod desktop_test_fixture;
 mod diff_parser;
+mod document_preview;
 mod frontend_host_request_transport;
 mod git_clone;
 mod git_origin_fetch;

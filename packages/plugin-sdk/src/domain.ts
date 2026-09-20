@@ -1093,6 +1093,27 @@ export interface FileContent {
   size: number;
 }
 
+/** Explicit bounded PDF bytes. Existing FileContent documents remain metadata-only. */
+export type DocumentPreviewRead =
+  | {
+      status: 'ready'
+      mimeType: 'application/pdf'
+      encoding: 'base64'
+      data: string
+      /** Raw bytes, not base64 characters. Maximum 16 MiB. */
+      size: number
+      /** Opaque byte digest, never an authorization token. */
+      revision: string
+      /** Unix timestamp in milliseconds. */
+      modifiedAt: number | null
+    }
+  | {
+      status: 'unavailable'
+      reason: 'too-large' | 'unsupported-format' | 'invalid-document'
+      size: number
+      maxBytes: number
+    }
+
 export function parseCheckRuns(json: string | null): CheckRunInfo[] {
   if (!json) return [];
   try {

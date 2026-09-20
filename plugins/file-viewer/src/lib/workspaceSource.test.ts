@@ -24,6 +24,18 @@ const content: FileContent = {
 }
 
 describe('project workspace source', () => {
+  it('routes explicit project document reads and never falls back on older hosts', async () => {
+    const readDocument = vi.fn().mockResolvedValue({ status: 'unavailable', reason: 'invalid-document', size: 0, maxBytes: 16777216 })
+    const readFile = vi.fn()
+    const api = { fs: { readDocument, readFile } } as unknown as FrontendOpenForgeAPI
+    const source = createProjectWorkspaceSource(api, 'P-1')
+    await expect(source.readDocument!('a.pdf')).resolves.toMatchObject({ status: 'unavailable' })
+    expect(readDocument).toHaveBeenCalledWith({ projectId: 'P-1', path: 'a.pdf' })
+    expect(readFile).not.toHaveBeenCalled()
+    const old = createProjectWorkspaceSource({ fs: { readFile } } as unknown as FrontendOpenForgeAPI, 'P-1')
+    await expect(old.readDocument!('a.pdf')).rejects.toThrow('DOCUMENT_PREVIEW_UNAVAILABLE_HOST:')
+  })
+
   it('owns the project identity and translates workspace operations to project-scoped fs requests', async () => {
     const readDir = vi.fn().mockResolvedValue(entries)
     const readFile = vi.fn().mockResolvedValue(content)

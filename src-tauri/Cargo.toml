@@ -54,6 +54,9 @@ tempfile = "3"
 thiserror = "2"
 shell-words = "1"
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 openforge-session-host = { path = "crates/session-host", features = ["test-contracts"] }

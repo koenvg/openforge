@@ -47,8 +47,8 @@ describe('Renderer Trust Policy Module', () => {
         corsEnabled: true,
       },
     })
-    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}; style-src 'self' plugin: 'unsafe-inline'; img-src 'self' plugin: https: data:; media-src 'self' https: data: blob:; font-src 'self' plugin: data:; connect-src 'self' http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
-    expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
+    expect(policy.contentSecurityPolicy(sidecarConfig)).toBe(`default-src 'self'; script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}; worker-src 'self' blob:; style-src 'self' plugin: 'unsafe-inline'; img-src 'self' plugin: https: data:; media-src 'self' https: data: blob:; font-src 'self' plugin: data:; connect-src 'self' plugin: http://127.0.0.1:17642 https://api.github.com https://*.atlassian.net`)
+    expect(policy.contentSecurityPolicy(null)).toContain(`connect-src 'self' plugin: http://127.0.0.1:${DEFAULT_SIDECAR_PORT}`)
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain(rendererImportMapScriptHashSource())
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).toContain("'wasm-unsafe-eval'")
     expect(cspDirective(policy.contentSecurityPolicy(sidecarConfig), 'script-src')).not.toContain("'unsafe-eval'")

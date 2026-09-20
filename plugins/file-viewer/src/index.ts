@@ -4,6 +4,8 @@ import TaskFilesView from './TaskFilesView.svelte'
 import { requestFileReveal } from './lib/stores'
 import { projectWorkspaceIdentity, taskWorkspaceIdentity } from './lib/workspaceSource'
 
+import { deactivatePdfPreviews } from './lib/pdf/lifecycle'
+import 'pdfjs-dist/web/pdf_viewer.css'
 /** Plugin-owned command for revealing a workspace-relative file in a project or explicit Task Files view. */
 export const FILE_VIEWER_REVEAL_FILE_COMMAND_ID = 'revealFile'
 export const FilesViewComponent = FilesView
@@ -11,6 +13,7 @@ export const TaskFilesViewComponent = TaskFilesView
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
+    context.subscriptions.add({ dispose: deactivatePdfPreviews })
     context.subscriptions.add(openforge.views.register({
       id: 'files',
       title: 'Files',

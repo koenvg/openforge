@@ -54,6 +54,28 @@ pub(super) async fn handle_app_files_review_command(
                 .map_err(app_project_fs_error)?,
             )?
         }
+        "fs_read_document" => {
+            #[derive(serde::Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct DocumentRequest {
+                project_id: String,
+                file_path: String,
+            }
+            let payload: DocumentRequest = serde_json::from_value(request.payload.clone())
+                .map_err(|_| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "DOCUMENT_PREVIEW_BAD_REQUEST: expected projectId and filePath".to_string(),
+                    )
+                })?;
+            crate::document_preview::read_project_document(
+                &state.db,
+                &payload.project_id,
+                payload.file_path,
+            )
+            .await
+            .map_err(|error| (StatusCode::BAD_REQUEST, error))?
+        }
         "fs_read_file" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let file_path = payload_string(&request.payload, "filePath")?;
