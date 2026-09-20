@@ -77,7 +77,7 @@ Catalog-ready fixtures, story-environment fixtures, and placeholder host-frame e
 
 `infrastructure-host-frames--plugin-page` is the foundation exception: it mounts File Viewer's exported `FilesViewComponent` in `PageFrame` with the plugin API and context, reads a local directory fixture, and opens a file into its preview. Its play check verifies both the visible contents and the filesystem API requests. The scenario resets the plugin's file-selection stores between renders. Task pane, settings, row-action, and status examples remain explicitly named layout placeholders and have no production contribution assignments.
 
-KVG-4697 supplies the full File Viewer catalog and inventory entries described below. The foundation smoke remains a host-integration check rather than duplicating that state matrix. KVG-4698 owns Terminal, and KVG-4702 owns Task Browser and demo plugins. This smoke does not complete those subsystem catalogs.
+KVG-4697 supplies the full File Viewer catalog and inventory entries described below. The foundation smoke remains a host-integration check rather than duplicating that state matrix. KVG-4698 owns Terminal. KVG-4702 completes the live Task Browser contribution in the [Task Browser catalog](storybook-task-browser.md); the removed demo plugin has no production contribution to recreate. This smoke does not complete those subsystem catalogs.
 
 ## File Viewer catalog
 

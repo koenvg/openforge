@@ -13,8 +13,13 @@ import {
 import type { StoryEnvironmentAdapter } from './storyEnvironment'
 import { createStoryFileSystem, type StoryFileSystemDefinition } from './storyFileSystem'
 import { createStoryScheduleBackend, type StoryScheduleDefinition } from './storyScheduleBackend'
+import {
+  createStoryBrowserSurfaceAdapter,
+  type StoryBrowserSurfaceDefinition,
+} from './storyBrowserSurfaceAdapter'
 
 export type StoryPluginDefinition = Omit<TestingOpenForgeApiOptions, 'storage'> & {
+  browserSurface?: StoryBrowserSurfaceDefinition
   filesystem?: StoryFileSystemDefinition
   schedules?: StoryScheduleDefinition
   backendMethods?: () => Readonly<Record<string, BackendMethodRegistration>>
@@ -38,10 +43,28 @@ export function createStoryPluginAdapter(
 ): StoryPluginAdapter {
   let filesystem: ReturnType<typeof createStoryFileSystem> | undefined
   let schedules: ReturnType<typeof createStoryScheduleBackend> | undefined
+  let browserSurface: ReturnType<typeof createStoryBrowserSurfaceAdapter> | undefined
   function createRegistry(): TestingOpenForgeRegistryFake {
-    const { backendMethods, filesystem: definitionFs, schedules: definitionSchedules, ...definitionOptions } = definition
+    const {
+      backendMethods,
+      browserSurface: browserSurfaceDefinition,
+      filesystem: definitionFs,
+      schedules: definitionSchedules,
+      ...definitionOptions
+    } = definition
     const options = structuredClone(definitionOptions)
     const result = createOpenForgeRegistryFake(options)
+    const browserSurfaceDefinitionCopy = browserSurfaceDefinition
+      ? structuredClone(browserSurfaceDefinition)
+      : undefined
+    browserSurface = browserSurfaceDefinitionCopy
+      ? createStoryBrowserSurfaceAdapter(
+          result.frontendApi.browserSurfaces,
+          (taskId, id, patch) => result.setBrowserSurfaceState(taskId, id, patch),
+          browserSurfaceDefinitionCopy,
+        )
+      : undefined
+    if (browserSurface) result.frontendApi.browserSurfaces = browserSurface.api
     filesystem = definitionFs ? createStoryFileSystem(structuredClone(definitionFs), result.frontendApi.fs) : undefined
     if (filesystem) result.frontendApi.fs = filesystem.fs
     schedules = definitionSchedules ? createStoryScheduleBackend(structuredClone(definitionSchedules)) : undefined
@@ -68,6 +91,7 @@ export function createStoryPluginAdapter(
   async function reset(): Promise<void> {
     if (!installed || disposed) throw new Error('Story plugin adapter must be installed before reset')
     filesystem?.dispose()
+    await browserSurface?.dispose()
     await registry.disposeAll()
     registry = createRegistry()
   }
@@ -84,6 +108,7 @@ export function createStoryPluginAdapter(
     if (disposed) return
     disposed = true
     filesystem?.dispose()
+    await browserSurface?.dispose()
     if (installed) await registry.disposeAll()
     installed = false
   }

@@ -1,6 +1,6 @@
 # Review screenshot changes
 
-The manifest includes foundation, task workspace, host chrome, Plugin SDK, terminal, and navigation/search cases. See [task workspaces](storybook-task-workspaces.md), [host chrome and feedback](storybook-host-chrome.md), [SDK composite layouts](storybook-sdk-composites.md), and [navigation workflows](storybook-navigation.md) for their adopted states and interaction checks. It does not enforce coverage of the remaining Storybook catalog.
+The manifest includes foundation, task workspace, host chrome, Plugin SDK, terminal, navigation/search, and Task Browser cases. See [task workspaces](storybook-task-workspaces.md), [host chrome and feedback](storybook-host-chrome.md), [SDK composite layouts](storybook-sdk-composites.md), [navigation workflows](storybook-navigation.md), and [Task Browser](storybook-task-browser.md) for their adopted states and interaction checks. It does not enforce coverage of the remaining Storybook catalog.
 
 For Task Creation, prompt editing, Project Setup, and branch-divergence dialogs, see [the creation/setup catalog](storybook-creation-setup.md).
 
