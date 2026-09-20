@@ -155,6 +155,7 @@ export const desktopIpcFunctionDomains = {
   fsSearchFiles: 'files-review',
   taskFsReadDir: 'files-review',
   taskFsReadFile: 'files-review',
+  taskFsReadDocument: 'files-review',
   taskFsSearchFiles: 'files-review',
   registerBuiltinPlugin: 'plugins',
   scanPluginFolder: 'plugins',

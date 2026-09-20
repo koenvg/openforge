@@ -68,6 +68,8 @@ export interface TestingTaskWorkspaceFixture {
   directories?: Readonly<Record<string, FileEntry[]>>
   /** Classified file contents keyed by workspace-relative path. */
   files?: Readonly<Record<string, FileContent>>
+  /** Explicit document results, separate from metadata-only file contents. */
+  documents?: Readonly<Record<string, import('../domain.js').DocumentPreviewRead>>
   /** Search results keyed by exact query. */
   searches?: Readonly<Record<string, string[]>>
 }

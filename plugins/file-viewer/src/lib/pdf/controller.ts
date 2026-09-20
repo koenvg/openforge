@@ -6,10 +6,10 @@ export type PdfPhase = 'idle' | 'reading' | 'parsing' | 'rendering' | 'ready' | 
 export interface PdfState { phase: PdfPhase; message: string; page: PdfPageResult | null }
 interface Selection { source: FileBrowserWorkspaceSource | null; path: string; modifiedAt: number | null; reload: number; visible: boolean }
 const messages: Record<string, string> = {
-  DOCUMENT_PREVIEW_FORBIDDEN: 'This PDF cannot be read from the authorized project folder.',
+  DOCUMENT_PREVIEW_FORBIDDEN: 'This PDF cannot be read from the authorized workspace.',
   DOCUMENT_PREVIEW_BAD_REQUEST: 'The PDF path is invalid.',
-  DOCUMENT_PREVIEW_NOT_FOUND: 'This PDF or its project is no longer available.',
-  DOCUMENT_PREVIEW_CHANGED: 'The PDF or project changed while reading. Retry to read the current file.',
+  DOCUMENT_PREVIEW_NOT_FOUND: 'This PDF or its workspace is no longer available.',
+  DOCUMENT_PREVIEW_CHANGED: 'The PDF or workspace changed while reading. Retry to read the current file.',
   DOCUMENT_PREVIEW_BUSY: 'Two document reads are already active. Try again when they finish.',
   DOCUMENT_PREVIEW_TIMEOUT: 'Reading the PDF timed out. A stalled read may still occupy capacity.',
   DOCUMENT_PREVIEW_UNAVAILABLE_HOST: 'PDF previews are unavailable on this host.',
@@ -21,10 +21,18 @@ const messages: Record<string, string> = {
   PasswordException: 'Password-protected PDFs cannot be previewed. No password is requested.',
   InvalidPDFException: 'This PDF is empty or corrupt.',
 }
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, source?: FileBrowserWorkspaceSource | null): string {
   const value = error instanceof Error ? error.message : String(error)
-  const key = error instanceof Error && error.name in messages ? error.name : value.split(':')[0]
-  return messages[key] ?? 'The PDF could not be parsed or rendered.'
+  // Electron adds transport context around the host's stable document category.
+  // Match only that category; never display or classify OS error prose.
+  const category = value.match(/(?:^|:\s*)(DOCUMENT_PREVIEW_[A-Z_]+):/)?.[1]
+  const key = error instanceof Error && error.name in messages ? error.name : category ?? value.split(':')[0]
+  const projectMessages: Record<string, string> = {
+    DOCUMENT_PREVIEW_FORBIDDEN: 'This PDF cannot be read from the authorized project folder.',
+    DOCUMENT_PREVIEW_NOT_FOUND: 'This PDF or its project is no longer available.',
+    DOCUMENT_PREVIEW_CHANGED: 'The PDF or project changed while reading. Retry to read the current file.',
+  }
+  return (source?.identity.startsWith('project:') ? projectMessages[key] : undefined) ?? messages[key] ?? 'The PDF could not be parsed or rendered.'
 }
 
 export class PdfPreviewController {
@@ -36,7 +44,7 @@ export class PdfPreviewController {
 
   transition(selection: Selection): void {
     if (this.destroyed) return
-    const identity = selection.visible ? JSON.stringify([selection.source?.identity, selection.path, selection.modifiedAt, selection.reload]) : null
+    const identity = selection.visible ? JSON.stringify([selection.source?.identity, selection.source?.documentRevision, selection.path, selection.modifiedAt, selection.reload]) : null
     if (identity === this.identity) return
     this.identity = identity
     const generation = ++this.generation
@@ -72,7 +80,7 @@ export class PdfPreviewController {
       this.session = createPdfSession(this.container, error => {
         if (!current()) return
         this.release()
-        this.publish({ phase: 'error', message: errorMessage(error), page: null })
+        this.publish({ phase: 'error', message: errorMessage(error, selection.source), page: null })
       })
       const page = await this.session.load(bytes, () => {
         if (current()) this.publish({ phase: 'rendering', message: 'Rendering first page…', page: null })
@@ -81,7 +89,7 @@ export class PdfPreviewController {
     } catch (error) {
       if (!current()) return
       this.release()
-      this.publish({ phase: 'error', message: errorMessage(error), page: null })
+      this.publish({ phase: 'error', message: errorMessage(error, selection.source), page: null })
     }
   }
 

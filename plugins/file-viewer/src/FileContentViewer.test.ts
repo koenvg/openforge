@@ -50,6 +50,7 @@ function renderViewer(props: Partial<{
       fileName: 'README.md',
       filePath: 'README.md',
       projectId: 'test-project-id',
+      workspaceSource: null,
       error: null,
       modifiedAt: null,
       ...props,

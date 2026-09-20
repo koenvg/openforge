@@ -78,6 +78,7 @@ export const desktopCommandContracts = [
   {"functionName":"fsSearchFiles","moduleName":"filesystem","ipcCommand":"fs_search_files","payloadKeys":["projectId","query","limit"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"taskFsReadDir","moduleName":"filesystem","ipcCommand":"task_fs_read_dir","payloadKeys":["taskId","dirPath"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"taskFsReadFile","moduleName":"filesystem","ipcCommand":"task_fs_read_file","payloadKeys":["taskId","filePath"],"owner":"rust-sidecar","domain":"files-review"},
+  {"functionName":"taskFsReadDocument","moduleName":"filesystem","ipcCommand":"task_fs_read_document","payloadKeys":["taskId","filePath"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"taskFsSearchFiles","moduleName":"filesystem","ipcCommand":"task_fs_search_files","payloadKeys":["taskId","query","limit"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"forceGithubSync","moduleName":"github","ipcCommand":"force_github_sync","payloadKeys":[],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"refreshTaskGithubStatus","moduleName":"github","ipcCommand":"refresh_task_github_status","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"github-review"},

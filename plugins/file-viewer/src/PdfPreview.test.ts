@@ -76,6 +76,7 @@ it.each([
   ['DOCUMENT_PREVIEW_BUSY: busy', 'Two document reads are already active. Try again when they finish.'],
   ['DOCUMENT_PREVIEW_CHANGED: changed', 'The PDF or project changed while reading. Retry to read the current file.'],
   ['DOCUMENT_PREVIEW_UNAVAILABLE_HOST: old host', 'PDF previews are unavailable on this host.'],
+  ["Error invoking remote method 'openforge:invoke': Error: Rust sidecar command failed: DOCUMENT_PREVIEW_NOT_FOUND: task workspace is unavailable", 'This PDF or its project is no longer available.'],
 ])('shows a sanitized, manually retryable read failure: %s', async (error, message) => {
   visible()
   const readDocument = vi.fn().mockRejectedValue(new Error(error))
@@ -100,4 +101,45 @@ it('replaces the document on workspace and modification identity changes, then r
   deactivatePdfPreviews()
   view.unmount()
   expect(engine.destroy).toHaveBeenCalledTimes(3)
+})
+
+it('uses task document bytes and discards delayed same-name results during rapid task changes', async () => {
+  visible()
+  const { createTaskWorkspaceSource } = await import('./lib/workspaceSource')
+  let finishFirst!: (value: typeof ready) => void
+  const readDocument = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve })).mockResolvedValue(ready)
+  const projectRead = vi.fn()
+  const api = { fs: { readDocument: projectRead, task: { readDocument } } } as unknown as import('@openforge-app/plugin-sdk/frontend').FrontendOpenForgeAPI
+  engine.load.mockResolvedValue({ pages: 2, notice: '', reduced: false })
+  const view = render(PdfPreview, { workspaceSource: createTaskWorkspaceSource(api, 'T-1'), filePath: 'guide.pdf', modifiedAt: 1, active: false })
+  expect(readDocument).not.toHaveBeenCalled()
+  await view.rerender({ active: true })
+  await waitFor(() => expect(readDocument).toHaveBeenCalledWith({ taskId: 'T-1', path: 'guide.pdf' }))
+  await view.rerender({ workspaceSource: createTaskWorkspaceSource(api, 'T-2') })
+  await screen.findByText('Page 1 of 2. Only the first page is available in this preview.')
+  finishFirst(ready)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(engine.load).toHaveBeenCalledTimes(1)
+  expect(readDocument).toHaveBeenLastCalledWith({ taskId: 'T-2', path: 'guide.pdf' })
+  await view.rerender({ active: false })
+  expect(engine.destroy).toHaveBeenCalledTimes(1)
+  view.unmount()
+  expect(engine.destroy).toHaveBeenCalledTimes(1)
+  expect(projectRead).not.toHaveBeenCalled()
+})
+
+it('invalidates a pending PDF when the same task workspace is replaced', async () => {
+  visible()
+  let finishOld!: (value: typeof ready) => void
+  const readDocument = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve })).mockResolvedValue(ready)
+  const workspaceSource = { ...source(readDocument), identity: 'task:T-1' as const, documentRevision: 0 }
+  engine.load.mockResolvedValue({ pages: 1, notice: '', reduced: false })
+  const view = render(PdfPreview, { workspaceSource, filePath: 'guide.pdf', modifiedAt: 1 })
+  await waitFor(() => expect(readDocument).toHaveBeenCalledTimes(1))
+  await view.rerender({ workspaceSource: { ...workspaceSource, documentRevision: 1 } })
+  await screen.findByText('Page 1 of 1')
+  finishOld(ready)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(engine.load).toHaveBeenCalledTimes(1)
+  expect(readDocument).toHaveBeenCalledTimes(2)
 })

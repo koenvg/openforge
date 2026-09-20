@@ -36,6 +36,7 @@
       "taskPane",
       "commands",
       "fs",
+      "tasks",
       "navigation",
       "system.openUrl",
       "context"

@@ -3,6 +3,8 @@ mod project;
 mod read_bytes;
 mod secure_open;
 pub(crate) use project::read_project_document;
+mod task;
+pub(crate) use task::read_task_document;
 
 use serde::Serialize;
 use std::path::PathBuf;
@@ -43,11 +45,14 @@ pub(crate) enum DocumentPreviewRead {
 #[derive(Debug)]
 pub(crate) struct DocumentResponse {
     pub(crate) document: DocumentPreviewRead,
+    root: secure_open::RootGuard,
     _permit: OwnedSemaphorePermit,
 }
 
-pub(crate) async fn read_document(root: PathBuf, path: String) -> Result<DocumentResponse, String> {
-    READER.read(root, path).await
+impl DocumentResponse {
+    pub(crate) fn verify_root(&self) -> Result<(), String> {
+        self.root.verify()
+    }
 }
 
 struct DocumentReader {
@@ -82,10 +87,11 @@ impl DocumentReader {
         // Dropping the caller requests cancellation but never releases the I/O slot.
         let _cancel_on_drop = CancelOnDrop(Arc::clone(&operation));
         let work = tokio::task::spawn_blocking(move || {
-            let document = read_bytes::read(&root, &path, &operation)?;
+            let (document, root) = read_bytes::read(&root, &path, &operation)?;
             operation.checkpoint()?;
             Ok(DocumentResponse {
                 document,
+                root,
                 _permit: permit,
             })
         });
@@ -145,3 +151,5 @@ mod lifecycle_tests;
 mod race_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod workspace_tests;

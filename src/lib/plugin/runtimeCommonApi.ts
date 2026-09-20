@@ -311,6 +311,10 @@ export class RuntimeCommonApiRegistry {
         task: {
           readDir: async (request) => this.services.host.readTaskDir ? this.services.host.readTaskDir(request) : unavailableCapability('fs.task.readDir'),
           readFile: async (request) => this.services.host.readTaskFile ? this.services.host.readTaskFile(request) : unavailableCapability('fs.task.readFile'),
+          readDocument: async (request) => {
+            if (!this.services.host.readTaskDocument) throw new Error('DOCUMENT_PREVIEW_UNAVAILABLE_HOST: task documents are unavailable')
+            return this.services.host.readTaskDocument(request)
+          },
           searchFiles: async (request) => this.services.host.searchTaskFiles ? this.services.host.searchTaskFiles(request) : unavailableCapability('fs.task.searchFiles'),
         },
       },

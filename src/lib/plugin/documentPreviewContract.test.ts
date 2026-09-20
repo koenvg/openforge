@@ -25,3 +25,30 @@ describe('project document SDK capability', () => {
     await registry.deactivate()
   })
 })
+
+describe('task document SDK capability', () => {
+  it('preserves workspace identity, results, and sanitized failures', async () => {
+    const readTaskDocument = vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(unavailable)
+    const registry = createRuntimeContributionRegistry({ pluginId: 'pdf', projectId: 'P-1', host: { readTaskDocument } })
+    const read = registry.getFrontendApi().fs.task.readDocument
+    const request = { taskId: 'T-2', path: 'a.pdf' }
+    await expect(read(request)).resolves.toEqual(ready)
+    await expect(read(request)).resolves.toEqual(unavailable)
+    for (const prefix of ['NOT_FOUND', 'FORBIDDEN', 'BUSY', 'TIMEOUT', 'CHANGED', 'UNAVAILABLE_HOST']) {
+      readTaskDocument.mockRejectedValueOnce(new Error(`DOCUMENT_PREVIEW_${prefix}: unavailable`))
+      await expect(read(request)).rejects.toThrow(`DOCUMENT_PREVIEW_${prefix}:`)
+    }
+    expect(readTaskDocument).toHaveBeenCalledWith(request)
+    await registry.deactivate()
+  })
+
+  it('does not fall back to project or metadata reads on older hosts', async () => {
+    const readDocument = vi.fn()
+    const readTaskFile = vi.fn()
+    const registry = createRuntimeContributionRegistry({ pluginId: 'pdf-old', projectId: 'P-1', host: { readDocument, readTaskFile } })
+    await expect(registry.getFrontendApi().fs.task.readDocument({ taskId: 'T-1', path: 'a.pdf' })).rejects.toThrow('DOCUMENT_PREVIEW_UNAVAILABLE_HOST:')
+    expect(readDocument).not.toHaveBeenCalled()
+    expect(readTaskFile).not.toHaveBeenCalled()
+    await registry.deactivate()
+  })
+})

@@ -2,7 +2,34 @@
 use std::fs::File;
 use std::path::Path;
 
-pub(super) fn open(root: &Path, path: &str, operation: &super::Operation) -> Result<File, String> {
+#[derive(Debug)]
+pub(super) struct RootGuard {
+    directory: File,
+    path: std::path::PathBuf,
+}
+
+impl RootGuard {
+    pub(super) fn verify(&self) -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let pinned = self.directory.metadata().map_err(io_error)?;
+            let current = std::fs::metadata(&self.path).map_err(|_| {
+                "DOCUMENT_PREVIEW_CHANGED: workspace root is unavailable".to_string()
+            })?;
+            if current.is_dir() && (pinned.dev(), pinned.ino()) == (current.dev(), current.ino()) {
+                return Ok(());
+            }
+        }
+        Err("DOCUMENT_PREVIEW_CHANGED: workspace root changed during reading".into())
+    }
+}
+
+pub(super) fn open(
+    root: &Path,
+    path: &str,
+    operation: &super::Operation,
+) -> Result<(File, RootGuard), String> {
     if path.is_empty()
         || path.starts_with('/')
         || path.contains(['\\', ':', '\0'])
@@ -14,12 +41,20 @@ pub(super) fn open(root: &Path, path: &str, operation: &super::Operation) -> Res
 }
 
 #[cfg(unix)]
-fn open_relative(root: &Path, path: &str, operation: &super::Operation) -> Result<File, String> {
+fn open_relative(
+    root: &Path,
+    path: &str,
+    operation: &super::Operation,
+) -> Result<(File, RootGuard), String> {
     use rustix::fs::{open, openat, Mode, OFlags};
     let directory_flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
     // The root is host-selected and may itself be a symlink. Descendants may not.
-    let root = open(root, directory_flags, Mode::empty()).map_err(open_error)?;
-    let mut directories = vec![root];
+    let directory = File::from(open(root, directory_flags, Mode::empty()).map_err(open_error)?);
+    let mut directories = vec![directory.try_clone().map_err(io_error)?];
+    let root_guard = RootGuard {
+        directory,
+        path: root.to_path_buf(),
+    };
     let mut components = path.split('/').filter(|part| !part.is_empty()).peekable();
     while let Some(component) = components.next() {
         #[cfg(test)]
@@ -43,15 +78,19 @@ fn open_relative(root: &Path, path: &str, operation: &super::Operation) -> Resul
                     "DOCUMENT_PREVIEW_FORBIDDEN: only regular documents are allowed".into(),
                 );
             }
-            return Ok(file);
+            return Ok((file, root_guard));
         }
-        directories.push(handle);
+        directories.push(File::from(handle));
     }
     Err("DOCUMENT_PREVIEW_BAD_REQUEST: expected a document path".into())
 }
 
 #[cfg(not(unix))]
-fn open_relative(_root: &Path, _path: &str, _operation: &super::Operation) -> Result<File, String> {
+fn open_relative(
+    _root: &Path,
+    _path: &str,
+    _operation: &super::Operation,
+) -> Result<(File, RootGuard), String> {
     Err("DOCUMENT_PREVIEW_UNAVAILABLE_HOST: secure document opening is unavailable".into())
 }
 

@@ -16,11 +16,13 @@ function captureStdout(): { output: string[]; restore(): void } {
 describe('plugin-host stdio transport', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('reassembles a maximum-size project document callback across LF transport chunks', async () => {
+  it.each(['project', 'task'] as const)('reassembles a maximum-size %s document callback across LF transport chunks', async scope => {
     const input = new PassThrough()
     const stdout = captureStdout()
     const bridge = new StdioHostCallbackBridge()
-    const pending = bridge.request({ method: 'openforge.fs.readDocument', params: { projectId: 'P-1', path: 'large.pdf' } })
+    const pending = bridge.request(scope === 'task'
+      ? { method: 'openforge.fs.task.readDocument', params: { taskId: 'T-1', path: 'large.pdf' } }
+      : { method: 'openforge.fs.readDocument', params: { projectId: 'P-1', path: 'large.pdf' } })
     const data = Buffer.alloc(16_777_216, 32).toString('base64')
     expect(data.length).toBe(22_369_624)
     const frame = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { status: 'ready', data, size: 16_777_216 } }) + '\n'
@@ -31,7 +33,7 @@ describe('plugin-host stdio transport', () => {
     const result = await pending as { data: string; size: number }
     expect(frames).toBe(1)
     expect(result.data.length).toBe(data.length)
-    expect(Buffer.from(result.data, 'base64').byteLength).toBe(16_777_216)
+    expect(Buffer.from(result.data, 'base64').equals(Buffer.alloc(16_777_216, 32))).toBe(true)
     stdout.restore()
   })
 

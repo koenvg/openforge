@@ -122,3 +122,25 @@ async fn observed_changes_reject_bytes_and_growth_over_limit_takes_precedence() 
         }
     }
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn replacing_the_workspace_root_at_the_same_path_rejects_old_bytes() {
+    let parent = tempfile::tempdir().unwrap();
+    let root = parent.path().join("workspace");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("a.pdf"), b"%PDF-old workspace").unwrap();
+    let path = root.clone();
+    let reader = DocumentReader::new(READ_DEADLINE).with_hook(Arc::new(move |stage| {
+        if stage == ReadStage::BeforeRead {
+            std::fs::rename(&path, path.with_file_name("old-workspace")).unwrap();
+            std::fs::create_dir(&path).unwrap();
+            std::fs::write(path.join("a.pdf"), b"%PDF-new workspace").unwrap();
+        }
+    }));
+    let error = reader
+        .read(root, "a.pdf".into())
+        .await
+        .expect_err("replaced root must not publish old bytes");
+    assert!(error.starts_with("DOCUMENT_PREVIEW_CHANGED:"), "{error}");
+}
