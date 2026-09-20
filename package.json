@@ -27,6 +27,8 @@
     "storybook:visual:check": "node scripts/storybook-visual/container.mjs check",
     "storybook:visual:update": "node scripts/storybook-visual/container.mjs update",
     "storybook:visual:test": "node scripts/storybook-visual/container.mjs test",
+    "storybook:visual:shard": "node scripts/storybook-visual/container.mjs shard",
+    "storybook:visual:probes": "node scripts/storybook-visual/container.mjs probes",
     "storybook:visual:unit": "vitest run scripts/storybook-visual",
     "storybook:terminal:check": "node scripts/storybook-terminal-check.mjs",
     "website:dev": "pnpm --filter @openforge-app/website dev",
