@@ -41,6 +41,10 @@ pub(super) const TASK_QUERY_INDEXES_SQL: &str =
          ON tasks(project_id, updated_at DESC)
          WHERE status = 'done';";
 
+pub(super) const PULL_REQUEST_REPOSITORY_NUMBER_INDEX_SQL: &str =
+    "CREATE INDEX IF NOT EXISTS idx_pull_requests_repository_number
+         ON pull_requests(repo_owner, repo_name, pr_number, updated_at DESC);";
+
 pub(super) const SCOPED_WORKSPACES_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS scoped_workspaces (
     id TEXT PRIMARY KEY,
@@ -2004,6 +2008,22 @@ INSERT OR IGNORE INTO config (key, value)
     }),
     M::up(SCOPED_WORKSPACES_SQL),
     M::up(SCOPED_AGENT_SESSIONS_SQL),
+    M::up_with_hook("", |tx| {
+        let can_index: bool = tx
+            .query_row(
+                "SELECT COUNT(*) = 4
+                   FROM pragma_table_info('pull_requests')
+                  WHERE name IN ('repo_owner', 'repo_name', 'pr_number', 'updated_at')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if can_index {
+            tx.execute_batch(PULL_REQUEST_REPOSITORY_NUMBER_INDEX_SQL)
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2824,6 +2844,7 @@ mod tests {
         ScopedAgentKeyReservation,
         ScopedWorkspaces,
         ScopedAgentSessions,
+        PullRequestRepositoryNumberIndex,
     }
 
     impl MigrationBoundary {
@@ -2849,6 +2870,7 @@ mod tests {
                 Self::ScopedAgentKeyReservation => 66,
                 Self::ScopedWorkspaces => 67,
                 Self::ScopedAgentSessions => 68,
+                Self::PullRequestRepositoryNumberIndex => 69,
             }
         }
     }
@@ -4983,6 +5005,76 @@ mod tests {
             )
             .expect("read the upgraded thread");
         assert_eq!(seen_sequence, None);
+    }
+
+    #[test]
+    fn pull_request_repository_number_index_migrates_existing_duplicates() {
+        let (_temp_dir, path) = temporary_database_path();
+        let task_id;
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            task_id = db
+                .create_task("Linked task", "doing", None, None, None)
+                .expect("create task")
+                .id;
+            let connection = db.connection();
+            let conn = connection.lock().expect("lock pre-upgrade database");
+            conn.execute(
+                "DROP INDEX IF EXISTS idx_pull_requests_repository_number",
+                [],
+            )
+            .expect("remove future repository/number index");
+            for (id, owner, updated_at) in [
+                (1001_i64, "owner", 100_i64),
+                (1002_i64, "owner", 200_i64),
+                (1003_i64, "Owner", 300_i64),
+            ] {
+                conn.execute(
+                    "INSERT INTO pull_requests (
+                        id, pr_number, ticket_id, repo_owner, repo_name, title, url, state,
+                        created_at, updated_at
+                     ) VALUES (?1, 77, ?2, ?3, 'repo', 'PR', 'url', 'open', 1, ?4)",
+                    rusqlite::params![id, task_id, owner, updated_at],
+                )
+                .expect("insert existing pull request");
+            }
+            set_user_version_before(&conn, MigrationBoundary::PullRequestRepositoryNumberIndex);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock upgraded database");
+        let indexed_columns = conn
+            .prepare("SELECT name FROM pragma_index_info('idx_pull_requests_repository_number') ORDER BY seqno")
+            .expect("prepare pull request index columns")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query pull request index columns")
+            .collect::<Result<Vec<_>>>()
+            .expect("read pull request index columns");
+        assert_eq!(
+            indexed_columns,
+            ["repo_owner", "repo_name", "pr_number", "updated_at"]
+        );
+
+        let exact_match_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pull_requests
+                 WHERE repo_owner = 'owner' AND repo_name = 'repo' AND pr_number = 77",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count preserved exact duplicate rows");
+        assert_eq!(exact_match_count, 2);
+        let selected_id: i64 = conn
+            .query_row(
+                "SELECT id FROM pull_requests
+                 WHERE repo_owner = 'owner' AND repo_name = 'repo' AND pr_number = 77
+                 ORDER BY updated_at DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("select most recently updated exact match");
+        assert_eq!(selected_id, 1002);
     }
 
     #[test]
