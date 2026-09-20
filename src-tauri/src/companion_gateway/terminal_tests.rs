@@ -2,31 +2,21 @@
 mod daemon;
 
 use super::{
-    attention::UnavailableCompanionAttentionSource,
     contract::{
-        create_router, create_router_with_sources_event_access_and_pty, AllowAllAuthorizer,
-        CompanionAuthorizer, CompanionErrorCode, CompanionHostStatus, CompanionRouterSources,
-        PairingUnavailableAuthorizer, PROTOCOL_VERSION, PROTOCOL_VERSION_HEADER,
+        create_router, AllowAllAuthorizer, CompanionHostStatus, PairingUnavailableAuthorizer,
+        PROTOCOL_VERSION, PROTOCOL_VERSION_HEADER,
     },
-    devices::InMemoryCompanionDeviceStore,
-    live_events::{CompanionStreamAccess, CompanionStreamTermination},
-    pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
-    project_board::UnavailableCompanionProjectBoardSource,
-    task_detail::UnavailableCompanionTaskDetailSource,
+    live_events::CompanionStreamTermination,
+    terminal_test_fixture::{
+        attach_and_wait_until_ready, next_frame, pairing, send_attach, AuthenticatedTerminalServer,
+        CancellationAccess,
+    },
 };
 use axum::{body::Body, http::Request};
 use futures::{SinkExt, StreamExt};
-use std::sync::Mutex as StdMutex;
 use std::{sync::Arc, time::Duration};
-use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+use tokio_tungstenite::tungstenite::Message;
 use tower::ServiceExt;
-
-fn pairing() -> Arc<PairingCoordinator> {
-    Arc::new(PairingCoordinator::new(
-        Arc::new(InMemoryCompanionDeviceStore::default()),
-        Duration::from_secs(60),
-    ))
-}
 
 fn upgrade_request(protocol_version: Option<&str>) -> Request<Body> {
     let mut request = Request::builder()
@@ -39,57 +29,6 @@ fn upgrade_request(protocol_version: Option<&str>) -> Request<Body> {
         request = request.header(PROTOCOL_VERSION_HEADER, version);
     }
     request.body(Body::empty()).expect("upgrade request")
-}
-
-fn current_protocol_version_header() -> axum::http::HeaderValue {
-    PROTOCOL_VERSION
-        .to_string()
-        .parse()
-        .expect("protocol version")
-}
-
-type TestTerminalSocket =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
-
-async fn connect_terminal(address: std::net::SocketAddr) -> TestTerminalSocket {
-    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
-        .into_client_request()
-        .expect("WebSocket request");
-    request.headers_mut().insert(
-        axum::http::header::AUTHORIZATION,
-        "Bearer paired-device-credential"
-            .parse()
-            .expect("authorization"),
-    );
-    request
-        .headers_mut()
-        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-    tokio_tungstenite::connect_async(request)
-        .await
-        .expect("WebSocket upgrade")
-        .0
-}
-
-async fn attach_and_wait_until_ready(socket: &mut TestTerminalSocket) {
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
-        ))
-        .await
-        .expect("attach control");
-    loop {
-        let frame = socket
-            .next()
-            .await
-            .expect("ready response")
-            .expect("ready frame");
-        if let Message::Text(control) = frame {
-            let control: serde_json::Value = serde_json::from_str(&control).expect("control JSON");
-            if control["type"] == "ready" {
-                return;
-            }
-        }
-    }
 }
 
 #[tokio::test]
@@ -128,99 +67,12 @@ async fn agent_terminal_upgrade_requires_device_authorization_and_protocol_versi
     assert_eq!(accepted.status(), axum::http::StatusCode::UPGRADE_REQUIRED);
 }
 
-#[derive(Debug)]
-struct BearerAuthorizer;
-
-impl CompanionAuthorizer for BearerAuthorizer {
-    fn authorize(
-        &self,
-        headers: &axum::http::HeaderMap,
-    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
-        let authorized = headers
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value == "Bearer paired-device-credential");
-        if !authorized {
-            return Err(CompanionErrorCode::Unauthenticated);
-        }
-        Ok(CompanionAuthenticatedDevice {
-            device_id: "device-a".to_string(),
-        })
-    }
-}
-
-#[derive(Default)]
-struct CancellationAccess {
-    sender: StdMutex<Option<tokio::sync::mpsc::UnboundedSender<CompanionStreamTermination>>>,
-}
-
-impl CancellationAccess {
-    fn cancel(&self, termination: CompanionStreamTermination) {
-        self.sender
-            .lock()
-            .expect("cancellation sender lock")
-            .as_ref()
-            .expect("open terminal stream")
-            .send(termination)
-            .expect("terminal cancellation");
-    }
-}
-
-impl CompanionStreamAccess for CancellationAccess {
-    fn open(
-        &self,
-        _headers: &axum::http::HeaderMap,
-    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>, CompanionErrorCode>
-    {
-        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        *self.sender.lock().expect("cancellation sender lock") = Some(sender);
-        Ok(receiver)
-    }
-
-    fn gateway_closing(&self) {}
-}
-
 #[tokio::test]
 async fn authenticated_websocket_revalidates_no_active_agent_terminal() {
-    let router = create_router(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let server = tokio::spawn(async move {
-        axum::serve(listener, router).await.expect("test server");
-    });
-    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
-        .into_client_request()
-        .expect("WebSocket request");
-    request.headers_mut().insert(
-        axum::http::header::AUTHORIZATION,
-        "Bearer paired-device-credential"
-            .parse()
-            .expect("authorization"),
-    );
-    request
-        .headers_mut()
-        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-
-    let (mut socket, _) = tokio_tungstenite::connect_async(request)
-        .await
-        .expect("WebSocket upgrade");
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
-        ))
-        .await
-        .expect("attach control");
-    let response = socket
-        .next()
-        .await
-        .expect("terminal response")
-        .expect("terminal frame");
+    let server = AuthenticatedTerminalServer::start().await;
+    let mut socket = server.connect().await;
+    send_attach(&mut socket).await;
+    let response = next_frame(&mut socket, "terminal response").await;
     let Message::Text(response) = response else {
         panic!("expected terminal control");
     };
@@ -229,43 +81,18 @@ async fn authenticated_websocket_revalidates_no_active_agent_terminal() {
     assert_eq!(response["code"], "no_active_agent_terminal");
     assert!(!response.to_string().contains("instance"));
 
-    server.abort();
+    server.shutdown().await;
 }
 
 #[tokio::test]
 async fn terminal_websocket_rejects_oversized_text_and_binary_frames() {
-    let router = create_router(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let server = tokio::spawn(async move {
-        axum::serve(listener, router).await.expect("test server");
-    });
+    let server = AuthenticatedTerminalServer::start().await;
 
     for oversized in [
         Message::Text("x".repeat(4_097)),
         Message::Binary(vec![0; 4_097]),
     ] {
-        let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
-            .into_client_request()
-            .expect("WebSocket request");
-        request.headers_mut().insert(
-            axum::http::header::AUTHORIZATION,
-            "Bearer paired-device-credential"
-                .parse()
-                .expect("authorization"),
-        );
-        request
-            .headers_mut()
-            .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-        let (mut socket, _) = tokio_tungstenite::connect_async(request)
-            .await
-            .expect("WebSocket upgrade");
+        let mut socket = server.connect().await;
         socket.send(oversized).await.expect("oversized frame send");
         let result = tokio::time::timeout(Duration::from_secs(1), socket.next())
             .await
@@ -276,7 +103,7 @@ async fn terminal_websocket_rejects_oversized_text_and_binary_frames() {
         );
     }
 
-    server.abort();
+    server.shutdown().await;
 }
 
 #[tokio::test]
@@ -293,38 +120,13 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
         .await
         .expect("test Agent PTY");
     let access = Arc::new(CancellationAccess::default());
-    let router = create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-        CompanionRouterSources {
-            attention: Arc::new(UnavailableCompanionAttentionSource),
-            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
-            task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
-            action_palette: Arc::new(
-                super::action_palette::UnavailableCompanionActionPaletteService,
-            ),
-            task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
-            task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
-            pty_manager: pty_manager.clone(),
-            events: crate::app_events::AppEventBus::new(16, 8),
-            stream_access: access,
-        },
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let server = tokio::spawn(async move {
-        axum::serve(listener, router).await.expect("test server");
-    });
+    let server = AuthenticatedTerminalServer::start_with_pty(pty_manager.clone(), access).await;
 
     for pre_ready in [
         Message::Binary(b"early".to_vec()),
         Message::Text(r#"{"type":"resize","columns":100,"rows":30}"#.to_string()),
     ] {
-        let mut early = connect_terminal(address).await;
+        let mut early = server.connect().await;
         early
             .feed(Message::Text(
                 r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
@@ -333,33 +135,25 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
             .expect("queued attach control");
         early.feed(pre_ready).await.expect("queued pre-ready frame");
         early.flush().await.expect("flush pre-ready frames");
-        let early_error = early
-            .next()
-            .await
-            .expect("early response")
-            .expect("early control");
+        let early_error = next_frame(&mut early, "early response").await;
         assert!(
             matches!(early_error, Message::Text(control) if control.contains("protocol_error")),
             "pre-ready frame must be rejected"
         );
     }
 
-    let mut malformed = connect_terminal(address).await;
+    let mut malformed = server.connect().await;
     attach_and_wait_until_ready(&mut malformed).await;
     malformed
         .send(Message::Binary(vec![0xff]))
         .await
         .expect("malformed binary frame");
-    let malformed_error = malformed
-        .next()
-        .await
-        .expect("malformed response")
-        .expect("malformed control");
+    let malformed_error = next_frame(&mut malformed, "malformed response").await;
     assert!(
         matches!(malformed_error, Message::Text(control) if control.contains("protocol_error"))
     );
 
-    let mut interactive = connect_terminal(address).await;
+    let mut interactive = server.connect().await;
     attach_and_wait_until_ready(&mut interactive).await;
     interactive
         .send(Message::Binary("héllo\n".as_bytes().to_vec()))
@@ -377,7 +171,7 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
         }
     }
 
-    server.abort();
+    server.shutdown().await;
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
 
@@ -398,33 +192,9 @@ async fn assert_ready_terminal_termination_blocks_input(
         .await
         .expect("test Agent PTY");
     let access = Arc::new(CancellationAccess::default());
-    let router = create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-        CompanionRouterSources {
-            attention: Arc::new(UnavailableCompanionAttentionSource),
-            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
-            task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
-            action_palette: Arc::new(
-                super::action_palette::UnavailableCompanionActionPaletteService,
-            ),
-            task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
-            task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
-            pty_manager: pty_manager.clone(),
-            events: crate::app_events::AppEventBus::new(16, 8),
-            stream_access: access.clone(),
-        },
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let server = tokio::spawn(async move {
-        axum::serve(listener, router).await.expect("test server");
-    });
-    let mut socket = connect_terminal(address).await;
+    let server =
+        AuthenticatedTerminalServer::start_with_pty(pty_manager.clone(), access.clone()).await;
+    let mut socket = server.connect().await;
     attach_and_wait_until_ready(&mut socket).await;
 
     access.cancel(termination);
@@ -432,11 +202,7 @@ async fn assert_ready_terminal_termination_blocks_input(
         .send(Message::Binary(b"must-not-cross\n".to_vec()))
         .await
         .expect("post-termination input frame");
-    let response = socket
-        .next()
-        .await
-        .expect("termination response")
-        .expect("termination control");
+    let response = next_frame(&mut socket, "termination response").await;
     assert!(
         matches!(response, Message::Text(control) if control.contains(expected_control)),
         "unexpected {test_name} control"
@@ -454,7 +220,7 @@ async fn assert_ready_terminal_termination_blocks_input(
         "input crossed the {test_name} terminal channel"
     );
 
-    server.abort();
+    server.shutdown().await;
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
 
@@ -503,60 +269,13 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
     }
 
     let access = Arc::new(CancellationAccess::default());
-    let router = create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-        CompanionRouterSources {
-            attention: Arc::new(UnavailableCompanionAttentionSource),
-            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
-            task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
-            action_palette: Arc::new(
-                super::action_palette::UnavailableCompanionActionPaletteService,
-            ),
-            task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
-            task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
-            pty_manager: pty_manager.clone(),
-            events: crate::app_events::AppEventBus::new(16, 8),
-            stream_access: access.clone(),
-        },
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let server = tokio::spawn(async move {
-        axum::serve(listener, router).await.expect("test server");
-    });
-    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
-        .into_client_request()
-        .expect("WebSocket request");
-    request.headers_mut().insert(
-        axum::http::header::AUTHORIZATION,
-        "Bearer paired-device-credential"
-            .parse()
-            .expect("authorization"),
-    );
-    request
-        .headers_mut()
-        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-    let (mut socket, _) = tokio_tungstenite::connect_async(request)
-        .await
-        .expect("WebSocket upgrade");
+    let server =
+        AuthenticatedTerminalServer::start_with_pty(pty_manager.clone(), access.clone()).await;
+    let mut socket = server.connect().await;
 
     access.cancel(CompanionStreamTermination::AuthorizationRevoked);
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
-        ))
-        .await
-        .expect("attach control");
-    let response = socket
-        .next()
-        .await
-        .expect("revocation response")
-        .expect("revocation frame");
+    send_attach(&mut socket).await;
+    let response = next_frame(&mut socket, "revocation response").await;
     let Message::Text(response) = response else {
         panic!("terminal replay crossed a revoked channel");
     };
@@ -571,46 +290,8 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
         }
     }
 
-    server.abort();
+    server.shutdown().await;
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
-}
-
-fn authenticated_terminal_request(address: std::net::SocketAddr) -> axum::http::Request<()> {
-    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
-        .into_client_request()
-        .expect("WebSocket request");
-    request.headers_mut().insert(
-        axum::http::header::AUTHORIZATION,
-        "Bearer paired-device-credential"
-            .parse()
-            .expect("authorization"),
-    );
-    request
-        .headers_mut()
-        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-    request
-}
-
-fn terminal_router(pty_manager: crate::pty_manager::PtyManager) -> axum::Router {
-    create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-        CompanionRouterSources {
-            attention: Arc::new(UnavailableCompanionAttentionSource),
-            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
-            task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
-            action_palette: Arc::new(
-                super::action_palette::UnavailableCompanionActionPaletteService,
-            ),
-            task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
-            task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
-            pty_manager,
-            events: crate::app_events::AppEventBus::new(16, 8),
-            stream_access: Arc::new(CancellationAccess::default()),
-        },
-    )
 }
 
 #[tokio::test]
@@ -643,25 +324,13 @@ async fn terminal_websocket_sanitizes_replay_and_live_images_before_binary_frame
     .await
     .expect("sanitized replay");
 
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let cleanup_manager = pty_manager.clone();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, terminal_router(pty_manager))
-            .await
-            .expect("test server");
-    });
-    let (mut socket, _) = tokio_tungstenite::connect_async(authenticated_terminal_request(address))
-        .await
-        .expect("WebSocket upgrade");
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
-        ))
-        .await
-        .expect("attach control");
+    let server = AuthenticatedTerminalServer::start_with_pty(
+        pty_manager.clone(),
+        Arc::new(CancellationAccess::default()),
+    )
+    .await;
+    let mut socket = server.connect().await;
+    send_attach(&mut socket).await;
 
     let mut output = Vec::new();
     let mut ready = false;
@@ -702,11 +371,8 @@ async fn terminal_websocket_sanitizes_replay_and_live_images_before_binary_frame
     assert!(!output.contains("REPLAY_SECRET"));
     assert!(!output.contains("LIVE_SECRET"));
 
-    server.abort();
-    cleanup_manager
-        .kill_pty("KVG-3018")
-        .await
-        .expect("PTY cleanup");
+    server.shutdown().await;
+    pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
 
 #[tokio::test]
@@ -738,25 +404,13 @@ async fn terminal_websocket_rejects_malformed_pty_utf8_with_safe_protocol_error(
     .await
     .expect("malformed output failure");
 
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .expect("test listener");
-    let address = listener.local_addr().expect("listener address");
-    let cleanup_manager = pty_manager.clone();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, terminal_router(pty_manager))
-            .await
-            .expect("test server");
-    });
-    let (mut socket, _) = tokio_tungstenite::connect_async(authenticated_terminal_request(address))
-        .await
-        .expect("WebSocket upgrade");
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
-        ))
-        .await
-        .expect("attach control");
+    let server = AuthenticatedTerminalServer::start_with_pty(
+        pty_manager.clone(),
+        Arc::new(CancellationAccess::default()),
+    )
+    .await;
+    let mut socket = server.connect().await;
+    send_attach(&mut socket).await;
 
     let mut saw_ready = false;
     let error = tokio::time::timeout(Duration::from_secs(3), async {
@@ -798,9 +452,6 @@ async fn terminal_websocket_rejects_malformed_pty_utf8_with_safe_protocol_error(
     assert!(!error.to_string().contains("377"));
     assert!(!error.to_string().contains("safe-replay"));
 
-    server.abort();
-    cleanup_manager
-        .kill_pty("KVG-3018")
-        .await
-        .expect("PTY cleanup");
+    server.shutdown().await;
+    pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }

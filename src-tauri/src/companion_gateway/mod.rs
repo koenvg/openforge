@@ -24,6 +24,8 @@ mod terminal;
 mod terminal_protocol;
 #[cfg(test)]
 mod terminal_protocol_tests;
+#[cfg(test)]
+mod terminal_test_fixture;
 mod trust_policy;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
