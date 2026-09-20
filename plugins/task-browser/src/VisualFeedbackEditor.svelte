@@ -2,6 +2,7 @@
   import { List, MessageSquarePlus, RefreshCw, Send as SendIcon, Trash2, Undo2 } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { VisualFeedbackEditorState } from './visualFeedbackEditorState.svelte'
 
   interface Props {
@@ -51,7 +52,7 @@
     </IconButton>
   {/if}
   {#if editor.saveError !== null}
-    <span class="max-w-48 truncate text-xs text-error" title={editor.saveError} role="alert">{editor.saveError}</span>
+    <span class="max-w-48 truncate text-xs text-of-danger" title={editor.saveError} role="alert">{editor.saveError}</span>
     <Button
       variant="outline"
       size="sm"
@@ -66,7 +67,7 @@
     </Button>
   {/if}
   {#if editor.annotations.length > 0}
-    <span class="whitespace-nowrap text-xs text-base-content/60" aria-live="polite">
+    <span class="whitespace-nowrap text-xs text-of-text/60" aria-live="polite">
       {countLabel(editor.captures.length, 'screenshot', 'screenshots')} ·
       {countLabel(editor.annotations.length, 'annotation', 'annotations')}
     </span>
@@ -91,7 +92,7 @@
       onclick={onSend}
     >
       {#if editor.busy}
-        <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+        <LoadingIndicator size="xs" decorative />
       {:else}
         <SendIcon size={16} aria-hidden="true" />
       {/if}

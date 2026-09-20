@@ -192,17 +192,17 @@
     {"tag":"span","context":"class=\"w-3 shrink-0\"","tokens":["w-3"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}
   ],
   "plugins/task-browser/src/TaskBrowserTab.svelte": [
-    {"tag":"div","context":"class=\"flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base-100\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class=\"flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-of-surface\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"input","context":"class=\"browser-address-input min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"relative min-h-0 flex-1 overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"absolute right-3 top-3 z-20 w-auto max-w-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error shadow-sm\"","tokens":["max-w-lg"],"count":1,"reason":"Transient task-browser error banner is bounded inside the feature viewport."},
+    {"tag":"div","context":"class=\"absolute right-3 top-3 z-20 w-auto max-w-lg border border-of-danger/30 bg-of-danger/10 px-4 py-2 text-sm text-of-danger shadow-sm\"","tokens":["max-w-lg"],"count":1,"reason":"Transient task-browser error banner is bounded inside the feature viewport."},
     {"tag":"div","context":"class=\"max-w-md space-y-2\"","tokens":["max-w-md"],"count":1,"reason":"Task-browser empty-state explanation uses a bounded reading column."}
   ],
   "plugins/task-browser/src/VisualFeedbackEditor.svelte": [
-    {"tag":"span","context":"class=\"max-w-48 truncate text-xs text-error\"","tokens":["max-w-48"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}
+    {"tag":"span","context":"class=\"max-w-48 truncate text-xs text-of-danger\"","tokens":["max-w-48"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}
   ],
   "plugins/task-browser/src/VisualFeedbackReview.svelte": [
-    {"tag":"section","context":"class=\"max-h-72 shrink-0 overflow-y-auto border-b border-base-300 bg-base-200/40 px-3 py-3\"","tokens":["max-h-72"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
+    {"tag":"section","context":"class=\"max-h-72 shrink-0 overflow-y-auto border-b border-of-border bg-of-surface-subtle/40 px-3 py-3\"","tokens":["max-h-72"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"TextField","context":"class=\"min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "plugins/task-schedules/src/components/TaskScheduleComposerSection.svelte": [

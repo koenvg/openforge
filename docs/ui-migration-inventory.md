@@ -154,3 +154,11 @@ Both terminal consumer inventories are clear. Runtime shells, loading feedback, 
 `scripts/terminal-ui-migration.test.mjs` applies the existing parser to both complete packages, including executable tests and conformance, plus `src/styles/terminal-presentation.css`. Its reviewed exceptions identify three identity/callback-only prop spreads and specific native role, event, and state strings. There are no remaining legacy color or feedback consumers or unexplained dynamic producers in that scope. Native keyboard-hint paint and bounds are checked without host compatibility CSS, including on checkouts before KVG-4873's scanner update.
 
 The KVG-4863 ledger above remains historical; its terminal records are superseded by this bounded scan, not a repository-wide rewrite. See [terminal migration validation](terminal-presentation-migration.md) for baseline evidence, commands, results, and gaps.
+
+## Task Browser presentation, KVG-4870
+
+Task Browser loading, toolbar, errors, and visual-feedback review now use semantic utilities and SDK loading indicators. Existing alpha modifiers, accessible announcements, scoped plugin CSS, callbacks, and browser/session ownership are unchanged. Four geometry-policy contexts were updated to match the renamed colors without broadening their exceptions.
+
+`scripts/task-browser-ui-migration.test.mjs` checks the complete plugin, including executable tests. The only remaining scanner candidates are documented non-class strings: browser state keys, command inputs, surface IDs, keyboard actions, and accessibility roles. There are no unexplained legacy consumers or dynamic producers. The earlier machine-readable ledger remains historical.
+
+See [Task Browser migration validation](task-browser-presentation-migration.md) for baseline reproduction, validation scope, and the pre-existing narrow-toolbar issue tracked as KVG-5100.

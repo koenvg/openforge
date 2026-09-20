@@ -22,6 +22,7 @@ __pycache__/
 # Live Electron invariant reports and Playwright runtime output
 /artifacts/desktop-test/
 /artifacts/terminal-presentation/
+/artifacts/task-browser-presentation/
 /artifacts/storybook-visual/
 /artifacts/tooltips/
 /artifacts/file-viewer/
