@@ -31,23 +31,21 @@ impl Database {
         Ok(result)
     }
 
-    fn query_pull_requests(&self, task_id: Option<&str>) -> Result<Vec<PrRow>> {
+    fn query_pull_requests(
+        &self,
+        clause: &str,
+        params: impl rusqlite::Params,
+    ) -> Result<Vec<PrRow>> {
         let conn = self.lock_conn()?;
-        let task_filter = if task_id.is_some() {
-            " WHERE ticket_id = ?1"
-        } else {
-            ""
-        };
         let sql = format!(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
                     merge_methods_policy_known, allowed_merge_methods, default_merge_method, reviewers,
                     {UNADDRESSED_COMMENT_COUNT_SQL} as unaddressed_comment_count
-             FROM pull_requests pr{task_filter}
-             ORDER BY updated_at DESC"
+             FROM pull_requests pr {clause}"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let prs = stmt.query_map(rusqlite::params_from_iter(task_id), read_pr_row)?;
+        let prs = stmt.query_map(params, read_pr_row)?;
 
         let mut result = Vec::new();
         for pr in prs {
@@ -57,11 +55,33 @@ impl Database {
     }
 
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
-        self.query_pull_requests(None)
+        self.query_pull_requests("ORDER BY updated_at DESC", [])
     }
 
     pub fn get_pull_requests_for_task(&self, task_id: &str) -> Result<Vec<PrRow>> {
-        self.query_pull_requests(Some(task_id))
+        self.query_pull_requests("WHERE ticket_id = ?1 ORDER BY updated_at DESC", [task_id])
+    }
+
+    pub fn get_pull_request_by_repository_number(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: i64,
+    ) -> Result<Option<PrRow>> {
+        Ok(self
+            .query_pull_requests(
+                "WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 ORDER BY updated_at DESC LIMIT 1",
+                rusqlite::params![owner, repo, number],
+            )?
+            .into_iter()
+            .next())
+    }
+
+    pub fn get_pull_request_by_id(&self, id: i64) -> Result<Option<PrRow>> {
+        Ok(self
+            .query_pull_requests("WHERE id = ?1", [id])?
+            .into_iter()
+            .next())
     }
 
     /// Get CI status for a pull request

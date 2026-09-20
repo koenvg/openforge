@@ -83,12 +83,8 @@ pub fn link_pull_request(
     }
 
     let existing_pr = db_lock
-        .get_all_pull_requests()
-        .map_err(|e| format!("Failed to read existing pull requests: {e}"))?
-        .into_iter()
-        .find(|pr| {
-            pr.repo_owner == link.owner && pr.repo_name == link.repo && pr.pr_number == link.number
-        });
+        .get_pull_request_by_repository_number(&link.owner, &link.repo, link.number)
+        .map_err(|e| format!("Failed to read existing pull requests: {e}"))?;
 
     let row_id = existing_pr
         .as_ref()
@@ -126,16 +122,42 @@ pub fn link_pull_request(
         .map_err(|e| format!("Failed to link pull request: {e}"))?;
 
     db_lock
-        .get_all_pull_requests()
+        .get_pull_request_by_id(row_id)
         .map_err(|e| format!("Failed to read linked pull request: {e}"))?
-        .into_iter()
-        .find(|pr| pr.id == row_id)
         .ok_or_else(|| "Failed to read linked pull request after insert".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::make_test_db;
+
+    fn insert_unrelated_prs(db: &crate::db::Database, task_id: &str) {
+        for (id, owner, repo, number) in [
+            (1, "other", "repo", 77),
+            (2, "owner", "other", 77),
+            (3, "owner", "repo", 78),
+        ] {
+            db.insert_pull_request_with_number(
+                id,
+                number,
+                task_id,
+                owner,
+                repo,
+                "Unrelated",
+                "https://github.com/unrelated",
+                "open",
+                1,
+                2,
+                false,
+            )
+            .expect("insert unrelated PR");
+        }
+        // A legacy row that cannot be decoded must not prevent linking another PR.
+        db.lock_conn()
+            .unwrap()
+            .execute("UPDATE pull_requests SET title = X'FF' WHERE id = 3", [])
+            .unwrap();
+    }
 
     #[test]
     fn parses_github_pull_request_url() {
@@ -159,10 +181,15 @@ mod tests {
         let task = db
             .create_task("Link a PR", "doing", None, None, None)
             .expect("create task");
+        insert_unrelated_prs(&db, &task.id);
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        let pr = super::link_pull_request(&db, &task.id, "https://github.com/owner/repo/pull/77")
-            .expect("link PR");
+        let pr = super::link_pull_request(
+            &db,
+            &task.id,
+            " http://github.com/owner/repo/pull/77/files?tab=files#diff ",
+        )
+        .expect("link PR");
 
         assert_eq!(pr.ticket_id, task.id);
         assert_eq!(pr.repo_owner, "owner");
@@ -171,6 +198,11 @@ mod tests {
         assert!(pr.id < 0, "manual links use a synthetic negative row id");
         assert_eq!(pr.title, "owner/repo#77");
         assert_eq!(pr.state, "open");
+        assert_eq!(pr.url, "https://github.com/owner/repo/pull/77");
+        assert!(!pr.draft);
+        let relinked = super::link_pull_request(&db, &task.id, &pr.url).expect("relink PR");
+        assert_eq!(relinked.id, pr.id);
+        assert_eq!(relinked.created_at, pr.created_at);
     }
 
     #[test]
@@ -189,13 +221,31 @@ mod tests {
             "owner",
             "repo",
             "Fetched GitHub title",
-            "https://github.com/owner/repo/pull/77",
-            "open",
+            "https://github.com/owner/repo/pull/77?stored=1",
+            "closed",
             1000,
             2000,
-            false,
+            true,
         )
         .expect("insert existing PR");
+        insert_unrelated_prs(&db, &old_task.id);
+        db.lock_conn().unwrap().execute(
+            "UPDATE pull_requests SET head_sha = 'abc123', ci_status = 'success', review_status = 'APPROVED' WHERE id = 123456",
+            [],
+        ).unwrap();
+        db.insert_pr_comment(
+            10,
+            123456,
+            "reviewer",
+            "Please fix",
+            "review",
+            None,
+            None,
+            None,
+            false,
+            1000,
+        )
+        .expect("insert comment");
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
 
         let pr =
@@ -205,5 +255,26 @@ mod tests {
         assert_eq!(pr.id, 123456);
         assert_eq!(pr.ticket_id, new_task.id);
         assert_eq!(pr.title, "Fetched GitHub title");
+        assert_eq!(pr.url, "https://github.com/owner/repo/pull/77?stored=1");
+        assert_eq!(pr.state, "closed");
+        assert_eq!(pr.created_at, 1000);
+        assert!(pr.updated_at > 2000);
+        assert!(pr.draft);
+        assert_eq!(pr.head_sha, "abc123");
+        assert_eq!(pr.ci_status.as_deref(), Some("success"));
+        assert_eq!(pr.review_status.as_deref(), Some("APPROVED"));
+        assert_eq!(pr.unaddressed_comment_count, 1);
+        let db = crate::db::acquire_db(&db);
+        assert!(db
+            .get_pull_requests_for_task(&new_task.id)
+            .unwrap()
+            .iter()
+            .any(|row| row.id == pr.id));
+        for id in [1, 2, 3] {
+            assert_eq!(
+                db.get_task_id_for_pr(id).unwrap().as_deref(),
+                Some(old_task.id.as_str())
+            );
+        }
     }
 }
