@@ -154,6 +154,8 @@ pub struct PtyManager {
     shell_spawn_pending_gate: Arc<std::sync::Mutex<Option<ShellSpawnPendingGate>>>,
     #[cfg(test)]
     test_environment: std::collections::HashMap<String, String>,
+    #[cfg(test)]
+    test_shell_program: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -262,6 +264,8 @@ impl PtyManager {
             shell_spawn_pending_gate: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(test)]
             test_environment: std::collections::HashMap::new(),
+            #[cfg(test)]
+            test_shell_program: None,
         }
     }
 }
@@ -286,6 +290,9 @@ impl PtyManager {
         self.test_environment.insert(key.into(), value.into());
     }
 
+    pub(crate) fn set_test_shell_program(&mut self, program: impl Into<PathBuf>) {
+        self.test_shell_program = Some(program.into());
+    }
     pub(crate) fn set_terminal_model_test_fault(&self, fault: TerminalModelTestFault) {
         *self
             .terminal_model_test_fault

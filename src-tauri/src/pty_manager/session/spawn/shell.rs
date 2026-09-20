@@ -36,11 +36,18 @@ impl PtyManager {
                 .await
                 .map_err(PtyError::SpawnFailed);
         }
+        #[cfg(test)]
+        let shell_program = self
+            .test_shell_program
+            .clone()
+            .unwrap_or_else(|| get_shell_path().into());
+        #[cfg(not(test))]
+        let shell_program = get_shell_path();
         self.spawn_shell_pty_with_command(
             context,
             terminal_index,
             terminal_image_protocol,
-            CommandBuilder::new(get_shell_path()),
+            CommandBuilder::new(shell_program),
         )
         .await
     }
