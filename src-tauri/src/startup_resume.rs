@@ -1,145 +1,22 @@
-use crate::{db, http_server, providers, pty_manager::PtyManager};
+//! Startup recovery ordering lives here; policy and database transitions do not.
+mod history;
+mod inventory;
+mod persistence;
+mod policy;
+mod targets;
+
+use crate::{backend_runtime::AppHandle, http_server::SidecarReadinessState};
+use inventory::RecoveryInventory;
 use log::{debug, error, info, warn};
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
-
-// ============================================================================
-// Startup: Resume Agent Sessions
-// ============================================================================
-
-#[derive(Debug, Clone)]
-pub(crate) struct ResumeTarget {
-    pub(crate) task_id: String,
-    pub(crate) project_id: String,
-    pub(crate) repo_path: String,
-    pub(crate) workspace_path: String,
-    pub(crate) kind: String,
-    pub(crate) branch_name: Option<String>,
-}
-
-impl ResumeTarget {
-    fn from_task_workspace(workspace: db::TaskWorkspaceRow) -> Self {
-        Self {
-            task_id: workspace.task_id,
-            project_id: workspace.project_id,
-            repo_path: workspace.repo_path,
-            workspace_path: workspace.workspace_path,
-            kind: workspace.kind,
-            branch_name: workspace.branch_name,
-        }
-    }
-
-    fn from_worktree(worktree: db::WorktreeRow) -> Self {
-        Self {
-            task_id: worktree.task_id,
-            project_id: worktree.project_id,
-            repo_path: worktree.repo_path,
-            workspace_path: worktree.worktree_path,
-            kind: "git_worktree".to_string(),
-            branch_name: Some(worktree.branch_name),
-        }
-    }
-}
-
-pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
-    let mut targets: Vec<ResumeTarget> = db
-        .get_resumable_task_workspaces()?
-        .into_iter()
-        .map(ResumeTarget::from_task_workspace)
-        .collect();
-
-    let existing_task_ids: HashSet<String> = targets
-        .iter()
-        .map(|target| target.task_id.clone())
-        .collect();
-
-    for worktree in db.get_resumable_worktrees()? {
-        if existing_task_ids.contains(&worktree.task_id) {
-            continue;
-        }
-
-        targets.push(ResumeTarget::from_worktree(worktree));
-    }
-
-    Ok(targets)
-}
-
-fn startup_resume_database_lock_message(context: &str, error: impl std::fmt::Display) -> String {
-    format!("{context}: database lock error: {error}")
-}
-
-fn is_startup_resumable_session_status(status: &str) -> bool {
-    db::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES.contains(&status)
-}
-
-fn latest_session_allows_startup_resume(latest_session: Option<&db::AgentSessionRow>) -> bool {
-    latest_session.is_some_and(|session| {
-        is_startup_resumable_session_status(&session.status) || session.status == "completed"
-    })
-}
-
-pub(crate) fn persist_resumed_session_state(
-    db: &db::Database,
-    latest_session: Option<&db::AgentSessionRow>,
-    target: &ResumeTarget,
-    provider_name: &str,
-    provider_result: &providers::ProviderSessionResult,
-) {
-    if provider_name == "pi" {
-        if let (Some(session), Some(pi_session_id)) =
-            (latest_session, provider_result.pi_session_id.as_deref())
-        {
-            if session.pi_session_id.as_deref() != Some(pi_session_id) {
-                if let Err(e) = db.set_agent_session_pi_id(&session.id, pi_session_id) {
-                    warn!(
-                        "[startup] Failed to persist resumed Pi session id for {}: {}",
-                        target.task_id, e
-                    );
-                }
-            }
-        }
-    }
-
-    restore_resumed_session_state(
-        db,
-        latest_session,
-        target,
-        provider_name,
-        provider_result.pty_instance_id,
-    );
-}
-
-async fn capture_recovered_completed_session_replay(
-    app: &crate::backend_runtime::AppHandle,
-    session: &db::AgentSessionRow,
-) {
-    if session.status != "completed" {
-        return;
-    }
-
-    let Some(manager) = app.try_state::<PtyManager>() else {
-        warn!(
-            "[startup] Completed Agent Session {} for task {} reattached without replay capture",
-            session.id, session.ticket_id
-        );
-        return;
-    };
-    let database = app.state::<Arc<Mutex<db::Database>>>();
-    crate::completed_session_replay::capture_completed_session_replay(
-        database.inner(),
-        manager.inner(),
-        &session.ticket_id,
-    )
-    .await;
-}
+use targets::ResumeTarget;
 
 pub(crate) async fn resume_task_sessions(
-    app: crate::backend_runtime::AppHandle,
+    app: AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
-    sidecar_readiness: http_server::SidecarReadinessState,
+    sidecar_readiness: SidecarReadinessState,
     stale_running_session_cutoff: i64,
 ) {
-    // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
+    // Hooks need the HTTP server before any provider recovery starts.
     match http_ready.await {
         Ok(()) => debug!("[startup] HTTP server ready, proceeding with session resume"),
         Err(_) => {
@@ -147,377 +24,58 @@ pub(crate) async fn resume_task_sessions(
         }
     }
 
-    // A retained allocation, including an exit, is authoritative before any provider resume.
-    let preserved_agents = match app.try_state::<PtyManager>() {
-        Some(manager) => match manager.daemon_shells.as_ref() {
-            Some(bridge) => match bridge.agent_sessions().await {
-                Ok(sessions) => sessions,
-                Err(error) => {
-                    sidecar_readiness.mark_startup_resume_degraded(format!(
-                        "Agent inventory reconciliation failed: {error}"
-                    ));
-                    let _ = app.emit("startup-resume-complete", ());
-                    return;
-                }
-            },
-            None => Vec::new(),
-        },
-        None => Vec::new(),
+    // A retained allocation, including an exit, is authoritative before history.
+    let inventory = match RecoveryInventory::load(&app).await {
+        Ok(inventory) => inventory,
+        Err(message) => {
+            sidecar_readiness.mark_startup_resume_degraded(message);
+            let _ = app.emit("startup-resume-complete", ());
+            return;
+        }
     };
-    let preserved_tasks: HashSet<_> = preserved_agents
-        .iter()
-        .map(|session| session.session_key.as_str())
-        .collect();
-    let live_tasks: Vec<_> = preserved_agents
-        .iter()
-        .filter(|session| session.exit_code.is_none())
-        .map(|session| (session.session_key.as_str(), session.pty.instance.value()))
-        .collect();
-
-    let resume_targets = {
-        let db = app.state::<Arc<Mutex<db::Database>>>();
-        let db_lock = match db.lock() {
-            Ok(db_lock) => db_lock,
-            Err(e) => {
-                let message = startup_resume_database_lock_message(
-                    "failed to get resumable task workspaces",
-                    e,
-                );
-                error!("[startup] {message}");
-                sidecar_readiness.mark_startup_resume_degraded(message);
-                let _ = app.emit("startup-resume-complete", ());
-                return;
-            }
-        };
-        match load_resume_targets(&db_lock) {
-            Ok(targets) => targets,
-            Err(e) => {
-                error!("[startup] Failed to get resumable task workspaces: {}", e);
-                sidecar_readiness.mark_startup_resume_degraded(format!(
-                    "failed to get resumable task workspaces: {e}"
-                ));
-                let _ = app.emit("startup-resume-complete", ());
-                return;
-            }
+    let targets = match persistence::load_targets(&app) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error!("[startup] {message}");
+            sidecar_readiness.mark_startup_resume_degraded(message);
+            let _ = app.emit("startup-resume-complete", ());
+            return;
         }
     };
 
-    if resume_targets.is_empty() {
-        mark_unresumed_running_sessions_interrupted(
-            &app,
-            stale_running_session_cutoff,
-            &live_tasks,
+    if !targets.is_empty() {
+        sidecar_readiness.mark_startup_resume_running(targets.len());
+        info!(
+            "[startup] Resuming agent sessions for {} task(s)",
+            targets.len()
         );
-        sidecar_readiness.mark_startup_resume_complete();
-        let _ = app.emit("startup-resume-complete", ());
-        return;
-    }
-
-    sidecar_readiness.mark_startup_resume_running(resume_targets.len());
-
-    info!(
-        "[startup] Resuming agent sessions for {} task(s)",
-        resume_targets.len()
-    );
-
-    for target in resume_targets {
-        if preserved_tasks.contains(target.task_id.as_str()) {
-            sidecar_readiness.record_startup_resume_success();
-            continue;
-        }
-        let workspace_path = std::path::Path::new(&target.workspace_path);
-        if !workspace_path.exists() {
-            warn!(
-                "[startup] Workspace path missing for task {}, skipping: {}",
-                target.task_id, target.workspace_path
-            );
-            continue;
-        }
-
-        // Look up the latest session to determine which provider to use
-        let latest_session = {
-            let db = app.state::<Arc<Mutex<db::Database>>>();
-            let db_lock = match db.lock() {
-                Ok(db_lock) => db_lock,
-                Err(e) => {
-                    let message = startup_resume_database_lock_message(
-                        &format!("failed to load latest session for task {}", target.task_id),
-                        e,
-                    );
-                    error!("[startup] {message}");
-                    sidecar_readiness.record_startup_resume_failure(message);
-                    let _ = app.emit(
-                        "session-resumed",
-                        serde_json::json!({
-                            "task_id": target.task_id,
-                            "workspace_path": target.workspace_path,
-                        }),
-                    );
-                    continue;
-                }
-            };
-            db_lock
-                .get_latest_session_for_ticket(&target.task_id)
-                .ok()
-                .flatten()
-        };
-        if !latest_session_allows_startup_resume(latest_session.as_ref()) {
-            if let Some(session) = latest_session.as_ref() {
-                info!(
-                    "[startup] Skipping resume for task {} because latest {} session {} is {}",
-                    target.task_id, session.provider, session.id, session.status
-                );
-            } else {
-                warn!(
-                    "[startup] Skipping resume for task {} because no latest session was found",
-                    target.task_id
-                );
-            }
-            continue;
-        }
-
-        let Some(session_ref) = latest_session.as_ref() else {
-            continue;
-        };
-        let provider_name = session_ref.provider.as_str();
-
-        let provider = match providers::Provider::from_name(
-            provider_name,
-            app.state::<PtyManager>().inner().clone(),
-        ) {
-            Ok(p) => p,
-            Err(e) => {
-                warn!(
-                    "[startup] Unknown provider for task {}: {}",
-                    target.task_id, e
-                );
+        for target in targets {
+            if inventory.retains(&target.task_id) {
+                sidecar_readiness.record_startup_resume_success();
                 continue;
             }
-        };
-
-        let start_context = providers::ProviderStartContext::new(
-            crate::app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
-        );
-
-        match provider
-            .resume(
-                &target.task_id,
-                session_ref,
-                workspace_path,
-                None,
-                None,
-                None,
-                None,
-                &start_context,
-            )
-            .await
-        {
-            Ok(result) => {
-                {
-                    let db = app.state::<Arc<Mutex<db::Database>>>();
-                    match db.lock() {
-                        Ok(db_lock) => persist_resumed_session_state(
-                            &db_lock,
-                            latest_session.as_ref(),
-                            &target,
-                            provider_name,
-                            &result,
-                        ),
-                        Err(e) => {
-                            let message = startup_resume_database_lock_message(
-                                &format!(
-                                    "failed to persist resumed session state for task {}",
-                                    target.task_id
-                                ),
-                                e,
-                            );
-                            error!("[startup] {message}");
-                            sidecar_readiness.record_startup_resume_failure(message);
-                        }
-                    };
-                }
-
-                capture_recovered_completed_session_replay(&app, session_ref).await;
-
-                let _ = app.emit(
-                    "session-resumed",
-                    serde_json::json!({
-                        "task_id": target.task_id,
-                        "workspace_path": target.workspace_path,
-                        "pty_instance_id": result.pty_instance_id,
-                    }),
-                );
-
-                sidecar_readiness.record_startup_resume_success();
-
-                info!(
-                    "[startup] Resumed {} for task {} (port {})",
-                    provider_name, target.task_id, result.port
-                );
-            }
-            Err(e) => {
-                error!(
-                    "[startup] Failed to resume {} for task {}: {}",
-                    provider_name, target.task_id, e
-                );
-                sidecar_readiness.record_startup_resume_failure(format!(
-                    "failed to resume {provider_name} for task {}: {e}",
-                    target.task_id
-                ));
-
-                // Mark provider sessions as interrupted on failure for providers that do not
-                // have an external status source to reconcile against after startup.
-                if matches!(
-                    provider_name,
-                    "claude-code" | "pi" | "opencode" | "codex" | "grok"
-                ) {
-                    if let Some(ref session) = latest_session {
-                        let db = app.state::<Arc<Mutex<db::Database>>>();
-                        match db.lock() {
-                            Ok(db_lock) => {
-                                let _ = db_lock.update_agent_session(
-                                    &session.id,
-                                    &session.stage,
-                                    "interrupted",
-                                    None,
-                                    Some("App restarted"),
-                                );
-                            }
-                            Err(e) => {
-                                let message = startup_resume_database_lock_message(
-                                    &format!(
-                                        "failed to mark resumed session interrupted for task {}",
-                                        target.task_id
-                                    ),
-                                    e,
-                                );
-                                warn!("[startup] {message}");
-                                sidecar_readiness.record_startup_resume_failure(message);
-                            }
-                        };
-                    }
-                }
-
-                let _ = app.emit(
-                    "session-resumed",
-                    serde_json::json!({
-                        "task_id": target.task_id,
-                        "workspace_path": target.workspace_path,
-                    }),
-                );
-            }
+            history::recover_target(&app, &target, &sidecar_readiness).await;
         }
     }
 
-    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff, &live_tasks);
+    persistence::mark_unresumed_running_sessions_interrupted(
+        &app,
+        stale_running_session_cutoff,
+        &inventory.live_tasks(),
+    );
     sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
 }
 
-fn mark_unresumed_running_sessions_interrupted(
-    app: &crate::backend_runtime::AppHandle,
-    stale_running_session_cutoff: i64,
-    live_tasks: &[(&str, u64)],
-) {
-    let db = app.state::<Arc<Mutex<db::Database>>>();
-    let db_lock = match db.lock() {
-        Ok(db_lock) => db_lock,
-        Err(e) => {
-            warn!(
-                "[startup] Failed to mark unresumed running sessions: database lock error: {}",
-                e
-            );
-            return;
-        }
-    };
-
-    match db_lock.mark_running_sessions_interrupted_except_live_agents(
-        stale_running_session_cutoff,
-        live_tasks,
-    ) {
-        Ok(count) if count > 0 => {
-            info!(
-                "[startup] Marked {} unresumed running sessions as interrupted",
-                count
-            );
-        }
-        Ok(_) => {}
-        Err(e) => {
-            warn!("[startup] Failed to mark stale sessions: {}", e);
-        }
-    }
-}
-
-pub(crate) fn restore_resumed_session_state(
-    db: &db::Database,
-    latest_session: Option<&db::AgentSessionRow>,
-    target: &ResumeTarget,
-    provider_name: &str,
-    pty_instance_id: Option<u64>,
-) {
-    if let Err(e) = db.upsert_task_workspace_record(
-        &target.task_id,
-        &target.project_id,
-        &target.workspace_path,
-        &target.repo_path,
-        &target.kind,
-        target.branch_name.as_deref(),
-        provider_name,
-        "active",
-    ) {
-        warn!(
-            "[startup] Failed to update task workspace for {}: {}",
-            target.task_id, e
-        );
-    }
-
-    if let Some(session) = latest_session {
-        if let Some(pty_instance_id) = pty_instance_id {
-            if let Err(e) = db.set_agent_session_pty_instance_id(&session.id, pty_instance_id) {
-                warn!(
-                    "[startup] Failed to restore PTY instance ID for session {} on task {}: {}",
-                    session.id, target.task_id, e
-                );
-            }
-        }
-
-        let persisted_status = if matches!(session.status.as_str(), "interrupted" | "running") {
-            Some("running")
-        } else if matches!(provider_name, "pi" | "opencode" | "codex")
-            && pty_instance_id.is_some()
-            && matches!(session.status.as_str(), "completed" | "paused")
-        {
-            Some(session.status.as_str())
-        } else {
-            None
-        };
-
-        if let Some(status) = persisted_status {
-            let checkpoint_data = if status == "running" {
-                None
-            } else {
-                session.checkpoint_data.as_deref()
-            };
-
-            if let Err(e) =
-                db.update_agent_session(&session.id, &session.stage, status, checkpoint_data, None)
-            {
-                warn!(
-                    "[startup] Failed to restore session {} for task {}: {}",
-                    session.id, target.task_id, e
-                );
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        capture_recovered_completed_session_replay, latest_session_allows_startup_resume,
-        load_resume_targets, persist_resumed_session_state, restore_resumed_session_state,
-        resume_task_sessions, ResumeTarget,
+        history::capture_recovered_completed_session_replay,
+        persistence::{persist_resumed_session_state, restore_resumed_session_state},
+        policy::latest_session_allows_startup_resume,
+        resume_task_sessions,
+        targets::{load_resume_targets, ResumeTarget},
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db;
@@ -544,6 +102,57 @@ mod tests {
             output_revision: 0,
             viewed_output_revision: 0,
         }
+    }
+
+    #[test]
+    fn recovery_policy_preserves_provider_and_completion_rules() {
+        for provider in ["claude-code", "pi", "opencode", "codex", "grok", "unknown"] {
+            assert_eq!(
+                super::policy::interrupt_on_resume_failure(provider),
+                provider != "unknown",
+            );
+            for status in ["running", "interrupted", "paused", "completed", "failed"] {
+                let session = test_agent_session_with_status(status);
+                for instance in [None, Some(42)] {
+                    let expected = match status {
+                        "running" | "interrupted" => Some("running"),
+                        "paused" | "completed"
+                            if matches!(provider, "pi" | "opencode" | "codex")
+                                && instance.is_some() =>
+                        {
+                            Some(status)
+                        }
+                        _ => None,
+                    };
+                    assert_eq!(
+                        super::policy::restored_status(&session, provider, instance),
+                        expected,
+                        "{provider}/{status}/{instance:?}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_recovery_completes_even_when_http_ready_sender_drops() {
+        let (database, _temp_dir) = make_test_db("empty_startup_recovery");
+        let app = crate::backend_runtime::AppHandle::new();
+        app.manage(Arc::new(Mutex::new(database)));
+        let events = Arc::new(RecordingEventAdapter::default());
+        app.set_app_event_adapter(events.clone());
+        let readiness = crate::http_server::SidecarReadinessState::new();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        drop(sender);
+
+        resume_task_sessions(app, receiver, readiness.clone(), 0).await;
+
+        assert_eq!(readiness.startup_resume().phase, "complete");
+        assert!(readiness.degraded().is_empty());
+        assert_eq!(
+            *events.events.lock().expect("recorded events"),
+            vec!["startup-resume-complete"],
+        );
     }
 
     #[test]
