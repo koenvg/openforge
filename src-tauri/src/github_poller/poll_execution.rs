@@ -5,12 +5,12 @@ use super::scheduling::{
     rate_limit_sleep_duration_with_optional_now, PollCadence, PollContext, PollScope,
 };
 pub(super) use super::scope_execution::poll_github_scope;
-use super::scope_execution::{github_token_for_poll, poll_outcome, ScopeExecution};
+use super::scope_execution::{github_token_for_poll, poll_outcome};
 use super::sync_logging::{format_rate_limit_pause_log, poll_scope_log_name};
 use crate::app_events::AppEventSender;
 use crate::db::{acquire_db, Database};
 use crate::github_client::GitHubClient;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
 
