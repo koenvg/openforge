@@ -545,6 +545,7 @@ export class TestingCommonApiFake {
         invokeGlobal: async <TOutput = unknown>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
         list: async () => Array.from(this.commands.values()).map(commandDescriptor),
         listCatalog: async () => [],
+        listInstalledProviders: async () => [...this.services.installedProviders],
       },
       events: {
         on: <TPayload = unknown>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as TestingEventHandler, false),

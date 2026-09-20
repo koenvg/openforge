@@ -157,6 +157,7 @@ export class RuntimeCommonApiRegistry {
         invokeGlobal: async <TOutput>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
         list: async () => Array.from(globalCommands.values()).map(commandDescriptor),
         listCatalog: async (request?: { projectId?: string | null }) => this.services.host.listCommandCatalog ? this.services.host.listCommandCatalog(request) : unavailableCapability('commands.listCatalog'),
+        listInstalledProviders: async () => this.services.host.listInstalledProviders ? this.services.host.listInstalledProviders() : unavailableCapability('commands.listInstalledProviders'),
       },
       events: {
         on: <TPayload>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as RuntimeEventHandler, false),

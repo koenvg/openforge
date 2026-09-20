@@ -50,6 +50,7 @@
   location="agentSession"
   projectId={injectableProjectId}
   taskId={taskId}
+  provider={session?.provider ?? null}
   onInsert={(text) => { void writeAgentTerminalTranscription(taskId, text, 'InjectionPoint') }}
 />
 {#if view}

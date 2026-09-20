@@ -100,6 +100,7 @@ describe('AgentStatusPill injection point', () => {
     expect(captured).toBeDefined()
     expect(captured?.location).toBe('agentSession')
     expect(captured?.taskId).toBe('T-1')
+    expect(captured?.provider).toBe('claude-code')
 
     // Call onInsert and assert writeAgentTerminalTranscription was invoked correctly.
     const onInsert = captured!.onInsert as (text: string) => void

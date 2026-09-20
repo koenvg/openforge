@@ -234,7 +234,7 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 
 | API | Type | Purpose |
 | --- | --- | --- |
-| `commands` | `CommandRegistry` | Register local commands, invoke local/global commands, and list command descriptors. |
+| `commands` | `CommandRegistry` | Register local commands, invoke local/global commands, list command descriptors, list the host skill catalog, and list installed OpenForge AI providers. |
 | `events` | `EventRegistry` | Register local/global event listeners and emit local/global events. |
 | `storage` | `PluginStorage` | Read/write JSON values in global, project, or task storage scopes. |
 | `context` | `{ getSnapshot(): OpenForgeContextSnapshot }` | Read the current plugin/project/task context snapshot. |

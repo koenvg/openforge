@@ -600,6 +600,13 @@ pub fn enrich_command(
     );
 }
 
+pub fn set_plugin_name(cmd: &mut crate::opencode_client::CommandInfo, plugin_name: &str) {
+    cmd.extra.insert(
+        "pluginName".to_string(),
+        serde_json::Value::from(plugin_name),
+    );
+}
+
 /// Resolve a provider's installed plugins by listing the subdirectories of one plugins
 /// root (e.g. `<project>/.grok/plugins` or `~/.grok/plugins`). Unlike Claude Code — which
 /// gates on a separate installed/enabled registry (`resolve_active_plugins`) — some
@@ -858,12 +865,17 @@ pub fn scan_plugin_commands(
             };
             let (_, fm_desc) = parse_skill_frontmatter(&content);
             let name = format!("{}:{}", plugin.name, file_stem);
+            let mut extra = serde_json::Map::new();
+            extra.insert(
+                "pluginName".to_string(),
+                serde_json::Value::from(plugin.name.as_str()),
+            );
             commands.push(crate::opencode_client::CommandInfo {
                 name,
                 description: fm_desc,
                 source: Some("plugin".to_string()),
                 agent: None,
-                extra: serde_json::Map::new(),
+                extra,
             });
         }
     }
@@ -1646,10 +1658,28 @@ mod tests {
         // "everything-claude-code:plan"
         assert_eq!(commands[0].name, "everything-claude-code:plan");
         assert_eq!(commands[0].description, Some("Create a plan".to_string()));
+        assert_eq!(
+            commands[0]
+                .extra
+                .get("pluginName")
+                .and_then(|value| value.as_str()),
+            Some("everything-claude-code")
+        );
 
         // "typescript-lsp:format"
         assert_eq!(commands[1].name, "typescript-lsp:format");
         assert_eq!(commands[1].description, Some("Format code".to_string()));
+        assert_eq!(
+            commands[1]
+                .extra
+                .get("pluginName")
+                .and_then(|value| value.as_str()),
+            Some("typescript-lsp")
+        );
+        assert_ne!(
+            commands[0].extra.get("pluginName"),
+            commands[1].extra.get("pluginName")
+        );
     }
 
     // ── scan_plugin_agents ───────────────────────────────────────────────

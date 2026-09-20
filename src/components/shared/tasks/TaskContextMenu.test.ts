@@ -411,8 +411,22 @@ describe('TaskContextMenu prefix providers', () => {
     expect(requestTaskStartPrefix).toHaveBeenCalledWith(
       'com.example.prefixer',
       'snippet',
-      { taskId: 'T-1', projectId: null },
+      { taskId: 'T-1', projectId: null, provider: null },
     )
+  })
+
+  it('passes the task agent as the start-prefix provider', async () => {
+    vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([provider] as never)
+    vi.mocked(requestTaskStartPrefix).mockResolvedValue('Verify relevance.')
+    tasks.set([{ ...makeTask('T-1', 'backlog'), agent: 'grok' }])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onStart: vi.fn() } })
+    await fireEvent.click(screen.getByText('Start with snippet…'))
+
+    await waitFor(() => expect(requestTaskStartPrefix).toHaveBeenCalledWith(
+      'com.example.prefixer',
+      'snippet',
+      { taskId: 'T-1', projectId: null, provider: 'grok' },
+    ))
   })
 
   it('starts nothing when the provider is cancelled', async () => {

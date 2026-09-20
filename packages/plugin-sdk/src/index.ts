@@ -252,7 +252,16 @@ export {
   isQueuedForMerge,
   isReadyToMerge,
   parseCheckRuns,
+  pluginCatalogGroupKey,
   preservePullRequestState,
   splitCheckRuns,
 } from './domain.js'
 export type * from './domain.js'
+export {
+  installedAiProvidersFromFlags,
+  isOpenForgeAiProviderId,
+  OPENFORGE_AI_PROVIDER_IDS,
+  OPENFORGE_AI_PROVIDERS,
+} from './aiProviders.js'
+export type { InstalledAiProvider, OpenForgeAiProviderId } from './aiProviders.js'
+export { removeNamedSkillTokens, replaceNamedSkillTokens } from './skillTokens.js'

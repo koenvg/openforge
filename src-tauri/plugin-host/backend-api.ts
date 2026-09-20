@@ -4,6 +4,7 @@ import type {
   ActiveTasks,
   AgentSession,
   CommandInfo,
+  InstalledAiProvider,
   ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
@@ -328,6 +329,7 @@ export function createBackendApi(
       },
       list: async () => runtime.listCommands(state.pluginId),
       listCatalog: async request => await hostCallback<CommandInfo[]>('openforge.commands.listCatalog', objectCallbackParams(request)),
+      listInstalledProviders: async () => await hostCallback<InstalledAiProvider[]>('openforge.commands.listInstalledProviders', {}),
     },
     events: {
       on: (event, handler) => contributions.registerEventListener(state, event, handler as RuntimeEventHandler, false),

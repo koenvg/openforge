@@ -128,6 +128,12 @@ impl PluginHost {
             .ok_or_else(|| "plugin host command catalog callback returned no value".to_string())
     }
 
+    pub(super) async fn list_installed_providers_for_host(&self) -> Result<Value, String> {
+        let providers = crate::runtime_checks::list_installed_ai_providers().await?;
+        serde_json::to_value(providers)
+            .map_err(|error| format!("failed to serialize installed providers: {error}"))
+    }
+
     pub(super) async fn invoke_global_command_for_host(
         &self,
         params: &Value,

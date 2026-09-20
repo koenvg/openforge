@@ -484,6 +484,18 @@ describe('runtime contribution registry', () => {
     expect(host.listCommandCatalog).toHaveBeenCalledWith({ projectId: 'P-1' })
   })
 
+  it('exposes installed providers through the configured host bridge', async () => {
+    const installed = [
+      { id: 'claude-code' as const, displayName: 'Claude Code' },
+      { id: 'grok' as const, displayName: 'Grok' },
+    ]
+    const host = { listInstalledProviders: vi.fn(async () => installed) }
+    const api = createRuntimeContributionRegistry({ pluginId: 'skills', projectId: 'P-1', host }).getFrontendApi()
+
+    await expect(api.commands.listInstalledProviders()).resolves.toEqual(installed)
+    expect(host.listInstalledProviders).toHaveBeenCalledOnce()
+  })
+
   it('qualifies browser surface requests with the active frontend plugin and cleans them up on deactivation', async () => {
     const state = { url: 'about:blank', title: '', loading: false, canGoBack: false, canGoForward: false, devToolsOpen: false, error: null }
     const controller = {
@@ -552,6 +564,9 @@ describe('runtime contribution registry', () => {
     )
     await expect(api.commands.listCatalog()).rejects.toThrow(
       'OpenForge host capability is unavailable: commands.listCatalog'
+    )
+    await expect(api.commands.listInstalledProviders()).rejects.toThrow(
+      'OpenForge host capability is unavailable: commands.listInstalledProviders'
     )
     await expect(api.system.writeClipboardText('Reviewer brief')).rejects.toThrow(
       'OpenForge host capability is unavailable: system.writeClipboardText'

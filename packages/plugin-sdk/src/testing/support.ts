@@ -12,6 +12,7 @@ import type {
   PluginStorageScope,
   StartPromptContribution,
   SubscriptionSink,
+  InstalledAiProvider,
 } from '../types.js'
 import type { AgentSession, FileContent, Task, TaskLabel } from '../domain.js'
 import type {
@@ -262,6 +263,7 @@ export class TestingRegistryServices {
   readonly projectFileContents: Readonly<Record<string, FileContent>>
   readonly projectDocuments: NonNullable<TestingOpenForgeApiOptions['projectDocuments']>
   readonly taskWorkspaces: Readonly<Record<string, TestingTaskWorkspaceFixture>>
+  readonly installedProviders: InstalledAiProvider[]
   readonly claims = new TestingContributionClaims()
 
   constructor(options: TestingOpenForgeApiOptions = {}) {
@@ -287,6 +289,7 @@ export class TestingRegistryServices {
     this.projectFileContents = options.projectFileContents ?? {}
     this.projectDocuments = options.projectDocuments ?? {}
     this.taskWorkspaces = options.taskWorkspaces ?? {}
+    this.installedProviders = options.installedProviders ?? []
     for (const file of options.userDataTextFiles ?? []) {
       this.userDataTextFiles.set(file.path, file.content)
     }

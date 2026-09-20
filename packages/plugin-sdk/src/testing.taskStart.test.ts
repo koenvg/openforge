@@ -23,7 +23,7 @@ describe('taskStart registry (fake)', () => {
     expect(provider.id).toBe('snippet')
     expect(provider.title).toBe('Start with snippet…')
     expect(provider.order).toBe(0)
-    await expect(provider.provide({ taskId: 'T-1', projectId: 'P-1' })).resolves.toBe('prefix text')
+    await expect(provider.provide({ taskId: 'T-1', projectId: 'P-1', provider: 'claude-code' })).resolves.toBe('prefix text')
   })
 
   it('removes the provider when its disposable is disposed', async () => {

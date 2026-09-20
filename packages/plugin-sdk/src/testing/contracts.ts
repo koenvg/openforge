@@ -35,6 +35,7 @@ import type {
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
   TaskStartPrefixContext,
+  InstalledAiProvider,
   ExternalReadDirectoryRequest,
   ExternalReadFileRequest,
   ExternalReadTextFileChunksRequest,
@@ -111,6 +112,8 @@ export interface TestingOpenForgeApiOptions {
   agentSessionWorkspaces?: Readonly<Record<string, AgentSessionWorkspace>>
   /** UTF-8 files returned by `fs.external.readTextFileChunks`. Defaults to none. */
   externalTextFiles?: TestingExternalTextFile[]
+  /** Providers returned by `commands.listInstalledProviders`. Defaults to none. */
+  installedProviders?: InstalledAiProvider[]
 }
 
 export interface TestingOpenForgeApiCalls {

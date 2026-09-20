@@ -56,7 +56,11 @@
     const id = taskId
     const projectId = $activeProjectId
     onClose()
-    const prefix = await requestTaskStartPrefix(pluginId, providerId, { taskId: id, projectId })
+    const prefix = await requestTaskStartPrefix(pluginId, providerId, {
+      taskId: id,
+      projectId,
+      provider: $activeTasks.find((task) => task.id === id)?.agent ?? null,
+    })
     // A null prefix means the user backed out of the picker: start nothing.
     if (prefix === null) return
     onStart?.(id, prefix)

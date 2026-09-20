@@ -78,7 +78,7 @@ describe('runtime registry — taskStart prefix providers', () => {
     })
 
     const [provider] = registry.listTaskStartPrefixProviders()
-    await expect(provider.provide({ taskId: 'T-1', projectId: 'P-1' })).resolves.toBe('chosen')
-    expect(provide).toHaveBeenCalledWith({ taskId: 'T-1', projectId: 'P-1' })
+    await expect(provider.provide({ taskId: 'T-1', projectId: 'P-1', provider: 'grok' })).resolves.toBe('chosen')
+    expect(provide).toHaveBeenCalledWith({ taskId: 'T-1', projectId: 'P-1', provider: 'grok' })
   })
 })

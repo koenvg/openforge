@@ -91,6 +91,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       invokeGlobal: unavailable('commands.invokeGlobal'),
       list: unavailable('commands.list'),
       listCatalog: unavailable('commands.listCatalog'),
+      listInstalledProviders: unavailable('commands.listInstalledProviders'),
     },
     events: {
       on: () => ({ dispose: () => undefined }),
