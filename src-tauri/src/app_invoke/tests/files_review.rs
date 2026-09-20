@@ -1,6 +1,64 @@
 use super::*;
 
 #[tokio::test]
+async fn project_and_task_image_preview_apis_return_metadata_above_limit() {
+    let (state, _db_dir) = test_state("app_image_preview_limits");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace dir");
+    let (project_id, task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let project = db
+            .create_project("Image limits", project_dir.path().to_str().unwrap())
+            .expect("project fixture");
+        let task = db
+            .create_task("Image limits", "doing", Some(&project.id), None, None)
+            .expect("task fixture");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            workspace_dir.path().to_str().unwrap(),
+            project_dir.path().to_str().unwrap(),
+            "git_worktree",
+            Some("image-limits"),
+            "pi",
+        )
+        .expect("workspace fixture");
+        (project.id, task.id)
+    };
+
+    for (command, payload, root, size) in [
+        (
+            "fs_read_file",
+            json!({ "projectId": project_id, "filePath": "image.png" }),
+            project_dir.path(),
+            26_214_401,
+        ),
+        (
+            "task_fs_read_file",
+            json!({ "taskId": task_id, "filePath": "image.png" }),
+            workspace_dir.path(),
+            26_214_402,
+        ),
+    ] {
+        let path = root.join("image.png");
+        std::fs::File::create(&path)
+            .expect("image fixture")
+            .set_len(size)
+            .expect("oversized image");
+        assert_eq!(
+            invoke_ok(&state, command, payload.clone()).await,
+            json!({ "type": "large-file", "content": "", "mimeType": "image/png", "size": size }),
+        );
+
+        std::fs::write(&path, [0_u8, 1, 2, 3]).expect("small image");
+        assert_eq!(
+            invoke_ok(&state, command, payload).await,
+            json!({ "type": "image", "content": "AAECAw==", "mimeType": "image/png", "size": 4 }),
+        );
+    }
+}
+
+#[tokio::test]
 async fn handles_project_filesystem_commands() {
     let (state, _temp_dir) = test_state("app_invoke_files_project_filesystem");
     let temp_dir = tempfile::tempdir().expect("temp project dir");

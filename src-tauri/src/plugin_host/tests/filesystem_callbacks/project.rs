@@ -3,6 +3,72 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
+async fn project_and_task_image_preview_callbacks_return_metadata_above_limit() {
+    let (database, _db_dir) = crate::db::test_helpers::make_test_db("plugin_image_preview_limits");
+    let project_dir = tempfile::tempdir().expect("project dir");
+    let workspace_dir = tempfile::tempdir().expect("workspace dir");
+    let project = database
+        .create_project("Image limits", project_dir.path().to_str().unwrap())
+        .expect("project fixture");
+    let task = database
+        .create_task("Image limits", "doing", Some(&project.id), None, None)
+        .expect("task fixture");
+    database
+        .create_task_workspace_record(
+            &task.id,
+            &project.id,
+            workspace_dir.path().to_str().unwrap(),
+            project_dir.path().to_str().unwrap(),
+            "git_worktree",
+            Some("image-limits"),
+            "pi",
+        )
+        .expect("workspace fixture");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+
+    for (method, payload, root, size) in [
+        (
+            "openforge.fs.readFile",
+            json!({ "projectId": project.id, "path": "image.png" }),
+            project_dir.path(),
+            26_214_401,
+        ),
+        (
+            "openforge.fs.task.readFile",
+            json!({ "taskId": task.id, "path": "image.png" }),
+            workspace_dir.path(),
+            26_214_402,
+        ),
+    ] {
+        let path = root.join("image.png");
+        std::fs::File::create(&path)
+            .expect("image fixture")
+            .set_len(size)
+            .expect("oversized image");
+        let oversized = host
+            .handle_host_callback(method, &payload)
+            .await
+            .expect("oversized image callback");
+        assert_eq!(
+            oversized,
+            json!({ "type": "large-file", "content": "", "mimeType": "image/png", "size": size }),
+        );
+
+        std::fs::write(&path, [0_u8, 1, 2, 3]).expect("small image");
+        let small = host
+            .handle_host_callback(method, &payload)
+            .await
+            .expect("small image callback");
+        assert_eq!(
+            small,
+            json!({ "type": "image", "content": "AAECAw==", "mimeType": "image/png", "size": 4 }),
+        );
+    }
+}
+
+#[tokio::test]
 async fn host_filesystem_callbacks_route_to_project_services() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_filesystem_callbacks");

@@ -92,6 +92,10 @@ pub(crate) struct ProjectFileContent {
     pub(crate) size: u64,
 }
 
+/// Images up to 25 MiB of raw bytes may be inlined; larger images are metadata-only.
+/// This bounds the payload before base64 expands it by roughly one third.
+const MAX_INLINE_IMAGE_PREVIEW_SIZE: u64 = 25 * 1024 * 1024;
+
 const MAX_INLINE_VIDEO_PREVIEW_SIZE: u64 = 25 * 1024 * 1024;
 
 fn file_type_key(path: &Path) -> String {
@@ -402,6 +406,14 @@ pub(crate) async fn read_file_preview(
     project_root: &Path,
     sub_path: &str,
 ) -> ProjectFsResult<ProjectFileContent> {
+    read_file_preview_impl(project_root, sub_path, || {}).await
+}
+
+async fn read_file_preview_impl(
+    project_root: &Path,
+    sub_path: &str,
+    after_metadata: impl FnOnce(),
+) -> ProjectFsResult<ProjectFileContent> {
     const MAX_INLINE_PREVIEW_SIZE: u64 = 1_048_576;
     const CONTENT_SAMPLE_SIZE: u64 = 8_192;
     let project_root = project_root.to_path_buf();
@@ -418,6 +430,8 @@ pub(crate) async fn read_file_preview(
         ProjectFsError::internal(format!("Failed to join authorized file open: {error}"))
     })??;
     let size = opened.metadata().len();
+    // Keep race tests deterministic without sleeps or a process-global hook.
+    after_metadata();
     let preview_metadata = file_preview_metadata(opened.resolved_path());
     let mime_type = preview_metadata.mime_type_string();
     let file = tokio::fs::File::from_std(opened.into_file());
@@ -443,7 +457,40 @@ pub(crate) async fn read_file_preview(
             })
         }
         ProjectFilePreviewType::Image => {
-            let bytes = read_file_bytes(file).await?;
+            if size > MAX_INLINE_IMAGE_PREVIEW_SIZE {
+                return Ok(ProjectFileContent {
+                    r#type: "large-file".to_string(),
+                    content: String::new(),
+                    mime_type,
+                    size,
+                });
+            }
+            // Probe one byte beyond the limit so an exact-limit image is still allowed.
+            // Bound the read itself: the file may have grown since authorized open.
+            let mut reader = file.take(MAX_INLINE_IMAGE_PREVIEW_SIZE + 1);
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await.map_err(|error| {
+                ProjectFsError::internal(format!("Failed to read file: {error}"))
+            })?;
+            let size = bytes.len() as u64;
+            if size > MAX_INLINE_IMAGE_PREVIEW_SIZE {
+                // Refresh from the same authorized descriptor, never reopen the path.
+                // If it shrank again, report at least the oversized length observed.
+                let current_size = reader
+                    .get_ref()
+                    .metadata()
+                    .await
+                    .map_err(|error| {
+                        ProjectFsError::internal(format!("Failed to read file metadata: {error}"))
+                    })?
+                    .len();
+                return Ok(ProjectFileContent {
+                    r#type: "large-file".to_string(),
+                    content: String::new(),
+                    mime_type,
+                    size: current_size.max(size),
+                });
+            }
             use base64::Engine;
             Ok(ProjectFileContent {
                 r#type: "image".to_string(),
@@ -555,6 +602,85 @@ pub(crate) async fn write_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn image_preview_enforces_inclusive_25_mib_limit() {
+        use base64::Engine;
+
+        let root = tempfile::tempdir().expect("project root");
+        for size in [26_214_399_u64, 26_214_400, 26_214_401] {
+            let path = root.path().join("photo.PNG");
+            std::fs::File::create(&path)
+                .expect("image fixture")
+                .set_len(size)
+                .expect("image size");
+
+            let preview = read_file_preview(root.path(), "photo.PNG")
+                .await
+                .expect("image preview");
+            assert_eq!(preview.mime_type.as_deref(), Some("image/png"));
+            assert_eq!(preview.size, size);
+            if size <= 26_214_400 {
+                assert_eq!(preview.r#type, "image");
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(&preview.content)
+                    .expect("complete base64 image");
+                assert_eq!(decoded.len() as u64, size);
+                assert!(decoded.iter().all(|byte| *byte == 0));
+            } else {
+                assert_eq!(preview.r#type, "large-file");
+                assert!(preview.content.is_empty());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn image_preview_rejects_growth_after_metadata_lookup() {
+        let root = tempfile::tempdir().expect("project root");
+        let path = root.path().join("growing.jpg");
+        for grown_size in [26_214_401, 104_857_600] {
+            std::fs::write(&path, [0_u8, 1, 2, 3]).expect("initial image");
+
+            let preview = read_file_preview_impl(root.path(), "growing.jpg", || {
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&path)
+                    .expect("growing image")
+                    .set_len(grown_size)
+                    .expect("grow past image limit");
+            })
+            .await
+            .expect("growing image metadata");
+
+            assert_eq!(preview.r#type, "large-file");
+            assert!(preview.content.is_empty());
+            assert_eq!(preview.mime_type.as_deref(), Some("image/jpeg"));
+            assert_eq!(preview.size, grown_size);
+        }
+    }
+
+    #[tokio::test]
+    async fn image_preview_reports_bytes_read_when_size_changes_within_limit() {
+        let root = tempfile::tempdir().expect("project root");
+        let path = root.path().join("changing.png");
+        for (initial, changed, expected) in [
+            (vec![0_u8], vec![0, 1, 2, 3], "AAECAw=="),
+            (vec![0, 1, 2, 3], vec![0], "AA=="),
+            (vec![0], vec![], ""),
+        ] {
+            std::fs::write(&path, initial).expect("initial image");
+            let preview = read_file_preview_impl(root.path(), "changing.png", || {
+                std::fs::write(&path, &changed).expect("change image size");
+            })
+            .await
+            .expect("changed image preview");
+
+            assert_eq!(preview.r#type, "image");
+            assert_eq!(preview.content, expected);
+            assert_eq!(preview.size, changed.len() as u64);
+            assert_eq!(preview.mime_type.as_deref(), Some("image/png"));
+        }
+    }
 
     #[test]
     fn derives_preview_type_and_mime_from_shared_metadata() {
