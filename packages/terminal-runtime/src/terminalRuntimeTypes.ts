@@ -29,6 +29,8 @@ export interface TerminalRuntimeEnvironment {
   loggerName?: string
   enableImages?: boolean
   performanceTrace?: TerminalPerformanceTrace
+  /** Fires after a live agent terminal receives a plain Enter that submits input. */
+  onAgentPromptSubmit?(shellSessionKey: string): void
 }
 
 declare const terminalSessionBrand: unique symbol

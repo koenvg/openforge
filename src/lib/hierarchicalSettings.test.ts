@@ -12,6 +12,9 @@ describe('hierarchical settings registry', () => {
     // Project-only settings do not cascade to tasks.
     expect(byKey['task_id_prefix'].levels).not.toContain('task')
     expect(byKey['github_poll_interval'].levels).not.toContain('task')
+    expect(byKey['open_attention_overview_on_send'].levels).toEqual(['global', 'project'])
+    expect(byKey['open_attention_overview_on_send'].control).toBe('toggle')
+    expect(byKey['open_attention_overview_on_send'].default).toBe('false')
   })
 
   it('project raw override wins over global, absence inherits global', () => {

@@ -77,6 +77,26 @@ describe('SettingsView rendering and navigation', () => {
     expect(providerCard?.querySelector('[data-testid="pr_review_guidance"]')).toBeNull()
   })
 
+  it('shows open-attention-overview-on-send in Global defaults, not the provider card', async () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    expect(screen.getByTestId('open_attention_overview_on_send')).toBeTruthy()
+
+    await openSettingsCategory(/^Agents/)
+    expect(screen.queryByTestId('open_attention_overview_on_send')).toBeNull()
+  })
+
+  it('shows open-attention-overview-on-send in project configuration', async () => {
+    render(SettingsView, { props: defaultProps })
+
+    expect(screen.queryByTestId('open_attention_overview_on_send')).toBeNull()
+
+    await openSettingsCategory(/Agents & tasks/)
+    expect(screen.getByTestId('open_attention_overview_on_send')).toBeTruthy()
+  })
+
 
   it('renders General section card', () => {
     render(SettingsView, { props: defaultProps })

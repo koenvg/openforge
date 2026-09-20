@@ -11,6 +11,7 @@ export const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval
 export const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'task_display_title_metadata_updates_enabled',
   'use_worktrees',
+  'open_attention_overview_on_send',
   'task_id_prefix',
   'github_poll_interval',
   'plugins',
@@ -21,6 +22,7 @@ export const GITHUB_ONLY_EXCLUDE_KEYS = [
   'task_display_title_metadata_updates_enabled',
   'ai_provider',
   'use_worktrees',
+  'open_attention_overview_on_send',
   'task_id_prefix',
   'plugins',
   'pr_review_guidance',
@@ -42,11 +44,13 @@ export function createSettingsGlobalController() {
   let loaded = $state(false)
   let loadError = $state<string | null>(null)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
+  let openAttentionOverviewOnSend = $state(false)
 
   const hierarchyValues = $derived<Record<string, string>>({
     task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
     ai_provider: aiProvider,
     use_worktrees: useWorktrees ? 'true' : 'false',
+    open_attention_overview_on_send: openAttentionOverviewOnSend ? 'true' : 'false',
     task_id_prefix: taskIdPrefix,
     github_poll_interval: String(githubPollInterval),
     pr_review_guidance: reviewGuidance,
@@ -64,6 +68,7 @@ export function createSettingsGlobalController() {
       aiProvider = settings.aiProvider
       reviewGuidance = settings.reviewGuidance
       walkthroughGuidance = settings.walkthroughGuidance
+      openAttentionOverviewOnSend = settings.openAttentionOverviewOnSend
       loaded = true
     } catch (value) {
       loadError = getErrorMessage(value)
@@ -88,6 +93,9 @@ export function createSettingsGlobalController() {
       case 'use_worktrees':
         useWorktrees = value === 'true'
         return { useWorktrees }
+      case 'open_attention_overview_on_send':
+        openAttentionOverviewOnSend = value === 'true'
+        return { openAttentionOverviewOnSend }
       case 'task_id_prefix':
         taskIdPrefix = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5)
         return { taskIdPrefix }

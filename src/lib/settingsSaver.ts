@@ -22,6 +22,7 @@ export interface GlobalSettingsSavePayload {
   aiProvider?: string
   reviewGuidance?: string
   walkthroughGuidance?: string
+  openAttentionOverviewOnSend?: boolean
 }
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
@@ -48,4 +49,7 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   if (payload.aiProvider !== undefined) await setConfig('ai_provider', payload.aiProvider)
   if (payload.reviewGuidance !== undefined) await setConfig('pr_review_guidance', payload.reviewGuidance)
   if (payload.walkthroughGuidance !== undefined) await setConfig('pr_walkthrough_guidance', payload.walkthroughGuidance)
+  if (payload.openAttentionOverviewOnSend !== undefined) {
+    await setConfig('open_attention_overview_on_send', payload.openAttentionOverviewOnSend ? 'true' : 'false')
+  }
 }

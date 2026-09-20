@@ -33,6 +33,7 @@ import {
   startImplementation,
   updateTaskStatus,
 } from '../ipc'
+import { notifySessionMessageSent } from '../openAttentionOnSessionSubmit'
 import { activeProjectId, selectedTaskId } from '../stores'
 import { requestTaskCompose } from '../taskCompose'
 import type { PluginHostCommandEntries } from './pluginHostCommandRegistry'
@@ -130,7 +131,9 @@ async function sendTaskFollowUpFromPluginRequest(request: SendTaskFollowUpReques
   }
 
   try {
-    return await sendAgentFollowUp(request.taskId, request.message)
+    const receipt = await sendAgentFollowUp(request.taskId, request.message)
+    notifySessionMessageSent()
+    return receipt
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const noSessionPrefix = 'AGENT_FOLLOW_UP_NO_SESSION:'

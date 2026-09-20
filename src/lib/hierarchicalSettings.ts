@@ -74,6 +74,14 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
     default: 'true',
   },
   {
+    key: 'open_attention_overview_on_send',
+    label: 'Open attention overview after send',
+    description: 'When you press Enter to send a message in an agent session, open the attention overview so you can move to other work.',
+    control: 'toggle',
+    levels: ['global', 'project'],
+    default: 'false',
+  },
+  {
     key: 'plugins',
     label: 'Plugins',
     description: 'Which plugins are enabled',

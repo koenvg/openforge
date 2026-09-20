@@ -143,16 +143,28 @@ export function createTerminalSessionCoordinator({
     view.setKeyEventHandler((event) => {
       const isShiftEnter = event.key === 'Enter' && event.shiftKey
       const shouldConsume = isShiftEnter && (event.type === 'keydown' || event.type === 'keypress')
-      if (!shouldConsume) return true
-
-      event.preventDefault()
-      event.stopPropagation()
-      if (event.type === 'keydown' && pty.isActive()) {
-        transport.writeUserInput(shellSessionKey, '\n').catch(error => {
-          console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
-        })
+      if (shouldConsume) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (event.type === 'keydown' && pty.isActive()) {
+          transport.writeUserInput(shellSessionKey, '\n').catch(error => {
+            console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
+          })
+        }
+        return false
       }
-      return false
+
+      const isPlainEnterSubmit = event.key === 'Enter'
+        && event.type === 'keydown'
+        && !event.shiftKey
+        && !event.metaKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.repeat
+      if (isPlainEnterSubmit && pty.isActive()) {
+        queueMicrotask(() => environment.onAgentPromptSubmit?.(shellSessionKey))
+      }
+      return true
     })
   }
 

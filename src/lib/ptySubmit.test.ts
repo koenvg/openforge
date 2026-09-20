@@ -4,7 +4,12 @@ vi.mock('./ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('./openAttentionOnSessionSubmit', () => ({
+  notifySessionMessageSent: vi.fn(),
+}))
+
 import { writePty } from './ipc'
+import { notifySessionMessageSent } from './openAttentionOnSessionSubmit'
 import { writePtyWithSubmit } from './ptySubmit'
 
 function pasteAndSubmit(body: string): string {
@@ -25,6 +30,7 @@ describe('writePtyWithSubmit', () => {
 
     expect(writePty).toHaveBeenCalledTimes(1)
     expect(writePty).toHaveBeenCalledWith('task-1', pasteAndSubmit('hello world'))
+    expect(notifySessionMessageSent).toHaveBeenCalledOnce()
   })
 
   it('sends a bare Enter when there is no prompt', async () => {

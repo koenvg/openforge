@@ -120,10 +120,12 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('Custom review guidance')
         .mockResolvedValueOnce('Custom walkthrough guidance')
+        .mockResolvedValueOnce('true')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(8)
+      expect(getConfig).toHaveBeenCalledTimes(9)
+      expect(getConfig).toHaveBeenCalledWith('open_attention_overview_on_send')
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
@@ -133,6 +135,7 @@ describe('settingsConfig', () => {
         aiProvider: 'opencode',
         reviewGuidance: 'Custom review guidance',
         walkthroughGuidance: 'Custom walkthrough guidance',
+        openAttentionOverviewOnSend: true,
       })
     })
 
@@ -154,6 +157,7 @@ describe('settingsConfig', () => {
         aiProvider: 'claude-code',
         reviewGuidance: DEFAULT_PR_REVIEW_GUIDANCE,
         walkthroughGuidance: DEFAULT_PR_WALKTHROUGH_GUIDANCE,
+        openAttentionOverviewOnSend: false,
       })
     })
 
@@ -237,6 +241,20 @@ describe('settingsConfig', () => {
 
       expect(result.useWorktrees).toBe(true)
       expect(result.aiProvider).toBe('claude-code')
+      expect(result.openAttentionOverviewOnSend).toBe(false)
+    })
+
+    it('loads the open-attention-overview-on-send global override', async () => {
+      vi.mocked(getConfig).mockImplementation(async (key: string) => {
+        const map: Record<string, string> = {
+          open_attention_overview_on_send: 'true',
+        }
+        return map[key] ?? null
+      })
+
+      const result = await loadGlobalSettings()
+
+      expect(result.openAttentionOverviewOnSend).toBe(true)
     })
   })
 

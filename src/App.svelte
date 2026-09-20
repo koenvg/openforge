@@ -57,6 +57,7 @@
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
   import { useAppCloseController } from './lib/appCloseController.svelte'
+  import { registerAttentionOverviewOpener } from './lib/openAttentionOnSessionSubmit'
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
@@ -325,9 +326,16 @@
 
   onMount(() => {
     mounted = true
+    const unregisterAttentionOverviewOpener = registerAttentionOverviewOpener({
+      open: () => { showAttentionOverview = true },
+      getProjectId: () => get(activeProjectId),
+    })
     hydrated = lifecycle.start()
     void restoreWorkspace()
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+      unregisterAttentionOverviewOpener()
+    }
   })
 
   onDestroy(() => {

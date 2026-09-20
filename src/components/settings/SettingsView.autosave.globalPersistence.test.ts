@@ -45,6 +45,7 @@ describe('SettingsView autosave global persistence', () => {
     resolvers.get('ai_provider')?.('claude-code')
     resolvers.get('pr_review_guidance')?.('Review guidance')
     resolvers.get('pr_walkthrough_guidance')?.('Walkthrough guidance')
+    resolvers.get('open_attention_overview_on_send')?.('false')
 
     await vi.waitFor(() => {
       expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)
@@ -127,6 +128,33 @@ describe('SettingsView autosave global persistence', () => {
     await vi.advanceTimersByTimeAsync(600)
 
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'false')
+  })
+
+  it('hydrates and saves the open-attention-overview-on-send toggle', async () => {
+    activeProjectId.set(null)
+    projects.set([])
+    vi.mocked(getConfig).mockImplementation(async (key: string) => {
+      if (key === 'open_attention_overview_on_send') return 'true'
+      if (key === 'github_poll_interval') return '60'
+      return null
+    })
+
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    const toggle = requireElement(
+      await screen.findByTestId('open_attention_overview_on_send'),
+      HTMLInputElement,
+    )
+
+    await vi.waitFor(() => {
+      expect(toggle.checked).toBe(true)
+    })
+    vi.mocked(setConfig).mockClear()
+
+    await fireEvent.click(toggle)
+    await vi.advanceTimersByTimeAsync(600)
+
+    expect(vi.mocked(setConfig)).toHaveBeenCalledWith('open_attention_overview_on_send', 'false')
   })
 
   it('does not save active project settings from the global settings page', async () => {
