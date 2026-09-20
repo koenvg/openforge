@@ -10,7 +10,13 @@ import { reviewScopeForPullRequest } from '../reviewScope'
 
 type ProjectResolver = (pr: ReviewPullRequest) => Promise<string | null>
 
+interface PrReviewAgentSessionControllerOptions {
+  availabilityTimeoutMs?: number
+}
+
 const ACTIVE_STATUSES = new Set(['queued', 'starting', 'running', 'paused'])
+const DEFAULT_AVAILABILITY_TIMEOUT_MS = 10_000
+const AVAILABILITY_TIMEOUT_MESSAGE = 'The review agent did not respond. Try again. If it keeps happening, restart OpenForge.'
 
 function scopeKey(scope: SessionScope): string {
   return JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
@@ -40,7 +46,9 @@ export function initialReviewInputForPullRequest(pr: ReviewPullRequest): string 
 export function createPrReviewAgentSessionController(
   api: FrontendOpenForgeAPI,
   resolveProject: ProjectResolver = pr => resolveProjectIdForRepo(api, pr.repo_owner, pr.repo_name),
+  options: PrReviewAgentSessionControllerOptions = {},
 ) {
+  const availabilityTimeoutMs = options.availabilityTimeoutMs ?? DEFAULT_AVAILABILITY_TIMEOUT_MS
   let pr = $state<ReviewPullRequest | null>(null)
   let scope = $state<SessionScope | null>(null)
   let projectId = $state<string | null>(null)
@@ -49,6 +57,7 @@ export function createPrReviewAgentSessionController(
   let isLoading = $state(false)
   let actionPending = $state(false)
   let error = $state<string | null>(null)
+  let availabilityError = $state<string | null>(null)
   let observation = 0
   let statusRead = 0
   let subscription: Disposable | null = null
@@ -66,6 +75,20 @@ export function createPrReviewAgentSessionController(
     subscription = api.agentSessions.onDidChange(nextScope, () => {
       void refreshStatus(nextScope, token)
     })
+  }
+
+  async function withinAvailabilityTimeout<T>(operation: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error(AVAILABILITY_TIMEOUT_MESSAGE)), availabilityTimeoutMs)
+        }),
+      ])
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
   }
 
   async function refreshStatus(expectedScope: SessionScope, token = observation): Promise<void> {
@@ -149,6 +172,7 @@ export function createPrReviewAgentSessionController(
       isLoading = false
       actionPending = false
       error = null
+      availabilityError = null
       void subscription?.dispose()
       subscription = null
       return
@@ -170,13 +194,34 @@ export function createPrReviewAgentSessionController(
     isLoading = true
     actionPending = false
     error = null
+    availabilityError = null
     replaceSubscription(nextScope, token)
 
+    await loadAvailability(nextPr, nextScope, token)
+  }
+
+  async function loadAvailability(
+    nextPr: ReviewPullRequest,
+    nextScope: SessionScope,
+    token: number,
+  ): Promise<void> {
+    isLoading = true
+    error = null
+    availabilityError = null
     const projectPromise = resolveProject(nextPr)
     const initialStatusRead = ++statusRead
     const statusPromise = ensureScopeReady(nextScope).then(() => api.agentSessions.status(nextScope))
-    const [projectResult, statusResult] = await Promise.allSettled([projectPromise, statusPromise])
+    let results: [PromiseSettledResult<string | null>, PromiseSettledResult<ScopedAgentSessionState | null>]
+    try {
+      results = await withinAvailabilityTimeout(Promise.allSettled([projectPromise, statusPromise]))
+    } catch (cause) {
+      if (!isCurrent(token, nextScope)) return
+      availabilityError = errorMessage(cause, AVAILABILITY_TIMEOUT_MESSAGE)
+      isLoading = false
+      return
+    }
     if (!isCurrent(token, nextScope)) return
+    const [projectResult, statusResult] = results
 
     projectResolved = true
     if (projectResult.status === 'fulfilled') {
@@ -191,6 +236,13 @@ export function createPrReviewAgentSessionController(
       error = errorMessage(statusResult.reason, 'Failed to read the review agent status.')
     }
     isLoading = false
+  }
+
+  async function retryAvailability(): Promise<void> {
+    const currentPr = pr
+    const currentScope = scope
+    if (!currentPr || !currentScope || isLoading) return
+    await loadAvailability(currentPr, currentScope, observation)
   }
 
   async function startCurrentSession(
@@ -332,7 +384,9 @@ export function createPrReviewAgentSessionController(
     get isLoading() { return isLoading },
     get actionPending() { return actionPending },
     get error() { return error },
+    get availabilityError() { return availabilityError },
     observe,
+    retryAvailability,
     start,
     sendInput,
     abort,

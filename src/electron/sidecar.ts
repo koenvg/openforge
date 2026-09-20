@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { StringDecoder } from 'node:string_decoder'
 import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
 import { RUST_SIDECAR_SIGTERM_GRACE_MS, SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS } from './shutdownBudgetContract.js'
@@ -7,6 +8,7 @@ import type { ElectronFailureReporter } from './failureReporting.js'
 
 export interface SidecarOutputStreamLike {
   on(event: 'data', listener: (chunk: unknown) => void): unknown
+  on(event: 'end' | 'close', listener: () => void): unknown
 }
 
 export interface ChildProcessLike {
@@ -21,6 +23,7 @@ export interface ChildProcessLike {
 
 export interface SidecarLogSink {
   info(message: string): void
+  warn(message: string): void
   error(message: string): void
 }
 
@@ -376,19 +379,55 @@ export async function waitForSidecarReadiness(options: WaitForSidecarReadinessOp
   throw new Error(`sidecar did not become ready: ${message}`)
 }
 
-function logChunk(chunk: unknown, prefix: string, write: (message: string) => void): void {
-  const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
-  for (const line of text.split(/\r?\n/)) {
-    if (line.trim().length > 0) write(`${prefix} ${line}`)
+function logSidecarLine(line: string, source: 'stdout' | 'stderr', logger: SidecarLogSink): void {
+  if (line.trim().length === 0) return
+  const structuredLevel = /^level=(TRACE|DEBUG|INFO|WARN|ERROR)\b/.exec(line)?.[1]
+  if (structuredLevel === 'WARN') {
+    logger.warn(`[sidecar:warn] ${line}`)
+  } else if (structuredLevel === 'ERROR' || (!structuredLevel && source === 'stderr')) {
+    logger.error(`[sidecar:error] ${line}`)
+  } else {
+    logger.info(`[sidecar] ${line}`)
   }
+}
+
+function forwardSidecarStream(
+  stream: SidecarOutputStreamLike | null | undefined,
+  source: 'stdout' | 'stderr',
+  logger: SidecarLogSink,
+): void {
+  if (!stream) return
+  const decoder = new StringDecoder('utf8')
+  let pending = ''
+  let ended = false
+
+  stream.on('data', (chunk) => {
+    pending += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+    let newline = pending.indexOf('\n')
+    while (newline >= 0) {
+      const line = pending.slice(0, newline).replace(/\r$/, '')
+      pending = pending.slice(newline + 1)
+      logSidecarLine(line, source, logger)
+      newline = pending.indexOf('\n')
+    }
+  })
+
+  const flush = (): void => {
+    if (ended) return
+    ended = true
+    pending += decoder.end()
+    logSidecarLine(pending.replace(/\r$/, ''), source, logger)
+  }
+  stream.on('end', flush)
+  stream.on('close', flush)
 }
 
 export function forwardSidecarOutput(
   child: ChildProcessLike,
   logger: SidecarLogSink = console,
 ): void {
-  child.stdout?.on('data', chunk => logChunk(chunk, '[sidecar]', message => logger.info(message)))
-  child.stderr?.on('data', chunk => logChunk(chunk, '[sidecar:error]', message => logger.error(message)))
+  forwardSidecarStream(child.stdout, 'stdout', logger)
+  forwardSidecarStream(child.stderr, 'stderr', logger)
 }
 
 function waitForExit(child: ChildProcessLike, sleep: Sleep, graceMs: number): Promise<'exited' | 'timeout'> {

@@ -6,7 +6,7 @@ use crate::github_client::{
     CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubReadinessSnapshot, PolicyValue,
     PrReview, PrReviewerKind, PullRequestMergeMethod, RequestedReviewer,
 };
-use log::warn;
+use log::{debug, warn};
 
 pub(super) struct RestReadinessSources {
     pub(super) rest_ci_sha: String,
@@ -85,7 +85,7 @@ pub(super) async fn fetch_graphql_readiness_snapshot(
         }
         Ok(snapshot) if !snapshot.requires_rest_check_fallback() => Some(snapshot),
         Ok(snapshot) => {
-            warn!(
+            debug!(
                 "[GitHub Poller] GraphQL readiness for PR #{} had stale or incomplete check rollup SHA; using REST fallback for checks",
                 pr.pr_number
             );

@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmdirSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -26,6 +26,8 @@ export interface DeveloperLogStore {
 export interface DeveloperLogStoreOptions {
   maxEntries?: number
   logFilePath?: string
+  maxFileBytes?: number
+  maxArchiveFiles?: number
 }
 
 export interface DeveloperLogDelegate {
@@ -41,6 +43,9 @@ export interface DeveloperLogSink {
 }
 
 const DEFAULT_UI_TAIL_LIMIT = 1000
+const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024
+const DEFAULT_MAX_ARCHIVE_FILES = 3
+const ROTATION_LOCK_STALE_MS = 30_000
 
 function defaultDeveloperLogPath(): string {
   return join(homedir(), '.openforge', 'logs', 'openforge-desktop.log')
@@ -69,15 +74,70 @@ function boundedLimit(limit: number | undefined, fallback: number): number {
   return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : fallback
 }
 
+function nonNegativeInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
+}
+
 export function createDeveloperLogStore(options: DeveloperLogStoreOptions = {}): DeveloperLogStore {
   const maxEntries = boundedLimit(options.maxEntries, DEFAULT_UI_TAIL_LIMIT)
   const logFilePath = options.logFilePath ?? defaultDeveloperLogPath()
+  const maxFileBytes = boundedLimit(options.maxFileBytes, DEFAULT_MAX_FILE_BYTES)
+  const maxArchiveFiles = nonNegativeInteger(options.maxArchiveFiles, DEFAULT_MAX_ARCHIVE_FILES)
+  const rotationLockPath = `${logFilePath}.rotation-lock`
   const entries: DeveloperLogEntry[] = []
   let nextId = 1
 
-  function appendToFile(entry: DeveloperLogEntry): void {
-    mkdirSync(dirname(logFilePath), { recursive: true })
-    appendFileSync(logFilePath, formatLogFileLine(entry), 'utf8')
+  function acquireRotationLock(): boolean {
+    try {
+      mkdirSync(rotationLockPath)
+      return true
+    } catch {
+      try {
+        if (Date.now() - statSync(rotationLockPath).mtimeMs <= ROTATION_LOCK_STALE_MS) return false
+        rmdirSync(rotationLockPath)
+        mkdirSync(rotationLockPath)
+        return true
+      } catch {
+        return false
+      }
+    }
+  }
+
+  function rotateIfNeeded(line: string): void {
+    if (!acquireRotationLock()) return
+    try {
+      if (existsSync(logFilePath) && statSync(logFilePath).size + Buffer.byteLength(line) > maxFileBytes) {
+        if (maxArchiveFiles === 0) {
+          unlinkSync(logFilePath)
+        } else {
+          for (let archive = maxArchiveFiles; archive >= 1; archive -= 1) {
+            const source = archive === 1 ? logFilePath : `${logFilePath}.${archive - 1}`
+            const destination = `${logFilePath}.${archive}`
+            if (!existsSync(source)) continue
+            if (existsSync(destination)) unlinkSync(destination)
+            renameSync(source, destination)
+          }
+        }
+      }
+    } finally {
+      try {
+        rmdirSync(rotationLockPath)
+      } catch {
+        return
+      }
+    }
+  }
+
+  function appendToFileBestEffort(entry: DeveloperLogEntry): void {
+    try {
+      mkdirSync(dirname(logFilePath), { recursive: true })
+      const line = formatLogFileLine(entry)
+      rotateIfNeeded(line)
+      appendFileSync(logFilePath, line, 'utf8')
+    } catch {
+      return
+    }
   }
 
   return {
@@ -93,7 +153,7 @@ export function createDeveloperLogStore(options: DeveloperLogStoreOptions = {}):
       if (entries.length > maxEntries) {
         entries.splice(0, entries.length - maxEntries)
       }
-      appendToFile(entry)
+      appendToFileBestEffort(entry)
       return entry
     },
 

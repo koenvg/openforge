@@ -97,6 +97,15 @@ async fn app_readiness_handler(
     headers: HeaderMap,
 ) -> Result<Json<AppReadinessResponse>, (StatusCode, String)> {
     require_backend_token(&state, &headers)?;
+    match state.db.try_lock() {
+        Ok(_) | Err(std::sync::TryLockError::Poisoned(_)) => {}
+        Err(std::sync::TryLockError::WouldBlock) => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "database connection is unavailable".to_string(),
+            ));
+        }
+    }
     Ok(Json(AppReadinessResponse {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),

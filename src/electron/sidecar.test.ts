@@ -197,7 +197,7 @@ describe('Electron Rust sidecar supervision', () => {
 
   it('streams Rust sidecar logger stdout and stderr to the configured logger when enabled', async () => {
     const child = new FakeChild()
-    const logger = { info: vi.fn(), error: vi.fn() }
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const spawn = vi.fn(() => child)
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) })
     const sleep = vi.fn(async () => undefined)
@@ -211,10 +211,16 @@ describe('Electron Rust sidecar supervision', () => {
     })
 
     child.stdout.emit('data', Buffer.from('level=INFO module=openforge::main message=[electron-sidecar] using database filename=openforge_dev.db app_data_dir_resolved=true\n'))
-    child.stderr.emit('data', 'level=WARN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123\n')
+    child.stderr.emit('data', Buffer.from('level=WA'))
+    child.stderr.emit('data', Buffer.from('RN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123\n'))
+    child.stderr.emit('data', 'level=ERROR module=openforge::http_server message=[http_server] startup failed\n')
+    child.stderr.emit('data', 'thread panicked unexpectedly\n')
 
     expect(logger.info).toHaveBeenCalledWith('[sidecar] level=INFO module=openforge::main message=[electron-sidecar] using database filename=openforge_dev.db app_data_dir_resolved=true')
-    expect(logger.error).toHaveBeenCalledWith('[sidecar:error] level=WARN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123')
+    expect(logger.warn).toHaveBeenCalledWith('[sidecar:warn] level=WARN module=openforge::startup_resume message=[startup] resume degraded task_id=T-123')
+    expect(logger.warn).toHaveBeenCalledOnce()
+    expect(logger.error).toHaveBeenCalledWith('[sidecar:error] level=ERROR module=openforge::http_server message=[http_server] startup failed')
+    expect(logger.error).toHaveBeenCalledWith('[sidecar:error] thread panicked unexpectedly')
   })
 
   it('force-kills a sidecar that does not exit during graceful shutdown', async () => {

@@ -14,6 +14,83 @@ const pullRequest = {
 } as ReviewPullRequest
 
 describe('pull request review Agent Session controller', () => {
+  it('times out an unresponsive availability check and can retry both reads', async () => {
+    vi.useFakeTimers()
+    try {
+      const registry = createOpenForgeRegistryFake({
+        pluginId: 'com.openforge.github-sync',
+        projectId: 'P-1',
+      })
+      const resolveProject = vi.fn()
+        .mockImplementationOnce(() => new Promise(() => undefined))
+        .mockResolvedValueOnce('P-1')
+      registry.frontendApi.agentSessions.status = vi.fn().mockResolvedValue(null)
+      const controller = createPrReviewAgentSessionController(
+        registry.frontendApi,
+        resolveProject,
+        { availabilityTimeoutMs: 50 },
+      )
+
+      const observing = controller.observe(pullRequest)
+      await vi.advanceTimersByTimeAsync(50)
+      await observing
+
+      expect(controller.isLoading).toBe(false)
+      expect(controller.availabilityError).toBe('The review agent did not respond. Try again. If it keeps happening, restart OpenForge.')
+
+      await controller.retryAvailability()
+
+      expect(resolveProject).toHaveBeenCalledTimes(2)
+      expect(registry.frontendApi.agentSessions.status).toHaveBeenCalledTimes(2)
+      expect(controller.availabilityError).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('still exits loading when an invalidation refreshes status during a hung initial read', async () => {
+    vi.useFakeTimers()
+    try {
+      const registry = createOpenForgeRegistryFake({
+        pluginId: 'com.openforge.github-sync',
+        projectId: 'P-1',
+      })
+      const realOnDidChange = registry.frontendApi.agentSessions.onDidChange.bind(registry.frontendApi.agentSessions)
+      let invalidate!: () => void
+      registry.frontendApi.agentSessions.onDidChange = vi.fn((scope, listener) => {
+        invalidate = listener
+        return realOnDidChange(scope, listener)
+      })
+      registry.frontendApi.agentSessions.status = vi.fn()
+        .mockImplementationOnce(() => new Promise(() => undefined))
+        .mockRejectedValueOnce(new Error('Temporary status failure'))
+        .mockResolvedValueOnce(null)
+      const controller = createPrReviewAgentSessionController(
+        registry.frontendApi,
+        async () => 'P-1',
+        { availabilityTimeoutMs: 50 },
+      )
+
+      const observing = controller.observe(pullRequest)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(registry.frontendApi.agentSessions.status).toHaveBeenCalledOnce()
+      invalidate()
+      await vi.advanceTimersByTimeAsync(50)
+      await observing
+
+      expect(controller.isLoading).toBe(false)
+      expect(controller.availabilityError).toContain('The review agent did not respond')
+      expect(controller.error).toBe('Temporary status failure')
+
+      await controller.retryAvailability()
+
+      expect(controller.availabilityError).toBeNull()
+      expect(controller.error).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('starts the current head in the matching local Project and shared review scope', async () => {
     const registry = createOpenForgeRegistryFake({
       pluginId: 'com.openforge.github-sync',
