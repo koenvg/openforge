@@ -1,7 +1,41 @@
 import { describe, expect, it, vi } from 'vitest'
-import { extractPackageArchive, fetchWithRetry, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { extractPackageArchive, fetchWithRetry, prepareRustDependencies, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 describe('Ghostty dependency preparation', () => {
+  it('allows cold-cache fetching even when the caller keeps builds offline', () => {
+    vi.stubEnv('CARGO_NET_OFFLINE', 'true')
+    try {
+      const runCommand = vi.fn((_command, args, options) => {
+        if (args.includes('--offline')) throw new Error('cold cache')
+        if (options.env.CARGO_NET_OFFLINE !== 'false') throw new Error('network still disabled')
+      })
+      expect(() => prepareRustDependencies({ runCommand })).not.toThrow()
+      expect(runCommand).toHaveBeenCalledTimes(4)
+      expect(process.env.CARGO_NET_OFFLINE).toBe('true')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('never requests an online fetch when both lockfiles are cached', () => {
+    const runCommand = vi.fn()
+    prepareRustDependencies({ runCommand })
+    expect(runCommand).toHaveBeenCalledTimes(2)
+    for (const [, args] of runCommand.mock.calls) expect(args).toContain('--offline')
+  })
+
+  it('prefetches the daemon lockfile before CI switches Cargo offline', () => {
+    const runCommand = vi.fn((_command, args) => {
+      if (args.includes('--offline')) throw new Error('cold cache')
+    })
+    prepareRustDependencies({ runCommand })
+    const layout = resolveRustSidecarLayout()
+    for (const manifest of [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]) {
+      expect(runCommand).toHaveBeenCalledWith('cargo', ['fetch', '--locked', '--manifest-path', manifest], expect.any(Object))
+    }
+  })
+
   it('forces Windows tar to treat drive-letter archives as local paths', () => {
     expect(tarExtractionArgs(
       String.raw`C:\Users\runner\archive.tar.gz`,

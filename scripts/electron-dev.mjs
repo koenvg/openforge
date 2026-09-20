@@ -444,6 +444,15 @@ export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv
     ELECTRON_RENDERER_URL: runtimeOptions.rendererUrl ?? ELECTRON_RENDERER_URL,
   }
 
+  if (runtimeOptions.homeDir) {
+    env.HOME = runtimeOptions.homeDir
+    env.XDG_CONFIG_HOME = join(runtimeOptions.homeDir, '.config')
+    env.XDG_DATA_HOME = join(runtimeOptions.homeDir, '.local', 'share')
+    env.XDG_CACHE_HOME = join(runtimeOptions.homeDir, '.cache')
+    env.ZDOTDIR = runtimeOptions.homeDir
+    for (const key of ['OPENFORGE_AGENT_CONFIG', 'OPENFORGE_AGENT_TOKEN', 'OPENFORGE_TASK_ID', 'OPENFORGE_RESTART_OPERATION']) delete env[key]
+  }
+
   if (runtimeOptions.userDataDir) {
     env.OPENFORGE_ELECTRON_USER_DATA_DIR = runtimeOptions.userDataDir
   }
@@ -711,6 +720,14 @@ export function createElectronDevLauncher(options = {}, deps = {}) {
         })
         trackOutput(cargoBuild, 'cargo')
         await awaitExit(cargoBuild, 'cargo build')
+        assertNotShuttingDown()
+
+        log('Building the installation Session Daemon beside the Rust sidecar ...')
+        const daemonBuild = spawnChild('cargo', ['build', '--manifest-path', join(rustSidecarLayout.backendCrateRootPath, 'crates/session-daemon/Cargo.toml')], {
+          cwd: rustSidecarLayout.backendCrateRootPath, env: cargoEnv, stdio: childStdio,
+        })
+        trackOutput(daemonBuild, 'session-daemon')
+        await awaitExit(daemonBuild, 'Session Daemon build')
         assertNotShuttingDown()
 
         log('Building Electron main process ...')

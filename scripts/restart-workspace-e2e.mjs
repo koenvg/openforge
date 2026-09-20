@@ -26,8 +26,9 @@ const lifecycle = createDesktopTestLifecycle({ timeoutMs: 120_000, retainRuntime
   createElectronDevLauncher: options => createElectronDevLauncher({
     ...options,
     env: { ...options.env, OPENFORGE_SESSION_DAEMON_ROOT: daemonRoot,
+      CARGO_TARGET_DIR: resolve('src-tauri/target'),
       OPENFORGE_SESSION_DAEMON_PATH: resolve('src-tauri/crates/session-daemon/target/debug/openforge-session-daemon'),
-      OPENFORGE_SESSION_DAEMON_SHELL_KEY: '*', OPENFORGE_E2E_RESTART_WINDOWS: '2' },
+      OPENFORGE_SESSION_DAEMON_SHELL_KEY: '', OPENFORGE_E2E_RESTART_WINDOWS: '2' },
   }, {
     spawnCommand(command, args, options) {
       if (command === 'pnpm' && args[0] === 'exec' && args[1] === 'electron') originalLaunch = { command, args, options }
@@ -118,7 +119,7 @@ try {
   assert.equal(before.hasLegacySessions, false)
 
   const sourceBrowser = browser
-  await page.evaluate(async () => (await import('/src/lib/ipc.ts')).controlledRestart()).catch(error => {
+  await page.evaluate(async () => (await import('/src/lib/ipc.ts')).restartApp()).catch(error => {
     if (!/closed|destroyed/i.test(error.message)) throw error
   })
   await until(() => !sourceBrowser.isConnected())
@@ -158,6 +159,7 @@ try {
   const restoredBrowser = browser
   await page.evaluate(async () => (await import('/src/lib/ipc.ts')).quitApp()).catch(() => {})
   await until(() => !restoredBrowser.isConnected())
+  await until(async () => !(await readdir(join(daemonRoot, 'session-v1'))).includes('control.sock'))
   assert.ok(originalLaunch)
   normalProcess = spawnCommand(originalLaunch.command, originalLaunch.args, originalLaunch.options)
   await waitForDevTools(context.ports.chromiumDebugPort, { timeoutMs: 60_000 })
@@ -183,7 +185,8 @@ try {
   if (normalProcess) await stopProcess(normalProcess)
   await lifecycle.shutdown()
   const empty = (await readdir(daemonRoot)).length === 0
-  const cleanup = empty ? { status: 0, stderr: '' } : spawnSync('cargo', ['run', '--quiet', '--manifest-path', 'src-tauri/crates/session-client/Cargo.toml', '--example', 'shutdown-fixture', '--', daemonRoot], { encoding: 'utf8' })
+  const daemonStopped = !(await readdir(join(daemonRoot, 'session-v1')).catch(() => [])).includes('control.sock')
+  const cleanup = empty || daemonStopped ? { status: 0, stderr: '' } : spawnSync('cargo', ['run', '--quiet', '--manifest-path', 'src-tauri/crates/session-client/Cargo.toml', '--example', 'shutdown-fixture', '--', daemonRoot], { encoding: 'utf8' })
   cleanupSucceeded = cleanup.status === 0
   if (cleanupSucceeded) {
     await rm(daemonRoot, { recursive: true, force: true })

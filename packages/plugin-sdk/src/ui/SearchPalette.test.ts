@@ -16,6 +16,7 @@ describe('SDK search palette', () => {
       // Run it before JSDOM tears down this test's document.
       await vi.runAllTimersAsync()
       expect(vi.getTimerCount()).toBe(0)
+      expect(document.body.style.overflow).not.toBe('hidden')
     } finally {
       vi.useRealTimers()
     }

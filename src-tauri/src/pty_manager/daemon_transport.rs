@@ -1,5 +1,6 @@
 //! Shared controller and event lifetime for selected daemon sessions.
 //! Dropping the last handle stops polling, never the daemon or its PTYs.
+use super::daemon_restart::{Intent, Operation, Phase};
 use crate::app_events::RuntimeEventPublisher;
 use crate::github_runtime::task_pr_discovery::{daemon::DaemonOutput, Discovery, LocalDiscovery};
 use base64::Engine;
@@ -25,6 +26,7 @@ struct Shared {
     connection: Mutex<Option<Connection>>,
     completion: Mutex<Option<LocalDiscovery>>,
     discovery: LocalDiscovery,
+    restart_operation: Mutex<Option<Operation>>,
 }
 
 struct Connection {
@@ -64,6 +66,7 @@ impl DaemonTransport {
             connection: Mutex::new(None),
             completion: Mutex::new(None),
             discovery: LocalDiscovery::default(),
+            restart_operation: Mutex::new(None),
         }))
     }
 
@@ -80,6 +83,119 @@ impl DaemonTransport {
             .unwrap_or_else(|| RuntimeEventPublisher::new(None, None))
     }
 
+    pub(super) async fn prepare_restart(
+        &self,
+        operation_id: String,
+        intent: Intent,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        uuid::Uuid::parse_str(&operation_id).map_err(|_| "invalid restart operation")?;
+        let shared = Arc::clone(&self.0);
+        self.read(String::new(), None, publisher, move |client, _| {
+            client.inventory()?;
+            let mut operation = shared
+                .restart_operation
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)?;
+            if operation.as_ref().is_some_and(Operation::blocks_mutations) {
+                return Err(Error::OperationConflict);
+            }
+            let prepared = Operation::new(operation_id, client.controller().clone(), intent)?;
+            *operation = Some(prepared.clone());
+            prepared.persist(&shared.root)?;
+            // Scoped sessions are explicitly not resumable. Their verified daemon
+            // process groups must stop before the preservation handoff.
+            for session in client.inventory()?.sessions {
+                if openforge_session_host::scoped_agent_digest(&session.session_key).is_some()
+                    && session.exit_code.is_none()
+                {
+                    client.terminate(
+                        &format!("restart-scoped-{}", session.pty.instance),
+                        &session.pty,
+                    )?;
+                }
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    pub(super) async fn transition_restart(
+        &self,
+        operation_id: String,
+        from: Phase,
+        to: Phase,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        let shared = Arc::clone(&self.0);
+        self.read(String::new(), None, publisher, move |client, _| {
+            client.inventory()?;
+            let mut slot = shared
+                .restart_operation
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)?;
+            let operation = slot.as_mut().ok_or(Error::OperationConflict)?;
+            if operation.operation_id == operation_id && operation.phase == to {
+                return Ok(());
+            }
+            if operation.operation_id != operation_id
+                || operation.phase != from
+                || operation.controller != *client.controller()
+            {
+                return Err(Error::OperationConflict);
+            }
+            // Retain the safe intent even if the fsync acknowledgement is lost.
+            operation.phase = to;
+            operation.persist(&shared.root)?;
+            if to == Phase::Detached {
+                client.register_sidecar(None)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    pub(super) async fn shutdown(&self, publisher: RuntimeEventPublisher) -> Result<(), String> {
+        let shared = Arc::clone(&self.0);
+        self.read(String::new(), None, publisher, move |client, _| {
+            let mut slot = shared
+                .restart_operation
+                .lock()
+                .map_err(|_| Error::OutcomeUnknown)?;
+            if slot.as_ref().is_some_and(Operation::preserves_sessions) {
+                return Ok(());
+            }
+            let inventory = client.inventory()?;
+            let operation = Operation::new(
+                uuid::Uuid::new_v4().to_string(),
+                client.controller().clone(),
+                Intent::Quit,
+            )?;
+            *slot = Some(operation.clone());
+            operation.persist(&shared.root)?;
+            for session in inventory.sessions {
+                if session.exit_code.is_none() {
+                    client.terminate(&format!("quit-{}", session.pty.instance), &session.pty)?;
+                }
+            }
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            loop {
+                match client.shutdown_empty() {
+                    Ok(()) => break,
+                    Err(Error::InvalidRequest) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(20))
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            let mut completed = operation;
+            completed.phase = Phase::Committed;
+            completed.persist(&shared.root)?;
+            Ok(())
+        })
+        .await
+    }
+
     /// Serializes commands and event polling under the same controller.
     /// A stale controller is never replaced here: reconnect requires a new transport.
     pub(super) async fn run<T: Send + 'static>(
@@ -87,6 +203,29 @@ impl DaemonTransport {
         key: String,
         fence: Option<CommandFence>,
         publisher: RuntimeEventPublisher,
+        operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, String> {
+        self.run_admitted(key, fence, publisher, false, operation)
+            .await
+    }
+
+    pub(super) async fn read<T: Send + 'static>(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, String> {
+        self.run_admitted(key, fence, publisher, true, operation)
+            .await
+    }
+
+    async fn run_admitted<T: Send + 'static>(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        allow_fenced: bool,
         operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
     ) -> Result<T, String> {
         let shared = Arc::clone(&self.0);
@@ -100,6 +239,11 @@ impl DaemonTransport {
                 let cursor = client.inventory()?.cursor;
                 let mut discovery = DaemonOutput::new(shared.discovery.clone());
                 discovery.resume(cursor);
+                *shared
+                    .restart_operation
+                    .lock()
+                    .map_err(|_| Error::OutcomeUnknown)? =
+                    Operation::reconnect(&shared.root, &client)?;
                 *slot = Some(Connection {
                     client,
                     cursor,
@@ -127,6 +271,18 @@ impl DaemonTransport {
                     })
                     .map_err(|error| Error::Host(error.to_string()))?;
             }
+            if !allow_fenced
+                && shared
+                    .restart_operation
+                    .lock()
+                    .map_err(|_| Error::OutcomeUnknown)?
+                    .as_ref()
+                    .is_some_and(Operation::blocks_mutations)
+            {
+                return Err(Error::Host(
+                    "restart preparing; request not executed".into(),
+                ));
+            }
             let connection = slot.as_mut().ok_or(Error::OutcomeUnknown)?;
             connection.publisher = publisher;
             if let Some(fence) = fence {
@@ -137,7 +293,8 @@ impl DaemonTransport {
                 let current = inventory
                     .sessions
                     .into_iter()
-                    .find(|session| session.session_key == key);
+                    .filter(|session| session.session_key == key)
+                    .max_by_key(|session| session.pty.instance.value());
                 if current.is_none_or(|session| session.pty.instance.value() != fence.instance_id) {
                     return Err(Error::StalePty);
                 }

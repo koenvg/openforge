@@ -134,6 +134,11 @@ pub(super) async fn shutdown_sidecar_runtime(
     }
 
     if let Some(pty_manager) = &state.pty_manager {
+        if let Some(daemon) = &pty_manager.daemon_shells {
+            if let Err(error) = daemon.shutdown().await {
+                warn!("[http_server] Daemon shutdown refused or incomplete: {error}");
+            }
+        }
         pty_manager.kill_all().await;
     }
 

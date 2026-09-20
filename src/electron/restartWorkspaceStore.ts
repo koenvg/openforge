@@ -18,6 +18,13 @@ export class RestartWorkspaceStore {
     return this.persistence.runExclusive(() => this.read(operationId))
   }
 
+  allWindowsAcknowledged(operationId: string): Promise<boolean> {
+    return this.persistence.runExclusive(async () => {
+      const record = await this.read(operationId, true)
+      return !!record && record.windows.every(window => record.restoredWindowIds.includes(window.windowId))
+    })
+  }
+
   completeWindow(operationId: string, windowId: string): Promise<void> {
     return this.persistence.runExclusive(async () => {
       const record = await this.read(operationId)
@@ -29,12 +36,12 @@ export class RestartWorkspaceStore {
     })
   }
 
-  private async read(operationId: string): Promise<RestartWorkspace | null> {
+  private async read(operationId: string, includeAcknowledged = false): Promise<RestartWorkspace | null> {
     const content = await this.persistence.readUtf8IfExists(this.path)
     if (content === null) return null
     const record = parseRestartWorkspace(JSON.parse(content))
     if (record.installationId !== this.installationId || record.operationId !== operationId) return null
-    if (record.windows.every(window => record.restoredWindowIds.includes(window.windowId))) return null
+    if (!includeAcknowledged && record.windows.every(window => record.restoredWindowIds.includes(window.windowId))) return null
     return record
   }
 

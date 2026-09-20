@@ -92,6 +92,17 @@ function createRecordingFailureReporter() {
 }
 
 describe('electron dev script environment', () => {
+  it('isolates installation writes and inherited credentials for a fixture home', () => {
+    const original = { HOME: '/Users/developer', XDG_CONFIG_HOME: '/Users/developer/config',
+      ZDOTDIR: '/Users/developer/zsh', OPENFORGE_AGENT_CONFIG: '/Users/developer/agent.json' }
+    const env = buildElectronDevEnv(original, '/tmp/sidecar', { homeDir: '/tmp/fixture/home' })
+    expect(env.HOME).toBe('/tmp/fixture/home')
+    expect(env.XDG_CONFIG_HOME).toBe('/tmp/fixture/home/.config')
+    expect(env.ZDOTDIR).toBe('/tmp/fixture/home')
+    expect(env.OPENFORGE_AGENT_CONFIG).toBeUndefined()
+    expect(original.HOME).toBe('/Users/developer')
+  })
+
   it('starts Electron against the Vite dev server and disables sidecar warning when no sidecar path is configured', () => {
     const env = buildElectronDevEnv({ PATH: '/usr/bin' })
 

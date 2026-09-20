@@ -44,7 +44,20 @@ impl AgentRuntime {
         &self,
         request: &mut ShellCommand,
         pty: PtyIdentity,
-    ) -> Result<AgentCredential, Error> {
+    ) -> Result<Option<AgentCredential>, Error> {
+        // Never inherit the Electron/Sidecar controller credential into a terminal.
+        request.command.env.remove("OPENFORGE_BACKEND_TOKEN");
+        request.command.env.remove("OPENFORGE_AGENT_TOKEN");
+        request.command.env.insert(
+            "OPENFORGE_PTY_INSTANCE_ID".into(),
+            pty.instance.value().to_string(),
+        );
+        if openforge_session_host::scoped_agent_digest(&request.owner.session_key()).is_some() {
+            // The Sidecar issued a narrower scoped credential. Do not replace it
+            // with a daemon credential that grants Task gateway access.
+            request.command.env.remove("OPENFORGE_TASK_ID");
+            return Ok(None);
+        }
         let config = AgentConfig {
             version: 1,
             port: self.port,
@@ -73,9 +86,6 @@ impl AgentRuntime {
         };
         serde_json::to_writer(&mut file, &credential.config).map_err(|_| Error::InvalidRequest)?;
         file.sync_all().map_err(io_error)?;
-        // Never inherit the Electron/Sidecar controller credential into a terminal.
-        request.command.env.remove("OPENFORGE_BACKEND_TOKEN");
-        request.command.env.remove("OPENFORGE_AGENT_TOKEN");
         request.command.env.insert(
             "OPENFORGE_AGENT_CONFIG".into(),
             credential.path.to_string_lossy().into_owned(),
@@ -84,11 +94,7 @@ impl AgentRuntime {
             .command
             .env
             .insert("OPENFORGE_TASK_ID".into(), request.owner.task_id().into());
-        request.command.env.insert(
-            "OPENFORGE_PTY_INSTANCE_ID".into(),
-            credential.config.pty.instance.value().to_string(),
-        );
-        Ok(credential)
+        Ok(Some(credential))
     }
 }
 impl AgentCredential {

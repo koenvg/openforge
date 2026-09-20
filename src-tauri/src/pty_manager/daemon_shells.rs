@@ -1,8 +1,7 @@
-//! Controlled shell/agent selection and command preparation for the daemon bridge.
+//! Installation-wide daemon ownership, with selected callers available to isolated tests.
 //! Connection ownership and event forwarding live in `daemon_transport`.
 pub(crate) use super::daemon_transport::CommandFence;
 use super::daemon_transport::DaemonTransport;
-#[cfg(test)]
 use super::PtyManager;
 use super::{PtyBufferState, TerminalViewSnapshot};
 use crate::app_events::RuntimeEventPublisher;
@@ -27,11 +26,26 @@ pub(crate) struct DaemonShells {
 struct Selection {
     shell_key: String,
     agent_keys: std::collections::BTreeMap<String, String>,
+    all: bool,
 }
 
 impl Selection {
     fn owns(&self, key: &str) -> bool {
-        selected_shell(&self.shell_key, key) || self.agent_keys.contains_key(key)
+        self.all || selected_shell(&self.shell_key, key) || self.agent_keys.contains_key(key)
+    }
+}
+
+impl PtyManager {
+    pub(crate) fn enable_installation_daemon(&mut self, root: PathBuf, executable: PathBuf) {
+        self.daemon_shells = Some(DaemonShells::from_selection(
+            root,
+            executable,
+            Selection {
+                shell_key: "*".into(),
+                agent_keys: Default::default(),
+                all: true,
+            },
+        ));
     }
 }
 
@@ -68,10 +82,19 @@ impl DaemonShells {
         key: String,
         agent_keys: std::collections::BTreeMap<String, String>,
     ) -> Self {
-        let selection = Arc::new(Selection {
-            shell_key: key,
-            agent_keys,
-        });
+        Self::from_selection(
+            root,
+            executable,
+            Selection {
+                shell_key: key,
+                agent_keys,
+                all: false,
+            },
+        )
+    }
+
+    fn from_selection(root: PathBuf, executable: PathBuf, selection: Selection) -> Self {
+        let selection = Arc::new(selection);
         let event_selection = Arc::clone(&selection);
         Self {
             transport: DaemonTransport::new(root, executable, move |key| event_selection.owns(key)),
@@ -124,13 +147,16 @@ impl DaemonShells {
         self.selection.owns(key)
     }
     pub(crate) fn owns_agent(&self, key: &str) -> bool {
-        self.selection.agent_keys.contains_key(key)
+        (self.selection.all && !indexed_shell_key(key))
+            || self.selection.agent_keys.contains_key(key)
     }
     pub(crate) fn selects_provider(&self, key: &str, command: &str) -> bool {
-        self.selection
-            .agent_keys
-            .get(key)
-            .is_some_and(|provider| provider == command)
+        self.selection.all
+            || self
+                .selection
+                .agent_keys
+                .get(key)
+                .is_some_and(|provider| provider == command)
     }
 
     pub(crate) async fn terminate_for_task(
@@ -208,19 +234,78 @@ impl DaemonShells {
         })
     }
 
+    pub(crate) async fn prepare_restart(
+        &self,
+        operation_id: String,
+        intent: &str,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        let intent = match intent {
+            "restart" => super::daemon_restart::Intent::Restart,
+            "update" => super::daemon_restart::Intent::Update,
+            _ => return Err("invalid restart intent".into()),
+        };
+        self.transport
+            .prepare_restart(operation_id, intent, publisher)
+            .await
+    }
+
+    pub(crate) async fn cancel_restart(
+        &self,
+        operation_id: String,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        use super::daemon_restart::Phase;
+        self.transport
+            .transition_restart(operation_id, Phase::Prepared, Phase::Cancelled, publisher)
+            .await
+    }
+
+    pub(crate) async fn detach_restart(
+        &self,
+        operation_id: String,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        use super::daemon_restart::Phase;
+        self.transport
+            .transition_restart(operation_id, Phase::Prepared, Phase::Detached, publisher)
+            .await
+    }
+
+    pub(crate) async fn commit_restart(
+        &self,
+        operation_id: String,
+        publisher: RuntimeEventPublisher,
+    ) -> Result<(), String> {
+        use super::daemon_restart::Phase;
+        self.transport
+            .transition_restart(
+                operation_id,
+                Phase::Reconnecting,
+                Phase::Committed,
+                publisher,
+            )
+            .await
+    }
+
+    pub(crate) async fn shutdown(&self) -> Result<(), String> {
+        self.transport.shutdown(self.publisher()).await
+    }
+
     pub(crate) async fn inventory(
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<serde_json::Value, String> {
         let selection = Arc::clone(&self.selection);
-        self.run(publisher, move |client, key| {
+        self.read(publisher, move |client, key| {
             let inventory = client.inventory()?;
-            let sessions: Vec<_> = inventory
-                .sessions
+            let sessions: Vec<_> = latest_sessions(inventory.sessions)
                 .into_iter()
                 .filter(|session| {
-                    selected_shell(key, &session.session_key)
-                        || selection.agent_keys.contains_key(&session.session_key)
+                    (selected_shell(key, &session.session_key)
+                        || selection.owns(&session.session_key))
+                        && openforge_session_host::scoped_agent_digest(&session.session_key)
+                            .is_none()
                 })
                 .map(|session| {
                     serde_json::json!({
@@ -242,11 +327,12 @@ impl DaemonShells {
     ) -> Result<u64, String> {
         let discovery = self.transport.completion();
         self.run(publisher, move |client, key| {
-            if let Some(session) = find(client, key)? {
+            let previous = find(client, key)?;
+            if let Some(session) = &previous {
                 if session.owner != command.owner {
                     return Err(Error::StalePty);
                 }
-                return if session.exit_code.is_none() {
+                if session.exit_code.is_none() {
                     if let (
                         Some(discovery),
                         openforge_session_protocol::TerminalOwner::Agent { task_id },
@@ -258,14 +344,15 @@ impl DaemonShells {
                             session.pty.instance.value(),
                         );
                     }
-                    Ok(session.pty.instance.value())
-                } else {
-                    Err(Error::StalePty)
-                };
+                    return Ok(session.pty.instance.value());
+                }
             }
+            // Recovery only reads inventory. An explicit spawn may start a new
+            // allocation after exit; its receipt is tied to the previous identity.
             use sha2::Digest;
             let hash = sha2::Sha256::digest(key.as_bytes());
-            let operation = format!("spawn-{:x}", hash);
+            let predecessor = previous.map_or(0, |session| session.pty.instance.value());
+            let operation = format!("spawn-{:x}-{predecessor}", hash);
             let instance = client.spawn(&operation, &command)?.pty.instance.value();
             if let (Some(discovery), openforge_session_protocol::TerminalOwner::Agent { task_id }) =
                 (&discovery, &command.owner)
@@ -279,24 +366,30 @@ impl DaemonShells {
 
     pub(crate) async fn agent_sessions(&self) -> Result<Vec<Session>, String> {
         let selection = Arc::clone(&self.selection);
-        self.run(self.publisher(), move |client, _| {
-            Ok(client
-                .inventory()?
-                .sessions
+        self.read(self.publisher(), move |client, _| {
+            Ok(latest_sessions(client.inventory()?.sessions)
                 .into_iter()
-                .filter(|session| selection.agent_keys.contains_key(&session.session_key))
+                .filter(|session| {
+                    selection.owns(&session.session_key)
+                        && matches!(
+                            session.owner,
+                            openforge_session_protocol::TerminalOwner::Agent { .. }
+                        )
+                        && openforge_session_host::scoped_agent_digest(&session.session_key)
+                            .is_none()
+                })
                 .collect())
         })
         .await
     }
 
     pub(crate) async fn session(&self) -> Result<Option<Session>, String> {
-        self.run(self.publisher(), find).await
+        self.read(self.publisher(), find).await
     }
 
     pub(crate) async fn shell_only(&self) -> Result<Self, String> {
         let fence = self
-            .run(self.publisher(), |client, key| {
+            .read(self.publisher(), |client, key| {
                 let Some(session) = find(client, key)? else {
                     return Ok(None);
                 };
@@ -317,7 +410,7 @@ impl DaemonShells {
     }
 
     pub(super) async fn session_client(&self) -> Result<Option<(Client, Session)>, String> {
-        self.run(self.publisher(), |client, key| {
+        self.read(self.publisher(), |client, key| {
             Ok(find(client, key)?.map(|session| (client.clone(), session)))
         })
         .await
@@ -326,7 +419,7 @@ impl DaemonShells {
     /// Captures the existing controller and exact PTY, never reacquiring ownership.
     pub(crate) async fn pin(&self, instance_id: u64) -> Result<Self, String> {
         let fence = self
-            .run(self.publisher(), move |client, key| {
+            .read(self.publisher(), move |client, key| {
                 let session = find(client, key)?.ok_or(Error::StalePty)?;
                 if session.pty.instance.value() != instance_id || session.exit_code.is_some() {
                     return Err(Error::StalePty);
@@ -363,7 +456,7 @@ impl DaemonShells {
         rows: u16,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.run(publisher, move |client, key| {
+        self.read(publisher, move |client, key| {
             let session = find(client, key)?.ok_or(Error::StalePty)?;
             client.resize(
                 &uuid::Uuid::new_v4().to_string(),
@@ -390,7 +483,7 @@ impl DaemonShells {
         &self,
         publisher: RuntimeEventPublisher,
     ) -> Result<PtyBufferState, String> {
-        self.run(publisher, move |client, key| {
+        self.read(publisher, move |client, key| {
             let session = find(client, key)?;
             let Some(session) = session else {
                 return Ok(PtyBufferState {
@@ -433,7 +526,7 @@ impl DaemonShells {
         publisher: RuntimeEventPublisher,
         endpoint: Option<openforge_session_protocol::SidecarEndpoint>,
     ) -> Result<(), String> {
-        self.run(publisher, move |client, _| {
+        self.read(publisher, move |client, _| {
             client.register_sidecar(endpoint)
         })
         .await
@@ -447,7 +540,7 @@ impl DaemonShells {
         installation: String,
         instance: u64,
     ) -> Result<(), String> {
-        self.run(publisher, move |client, _| {
+        self.read(publisher, move |client, _| {
             let inventory = client.inventory()?;
             if inventory.controller.installation.as_str() != installation {
                 return Err(Error::ForeignInstallation);
@@ -467,6 +560,21 @@ impl DaemonShells {
             }
         })
         .await
+    }
+
+    async fn read<T: Send + 'static>(
+        &self,
+        publisher: RuntimeEventPublisher,
+        operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, String> {
+        self.transport
+            .read(
+                self.key().to_owned(),
+                self.fence.clone(),
+                publisher,
+                operation,
+            )
+            .await
     }
 
     async fn run<T: Send + 'static>(
@@ -496,6 +604,19 @@ fn indexed_shell_key(key: &str) -> bool {
 
 fn selected_shell(selection: &str, key: &str) -> bool {
     selection == key || (selection == "*" && indexed_shell_key(key))
+}
+
+fn latest_sessions(sessions: Vec<Session>) -> Vec<Session> {
+    let mut current = std::collections::BTreeMap::<String, Session>::new();
+    for session in sessions {
+        if current
+            .get(&session.session_key)
+            .is_none_or(|previous| previous.pty.instance.value() < session.pty.instance.value())
+        {
+            current.insert(session.session_key.clone(), session);
+        }
+    }
+    current.into_values().collect()
 }
 
 fn find(client: &Client, key: &str) -> Result<Option<Session>, Error> {

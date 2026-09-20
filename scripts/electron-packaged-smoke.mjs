@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,9 +22,6 @@ function repoRootFromScript() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
 }
 
-function sleep(ms) {
-  return new Promise(resolvePromise => setTimeout(resolvePromise, ms))
-}
 
 async function pathExists(path) {
   try {
@@ -60,13 +57,23 @@ async function runCommand(command, args, options = {}) {
 export function createPackagedSmokeEnv({ baseEnv = process.env, runtimeRoot, backendPort } = {}) {
   if (!runtimeRoot) throw new Error('runtimeRoot is required for packaged smoke env isolation')
   if (!backendPort) throw new Error('backendPort is required for packaged smoke port isolation')
-  return {
+  const home = join(runtimeRoot, 'home')
+  const env = {
     ...baseEnv,
+    HOME: home,
+    ZDOTDIR: home,
+    XDG_CONFIG_HOME: join(home, '.config'),
+    XDG_DATA_HOME: join(home, '.local', 'share'),
+    XDG_CACHE_HOME: join(home, '.cache'),
     OPENFORGE_APP_DATA_DIR: join(runtimeRoot, 'app-data'),
     OPENFORGE_BACKEND_PORT: String(backendPort),
     OPENFORGE_ELECTRON_USER_DATA_DIR: join(runtimeRoot, 'electron-user-data'),
     ELECTRON_ENABLE_LOGGING: '1',
   }
+  for (const key of ['OPENFORGE_SESSION_DAEMON_ROOT', 'OPENFORGE_SESSION_DAEMON_PATH',
+    'OPENFORGE_RESTART_OPERATION', 'OPENFORGE_AGENT_CONFIG', 'OPENFORGE_AGENT_TOKEN',
+    'OPENFORGE_TASK_ID', 'OPENFORGE_SIDECAR_PATH', 'OPENFORGE_E2E']) delete env[key]
+  return env
 }
 
 export function packagedAppExecutablePath(appPath, platform = process.platform) {
@@ -205,21 +212,30 @@ async function stopChild(child, timeoutMs = 5_000) {
   })
 }
 
-async function closeElectronGracefully(browser, child, timeoutMs = 7_000) {
+export async function closeElectronGracefully(browser, child, timeoutMs = 7_000) {
   if (!browser || child.exitCode !== null || child.signalCode !== null) return
 
-  const exited = new Promise(resolvePromise => child.once('exit', resolvePromise))
+  let timer
+  let onExit
+  const exited = new Promise(resolvePromise => {
+    onExit = resolvePromise
+    child.once('exit', onExit)
+  })
   try {
-    const session = await browser.newBrowserCDPSession()
-    await session.send('Browser.close')
+    await Promise.race([
+      (async () => {
+        const session = await browser.newBrowserCDPSession()
+        await session.send('Browser.close')
+        await exited
+      })(),
+      new Promise(resolvePromise => { timer = setTimeout(resolvePromise, timeoutMs) }),
+    ])
   } catch {
-    return
+    // Best effort: the caller stops the owned process if CDP cannot close it.
+  } finally {
+    clearTimeout(timer)
+    child.removeListener('exit', onExit)
   }
-
-  await Promise.race([
-    exited,
-    sleep(timeoutMs),
-  ])
 }
 
 export async function runPackagedElectronSmoke({
@@ -244,10 +260,12 @@ export async function runPackagedElectronSmoke({
     throw new Error(`Packaged Electron executable not found at ${executablePath}`)
   }
 
-  const runtimeRoot = await mkdtemp(join(tmpdir(), 'openforge-packaged-smoke-'))
+  // macOS temporary paths can exceed the daemon's Unix socket path limit.
+  const runtimeRoot = await mkdtemp(join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'of-packaged-smoke-'))
   const port = debugPort ?? await allocateLoopbackPort()
   const backendPort = await allocateLoopbackPort()
   const env = createPackagedSmokeEnv({ runtimeRoot, backendPort })
+  await mkdir(env.HOME, { recursive: true })
   const childState = { exited: false, code: null, signal: null, error: null }
   const child = spawn(executablePath, [
     `--remote-debugging-port=${port}`,
@@ -284,8 +302,8 @@ export async function runPackagedElectronSmoke({
     throw new Error(detail ? `${message}\n\nPackaged app output:\n${detail}` : message)
   } finally {
     await closeElectronGracefully(browser, child)
-    await browser?.close().catch(() => {})
     await stopChild(child)
+    await browser?.close().catch(() => {})
     if (!keepRuntimeDirs) {
       await rm(runtimeRoot, { recursive: true, force: true })
     } else {

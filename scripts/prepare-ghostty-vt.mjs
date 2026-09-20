@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { execFileSync } from 'node:child_process'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const WRAPPER_REVISION = 'de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec'
 const GHOSTTY_REVISION = '22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018'
@@ -244,18 +245,14 @@ async function prepareZigPackages() {
   return processed.size
 }
 
-function prepareRustDependencies() {
+export function prepareRustDependencies({ runCommand = run } = {}) {
   const lockfile = readFileSync(join(repositoryRoot, 'src-tauri', 'Cargo.lock'), 'utf8')
   const lockedSource = `git+https://github.com/Uzaaft/libghostty-rs.git?rev=${WRAPPER_REVISION}#${WRAPPER_REVISION}`
   if (!lockfile.includes(lockedSource)) {
     throw new Error(`Cargo.lock does not pin libghostty-vt to ${WRAPPER_REVISION}`)
   }
-  const manifestArgs = [
-    'fetch',
-    '--locked',
-    '--manifest-path',
-    join(repositoryRoot, 'src-tauri', 'Cargo.toml'),
-  ]
+  const layout = resolveRustSidecarLayout({ repoRoot: repositoryRoot })
+  const manifests = [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]
   const options = {
     cwd: repositoryRoot,
     env: {
@@ -264,13 +261,21 @@ function prepareRustDependencies() {
       GHOSTTY_ZIG_SYSTEM_DIR: systemDir,
     },
   }
-  try {
-    run('cargo', [...manifestArgs, '--offline'], {
-      ...options,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch {
-    run('cargo', manifestArgs, options)
+  for (const manifest of manifests) {
+    const manifestArgs = ['fetch', '--locked', '--manifest-path', manifest]
+    try {
+      runCommand('cargo', [...manifestArgs, '--offline'], {
+        ...options,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } catch {
+      // Preparation may run again after CI has made subsequent builds offline.
+      // Allow networking only for this cache-miss fetch, not in the caller.
+      runCommand('cargo', manifestArgs, {
+        ...options,
+        env: { ...options.env, CARGO_NET_OFFLINE: 'false' },
+      })
+    }
   }
 }
 

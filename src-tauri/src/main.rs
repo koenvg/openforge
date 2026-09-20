@@ -249,7 +249,28 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(WhisperModelSize::Small);
 
     let db_arc = Arc::new(Mutex::new(database));
-    let pty_manager = PtyManager::new();
+    let mut pty_manager = PtyManager::new();
+    // Controlled fixtures may select individual callers. Every normal installation
+    // uses one daemon for all PTYs; failure must never fall back to Sidecar ownership.
+    if pty_manager.daemon_shells.is_none()
+        && (!(cfg!(debug_assertions) && std::env::var("OPENFORGE_E2E").as_deref() == Ok("1"))
+            || (std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT").is_some()
+                && std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH").is_some()))
+    {
+        let executable = match std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH") {
+            Some(path) => PathBuf::from(path),
+            None => std::env::current_exe()?.with_file_name("openforge-session-daemon"),
+        };
+        let root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| app_data_dir.join("session-daemon"));
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&root)?;
+        pty_manager.enable_installation_daemon(root, executable);
+    }
     let scoped_workspaces = scoped_workspace_service::ScopedWorkspaceService::new(
         Arc::clone(&db_arc),
         app_data_dir.join("scoped-workspaces"),

@@ -23,6 +23,11 @@ export async function buildAndPackageElectronApp(options = {}) {
     ? ['build', '--release', '--target', cargoBuildTarget]
     : ['build', '--release']
   await runCommand('cargo', cargoArgs, { cwd: rustSidecarLayout.backendCrateRootPath })
+  await runCommand('cargo', [
+    ...cargoArgs,
+    '--manifest-path', rustSidecarLayout.sessionCrates.daemon.manifestPath,
+    '--target-dir', rustSidecarLayout.defaultCargoTargetDir,
+  ], { cwd: rustSidecarLayout.backendCrateRootPath })
   return packageApp({
     repoRoot,
     rustSidecarLayout,

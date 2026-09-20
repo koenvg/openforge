@@ -11,6 +11,7 @@ const DAEMON_SHELL_CONTRACT_TIMEOUT: Duration = Duration::from_secs(30);
 mod companion;
 mod core;
 mod daemon_fixture;
+mod daemon_scoped;
 mod daemon_shell_events;
 mod daemon_shell_recovery;
 mod daemon_shells;

@@ -4,6 +4,7 @@ mod attachment;
 mod attachment_tests;
 mod commands;
 mod daemon_attachment;
+mod daemon_restart;
 pub(crate) mod daemon_shells;
 mod daemon_transport;
 pub(crate) use commands::PiSessionTarget;

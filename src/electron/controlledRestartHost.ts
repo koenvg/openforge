@@ -1,27 +1,81 @@
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { RestartOperation } from './restartOperation.js'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { RestartWorkspaceStore } from './restartWorkspaceStore.js'
 import type { RestartTerminalInventory } from './restartWorkspace.js'
 
+export interface RestartBackend {
+  prepare(operationId: string, intent: 'restart' | 'update'): Promise<void>
+  cancel(operationId: string): Promise<void>
+  detach(operationId: string): Promise<void>
+  commit(operationId: string): Promise<void>
+}
+
 export async function createControlledRestartHost(options: {
   root: string
   operationId: string | null
+  intent?: 'restart' | 'update'
+  backend?: RestartBackend
   inventory(): Promise<RestartTerminalInventory>
   replace(operationId: string): Promise<void>
 }): Promise<RestartWorkspaceIpc> {
   const initial = await options.inventory()
   const daemonInstallation = initial.controller.installation
   const installationId = createHash('sha256').update(JSON.stringify([options.root, daemonInstallation])).digest('hex')
+  const store = new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId)
+  const operation = new RestartOperation(join(options.root, 'restart-operation.json'), installationId)
+  const acknowledged = options.operationId && await store.allWindowsAcknowledged(options.operationId)
+  if (options.operationId && (await store.load(options.operationId) || acknowledged)) {
+    if (!acknowledged || await operation.shutdownIntent() !== 'quit') await operation.reconnect(options.operationId, initial.controller)
+    if (acknowledged) {
+      await options.backend?.commit(options.operationId)
+      await operation.commit(options.operationId)
+    }
+  }
   return new RestartWorkspaceIpc(
-    new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId),
+    store,
     options.operationId,
     async (operationId, assertCurrent) => {
       const current = await options.inventory()
       if (current.controller.installation !== daemonInstallation) throw new Error('Daemon installation changed during capture')
+      if (current.controller.lifetime !== initial.controller.lifetime
+        || current.controller.generation !== initial.controller.generation) {
+        throw new Error('Daemon controller changed during capture')
+      }
       if (current.hasLegacySessions !== false) throw new Error('Controlled restart cannot preserve legacy processes')
       assertCurrent()
+      await options.backend?.detach(operationId)
+      await operation.detach(operationId)
+      assertCurrent()
       await options.replace(operationId)
+    },
+    {
+      prepare: async operationId => {
+        const intent = options.intent ?? 'restart'
+        await operation.prepare(operationId, initial.controller, intent)
+        await options.backend?.prepare(operationId, intent)
+      },
+      cancel: async operationId => {
+        // A failed relaunch must never turn an authorized replacement into Quit.
+        if (await operation.shutdownIntent() === 'quit') {
+          await options.backend?.cancel(operationId)
+          await operation.cancel(operationId)
+        }
+      },
+      validateCompletion: async () => {
+        const current = await options.inventory()
+        if (current.controller.installation !== initial.controller.installation
+          || current.controller.lifetime !== initial.controller.lifetime
+          || current.controller.generation !== initial.controller.generation) {
+          throw new Error('Restart controller changed before restoration completed')
+        }
+      },
+      complete: async operationId => {
+        await options.backend?.commit(operationId)
+        await operation.commit(operationId)
+      },
+      shutdownIntent: () => operation.shutdownIntent(),
     },
   )
 }

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { createControlledRestartHost } from './controlledRestartHost.js'
+import { installRestartMenu } from './restartMenu.js'
 import { RestartGeometryLeases } from './restartGeometryLeases.js'
 import type { RestartAttachmentIdentity } from './restartGeometryLeases.js'
 import type { RestartTerminalFence, RestartTerminalInventory } from './restartWorkspace.js'
@@ -13,6 +14,7 @@ import {
   LIST_BROWSER_SESSION_PURGE_INTENTS_COMMAND,
 } from './internalSidecarCommandRegistrations.js'
 import { handleElectronInvoke } from './backendBridge.js'
+import { forwardToSidecar } from './rustSidecarForwarder.js'
 import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
 import { TaskBrowserPermissionPolicy } from './taskBrowserPermissionPolicy.js'
@@ -113,9 +115,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   const restartGeometryLeases = new RestartGeometryLeases()
   let restartWorkspace: Promise<RestartWorkspaceIpc> | null = null
   function controlledWorkspace(): Promise<RestartWorkspaceIpc | null> {
-    if (app.isPackaged || options.env.OPENFORGE_E2E !== '1' || !options.env.OPENFORGE_ELECTRON_USER_DATA_DIR
-      || !options.env.OPENFORGE_SESSION_DAEMON_ROOT || !options.env.OPENFORGE_SESSION_DAEMON_PATH
-      || options.env.OPENFORGE_SESSION_DAEMON_SHELL_KEY !== '*') return Promise.resolve(null)
+    // Older isolated fixtures deliberately exercise the legacy test adapter.
+    if (options.env.OPENFORGE_E2E === '1' && !options.env.OPENFORGE_SESSION_DAEMON_ROOT) return Promise.resolve(null)
     if (restartWorkspace) return restartWorkspace
     const operationPrefix = '--openforge-restart-operation='
     const operationId = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null
@@ -125,12 +126,23 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         if (!backendInvokeContext) throw new Error('Restart backend is not ready')
         return await handleElectronInvoke({ command: 'get_restart_terminal_inventory', payload: {} }, createInvokeDeps(backendInvokeContext)) as RestartTerminalInventory
       },
+      backend: {
+        prepare: (operationId, intent) => restartBackendCommand('prepare_app_restart', { operationId, intent }),
+        cancel: operationId => restartBackendCommand('cancel_app_restart', { operationId }),
+        detach: operationId => restartBackendCommand('detach_app_restart', { operationId }),
+        commit: operationId => restartBackendCommand('commit_app_restart', { operationId }),
+      },
       replace: async nextOperation => {
         app.relaunch({ args: [...process.argv.slice(1).filter(arg => !arg.startsWith(operationPrefix)), `${operationPrefix}${nextOperation}`] })
         app.quit()
       },
     }).catch(error => { restartWorkspace = null; throw error })
     return restartWorkspace
+  }
+
+  async function restartBackendCommand(command: string, payload: { operationId: string; intent?: 'restart' | 'update' }): Promise<void> {
+    if (!backendInvokeContext) throw new Error('Restart backend is not ready')
+    await forwardToSidecar(command, payload, createInvokeDeps(backendInvokeContext))
   }
 
   function createInvokeDeps(context: BootBackendInvokeContext): ElectronInvokeDeps {
@@ -244,6 +256,12 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     const ids = await (await controlledWorkspace())?.launchWindowIds(options.env.OPENFORGE_E2E_RESTART_WINDOWS === '2' ? 2 : 1) ?? [randomUUID()]
     const windows: BrowserWindow[] = []
     for (const id of ids) windows.push(await createWorkspaceWindow(id))
+    installRestartMenu(async rendererId => {
+      if (!appRenderers.has(rendererId)) throw new Error('Restart requires an OpenForge workspace')
+      const host = await controlledWorkspace()
+      if (!host) throw new Error('Session-preserving Restart is unavailable in this launch')
+      await host.handle(rendererId, 'restart_app', {})
+    })
     return windows[0]
   }
 
@@ -399,7 +417,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       return createSidecarLaunchConfig({
         executablePath: sidecarPath,
         port: resolveSidecarPort(options.env),
-        processEnv: options.env,
+        processEnv: {
+          ...options.env,
+          OPENFORGE_RESTART_OPERATION: process.argv.find(arg => arg.startsWith('--openforge-restart-operation='))?.split('=')[1],
+        },
       })
     },
 

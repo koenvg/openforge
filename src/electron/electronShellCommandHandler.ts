@@ -18,6 +18,7 @@ const electronShellCommandHandlers = {
   capture_restart_workspace: (payload, deps) => restartWorkspace('capture_restart_workspace', payload, deps),
   complete_restart_workspace: (payload, deps) => restartWorkspace('complete_restart_workspace', payload, deps),
   controlled_restart: (payload, deps) => restartWorkspace('controlled_restart', payload, deps),
+  restart_app: (payload, deps) => restartWorkspace('restart_app', payload, deps),
   open_url: (payload, deps) => {
     const url = typeof (payload as { url?: unknown } | null)?.url === 'string'
       ? (payload as { url: string }).url
