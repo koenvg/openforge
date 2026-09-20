@@ -2,6 +2,58 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
+async fn restart_preparation_drains_spawns_and_rejects_later_mutations_as_not_executed() {
+    let fixture = super::daemon_fixture::DaemonFixture(
+        tempfile::Builder::new().prefix("of-restart-fence-").tempdir_in("/tmp").unwrap(),
+    );
+    let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("crates/session-daemon/target/debug/openforge-session-daemon");
+    let (mut state, _db) = test_state("restart-fence");
+    state.pty_manager.as_mut().unwrap().enable_daemon_shell(
+        fixture.0.path().into(), executable, "*".into(),
+    );
+    let instance = invoke_ok(&state, "pty_spawn_shell", json!({
+        "taskId": "T-fenced", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+    })).await;
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let prepared = invoke_ok(&state, "prepare_app_restart", json!({
+        "operationId": operation_id, "intent": "restart",
+    })).await;
+    assert_eq!(prepared["sessions"][0]["instanceId"], instance);
+    let rejected = invoke(&state, "pty_spawn_shell", json!({
+        "taskId": "T-rejected", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+    })).await.unwrap_err();
+    assert!(rejected.1.contains("not executed"), "{rejected:?}");
+    let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(inventory["sessions"].as_array().unwrap().len(), 1);
+    invoke_ok(&state, "cancel_app_restart", json!({ "operationId": operation_id })).await;
+    invoke_ok(&state, "pty_spawn_shell", json!({
+        "taskId": "T-rejected", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+    })).await;
+}
+
+#[tokio::test]
+#[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
+async fn production_daemon_owns_unindexed_and_indexed_shells() {
+    let fixture = super::daemon_fixture::DaemonFixture(
+        tempfile::Builder::new().prefix("of-production-owner-").tempdir_in("/tmp").unwrap(),
+    );
+    let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("crates/session-daemon/target/debug/openforge-session-daemon");
+    let (mut state, _db) = test_state("production-daemon");
+    state.pty_manager.as_mut().unwrap().enable_installation_daemon(fixture.0.path().into(), executable);
+    for (task, index) in [("T-production-a", None), ("T-production-b", Some(3))] {
+        invoke_ok(&state, "pty_spawn_shell", json!({
+            "taskId": task, "terminalIndex": index, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+        })).await;
+    }
+    let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(inventory["hasLegacySessions"], false);
+    assert_eq!(inventory["sessions"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+#[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
 async fn controlled_workspace_recovers_multiple_indexed_shells_across_tasks() {
     let fixture = super::daemon_fixture::DaemonFixture(
         tempfile::Builder::new()

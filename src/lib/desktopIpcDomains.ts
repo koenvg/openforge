@@ -5,6 +5,7 @@ export const desktopIpcFunctionDomains = {
   captureRestartWorkspace: 'app-shell',
   completeRestartWorkspace: 'app-shell',
   controlledRestart: 'app-shell',
+  restartApp: 'app-shell',
   getRestartTerminalInventory: 'agent-session-pty',
   createTask: 'tasks-projects',
   updateTaskInitialPrompt: 'tasks-projects',

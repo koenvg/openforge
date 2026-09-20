@@ -19,6 +19,10 @@ export async function controlledRestart(): Promise<void> {
   return invoke('controlled_restart')
 }
 
+export async function restartApp(): Promise<void> {
+  return invoke('restart_app')
+}
+
 export async function openInEditor(path: string): Promise<void> {
   return invoke("open_in_editor", { path });
 }

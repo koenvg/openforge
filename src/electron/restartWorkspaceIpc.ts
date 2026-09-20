@@ -75,6 +75,7 @@ export class RestartWorkspaceIpc {
     if (!windowId) throw new Error('Unregistered restart workspace renderer')
     const input = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
     switch (command) {
+      case 'restart_app':
       case 'controlled_restart': {
         if (this.captureOperation) throw new Error('Controlled restart already preparing')
         const operationId = randomUUID()

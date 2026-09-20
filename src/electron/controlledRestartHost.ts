@@ -5,10 +5,18 @@ import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { RestartWorkspaceStore } from './restartWorkspaceStore.js'
 import type { RestartTerminalInventory } from './restartWorkspace.js'
 
+export interface RestartBackend {
+  prepare(operationId: string, intent: 'restart' | 'update'): Promise<void>
+  cancel(operationId: string): Promise<void>
+  detach(operationId: string): Promise<void>
+  commit(operationId: string): Promise<void>
+}
+
 export async function createControlledRestartHost(options: {
   root: string
   operationId: string | null
   intent?: 'restart' | 'update'
+  backend?: RestartBackend
   inventory(): Promise<RestartTerminalInventory>
   replace(operationId: string): Promise<void>
 }): Promise<RestartWorkspaceIpc> {
@@ -32,14 +40,23 @@ export async function createControlledRestartHost(options: {
       }
       if (current.hasLegacySessions !== false) throw new Error('Controlled restart cannot preserve legacy processes')
       assertCurrent()
+      await options.backend?.detach(operationId)
       await operation.detach(operationId)
+      assertCurrent()
       await options.replace(operationId)
     },
     {
-      prepare: operationId => operation.prepare(operationId, initial.controller, options.intent ?? 'restart'),
+      prepare: async operationId => {
+        const intent = options.intent ?? 'restart'
+        await operation.prepare(operationId, initial.controller, intent)
+        await options.backend?.prepare(operationId, intent)
+      },
       cancel: async operationId => {
         // A failed relaunch must never turn an authorized replacement into Quit.
-        if (await operation.shutdownIntent() === 'quit') await operation.cancel(operationId)
+        if (await operation.shutdownIntent() === 'quit') {
+          await options.backend?.cancel(operationId)
+          await operation.cancel(operationId)
+        }
       },
       validateCompletion: async () => {
         const current = await options.inventory()
@@ -49,7 +66,10 @@ export async function createControlledRestartHost(options: {
           throw new Error('Restart controller changed before restoration completed')
         }
       },
-      complete: operationId => operation.commit(operationId),
+      complete: async operationId => {
+        await options.backend?.commit(operationId)
+        await operation.commit(operationId)
+      },
       shutdownIntent: () => operation.shutdownIntent(),
     },
   )

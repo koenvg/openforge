@@ -170,3 +170,35 @@ it('does not commit restoration after another controller takes ownership', async
     expect(await replacement.handle(20, 'get_restart_workspace', {})).not.toBeNull()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+it('fences the backend before capturing windows and authorizes detach before relaunch', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'openforge-controlled-restart-'))
+  try {
+    const controller = { installation: 'daemon-installation', lifetime: 'daemon', generation: 1 }
+    let fenced = false
+    let detached = false
+    let capturedWhileFenced = false
+    let relaunchedAfterDetach = false
+    const host = await createControlledRestartHost({
+      root, operationId: null,
+      inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
+      backend: {
+        prepare: async () => { fenced = true },
+        cancel: async () => { fenced = false },
+        detach: async () => { detached = true },
+        commit: async () => { fenced = false },
+      },
+      replace: async () => { relaunchedAfterDetach = detached },
+    })
+    let operationId = ''
+    host.register(10, 'stable', operation => { operationId = operation; capturedWhileFenced = fenced })
+    const restart = host.handle(10, 'controlled_restart', {})
+    await vi.waitFor(() => expect(operationId).not.toBe(''))
+    await host.handle(10, 'capture_restart_workspace', {
+      operationId, snapshot: { navigation: { projectId: null, taskId: null, view: 'board' }, tasks: [] },
+    })
+    await restart
+    expect(capturedWhileFenced).toBe(true)
+    expect(relaunchedAfterDetach).toBe(true)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

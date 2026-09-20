@@ -118,7 +118,7 @@ try {
   assert.equal(before.hasLegacySessions, false)
 
   const sourceBrowser = browser
-  await page.evaluate(async () => (await import('/src/lib/ipc.ts')).controlledRestart()).catch(error => {
+  await page.evaluate(async () => (await import('/src/lib/ipc.ts')).restartApp()).catch(error => {
     if (!/closed|destroyed/i.test(error.message)) throw error
   })
   await until(() => !sourceBrowser.isConnected())
@@ -158,6 +158,7 @@ try {
   const restoredBrowser = browser
   await page.evaluate(async () => (await import('/src/lib/ipc.ts')).quitApp()).catch(() => {})
   await until(() => !restoredBrowser.isConnected())
+  await until(async () => !(await readdir(join(daemonRoot, 'session-v1'))).includes('control.sock'))
   assert.ok(originalLaunch)
   normalProcess = spawnCommand(originalLaunch.command, originalLaunch.args, originalLaunch.options)
   await waitForDevTools(context.ports.chromiumDebugPort, { timeoutMs: 60_000 })
@@ -183,7 +184,8 @@ try {
   if (normalProcess) await stopProcess(normalProcess)
   await lifecycle.shutdown()
   const empty = (await readdir(daemonRoot)).length === 0
-  const cleanup = empty ? { status: 0, stderr: '' } : spawnSync('cargo', ['run', '--quiet', '--manifest-path', 'src-tauri/crates/session-client/Cargo.toml', '--example', 'shutdown-fixture', '--', daemonRoot], { encoding: 'utf8' })
+  const daemonStopped = !(await readdir(join(daemonRoot, 'session-v1')).catch(() => [])).includes('control.sock')
+  const cleanup = empty || daemonStopped ? { status: 0, stderr: '' } : spawnSync('cargo', ['run', '--quiet', '--manifest-path', 'src-tauri/crates/session-client/Cargo.toml', '--example', 'shutdown-fixture', '--', daemonRoot], { encoding: 'utf8' })
   cleanupSucceeded = cleanup.status === 0
   if (cleanupSucceeded) {
     await rm(daemonRoot, { recursive: true, force: true })

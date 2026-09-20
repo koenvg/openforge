@@ -21,6 +21,7 @@ export const desktopCommandContracts = [
   {"functionName":"captureRestartWorkspace","moduleName":"appLifecycle","ipcCommand":"capture_restart_workspace","payloadKeys":["operationId","snapshot"],"owner":"electron-main","domain":"app-shell"},
   {"functionName":"completeRestartWorkspace","moduleName":"appLifecycle","ipcCommand":"complete_restart_workspace","payloadKeys":["operationId"],"owner":"electron-main","domain":"app-shell"},
   {"functionName":"controlledRestart","moduleName":"appLifecycle","ipcCommand":"controlled_restart","payloadKeys":[],"owner":"electron-main","domain":"app-shell"},
+  {"functionName":"restartApp","moduleName":"appLifecycle","ipcCommand":"restart_app","payloadKeys":[],"owner":"electron-main","domain":"app-shell"},
   {"functionName":"openInEditor","moduleName":"appLifecycle","ipcCommand":"open_in_editor","payloadKeys":["path"],"owner":"electron-main","domain":"misc"},
   {"functionName":"hasVsCodeProtocolHandler","moduleName":"appLifecycle","ipcCommand":"has_vscode_protocol_handler","payloadKeys":[],"owner":"electron-main","domain":"misc"},
   {"functionName":"openUrl","moduleName":"appLifecycle","ipcCommand":"open_url","payloadKeys":["url"],"owner":"electron-main","domain":"misc"},

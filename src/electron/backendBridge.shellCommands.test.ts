@@ -3,6 +3,18 @@ import { handleElectronInvoke } from './backendBridge'
 import { sidecarConfig } from './backendBridge.testUtils'
 
 describe('Electron backend bridge shell commands', () => {
+  it('routes Restart through workspace preparation rather than normal Quit', async () => {
+    const quitApp = vi.fn()
+    const fetch = vi.fn()
+    const restartWorkspace = vi.fn(async () => 'authorized')
+    await expect(handleElectronInvoke({ command: 'restart_app' }, {
+      sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn(), quitApp, restartWorkspace,
+    })).resolves.toBe('authorized')
+    expect(restartWorkspace).toHaveBeenCalledWith('restart_app', null)
+    expect(quitApp).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps open_url shell-owned and does not forward it to the Rust sidecar', async () => {
     const fetch = vi.fn()
     const openExternal = vi.fn(async () => undefined)

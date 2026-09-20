@@ -1,4 +1,6 @@
 //! Isolated real-process contract. Never launches or stops the installed desktop app.
+#[path = "session_daemon_sidecar/restart.rs"]
+mod restart;
 #[path = "session_daemon_sidecar/pi.rs"]
 mod pi;
 #[path = "session_daemon_sidecar/pi-live.rs"]
@@ -211,6 +213,7 @@ impl Drop for Fixture {
             let _ = child.wait();
         }
         let cleanup = (|| -> Result<(), String> {
+            if !self.root.path().join("session-v1/control.sock").exists() { return Ok(()); }
             let client = openforge_session_client::Client::connect(self.root.path())
                 .map_err(|e| e.to_string())?;
             for session in client.inventory().map_err(|e| e.to_string())?.sessions {
