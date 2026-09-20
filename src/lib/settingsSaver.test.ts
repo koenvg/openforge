@@ -63,6 +63,7 @@ describe('settingsSaver', () => {
       githubPollInterval: 45,
       useWorktrees: false,
       aiProvider: 'opencode',
+      openAttentionOverviewOnSend: true,
     })
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
@@ -71,6 +72,7 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
     expect(setConfig).toHaveBeenCalledWith('use_worktrees', 'false')
     expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')
+    expect(setConfig).toHaveBeenCalledWith('open_attention_overview_on_send', 'true')
   })
 
   it('persists only supplied global settings', async () => {

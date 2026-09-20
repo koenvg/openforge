@@ -41,6 +41,7 @@ export interface GlobalSettingsConfig {
   aiProvider: string
   reviewGuidance: string
   walkthroughGuidance: string
+  openAttentionOverviewOnSend: boolean
 }
 
 export interface InstallationStatus {
@@ -107,6 +108,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   aiProvider: 'claude-code',
   reviewGuidance: DEFAULT_PR_REVIEW_GUIDANCE,
   walkthroughGuidance: DEFAULT_PR_WALKTHROUGH_GUIDANCE,
+  openAttentionOverviewOnSend: false,
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
@@ -152,6 +154,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     aiProvider,
     reviewGuidance,
     walkthroughGuidance,
+    openAttentionOverviewOnSend,
   ] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
@@ -161,6 +164,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     getConfig('ai_provider'),
     getConfig('pr_review_guidance'),
     getConfig('pr_walkthrough_guidance'),
+    getConfig('open_attention_overview_on_send'),
   ])
 
   return {
@@ -174,6 +178,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     // key falls back to the shipped default.
     reviewGuidance: reviewGuidance ?? DEFAULT_GLOBAL_SETTINGS.reviewGuidance,
     walkthroughGuidance: walkthroughGuidance ?? DEFAULT_GLOBAL_SETTINGS.walkthroughGuidance,
+    openAttentionOverviewOnSend: openAttentionOverviewOnSend === 'true',
   }
 }
 

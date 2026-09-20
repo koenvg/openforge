@@ -18,6 +18,7 @@ import { terminalFontFamily } from './terminalFont'
 import { terminalFontSize } from './terminalFontSize'
 import { selectedTheme } from './theme'
 import { createTerminalThemeSnapshot } from './terminalThemePresentation'
+import { notifySessionMessageSent } from './openAttentionOnSessionSubmit'
 
 export const reconcileRestartTerminalInventory = restartTerminalControl.reconcile
 
@@ -43,6 +44,7 @@ const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
   fontFamily: terminalFontFamily,
   fontSize: terminalFontSize,
   loggerName: 'terminalSessionService',
+  onAgentPromptSubmit: () => { notifySessionMessageSent() },
 }
 
 const terminalRuntime = createTerminalRuntime({

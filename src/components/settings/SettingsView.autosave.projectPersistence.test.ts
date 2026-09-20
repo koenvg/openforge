@@ -68,6 +68,22 @@ describe('SettingsView autosave project persistence', () => {
     expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'ai_provider', 'claude-code')
   })
 
+  it('writes a project override for open-attention-overview-on-send immediately', async () => {
+    render(SettingsView, { props: defaultProps })
+    await openSettingsCategory(/Agents & tasks/)
+
+    const toggle = await screen.findByTestId('open_attention_overview_on_send')
+    vi.mocked(setProjectConfig).mockClear()
+    await fireEvent.click(toggle)
+
+    expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith(
+      'test-project-id',
+      'open_attention_overview_on_send',
+      'true',
+    )
+    expect(vi.mocked(setConfig)).not.toHaveBeenCalledWith('open_attention_overview_on_send', expect.anything())
+  })
+
   it('saves project settings after debounce when a field changes', async () => {
     render(SettingsView, { props: defaultProps })
 

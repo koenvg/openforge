@@ -8,6 +8,7 @@ const baseValues: Record<string, string> = {
   task_display_title_metadata_updates_enabled: 'false',
   ai_provider: 'claude-code',
   use_worktrees: 'true',
+  open_attention_overview_on_send: 'false',
   task_id_prefix: 'WEB',
   github_poll_interval: '60',
   pr_review_guidance: DEFAULT_PR_REVIEW_GUIDANCE,
@@ -30,6 +31,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
 
     expect(screen.queryByTestId('ai_provider')).not.toBeNull()
     expect(screen.queryByTestId('use_worktrees')).not.toBeNull()
+    expect(screen.queryByTestId('open_attention_overview_on_send')).not.toBeNull()
     expect(screen.queryByTestId('plugin-default-demo')).not.toBeNull()
     expect(screen.queryByTestId('task_display_title_metadata_updates_enabled')).not.toBeNull()
   })
@@ -120,6 +122,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
 
     // Settings whose only home is the grouped card remain visible.
     expect(screen.queryByTestId('task_display_title_metadata_updates_enabled')).not.toBeNull()
+    expect(screen.queryByTestId('open_attention_overview_on_send')).not.toBeNull()
     expect(screen.queryByTestId('task_id_prefix')).not.toBeNull()
   })
 })
