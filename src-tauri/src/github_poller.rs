@@ -33,6 +33,7 @@ mod pr_execution;
 mod pr_readiness;
 mod review_sync;
 mod scheduling;
+mod scope_execution;
 mod sync_logging;
 
 #[allow(unused_imports)]
