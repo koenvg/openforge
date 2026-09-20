@@ -1,5 +1,7 @@
 use super::*;
 
+const SATURATED_QUEUE_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(60);
+
 #[tokio::test]
 async fn saturated_signal_queue_is_nonblocking_and_keeps_at_most_256_candidates() {
     let f = Fixture::new(true, Some("test-token")).await;
@@ -13,9 +15,22 @@ async fn saturated_signal_queue_is_nonblocking_and_keeps_at_most_256_candidates(
         1,
         "output does not await slow GitHub"
     );
+
+    let completion = f.discovery.completion_barrier().await;
     f.api.gate.add_permits(500);
-    f.discovery.settled().await;
+    tokio::time::timeout(SATURATED_QUEUE_WATCHDOG, completion)
+        .await
+        .expect("saturated discovery queue should complete")
+        .expect("discovery coordinator should remain available");
+
     assert_eq!(f.api.calls.lock().unwrap().len(), 256);
+    assert_eq!(
+        acquire_db(&f.db)
+            .get_pull_requests_for_task(&f.task_id)
+            .unwrap()
+            .len(),
+        256
+    );
 }
 
 #[tokio::test]

@@ -90,13 +90,20 @@ impl Discovery {
         }));
     }
     #[cfg(test)]
-    pub(crate) async fn settled(&self) {
+    pub(crate) async fn completion_barrier(&self) -> tokio::sync::oneshot::Receiver<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.tx.send(Message::Barrier(tx)).await.unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(5), rx)
-            .await
-            .expect("discovery settled")
-            .unwrap();
+        rx
+    }
+    #[cfg(test)]
+    pub(crate) async fn settled(&self) {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.completion_barrier().await,
+        )
+        .await
+        .expect("discovery settled")
+        .unwrap();
     }
 }
 impl Signal {
