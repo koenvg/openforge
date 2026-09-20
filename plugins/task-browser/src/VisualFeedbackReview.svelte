@@ -36,13 +36,13 @@
 </script>
 
 <section
-  class="max-h-72 shrink-0 overflow-y-auto border-b border-base-300 bg-base-200/40 px-3 py-3"
+  class="max-h-72 shrink-0 overflow-y-auto border-b border-of-border bg-of-surface-subtle/40 px-3 py-3"
   aria-label="Visual feedback review"
 >
   <div class="mb-3 flex items-center justify-between gap-3">
     <div>
       <h2 class="text-sm font-semibold">Visual feedback review</h2>
-      <p class="text-xs text-base-content/60">Correct ordered feedback while keeping the live page available below.</p>
+      <p class="text-xs text-of-text/60">Correct ordered feedback while keeping the live page available below.</p>
     </div>
     <IconButton label="Close visual feedback review" size="sm" type="button" onclick={onClose}>
       <X size={16} aria-hidden="true" />
@@ -68,24 +68,24 @@
           </Button>
         </div>
         <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
-          <dt class="text-base-content/60">Page</dt>
+          <dt class="text-of-text/60">Page</dt>
           <dd class="truncate" title={capture.evidence.title || capture.evidence.url}>
             {capture.evidence.title || capture.evidence.url}
           </dd>
-          <dt class="text-base-content/60">URL</dt>
+          <dt class="text-of-text/60">URL</dt>
           <dd class="truncate font-mono" title={capture.evidence.url}>{capture.evidence.url}</dd>
-          <dt class="text-base-content/60">Captured</dt>
+          <dt class="text-of-text/60">Captured</dt>
           <dd>{capture.evidence.capturedAt}</dd>
-          <dt class="text-base-content/60">Viewport</dt>
+          <dt class="text-of-text/60">Viewport</dt>
           <dd>{capture.evidence.width} × {capture.evidence.height}</dd>
         </dl>
 
         <ol class="mt-3 space-y-2">
           {#each captureAnnotations(capture.number) as annotation (annotation.number)}
-            <li class="rounded-[var(--of-radius-container)] bg-base-200/60 p-2 text-xs">
+            <li class="rounded-[var(--of-radius-container)] bg-of-surface-subtle/60 p-2 text-xs">
               <form onsubmit={(event) => saveAnnotation(event, annotation)}>
                 {#if capture.artifactState !== 'available'}
-                  <p class="mt-2 border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert">
+                  <p class="mt-2 border border-of-warning/30 bg-of-warning/10 px-3 py-2 text-xs text-of-warning" role="alert">
                     Annotation {annotation.number} background unavailable: {capture.artifactError ?? 'Capture availability is unknown'}
                   </p>
                 {/if}

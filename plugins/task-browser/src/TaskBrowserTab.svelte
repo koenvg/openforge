@@ -2,6 +2,7 @@
   import { ArrowLeft, ArrowRight, PanelRightOpen, RefreshCw, X } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'
   import type {
     Disposable,
@@ -257,10 +258,10 @@
 
 <svelte:window onkeydown={handleDevToolsShortcut} />
 
-<div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
+<div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-of-surface">
   <form
     data-testid="browser-navigation-toolbar"
-    class="flex min-h-[var(--of-control-height-touch)] shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-100 px-2"
+    class="flex min-h-[var(--of-control-height-touch)] shrink-0 items-center gap-1.5 border-b border-of-border bg-of-surface px-2"
     onsubmit={submitAddress}
   >
     <div class="flex shrink-0 items-center gap-0.5">
@@ -355,20 +356,20 @@
 
   <div bind:this={browserRegion} class="relative min-h-0 flex-1 overflow-hidden">
     {#if actionError !== null && session !== null}
-      <div class="absolute right-3 top-3 z-20 w-auto max-w-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error shadow-sm" aria-live="polite">
+      <div class="absolute right-3 top-3 z-20 w-auto max-w-lg border border-of-danger/30 bg-of-danger/10 px-4 py-2 text-sm text-of-danger shadow-sm" aria-live="polite">
         <span>{actionError}</span>
       </div>
     {/if}
     {#if opening}
-      <div class="flex h-full items-center justify-center p-6 text-sm text-base-content/60" role="status">
-        <span class="loading loading-spinner loading-md" aria-hidden="true"></span>
+      <div class="flex h-full items-center justify-center p-6 text-sm text-of-text/60" role="status">
+        <LoadingIndicator size="md" decorative />
         <span class="ml-3">Starting secure browser surface…</span>
       </div>
     {:else if session === null}
       <div class="flex h-full items-center justify-center p-6 text-center" role="alert">
         <div class="max-w-md space-y-2">
           <p class="font-medium">Browser unavailable</p>
-          <p class="text-sm text-base-content/70">{actionError ?? 'OpenForge could not create the browser surface.'}</p>
+          <p class="text-sm text-of-text/70">{actionError ?? 'OpenForge could not create the browser surface.'}</p>
           <Button size="sm" type="button" onclick={retrySurface}>Retry</Button>
         </div>
       </div>
