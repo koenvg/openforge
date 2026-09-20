@@ -62,7 +62,7 @@
 
 ## 8. Packaging, installation, and owned cleanup
 
-- [ ] 8.1 Package verified versioned daemon binaries and runtime assets outside replaceable app resources while live; verify packaged path resolution and that replacing the app bundle does not remove current/recovery images, required assets, or hook files.
+- [x] 8.1 Package verified versioned daemon binaries and runtime assets outside replaceable app resources while live; verify packaged path resolution and that replacing the app bundle does not remove current/recovery images, required assets, or hook files.
 - [ ] 8.2 Add the verified updater helper and integrate source installation with the restart protocol; verify isolated install tests preserve active sessions, restore the old bundle on supported pre-commit replacement failures, and never use blanket process-name kills for daemon cleanup.
 - [ ] 8.3 Integrate the explicit Restart action and available coordinated update entry points without adding release discovery; verify user-visible progress, refusal, recovery, and explicit interruption approval for first adoption. Keep production update enablement blocked if its trusted-release verification prerequisite is unavailable.
 - [ ] 8.4 Refresh CLI payloads and retain runtime versions referenced by live/recovery state; verify existing agents still reach the gateway, cleanup removes only unreferenced owned artifacts, and incompatible domain database rollback is not attempted.

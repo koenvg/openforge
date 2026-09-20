@@ -29,10 +29,13 @@ export async function assertPackageArchitectureCompatibility({
   cargoBuildTarget = '',
   appExecutablePath,
   sidecarPath,
+  daemonPath,
   readExecutableArchitectures = readDarwinExecutableArchitectures,
 } = {}) {
-  const expectedArch = expectedDarwinArchForTarget(cargoBuildTarget)
-  if (!expectedArch) return null
+  const expectedArch = cargoBuildTarget
+    ? expectedDarwinArchForTarget(cargoBuildTarget)
+    : ({ arm64: 'arm64', x64: 'x86_64' })[process.arch]
+  if (!expectedArch) throw new Error(`Unsupported macOS package target: ${cargoBuildTarget || process.arch}`)
 
   const [appArchitectures, sidecarArchitectures] = await Promise.all([
     readExecutableArchitectures(appExecutablePath),
@@ -44,6 +47,12 @@ export async function assertPackageArchitectureCompatibility({
   }
   if (!sidecarArchitectures.includes(expectedArch)) {
     throw new Error(`Rust sidecar architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${sidecarArchitectures.join(', ') || 'unknown'}`)
+  }
+  if (daemonPath) {
+    const architectures = await readExecutableArchitectures(daemonPath)
+    if (!architectures.includes(expectedArch)) {
+      throw new Error(`Session Daemon architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${architectures.join(', ') || 'unknown'}`)
+    }
   }
 
   return { expectedArch, appArchitectures, sidecarArchitectures }
