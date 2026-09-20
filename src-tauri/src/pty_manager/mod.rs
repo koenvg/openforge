@@ -215,6 +215,15 @@ impl PtyManager {
         discovery: crate::github_runtime::task_pr_discovery::Discovery,
     ) {
         self.terminal_sessions.pr_discovery.configure(discovery);
+        if let Some(bridge) = &self.daemon_shells {
+            bridge.configure_completion(self.terminal_sessions.pr_discovery.clone());
+        }
+    }
+    pub(crate) fn accept_pr_discovery_lifecycle(
+        &self,
+        change: &crate::agent_lifecycle::AgentLifecycleStatusChange,
+    ) {
+        self.terminal_sessions.pr_discovery.lifecycle(change);
     }
     pub fn new() -> Self {
         let terminal_sessions = TerminalSessions::new();

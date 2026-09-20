@@ -15,7 +15,8 @@ const TASK_LIMIT: usize = 128;
 #[derive(Clone)]
 pub(super) struct Signal {
     pub origin: Arc<Origin>,
-    pub candidate: Candidate,
+    pub candidate: Option<Candidate>,
+    pub completion: Option<u64>,
 }
 struct Pending {
     signal: Signal,
@@ -23,6 +24,7 @@ struct Pending {
 }
 enum Message {
     Signal(Pending),
+    Completion(Pending),
     #[cfg(test)]
     Barrier(tokio::sync::oneshot::Sender<()>),
 }
@@ -53,12 +55,29 @@ impl Discovery {
                 github,
                 events,
                 clock,
+                recent: Default::default(),
             },
         ));
         Self {
             tx,
             slots: Arc::new(Semaphore::new(SIGNAL_LIMIT)),
         }
+    }
+    pub(super) fn complete(&self, origin: Arc<Origin>, generation: u64) {
+        let Ok(slot) = self.slots.clone().try_acquire_owned() else {
+            log::debug!(
+                "[PR discovery] completion signal capacity exhausted; reconciliation will recover"
+            );
+            return;
+        };
+        let _ = self.tx.try_send(Message::Completion(Pending {
+            signal: Signal {
+                origin,
+                candidate: None,
+                completion: Some(generation),
+            },
+            _slot: slot,
+        }));
     }
     pub(super) fn submit(&self, signal: Signal) {
         let Ok(slot) = self.slots.clone().try_acquire_owned() else {
@@ -80,6 +99,64 @@ impl Discovery {
             .unwrap();
     }
 }
+impl Signal {
+    pub(super) fn is_current(&self) -> bool {
+        *self
+            .origin
+            .current
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            && self.completion.is_none_or(|generation| {
+                self.origin
+                    .completion
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .generation
+                    == generation
+            })
+    }
+}
+
+fn has_task_capacity(
+    task: &str,
+    tasks: &HashMap<String, VecDeque<Pending>>,
+    timers: &HashMap<String, usize>,
+) -> bool {
+    tasks.contains_key(task)
+        || timers.contains_key(task)
+        || tasks
+            .keys()
+            .chain(timers.keys())
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            < TASK_LIMIT
+}
+
+fn enqueue(
+    pending: Pending,
+    tasks: &mut HashMap<String, VecDeque<Pending>>,
+    jobs: &mut JoinSet<String>,
+    execution: &Execution,
+) {
+    let task = pending.signal.origin.task_id.clone();
+    if !tasks.contains_key(&task) && tasks.len() == TASK_LIMIT {
+        log::debug!("[PR discovery] task capacity exhausted; reconciliation will recover");
+        return;
+    }
+    let queue = tasks.entry(task).or_default();
+    if queue.iter().any(|p| {
+        p.signal.candidate == pending.signal.candidate
+            && p.signal.completion == pending.signal.completion
+            && Arc::ptr_eq(&p.signal.origin, &pending.signal.origin)
+    }) {
+        return;
+    }
+    if queue.is_empty() {
+        launch(jobs, execution, pending.signal.clone());
+    }
+    queue.push_back(pending);
+}
+
 fn launch(jobs: &mut JoinSet<String>, execution: &Execution, signal: Signal) {
     let execution = execution.clone();
     jobs.spawn(async move {
@@ -91,28 +168,48 @@ fn launch(jobs: &mut JoinSet<String>, execution: &Execution, signal: Signal) {
 async fn run(mut rx: mpsc::Receiver<Message>, execution: Execution) {
     let mut tasks: HashMap<String, VecDeque<Pending>> = HashMap::new();
     let mut jobs = JoinSet::new();
+    let mut timers = JoinSet::new();
+    let mut timer_tasks = HashMap::<String, usize>::new();
     let mut open = true;
     #[cfg(test)]
     let mut barriers = Vec::new();
-    while open || !jobs.is_empty() {
+    while open || !jobs.is_empty() || !timers.is_empty() {
         tokio::select! {
             // Drain available signals before completions so repeated output coalesces.
             biased;
             message = rx.recv(), if open => match message {
                 Some(Message::Signal(pending)) => {
-                    let task = pending.signal.origin.task_id.clone();
-                    if !tasks.contains_key(&task) && tasks.len() == TASK_LIMIT {
+                    if !has_task_capacity(&pending.signal.origin.task_id, &tasks, &timer_tasks) {
                         log::debug!("[PR discovery] task capacity exhausted; reconciliation will recover");
                         continue;
                     }
-                    let queue = tasks.entry(task).or_default();
-                    if queue.iter().any(|p| p.signal.candidate == pending.signal.candidate && Arc::ptr_eq(&p.signal.origin, &pending.signal.origin)) { continue; }
-                    if queue.is_empty() { launch(&mut jobs, &execution, pending.signal.clone()); }
-                    queue.push_back(pending);
+                    enqueue(pending, &mut tasks, &mut jobs, &execution);
+                }
+                Some(Message::Completion(pending)) => {
+                    if timers.len() >= TASK_LIMIT || !has_task_capacity(&pending.signal.origin.task_id, &tasks, &timer_tasks) {
+                        log::debug!("[PR discovery] completion capacity exhausted; reconciliation will recover");
+                        continue;
+                    }
+                    *timer_tasks.entry(pending.signal.origin.task_id.clone()).or_default() += 1;
+                    let clock = execution.clock.clone();
+                    timers.spawn(async move {
+                        clock.sleep(std::time::Duration::from_secs(2)).await;
+                        pending
+                    });
                 }
                 #[cfg(test)]
                 Some(Message::Barrier(done)) => barriers.push(done),
                 None => open = false,
+            },
+            result = timers.join_next(), if !timers.is_empty() => {
+                if let Some(Ok(pending)) = result {
+                    let task = &pending.signal.origin.task_id;
+                    if let Some(count) = timer_tasks.get_mut(task) {
+                        *count -= 1;
+                        if *count == 0 { timer_tasks.remove(task); }
+                    }
+                    if pending.signal.is_current() { enqueue(pending, &mut tasks, &mut jobs, &execution); }
+                }
             },
             result = jobs.join_next(), if !jobs.is_empty() => {
                 match result {
@@ -128,7 +225,7 @@ async fn run(mut rx: mpsc::Receiver<Message>, execution: Execution) {
             }
         }
         #[cfg(test)]
-        if tasks.is_empty() {
+        if tasks.is_empty() && timers.is_empty() {
             for done in barriers.drain(..) {
                 let _ = done.send(());
             }

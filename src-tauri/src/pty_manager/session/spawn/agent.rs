@@ -360,8 +360,7 @@ impl PtyManager {
         if matches!(exit_policy, PtyExitPolicy::TaskAgent) {
             let generations = self.terminal_sessions.agent_spawn_generations.lock().await;
             if generations.get(task_id) == Some(&token.generation) {
-                self.terminal_sessions.pr_discovery.register(
-                    task_id,
+                self.terminal_sessions.pr_discovery.register_agent(
                     task_id,
                     resolved_cwd.clone(),
                     instance_id,

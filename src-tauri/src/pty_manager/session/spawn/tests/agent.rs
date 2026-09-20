@@ -1,3 +1,6 @@
+#[path = "pr_completion.rs"]
+mod pr_completion;
+
 use crate::app_events::{AppEventBus, AppEventFrame, InMemoryAppEventAdapter};
 use crate::backend_runtime::AppHandle;
 use crate::pty_manager::session::provider_adapter::AgentPtyProviderAdapter;

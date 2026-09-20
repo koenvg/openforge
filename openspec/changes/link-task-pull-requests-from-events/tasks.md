@@ -5,9 +5,9 @@
 
 ## 2. Task identity and GitHub verification
 
-- [ ] 2.1 Add temporary-worktree and fake-GitHub tests for exact URL verification and first-PR branch discovery, including forks, tracked branch names, unresolvable ownership, ambiguous PRs, closed PRs, and same-number PRs in different repositories; verify the missing discovery behavior is red.
+- [x] 2.1 Add temporary-worktree and fake-GitHub tests for exact URL verification and first-PR branch discovery, including forks, tracked branch names, unresolvable ownership, ambiguous PRs, closed PRs, and same-number PRs in different repositories; verify the missing discovery behavior is red.
 - [ ] 2.2 Implement narrow task/session/worktree identity resolution and trusted Git remote resolution for task-owned agent, shell, and scoped sessions; verify the fixtures reject project-only and review-only sessions and resolve the correct task independent of UI selection.
-- [ ] 2.3 Add the GitHub open-head query and exact candidate verifier using the existing client, authentication, and request limits; verify fake-server assertions cover encoded branch names, complete ambiguity detection, head/base repository matching, draft acceptance, and no arbitrary URL fetching.
+- [x] 2.3 Add the GitHub open-head query and exact candidate verifier using the existing client, authentication, and request limits; verify fake-server assertions cover encoded branch names, complete ambiguity detection, head/base repository matching, draft acceptance, and no arbitrary URL fetching.
 
 ## 3. Guarded automatic persistence
 
@@ -16,7 +16,7 @@
 
 ## 4. Discovery coordination and lifecycle safety
 
-- [ ] 4.1 Add deterministic-clock coordinator tests for immediate URL signals, two-second completion debounce, resumed-work cancellation, duplicate hooks, distinct candidates during an in-flight lookup, and recently satisfied discovery; verify observable request counts and timer outcomes fail before implementation.
+- [x] 4.1 Add deterministic-clock coordinator tests for immediate URL signals, two-second completion debounce, resumed-work cancellation, duplicate hooks, distinct candidates during an in-flight lookup, and recently satisfied discovery; verify observable request counts and timer outcomes fail before implementation.
 - [x] 4.2 Implement the sidecar-owned discovery module with a bounded nonblocking queue, one in-flight discovery per task, shared GitHub capacity, and bounded retries; verify rate-limit deadlines, missing credentials, delayed visibility, queue overflow, and later retry eligibility using fake GitHub responses.
 - [x] 4.3 Add and satisfy asynchronous race tests for task deletion/completion, changed branch or worktree, PTY replacement, normal completion without replacement, and manual linking during verification; verify no stale result commits and no DB lock spans network I/O.
 
@@ -24,7 +24,7 @@
 
 - [x] 5.1 Wire accepted local PTY output in `pty_manager/events.rs` and session registration to the shared detector/discovery interface; verify current task-owned output triggers discovery while stale, replayed, unattributed, and detached-view cases behave as specified.
 - [ ] 5.2 Wire current daemon output in `pty_manager/daemon_transport.rs` through the same interface, resetting parser state on gaps and replacement without replay scanning; verify daemon output tests cover reconnect, ordering, hidden views, and a nonblocking saturated discovery queue.
-- [ ] 5.3 Wire accepted normalized task-agent completion and successful current task-agent exit into the coordinator, including renewed-working cancellation; verify lifecycle tests cover OpenCode and another provider, stale/duplicate notifications, waiting-for-input, review sessions, and hook/exit deduplication.
+- [x] 5.3 Wire accepted normalized task-agent completion and successful current task-agent exit into the coordinator, including renewed-working cancellation; verify lifecycle tests cover OpenCode and another provider, stale/duplicate notifications, waiting-for-input, review sessions, and hook/exit deduplication.
 
 ## 6. Immediate UI delivery
 

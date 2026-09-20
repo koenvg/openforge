@@ -424,9 +424,6 @@ pub(super) fn spawn_batched_pty_event_emitter(
             }
         }
 
-        terminal_sessions
-            .pr_discovery
-            .finish(&session_key, instance_id);
         batcher.flush_pending(&mut emit_pty_event);
         let (exit_outcome, emit_agent_exit, observer) = match exit_action {
             PtyExitAction::Cleanup {
@@ -471,6 +468,15 @@ pub(super) fn spawn_batched_pty_event_emitter(
         if let Some(observer) = observer {
             observer(instance_id, success);
         }
+
+        if emit_agent_exit {
+            terminal_sessions
+                .pr_discovery
+                .agent_exited(&session_key, instance_id, success);
+        }
+        terminal_sessions
+            .pr_discovery
+            .finish(&session_key, instance_id);
 
         info!("[PTY] key={} emitter received exit signal", session_key);
         let exit_event_name = format!("pty-exit-{}", session_key);

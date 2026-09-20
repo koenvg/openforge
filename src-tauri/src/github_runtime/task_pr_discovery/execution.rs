@@ -15,9 +15,10 @@ pub(super) struct Execution {
     pub github: GitHubClient,
     pub events: RuntimeEventPublisher,
     pub clock: Arc<dyn super::clock::Clock>,
+    pub recent: Arc<Mutex<std::collections::VecDeque<Success>>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Identity {
     project_id: String,
     workspace_id: i64,
@@ -25,8 +26,16 @@ struct Identity {
     path: PathBuf,
     repo_path: String,
     recorded_branch: Option<String>,
+    agent_session_id: Option<String>,
 }
 fn identity(db: &Database, origin: &Origin) -> Option<Identity> {
+    let session = db.get_latest_session_for_ticket(&origin.task_id).ok()?;
+    if origin.agent {
+        let session = session.as_ref()?;
+        if session.stage != "implementing" || session.pty_instance_id != Some(origin.instance) {
+            return None;
+        }
+    }
     let project_id = db.active_task_project_id(&origin.task_id).ok()??;
     let legacy = db.get_worktree_for_task(&origin.task_id).ok()?;
     let (workspace_id, workspace_kind, path, repo_path, recorded_branch) =
@@ -65,7 +74,14 @@ fn identity(db: &Database, origin: &Origin) -> Option<Identity> {
         path,
         repo_path,
         recorded_branch,
+        agent_session_id: session.map(|s| s.id),
     })
+}
+pub(super) struct Success {
+    task_id: String,
+    identity: Identity,
+    git: GitContext,
+    at: i64,
 }
 
 impl Execution {
@@ -87,10 +103,22 @@ impl Execution {
         else {
             return;
         };
-        if !git.trusted_bases.contains(&(
-            signal.candidate.owner.clone(),
-            signal.candidate.repo.clone(),
-        )) {
+        {
+            let mut recent = self.recent.lock().unwrap_or_else(|p| p.into_inner());
+            let now = self.clock.now();
+            recent.retain(|s| now >= s.at && now - s.at < 30);
+            if signal.candidate.is_none()
+                && recent.iter().any(|s| {
+                    s.task_id == signal.origin.task_id && s.identity == initial && s.git == git
+                })
+            {
+                return;
+            }
+        }
+        if signal.candidate.as_ref().is_some_and(|c| {
+            !git.trusted_bases
+                .contains(&(c.owner.clone(), c.repo.clone()))
+        }) {
             return;
         }
         let mut verified = None;
@@ -107,16 +135,13 @@ impl Execution {
                     .sleep(std::time::Duration::from_secs(delay))
                     .await;
             }
-            if !signal
-                .origin
-                .current
-                .read()
-                .map(|current| *current)
-                .unwrap_or(false)
-            {
+            if !signal.is_current() {
                 return;
             }
             let permit = self.github.acquire_refresh_permit().await;
+            if !signal.is_current() {
+                return;
+            }
             if self
                 .github
                 .get_last_rate_limit_reset()
@@ -127,12 +152,7 @@ impl Execution {
             }
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(30),
-                self.github.get_pr_details(
-                    &signal.candidate.owner,
-                    &signal.candidate.repo,
-                    signal.candidate.number,
-                    &token,
-                ),
+                super::lookup::lookup(&self.github, &token, &git, signal.candidate.as_ref()),
             )
             .await
             .unwrap_or_else(|_| {
@@ -142,10 +162,12 @@ impl Execution {
             });
             drop(permit);
             match result {
-                Ok(pr) => {
-                    verified = Some(pr);
+                Ok(super::lookup::Lookup::Verified(candidate, pr)) => {
+                    verified = Some((candidate, pr));
                     break;
                 }
+                Ok(super::lookup::Lookup::Rejected) => return,
+                Ok(super::lookup::Lookup::NotVisible) => {}
                 Err(error) => {
                     use crate::github_client::GitHubError;
                     let retry = match &error {
@@ -169,30 +191,35 @@ impl Execution {
                 }
             }
         }
-        let Some(pr) = verified else {
+        let Some((candidate, pr)) = verified else {
             return;
         };
         let now = self.clock.now();
-        if !git.verifies(&signal.candidate, &pr) {
-            return;
-        }
         let this = self.clone();
         let _ = tokio::task::spawn_blocking(move || -> Option<()> {
             let current = signal.origin.current.read().ok()?;
             if !*current { return None; }
+            let completion = signal.origin.completion.lock().ok()?;
+            if signal.completion.is_some_and(|g| g != completion.generation) { return None; }
             let db = this.db.lock().ok()?;
             if identity(&db, &signal.origin)? != initial { return None; }
             // Re-read Git after acquiring the database lock: waiting for a concurrent
             // write must not leave a pre-lock branch snapshot eligible to commit.
             if GitContext::resolve(&initial.path)? != git { return None; }
             let id = pr.extra["id"].as_i64()?;
-            let url = format!("https://github.com/{}/{}/pull/{}", signal.candidate.owner, signal.candidate.repo, signal.candidate.number);
+            let url = format!("https://github.com/{}/{}/pull/{}", candidate.owner, candidate.repo, candidate.number);
             let outcome = db.associate_pull_request_automatically(AutomaticPr {
-                id, number: pr.number, task_id: &signal.origin.task_id, owner: &signal.candidate.owner,
-                repo: &signal.candidate.repo, title: &pr.title, url: &url, state: &pr.state, now, draft: pr.draft.unwrap_or(false),
+                id, number: pr.number, task_id: &signal.origin.task_id, owner: &candidate.owner,
+                repo: &candidate.repo, title: &pr.title, url: &url, state: &pr.state, now, draft: pr.draft.unwrap_or(false),
             }).ok()?;
             if outcome == AutomaticAssociation::Created {
                 this.events.publish("task-pull-request-updated", &serde_json::json!({"task_id":signal.origin.task_id,"pr_id":id,"action":"linked"}));
+            }
+            if outcome != AutomaticAssociation::OwnershipConflict {
+                let mut recent = this.recent.lock().ok()?;
+                recent.retain(|s| s.task_id != signal.origin.task_id);
+                if recent.len() == 128 { recent.pop_front(); }
+                recent.push_back(Success { task_id: signal.origin.task_id.clone(), identity: initial, git, at: now });
             }
             Some(())
         }).await;

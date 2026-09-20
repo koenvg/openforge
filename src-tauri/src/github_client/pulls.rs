@@ -102,6 +102,48 @@ fn review_body_comment(review: &PrReview) -> Option<PrComment> {
 }
 
 impl GitHubClient {
+    /// Fetch every open PR for a qualified head, including drafts and all authors.
+    pub(crate) async fn open_prs_by_head(
+        &self,
+        owner: &str,
+        repo: &str,
+        head: &str,
+        token: &str,
+    ) -> Result<Vec<PullRequest>, GitHubError> {
+        let endpoint = format!("https://api.github.com/repos/{owner}/{repo}/pulls");
+        let mut prs = Vec::new();
+        // Bound pathological responses. Never return a partial, apparently unique result.
+        for page in 1..=100 {
+            let mut url = reqwest::Url::parse(&endpoint)
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            url.query_pairs_mut().extend_pairs([
+                ("state", "open"),
+                ("head", head),
+                ("per_page", "100"),
+                ("page", &page.to_string()),
+            ]);
+            let response = self
+                .send_github(self.github_request(reqwest::Method::GET, url.as_str(), token))
+                .await?;
+            if !response.status().is_success() {
+                return Err(Self::api_error_from_response(response).await);
+            }
+            let more = next_page_url(response.headers()).is_some();
+            let batch: Vec<PullRequest> = response
+                .json()
+                .await
+                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            let full = batch.len() == 100;
+            prs.extend(batch);
+            if !more && !full {
+                return Ok(prs);
+            }
+        }
+        Err(GitHubError::ParseError(
+            "head lookup pagination limit exceeded".into(),
+        ))
+    }
+
     pub async fn merge_pr(
         &self,
         owner: &str,

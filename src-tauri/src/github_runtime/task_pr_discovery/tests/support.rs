@@ -1,6 +1,6 @@
 use super::*;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
@@ -10,6 +10,8 @@ use tokio::sync::{Notify, Semaphore};
 pub(in crate::github_runtime::task_pr_discovery) struct Api {
     pub calls: Mutex<Vec<i64>>,
     pub started: Notify,
+    pub branches: Mutex<Vec<(String, String, String, usize)>>,
+    pub branch_prs: Mutex<Option<Vec<serde_json::Value>>>,
     pub gate: Semaphore,
     pub statuses: Mutex<VecDeque<u16>>,
     pub body: Mutex<serde_json::Value>,
@@ -28,6 +30,55 @@ async fn response(
     let mut body = api.body.lock().unwrap().clone();
     body["number"] = number.into();
     body["id"] = (500 + number).into();
+    let mut headers = HeaderMap::new();
+    if let Some(retry) = api.retry_after.lock().unwrap().as_ref() {
+        headers.insert("retry-after", retry.parse().unwrap());
+    }
+    (StatusCode::from_u16(status).unwrap(), headers, Json(body))
+}
+async fn branch_response(
+    State(api): State<Arc<Api>>,
+    Path((owner, repo)): Path<(String, String)>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    assert_eq!(headers["authorization"], "token test-token");
+    assert_eq!(query["state"], "open");
+    assert_eq!(query["per_page"], "100");
+    let head = query["head"].clone();
+    let page: usize = query["page"].parse().unwrap();
+    api.branches
+        .lock()
+        .unwrap()
+        .push((owner.clone(), repo.clone(), head.clone(), page));
+    api.calls.lock().unwrap().push(0);
+    api.started.notify_one();
+    api.gate.acquire().await.unwrap().forget();
+    let status = api.statuses.lock().unwrap().pop_front().unwrap_or(200);
+    let body = api
+        .branch_prs
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap_or_else(|| vec![api.body.lock().unwrap().clone()]);
+    let body: Vec<_> = body
+        .into_iter()
+        .filter(|pr| {
+            pr["base"]["repo"]["full_name"] == format!("{owner}/{repo}")
+                && format!(
+                    "{}:{}",
+                    pr["head"]["repo"]["full_name"]
+                        .as_str()
+                        .unwrap()
+                        .split('/')
+                        .next()
+                        .unwrap(),
+                    pr["head"]["ref"].as_str().unwrap()
+                ) == head
+        })
+        .skip((page - 1) * 100)
+        .take(100)
+        .collect();
     let mut headers = HeaderMap::new();
     if let Some(retry) = api.retry_after.lock().unwrap().as_ref() {
         headers.insert("retry-after", retry.parse().unwrap());
@@ -95,6 +146,8 @@ impl Fixture {
         .unwrap();
         let api = Arc::new(Api {
             calls: Mutex::new(vec![]),
+            branches: Mutex::new(vec![]),
+            branch_prs: Mutex::new(None),
             started: Notify::new(),
             gate: Semaphore::new(if blocked { 0 } else { 1024 }),
             statuses: Mutex::new(VecDeque::new()),
@@ -108,6 +161,7 @@ impl Fixture {
         });
         let router = Router::new()
             .route("/repos/acme/widgets/pulls/:number", get(response))
+            .route("/repos/:owner/:repo/pulls", get(branch_response))
             .with_state(api.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
