@@ -36,11 +36,22 @@ export async function exchangeDaemon(runtime, credentials, command) {
       const length = bytes.readUInt32BE()
       if (length > 4 * 1024 * 1024) return finish(new Error('Oversized daemon fixture reply'))
       if (bytes.length < length + 4) return
+      let reply
       try {
-        const reply = JSON.parse(bytes.subarray(4, length + 4).toString())
-        if (reply.version !== 3 || !reply.body?.Ok) throw new Error('Daemon fixture request refused')
-        finish(null, reply.body.Ok)
-      } catch { finish(new Error('Invalid or refused daemon fixture reply')) }
+        reply = JSON.parse(bytes.subarray(4, length + 4).toString())
+      } catch { return finish(new Error('Invalid daemon fixture reply')) }
+      if (reply?.version !== 3) return finish(new Error('Invalid daemon fixture reply version'))
+      if (!reply.body?.Ok) {
+        const failure = reply.body?.Err
+        const known = ['version', 'capacity', 'foreignInstallation', 'staleController', 'unauthorized',
+          'alreadyRunning', 'stalePty', 'staleOutput', 'unsupportedReplacement', 'operationConflict',
+          'outOfOrder', 'outcomeUnknown', 'recoveryUnavailable', 'invalidRequest']
+        const category = known.includes(failure) ? failure
+          : failure && typeof failure === 'object' && Object.hasOwn(failure, 'host') ? 'host'
+            : failure && typeof failure === 'object' && Object.hasOwn(failure, 'transport') ? 'transport' : 'invalidReply'
+        return finish(new Error(`Daemon fixture ${command.kind} refused (${category})`))
+      }
+      finish(null, reply.body.Ok)
     })
   })
 }
