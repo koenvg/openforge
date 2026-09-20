@@ -30,6 +30,7 @@
     "description": "Adds a secure browser tab to every OpenForge task",
     "icon": "globe",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin-task-browser.css"],
     "requires": [
       "taskPane",
       "browserSurfaces",
