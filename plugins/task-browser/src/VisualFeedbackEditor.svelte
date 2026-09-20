@@ -27,7 +27,7 @@
 </script>
 
 {#if available}
-  <div class="visual-feedback-actions">
+  <div class="visual-feedback-actions max-w-full">
     <IconButton
       label={editor.active ? 'Stop adding visual feedback' : 'Add visual feedback'}
       variant={editor.active ? 'primary' : 'ghost'}
@@ -116,13 +116,12 @@
 <style>
   .visual-feedback-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--of-space2);
   }
 
-  @container task-browser (max-width: 68rem) {
-    .visual-feedback-actions {
-      flex-wrap: wrap;
-    }
+  .visual-feedback-actions > :global(*) {
+    flex-shrink: 0;
   }
 </style>
