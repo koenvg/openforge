@@ -27,86 +27,102 @@
 </script>
 
 {#if available}
-  <IconButton
-    label={editor.active ? 'Stop adding visual feedback' : 'Add visual feedback'}
-    variant={editor.active ? 'primary' : 'ghost'}
-    size="sm"
-    type="button"
-    title={editor.active ? 'Stop adding visual feedback' : 'Add visual feedback'}
-    aria-pressed={editor.active}
-    disabled={editor.busy}
-    onclick={() => void editor.toggle()}
-  >
-    <MessageSquarePlus size={17} aria-hidden="true" />
-  </IconButton>
-  {#if editor.canUndo}
+  <div class="visual-feedback-actions">
     <IconButton
-      label="Undo last visual feedback change"
+      label={editor.active ? 'Stop adding visual feedback' : 'Add visual feedback'}
+      variant={editor.active ? 'primary' : 'ghost'}
       size="sm"
       type="button"
-      title="Undo last change"
+      title={editor.active ? 'Stop adding visual feedback' : 'Add visual feedback'}
+      aria-pressed={editor.active}
       disabled={editor.busy}
-      onclick={() => void editor.undo()}
+      onclick={() => void editor.toggle()}
     >
-      <Undo2 size={16} aria-hidden="true" />
+      <MessageSquarePlus size={17} aria-hidden="true" />
     </IconButton>
-  {/if}
-  {#if editor.saveError !== null}
-    <span class="max-w-48 truncate text-xs text-of-danger" title={editor.saveError} role="alert">{editor.saveError}</span>
-    <Button
-      variant="outline"
-      size="sm"
-      style="border-color: var(--of-warning); color: var(--of-warning);"
-      type="button"
-      aria-label="Retry saving visual feedback"
-      disabled={editor.busy}
-      onclick={() => void editor.retrySave()}
-    >
-      <RefreshCw size={15} aria-hidden="true" />
-      Retry save
-    </Button>
-  {/if}
-  {#if editor.annotations.length > 0}
-    <span class="whitespace-nowrap text-xs text-of-text/60" aria-live="polite">
-      {countLabel(editor.captures.length, 'screenshot', 'screenshots')} ·
-      {countLabel(editor.annotations.length, 'annotation', 'annotations')}
-    </span>
-    <Button
-      variant={reviewing ? 'secondary' : 'ghost'}
-      size="sm"
-      type="button"
-      aria-label="Review visual feedback"
-      aria-expanded={reviewing}
-      disabled={editor.busy}
-      onclick={onReview}
-    >
-      <List size={16} aria-hidden="true" />
-      Review
-    </Button>
-    <Button
-      size="sm"
-      type="button"
-      aria-label="Send visual feedback to agent"
-      title="Send to agent"
-      disabled={editor.busy}
-      onclick={onSend}
-    >
-      {#if editor.busy}
-        <LoadingIndicator size="xs" decorative />
-      {:else}
-        <SendIcon size={16} aria-hidden="true" />
-      {/if}
-      Send to agent
-    </Button>
-    <IconButton
-      label="Discard visual feedback"
-      size="sm"
-      type="button"
-      title="Discard visual feedback"
-      disabled={editor.busy}
-      onclick={discardSession}
-    >
-      <Trash2 size={16} aria-hidden="true" />
-    </IconButton>
-  {/if}
+    {#if editor.canUndo}
+      <IconButton
+        label="Undo last visual feedback change"
+        size="sm"
+        type="button"
+        title="Undo last change"
+        disabled={editor.busy}
+        onclick={() => void editor.undo()}
+      >
+        <Undo2 size={16} aria-hidden="true" />
+      </IconButton>
+    {/if}
+    {#if editor.saveError !== null}
+      <span class="max-w-48 truncate text-xs text-of-danger" title={editor.saveError} role="alert">{editor.saveError}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        style="border-color: var(--of-warning); color: var(--of-warning);"
+        type="button"
+        aria-label="Retry saving visual feedback"
+        disabled={editor.busy}
+        onclick={() => void editor.retrySave()}
+      >
+        <RefreshCw size={15} aria-hidden="true" />
+        Retry save
+      </Button>
+    {/if}
+    {#if editor.annotations.length > 0}
+      <span class="whitespace-nowrap text-xs text-of-text/60" aria-live="polite">
+        {countLabel(editor.captures.length, 'screenshot', 'screenshots')} ·
+        {countLabel(editor.annotations.length, 'annotation', 'annotations')}
+      </span>
+      <Button
+        variant={reviewing ? 'secondary' : 'ghost'}
+        size="sm"
+        type="button"
+        aria-label="Review visual feedback"
+        aria-expanded={reviewing}
+        disabled={editor.busy}
+        onclick={onReview}
+      >
+        <List size={16} aria-hidden="true" />
+        Review
+      </Button>
+      <Button
+        size="sm"
+        type="button"
+        aria-label="Send visual feedback to agent"
+        title="Send to agent"
+        disabled={editor.busy}
+        onclick={onSend}
+      >
+        {#if editor.busy}
+          <LoadingIndicator size="xs" decorative />
+        {:else}
+          <SendIcon size={16} aria-hidden="true" />
+        {/if}
+        Send to agent
+      </Button>
+      <IconButton
+        label="Discard visual feedback"
+        size="sm"
+        type="button"
+        title="Discard visual feedback"
+        disabled={editor.busy}
+        onclick={discardSession}
+      >
+        <Trash2 size={16} aria-hidden="true" />
+      </IconButton>
+    {/if}
+  </div>
 {/if}
+
+<style>
+  .visual-feedback-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--of-space2);
+  }
+
+  @container task-browser (max-width: 68rem) {
+    .visual-feedback-actions {
+      flex-wrap: wrap;
+    }
+  }
+</style>

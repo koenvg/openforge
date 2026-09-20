@@ -107,6 +107,33 @@ async function assertSession(page) {
   assert.deepEqual(await page.evaluate(async entry => (await import(entry)).lifecycle, entry),
     { created: 1, attached: 1, detached: 0, destroyed: 0 })
 }
+async function assertToolbarReachable(page, label) {
+  const layout = await page.locator(targets.toolbar).evaluate(toolbar => {
+    const toolbarBox = toolbar.getBoundingClientRect()
+    const address = toolbar.querySelector('#task-browser-address')
+    if (!(address instanceof HTMLElement)) throw new Error('Missing browser address input')
+    const addressBox = address.getBoundingClientRect()
+    const clipped = [...toolbar.querySelectorAll('button, input')]
+      .filter(element => element instanceof HTMLElement && element.offsetParent !== null)
+      .filter(element => {
+        const box = element.getBoundingClientRect()
+        return box.left < toolbarBox.left - 1
+          || box.right > toolbarBox.right + 1
+          || box.top < toolbarBox.top - 1
+          || box.bottom > toolbarBox.bottom + 1
+      })
+      .map(element => element.getAttribute('aria-label') || element.textContent?.trim() || element.id)
+    return {
+      addressWidth: addressBox.width,
+      clipped,
+      clientWidth: toolbar.clientWidth,
+      scrollWidth: toolbar.scrollWidth,
+    }
+  })
+  assert.ok(layout.addressWidth >= 160, `${label}: address input is only ${layout.addressWidth}px wide`)
+  assert.deepEqual(layout.clipped, [], `${label}: toolbar controls are clipped`)
+  assert.ok(layout.scrollWidth <= layout.clientWidth + 1, `${label}: toolbar overflows horizontally`)
+}
 let browser
 try {
   await server.listen()
@@ -119,6 +146,9 @@ try {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
     try {
       await page.setViewportSize({ width, height: 850 })
       await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -126,6 +156,7 @@ try {
       await page.locator('#live').getByRole('button', { name: 'Review visual feedback' }).click()
       await page.locator('#live').getByRole('button', { name: 'Reload page' }).click()
       await page.locator(targets.error).waitFor()
+      await assertToolbarReachable(page, `draft/${width}`)
       await installBaselineThemes(page, entry)
       const comment = page.locator('#live textarea')
       await comment.fill('Edited feedback survives every theme switch and keeps its wrapping.')
@@ -158,8 +189,8 @@ try {
         if (!baseline) {
           const expected = previous.reports.find(report => report.width === width && report.theme === theme)
           compareBaseline(snapshot, expected.snapshot, `${theme}/${width}`, {
-            // SDK spinners use a currentColor border instead of the legacy mask fill.
-            ignorePath: path => /\.spinner\.(background|borderColor|borderRadius|scrollWidth|scrollHeight)$/.test(path),
+            // SDK spinners intentionally changed rendering; this task intentionally changes narrow toolbar height.
+            ignorePath: path => /\.(spinner\.(background|borderColor|borderRadius|scrollWidth|scrollHeight)|toolbar\.(height|scrollHeight))$/.test(path),
           })
           assert.equal(await page.locator(targets.spinner).evaluate(element => {
             const css = getComputedStyle(element)
@@ -174,6 +205,7 @@ try {
       await fixture(page, 'rejectSaves', true)
       await page.locator('#live').getByRole('button', { name: 'Save annotation 1' }).click()
       await page.locator('#live').getByRole('button', { name: 'Retry saving visual feedback' }).waitFor()
+      await assertToolbarReachable(page, `save-error/${width}`)
       const saveError = await measure(page, { saveError: '#live span[role="alert"]' })
       await fixture(page, 'rejectSaves', false)
       await page.locator('#live').getByRole('button', { name: 'Retry saving visual feedback' }).click()
@@ -183,10 +215,11 @@ try {
       await send.click()
       await page.waitForFunction(() => document.querySelector('#live button[aria-label="Send visual feedback to agent"]')?.disabled)
       const busy = await measure(page, { busySpinner: '#live button[aria-label="Send visual feedback to agent"] > span', send: '#live button[aria-label="Send visual feedback to agent"]' })
+      await assertToolbarReachable(page, `busy/${width}`)
       assert.equal(await send.locator('[aria-hidden="true"]').count(), 1)
       assert.equal(await send.getByRole('status').count(), 0)
       if (!baseline) compareBaseline({ saveError, busy }, previous.states[width], `states/${width}`, {
-        ignorePath: path => /\.busySpinner\.(background|borderColor|borderRadius|scrollWidth|scrollHeight)$/.test(path),
+        ignorePath: path => /\.(busySpinner\.(background|borderColor|borderRadius|scrollWidth|scrollHeight)|saveError\.(width|scrollWidth))$/.test(path),
       })
       states[width] = { saveError, busy }
       await fixture(page, 'finishSend')
