@@ -2,7 +2,7 @@ use super::super::callbacks::{
     optional_param_string, optional_param_u64, optional_param_usize, required_param_string,
 };
 use super::super::PluginHost;
-use super::{filesystem_plugin_id, read_text_file_under_root};
+use super::{filesystem_plugin_id, open_authorized_file_under_root, read_text_file_under_root};
 use serde_json::{json, Value};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -45,23 +45,7 @@ impl PluginHost {
     ) -> Result<Value, String> {
         let path = required_param_string(params, "path")?;
         let root = self.external_read_root_for_host(params)?;
-        let full_path = crate::project_fs::resolve_existing_path(&root, Some(&path))
-            .map_err(|error| error.to_string())?;
-        let metadata = tokio::fs::metadata(&full_path)
-            .await
-            .map_err(|error| format!("failed to inspect external file: {error}"))?;
-        if !metadata.is_file() {
-            return Err("external filesystem path is not a file".to_string());
-        }
-        let modified_at_ms = metadata
-            .modified()
-            .ok()
-            .and_then(|time| crate::unix_timestamp::milliseconds(time).ok());
-        Ok(json!({
-            "identity": external_file_identity(&metadata)?,
-            "sizeBytes": metadata.len(),
-            "modifiedAtMs": modified_at_ms,
-        }))
+        stat_external_file_under_root(&root, &path).await
     }
 
     pub(in crate::plugin_host) async fn read_external_text_file_chunk_for_host(
@@ -104,6 +88,37 @@ impl PluginHost {
     }
 }
 
+async fn stat_external_file_under_root(root: &Path, path: &str) -> Result<Value, String> {
+    let opened = open_authorized_file_under_root(root, path).await?;
+    external_file_stat(opened)
+}
+
+#[cfg(test)]
+async fn stat_external_file_under_root_with_hook<F>(
+    root: &Path,
+    path: &str,
+    before_open: F,
+) -> Result<Value, String>
+where
+    F: FnOnce() + Send + 'static,
+{
+    let opened = super::open_authorized_file_under_root_with_hook(root, path, before_open).await?;
+    external_file_stat(opened)
+}
+
+fn external_file_stat(opened: crate::authorized_fs::AuthorizedFile) -> Result<Value, String> {
+    let metadata = opened.metadata();
+    let modified_at_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|time| crate::unix_timestamp::milliseconds(time).ok());
+    Ok(json!({
+        "identity": external_file_identity(metadata)?,
+        "sizeBytes": metadata.len(),
+        "modifiedAtMs": modified_at_ms,
+    }))
+}
+
 async fn read_text_file_chunk_under_root(
     root: &Path,
     path: &str,
@@ -111,16 +126,35 @@ async fn read_text_file_chunk_under_root(
     offset: u64,
     max_bytes: usize,
 ) -> Result<(String, u64, bool), String> {
-    let full_path = crate::project_fs::resolve_existing_path(root, Some(path))
-        .map_err(|error| error.to_string())?;
-    let mut file = tokio::fs::File::open(full_path)
-        .await
-        .map_err(|error| format!("failed to open UTF-8 text file: {error}"))?;
-    let metadata = file
-        .metadata()
-        .await
-        .map_err(|error| format!("failed to inspect UTF-8 text file: {error}"))?;
-    let identity = external_file_identity(&metadata)?;
+    let opened = open_authorized_file_under_root(root, path).await?;
+    read_opened_text_file_chunk(opened, expected_identity, offset, max_bytes).await
+}
+
+#[cfg(test)]
+async fn read_text_file_chunk_under_root_with_hook<F>(
+    root: &Path,
+    path: &str,
+    expected_identity: Option<&str>,
+    offset: u64,
+    max_bytes: usize,
+    before_open: F,
+) -> Result<(String, u64, bool), String>
+where
+    F: FnOnce() + Send + 'static,
+{
+    let opened = super::open_authorized_file_under_root_with_hook(root, path, before_open).await?;
+    read_opened_text_file_chunk(opened, expected_identity, offset, max_bytes).await
+}
+
+async fn read_opened_text_file_chunk(
+    opened: crate::authorized_fs::AuthorizedFile,
+    expected_identity: Option<&str>,
+    offset: u64,
+    max_bytes: usize,
+) -> Result<(String, u64, bool), String> {
+    let metadata = opened.metadata();
+    let identity = external_file_identity(metadata)?;
+    let file_len = metadata.len();
     if let Some(expected_identity) = expected_identity {
         if expected_identity != identity {
             return Err(format!(
@@ -128,11 +162,11 @@ async fn read_text_file_chunk_under_root(
             ));
         }
     }
-    let file_len = metadata.len();
     if offset >= file_len {
         return Ok((String::new(), offset, true));
     }
 
+    let mut file = tokio::fs::File::from_std(opened.into_file());
     file.seek(std::io::SeekFrom::Start(offset))
         .await
         .map_err(|error| format!("failed to seek UTF-8 text file: {error}"))?;
@@ -176,4 +210,112 @@ fn external_file_identity(metadata: &std::fs::Metadata) -> Result<String, String
 #[cfg(not(unix))]
 fn external_file_identity(_metadata: &std::fs::Metadata) -> Result<String, String> {
     Err("stable external file identity is unavailable on this platform".to_string())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::ffi::OsStrExt;
+
+    fn replace_component_with_outside_symlink(root: &Path, outside: &Path) {
+        std::fs::rename(root.join("nested"), root.join("original"))
+            .expect("move authorized component");
+        std::os::unix::fs::symlink(outside, root.join("nested"))
+            .expect("replace component with outside symlink");
+    }
+
+    fn create_fifo(path: &Path) {
+        let fifo_path = std::ffi::CString::new(path.as_os_str().as_bytes()).expect("FIFO path");
+        // SAFETY: fifo_path is NUL-terminated and the mode is a valid permission mask.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+    }
+
+    #[tokio::test]
+    async fn external_stat_cannot_be_redirected_by_component_replacement() {
+        let root = tempfile::tempdir().expect("root");
+        let outside = tempfile::tempdir().expect("outside");
+        std::fs::create_dir(root.path().join("nested")).expect("nested directory");
+        std::fs::write(root.path().join("nested/file.txt"), "inside").expect("inside fixture");
+        std::fs::write(outside.path().join("file.txt"), "outside content")
+            .expect("outside fixture");
+        let root_path = root.path().to_path_buf();
+        let outside_path = outside.path().to_path_buf();
+
+        let result =
+            stat_external_file_under_root_with_hook(root.path(), "nested/file.txt", move || {
+                replace_component_with_outside_symlink(&root_path, &outside_path)
+            })
+            .await;
+
+        match result {
+            Ok(stat) => assert_eq!(stat["sizeBytes"], 6),
+            Err(error) => assert!(
+                error.contains("Path traversal detected")
+                    || error.contains("Failed to canonicalize path"),
+                "unexpected authorization error: {error}"
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn external_chunk_read_cannot_be_redirected_by_component_replacement() {
+        let root = tempfile::tempdir().expect("root");
+        let outside = tempfile::tempdir().expect("outside");
+        std::fs::create_dir(root.path().join("nested")).expect("nested directory");
+        std::fs::write(root.path().join("nested/file.txt"), "inside").expect("inside fixture");
+        std::fs::write(outside.path().join("file.txt"), "outside").expect("outside fixture");
+        let root_path = root.path().to_path_buf();
+        let outside_path = outside.path().to_path_buf();
+
+        let result = read_text_file_chunk_under_root_with_hook(
+            root.path(),
+            "nested/file.txt",
+            None,
+            0,
+            64,
+            move || replace_component_with_outside_symlink(&root_path, &outside_path),
+        )
+        .await;
+
+        match result {
+            Ok((content, _, _)) => assert_eq!(content, "inside"),
+            Err(error) => assert!(
+                error.contains("Path traversal detected")
+                    || error.contains("Failed to canonicalize path"),
+                "unexpected authorization error: {error}"
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn external_stat_rejects_special_files() {
+        let root = tempfile::tempdir().expect("root");
+        create_fifo(&root.path().join("events.jsonl"));
+
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            stat_external_file_under_root(root.path(), "events.jsonl"),
+        )
+        .await
+        .expect("special-file rejection must return promptly")
+        .expect_err("special file must fail");
+
+        assert!(error.contains("not a regular file"));
+    }
+
+    #[tokio::test]
+    async fn external_chunk_read_rejects_special_files_without_waiting_for_a_writer() {
+        let root = tempfile::tempdir().expect("root");
+        create_fifo(&root.path().join("events.jsonl"));
+
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            read_text_file_chunk_under_root(root.path(), "events.jsonl", None, 0, 64),
+        )
+        .await
+        .expect("special-file rejection must not wait for a writer")
+        .expect_err("special file must fail");
+
+        assert!(error.contains("not a regular file"));
+    }
 }
