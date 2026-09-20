@@ -83,11 +83,14 @@ describe('icon button tooltip positioning', () => {
   })
 
   it('briefly overshoots on entry and settles without shifting its button', async () => {
+    // Hold the real CSS animation from creation, before a slow driver can miss it.
+    await page.addStyleTag({ content: '[role="tooltip"] { animation-play-state: paused !important; }' })
     const button = page.getByRole('button', { name: 'right action', exact: true })
     const before = await button.boundingBox()
     await button.focus()
     const tooltip = page.getByRole('tooltip')
     await tooltip.waitFor()
+    expect(await tooltip.evaluate(node => node.getAnimations().map(animation => animation.playState))).toEqual(['paused'])
     const motion = await tooltip.evaluate((node) => {
       const animation = node.getAnimations()[0]
       if (!animation) return null
@@ -105,9 +108,11 @@ describe('icon button tooltip positioning', () => {
 
   it.each(['top', 'right', 'bottom', 'left'])('avoids clipping at the %s window edge', async (side) => {
     await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html?edge=${side}`)
+    await page.addStyleTag({ content: '[role="tooltip"] { animation-play-state: paused !important; }' })
     await page.getByRole('button', { name: 'Edge action' }).focus()
     const tooltip = page.getByRole('tooltip')
     await tooltip.waitFor()
+    expect(await tooltip.evaluate(node => node.getAnimations().map(animation => animation.playState))).toEqual(['paused'])
     const entrance = await tooltip.evaluate((node) => {
       const animation = node.getAnimations()[0]
       animation.pause()
