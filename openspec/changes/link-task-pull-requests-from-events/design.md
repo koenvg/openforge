@@ -87,7 +87,7 @@ Alternative rejected: using manual linking's synthetic optimistic row before Git
 
 ### 6. Give reconciliation its own clock
 
-Separate task-link reconciliation eligibility from `GlobalReviewLists`. Add a dedicated reconciliation scope or explicit phase with its own last-success timestamp and a fixed 900-second due interval. Keep `github_poll_interval` and the global-list multiplier unchanged for their existing purposes.
+Separate task-link reconciliation eligibility from `GlobalReviewLists`. Add a dedicated reconciliation scope or explicit phase with its own last-success timestamp and a fixed 300-second due interval. Keep `github_poll_interval` and the global-list multiplier unchanged for their existing purposes.
 
 The first eligible startup cycle requests reconciliation. Manual full synchronization includes it regardless of the background interval. Failed reconciliation does not advance its success timestamp; it retries on a later eligible scheduler wake, subject to existing rate-limit backoff. Automatic cycles preserve focus gating. Targeted local-signal work is allowed while unfocused because it follows actual task activity, not an idle periodic scan.
 
@@ -100,7 +100,7 @@ Alternative rejected: deleting reconciliation entirely, because PRs can be creat
 - Terminal output can contain unrelated or malicious URLs -> treat text as a hint, verify full Git identity, restrict hosts, and preserve existing ownership.
 - TUI redraws or unsupported escape sequences can hide a URL -> fail closed and use completion discovery plus reconciliation instead of implementing a screen parser.
 - Slow global refresh work can delay targeted verification -> share request capacity, avoid a full global scan for local signals, and measure queue delay separately from request latency.
-- A 15-minute fallback increases delay for PRs created elsewhere -> retain startup/manual synchronization and document that only locally observed creation gets immediate discovery.
+- A 5-minute fallback delays PRs created elsewhere -> retain startup/manual synchronization and document that only locally observed creation gets immediate discovery.
 - Forks and reused branch names can be ambiguous -> verify head repository, tracked branch, and trusted base candidates; skip ambiguous results rather than guess.
 - Local and daemon transport paths can diverge -> exercise both adapters against the same detector and stale-instance/gap cases, including a hidden or absent view.
 - A task/worktree may change during network I/O -> generation checks and guarded persistence prevent stale results from linking the new session.
@@ -110,7 +110,7 @@ Alternative rejected: deleting reconciliation entirely, because PRs can be creat
 
 1. Add detector, verifier, guarded persistence, and coordinator tests before each corresponding implementation slice.
 2. Wire both output adapters and normalized completion signals, retaining the existing discovery cadence until the new path passes integration checks.
-3. Switch background task-link reconciliation to its independent 15-minute clock only after event-driven first-link behavior and UI delivery are verified.
+3. Switch background task-link reconciliation to its independent 5-minute clock only after event-driven first-link behavior and UI delivery are verified.
 4. No schema migration is planned. Existing PR rows and manual links remain valid. If canonical identity handling exposes a required schema change, stop and revise this plan before implementing it.
 5. Rollback removes the signal integrations and restores the old reconciliation scheduling. Persisted associations remain ordinary PR records; no destructive rollback or data deletion is needed.
 

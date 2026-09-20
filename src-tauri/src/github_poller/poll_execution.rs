@@ -1,13 +1,13 @@
 use super::common::{json_value_for_event, GitHubEventTarget, PollOutcome, PollResult};
 use super::persistence::{get_open_prs_for_task, poll_prs_for_project};
 use super::review_sync::{
-    count_poll_phase_error, poll_authored_prs, poll_review_prs, sync_authored_task_prs,
+    count_poll_phase_error, poll_authored_prs, poll_authored_prs_from_snapshot, poll_review_prs,
+    sync_authored_task_prs,
 };
 use super::scheduling::{
-    build_poll_plan, current_unix_timestamp, get_scheduled_prs_for_project,
-    parse_poll_interval_seconds, poll_scheduler_snapshot,
-    rate_limit_sleep_duration_with_optional_now, scheduled_pr_in_scope, select_projects,
-    PollContext, PollScope,
+    current_unix_timestamp, get_scheduled_prs_for_project, parse_poll_interval_seconds,
+    poll_scheduler_snapshot, rate_limit_sleep_duration_with_optional_now, scheduled_pr_in_scope,
+    select_projects, PollCadence, PollContext, PollScope,
 };
 use super::sync_logging::{
     format_rate_limit_pause_log, format_sync_phase_log, format_sync_scope_log, poll_scope_log_name,
@@ -62,7 +62,7 @@ async fn start_github_poller_with_state(
     events: GitHubEventTarget,
     poll_context: PollContext,
 ) {
-    let mut last_global_review_at = 0;
+    let mut cadence = PollCadence::default();
 
     loop {
         let poll_interval = {
@@ -80,10 +80,10 @@ async fn start_github_poller_with_state(
                 continue;
             }
         };
-        let global_review_interval = (poll_interval * 4) as i64;
-        let global_review_due = now.saturating_sub(last_global_review_at) >= global_review_interval;
-        let scheduler_snapshot = poll_scheduler_snapshot(&db, false, None, global_review_due);
-        let plan = build_poll_plan(
+        let reset_at = github_client.get_last_rate_limit_reset();
+        let rate_limited = reset_at.is_some_and(|reset| reset > now);
+        let scheduler_snapshot = poll_scheduler_snapshot(&db, rate_limited, reset_at, false);
+        let plan = cadence.plan(
             &poll_context.snapshot(),
             scheduler_snapshot,
             poll_interval,
@@ -99,14 +99,25 @@ async fn start_github_poller_with_state(
             continue;
         }
 
-        let ran_global_review = plan.scopes.iter().any(PollScope::polls_global_lists);
         let mut result = PollResult::empty();
         let mut last_scope = None;
         for scope in plan.scopes {
             last_scope = Some(scope.clone());
-            let scope_result =
-                poll_github_once_with_state(db.clone(), &github_client, &events, &scope).await;
+            let execution = poll_github_scope(db.clone(), &github_client, &events, &scope).await;
+            let scope_result = execution.result;
             let stop_for_rate_limit = scope_result.rate_limited;
+            match current_unix_timestamp() {
+                Ok(now) => cadence.record(
+                    &scope,
+                    if execution.task_links_succeeded {
+                        PollOutcome::Completed
+                    } else {
+                        PollOutcome::Failed
+                    },
+                    now,
+                ),
+                Err(error) => warn!("[GitHub Poller] Failed to record sync time: {error}"),
+            }
             result.absorb(scope_result);
             if stop_for_rate_limit {
                 break;
@@ -129,13 +140,6 @@ async fn start_github_poller_with_state(
                     "reset_at": result.rate_limit_reset_at
                 }),
             );
-        }
-
-        if ran_global_review {
-            match current_unix_timestamp() {
-                Ok(now) => last_global_review_at = now,
-                Err(error) => warn!("[GitHub Poller] Failed to record global review time: {error}"),
-            }
         }
 
         let sleep_secs = if result.rate_limited {
@@ -239,19 +243,56 @@ pub async fn refresh_task_github_status_for_sidecar(
     })
 }
 
+/// Phase success is separate from the overall cycle: a list failure must not
+/// turn successful recovery back into work on every scheduler wake.
+pub(super) struct ScopeExecution {
+    pub(super) result: PollResult,
+    pub(super) task_links_succeeded: bool,
+}
+
+impl From<PollResult> for ScopeExecution {
+    fn from(result: PollResult) -> Self {
+        Self {
+            result,
+            task_links_succeeded: false,
+        }
+    }
+}
+
 pub(super) async fn poll_github_once_with_state(
     db: Arc<Mutex<Database>>,
     github_client: &GitHubClient,
     events: &GitHubEventTarget,
     scope: &PollScope,
 ) -> PollResult {
+    poll_github_scope(db, github_client, events, scope)
+        .await
+        .result
+}
+
+pub(super) async fn poll_github_scope(
+    db: Arc<Mutex<Database>>,
+    github_client: &GitHubClient,
+    events: &GitHubEventTarget,
+    scope: &PollScope,
+) -> ScopeExecution {
     let _refresh_permit = github_client.acquire_refresh_permit().await;
     let cycle_start = Instant::now();
+    if let Some(reset_at) = github_client.get_last_rate_limit_reset() {
+        if current_unix_timestamp().map_or(true, |now| reset_at > now) {
+            return PollResult {
+                rate_limited: true,
+                rate_limit_reset_at: Some(reset_at),
+                ..PollResult::with_outcome(PollOutcome::RateLimited)
+            }
+            .into();
+        }
+    }
     github_client.clear_rate_limit_reset();
 
     let github_token = match github_token_for_poll(github_client).await {
         Ok(token) => token,
-        Err(outcome) => return PollResult::with_outcome(outcome),
+        Err(outcome) => return PollResult::with_outcome(outcome).into(),
     };
 
     let projects = {
@@ -272,12 +313,13 @@ pub(super) async fn poll_github_once_with_state(
                 rate_limited: false,
                 rate_limit_reset_at: None,
                 outcome: PollOutcome::Failed,
-            };
+            }
+            .into();
         }
     };
 
     if projects.is_empty() && scope.polls_task_prs() {
-        return PollResult::empty();
+        return PollResult::empty().into();
     }
 
     let projects = select_projects(projects, scope);
@@ -296,14 +338,18 @@ pub(super) async fn poll_github_once_with_state(
     let mut total_errors = 0;
     let mut rate_limit_count = 0;
 
+    let mut authored_snapshot = None;
+    let mut task_links_succeeded = false;
     if scope.refreshes_task_links() {
         let sync_start = Instant::now();
         info!(
             "[GitHub Poller] Starting authored task PR link sync (scope={})",
             poll_scope_log_name(scope)
         );
-        match sync_authored_task_prs(github_client, &db, &github_token).await {
-            Ok(synced) => {
+        match sync_authored_task_prs(github_client, &db, &github_token, events).await {
+            Ok((synced, snapshot)) => {
+                task_links_succeeded = github_client.get_last_rate_limit_reset().is_none();
+                authored_snapshot = Some(snapshot);
                 let detail = format!("synced {synced} task-linked PRs");
                 debug!(
                     "{}",
@@ -439,9 +485,16 @@ pub(super) async fn poll_github_once_with_state(
 
         let authored_start = Instant::now();
         info!("[GitHub Poller] Starting authored PR list sync");
+        let authored_result = match authored_snapshot {
+            Some(snapshot) => {
+                poll_authored_prs_from_snapshot(github_client, &db, events, &github_token, snapshot)
+                    .await
+            }
+            None => poll_authored_prs(github_client, &db, events, &github_token).await,
+        };
         count_poll_phase_error(
             "authored PRs",
-            poll_authored_prs(github_client, &db, events, &github_token).await,
+            authored_result,
             &mut total_errors,
             &mut rate_limit_count,
         );
@@ -505,14 +558,17 @@ pub(super) async fn poll_github_once_with_state(
         }
     }
 
-    PollResult {
-        new_comments: total_new_comments,
-        ci_changes: total_ci_changes,
-        review_changes: total_review_changes,
-        pr_changes: total_pr_changes,
-        errors: total_errors,
-        rate_limited,
-        rate_limit_reset_at: rate_limit_reset,
-        outcome: poll_outcome(total_errors, rate_limited),
+    ScopeExecution {
+        result: PollResult {
+            new_comments: total_new_comments,
+            ci_changes: total_ci_changes,
+            review_changes: total_review_changes,
+            pr_changes: total_pr_changes,
+            errors: total_errors,
+            rate_limited,
+            rate_limit_reset_at: rate_limit_reset,
+            outcome: poll_outcome(total_errors, rate_limited),
+        },
+        task_links_succeeded,
     }
 }

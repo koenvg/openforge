@@ -1,6 +1,93 @@
 use super::*;
 
 #[test]
+fn recovery_cadence_is_independent_and_retries_until_success() {
+    let mut cadence = PollCadence::default();
+    let ctx = reported_ctx(true, Some("active"), false);
+    let plan = cadence.plan(&ctx, PollSchedulerSnapshot::default(), 60, 1_000);
+    assert!(plan.scopes.iter().any(PollScope::refreshes_task_links));
+    assert!(plan.scopes.iter().any(PollScope::polls_global_lists));
+    cadence.record(
+        &PollScope::GlobalReviewListsAndTaskLinks,
+        PollOutcome::Failed,
+        1_000,
+    );
+    assert!(cadence
+        .plan(&ctx, PollSchedulerSnapshot::default(), 60, 1_060)
+        .scopes
+        .iter()
+        .any(PollScope::refreshes_task_links));
+    cadence.record(
+        &PollScope::GlobalReviewListsAndTaskLinks,
+        PollOutcome::Completed,
+        1_060,
+    );
+    let lists = cadence.plan(&ctx, PollSchedulerSnapshot::default(), 60, 1_300);
+    assert!(lists.scopes.iter().any(PollScope::polls_global_lists));
+    assert!(!lists.scopes.iter().any(PollScope::refreshes_task_links));
+    assert!(!cadence
+        .plan(&ctx, PollSchedulerSnapshot::default(), 15, 1_359)
+        .scopes
+        .iter()
+        .any(PollScope::refreshes_task_links));
+    assert!(cadence
+        .plan(&ctx, PollSchedulerSnapshot::default(), 300, 1_360)
+        .scopes
+        .iter()
+        .any(PollScope::refreshes_task_links));
+}
+
+#[test]
+fn recovery_startup_waits_for_focus_and_shared_rate_limit() {
+    let cadence = PollCadence::default();
+    assert!(cadence
+        .plan(
+            &reported_ctx(false, None, false),
+            PollSchedulerSnapshot::default(),
+            60,
+            0
+        )
+        .scopes
+        .is_empty());
+    let blocked = cadence.plan(
+        &reported_ctx(true, None, false),
+        PollSchedulerSnapshot {
+            rate_limited: true,
+            rate_limit_reset_at: Some(120),
+            ..Default::default()
+        },
+        60,
+        0,
+    );
+    assert!(blocked.scopes.is_empty());
+    assert_eq!(blocked.sleep_secs, 121);
+    assert!(cadence
+        .plan(
+            &reported_ctx(true, None, false),
+            PollSchedulerSnapshot::default(),
+            60,
+            121
+        )
+        .scopes
+        .iter()
+        .any(PollScope::refreshes_task_links));
+}
+
+#[test]
+fn recovery_does_not_repeat_before_frontend_reports_context() {
+    let mut cadence = PollCadence::default();
+    let ctx = PollContextSnapshot::default();
+    let first = cadence.plan(&ctx, PollSchedulerSnapshot::default(), 60, 0);
+    assert!(first.scopes.iter().any(PollScope::refreshes_task_links));
+    for scope in first.scopes {
+        cadence.record(&scope, PollOutcome::Completed, 0);
+    }
+    let later = cadence.plan(&ctx, PollSchedulerSnapshot::default(), 60, 60);
+    assert!(!later.scopes.iter().any(PollScope::refreshes_task_links));
+    assert!(!later.scopes.iter().any(PollScope::polls_global_lists));
+}
+
+#[test]
 fn rate_limit_sleep_uses_poll_interval_when_current_time_is_unavailable() {
     assert_eq!(
         rate_limit_sleep_duration_with_optional_now(60, Some(i64::MAX), None),

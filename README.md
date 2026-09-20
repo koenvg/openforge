@@ -37,9 +37,13 @@ Open Forge is a macOS desktop app for running AI coding agents across one or mor
 | **Voice input** | Dictate instructions with on-device Whisper transcription. |
 | **OpenForge CLI** | Let agents and scripts read and update tasks through the local Open Forge bridge. |
 
-When a task's local agent terminal or task shell prints a GitHub PR URL, Open Forge verifies the open PR against the current worktree repository and branch before linking it. Hidden terminals work too. GitHub credentials are required; unrelated PRs and PRs assigned to another task are not automatically linked. Project-only shells and review-only scoped sessions do not create links.
+When a task-owned local or daemon-backed terminal prints a GitHub PR URL, Open Forge verifies the open PR against the current worktree repository and branch before linking it immediately. Hidden or detached terminals work too, including while the app is unfocused. GitHub credentials are required; unrelated PRs and PRs assigned to another task are not automatically linked. Project-only shells and review-only scoped sessions do not create links.
 
-Periodic discovery and remote CI/review status polling keep their existing schedules. Daemon-backed terminal discovery and agent-completion lookup are not included yet.
+If no URL is printed, accepted agent completion triggers a branch lookup after a two-second debounce. Repeated completion signals share that lookup; resumed work cancels it.
+
+A separate 5-minute recovery cycle finds authored PRs created elsewhere or missed while disconnected, using unambiguous task IDs in the branch, then title, then body. Recovery also runs on the first eligible startup cycle and on manual full synchronization. Periodic work pauses while the app is unfocused and respects shared GitHub rate-limit backoff.
+
+Linked PR state, CI, reviews, comments, and merge readiness keep their existing adaptive status polling. Global review and authored lists keep their existing refresh cadence without rerunning task-link discovery. Manual linking is unchanged; no webhook setup is required.
 
 ## Quick install
 

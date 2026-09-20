@@ -7,6 +7,60 @@ pub(super) const DEFAULT_GITHUB_POLL_INTERVAL_SECS: u64 = 60;
 pub(super) const MIN_GITHUB_POLL_INTERVAL_SECS: u64 = 15;
 pub(super) const MAX_GITHUB_POLL_INTERVAL_SECS: u64 = 300;
 
+const TASK_LINK_RECONCILIATION_INTERVAL_SECS: i64 = 300;
+
+/// In-memory success clock: every process startup gets an eligible recovery pass.
+#[derive(Default)]
+pub(super) struct PollCadence {
+    last_global_review_at: Option<i64>,
+    last_task_link_success_at: Option<i64>,
+}
+
+impl PollCadence {
+    pub(super) fn plan(
+        &self,
+        ctx: &PollContextSnapshot,
+        mut snapshot: PollSchedulerSnapshot,
+        poll_interval: u64,
+        now: i64,
+    ) -> PollPlan {
+        snapshot.global_review_due = self
+            .last_global_review_at
+            .is_none_or(|last| now.saturating_sub(last) >= (poll_interval * 4) as i64);
+        let recovery_due = self
+            .last_task_link_success_at
+            .is_none_or(|last| now.saturating_sub(last) >= TASK_LINK_RECONCILIATION_INTERVAL_SECS);
+        let gated = snapshot.rate_limited || (ctx.reported && !ctx.focused);
+        let mut plan = build_poll_plan(ctx, snapshot, poll_interval, now);
+        if recovery_due && !gated {
+            if let Some(scope) = plan
+                .scopes
+                .iter_mut()
+                .find(|scope| scope.polls_global_lists())
+            {
+                *scope = PollScope::GlobalReviewListsAndTaskLinks;
+            } else {
+                plan.scopes.push(PollScope::TaskLinkReconciliation);
+            }
+        }
+        plan
+    }
+
+    pub(super) fn record(
+        &mut self,
+        scope: &PollScope,
+        outcome: super::common::PollOutcome,
+        now: i64,
+    ) {
+        if scope.polls_global_lists() {
+            self.last_global_review_at = Some(now);
+        }
+        if scope.refreshes_task_links() && outcome == super::common::PollOutcome::Completed {
+            self.last_task_link_success_at = Some(now);
+        }
+    }
+}
+
 pub(super) fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
     raw.and_then(|value| value.parse::<u64>().ok())
         .map(|value| value.clamp(MIN_GITHUB_POLL_INTERVAL_SECS, MAX_GITHUB_POLL_INTERVAL_SECS))
@@ -126,6 +180,10 @@ pub enum PollScope {
     InactiveTaskPrs(Option<String>),
     /// Poll global review/authored PR-list data without the per-task PR fan-out.
     GlobalReviewLists,
+    /// Recover missed task associations without polling lists or linked PR status.
+    TaskLinkReconciliation,
+    /// Share one authored snapshot when list refresh and recovery are both due.
+    GlobalReviewListsAndTaskLinks,
 }
 
 #[derive(Debug, Clone)]
@@ -152,15 +210,26 @@ pub(super) struct PollPlan {
 
 impl PollScope {
     pub(super) fn polls_task_prs(&self) -> bool {
-        !matches!(self, Self::GlobalReviewLists)
+        !matches!(
+            self,
+            Self::GlobalReviewLists
+                | Self::TaskLinkReconciliation
+                | Self::GlobalReviewListsAndTaskLinks
+        )
     }
 
     pub(super) fn polls_global_lists(&self) -> bool {
-        matches!(self, Self::Global | Self::GlobalReviewLists)
+        matches!(
+            self,
+            Self::Global | Self::GlobalReviewLists | Self::GlobalReviewListsAndTaskLinks
+        )
     }
 
     pub(super) fn refreshes_task_links(&self) -> bool {
-        matches!(self, Self::Global | Self::GlobalReviewLists)
+        matches!(
+            self,
+            Self::Global | Self::TaskLinkReconciliation | Self::GlobalReviewListsAndTaskLinks
+        )
     }
 }
 
@@ -194,7 +263,10 @@ pub(super) fn scope_has_matches(scope: &PollScope, prs: &[ScheduledPr]) -> bool 
 pub(super) fn scheduled_pr_in_scope(pr: &ScheduledPr, scope: &PollScope) -> bool {
     match scope {
         PollScope::Global | PollScope::ActiveRepo(_) => true,
-        PollScope::GlobalReviewLists => false,
+        PollScope::GlobalReviewLists
+        | PollScope::TaskLinkReconciliation
+        | PollScope::GlobalReviewListsAndTaskLinks => false,
+        PollScope::InactiveTaskPrs(None) => true,
         PollScope::ActiveFocusTaskPrs(Some(active_project_id)) => {
             pr.project_id == *active_project_id
                 && is_focus_task_status(&pr.task_status)
@@ -205,9 +277,7 @@ pub(super) fn scheduled_pr_in_scope(pr: &ScheduledPr, scope: &PollScope) -> bool
                 && (!is_focus_task_status(&pr.task_status) || pr.out_of_focus)
         }
         PollScope::InactiveTaskPrs(Some(active_project_id)) => pr.project_id != *active_project_id,
-        PollScope::ActiveFocusTaskPrs(None)
-        | PollScope::ActiveTaskPrs(None)
-        | PollScope::InactiveTaskPrs(None) => false,
+        PollScope::ActiveFocusTaskPrs(None) | PollScope::ActiveTaskPrs(None) => false,
     }
 }
 
@@ -236,8 +306,12 @@ pub(super) fn build_poll_plan(
     }
 
     if !ctx.reported {
+        let mut scopes = vec![PollScope::InactiveTaskPrs(None)];
+        if snapshot.global_review_due {
+            scopes.push(PollScope::GlobalReviewLists);
+        }
         return PollPlan {
-            scopes: vec![PollScope::Global],
+            scopes,
             sleep_secs: poll_interval,
         };
     }
@@ -306,7 +380,9 @@ pub fn decide_poll(ctx: &PollContextSnapshot) -> PollDecision {
 pub(super) fn select_projects(all: Vec<ProjectRow>, scope: &PollScope) -> Vec<ProjectRow> {
     match scope {
         PollScope::Global => all,
-        PollScope::GlobalReviewLists => Vec::new(),
+        PollScope::GlobalReviewLists
+        | PollScope::TaskLinkReconciliation
+        | PollScope::GlobalReviewListsAndTaskLinks => Vec::new(),
         PollScope::ActiveRepo(None)
         | PollScope::ActiveFocusTaskPrs(None)
         | PollScope::ActiveTaskPrs(None) => Vec::new(),

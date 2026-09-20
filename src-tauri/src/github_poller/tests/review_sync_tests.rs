@@ -66,7 +66,9 @@ async fn automatic_reconciliation_cannot_undo_manual_reassignment() {
     let client =
         GitHubClient::with_test_api_base_url(GitHubClient::new(), format!("http://{address}"));
     let db = Mutex::new(db);
-    sync_authored_task_prs(&client, &db, "test").await.unwrap();
+    sync_authored_task_prs(&client, &db, "test", &GitHubEventTarget::sidecar(None))
+        .await
+        .unwrap();
     server.abort();
     let rows = acquire_db(&db).get_all_pull_requests().unwrap();
     assert_eq!(rows.len(), 1);

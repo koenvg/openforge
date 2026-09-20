@@ -6,7 +6,7 @@
 ## 2. Task identity and GitHub verification
 
 - [x] 2.1 Add temporary-worktree and fake-GitHub tests for exact URL verification and first-PR branch discovery, including forks, tracked branch names, unresolvable ownership, ambiguous PRs, closed PRs, and same-number PRs in different repositories; verify the missing discovery behavior is red.
-- [ ] 2.2 Implement narrow task/session/worktree identity resolution and trusted Git remote resolution for task-owned agent, shell, and scoped sessions; verify the fixtures reject project-only and review-only sessions and resolve the correct task independent of UI selection.
+- [x] 2.2 Implement narrow task/session/worktree identity resolution and trusted Git remote resolution for task-owned agent, shell, and scoped sessions; verify the fixtures reject project-only and review-only sessions and resolve the correct task independent of UI selection.
 - [x] 2.3 Add the GitHub open-head query and exact candidate verifier using the existing client, authentication, and request limits; verify fake-server assertions cover encoded branch names, complete ambiguity detection, head/base repository matching, draft acceptance, and no arbitrary URL fetching.
 
 ## 3. Guarded automatic persistence
@@ -33,12 +33,14 @@
 
 ## 7. Independent recovery reconciliation
 
-- [ ] 7.1 Add failing scheduler/execution tests for independent 900-second task-link reconciliation, first eligible startup, manual synchronization, failure retry, focus gating, and unchanged global-list/status cadences; verify global-list-only refreshes do not perform link discovery.
-- [ ] 7.2 Separate reconciliation scheduling from `GlobalReviewLists` while retaining authored-list refresh, existing task-ID matching, guarded persistence, and rate-limit behavior; verify the scheduler, poll execution, and review sync suites pass, including a missed-terminal-signal recovery case.
+- [x] 7.1 Add failing scheduler/execution tests for independent 300-second task-link reconciliation, first eligible startup, manual synchronization, failure retry, focus gating, and unchanged global-list/status cadences; verify global-list-only refreshes do not perform link discovery.
+- [x] 7.2 Separate reconciliation scheduling from `GlobalReviewLists` while retaining authored-list refresh, existing task-ID matching, guarded persistence, and rate-limit behavior; verify the scheduler, poll execution, and review sync suites pass, including a missed-terminal-signal recovery case.
 
 ## 8. Affected-system verification and handoff
 
-- [ ] 8.1 Run cross-path integration cases from live terminal output or accepted completion through fake GitHub, persistence, and task PR notification for local and daemon PTYs; verify hidden-view discovery, first-link latency without polling, and unchanged external CI/review/merge updates.
+- [x] 8.1 Run cross-path integration cases from live terminal output or accepted completion through fake GitHub, persistence, and task PR notification for local and daemon PTYs; verify hidden-view discovery, first-link latency without polling, and unchanged external CI/review/merge updates.
 - [x] 8.2 Run full Rust sidecar validation from the crate root resolved by `node scripts/rust-sidecar-layout.mjs backend-crate-root`: `cargo test`, `cargo check`, `cargo build`, and `cargo clippy`; verify successful results or record precise environmental blockers and remaining gaps.
 - [x] 8.3 Run the full affected renderer test/static checks, applicable event-contract checks, and relevant desktop terminal invariant checks from CONTRIBUTING.md and its linked testing guides; if another workspace or crate changes, run all its test/static scripts too and record the final affected-system coverage.
-- [ ] 8.4 Validate the completed OpenSpec change, document the event-first behavior and slower recovery cadence in the appropriate existing user/developer documentation, and update KVG-4655 Handoff Notes; verify artifact validation, documentation accuracy, and successful replacement of the complete notes before handing off.
+- [x] 8.4 Validate the completed OpenSpec change, document the event-first behavior and slower recovery cadence in the appropriate existing user/developer documentation, and update KVG-5084 Handoff Notes without modifying the parent KVG-4655; verify artifact validation, documentation accuracy, and successful replacement of the complete notes before handing off.
+
+Final KVG-5084 checks, test-first evidence, environmental skips, and follow-up tasks are recorded in [verification.md](verification.md).

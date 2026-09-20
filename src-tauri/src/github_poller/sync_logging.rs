@@ -8,6 +8,8 @@ pub(super) fn poll_scope_log_name(scope: &PollScope) -> &'static str {
         PollScope::ActiveTaskPrs(_) => "active-task-prs",
         PollScope::InactiveTaskPrs(_) => "inactive-task-prs",
         PollScope::GlobalReviewLists => "global-review-lists",
+        PollScope::TaskLinkReconciliation => "task-link-reconciliation",
+        PollScope::GlobalReviewListsAndTaskLinks => "global-review-lists-and-task-links",
     }
 }
 
