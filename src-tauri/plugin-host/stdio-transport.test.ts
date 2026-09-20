@@ -16,6 +16,25 @@ function captureStdout(): { output: string[]; restore(): void } {
 describe('plugin-host stdio transport', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('reassembles a maximum-size project document callback across LF transport chunks', async () => {
+    const input = new PassThrough()
+    const stdout = captureStdout()
+    const bridge = new StdioHostCallbackBridge()
+    const pending = bridge.request({ method: 'openforge.fs.readDocument', params: { projectId: 'P-1', path: 'large.pdf' } })
+    const data = Buffer.alloc(16_777_216, 32).toString('base64')
+    expect(data.length).toBe(22_369_624)
+    const frame = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { status: 'ready', data, size: 16_777_216 } }) + '\n'
+    let frames = 0
+    readJsonLines(input, line => { frames++; bridge.handleResponse(JSON.parse(line)) })
+    for (let offset = 0; offset < frame.length; offset += 64 * 1024) input.write(frame.slice(offset, offset + 64 * 1024))
+    input.end()
+    const result = await pending as { data: string; size: number }
+    expect(frames).toBe(1)
+    expect(result.data.length).toBe(data.length)
+    expect(Buffer.from(result.data, 'base64').byteLength).toBe(16_777_216)
+    stdout.restore()
+  })
+
   it('keeps valid JSON with Unicode line separators in one LF-framed message', async () => {
     const input = new PassThrough()
     const lines: string[] = []

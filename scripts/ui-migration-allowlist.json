@@ -106,7 +106,7 @@
     {"tag":"section","context":"class=\"flex-1 min-h-0 overflow-hidden bg-base-100\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"CircleAlert","context":"class=\"mx-auto h-8 w-8 text-warning\"","tokens":["h-8","w-8"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
     {"tag":"div","context":"class=\"flex h-full min-h-0 flex-col\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"div","context":"class=\"flex min-h-9 items-center justify-between gap-4\"","tokens":["min-h-9"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
+    {"tag":"div","context":"class=\"flex min-h-9 items-center justify-between gap-4\" class:flex-wrap={content.type === 'document' && content.mimeType === 'application/pdf'}","tokens":["min-h-9"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-y-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex-1 min-h-0 overflow-auto p-4\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"w-12 shrink-0 pr-3 text-right text-base-content/30 select-none flex flex-col\"","tokens":["w-12"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
@@ -117,6 +117,10 @@
     {"tag":"TriangleAlert","context":"class=\"mx-auto h-8 w-8 text-base-content/50\"","tokens":["h-8","w-8"],"count":1,"reason":"Icon or illustration artwork dimensions, not the surrounding control hit area."},
     {"tag":"div","context":"class=\"max-w-lg text-center space-y-3\"","tokens":["max-w-lg"],"count":1,"reason":"File-viewer unavailable-state message has a bounded text column."},
     {"tag":"div","context":"class=\"max-w-md text-center space-y-2\"","tokens":["max-w-md"],"count":3,"reason":"File-viewer preview-state messages have a bounded text column."}
+  ],
+  "plugins/file-viewer/src/PdfPreview.svelte": [
+    {"tag":"div","context":"class=\"pdf-preview flex min-h-0 flex-1 flex-col\"","tokens":["min-h-0"],"count":1,"reason":"Let the PDF preview shrink within its feature pane."},
+    {"tag":"div","context":"class=\"min-h-0 flex-1 overflow-auto px-2 pb-3\"","tokens":["min-h-0"],"count":1,"reason":"Scroll the PDF page without displacing metadata or navigation."}
   ],
   "plugins/file-viewer/src/FilePreviewPane.svelte": [
     {"tag":"div","context":"class=\"flex-1 min-h-0 overflow-hidden flex flex-col\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}

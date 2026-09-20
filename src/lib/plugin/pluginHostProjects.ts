@@ -2,6 +2,7 @@ import { get } from 'svelte/store'
 import {
   fsReadDir,
   fsReadFile,
+  fsReadDocument,
   fsWriteFile,
   fsSearchFiles,
   taskFsReadDir,
@@ -23,6 +24,7 @@ type ProjectHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listCommandCatalog'
   | 'readDir'
   | 'readFile'
+  | 'readDocument'
   | 'writeFile'
   | 'searchFiles'
   | 'readTaskDir'
@@ -82,6 +84,7 @@ export function createPluginProjectHostCapabilities(): ProjectHostCapabilities {
     listCommandCatalog,
     readDir: readProjectDir,
     readFile: readProjectFile,
+    readDocument: (request) => fsReadDocument(request.projectId, request.path),
     writeFile: writeProjectFile,
     searchFiles: searchProjectFiles,
     readTaskDir,

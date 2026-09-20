@@ -708,6 +708,21 @@ Project file methods are available to frontend and backend plugins:
 
 - `openforge.fs.readDir(...)`, `readFile(...)`, `writeFile(...)`, and `searchFiles(...)` stay inside the requested OpenForge Project.
 
+`openforge.fs.readDocument({ projectId, path })` is an additive, explicit PDF-byte read for trusted project frontends and backend plugins. Ordinary `readFile` PDF results remain metadata-only (`type: 'document'`, empty `content`); listings never request document bytes. Task-workspace document reads are not included in this first-page release.
+
+The exported `DocumentPreviewRead` union is either:
+
+- `{ status: 'ready', mimeType: 'application/pdf', encoding: 'base64', data, size, revision, modifiedAt }`: `size` is the raw byte count, `revision` is the SHA-256 digest of those bytes, and `modifiedAt` is Unix milliseconds or null.
+- `{ status: 'unavailable', reason: 'too-large' | 'unsupported-format' | 'invalid-document', size, maxBytes }`: no encoded data is returned.
+
+The host chooses the root from its project record and rechecks that record before returning. Paths must be relative; traversal, absolute/drive/UNC/URL paths, descendant symlinks, and nonregular files are rejected. A host-selected root may itself be a symlink. This policy is stricter than ordinary preview reads. Unix hosts use descriptor-relative opening; hosts without that primitive fail closed rather than use a path-based fallback.
+
+Reads accept case-insensitive `.pdf` extensions and require `%PDF-` within the first 1,024 bytes. The raw limit is 16,777,216 bytes (16 MiB), with at most one extra byte read to detect growth. Maximum base64 length is 22,369,624 characters. Observed file changes reject the read. Two operations share admission across both host transports; further requests fail immediately instead of queuing.
+
+The read response deadline is 15 seconds. Cancellation is cooperative: a timed-out or abandoned blocking OS read retains its admission slot until it actually exits; late results are discarded. A timeout does not prove that stalled filesystem I/O stopped. Decoded bytes belong to the caller: release them after transferring to the PDF worker and on selection changes, hiding, or disposal. Do not cache document bytes across workspaces.
+
+Rejected reads use sanitized prefixes: `DOCUMENT_PREVIEW_BAD_REQUEST`, `DOCUMENT_PREVIEW_NOT_FOUND`, `DOCUMENT_PREVIEW_FORBIDDEN`, `DOCUMENT_PREVIEW_CHANGED`, `DOCUMENT_PREVIEW_BUSY`, `DOCUMENT_PREVIEW_TIMEOUT`, `DOCUMENT_PREVIEW_IO`, and `DOCUMENT_PREVIEW_UNAVAILABLE_HOST`. Unsupported/older hosts may lack the method; feature-detect it and show an unavailable state. Never fall back to ordinary reads, direct filesystem access, or a file URL. Retry is user-initiated, not automatic.
+
 Backend plugins also receive two user-scoped file APIs under the same `fs` capability:
 
 - `openforge.fs.userData` reads and writes files in a host-owned directory namespaced by plugin id. Paths are relative to that directory. `writeTextFile(...)` atomically replaces and syncs a file. `appendTextFile(...)` appends and syncs text, then returns the resulting UTF-8 byte size. Use this for durable plugin files that do not fit JSON `storage`, such as telemetry logs or cached indexes.

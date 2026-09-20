@@ -128,7 +128,7 @@ describe('file-viewer plugin', () => {
       workspaceIdentity: 'project:project-1',
       path: 'src/lib/fileViewerPlugin.ts',
     })
-    expect(subscriptions.add).toHaveBeenCalledTimes(3)
+    expect(subscriptions.add).toHaveBeenCalledTimes(4)
   })
 
   it('targets a reveal to the requested task and activates that task Files tab', async () => {

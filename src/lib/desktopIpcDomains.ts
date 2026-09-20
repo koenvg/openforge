@@ -150,6 +150,7 @@ export const desktopIpcFunctionDomains = {
   getAuthoredPrs: 'github-review',
   fsReadDir: 'files-review',
   fsReadFile: 'files-review',
+  fsReadDocument: 'files-review',
   fsWriteFile: 'files-review',
   fsSearchFiles: 'files-review',
   taskFsReadDir: 'files-review',

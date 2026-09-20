@@ -9,6 +9,7 @@ import type {
   CreateTaskRequest,
   ExternalFileMetadata,
   FileContent,
+  DocumentPreviewRead,
   FileEntry,
   ImplementationRun,
   ListTaskSessionsRequest,
@@ -425,6 +426,7 @@ export function createBackendApi(
     fs: {
       readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.readDir', objectCallbackParams(request)),
       readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', objectCallbackParams(request)),
+      readDocument: async request => await hostCallback<DocumentPreviewRead>('openforge.fs.readDocument', objectCallbackParams(request)),
       writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', objectCallbackParams(request)) },
       searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', objectCallbackParams(request)),
       task: {

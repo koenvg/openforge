@@ -6,6 +6,7 @@
   import { getMarkdownRepositoryLinkFragment } from '@openforge-app/plugin-sdk/markdown'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
+  import PdfPreview from './PdfPreview.svelte'
   import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
   import { onDestroy, tick } from 'svelte'
 
@@ -66,6 +67,7 @@
   const previewStatusMessage = $derived.by(() => {
     if (error !== null) return `Unable to load ${fileName}: ${error}`
     if (content === null) return `Loading ${fileName}`
+    if (content.type === 'document' && content.mimeType === 'application/pdf') return `PDF metadata loaded for ${fileName}`
     return `Loaded ${fileName}`
   })
 
@@ -194,7 +196,7 @@
   {:else if content !== null}
     <div class="flex h-full min-h-0 flex-col">
       <div class="shrink-0 border-b border-base-300 bg-base-100 px-5 py-3">
-        <div class="flex min-h-9 items-center justify-between gap-4">
+        <div class="flex min-h-9 items-center justify-between gap-4" class:flex-wrap={content.type === 'document' && content.mimeType === 'application/pdf'}>
           <div class="flex min-w-0 flex-wrap items-center gap-y-1">
             <div class="mr-3 text-base font-semibold tracking-tight text-base-content break-all">{fileName}</div>
             <div class="flex flex-wrap items-center gap-y-1 border-l border-base-300 pl-3 text-xs text-base-content/60">
@@ -303,6 +305,8 @@
             </p>
           </div>
         </div>
+      {:else if content.type === 'document' && content.mimeType === 'application/pdf' && workspaceSource?.identity.startsWith('project:')}
+        <PdfPreview {workspaceSource} {filePath} {modifiedAt} />
       {:else if content.type === 'document'}
         <div class="flex-1 flex items-center justify-center p-6">
           <div class="max-w-md text-center space-y-2">

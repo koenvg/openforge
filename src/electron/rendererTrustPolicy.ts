@@ -159,11 +159,12 @@ export class RendererTrustPolicy {
     return [
       "default-src 'self'",
       `script-src 'self' plugin: 'wasm-unsafe-eval' ${rendererImportMapScriptHashSource()}`,
+      "worker-src 'self' blob:",
       "style-src 'self' plugin: 'unsafe-inline'",
       "img-src 'self' plugin: https: data:",
       "media-src 'self' https: data: blob:",
       "font-src 'self' plugin: data:",
-      `connect-src 'self' ${[sidecarOrigin(sidecarConfig), ...TRUSTED_CONNECT_SRC].join(' ')}`,
+      `connect-src 'self' plugin: ${[sidecarOrigin(sidecarConfig), ...TRUSTED_CONNECT_SRC].join(' ')}`,
     ].join('; ')
   }
 

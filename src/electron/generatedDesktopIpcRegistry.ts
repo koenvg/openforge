@@ -62,6 +62,7 @@ export const desktopCommandContracts = [
   {"functionName":"checkClaudeInstalled","moduleName":"config","ipcCommand":"check_claude_installed","payloadKeys":[],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"getConfig","moduleName":"config","ipcCommand":"get_config","payloadKeys":["key"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"setConfig","moduleName":"config","ipcCommand":"set_config","payloadKeys":["key","value"],"owner":"rust-sidecar","domain":"config"},
+  {"functionName":"fsReadDocument","moduleName":"filesystem","ipcCommand":"fs_read_document","payloadKeys":["projectId","filePath"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getTaskDiff","moduleName":"filesystem","ipcCommand":"get_task_diff","payloadKeys":["taskId","includeCommitted","includeUncommitted"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getTaskGitStatus","moduleName":"filesystem","ipcCommand":"get_task_git_status","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getTaskFileContents","moduleName":"filesystem","ipcCommand":"get_task_file_contents","payloadKeys":["taskId","path","oldPath","status","includeCommitted","includeUncommitted"],"owner":"rust-sidecar","domain":"files-review"},

@@ -26,6 +26,7 @@ afterEach(async () => {
   cleanup()
   for (const dispose of disposals.splice(0).reverse()) await dispose()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   expect(diagnostics).toEqual([])
 })
 
@@ -55,6 +56,19 @@ describe('File Viewer catalog', () => {
         await composed[name].run({ canvasElement: canvas, testingLibraryRender: render })
         await composed[name].run({ canvasElement: canvas, testingLibraryRender: render })
       }
+      vi.stubGlobal('IntersectionObserver', class {
+        constructor(private notify: (entries: { isIntersecting: boolean }[]) => void) {}
+        observe() { this.notify([{ isIntersecting: true }]) }
+        unobserve() {}
+        disconnect() {}
+      })
+      vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+      await composed.Document.run({ canvasElement: canvas, testingLibraryRender: render })
+      const message = 'This PDF or its project is no longer available.'
+      expect(await view.findByText(message)).toBeTruthy()
+      expect(view.getByRole('button', { name: 'Retry PDF preview' })).toBeTruthy()
+      const { default: manifest } = await import('../visual-manifest.json')
+      expect(manifest.find(entry => entry.story === 'pages-file-viewer--document')?.ready).toBe(`text=${message}`)
     } finally { canvas.remove() }
   }, 30_000)
 })

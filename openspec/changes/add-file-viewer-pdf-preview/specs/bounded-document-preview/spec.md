@@ -46,7 +46,7 @@ The system SHALL resolve project and task roots from host-owned records for each
 
 ### Requirement: Reads are bounded by size, concurrency, and time
 
-The system SHALL admit at most two concurrent document reads across its project/task and frontend/backend adapters, without an unbounded wait queue. Each admitted read SHALL enforce a 16,777,216-byte maximum against the opened regular file and the actual bytes read, with at most one additional byte to detect growth. It SHALL finish or time out within 15 seconds and release its resources on every exit. Empty or invalid PDF headers SHALL return `invalid-document`; unsupported extensions SHALL return `unsupported-format`; over-limit files SHALL return `too-large`, with no document bytes. Extensions SHALL be matched case-insensitively.
+The system SHALL admit at most two concurrent document reads across its project/task and frontend/backend adapters, without an unbounded wait queue. Each admitted read SHALL enforce a 16,777,216-byte maximum against the opened regular file and the actual bytes read, with at most one additional byte to detect growth. It SHALL return a response or timeout within 15 seconds. Timeout or cancellation SHALL discard late results and request cooperative cancellation, retaining handles and the admission slot until underlying I/O exits. Blocking filesystem operations may outlive the response deadline; they SHALL continue to count against the two-read limit. Resources SHALL be released when underlying work exits. Empty or invalid PDF headers SHALL return `invalid-document`; unsupported extensions SHALL return `unsupported-format`; over-limit files SHALL return `too-large`, with no document bytes. Extensions SHALL be matched case-insensitively.
 
 #### Scenario: PDF reaches the byte limit exactly
 - **WHEN** an otherwise valid PDF contains exactly 16,777,216 bytes
@@ -66,7 +66,8 @@ The system SHALL admit at most two concurrent document reads across its project/
 
 #### Scenario: Read stalls or is cancelled
 - **WHEN** a read reaches its deadline or the host cancels the request
-- **THEN** its handles and admission slot are released, and a later valid read can proceed
+- **THEN** no late result is published, cooperative cancellation is requested, and its handles and admission slot remain owned until underlying I/O exits, after which a later valid read can use that capacity
+- **AND** timed-out blocking reads continue counting against the shared two-read limit rather than permitting additional reads
 
 #### Scenario: File is empty or misidentified
 - **WHEN** a `.pdf` file is empty or lacks a PDF header in its first 1,024 bytes

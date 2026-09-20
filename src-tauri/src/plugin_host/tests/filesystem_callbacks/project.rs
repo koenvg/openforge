@@ -167,3 +167,50 @@ async fn host_filesystem_callbacks_route_to_project_services() {
         "plugin host callback missing string param: content"
     );
 }
+
+#[tokio::test]
+async fn project_document_callback_returns_ready_and_unavailable_without_changing_metadata() {
+    let (database, _db_dir) = crate::db::test_helpers::make_test_db("document_callback");
+    let root = tempfile::tempdir().unwrap();
+    let project = database
+        .create_project("PDF", root.path().to_str().unwrap())
+        .unwrap();
+    std::fs::write(root.path().join("a.pdf"), b"%PDF-1.7").unwrap();
+    std::fs::write(root.path().join("empty.pdf"), b"").unwrap();
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+    let request = json!({"projectId": project.id, "path": "a.pdf"});
+    let document = host
+        .handle_host_callback("openforge.fs.readDocument", &request)
+        .await
+        .unwrap();
+    assert_eq!(document["status"], "ready");
+    assert_eq!(document["data"], "JVBERi0xLjc=");
+    assert_eq!(document["size"], 8);
+    let metadata = host
+        .handle_host_callback("openforge.fs.readFile", &request)
+        .await
+        .unwrap();
+    assert_eq!(metadata["content"], "");
+    assert_eq!(metadata["type"], "document");
+    let unavailable = host
+        .handle_host_callback(
+            "openforge.fs.readDocument",
+            &json!({"projectId": project.id, "path": "empty.pdf"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        unavailable,
+        json!({"status":"unavailable", "reason":"invalid-document", "size":0,"maxBytes":16_777_216})
+    );
+    let error = host
+        .handle_host_callback(
+            "openforge.fs.readDocument",
+            &json!({"projectId": project.id, "path": "../a.pdf"}),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.starts_with("DOCUMENT_PREVIEW_BAD_REQUEST:"));
+}

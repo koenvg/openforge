@@ -1729,6 +1729,7 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "rusqlite_migration",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha1 0.11.0",

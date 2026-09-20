@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@lucide/svelte": "catalog:",
-    "@openforge-app/plugin-sdk": "workspace:*"
+    "@openforge-app/plugin-sdk": "workspace:*",
+    "pdfjs-dist": "6.3.289"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -29,6 +30,7 @@
     "description": "Browse and preview project and task worktree files",
     "icon": "folder-open",
     "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/file-viewer.css"],
     "requires": [
       "views",
       "taskPane",

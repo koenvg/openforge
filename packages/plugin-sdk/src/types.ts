@@ -9,6 +9,7 @@ import type {
   AgentSession,
   CommandInfo,
   FileContent,
+  DocumentPreviewRead,
   FileEntry,
   Project,
   ProjectAttention,
@@ -564,6 +565,8 @@ export interface TaskFileSystemAPI {
 export interface FileSystemAPI {
   readDir(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile(request: ProjectScopedFileRequest): Promise<FileContent>
+  /** Authorized project PDF bytes. Older hosts reject with DOCUMENT_PREVIEW_UNAVAILABLE_HOST. */
+  readDocument(request: ProjectScopedFileRequest): Promise<DocumentPreviewRead>
   writeFile(request: ProjectScopedFileRequest & { content: string }): Promise<void>
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
   task: TaskFileSystemAPI

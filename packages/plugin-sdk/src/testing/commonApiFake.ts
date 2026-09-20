@@ -964,6 +964,11 @@ export class TestingCommonApiFake {
         readDir: async () => [],
         readFile: async ({ path }) => this.services.projectFileContents[path]
           ?? { type: 'text', content: '', mimeType: null, size: 0 },
+        readDocument: async ({ projectId, path }) => {
+          const document = this.services.projectDocuments[projectId]?.[path]
+          if (!document) throw new Error('DOCUMENT_PREVIEW_NOT_FOUND: document fixture unavailable')
+          return document
+        },
         writeFile: async (request) => {
           this.services.calls.fsWrites.push(request)
         },
