@@ -69,6 +69,7 @@ pub(crate) use pull_request_readiness::{
     review_status_for_readiness, select_snapshot_readiness_inputs, MergeReadinessInputs,
     PullRequestReadinessInput, PullRequestReadinessStatus, PullRequestReadinessView,
 };
+pub(crate) use pull_requests::{AutomaticAssociation, AutomaticPr};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::{ReviewPrRow, ReviewPrUpsert};
 pub use review_threads::{

@@ -5,6 +5,7 @@ mod rows;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use persistence::{AutomaticAssociation, AutomaticPr};
 pub use rows::{PrCommentRow, PrRow};
 
 pub(super) const UNADDRESSED_COMMENT_COUNT_SQL: &str = "(

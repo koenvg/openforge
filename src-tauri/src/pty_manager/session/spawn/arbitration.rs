@@ -115,11 +115,11 @@ impl PtyManager {
             generation: NEXT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed),
             label,
         };
-        self.terminal_sessions
-            .agent_spawn_generations
-            .lock()
-            .await
-            .insert(task_id.to_string(), token.generation);
+        {
+            let mut generations = self.terminal_sessions.agent_spawn_generations.lock().await;
+            self.terminal_sessions.pr_discovery.invalidate(task_id);
+            generations.insert(task_id.to_string(), token.generation);
+        }
         let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
         (token, lifecycle_lock)
     }
@@ -192,6 +192,7 @@ impl PtyManager {
         };
         let pending_spawn = {
             let mut generations = self.terminal_sessions.agent_spawn_generations.lock().await;
+            self.terminal_sessions.pr_discovery.invalidate(session_key);
             let pending_spawn =
                 PendingShellSpawn::register(self, session_key, task_id, token.generation);
             generations.insert(token.session_key.clone(), token.generation);
