@@ -49,14 +49,14 @@
   initialFocus="[data-media-preview-close]"
   onKeydown={handleKeydown}
 >
-  <div class="flex min-h-0 flex-1 flex-col bg-base-300/40">
-    <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 py-2">
+  <div class="flex min-h-0 flex-1 flex-col bg-of-border/40">
+    <header class="flex min-h-14 shrink-0 items-center gap-3 border-b border-of-border bg-of-surface px-4 py-2">
       <div class="min-w-0 flex-1">
-        <h2 class="m-0 truncate text-sm font-semibold text-base-content" title={activeItem?.filename}>
+        <h2 class="m-0 truncate text-sm font-semibold text-of-text" title={activeItem?.filename}>
           {activeItem?.filename ?? 'Media preview'}
         </h2>
         {#if activeItem}
-          <p class="m-0 text-xs text-base-content/60">{activeItem.label}</p>
+          <p class="m-0 text-xs text-of-text/60">{activeItem.label}</p>
         {/if}
       </div>
 
@@ -72,7 +72,7 @@
           <IconButton label="Previous media" size="sm" type="button" onclick={() => selectIndex(activeIndex - 1)}>
             <ChevronLeft size={20} aria-hidden="true" />
           </IconButton>
-          <span class="min-w-12 text-center text-xs tabular-nums text-base-content/60">{activeIndex + 1} of {request.items.length}</span>
+          <span class="min-w-12 text-center text-xs tabular-nums text-of-text/60">{activeIndex + 1} of {request.items.length}</span>
           <IconButton label="Next media" size="sm" type="button" onclick={() => selectIndex(activeIndex + 1)}>
             <ChevronRight size={20} aria-hidden="true" />
           </IconButton>
@@ -103,7 +103,7 @@
           <img
             src={activeItem.src}
             alt={activeItem.alt}
-            class="block rounded-[var(--of-radius-container)] bg-base-100 object-contain shadow-2xl {fitImage ? 'max-h-[calc(100vh-7rem)] max-w-[calc(100vw-4rem)]' : 'max-h-none max-w-none'}"
+            class="block rounded-[var(--of-radius-container)] bg-of-surface object-contain shadow-2xl {fitImage ? 'max-h-[calc(100vh-7rem)] max-w-[calc(100vw-4rem)]' : 'max-h-none max-w-none'}"
           />
         {/if}
       </div>

@@ -199,6 +199,9 @@ describe('DiffViewer accessibility', () => {
     render(DiffViewer, { props: { files: largeFiles } })
 
     expect(screen.getByText(/Large diff — 12 files, 6012 total changes\. 12 files auto-collapsed/)).toBeTruthy()
+    const warning = screen.getByText(/Large diff — 12 files/).closest('[data-variant="warning"]')
+    expect(warning).not.toBeNull()
+    expect(warning?.getAttribute('role')).toBeNull()
     expect(screen.getAllByRole('button', { name: /Expand diff for src\/large-/ })).toHaveLength(12)
   })
   it('keeps the auto-collapse count unchanged after manual and Reviewed File collapses', async () => {

@@ -45,13 +45,13 @@
   }
 </script>
 
-<div class="review-inline-comment-form mx-4 my-2 overflow-hidden rounded-[var(--of-radius-container)] border border-base-300 bg-base-100 shadow-sm font-sans">
-  <div class="flex items-center justify-between gap-3 border-b border-base-300 bg-base-200/70 px-3 py-2">
-    <div class="flex min-w-0 items-center gap-2 text-base-content">
-      <MessageSquarePlus size={16} strokeWidth={1.8} class="shrink-0 text-primary" aria-hidden="true" />
+<div class="review-inline-comment-form mx-4 my-2 overflow-hidden rounded-[var(--of-radius-container)] border border-of-border bg-of-surface shadow-sm font-sans">
+  <div class="flex items-center justify-between gap-3 border-b border-of-border bg-of-surface-subtle/70 px-3 py-2">
+    <div class="flex min-w-0 items-center gap-2 text-of-text">
+      <MessageSquarePlus size={16} strokeWidth={1.8} class="shrink-0 text-of-accent" aria-hidden="true" />
       <span class="truncate text-[13px] font-semibold">Add inline comment</span>
     </div>
-    <span class="shrink-0 rounded-[var(--of-radius-round)] border border-base-300 bg-base-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-base-content/60">
+    <span class="shrink-0 rounded-[var(--of-radius-round)] border border-of-border bg-of-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-of-text/60">
       Line {lineNumber}
     </span>
   </div>
@@ -84,11 +84,11 @@
     />
 
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <p id={helpId} class="m-0 flex items-center gap-1.5 text-[11px] text-base-content/50">
+      <p id={helpId} class="m-0 flex items-center gap-1.5 text-[11px] text-of-text/50">
         <span>Submit with</span>
-        <kbd class="kbd kbd-xs border-base-300 bg-base-200 text-base-content/70">⌘ / Ctrl</kbd>
+        <kbd class="key-hint">⌘ / Ctrl</kbd>
         <span>+</span>
-        <kbd class="kbd kbd-xs border-base-300 bg-base-200 text-base-content/70">Enter</kbd>
+        <kbd class="key-hint">Enter</kbd>
       </p>
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" type="button" onclick={onCancel}>Cancel</Button>
@@ -123,3 +123,25 @@
     </div>
   </div>
 </div>
+
+<style>
+  .key-hint {
+    --key-hint-size: calc(var(--of-control-height-compact) * .5);
+    box-sizing: border-box;
+    display: inline-flex;
+    height: var(--key-hint-size);
+    min-width: var(--key-hint-size);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    padding-inline: .5em;
+    border: var(--of-border-width) solid var(--of-border);
+    border-bottom-width: calc(var(--of-border-width) + 1px);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface-subtle);
+    color: color-mix(in srgb, var(--of-text) 70%, transparent);
+    font-size: .625rem;
+    box-shadow: none;
+  }
+</style>

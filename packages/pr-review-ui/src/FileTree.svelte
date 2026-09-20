@@ -159,15 +159,15 @@
   }
 </script>
 
-<div class="flex h-full flex-col border-r border-base-300 bg-base-100">
-  <div class="border-b border-base-300 bg-base-100 p-3">
+<div class="flex h-full flex-col border-r border-of-border bg-of-surface">
+  <div class="border-b border-of-border bg-of-surface p-3">
     <div class="mb-3 flex items-start justify-between gap-3">
       <div>
-        <h2 class="m-0 text-sm font-semibold text-base-content">Changed files</h2>
+        <h2 class="m-0 text-sm font-semibold text-of-text">Changed files</h2>
         <div class="mt-1 flex items-center gap-3 text-[13px] tabular-nums" aria-label="{files.length} changed files, {getTotalStats().additions} additions, {getTotalStats().deletions} deletions">
-          <span class="text-base-content/65">{files.length} files</span>
-          <span class="font-medium text-success">+{getTotalStats().additions}</span>
-          <span class="font-medium text-error">−{getTotalStats().deletions}</span>
+          <span class="text-of-text/65">{files.length} files</span>
+          <span class="font-medium text-of-success">+{getTotalStats().additions}</span>
+          <span class="font-medium text-of-danger">−{getTotalStats().deletions}</span>
         </div>
       </div>
       {#if onCollapse}
@@ -196,7 +196,7 @@
   </div>
 
   {#if onToggleNonApplicationFiles && nonApplicationFileCount > 0}
-    <div class="px-3 py-2 border-b border-base-300">
+    <div class="px-3 py-2 border-b border-of-border">
       <NonApplicationFilesToggle
         checked={includeNonApplicationFiles}
         hiddenCount={nonApplicationFileCount}
@@ -214,8 +214,8 @@
     onkeydown={handleTreeKeydown}
   >
     {#if filteredFiles.length === 0}
-      <div class="flex flex-col items-center gap-2 px-4 py-8 text-center text-[13px] text-base-content/60" role="status">
-        <span class="font-medium text-base-content">No matching files</span>
+      <div class="flex flex-col items-center gap-2 px-4 py-8 text-center text-[13px] text-of-text/60" role="status">
+        <span class="font-medium text-of-text">No matching files</span>
         <span>Try a different path or clear the filter.</span>
       </div>
     {:else}

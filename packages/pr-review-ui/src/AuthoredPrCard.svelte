@@ -39,14 +39,14 @@
   </div>
 
   <div class="flex items-start">
-    <h3 class="text-[0.9rem] font-medium text-base-content m-0 leading-snug">{pr.title}</h3>
+    <h3 class="text-[0.9rem] font-medium text-of-text m-0 leading-snug">{pr.title}</h3>
   </div>
 
-  <div class="flex items-center gap-2 text-xs text-base-content/50">
-    <span class="font-semibold text-base-content">#{pr.number}</span>
-    <span class="text-base-300">•</span>
+  <div class="flex items-center gap-2 text-xs text-of-text/50">
+    <span class="font-semibold text-of-text">#{pr.number}</span>
+    <span class="text-of-border">•</span>
     <span class="font-medium">{pr.head_ref}</span>
-    <span class="text-base-300">•</span>
+    <span class="text-of-border">•</span>
     <span>{timeAgoFromSeconds(pr.created_at)}</span>
   </div>
 
@@ -58,10 +58,10 @@
     {/each}
 
     <span class="flex-1"></span>
-    <span class="font-medium text-base-content/50">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
-    <span class="text-base-300">•</span>
-    <span class="font-medium text-success">+{pr.additions}</span>
-    <span class="font-medium text-error">−{pr.deletions}</span>
+    <span class="font-medium text-of-text/50">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
+    <span class="text-of-border">•</span>
+    <span class="font-medium text-of-success">+{pr.additions}</span>
+    <span class="font-medium text-of-danger">−{pr.deletions}</span>
   </div>
 
   {#if visibleLabels.length > 0}

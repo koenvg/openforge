@@ -104,7 +104,7 @@
 <InlineCommentBody>
   {#each comment.thread.messages as message (message.id)}
     <div class="mb-1.5">
-      <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'human' ? 'font-semibold' : ''}">{message.role === 'agent' ? 'Agent' : 'Reviewer'}</span>
+      <span class="text-of-text/50 text-[0.7rem] mr-1 {message.role === 'human' ? 'font-semibold' : ''}">{message.role === 'agent' ? 'Agent' : 'Reviewer'}</span>
       <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
     </div>
   {/each}

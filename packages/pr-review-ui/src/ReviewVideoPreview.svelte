@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ReviewVideoMedia } from './reviewMedia'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
 
   interface Props {
     item: ReviewVideoMedia
@@ -28,8 +29,8 @@
     Video playback is unavailable for this file.
   </video>
   {#if playbackFailed}
-    <div class="rounded-[var(--of-radius-container)] bg-error px-4 py-3 text-sm text-error-content shadow-lg" role="alert">
+    <Alert variant="danger" class="shadow-lg" role="alert">
       This video cannot be played by this browser. The file may use an unsupported codec.
-    </div>
+    </Alert>
   {/if}
 </div>

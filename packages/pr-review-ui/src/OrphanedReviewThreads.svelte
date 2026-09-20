@@ -23,9 +23,9 @@
 {#if threads.length > 0}
   <section
     aria-label="Threads not in this diff"
-    class="max-h-64 shrink-0 overflow-y-auto border-b border-base-300 bg-base-200 px-4 py-2"
+    class="max-h-64 shrink-0 overflow-y-auto border-b border-of-border bg-of-surface-subtle px-4 py-2"
   >
-    <div class="flex items-center gap-2 text-sm text-base-content/80">
+    <div class="flex items-center gap-2 text-sm text-of-text/80">
       <TriangleAlert size={16} strokeWidth={1.8} aria-hidden="true" />
       <span>
         {threads.length === 1
@@ -34,8 +34,8 @@
       </span>
     </div>
     {#each threads as entry (entry.thread.id)}
-      <div class="my-1.5 rounded-[var(--of-radius-container)] border border-base-300 border-l-4 border-l-warning bg-base-100 px-4 py-2.5 text-[0.8rem]">
-        <div class="mb-1.5 flex flex-wrap items-center gap-2 text-[0.7rem] text-base-content/60">
+      <div class="my-1.5 rounded-[var(--of-radius-container)] border border-of-border border-l-4 border-l-of-warning bg-of-surface px-4 py-2.5 text-[0.8rem]">
+        <div class="mb-1.5 flex flex-wrap items-center gap-2 text-[0.7rem] text-of-text/60">
           <span class="font-mono">{entry.thread.anchor.filePath}:{entry.thread.anchor.line}</span>
           <span>{REASON_LABELS[entry.reason]}</span>
         </div>

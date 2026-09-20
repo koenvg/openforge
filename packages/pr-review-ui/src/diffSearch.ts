@@ -23,18 +23,18 @@ const DIFF_SEARCH_HIGHLIGHT_STYLES_ID = 'openforge-diff-search-highlight-styles'
 
 export const DIFF_SEARCH_HIGHLIGHT_STYLES = `
 ::highlight(${SEARCH_MATCH_HIGHLIGHT}) {
-  background-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
-  color: var(--color-base-content);
+  background-color: color-mix(in oklch, var(--of-warning) 40%, transparent);
+  color: var(--of-text);
 }
 
 ::highlight(${SEARCH_CURRENT_HIGHLIGHT}) {
-  background-color: var(--color-warning);
-  color: var(--color-warning-content);
+  background-color: var(--of-warning);
+  color: var(--of-on-warning);
 }
 
 ::highlight(${OCCURRENCE_MATCH_HIGHLIGHT}) {
-  background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
-  color: var(--color-base-content);
+  background-color: color-mix(in oklch, var(--of-info) 30%, transparent);
+  color: var(--of-text);
 }
 `.trim()
 

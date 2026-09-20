@@ -26,8 +26,8 @@
 
 ## 5. PR review UI package
 
-- [ ] 5.1 Migrate diff/file-content alerts, loading states, and their associated colors in `packages/pr-review-ui`; verify loading/error/empty cases, expanded diff behavior, announcements, and baseline paint/bounds through focused tests and browser coverage.
-- [ ] 5.2 Migrate remaining review overview, comment/question, status-chip, and CSS-variable consumers in the package while preserving opacity and interaction states; verify review behavior tests and theme-switch browser assertions, with no unresolved package inventory entries.
+- [x] 5.1 Migrate diff/file-content alerts, loading states, and their associated colors in `packages/pr-review-ui`; verify loading/error/empty cases, expanded diff behavior, announcements, and baseline paint/bounds through focused tests and browser coverage.
+- [x] 5.2 Migrate remaining review overview, comment/question, status-chip, and CSS-variable consumers in the package while preserving opacity and interaction states; verify review behavior tests and theme-switch browser assertions, with no unresolved package inventory entries.
 - [ ] 5.3 Run `pnpm exec vitest run packages/pr-review-ui` and `pnpm --filter @openforge-app/pr-review-ui check`, plus production host review rendering; verify package checks pass and the review views remain styled before removing the adapter.
 
 ## 6. Terminal runtime presentation

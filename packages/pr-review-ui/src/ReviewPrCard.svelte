@@ -73,8 +73,8 @@
 >
   <div class="flex flex-wrap items-center justify-between gap-2 {headerActionPadding}">
     <div class="flex flex-wrap items-center gap-2">
-      <span class="inline-flex items-center gap-1.5 text-xs font-medium text-base-content/70">
-        <GitPullRequest class="size-3.5 text-base-content/50" aria-hidden="true" />
+      <span class="inline-flex items-center gap-1.5 text-xs font-medium text-of-text/70">
+        <GitPullRequest class="size-3.5 text-of-text/50" aria-hidden="true" />
         {pr.repo_owner}/{pr.repo_name}
       </span>
       {#if pr.draft}
@@ -90,20 +90,20 @@
     <div class="flex items-start gap-2">
       {#if isUnread}
         <span
-          class="mt-[0.4rem] size-2 shrink-0 rounded-[var(--of-radius-round)] bg-info ring-2 ring-info/15"
+          class="mt-[0.4rem] size-2 shrink-0 rounded-[var(--of-radius-round)] bg-of-info ring-2 ring-of-info/15"
           role="img"
           aria-label="Unread review request"
           title="Unread"
         ></span>
       {/if}
-      <h3 class="text-[0.9rem] {titleWeight} text-base-content m-0 leading-snug">{pr.title}</h3>
+      <h3 class="text-[0.9rem] {titleWeight} text-of-text m-0 leading-snug">{pr.title}</h3>
     </div>
 
-    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-base-content/60">
-      <span class="font-semibold text-base-content">#{pr.number}</span>
-      <span class="text-base-300" aria-hidden="true">•</span>
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-of-text/60">
+      <span class="font-semibold text-of-text">#{pr.number}</span>
+      <span class="text-of-border" aria-hidden="true">•</span>
       <span class="font-medium">{pr.user_login}</span>
-      <span class="text-base-300" aria-hidden="true">•</span>
+      <span class="text-of-border" aria-hidden="true">•</span>
       <span>{timeAgoFromSeconds(pr.created_at)}</span>
     </div>
 
@@ -114,20 +114,20 @@
           <StatusBadge {status}>{chip.label}</StatusBadge>
         {/if}
       {/each}
-      <span class="font-medium text-base-content/60">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
-      <span class="text-base-300" aria-hidden="true">•</span>
-      <span class="font-semibold text-success">+{pr.additions}</span>
-      <span class="font-semibold text-error">−{pr.deletions}</span>
+      <span class="font-medium text-of-text/60">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>
+      <span class="text-of-border" aria-hidden="true">•</span>
+      <span class="font-semibold text-of-success">+{pr.additions}</span>
+      <span class="font-semibold text-of-danger">−{pr.deletions}</span>
     </div>
 
     {#if visibleLabels.length > 0}
-      <div class="flex min-w-0 items-start gap-2 text-xs text-base-content/75">
-        <Tags class="mt-0.5 size-3.5 shrink-0 text-base-content/50" aria-hidden="true" />
+      <div class="flex min-w-0 items-start gap-2 text-xs text-of-text/75">
+        <Tags class="mt-0.5 size-3.5 shrink-0 text-of-text/50" aria-hidden="true" />
         <ul class="m-0 flex min-w-0 list-none flex-wrap items-center gap-x-3 gap-y-1 p-0" aria-label="Pull request labels">
           {#each visibleLabels as label}
             <li class="flex min-w-0 items-center gap-1.5">
               <span
-                class="size-2 shrink-0 rounded-[var(--of-radius-round)] ring-1 ring-base-content/15"
+                class="size-2 shrink-0 rounded-[var(--of-radius-round)] ring-1 ring-of-text/15"
                 style={labelMarkerStyle(label.color)}
                 aria-hidden="true"
               ></span>
@@ -136,7 +136,7 @@
           {/each}
         </ul>
         {#if overflowCount > 0}
-          <span class="shrink-0 font-medium text-base-content/60" aria-label={`${overflowCount} more labels`}>+{overflowCount}</span>
+          <span class="shrink-0 font-medium text-of-text/60" aria-label={`${overflowCount} more labels`}>+{overflowCount}</span>
         {/if}
       </div>
     {/if}

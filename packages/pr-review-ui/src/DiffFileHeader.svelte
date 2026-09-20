@@ -66,27 +66,27 @@
 </script>
 
 <div
-      class="sticky top-0 z-20 w-full flex cursor-pointer items-center gap-2 px-4 py-1 bg-base-100 border-b border-base-300 rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm"
+      class="sticky top-0 z-20 w-full flex cursor-pointer items-center gap-2 px-4 py-1 bg-of-surface border-b border-of-border rounded-t-[var(--of-diff-section-radius,var(--of-radius-container))] shadow-sm"
   data-diff-file-header={file.filename}
   role="presentation"
   onclick={handleHeaderClick}
   onkeydown={handleHeaderKeydown}
 >
   <button
-    class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 items-center gap-2 text-left hover:text-primary transition-colors"
+    class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 items-center gap-2 text-left hover:text-of-accent transition-colors"
     aria-label={getToggleLabel()}
     aria-expanded={!collapsed}
     onclick={onToggleCollapse}
   >
-    <span class="text-xs text-base-content/50 flex-shrink-0" aria-hidden="true">{collapsed ? '▶' : '▼'}</span>
+    <span class="text-xs text-of-text/50 flex-shrink-0" aria-hidden="true">{collapsed ? '▶' : '▼'}</span>
     <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
       {getFileStatusIcon(file.status)}
     </span>
   </button>
-  <div class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap font-mono text-[13px] text-base-content">
+  <div class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap font-mono text-[13px] text-of-text">
     {#if file.previous_filename}
-      <span class="max-w-[40%] min-w-0 overflow-hidden text-ellipsis text-base-content/50 line-through" title={file.previous_filename}>{file.previous_filename}</span>
-      <span class="text-primary mx-1 flex-shrink-0">→</span>
+      <span class="max-w-[40%] min-w-0 overflow-hidden text-ellipsis text-of-text/50 line-through" title={file.previous_filename}>{file.previous_filename}</span>
+      <span class="text-of-accent mx-1 flex-shrink-0">→</span>
     {/if}
     <span class="min-w-0 overflow-hidden text-ellipsis" title={file.filename}>{file.filename}</span>
     {#if onCopyFilePath}
@@ -134,7 +134,7 @@
     </div>
   {/if}
   {#if onReviewedChange}
-    <label class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-base-content/70">
+    <label class="flex min-h-[var(--of-control-height-touch)] flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-of-text/70">
       <Checkbox
         size="xs"
         aria-label="Mark {file.filename} reviewed"
@@ -148,7 +148,7 @@
   {/if}
   <span class="flex-shrink-0 text-[13px] font-semibold uppercase tracking-wider" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
   <span class="flex flex-shrink-0 gap-2 text-[13px] tabular-nums">
-    {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
-    {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
+    {#if file.additions > 0}<span class="text-of-success">+{file.additions}</span>{/if}
+    {#if file.deletions > 0}<span class="text-of-danger">−{file.deletions}</span>{/if}
   </span>
 </div>

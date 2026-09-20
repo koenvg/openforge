@@ -5,25 +5,25 @@
   let { chip }: { chip: PrStatusChipSpec } = $props();
 
   const variantClasses: Record<PrStatusChipSpec['variant'], { bg: string, dot: string, text: string }> = {
-    success: { bg: 'bg-[var(--chip-running-bg)]', dot: 'bg-[var(--chip-running-dot)]', text: 'text-[var(--chip-running-text)]' },
-    error: { bg: 'bg-[var(--chip-error-bg)]', dot: 'bg-[var(--chip-error-dot)]', text: 'text-[var(--chip-error-text)]' },
-    pending: { bg: 'bg-[var(--chip-paused-bg)]', dot: 'bg-[var(--chip-paused-dot)]', text: 'text-[var(--chip-paused-text)]' },
-    muted: { bg: 'bg-[var(--chip-soft-bg)]', dot: '', text: 'text-[var(--chip-soft-text)]' },
-    neutral: { bg: 'bg-[var(--chip-stopped-bg)]', dot: 'bg-[var(--chip-stopped-dot)]', text: 'text-[var(--chip-stopped-text)]' },
-    done: { bg: 'bg-[var(--chip-done-bg)]', dot: 'bg-[var(--chip-done-dot)]', text: 'text-[var(--chip-done-text)]' },
-    merged: { bg: 'bg-[var(--chip-done-bg)]', dot: '', text: 'text-[var(--chip-done-text)]' },
-    closed: { bg: 'bg-[var(--chip-stopped-bg)]', dot: '', text: 'text-[var(--chip-stopped-text)]' }
+    success: { bg: 'bg-of-success/15', dot: 'bg-of-success', text: 'text-of-success' },
+    error: { bg: 'bg-of-danger/15', dot: 'bg-of-danger', text: 'text-of-danger' },
+    pending: { bg: 'bg-of-warning/15', dot: 'bg-of-warning', text: 'text-of-warning' },
+    muted: { bg: 'bg-of-text/15', dot: '', text: 'text-of-text/50' },
+    neutral: { bg: 'bg-of-text/15', dot: 'bg-of-text/50', text: 'text-of-text/50' },
+    done: { bg: 'bg-of-accent/15', dot: 'bg-of-accent', text: 'text-of-accent' },
+    merged: { bg: 'bg-of-control/15', dot: '', text: 'text-of-control' },
+    closed: { bg: 'bg-of-control/15', dot: '', text: 'text-of-control' }
   };
 
   const detailClasses: Record<PrStatusChipSpec['variant'], string> = {
-    success: 'bg-success/15 text-success',
-    error: 'bg-error/15 text-error',
-    pending: 'bg-warning/15 text-warning',
-    muted: 'bg-base-content/15 text-base-content/50',
-    neutral: 'bg-base-content/15 text-base-content/50',
-    done: 'bg-primary/15 text-primary',
-    merged: 'bg-secondary/15 text-secondary',
-    closed: 'bg-secondary/15 text-secondary'
+    success: 'bg-of-success/15 text-of-success',
+    error: 'bg-of-danger/15 text-of-danger',
+    pending: 'bg-of-warning/15 text-of-warning',
+    muted: 'bg-of-text/15 text-of-text/50',
+    neutral: 'bg-of-text/15 text-of-text/50',
+    done: 'bg-of-accent/15 text-of-accent',
+    merged: 'bg-of-control/15 text-of-control',
+    closed: 'bg-of-control/15 text-of-control'
   };
 </script>
 

@@ -90,6 +90,7 @@ describe('DiffViewer file-content fetch errors', () => {
 
     const error = await screen.findByRole('alert')
     expect(error.textContent).toContain('Couldn’t load file contents')
+    expect(error.getAttribute('data-variant')).toBe('danger')
     expect(error.textContent).toContain('Image content unavailable')
     expect(screen.queryByLabelText('Loading new image preview')).toBeNull()
 
