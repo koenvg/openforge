@@ -269,7 +269,12 @@ export function prepareRustDependencies({ runCommand = run } = {}) {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } catch {
-      runCommand('cargo', manifestArgs, options)
+      // Preparation may run again after CI has made subsequent builds offline.
+      // Allow networking only for this cache-miss fetch, not in the caller.
+      runCommand('cargo', manifestArgs, {
+        ...options,
+        env: { ...options.env, CARGO_NET_OFFLINE: 'false' },
+      })
     }
   }
 }
