@@ -1,6 +1,15 @@
-use super::*;
+use super::super::{
+    live_events::CompanionStreamTermination,
+    terminal_test_fixture::{
+        attach_and_wait_until_ready, next_frame, send_attach, AuthenticatedTerminalServer,
+        CancellationAccess, TestTerminalSocket,
+    },
+};
 use crate::pty_manager::PtyManager;
 use crate::test_support::daemon::DaemonFixture;
+use futures::{SinkExt, StreamExt};
+use std::{sync::Arc, time::Duration};
+use tokio_tungstenite::tungstenite::Message;
 
 fn manager(fixture: &DaemonFixture) -> PtyManager {
     let mut manager = PtyManager::new();
@@ -10,41 +19,6 @@ fn manager(fixture: &DaemonFixture) -> PtyManager {
         "KVG-3018".into(),
     );
     manager
-}
-
-async fn server(
-    manager: PtyManager,
-    access: Arc<CancellationAccess>,
-) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
-    let router = create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new("consumer-contract".into()),
-        Arc::new(BearerAuthorizer),
-        pairing(),
-        CompanionRouterSources {
-            attention: Arc::new(UnavailableCompanionAttentionSource),
-            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
-            task_actions: Arc::new(
-                super::super::task_actions::UnavailableCompanionTaskActionService,
-            ),
-            action_palette: Arc::new(
-                super::super::action_palette::UnavailableCompanionActionPaletteService,
-            ),
-            task_creator: Arc::new(super::super::task_creation::UnavailableCompanionTaskCreator),
-            task_start: Arc::new(super::super::task_start::UnavailableCompanionTaskStarter),
-            pty_manager: manager,
-            events: crate::app_events::AppEventBus::new(16, 8),
-            stream_access: access,
-        },
-    );
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .unwrap();
-    let address = listener.local_addr().unwrap();
-    (
-        address,
-        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() }),
-    )
 }
 
 async fn output_until(socket: &mut TestTerminalSocket, expected: &str) -> String {
@@ -83,14 +57,9 @@ async fn companion_reconnects_to_same_daemon_agent_after_backend_replacement() {
     }, crate::app_events::RuntimeEventPublisher::new(None, None)).await.unwrap();
     let before = bridge.session().await.unwrap().unwrap();
     let access = Arc::new(CancellationAccess::default());
-    let (address, running) = server(first.clone(), access.clone()).await;
-    let mut socket = connect_terminal(address).await;
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        attach_and_wait_until_ready(&mut socket),
-    )
-    .await
-    .expect("ready deadline");
+    let server = AuthenticatedTerminalServer::start_with_pty(first.clone(), access.clone()).await;
+    let mut socket = server.connect().await;
+    attach_and_wait_until_ready(&mut socket).await;
     socket
         .send(Message::Binary(b"before-replacement\n".to_vec()))
         .await
@@ -100,19 +69,14 @@ async fn companion_reconnects_to_same_daemon_agent_after_backend_replacement() {
 
     access.cancel(CompanionStreamTermination::GatewayClosing);
     socket.close(None).await.ok();
-    running.abort();
+    server.shutdown().await;
     drop(first);
 
     let second = manager(&fixture);
     let access = Arc::new(CancellationAccess::default());
-    let (address, running) = server(second.clone(), access.clone()).await;
-    let mut socket = connect_terminal(address).await;
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        attach_and_wait_until_ready(&mut socket),
-    )
-    .await
-    .expect("replacement ready deadline");
+    let server = AuthenticatedTerminalServer::start_with_pty(second.clone(), access.clone()).await;
+    let mut socket = server.connect().await;
+    attach_and_wait_until_ready(&mut socket).await;
     let current = second
         .daemon_shells
         .as_ref()
@@ -130,20 +94,11 @@ async fn companion_reconnects_to_same_daemon_agent_after_backend_replacement() {
         .is_err());
     // This fixture stores only the newest cancellation sender. Keep the first
     // channel alive so the registry, not a dropped test sender, replaces it.
-    let _previous_access = access.sender.lock().unwrap().clone();
+    let _previous_access = access.current_sender();
     let mut replaced = socket;
-    let mut socket = connect_terminal(address).await;
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        attach_and_wait_until_ready(&mut socket),
-    )
-    .await
-    .expect("replacement attachment deadline");
-    let replaced_control = tokio::time::timeout(Duration::from_secs(5), replaced.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let mut socket = server.connect().await;
+    attach_and_wait_until_ready(&mut socket).await;
+    let replaced_control = next_frame(&mut replaced, "replaced attachment control").await;
     assert!(
         matches!(replaced_control, Message::Text(text) if text.contains("attachment_replaced"))
     );
@@ -178,11 +133,7 @@ async fn companion_reconnects_to_same_daemon_agent_after_backend_replacement() {
     let image = output_until(&mut socket, "[Image unavailable on mobile]").await;
     assert!(!image.contains("SECRET_IMAGE"));
     access.cancel(CompanionStreamTermination::AuthorizationRevoked);
-    let control = tokio::time::timeout(Duration::from_secs(5), socket.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let control = next_frame(&mut socket, "authorization revocation control").await;
     assert!(matches!(control, Message::Text(text) if text.contains("authorization_revoked")));
     assert!(second
         .daemon_shells
@@ -204,20 +155,11 @@ async fn companion_reconnects_to_same_daemon_agent_after_backend_replacement() {
     })
     .await
     .unwrap();
-    let mut exited = connect_terminal(address).await;
-    exited
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.into(),
-        ))
-        .await
-        .unwrap();
-    let response = tokio::time::timeout(Duration::from_secs(5), exited.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let mut exited = server.connect().await;
+    send_attach(&mut exited).await;
+    let response = next_frame(&mut exited, "exited terminal response").await;
     assert!(matches!(response, Message::Text(text) if text.contains("no_active_agent_terminal")));
-    running.abort();
+    server.shutdown().await;
 }
 
 #[tokio::test]
@@ -237,29 +179,14 @@ async fn companion_never_attaches_to_a_shell_even_when_its_key_is_selected_as_an
         fixture.executable.clone(),
         key.into(),
     );
-    let (address, running) = server(selected, Arc::new(CancellationAccess::default())).await;
-    let mut request = format!("ws://{address}/companion/v1/tasks/{key}/agent-terminal")
-        .into_client_request()
-        .unwrap();
-    request.headers_mut().insert(
-        axum::http::header::AUTHORIZATION,
-        "Bearer paired-device-credential".parse().unwrap(),
-    );
-    request
-        .headers_mut()
-        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
-    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
-    socket
-        .send(Message::Text(
-            r#"{"type":"attach","columns":80,"rows":24}"#.into(),
-        ))
-        .await
-        .unwrap();
-    let response = tokio::time::timeout(Duration::from_secs(5), socket.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let server = AuthenticatedTerminalServer::start_with_pty(
+        selected,
+        Arc::new(CancellationAccess::default()),
+    )
+    .await;
+    let mut socket = server.connect_task(key).await;
+    send_attach(&mut socket).await;
+    let response = next_frame(&mut socket, "shell terminal response").await;
     assert!(matches!(response, Message::Text(text) if text.contains("no_active_agent_terminal")));
-    running.abort();
+    server.shutdown().await;
 }
