@@ -173,6 +173,8 @@ fn sidecar_response(
                 Err(error) => panic!("{error}"),
             }
         };
+        // macOS accepts this socket with the listener's O_NONBLOCK flag still set.
+        stream.set_nonblocking(false).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
