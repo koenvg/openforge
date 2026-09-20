@@ -208,8 +208,9 @@ async fn receive_output_containing(
 
 #[tokio::test]
 async fn attachment_writes_only_valid_utf8_to_the_bound_agent_pty() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
     let temp_dir = tempfile::tempdir().expect("terminal tempdir");
+    manager.set_pid_dir(temp_dir.path().join("pids"));
     manager
         .spawn_companion_test_agent_pty(
             "interactive-agent",
