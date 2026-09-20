@@ -30,9 +30,9 @@
   })
 </script>
 
-<main class="min-h-screen bg-base-200 p-8 text-base-content">
+<main class="min-h-screen bg-of-surface-subtle p-8 text-of-text">
   <section
-    class="mx-auto w-[900px] rounded-lg border border-base-300 bg-base-100 p-6 leading-relaxed"
+    class="mx-auto w-[900px] rounded-lg border border-of-border bg-of-surface p-6 leading-relaxed"
     data-testid="markdown-visual"
     aria-label={surface === 'preview' ? `Markdown preview for ${filename}` : `Rich diff for ${filename}`}
   >

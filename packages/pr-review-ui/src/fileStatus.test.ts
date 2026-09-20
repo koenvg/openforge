@@ -9,10 +9,10 @@ import {
 
 describe('getFileStatusPresentation', () => {
   it.each([
-    ['added', 'Added', 'text-success border-success/45 bg-success/5'],
-    ['removed', 'Deleted', 'text-error border-error/45 bg-error/5'],
-    ['modified', 'Modified', 'text-primary border-primary/45 bg-primary/5'],
-    ['renamed', 'Renamed', 'text-info border-info/45 bg-info/5'],
+    ['added', 'Added', 'text-of-success border-of-success/45 bg-of-success/5'],
+    ['removed', 'Deleted', 'text-of-danger border-of-danger/45 bg-of-danger/5'],
+    ['modified', 'Modified', 'text-of-accent border-of-accent/45 bg-of-accent/5'],
+    ['renamed', 'Renamed', 'text-of-info border-of-info/45 bg-of-info/5'],
   ])('maps %s to its badge label and classes', (status, label, badgeClass) => {
     expect(getFileStatusPresentation(status)).toMatchObject({ label, badgeClass })
   })
@@ -20,7 +20,7 @@ describe('getFileStatusPresentation', () => {
   it('preserves unknown status labels and uses the fallback badge classes', () => {
     expect(getFileStatusPresentation('unknown')).toMatchObject({
       label: 'unknown',
-      badgeClass: 'text-base-content/60 border-base-300 bg-base-200',
+      badgeClass: 'text-of-text/60 border-of-border bg-of-surface-subtle',
     })
   })
 })
@@ -49,46 +49,46 @@ describe('fileStatus', () => {
   })
 
   describe('getFileStatusColor', () => {
-    it('returns "var(--success)" for added status', () => {
-      expect(getFileStatusColor('added')).toBe('var(--success)')
+    it('returns the semantic success token for added status', () => {
+      expect(getFileStatusColor('added')).toBe('var(--of-success)')
     })
 
-    it('returns "var(--error)" for removed status', () => {
-      expect(getFileStatusColor('removed')).toBe('var(--error)')
+    it('returns the semantic danger token for removed status', () => {
+      expect(getFileStatusColor('removed')).toBe('var(--of-danger)')
     })
 
-    it('returns "var(--warning)" for modified status', () => {
-      expect(getFileStatusColor('modified')).toBe('var(--warning)')
+    it('returns the semantic warning token for modified status', () => {
+      expect(getFileStatusColor('modified')).toBe('var(--of-warning)')
     })
 
-    it('returns "var(--accent)" for renamed status', () => {
-      expect(getFileStatusColor('renamed')).toBe('var(--accent)')
+    it('returns the semantic accent token for renamed status', () => {
+      expect(getFileStatusColor('renamed')).toBe('var(--of-accent)')
     })
 
-    it('returns "var(--text-secondary)" for unknown status', () => {
-      expect(getFileStatusColor('unknown')).toBe('var(--text-secondary)')
+    it('returns the semantic muted text token for unknown status', () => {
+      expect(getFileStatusColor('unknown')).toBe('var(--of-text-muted)')
     })
   })
 
   describe('getFileStatusClass', () => {
-    it('returns "text-success" for added status', () => {
-      expect(getFileStatusClass('added')).toBe('text-success')
+    it('returns the semantic success class for added status', () => {
+      expect(getFileStatusClass('added')).toBe('text-of-success')
     })
 
-    it('returns "text-error" for removed status', () => {
-      expect(getFileStatusClass('removed')).toBe('text-error')
+    it('returns the semantic danger class for removed status', () => {
+      expect(getFileStatusClass('removed')).toBe('text-of-danger')
     })
 
-    it('returns "text-warning" for modified status', () => {
-      expect(getFileStatusClass('modified')).toBe('text-warning')
+    it('returns the semantic warning class for modified status', () => {
+      expect(getFileStatusClass('modified')).toBe('text-of-warning')
     })
 
-    it('returns "text-primary" for renamed status', () => {
-      expect(getFileStatusClass('renamed')).toBe('text-primary')
+    it('returns the semantic accent class for renamed status', () => {
+      expect(getFileStatusClass('renamed')).toBe('text-of-accent')
     })
 
-    it('returns "text-base-content/50" for unknown status', () => {
-      expect(getFileStatusClass('unknown')).toBe('text-base-content/50')
+    it('returns a translucent semantic text class for unknown status', () => {
+      expect(getFileStatusClass('unknown')).toBe('text-of-text/50')
     })
   })
 

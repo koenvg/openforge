@@ -124,9 +124,9 @@
   }
 </script>
 
-<div class="flex flex-col shrink-0 bg-base-200 border-t border-base-300">
-  <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-base-300">
-    <h3 class="text-[0.9rem] font-semibold text-base-content m-0">Submit Review</h3>
+<div class="flex flex-col shrink-0 bg-of-surface-subtle border-t border-of-border">
+  <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-of-border">
+    <h3 class="text-[0.9rem] font-semibold text-of-text m-0">Submit Review</h3>
     {#if totalPendingCount > 0}
       <Badge variant="warning">{totalPendingCount} comment{totalPendingCount === 1 ? '' : 's'} will be submitted</Badge>
     {/if}
@@ -136,9 +136,9 @@
     {#if includedFindings.length > 0}
       <div class="flex flex-col gap-1.5">
         {#each includedFindings as finding (finding.id)}
-          <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-warning/10 border border-warning/30 rounded-[var(--of-radius-container)]">
+          <div class="flex items-start gap-2 pl-3 pr-1.5 py-1.5 bg-of-warning/10 border border-of-warning/30 rounded-[var(--of-radius-container)]">
             <Badge variant="warning" class="shrink-0 mt-0.5">{finding.label}</Badge>
-            <span class="flex-1 text-[0.8rem] text-base-content leading-snug">{finding.text}</span>
+            <span class="flex-1 text-[0.8rem] text-of-text leading-snug">{finding.text}</span>
             <IconButton
               label={`Remove "${finding.label}" from review`}
               size="xs"
@@ -166,14 +166,14 @@
     />
 
     {#if error}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-[var(--of-radius-container)] text-error text-[0.8rem]" role="alert" aria-live="assertive">
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-of-danger/10 border border-of-danger/30 rounded-[var(--of-radius-container)] text-of-danger text-[0.8rem]" role="alert" aria-live="assertive">
         <TriangleAlert size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{error}</span>
       </div>
     {/if}
 
     {#if successMessage}
-      <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-[var(--of-radius-container)] text-success text-[0.8rem]" role="status" aria-live="polite">
+      <div class="flex items-center gap-2 px-3 py-2.5 bg-of-success/10 border border-of-success/30 rounded-[var(--of-radius-container)] text-of-success text-[0.8rem]" role="status" aria-live="polite">
         <CircleCheck size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{successMessage}</span>
       </div>

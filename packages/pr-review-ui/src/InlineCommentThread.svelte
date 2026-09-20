@@ -56,7 +56,7 @@
   {#each data.comments as comment}
     {@const isNested = comment.type === 'pending-reply' || (comment.type === 'existing' && comment.isReply)}
     {@const isConnectedReply = comment.type === 'existing' && comment.isReply}
-    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5' : 'my-1.5'} text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'thread' ? 'border-l-4 border-l-info' : ''}">
+    <div class="{isNested ? 'ml-8' : ''} px-4 py-2.5 mx-4 {isConnectedReply ? 'mt-0 mb-1.5' : 'my-1.5'} text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-of-warning' : comment.type === 'existing' ? 'border-l-4 border-l-of-accent' : comment.type === 'thread' ? 'border-l-4 border-l-of-info' : ''}">
       {#if comment.type === 'existing'}
         <InlineExistingComment
           {comment}

@@ -13,6 +13,7 @@
   import FileContentsError from './FileContentsError.svelte'
   import RichMarkdownDiff from './RichMarkdownDiff.svelte'
   import ReviewVideoPreview from './ReviewVideoPreview.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
 
   interface Props {
     file: PrFileDiff
@@ -141,7 +142,7 @@
   {:else if onOpenMedia}
     <button
       type="button"
-      class="cursor-zoom-in rounded-[var(--of-radius-container)] border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      class="cursor-zoom-in rounded-[var(--of-radius-container)] border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-of-accent"
       aria-label={openLabel}
       onclick={(event) => {
         event.currentTarget.focus()
@@ -156,11 +157,11 @@
 {/snippet}
 
 {#if !file.patch && !isMediaFileDiff(file) && file.status === 'renamed' && file.changes === 0}
-  <div class="flex items-center justify-center py-8 text-base-content/50">
+  <div class="flex items-center justify-center py-8 text-of-text/50">
     <span class="text-xs">File renamed without content changes.</span>
   </div>
 {:else if richDiffActive && file.patch}
-  <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
+  <div class="bg-of-surface p-6 text-of-text leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
     {#if fileContents}
       <RichMarkdownDiff
         {file}
@@ -201,16 +202,16 @@
         aria-live="polite"
         aria-label="Loading rich diff for {file.filename}"
       >
-        <span class="loading loading-spinner loading-sm text-primary" aria-hidden="true"></span>
+        <LoadingIndicator size="sm" decorative class="text-of-accent" />
         <span class="sr-only">Loading rich diff for {file.filename}</span>
       </div>
     {:else}
-      <p class="text-sm text-base-content/50">Rich preview unavailable</p>
+      <p class="text-sm text-of-text/50">Rich preview unavailable</p>
     {/if}
   </div>
 {:else if isMediaFileDiff(file)}
   {#if fileContentError}
-    <div class="bg-base-100 p-4">
+    <div class="bg-of-surface p-4">
       <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
     </div>
   {:else}
@@ -221,11 +222,11 @@
     {@const oldSrc = getMediaPreviewDataUrl(file.previous_filename || file.filename, oldContent)}
     {@const newSrc = getMediaPreviewDataUrl(file.filename, newContent)}
     {@const mediaGallery = buildMediaGallery(oldSrc, newSrc)}
-    <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
+    <div class="grid gap-4 p-4 md:grid-cols-2 bg-of-surface">
       {#if file.status !== 'added'}
         {@const oldItem = mediaGallery.find(item => item.label === 'Before')}
-        <div class="rounded-[var(--of-radius-container)] border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
+        <div class="rounded-[var(--of-radius-container)] border border-of-border bg-of-surface-subtle/40 p-3 min-h-48 flex flex-col">
+          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-of-text/60">Before</div>
           <div class="flex flex-1 items-center justify-center overflow-auto">
             {#if oldItem}
               {@render mediaPreview(
@@ -235,21 +236,21 @@
                 mediaGallery.indexOf(oldItem),
               )}
             {:else if oldAvailability === undefined && canFetchFileContents}
-              <span class="loading loading-spinner loading-sm text-primary" aria-label={isVideoFileDiff(file) ? 'Loading old video preview' : 'Loading old image preview'}></span>
+              <LoadingIndicator size="sm" class="text-of-accent" aria-label={isVideoFileDiff(file) ? 'Loading old video preview' : 'Loading old image preview'} />
             {:else if oldAvailability?.status === 'too-large'}
-              <span class="text-sm text-base-content/60">Video is too large to preview ({formatByteSize(oldAvailability.size)}).</span>
+              <span class="text-sm text-of-text/60">Video is too large to preview ({formatByteSize(oldAvailability.size)}).</span>
             {:else if oldAvailability?.status === 'load-failed'}
               <FileContentsError filename={file.filename} error={oldAvailability.message} onRetry={onRetryFileContents} />
             {:else}
-              <span class="text-sm text-base-content/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No previous image preview'}</span>
+              <span class="text-sm text-of-text/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No previous image preview'}</span>
             {/if}
           </div>
         </div>
       {/if}
       {#if file.status !== 'removed' && file.status !== 'deleted'}
         {@const newItem = mediaGallery.find(item => item.label === 'After')}
-        <div class="rounded-[var(--of-radius-container)] border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
-          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
+        <div class="rounded-[var(--of-radius-container)] border border-of-border bg-of-surface-subtle/40 p-3 min-h-48 flex flex-col">
+          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-of-text/60">After</div>
           <div class="flex flex-1 items-center justify-center overflow-auto">
             {#if newItem}
               {@render mediaPreview(
@@ -259,13 +260,13 @@
                 mediaGallery.indexOf(newItem),
               )}
             {:else if newAvailability === undefined && canFetchFileContents}
-              <span class="loading loading-spinner loading-sm text-primary" aria-label={isVideoFileDiff(file) ? 'Loading new video preview' : 'Loading new image preview'}></span>
+              <LoadingIndicator size="sm" class="text-of-accent" aria-label={isVideoFileDiff(file) ? 'Loading new video preview' : 'Loading new image preview'} />
             {:else if newAvailability?.status === 'too-large'}
-              <span class="text-sm text-base-content/60">Video is too large to preview ({formatByteSize(newAvailability.size)}).</span>
+              <span class="text-sm text-of-text/60">Video is too large to preview ({formatByteSize(newAvailability.size)}).</span>
             {:else if newAvailability?.status === 'load-failed'}
               <FileContentsError filename={file.filename} error={newAvailability.message} onRetry={onRetryFileContents} />
             {:else}
-              <span class="text-sm text-base-content/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No image preview'}</span>
+              <span class="text-sm text-of-text/50">{isVideoFileDiff(file) ? 'No video revision available' : 'No image preview'}</span>
             {/if}
           </div>
         </div>
@@ -273,11 +274,11 @@
     </div>
   {/if}
 {:else if !file.patch && file.status === 'binary'}
-  <div class="flex items-center justify-center py-8 text-base-content/50">
+  <div class="flex items-center justify-center py-8 text-of-text/50">
     <span class="text-xs">Binary file changes cannot be displayed.</span>
   </div>
 {:else if !file.patch}
-  <div class="flex items-center justify-center py-8 text-base-content/50">
+  <div class="flex items-center justify-center py-8 text-of-text/50">
     <span class="text-xs">Diff unavailable for this file.</span>
   </div>
 {:else if workerDiffFile}
@@ -325,8 +326,8 @@
     {/snippet}
   </DiffView>
 {:else}
-  <div class="flex items-center justify-center py-8 text-base-content/40">
-    <span class="loading loading-spinner loading-sm mr-2"></span>
+  <div class="flex items-center justify-center py-8 text-of-text/40">
+    <LoadingIndicator size="sm" decorative class="mr-2" />
     <span class="text-xs">Processing diff…</span>
   </div>
 {/if}

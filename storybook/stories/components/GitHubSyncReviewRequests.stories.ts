@@ -1,73 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite'
-import { expect, fn, within } from 'storybook/test'
-import PrReviewListSection from '../../../plugins/github-sync/src/review/pr/PrReviewListSection.svelte'
+import { expect, within } from 'storybook/test'
 import WorkspaceComponentFrame from '../../shared/frames/WorkspaceComponentFrame.svelte'
+import GitHubSyncReviewRequestsFrame from '../../shared/frames/GitHubSyncReviewRequestsFrame.svelte'
 import {
   activeReviewRequest,
   closedReviewRequest,
   mergedReviewRequest,
-  viewedReviewRequest,
 } from '../../shared/fixtures/githubSyncReviewFixtures'
-
-const activeRequests = [activeReviewRequest, viewedReviewRequest]
-const finishedRequests = [mergedReviewRequest, closedReviewRequest]
-const allReviewRequests = [...activeRequests, ...finishedRequests]
-const repository = 'openforge/openforge'
 
 const meta = {
   title: 'Components/GitHub Sync/Review Requests',
-  component: PrReviewListSection,
+  component: GitHubSyncReviewRequestsFrame,
   decorators: [() => ({ Component: WorkspaceComponentFrame })],
-  args: {
-    headerTitle: 'Pull Requests',
-    headerSubtitle: 'Review requests and pull requests you authored',
-    projectName: 'OpenForge',
-    showFilters: false,
-    projectHasNoRepo: false,
-    excludedRepos: new Set<string>(),
-    showFilterDropdown: false,
-    newRepoInput: '',
-    suggestedRepos: [],
-    isLoading: false,
-    isLoadingAuthored: false,
-    error: null,
-    authoredError: null,
-    githubTokenConfigured: true,
-    reviewRequests: {
-      activeCount: activeRequests.length,
-      filtered: allReviewRequests,
-      finishedCount: finishedRequests.length,
-      groupedActive: new Map([[repository, activeRequests]]),
-      groupedFinished: new Map([[repository, finishedRequests]]),
-      keyboardNavigable: activeRequests,
-    },
-    filteredAuthoredPrs: [],
-    allReviewPrs: allReviewRequests,
-    allAuthoredPrs: [],
-    hiddenReviewRepos: [],
-    hiddenAuthoredRepos: [],
-    groupedAuthoredPrs: new Map(),
-    focusedIndex: -1,
-    onToggleFilterDropdown: fn(),
-    onCloseFilterDropdown: fn(),
-    onNewRepoInputChange: fn(),
-    onAddExcludedRepo: fn(),
-    onRemoveExcludedRepo: fn(),
-    onRefreshPrs: fn(),
-    onRefreshAuthoredPrs: fn(),
-    onOpenGithubSettings: fn(),
-    onOpenRepositoryFilters: fn(),
-    onSelectPr: fn(),
-    onMarkUnread: fn(),
-    onRemove: fn(),
-    onOpenAuthoredPr: fn(),
-    pluralize: (count: number, singular: string, plural = `${singular}s`) => count === 1 ? singular : plural,
-    walkthroughByPr: new Map(),
-    canGenerateWalkthrough: () => true,
-    onGenerateWalkthrough: fn(),
-    onStopWalkthrough: fn(),
-  },
-} satisfies Meta<typeof PrReviewListSection>
+} satisfies Meta<typeof GitHubSyncReviewRequestsFrame>
 export default meta
 
 type Story = StoryObj<typeof meta>
@@ -88,5 +33,8 @@ export const ActiveAndFinished: Story = {
     await expect(mergedTitle.closest('.vim-focus')).toBeNull()
     await expect(closedTitle.closest('.vim-focus')).toBeNull()
     await expect(canvas.getAllByRole('button', { name: 'Generate walkthrough and AI review' })).toHaveLength(2)
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    await expect(canvas.getByText(activeReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Finished (2)' })).toHaveAttribute('aria-expanded', 'true')
   },
 }

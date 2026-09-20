@@ -1,5 +1,6 @@
 <script lang="ts">
   import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
   import { ChevronDown, ChevronUp, Columns2, PanelLeftOpen, Rows3, Search, TextWrap, X } from '@lucide/svelte'
   import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
@@ -319,7 +320,7 @@
   onkeydown={search.handleRootKeydown}
 >
   <div
-      class="diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-base-300 bg-base-100 px-2 py-1"
+      class="diff-viewer-toolbar flex min-h-[var(--of-diff-toolbar-height,2.5rem)] shrink-0 flex-wrap items-center gap-1 border-b border-of-border bg-of-surface px-2 py-1"
     role="toolbar"
     aria-label="Diff controls"
   >
@@ -334,7 +335,7 @@
       >
         <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" />
       </IconButton>
-      <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+      <div class="w-px h-5 bg-of-border mx-1 self-center"></div>
     {/if}
     <IconButton
       label="Split diff view"
@@ -356,7 +357,7 @@
     >
       <Rows3 size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
-    <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+    <div class="w-px h-5 bg-of-border mx-1 self-center"></div>
     <IconButton
       label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       variant={diffViewWrap ? 'outline' : 'ghost'}
@@ -367,7 +368,7 @@
     >
       <TextWrap size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
-    <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
+    <div class="w-px h-5 bg-of-border mx-1 self-center"></div>
     <IconButton label="Search diff (⌘F)" size="sm" onclick={search.open}>
       <Search size={18} strokeWidth={1.8} aria-hidden="true" />
     </IconButton>
@@ -388,7 +389,7 @@
         onkeydown={search.handleKeydown}
       />
       </div>
-      <span class="text-[13px] text-base-content/60 tabular-nums">
+      <span class="text-[13px] text-of-text/60 tabular-nums">
         {#if search.query && search.matchCount === 0}
           0 results
         {:else if search.matchCount > 0}
@@ -428,7 +429,7 @@
   <div
     role="region"
     aria-label="Diff scroll area"
-    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100 pr-2 focus:outline-none focus-visible:ring-2 focus:ring-2 focus:ring-primary focus:ring-inset"
+    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-of-surface pr-2 focus:outline-none focus-visible:ring-2 focus:ring-2 focus:ring-of-accent focus:ring-inset"
     tabindex="-1"
     bind:this={scrollContainerEl}
     onkeydown={handleScrollAreaKeydown}
@@ -437,12 +438,12 @@
     onscroll={(e) => onScrollTopChange?.(e.currentTarget.scrollTop)}
   >
     {#if files.length === 0}
-      <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
+      <div class="flex items-center justify-center h-full text-of-text/50 text-sm">No files to display</div>
     {:else}
       {#if showLargeDiffWarning}
-        <div class="alert alert-warning py-2 px-4 rounded-none border-x-0 border-t-0 text-sm">
+        <Alert variant="warning" style="padding: 0.5rem 1rem; border-inline-width: 0; border-top-width: 0; border-radius: 0">
           <span>Large diff — {totalFiles} files, {totalChanges} total changes. {autoCollapsedFileCount} files auto-collapsed for performance.</span>
-        </div>
+        </Alert>
       {/if}
       <div style="height: {virtualizer.totalSize}px; width: 100%; position: relative;">
         {#each virtualizer.virtualItems as row (row.key)}

@@ -9,39 +9,39 @@ export interface FileStatusPresentation {
 const FILE_STATUS_PRESENTATIONS = {
   added: {
     icon: '+',
-    color: 'var(--success)',
-    textClass: 'text-success',
+    color: 'var(--of-success)',
+    textClass: 'text-of-success',
     label: 'Added',
-    badgeClass: 'text-success border-success/45 bg-success/5',
+    badgeClass: 'text-of-success border-of-success/45 bg-of-success/5',
   },
   removed: {
     icon: '−',
-    color: 'var(--error)',
-    textClass: 'text-error',
+    color: 'var(--of-danger)',
+    textClass: 'text-of-danger',
     label: 'Deleted',
-    badgeClass: 'text-error border-error/45 bg-error/5',
+    badgeClass: 'text-of-danger border-of-danger/45 bg-of-danger/5',
   },
   modified: {
     icon: '±',
-    color: 'var(--warning)',
-    textClass: 'text-warning',
+    color: 'var(--of-warning)',
+    textClass: 'text-of-warning',
     label: 'Modified',
-    badgeClass: 'text-primary border-primary/45 bg-primary/5',
+    badgeClass: 'text-of-accent border-of-accent/45 bg-of-accent/5',
   },
   renamed: {
     icon: '→',
-    color: 'var(--accent)',
-    textClass: 'text-primary',
+    color: 'var(--of-accent)',
+    textClass: 'text-of-accent',
     label: 'Renamed',
-    badgeClass: 'text-info border-info/45 bg-info/5',
+    badgeClass: 'text-of-info border-of-info/45 bg-of-info/5',
   },
 } as const satisfies Record<string, FileStatusPresentation>
 
 const UNKNOWN_FILE_STATUS_PRESENTATION = {
   icon: '•',
-  color: 'var(--text-secondary)',
-  textClass: 'text-base-content/50',
-  badgeClass: 'text-base-content/60 border-base-300 bg-base-200',
+  color: 'var(--of-text-muted)',
+  textClass: 'text-of-text/50',
+  badgeClass: 'text-of-text/60 border-of-border bg-of-surface-subtle',
 } as const
 
 export function getFileStatusPresentation(status: string): Readonly<FileStatusPresentation> {

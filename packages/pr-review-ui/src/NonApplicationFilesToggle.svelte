@@ -24,10 +24,10 @@
       onToggle(e.currentTarget.checked)
     }}
   />
-  <span class="text-[13px] leading-snug text-base-content/70">
+  <span class="text-[13px] leading-snug text-of-text/70">
     Also include non-application files
     {#if !checked && hiddenCount > 0}
-      <span class="text-base-content/40">({hiddenCount} hidden)</span>
+      <span class="text-of-text/40">({hiddenCount} hidden)</span>
     {/if}
   </span>
 </label>

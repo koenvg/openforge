@@ -48,6 +48,9 @@ describe('PrOverviewTab', () => {
 
     expect((await screen.findByRole('status')).textContent).toContain('Loading comments')
     rejectComments(new Error('GitHub failed'))
+    const loadingIndicator = screen.getByRole('status').querySelector('[data-size="md"]')
+    expect(loadingIndicator?.getAttribute('aria-hidden')).toBe('true')
+    expect(loadingIndicator?.getAttribute('role')).toBeNull()
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('Failed to load PR overview.')

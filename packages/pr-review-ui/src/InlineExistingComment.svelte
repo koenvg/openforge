@@ -60,13 +60,13 @@
 </script>
 
 <div class="flex items-center gap-2 mb-1.5">
-  <div class="w-5 h-5 rounded-[var(--of-radius-round)] bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
+  <div class="w-5 h-5 rounded-[var(--of-radius-round)] bg-of-accent/15 flex items-center justify-center text-[0.6rem] font-bold text-of-accent shrink-0">
     {comment.author.charAt(0).toUpperCase()}
   </div>
-  <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
-  <span class="text-base-content/50 text-[0.7rem]">{timeAgo(new Date(comment.createdAt).getTime())}</span>
+  <strong class="text-of-text font-semibold text-xs">{comment.author}</strong>
+  <span class="text-of-text/50 text-[0.7rem]">{timeAgo(new Date(comment.createdAt).getTime())}</span>
   {#if comment.isReply}
-    <span class="inline-flex items-center gap-1 text-base-content/30 text-[0.65rem]">
+    <span class="inline-flex items-center gap-1 text-of-text/30 text-[0.65rem]">
       <Reply size={12} strokeWidth={1.8} aria-hidden="true" />
       reply
     </span>
