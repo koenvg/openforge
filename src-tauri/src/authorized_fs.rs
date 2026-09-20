@@ -284,7 +284,7 @@ fn map_open_error(error: std::io::Error) -> AuthorizedOpenError {
 }
 
 #[cfg(test)]
-fn open_authorized_file_with_hook(
+pub(crate) fn open_authorized_file_with_hook(
     root: &Path,
     relative_path: &str,
     symlink_policy: SymlinkPolicy,
