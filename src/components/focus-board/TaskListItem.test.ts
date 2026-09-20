@@ -33,7 +33,7 @@ const baseTask: TaskDetail = {
 }
 
 const basePr: PullRequestInfo = {
-  id: 99,
+  id: 4579116270,
   pr_number: 99,
   ticket_id: 'T-100',
   repo_owner: 'owner',
@@ -315,8 +315,8 @@ describe('TaskListItem', () => {
   })
 
   it('with multiple PRs, shows the state-driving PR (open preferred over merged)', () => {
-    const mergedPr: PullRequestInfo = { ...basePr, id: 7, state: 'merged', merged_at: 5000 }
-    const openPr: PullRequestInfo = { ...basePr, id: 42, state: 'open' }
+    const mergedPr: PullRequestInfo = { ...basePr, id: 1007, pr_number: 7, state: 'merged', merged_at: 5000 }
+    const openPr: PullRequestInfo = { ...basePr, id: 1042, pr_number: 42, state: 'open' }
     render(TaskListItem, { props: { ...baseProps, pullRequests: [mergedPr, openPr] } })
     expect(screen.getByText(/PR #42/)).toBeTruthy()
     expect(screen.queryByText(/PR #7/)).toBeNull()

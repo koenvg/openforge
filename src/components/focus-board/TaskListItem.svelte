@@ -196,7 +196,7 @@
   {#if firstPr}
     <div class="flex gap-1">
       <Badge variant="info" class="font-mono">
-        PR #{firstPr.id}
+        PR #{firstPr.pr_number}
       </Badge>
     </div>
   {/if}
