@@ -80,6 +80,7 @@ mod task_attention;
 mod task_claims;
 mod task_metadata_refresh;
 mod task_prompt;
+mod task_prompt_attachments;
 mod task_start;
 mod task_start_prompt;
 mod task_workspace_service;

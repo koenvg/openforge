@@ -7,6 +7,7 @@ use crate::{
     providers::{Provider, ProviderError, ProviderSessionResult, ProviderStartContext},
     pty_manager::{PtyManager, TerminalImageProtocol},
     task_claims::{TaskClaims, TaskOperation},
+    task_prompt_attachments,
 };
 use log::error;
 use std::{
@@ -535,11 +536,11 @@ impl TaskStartService {
                 ))
             })?
             .unwrap_or_else(|| std::env::temp_dir().join("openforge"));
-        let image_attachment_dir = agent_lifecycle::task_prompt_image_attachment_dir(
+        let image_attachment_dir = task_prompt_attachments::task_prompt_image_attachment_dir(
             &image_attachment_root,
             &context.task.id,
         );
-        agent_lifecycle::materialize_task_prompt_images(
+        task_prompt_attachments::materialize_task_prompt_images(
             &context.task.id,
             &prompt,
             &image_attachment_dir,
