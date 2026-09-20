@@ -98,6 +98,8 @@ const MAX_INLINE_IMAGE_PREVIEW_SIZE: u64 = 25 * 1024 * 1024;
 
 const MAX_INLINE_VIDEO_PREVIEW_SIZE: u64 = 25 * 1024 * 1024;
 
+const MAX_INLINE_PREVIEW_SIZE: u64 = 1024 * 1024;
+
 fn file_type_key(path: &Path) -> String {
     if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
         return ext.to_ascii_lowercase();
@@ -384,13 +386,38 @@ fn decode_text_content(bytes: Vec<u8>) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-async fn read_file_bytes(file: tokio::fs::File) -> ProjectFsResult<Vec<u8>> {
+#[derive(Debug)]
+enum BoundedFileRead {
+    Complete(Vec<u8>),
+    TooLarge { bytes: Vec<u8>, size: u64 },
+}
+
+async fn read_file_bytes_bounded(
+    file: tokio::fs::File,
+    max_size: u64,
+) -> ProjectFsResult<BoundedFileRead> {
     let mut bytes = Vec::new();
-    let mut file = file;
-    file.read_to_end(&mut bytes)
+    let mut reader = file.take(max_size + 1);
+    reader
+        .read_to_end(&mut bytes)
         .await
         .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))?;
-    Ok(bytes)
+    if bytes.len() as u64 <= max_size {
+        return Ok(BoundedFileRead::Complete(bytes));
+    }
+
+    let current_size = reader
+        .get_ref()
+        .metadata()
+        .await
+        .map_err(|error| {
+            ProjectFsError::internal(format!("Failed to read file metadata: {error}"))
+        })?
+        .len();
+    Ok(BoundedFileRead::TooLarge {
+        size: current_size.max(bytes.len() as u64),
+        bytes,
+    })
 }
 
 async fn read_file_sample(file: tokio::fs::File, sample_size: u64) -> ProjectFsResult<Vec<u8>> {
@@ -414,7 +441,6 @@ async fn read_file_preview_impl(
     sub_path: &str,
     after_metadata: impl FnOnce(),
 ) -> ProjectFsResult<ProjectFileContent> {
-    const MAX_INLINE_PREVIEW_SIZE: u64 = 1_048_576;
     const CONTENT_SAMPLE_SIZE: u64 = 8_192;
     let project_root = project_root.to_path_buf();
     let sub_path = sub_path.to_string();
@@ -445,7 +471,18 @@ async fn read_file_preview_impl(
                     size,
                 });
             }
-            let bytes = read_file_bytes(file).await?;
+            let bytes = match read_file_bytes_bounded(file, MAX_INLINE_PREVIEW_SIZE).await? {
+                BoundedFileRead::Complete(bytes) => bytes,
+                BoundedFileRead::TooLarge { size, .. } => {
+                    return Ok(ProjectFileContent {
+                        r#type: "large-file".to_string(),
+                        content: String::new(),
+                        mime_type,
+                        size,
+                    });
+                }
+            };
+            let size = bytes.len() as u64;
             let content = String::from_utf8(bytes).map_err(|error| {
                 ProjectFsError::bad_request(format!("File is not valid UTF-8: {error}"))
             })?;
@@ -509,7 +546,18 @@ async fn read_file_preview_impl(
                 });
             }
 
-            let bytes = read_file_bytes(file).await?;
+            let bytes = match read_file_bytes_bounded(file, MAX_INLINE_VIDEO_PREVIEW_SIZE).await? {
+                BoundedFileRead::Complete(bytes) => bytes,
+                BoundedFileRead::TooLarge { size, .. } => {
+                    return Ok(ProjectFileContent {
+                        r#type: "large-file".to_string(),
+                        content: String::new(),
+                        mime_type,
+                        size,
+                    });
+                }
+            };
+            let size = bytes.len() as u64;
             use base64::Engine;
             Ok(ProjectFileContent {
                 r#type: "video".to_string(),
@@ -534,7 +582,24 @@ async fn read_file_preview_impl(
                 });
             }
 
-            let bytes = read_file_bytes(file).await?;
+            let bytes = match read_file_bytes_bounded(file, MAX_INLINE_PREVIEW_SIZE).await? {
+                BoundedFileRead::Complete(bytes) => bytes,
+                BoundedFileRead::TooLarge { bytes, size } => {
+                    let sample_len = bytes.len().min(CONTENT_SAMPLE_SIZE as usize);
+                    let is_text = is_utf8_text_sample(&bytes[..sample_len]);
+                    return Ok(ProjectFileContent {
+                        r#type: if is_text { "large-file" } else { "binary" }.to_string(),
+                        content: String::new(),
+                        mime_type: if is_text {
+                            Some("text/plain".to_string())
+                        } else {
+                            mime_type
+                        },
+                        size,
+                    });
+                }
+            };
+            let size = bytes.len() as u64;
             let content = decode_text_content(bytes);
             let Some(content) = content else {
                 return Ok(ProjectFileContent {
@@ -602,6 +667,87 @@ pub(crate) async fn write_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn text_preview_rejects_growth_after_metadata_lookup() {
+        let root = tempfile::tempdir().expect("project root");
+        let path = root.path().join("growing.txt");
+        std::fs::write(&path, b"small").expect("initial text");
+
+        let preview = read_file_preview_impl(root.path(), "growing.txt", || {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .expect("growing text")
+                .set_len(MAX_INLINE_PREVIEW_SIZE + 1)
+                .expect("grow past text limit");
+        })
+        .await
+        .expect("growing text metadata");
+
+        assert_eq!(preview.r#type, "large-file");
+        assert!(preview.content.is_empty());
+        assert_eq!(preview.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(preview.size, MAX_INLINE_PREVIEW_SIZE + 1);
+    }
+
+    #[tokio::test]
+    async fn video_preview_rejects_growth_after_metadata_lookup() {
+        let root = tempfile::tempdir().expect("project root");
+        let path = root.path().join("growing.mp4");
+        std::fs::write(&path, [0_u8, 1, 2, 3]).expect("initial video");
+
+        let preview = read_file_preview_impl(root.path(), "growing.mp4", || {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .expect("growing video")
+                .set_len(MAX_INLINE_VIDEO_PREVIEW_SIZE + 1)
+                .expect("grow past video limit");
+        })
+        .await
+        .expect("growing video metadata");
+
+        assert_eq!(preview.r#type, "large-file");
+        assert!(preview.content.is_empty());
+        assert_eq!(preview.mime_type.as_deref(), Some("video/mp4"));
+        assert_eq!(preview.size, MAX_INLINE_VIDEO_PREVIEW_SIZE + 1);
+    }
+
+    #[tokio::test]
+    async fn binary_preview_preserves_classification_when_growth_exceeds_limit() {
+        let root = tempfile::tempdir().expect("project root");
+
+        let text_path = root.path().join("NOTICE");
+        std::fs::write(&text_path, b"small").expect("initial extensionless text");
+        let text_preview = read_file_preview_impl(root.path(), "NOTICE", || {
+            std::fs::write(&text_path, vec![b'a'; MAX_INLINE_PREVIEW_SIZE as usize + 1])
+                .expect("grow extensionless text past limit");
+        })
+        .await
+        .expect("growing extensionless text metadata");
+        assert_eq!(text_preview.r#type, "large-file");
+        assert!(text_preview.content.is_empty());
+        assert_eq!(text_preview.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(text_preview.size, MAX_INLINE_PREVIEW_SIZE + 1);
+
+        let binary_path = root.path().join("artifact");
+        std::fs::write(&binary_path, b"\x01binary").expect("initial binary");
+        let binary_preview = read_file_preview_impl(root.path(), "artifact", || {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&binary_path)
+                .expect("growing binary")
+                .set_len(MAX_INLINE_PREVIEW_SIZE + 1)
+                .expect("grow binary past limit");
+        })
+        .await
+        .expect("growing binary metadata");
+        assert_eq!(binary_preview.r#type, "binary");
+        assert!(binary_preview.content.is_empty());
+        assert_eq!(binary_preview.mime_type, None);
+        assert_eq!(binary_preview.size, MAX_INLINE_PREVIEW_SIZE + 1);
+    }
 
     #[tokio::test]
     async fn image_preview_enforces_inclusive_25_mib_limit() {
