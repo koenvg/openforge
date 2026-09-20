@@ -298,6 +298,22 @@ fn collect_managed_processes(
 fn signal_processes(processes: &[ProcessSnapshot], signal: ManagedSignal) -> Result<(), String> {
     let own_pid = i32::try_from(std::process::id()).unwrap_or(i32::MAX);
     let own_process_group_id = process_group_id(own_pid).ok();
+    signal_processes_with(
+        processes,
+        signal,
+        own_pid,
+        own_process_group_id,
+        send_signal,
+    )
+}
+
+fn signal_processes_with(
+    processes: &[ProcessSnapshot],
+    signal: ManagedSignal,
+    own_pid: i32,
+    own_process_group_id: Option<i32>,
+    mut signal_target: impl FnMut(SignalTarget, ManagedSignal) -> std::io::Result<()>,
+) -> Result<(), String> {
     let mut attempted_groups = HashSet::new();
     let mut successfully_signaled_groups = HashSet::new();
     let mut errors = Vec::new();
@@ -307,20 +323,15 @@ fn signal_processes(processes: &[ProcessSnapshot], signal: ManagedSignal) -> Res
             errors.push(format!("refusing to signal sidecar PID {own_pid}"));
             continue;
         }
+        // Group delivery is an optimization. On macOS, a process can become a zombie
+        // after the snapshot and make its group return EPERM. Fall back to the exact
+        // identity-checked PIDs and report only failures from those narrow targets.
         if process.process_group_id > 1
             && Some(process.process_group_id) != own_process_group_id
             && attempted_groups.insert(process.process_group_id)
+            && signal_target(SignalTarget::ProcessGroup(process.process_group_id), signal).is_ok()
         {
-            match send_signal(SignalTarget::ProcessGroup(process.process_group_id), signal) {
-                Ok(()) => {
-                    successfully_signaled_groups.insert(process.process_group_id);
-                }
-                Err(error) if error.raw_os_error() == Some(libc::ESRCH) => {}
-                Err(error) => errors.push(format!(
-                    "failed to signal managed process group {}: {}",
-                    process.process_group_id, error
-                )),
-            }
+            successfully_signaled_groups.insert(process.process_group_id);
         }
     }
 
@@ -330,7 +341,7 @@ fn signal_processes(processes: &[ProcessSnapshot], signal: ManagedSignal) -> Res
         {
             continue;
         }
-        match send_signal(SignalTarget::Process(process.pid), signal) {
+        match signal_target(SignalTarget::Process(process.pid), signal) {
             Ok(()) => {}
             Err(error) if error.raw_os_error() == Some(libc::ESRCH) => {}
             Err(error) => errors.push(format!(
@@ -567,6 +578,41 @@ mod tests {
             error.contains("greater than 1"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn process_group_error_uses_verified_process_fallback() {
+        let pid = 4_242;
+        let process = ProcessSnapshot {
+            pid,
+            parent_pid: None,
+            process_group_id: pid,
+            session_id: Some(pid),
+            start_time: 7,
+            terminated: false,
+        };
+        let mut targets = Vec::new();
+
+        let result = signal_processes_with(
+            &[process],
+            ManagedSignal::Terminate,
+            9_999,
+            Some(9_999),
+            |target, _| {
+                targets.push(target);
+                match target {
+                    SignalTarget::ProcessGroup(_) => {
+                        Err(std::io::Error::from_raw_os_error(libc::EPERM))
+                    }
+                    SignalTarget::Process(_) => Ok(()),
+                }
+            },
+        );
+
+        assert_eq!(targets.len(), 2);
+        assert!(matches!(targets[0], SignalTarget::ProcessGroup(target) if target == pid));
+        assert!(matches!(targets[1], SignalTarget::Process(target) if target == pid));
+        assert_eq!(result, Ok(()));
     }
 
     #[tokio::test]
