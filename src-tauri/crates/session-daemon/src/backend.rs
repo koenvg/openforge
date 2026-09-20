@@ -219,7 +219,7 @@ impl HostBackend for Backend {
             Record {
                 metadata,
                 process: Some(process),
-                agent: Some(agent),
+                agent,
                 final_recovery: None,
             },
         );

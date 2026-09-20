@@ -8,6 +8,30 @@ use crate::pty_manager::{
 use openforge_session_protocol::{PreparedCommand, ShellCommand, TerminalOwner};
 
 impl PtyManager {
+    pub(super) fn observe_daemon_scoped_exit(
+        bridge: DaemonShells,
+        instance: u64,
+        observer: crate::pty_manager::events::PtyExitObserver,
+    ) {
+        tokio::spawn(async move {
+            loop {
+                match bridge.session().await {
+                    Ok(Some(session)) if session.pty.instance.value() == instance => {
+                        if let Some(code) = session.exit_code {
+                            observer(instance, code == 0);
+                            return;
+                        }
+                    }
+                    _ => {
+                        observer(instance, false);
+                        return;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        });
+    }
+
     pub(super) async fn spawn_daemon_agent<A: AgentPtyProviderAdapter>(
         &self,
         bridge: DaemonShells,

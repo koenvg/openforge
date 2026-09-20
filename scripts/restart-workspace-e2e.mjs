@@ -26,8 +26,9 @@ const lifecycle = createDesktopTestLifecycle({ timeoutMs: 120_000, retainRuntime
   createElectronDevLauncher: options => createElectronDevLauncher({
     ...options,
     env: { ...options.env, OPENFORGE_SESSION_DAEMON_ROOT: daemonRoot,
+      CARGO_TARGET_DIR: resolve('src-tauri/target'),
       OPENFORGE_SESSION_DAEMON_PATH: resolve('src-tauri/crates/session-daemon/target/debug/openforge-session-daemon'),
-      OPENFORGE_SESSION_DAEMON_SHELL_KEY: '*', OPENFORGE_E2E_RESTART_WINDOWS: '2' },
+      OPENFORGE_SESSION_DAEMON_SHELL_KEY: '', OPENFORGE_E2E_RESTART_WINDOWS: '2' },
   }, {
     spawnCommand(command, args, options) {
       if (command === 'pnpm' && args[0] === 'exec' && args[1] === 'electron') originalLaunch = { command, args, options }

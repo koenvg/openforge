@@ -4,21 +4,31 @@ use super::*;
 #[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
 async fn restart_preparation_drains_spawns_and_rejects_later_mutations_as_not_executed() {
     let fixture = super::daemon_fixture::DaemonFixture(
-        tempfile::Builder::new().prefix("of-restart-fence-").tempdir_in("/tmp").unwrap(),
+        tempfile::Builder::new()
+            .prefix("of-restart-fence-")
+            .tempdir_in("/tmp")
+            .unwrap(),
     );
     let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("crates/session-daemon/target/debug/openforge-session-daemon");
     let (mut state, _db) = test_state("restart-fence");
     state.pty_manager.as_mut().unwrap().enable_daemon_shell(
-        fixture.0.path().into(), executable, "*".into(),
+        fixture.0.path().into(),
+        executable,
+        "*".into(),
     );
     let instance = invoke_ok(&state, "pty_spawn_shell", json!({
         "taskId": "T-fenced", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
     })).await;
     let operation_id = uuid::Uuid::new_v4().to_string();
-    let prepared = invoke_ok(&state, "prepare_app_restart", json!({
-        "operationId": operation_id, "intent": "restart",
-    })).await;
+    let prepared = invoke_ok(
+        &state,
+        "prepare_app_restart",
+        json!({
+            "operationId": operation_id, "intent": "restart",
+        }),
+    )
+    .await;
     assert_eq!(prepared["sessions"][0]["instanceId"], instance);
     let rejected = invoke(&state, "pty_spawn_shell", json!({
         "taskId": "T-rejected", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
@@ -26,7 +36,12 @@ async fn restart_preparation_drains_spawns_and_rejects_later_mutations_as_not_ex
     assert!(rejected.1.contains("not executed"), "{rejected:?}");
     let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
     assert_eq!(inventory["sessions"].as_array().unwrap().len(), 1);
-    invoke_ok(&state, "cancel_app_restart", json!({ "operationId": operation_id })).await;
+    invoke_ok(
+        &state,
+        "cancel_app_restart",
+        json!({ "operationId": operation_id }),
+    )
+    .await;
     invoke_ok(&state, "pty_spawn_shell", json!({
         "taskId": "T-rejected", "terminalIndex": 0, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
     })).await;
@@ -36,20 +51,74 @@ async fn restart_preparation_drains_spawns_and_rejects_later_mutations_as_not_ex
 #[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
 async fn production_daemon_owns_unindexed_and_indexed_shells() {
     let fixture = super::daemon_fixture::DaemonFixture(
-        tempfile::Builder::new().prefix("of-production-owner-").tempdir_in("/tmp").unwrap(),
+        tempfile::Builder::new()
+            .prefix("of-production-owner-")
+            .tempdir_in("/tmp")
+            .unwrap(),
     );
     let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("crates/session-daemon/target/debug/openforge-session-daemon");
     let (mut state, _db) = test_state("production-daemon");
-    state.pty_manager.as_mut().unwrap().enable_installation_daemon(fixture.0.path().into(), executable);
+    state
+        .pty_manager
+        .as_mut()
+        .unwrap()
+        .enable_installation_daemon(fixture.0.path().into(), executable);
     for (task, index) in [("T-production-a", None), ("T-production-b", Some(3))] {
         invoke_ok(&state, "pty_spawn_shell", json!({
             "taskId": task, "terminalIndex": index, "cwd": fixture.0.path(), "cols": 80, "rows": 24,
         })).await;
     }
+    state
+        .pty_manager
+        .as_ref()
+        .unwrap()
+        .spawn_shell_pty(
+            crate::pty_manager::PtySpawnContext {
+                task_id: "T-production-a",
+                cwd: fixture.0.path(),
+                cols: 80,
+                rows: 24,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
+            },
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
     assert_eq!(inventory["hasLegacySessions"], false);
     assert_eq!(inventory["sessions"].as_array().unwrap().len(), 2);
+    let previous = invoke_ok(
+        &state,
+        "get_pty_buffer",
+        json!({"shellSessionKey": "T-production-a-shell-0"}),
+    )
+    .await;
+    invoke_ok(
+        &state,
+        "pty_kill",
+        json!({"shellSessionKey": "T-production-a-shell-0"}),
+    )
+    .await;
+    let replacement = invoke_ok(
+        &state,
+        "pty_spawn_shell",
+        json!({
+            "taskId": "T-production-a", "cwd": fixture.0.path(), "cols": 80, "rows": 24,
+        }),
+    )
+    .await;
+    assert_ne!(
+        replacement, previous["instanceId"],
+        "an explicit new shell needs a new identity"
+    );
+    let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(
+        inventory["sessions"].as_array().unwrap().len(),
+        2,
+        "only the current identity of each tab may be restored"
+    );
 }
 
 #[tokio::test]

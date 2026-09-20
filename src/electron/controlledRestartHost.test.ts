@@ -202,3 +202,39 @@ it('fences the backend before capturing windows and authorizes detach before rel
     expect(relaunchedAfterDetach).toBe(true)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+it.each(['reload', 'replacement'])('finishes a failed commit after the final window acknowledgement on %s without replaying windows', async recovery => {
+  const root = await mkdtemp(join(tmpdir(), 'openforge-controlled-restart-'))
+  try {
+    let generation = 1
+    let failCommit = true
+    const commit = vi.fn(async () => { if (failCommit) throw new Error('Backend commit unavailable') })
+    const options = {
+      root, replace: async () => undefined,
+      inventory: async () => ({ controller: { installation: 'daemon-installation', lifetime: 'daemon', generation }, sessions: [], hasLegacySessions: false }),
+      backend: { prepare: async () => {}, cancel: async () => {}, detach: async () => {}, commit },
+    }
+    const source = await createControlledRestartHost({ ...options, operationId: null })
+    let operationId = ''
+    source.register(10, 'stable', operation => { operationId = operation })
+    const restart = source.handle(10, 'restart_app', {})
+    await vi.waitFor(() => expect(operationId).not.toBe(''))
+    await source.handle(10, 'capture_restart_workspace', {
+      operationId, snapshot: { navigation: { projectId: null, taskId: null, view: 'board' }, tasks: [] },
+    })
+    await restart
+    generation = 2
+    const replacement = await createControlledRestartHost({ ...options, operationId })
+    replacement.register(20, 'stable', () => {})
+    await expect(replacement.handle(20, 'complete_restart_workspace', { operationId })).rejects.toThrow('Backend commit unavailable')
+    failCommit = false
+    generation = recovery === 'replacement' ? 3 : 2
+    const recovered = recovery === 'replacement'
+      ? await createControlledRestartHost({ ...options, operationId })
+      : replacement
+    if (recovery === 'reload') expect(await recovered.handle(20, 'get_restart_workspace', {})).toBeNull()
+    expect(await recovered.shutdownIntent()).toBe('quit')
+    expect(await recovered.launchWindowIds()).not.toContain('stable')
+    expect(commit).toHaveBeenCalledTimes(2)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

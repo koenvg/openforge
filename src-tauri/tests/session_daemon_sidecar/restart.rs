@@ -16,23 +16,39 @@ fn stop_sidecar(fixture: &mut Fixture) {
 #[ignore = "requires built Session Daemon; run the session-daemon contract command"]
 fn authorized_restart_preserves_shell_but_normal_quit_stops_daemon() {
     let mut fixture = Fixture::new();
+    // With no test caller selector, use the same all-session ownership as production.
+    fixture
+        .provider_env
+        .push(("OPENFORGE_SESSION_DAEMON_SHELL_KEY".into(), String::new()));
     fixture.start("first");
     let instance = fixture.invoke("pty_spawn_shell", json!({
         "taskId": "T-proof", "terminalIndex": 3, "cwd": fixture.root.path(), "cols": 80, "rows": 24,
     }));
     fixture.write("stty -echo; kept=alive; printf 'RESTART-PID=%s\\n' \"$$\"\n");
     let before = fixture.output("RESTART-PID=");
-    let pid = regex::Regex::new(r"RESTART-PID=(\d+)").unwrap()
-        .captures(&before).unwrap()[1].parse::<i32>().unwrap();
+    let pid = regex::Regex::new(r"RESTART-PID=(\d+)")
+        .unwrap()
+        .captures(&before)
+        .unwrap()[1]
+        .parse::<i32>()
+        .unwrap();
     let operation = uuid::Uuid::new_v4().to_string();
-    fixture.invoke("prepare_app_restart", json!({ "operationId": operation, "intent": "restart" }));
+    fixture.invoke(
+        "prepare_app_restart",
+        json!({ "operationId": operation, "intent": "restart" }),
+    );
     fixture.invoke("detach_app_restart", json!({ "operationId": operation }));
     stop_sidecar(&mut fixture);
     // SAFETY: signal zero only checks the shell PID obtained from this fixture.
     assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
-    fixture.provider_env.push(("OPENFORGE_RESTART_OPERATION".into(), operation.clone()));
+    fixture
+        .provider_env
+        .push(("OPENFORGE_RESTART_OPERATION".into(), operation.clone()));
     fixture.start("second");
-    let restored = fixture.invoke("get_pty_buffer", json!({ "shellSessionKey": fixture.shell_key }));
+    let restored = fixture.invoke(
+        "get_pty_buffer",
+        json!({ "shellSessionKey": fixture.shell_key }),
+    );
     assert_eq!(restored["instanceId"], instance);
     assert_eq!(restored["isLive"], true);
     fixture.invoke("commit_app_restart", json!({ "operationId": operation }));
@@ -42,7 +58,10 @@ fn authorized_restart_preserves_shell_but_normal_quit_stops_daemon() {
     stop_sidecar(&mut fixture);
     let deadline = Instant::now() + Duration::from_secs(5);
     while fixture.root.path().join("session-v1/control.sock").exists() {
-        assert!(Instant::now() < deadline, "normal Quit left the daemon running");
+        assert!(
+            Instant::now() < deadline,
+            "normal Quit left the daemon running"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
     // SAFETY: signal zero does not modify the fixture process.

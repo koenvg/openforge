@@ -153,6 +153,7 @@ struct ProviderLaunch {
 
 fn prepare_fixture(provider: Provider) -> (Fixture, PathBuf) {
     let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
     let repo = fixture.root.path().join("repo");
     fs::create_dir(&repo).unwrap();
     assert!(Command::new("git")

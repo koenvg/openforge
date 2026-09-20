@@ -275,27 +275,29 @@ impl PtyManager {
         terminal_image_protocol: Option<TerminalImageProtocol>,
         exit_policy: PtyExitPolicy,
     ) -> Result<u64, PtyError> {
-        let daemon_bridge = match &exit_policy {
-            PtyExitPolicy::TaskAgent => self
-                .daemon_shells
-                .as_ref()
-                .filter(|bridge| bridge.owns_agent(context.task_id)),
-            PtyExitPolicy::Shell | PtyExitPolicy::ScopedAgent(_) => None,
-        };
+        let daemon_bridge = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns_agent(context.task_id));
         if let Some(bridge) = daemon_bridge {
             if !bridge.selects_provider(context.task_id, adapter.command_name()) {
                 return Err(PtyError::SpawnFailed(
                     "task is selected for another daemon provider".into(),
                 ));
             }
-            return self
+            let scoped_bridge = bridge.for_key(context.task_id);
+            let instance = self
                 .spawn_daemon_agent(
-                    bridge.for_key(context.task_id),
+                    scoped_bridge.clone(),
                     adapter,
                     context,
                     terminal_image_protocol,
                 )
-                .await;
+                .await?;
+            if let PtyExitPolicy::ScopedAgent(observer) = exit_policy {
+                Self::observe_daemon_scoped_exit(scoped_bridge, instance, observer);
+            }
+            return Ok(instance);
         }
         let PtySpawnContext {
             task_id,

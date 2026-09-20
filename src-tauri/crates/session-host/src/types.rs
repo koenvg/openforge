@@ -75,6 +75,16 @@ pub enum TerminalOwner {
     Agent { task_id: String },
     Shell { task_id: String, index: Option<u32> },
 }
+/// Reserved identity namespace for non-Task agents. These never receive Task credentials.
+pub fn scoped_agent_digest(session_key: &str) -> Option<&str> {
+    let digest = session_key.strip_prefix("scoped-agent-v1-")?;
+    (digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+    .then_some(digest)
+}
+
 impl TerminalOwner {
     pub fn task_id(&self) -> &str {
         match self {

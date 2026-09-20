@@ -1,4 +1,4 @@
-//! Routes selected daemon-backed terminals. Unselected callers retain the old adapter.
+//! Daemon-backed terminal commands. Only isolated legacy fixtures retain fallback routing.
 use super::{pty_payload::*, *};
 use crate::app_events::RuntimeEventPublisher;
 
@@ -18,20 +18,34 @@ pub(super) async fn handle(
         "prepare_app_restart" => {
             let operation_id = payload_string(&request.payload, "operationId")?;
             let intent = payload_string(&request.payload, "intent")?;
-            if intent != "restart" && intent != "update" { return Err(error("invalid restart intent".into())); }
-            bridge.prepare_restart(operation_id, &intent, publisher.clone()).await.map_err(error)?;
+            if intent != "restart" && intent != "update" {
+                return Err(error("invalid restart intent".into()));
+            }
+            bridge
+                .prepare_restart(operation_id, &intent, publisher.clone())
+                .await
+                .map_err(error)?;
             bridge.inventory(publisher).await.map_err(error)?
         }
         "cancel_app_restart" => {
-            bridge.cancel_restart(payload_string(&request.payload, "operationId")?, publisher).await.map_err(error)?;
+            bridge
+                .cancel_restart(payload_string(&request.payload, "operationId")?, publisher)
+                .await
+                .map_err(error)?;
             serde_json::Value::Null
         }
         "detach_app_restart" => {
-            bridge.detach_restart(payload_string(&request.payload, "operationId")?, publisher).await.map_err(error)?;
+            bridge
+                .detach_restart(payload_string(&request.payload, "operationId")?, publisher)
+                .await
+                .map_err(error)?;
             serde_json::Value::Null
         }
         "commit_app_restart" => {
-            bridge.commit_restart(payload_string(&request.payload, "operationId")?, publisher).await.map_err(error)?;
+            bridge
+                .commit_restart(payload_string(&request.payload, "operationId")?, publisher)
+                .await
+                .map_err(error)?;
             serde_json::Value::Null
         }
         "get_restart_terminal_inventory" => {

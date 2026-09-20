@@ -14,7 +14,7 @@ export async function completeRestartWorkspace(operationId: string): Promise<voi
   return invoke('complete_restart_workspace', { operationId })
 }
 
-/** Controlled E2E only. The host rejects this in normal and packaged launches. */
+/** Compatibility alias for older isolated Restart fixtures. */
 export async function controlledRestart(): Promise<void> {
   return invoke('controlled_restart')
 }

@@ -1,6 +1,4 @@
 //! Isolated real-process contract. Never launches or stops the installed desktop app.
-#[path = "session_daemon_sidecar/restart.rs"]
-mod restart;
 #[path = "session_daemon_sidecar/pi.rs"]
 mod pi;
 #[path = "session_daemon_sidecar/pi-live.rs"]
@@ -11,6 +9,8 @@ mod provider_live;
 mod provider_scoping;
 #[path = "session_daemon_sidecar/providers.rs"]
 mod providers;
+#[path = "session_daemon_sidecar/restart.rs"]
+mod restart;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::{
@@ -62,6 +62,14 @@ impl Fixture {
                 .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap(),
+        }
+    }
+    fn use_installation_daemon(&mut self) {
+        for caller in ["SHELL", "PI", "CLAUDE", "CODEX", "OPENCODE", "GROK"] {
+            self.provider_env.push((
+                format!("OPENFORGE_SESSION_DAEMON_{caller}_KEY"),
+                String::new(),
+            ));
         }
     }
     fn start(&mut self, stage: &str) {
@@ -213,7 +221,9 @@ impl Drop for Fixture {
             let _ = child.wait();
         }
         let cleanup = (|| -> Result<(), String> {
-            if !self.root.path().join("session-v1/control.sock").exists() { return Ok(()); }
+            if !self.root.path().join("session-v1/control.sock").exists() {
+                return Ok(());
+            }
             let client = openforge_session_client::Client::connect(self.root.path())
                 .map_err(|e| e.to_string())?;
             for session in client.inventory().map_err(|e| e.to_string())?.sessions {

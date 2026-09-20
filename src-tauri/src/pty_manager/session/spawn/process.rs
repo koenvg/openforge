@@ -6,7 +6,7 @@ use crate::terminal_model::{
 };
 use crate::user_environment::user_environment;
 use log::{info, warn};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::CommandBuilder;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -102,6 +102,26 @@ where
     )))
 }
 
+/// Native Sidecar PTYs exist only for legacy test fixtures, never release builds.
+fn open_legacy_test_pty(_request: &PtyProcessRequest) -> Result<portable_pty::PtyPair, PtyError> {
+    #[cfg(any(test, debug_assertions))]
+    if cfg!(test) || std::env::var("OPENFORGE_E2E").as_deref() == Ok("1") {
+        return portable_pty::native_pty_system()
+            .openpty(portable_pty::PtySize {
+                rows: _request.rows,
+                cols: _request.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| {
+                PtyError::SpawnFailed(format!("Failed to create test PTY pair: {error}"))
+            });
+    }
+    Err(PtyError::SpawnFailed(
+        "Sidecar PTY ownership is disabled; the installation Session Daemon is required".into(),
+    ))
+}
+
 impl PtyManager {
     fn configure_pty_command(
         &self,
@@ -127,16 +147,7 @@ impl PtyManager {
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
         let pid_file = pid_dir.join(&request.pid_file_name);
-        let pair = native_pty_system()
-            .openpty(PtySize {
-                rows: request.rows,
-                cols: request.cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|error| {
-                PtyError::SpawnFailed(format!("Failed to create PTY pair: {error}"))
-            })?;
+        let pair = open_legacy_test_pty(&request)?;
         let reader = pair
             .master
             .try_clone_reader()

@@ -372,6 +372,8 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
         const ghosttyOptimizeEnv = options.ghosttyOptimizeMode
           ? { LIBGHOSTTY_VT_SYS_OPTIMIZE: options.ghosttyOptimizeMode }
           : {}
+        const homeDir = join(resolvedPaths.runRoot, 'home')
+        await makeDir(homeDir, { recursive: true })
         launcher = createLauncher({
           captureOutput: true,
           electronLaunchAdapter: policy.playwrightAccess === 'electron'
@@ -386,6 +388,7 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
             OPENFORGE_HTTP_PORT: String(backendPort),
           },
           runtimeOptions: {
+            homeDir,
             rendererPort,
             rendererUrl: `http://127.0.0.1:${rendererPort}`,
             electronDebugPort: null,

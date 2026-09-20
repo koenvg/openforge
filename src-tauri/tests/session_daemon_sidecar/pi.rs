@@ -16,6 +16,7 @@ fn proof_record(fixture: &Fixture, sequence: usize) -> Value {
 #[ignore = "requires built Sidecar and Session Daemon"]
 fn pi_and_running_tool_survive_sidecar_replacement_and_downtime_notifications() {
     let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
     let repo = fixture.root.path().join("repo");
     fs::create_dir(&repo).unwrap();
     assert!(Command::new("git")

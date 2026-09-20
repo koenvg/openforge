@@ -118,10 +118,11 @@ describe('importable Electron development launcher', () => {
     expect(spawned.map(child => [child.command, child.args])).toEqual([
       ['pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '1431', '--strictPort']],
       ['cargo', ['build']],
+      ['cargo', ['build', '--manifest-path', '/repo/openforge/src-tauri/crates/session-daemon/Cargo.toml']],
       ['pnpm', ['electron:build']],
       ['pnpm', ['exec', 'electron', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=9444', '.']],
     ])
-    expect(spawned[3].options.env).toMatchObject({
+    expect(spawned[4].options.env).toMatchObject({
       OPENFORGE_APP_DATA_DIR: '/tmp/desktop-test/app-data',
       OPENFORGE_ELECTRON_USER_DATA_DIR: '/tmp/desktop-test/user-data',
       OPENFORGE_SIDECAR_PATH: '/tmp/cargo-target/debug/openforge',
@@ -158,7 +159,7 @@ describe('importable Electron development launcher', () => {
       VITE_OPENFORGE_E2E: '1',
       VITE_OPENFORGE_E2E_TOKEN: 'fixed-run-token',
     })
-    expect(spawned[3].options.env).toMatchObject({
+    expect(spawned[4].options.env).toMatchObject({
       OPENFORGE_E2E: '1',
       ELECTRON_RENDERER_URL: 'http://127.0.0.1:1431/?openforge-e2e-token=fixed-run-token&openforge-desktop-test=1',
     })
@@ -239,7 +240,7 @@ describe('importable Electron development launcher', () => {
 
     await launcher.start()
 
-    expect(spawned.map(child => child.command)).toEqual(['pnpm', 'cargo', 'pnpm'])
+    expect(spawned.map(child => child.command)).toEqual(['pnpm', 'cargo', 'cargo', 'pnpm'])
     expect(electronLaunchAdapter.launch).toHaveBeenCalledWith(expect.objectContaining({
       args: ['--no-first-run', '.'],
       env: expect.objectContaining({

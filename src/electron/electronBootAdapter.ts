@@ -115,9 +115,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   const restartGeometryLeases = new RestartGeometryLeases()
   let restartWorkspace: Promise<RestartWorkspaceIpc> | null = null
   function controlledWorkspace(): Promise<RestartWorkspaceIpc | null> {
-    if (app.isPackaged || options.env.OPENFORGE_E2E !== '1' || !options.env.OPENFORGE_ELECTRON_USER_DATA_DIR
-      || !options.env.OPENFORGE_SESSION_DAEMON_ROOT || !options.env.OPENFORGE_SESSION_DAEMON_PATH
-      || options.env.OPENFORGE_SESSION_DAEMON_SHELL_KEY !== '*') return Promise.resolve(null)
+    // Older isolated fixtures deliberately exercise the legacy test adapter.
+    if (options.env.OPENFORGE_E2E === '1' && !options.env.OPENFORGE_SESSION_DAEMON_ROOT) return Promise.resolve(null)
     if (restartWorkspace) return restartWorkspace
     const operationPrefix = '--openforge-restart-operation='
     const operationId = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null

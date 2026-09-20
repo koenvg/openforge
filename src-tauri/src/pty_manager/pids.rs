@@ -352,14 +352,8 @@ impl<'a> PtySessionKey<'a> {
     }
 
     fn parse(session_key: &'a str) -> Self {
-        if let Some(digest) = session_key.strip_prefix(SCOPED_AGENT_KEY_PREFIX) {
-            if digest.len() == 64
-                && digest
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-            {
-                return Self::ScopedAgent { digest };
-            }
+        if let Some(digest) = openforge_session_host::scoped_agent_digest(session_key) {
+            return Self::ScopedAgent { digest };
         }
 
         if let Some((task_id, shell_index)) = session_key.rsplit_once("-shell-") {

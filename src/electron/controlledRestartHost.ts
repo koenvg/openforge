@@ -25,8 +25,13 @@ export async function createControlledRestartHost(options: {
   const installationId = createHash('sha256').update(JSON.stringify([options.root, daemonInstallation])).digest('hex')
   const store = new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId)
   const operation = new RestartOperation(join(options.root, 'restart-operation.json'), installationId)
-  if (options.operationId && await store.load(options.operationId)) {
-    await operation.reconnect(options.operationId, initial.controller)
+  const acknowledged = options.operationId && await store.allWindowsAcknowledged(options.operationId)
+  if (options.operationId && (await store.load(options.operationId) || acknowledged)) {
+    if (!acknowledged || await operation.shutdownIntent() !== 'quit') await operation.reconnect(options.operationId, initial.controller)
+    if (acknowledged) {
+      await options.backend?.commit(options.operationId)
+      await operation.commit(options.operationId)
+    }
   }
   return new RestartWorkspaceIpc(
     store,

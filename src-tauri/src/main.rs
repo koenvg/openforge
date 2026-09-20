@@ -253,11 +253,16 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     // Controlled fixtures may select individual callers. Every normal installation
     // uses one daemon for all PTYs; failure must never fall back to Sidecar ownership.
     if pty_manager.daemon_shells.is_none()
-        && !(cfg!(debug_assertions) && std::env::var("OPENFORGE_E2E").as_deref() == Ok("1"))
+        && (!(cfg!(debug_assertions) && std::env::var("OPENFORGE_E2E").as_deref() == Ok("1"))
+            || (std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT").is_some()
+                && std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH").is_some()))
     {
-        let executable = std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH").map(PathBuf::from)
-            .unwrap_or_else(|| std::env::current_exe().expect("Sidecar executable").with_file_name("openforge-session-daemon"));
-        let root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT").map(PathBuf::from)
+        let executable = match std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH") {
+            Some(path) => PathBuf::from(path),
+            None => std::env::current_exe()?.with_file_name("openforge-session-daemon"),
+        };
+        let root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
+            .map(PathBuf::from)
             .unwrap_or_else(|| app_data_dir.join("session-daemon"));
         pty_manager.enable_installation_daemon(root, executable);
     }

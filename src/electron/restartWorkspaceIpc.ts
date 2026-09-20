@@ -102,6 +102,10 @@ export class RestartWorkspaceIpc {
       case 'get_restart_workspace': {
         if (!this.launchOperation) return null
         const record = await this.store.load(this.launchOperation)
+        if (!record && await this.store.allWindowsAcknowledged(this.launchOperation)) {
+          await this.lifecycle?.validateCompletion()
+          await this.lifecycle?.complete(this.launchOperation)
+        }
         const window = record?.windows.find(window => window.windowId === windowId)
         return window && !record?.restoredWindowIds.includes(windowId) ? { operationId: this.launchOperation, window } : null
       }

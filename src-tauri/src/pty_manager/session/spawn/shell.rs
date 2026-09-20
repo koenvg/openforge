@@ -16,6 +16,26 @@ impl PtyManager {
         terminal_index: Option<u32>,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
+        let key = shell_session_key(context.task_id, terminal_index);
+        if let Some(bridge) = self
+            .daemon_shells
+            .as_ref()
+            .filter(|bridge| bridge.owns(&key))
+        {
+            let bridge = bridge.for_key(&key);
+            let command = bridge
+                .prepare_shell(
+                    context.cwd.into(),
+                    context.cols,
+                    context.rows,
+                    terminal_image_protocol,
+                )
+                .map_err(PtyError::SpawnFailed)?;
+            return bridge
+                .spawn(command, context.event_publisher)
+                .await
+                .map_err(PtyError::SpawnFailed);
+        }
         self.spawn_shell_pty_with_command(
             context,
             terminal_index,

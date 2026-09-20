@@ -37,6 +37,38 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn scoped_agent_keeps_its_restricted_config_instead_of_receiving_task_credentials() {
+    use openforge_session_host::{PreparedCommand, TerminalOwner};
+    let fixture = Fixture::new();
+    let client = fixture.connect();
+    let session = client.spawn("scoped-config", &openforge_session_protocol::ShellCommand {
+        owner: TerminalOwner::Agent { task_id: format!("scoped-agent-v1-{}", "a".repeat(64)) },
+        command: PreparedCommand {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "printf '%s\\n' \"$OPENFORGE_AGENT_CONFIG\" \"$OPENFORGE_PTY_INSTANCE_ID\" \"${OPENFORGE_BACKEND_TOKEN-unset}\" > receipt.tmp; mv receipt.tmp receipt; exec sleep 120".into()],
+            cwd: fixture.0.path().into(),
+            env: [("OPENFORGE_AGENT_CONFIG".into(), "/restricted/scoped.json".into()), ("OPENFORGE_BACKEND_TOKEN".into(), "controller-secret".into())].into(),
+        },
+        columns: 80, rows: 24, image_protocol: None,
+    }).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let receipt = loop {
+        if let Ok(receipt) = std::fs::read_to_string(fixture.0.path().join("receipt")) {
+            break receipt;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert_eq!(
+        receipt,
+        format!(
+            "/restricted/scoped.json\n{}\nunset\n",
+            session.pty.instance.value()
+        )
+    );
+}
+
+#[test]
 fn registration_is_controller_fenced_and_cleared_on_replacement() {
     let fixture = Fixture::new();
     let first = fixture.connect();
