@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import { extractPackageArchive, fetchWithRetry, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { extractPackageArchive, fetchWithRetry, prepareRustDependencies, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 describe('Ghostty dependency preparation', () => {
+  it('prefetches the daemon lockfile before CI switches Cargo offline', () => {
+    const runCommand = vi.fn((_command, args) => {
+      if (args.includes('--offline')) throw new Error('cold cache')
+    })
+    prepareRustDependencies({ runCommand })
+    const layout = resolveRustSidecarLayout()
+    for (const manifest of [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]) {
+      expect(runCommand).toHaveBeenCalledWith('cargo', ['fetch', '--locked', '--manifest-path', manifest], expect.any(Object))
+    }
+  })
+
   it('forces Windows tar to treat drive-letter archives as local paths', () => {
     expect(tarExtractionArgs(
       String.raw`C:\Users\runner\archive.tar.gz`,

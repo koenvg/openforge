@@ -195,6 +195,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeBuiltinPluginCatalog(root, [])
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'))
 
     await packageElectronApp({ repoRoot: root })
 
@@ -266,6 +267,7 @@ describe('Electron macOS packaging helpers', () => {
       { command: 'pnpm', args: ['build'], cwd: '/repo' },
       { command: 'pnpm', args: ['electron:build'], cwd: '/repo' },
       { command: 'cargo', args: ['build', '--release'], cwd: '/repo/src-tauri' },
+      { command: 'cargo', args: ['build', '--release', '--manifest-path', '/repo/src-tauri/crates/session-daemon/Cargo.toml', '--target-dir', '/repo/src-tauri/target'], cwd: '/repo/src-tauri' },
       { command: 'packageElectronApp', args: [], cwd: '/repo' },
     ])
   })
@@ -320,6 +322,13 @@ describe('Electron macOS packaging helpers', () => {
       },
     })
 
+    expect(commands).toContainEqual({
+      command: 'cargo',
+      args: ['build', '--release', '--target', 'aarch64-apple-darwin',
+        '--manifest-path', '/repo/crates/openforge-backend/crates/session-daemon/Cargo.toml',
+        '--target-dir', '/repo/crates/openforge-backend/target'],
+      cwd: '/repo/crates/openforge-backend',
+    })
     expect(commands).toContainEqual({
       command: 'cargo',
       args: ['build', '--release', '--target', 'aarch64-apple-darwin'],
@@ -394,6 +403,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeBuiltinPluginCatalog(root, [])
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'))
 
     await packageElectronApp({
       repoRoot: root,
@@ -437,6 +447,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeBuiltinPluginCatalog(root, [])
     await mkdir(join(root, 'crates/openforge-backend/target/release'), { recursive: true })
     await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-backend'), '#!/bin/sh\necho sidecar\n')
+    await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-session-daemon'))
     await mkdir(join(root, 'crates/openforge-backend/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/runtime-assets.json'), `${JSON.stringify({
       runtimeFiles: ['cli.js', 'configured-command.js'],
@@ -479,6 +490,8 @@ describe('Electron macOS packaging helpers', () => {
     await writeElectronRuntimeDependencyArtifacts(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+    await expect(packageElectronApp({ repoRoot: root })).rejects.toThrow('Session Daemon binary')
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'), '#!/bin/sh\necho daemon\n')
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     const runtimeAssetManifest = JSON.parse(
       await readFile(new URL('../src-tauri/src/openforge-cli/runtime-assets.json', import.meta.url), 'utf8'),
@@ -517,6 +530,9 @@ describe('Electron macOS packaging helpers', () => {
     expect(packagedElectronMain.classifyTaskBrowserDevToolsShortcut).toBeTypeOf('function')
     await expect(stat(join(output, 'Contents/MacOS/Open Forge'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
+    const daemonPath = join(output, 'Contents/MacOS/openforge-session-daemon')
+    await expect(readFile(daemonPath, 'utf8')).resolves.toContain('echo daemon')
+    expect((await stat(daemonPath)).mode & 0o111).toBe(0o111)
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
     for (const { directoryName } of builtInPluginCatalog) {

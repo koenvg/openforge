@@ -100,6 +100,7 @@ export async function packageElectronApp({
   hydrateElectronTemplate: hydrateTemplate = hydrateElectronTemplate,
   cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
   sidecarBinaryPath = rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
+  sessionDaemonBinaryPath = join(dirname(sidecarBinaryPath), 'openforge-session-daemon'),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
 } = {}) {
   const rendererDist = join(repoRoot, 'dist')
@@ -115,6 +116,7 @@ export async function packageElectronApp({
   await assertExists(rendererDist, 'Renderer build')
   await assertExists(electronDist, 'Electron main build')
   await assertExists(sidecarBinaryPath, 'Rust sidecar binary')
+  await assertExists(sessionDaemonBinaryPath, 'Session Daemon binary')
 
   await rm(outputAppPath, { recursive: true, force: true })
   await mkdir(dirname(outputAppPath), { recursive: true })
@@ -132,6 +134,9 @@ export async function packageElectronApp({
   const sidecarTargetPath = join(macosDir, 'openforge-sidecar')
   await cp(sidecarBinaryPath, sidecarTargetPath)
   await chmod(sidecarTargetPath, 0o755)
+  const daemonTargetPath = join(macosDir, 'openforge-session-daemon')
+  await cp(sessionDaemonBinaryPath, daemonTargetPath)
+  await chmod(daemonTargetPath, 0o755)
   await copyBackendPluginHostRuntime(electronDist, macosDir)
 
   await assertPackageArchitectureCompatibility({

@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createPackagedSmokeEnv,
+  closeElectronGracefully,
   forceKillPackagedApp,
   formatHealthFailure,
   packagedAppExecutablePath,
@@ -11,6 +13,38 @@ import {
 } from './electron-packaged-smoke.mjs'
 
 describe('Electron packaged runtime smoke helpers', () => {
+  it('bounds a Browser.close command that never acknowledges during startup failure', async () => {
+    vi.useFakeTimers()
+    try {
+      const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null })
+      const browser = { newBrowserCDPSession: async () => ({ send: () => new Promise(() => {}) }) }
+      let finished = false
+      void closeElectronGracefully(browser, child, 100).then(() => { finished = true })
+      await vi.advanceTimersByTimeAsync(100)
+      expect(finished).toBe(true)
+      expect(child.listenerCount('exit')).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('isolates installation writes and ignores inherited daemon ownership', () => {
+    const env = createPackagedSmokeEnv({
+      baseEnv: { HOME: '/real/home', OPENFORGE_SESSION_DAEMON_ROOT: '/real/daemon',
+        OPENFORGE_SESSION_DAEMON_PATH: '/real/daemon-bin', OPENFORGE_RESTART_OPERATION: 'inherited',
+        OPENFORGE_AGENT_TOKEN: 'inherited', OPENFORGE_SIDECAR_PATH: '/real/sidecar' },
+      runtimeRoot: '/tmp/smoke', backendPort: 38123,
+    })
+    expect(env.HOME).toBe('/tmp/smoke/home')
+    expect(env.XDG_CONFIG_HOME).toBe('/tmp/smoke/home/.config')
+    expect(env.ZDOTDIR).toBe(env.HOME)
+    for (const key of ['OPENFORGE_SESSION_DAEMON_ROOT', 'OPENFORGE_SESSION_DAEMON_PATH',
+      'OPENFORGE_RESTART_OPERATION', 'OPENFORGE_AGENT_TOKEN', 'OPENFORGE_SIDECAR_PATH']) {
+      expect(env[key]).toBeUndefined()
+    }
+  })
+
   it('launches packaged runtime with isolated app and Electron user data directories', () => {
     const env = createPackagedSmokeEnv({
       baseEnv: { PATH: '/usr/bin', OPENFORGE_APP_DATA_DIR: '/real/data', OPENFORGE_BACKEND_PORT: '17422' },

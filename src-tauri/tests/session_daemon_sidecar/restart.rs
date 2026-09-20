@@ -1,5 +1,32 @@
 use super::*;
 
+#[test]
+#[ignore = "requires built Session Daemon; run the session-daemon contract command"]
+fn cold_installation_creates_private_daemon_root() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
+    fixture.default_daemon_root = true;
+    assert!(!fixture.daemon_root().exists());
+    fixture.start("cold-installation");
+    fixture.invoke("pty_spawn_shell", json!({
+        "taskId": "T-proof", "terminalIndex": 3, "cwd": fixture.root.path(), "cols": 80, "rows": 24,
+    }));
+    assert_eq!(
+        fs::metadata(fixture.daemon_root())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    fixture.write("printf 'COLD_INSTALLATION_READY\\n'\n");
+    assert!(fixture
+        .output("COLD_INSTALLATION_READY")
+        .contains("COLD_INSTALLATION_READY"));
+    stop_sidecar(&mut fixture);
+}
+
 fn stop_sidecar(fixture: &mut Fixture) {
     let child = fixture.child.as_mut().unwrap();
     // SAFETY: this PID belongs to the isolated child created by Fixture.

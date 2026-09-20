@@ -31,6 +31,7 @@ fn should_retry_startup(log: &str, attempts_remaining: usize) -> bool {
 
 struct Fixture {
     root: tempfile::TempDir,
+    default_daemon_root: bool,
     child: Option<Child>,
     port: u16,
     shell_key: String,
@@ -50,6 +51,7 @@ impl Fixture {
         fs::create_dir(root.path().join("home")).unwrap();
         Self {
             root,
+            default_daemon_root: false,
             child: None,
             port: 0,
             shell_key: "T-proof-shell-3".into(),
@@ -62,6 +64,13 @@ impl Fixture {
                 .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap(),
+        }
+    }
+    fn daemon_root(&self) -> PathBuf {
+        if self.default_daemon_root {
+            self.root.path().join("session-daemon")
+        } else {
+            self.root.path().to_path_buf()
         }
     }
     fn use_installation_daemon(&mut self) {
@@ -140,6 +149,10 @@ impl Fixture {
             command.env("PATH", path);
         }
         command.envs(self.provider_env.iter().cloned());
+        if self.default_daemon_root {
+            command.env_remove("OPENFORGE_SESSION_DAEMON_ROOT");
+            command.env("OPENFORGE_E2E", "0");
+        }
         self.child = Some(command.spawn().unwrap());
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
@@ -221,10 +234,10 @@ impl Drop for Fixture {
             let _ = child.wait();
         }
         let cleanup = (|| -> Result<(), String> {
-            if !self.root.path().join("session-v1/control.sock").exists() {
+            if !self.daemon_root().join("session-v1/control.sock").exists() {
                 return Ok(());
             }
-            let client = openforge_session_client::Client::connect(self.root.path())
+            let client = openforge_session_client::Client::connect(&self.daemon_root())
                 .map_err(|e| e.to_string())?;
             for session in client.inventory().map_err(|e| e.to_string())?.sessions {
                 client
