@@ -46,10 +46,13 @@ describe('Task Browser catalog', () => {
     try {
       await pages.Empty.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(await view.findByText('No page loaded')).toBeTruthy()
+      expect(document.body.dataset.taskBrowserReady).toBe('pages-task-browser--empty')
       await pages.Failure.run({ canvasElement: canvas, testingLibraryRender: render })
       expect((await view.findAllByText('The local preview could not be loaded')).length).toBeGreaterThanOrEqual(1)
+      expect(document.body.dataset.taskBrowserReady).toBe('pages-task-browser--failure')
       await pages.Disconnected.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(await view.findByText('Browser runtime disconnected')).toBeTruthy()
+      expect(document.body.dataset.taskBrowserReady).toBe('pages-task-browser--disconnected')
 
       await pages.Populated.run({ canvasElement: canvas, testingLibraryRender: render })
       const firstScenario = latestScenario
@@ -66,11 +69,13 @@ describe('Task Browser catalog', () => {
       expect(view.getAllByLabelText('Attached browser page')).toHaveLength(1)
       expect(firstScenario.plugin.calls.browserSurfaceDetaches).toEqual([{ taskId: 'T-42', id: 'main' }])
       expect(latestScenario.plugin.calls.storageSets).toHaveLength(1)
+      expect(document.body.dataset.taskBrowserReady).toBe('pages-task-browser--populated')
 
       await pages.VisualFeedback.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(await view.findByText('1 screenshot · 1 annotation')).toBeTruthy()
       await pages.VisualFeedback.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(view.getAllByText('1 screenshot · 1 annotation')).toHaveLength(1)
+      expect(document.body.dataset.taskBrowserReady).toBe('pages-task-browser--visual-feedback')
 
       for (const [name, story] of [
         ['Navigation', pages.Navigation],
@@ -86,8 +91,10 @@ describe('Task Browser catalog', () => {
 
       await components.FeedbackActions.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(await view.findByText('1 screenshot · 1 annotation')).toBeTruthy()
+      expect(document.body.dataset.taskBrowserReady).toBe('components-task-browser--feedback-actions')
       await components.Review.run({ canvasElement: canvas, testingLibraryRender: render })
       expect(await view.findByRole('region', { name: 'Visual feedback review' })).toBeTruthy()
+      expect(document.body.dataset.taskBrowserReady).toBe('components-task-browser--review')
       await components.EditReview.run({ canvasElement: canvas, testingLibraryRender: render })
       await components.EditReview.run({ canvasElement: canvas, testingLibraryRender: render })
       expect((view.getByRole('textbox', { name: 'Comment for annotation 1' }) as HTMLTextAreaElement).value)

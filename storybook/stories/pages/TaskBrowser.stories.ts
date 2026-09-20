@@ -8,6 +8,11 @@ const meta = {
   title: 'Pages/Task Browser',
   component: TaskBrowserPage,
   parameters: { openforge: taskBrowserScenario() },
+  beforeEach: context => {
+    const body = context.canvasElement.ownerDocument.body
+    delete body.dataset.taskBrowserReady
+    return () => { delete body.dataset.taskBrowserReady }
+  },
   render: (args, context) => {
     const { plugin } = getStoryScenario(context)
     return { Component: TaskBrowserPage, props: { ...args, api: plugin.api, context: plugin.context } }
@@ -16,11 +21,47 @@ const meta = {
 export default meta
 type Story = StoryObj<{ taskId?: string }>
 
-export const Populated: Story = {}
-export const Empty: Story = { parameters: { openforge: taskBrowserScenario('empty') } }
+async function markReady(canvasElement: HTMLElement, id: string): Promise<void> {
+  const view = canvasElement.ownerDocument.defaultView
+  if (view?.requestAnimationFrame) {
+    await new Promise<void>(resolve => {
+      view.requestAnimationFrame(() => view.requestAnimationFrame(() => resolve()))
+    })
+  }
+  canvasElement.ownerDocument.body.dataset.taskBrowserReady = id
+}
+
+async function markAttachedReady(
+  { canvasElement, id }: { canvasElement: HTMLElement; id: string },
+  heading: string,
+): Promise<void> {
+  const canvas = within(canvasElement)
+  await expect(canvas.findByRole('heading', { name: heading })).resolves.toBeVisible()
+  await expect(canvas.findByRole('button', { name: 'Add visual feedback' })).resolves.toBeVisible()
+  await markReady(canvasElement, id)
+}
+
+export const Populated: Story = {
+  play: context => markAttachedReady(context, 'Task implementation preview'),
+}
+export const Empty: Story = {
+  parameters: { openforge: taskBrowserScenario('empty') },
+  play: context => markAttachedReady(context, 'No page loaded'),
+}
 export const Loading: Story = { parameters: { openforge: taskBrowserScenario('loading') } }
-export const Failure: Story = { parameters: { openforge: taskBrowserScenario('failure') } }
-export const Disconnected: Story = { parameters: { openforge: taskBrowserScenario('disconnected') } }
+export const Failure: Story = {
+  parameters: { openforge: taskBrowserScenario('failure') },
+  play: context => markAttachedReady(context, 'The local preview could not be loaded'),
+}
+export const Disconnected: Story = {
+  parameters: { openforge: taskBrowserScenario('disconnected') },
+  play: async ({ canvasElement, id }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.findByText('Browser unavailable')).resolves.toBeVisible()
+    await expect(canvas.findByRole('button', { name: 'Retry' })).resolves.toBeVisible()
+    await markReady(canvasElement, id)
+  },
+}
 export const Overflow: Story = { parameters: { openforge: taskBrowserScenario('overflow') } }
 
 export const Navigation: Story = {
@@ -86,12 +127,13 @@ export const InvalidAddress: Story = {
 
 export const VisualFeedback: Story = {
   parameters: { openforge: taskBrowserScenario('feedback') },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, id }) => {
     const canvas = within(canvasElement)
     await userEvent.click(await canvas.findByRole('button', { name: 'Add visual feedback' }))
     await expect(canvas.findByText('1 screenshot · 1 annotation')).resolves.toBeVisible()
     await userEvent.click(canvas.getByRole('button', { name: 'Review visual feedback' }))
     await expect(canvas.findByRole('region', { name: 'Visual feedback review' })).resolves.toBeVisible()
+    await markReady(canvasElement, id)
   },
 }
 
