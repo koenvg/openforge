@@ -1,3 +1,4 @@
+import type { BackendMethodRegistration } from '@openforge-app/plugin-sdk/backend'
 import type {
   OpenForgeContextSnapshot,
   TaskBrowserSurfaceState,
@@ -16,6 +17,7 @@ import { createStoryScheduleBackend, type StoryScheduleDefinition } from './stor
 export type StoryPluginDefinition = Omit<TestingOpenForgeApiOptions, 'storage'> & {
   filesystem?: StoryFileSystemDefinition
   schedules?: StoryScheduleDefinition
+  backendMethods?: () => Readonly<Record<string, BackendMethodRegistration>>
 }
 
 export interface StoryPluginAdapter extends StoryEnvironmentAdapter {
@@ -37,16 +39,20 @@ export function createStoryPluginAdapter(
   let filesystem: ReturnType<typeof createStoryFileSystem> | undefined
   let schedules: ReturnType<typeof createStoryScheduleBackend> | undefined
   function createRegistry(): TestingOpenForgeRegistryFake {
-    const { filesystem: definitionFs, schedules: definitionSchedules, ...options } = structuredClone(definition)
+    const { backendMethods, filesystem: definitionFs, schedules: definitionSchedules, ...definitionOptions } = definition
+    const options = structuredClone(definitionOptions)
     const result = createOpenForgeRegistryFake(options)
-    filesystem = definitionFs ? createStoryFileSystem(definitionFs, result.frontendApi.fs) : undefined
+    filesystem = definitionFs ? createStoryFileSystem(structuredClone(definitionFs), result.frontendApi.fs) : undefined
     if (filesystem) result.frontendApi.fs = filesystem.fs
-    schedules = definitionSchedules ? createStoryScheduleBackend(definitionSchedules) : undefined
+    schedules = definitionSchedules ? createStoryScheduleBackend(structuredClone(definitionSchedules)) : undefined
     if (schedules) {
       result.backendSubscriptions.add({ dispose: schedules.dispose })
       for (const [method, registration] of Object.entries(schedules.methods)) {
         result.backendSubscriptions.add(result.backendApi.backend.registerMethod(method, registration))
       }
+    }
+    for (const [method, registration] of Object.entries(backendMethods?.() ?? {})) {
+      result.backendSubscriptions.add(result.backendApi.backend.registerMethod(method, registration))
     }
     return result
   }
