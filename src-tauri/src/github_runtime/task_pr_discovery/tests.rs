@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
 mod capacity;
 mod completion;
 mod daemon;
+mod daemon_hyperlinks;
+mod hyperlinks;
 mod retries;
 pub(crate) mod support;
 use support::Fixture;

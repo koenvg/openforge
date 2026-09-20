@@ -26,7 +26,7 @@ impl Stream {
             self.observer.gap();
         }
         self.sequence = Some(sequence);
-        self.observer.output(&String::from_utf8_lossy(data));
+        self.observer.output_bytes(data);
     }
 }
 
