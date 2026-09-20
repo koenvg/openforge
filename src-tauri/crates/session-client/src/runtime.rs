@@ -66,21 +66,40 @@ impl RuntimeDirectory {
     /// # Errors
     /// Refuses symlinks, foreign ownership, writable installation roots and unsafe files.
     pub fn open(root: &Path) -> Result<Self, Error> {
+        Self::open_with_creation(root, true)
+    }
+
+    /// Opens existing authentication without manufacturing replacement credentials.
+    /// # Errors
+    /// Refuses missing or unsafe runtime metadata. Reauthentication must use the
+    /// installation's existing credentials, never infer ownership from a PID.
+    pub fn open_existing(root: &Path) -> Result<Self, Error> {
+        Self::open_with_creation(root, false)
+    }
+
+    fn open_with_creation(root: &Path, create: bool) -> Result<Self, Error> {
         let metadata = fs::symlink_metadata(root).map_err(io_error)?;
         if !metadata.is_dir() || metadata.uid() != uid() || metadata.mode() & 0o022 != 0 {
             return Err(Error::Unauthorized);
         }
         let path = fs::canonicalize(root).map_err(io_error)?.join("session-v1");
-        match DirBuilder::new().mode(0o700).create(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(io_error(error)),
+        if create {
+            match DirBuilder::new().mode(0o700).create(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(io_error(error)),
+            }
         }
         check_private(&path, true)?;
-        let setup = private_file(&path.join("setup.lock"))?;
-        setup.lock().map_err(io_error)?;
+        let _setup = if create {
+            let setup = private_file(&path.join("setup.lock"))?;
+            setup.lock().map_err(io_error)?;
+            Some(setup)
+        } else {
+            None
+        };
         let credential_path = path.join("credentials.json");
-        if !credential_path.try_exists().map_err(io_error)? {
+        if create && !credential_path.try_exists().map_err(io_error)? {
             let credentials = Credentials {
                 installation: openforge_session_host::InstallationId::parse(
                     uuid::Uuid::new_v4().to_string(),
@@ -135,6 +154,14 @@ impl RuntimeDirectory {
     /// Fails rather than taking over a running daemon or an unsafe lock file.
     pub fn claim(&self) -> Result<File, Error> {
         let file = private_file(&self.path.join("daemon.lock"))?;
+        file.try_lock().map_err(|_| Error::AlreadyRunning)?;
+        Ok(file)
+    }
+    /// Serializes launch attempts while a spawned image has not become ready.
+    /// # Errors
+    /// Refuses unsafe metadata or another in-progress launch.
+    pub fn claim_launch(&self) -> Result<File, Error> {
+        let file = private_file(&self.path.join("launch.lock"))?;
         file.try_lock().map_err(|_| Error::AlreadyRunning)?;
         Ok(file)
     }

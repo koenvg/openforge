@@ -3,6 +3,7 @@
 mod host;
 mod operations;
 mod output;
+mod recovery;
 mod replacement;
 pub mod runtime;
 use openforge_session_protocol::*;
@@ -24,7 +25,13 @@ impl Client {
     /// # Errors
     /// Refuses unsafe discovery, incompatible daemons and failed startup.
     pub fn launch(executable: &Path, root: &Path) -> Result<Self, Error> {
-        let runtime = RuntimeDirectory::open(root)?;
+        let runtime = match std::fs::symlink_metadata(root.join("session-v1")) {
+            Ok(_) => RuntimeDirectory::open_existing(root)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                RuntimeDirectory::open(root)?
+            }
+            Err(error) => return Err(io_error(error)),
+        };
         if runtime.socket_path().try_exists().map_err(io_error)? {
             runtime.check_socket()?;
             match Self::connect(root) {
@@ -33,6 +40,10 @@ impl Client {
                 Err(error) => return Err(error),
             }
         }
+        let launch = runtime.claim_launch()?;
+        // A live owner can be temporarily unreachable during exec or startup.
+        // Only the daemon's lifetime lock can establish that no owner exists.
+        drop(runtime.claim()?);
         let mut command = std::process::Command::new(executable);
         command
             .arg(root)
@@ -63,9 +74,14 @@ impl Client {
                     .map_err(|_| Error::Transport(format!("daemon startup failed: {status}")));
             }
             if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(Error::Transport("daemon startup timed out".into()));
+                // Readiness bounds the caller's wait, not the PTY owner's lifetime.
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                    drop(launch);
+                });
+                return Err(Error::Transport(
+                    "daemon startup timed out; retry attachment without launching a host".into(),
+                ));
             }
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -75,7 +91,7 @@ impl Client {
     /// # Errors
     /// Refuses unsafe runtime metadata and incompatible or unauthenticated peers.
     pub fn connect(root: &Path) -> Result<Self, Error> {
-        let runtime = RuntimeDirectory::open(root)?;
+        let runtime = RuntimeDirectory::open_existing(root)?;
         runtime.check_socket()?;
         let credentials = runtime.credentials().clone();
         let response = exchange(

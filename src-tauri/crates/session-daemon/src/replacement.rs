@@ -446,6 +446,10 @@ impl Activation {
 pub(crate) fn run() -> Result<(), Error> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     match args.first().and_then(|argument| argument.to_str()) {
+        Some("--terminate-sessions") if args.len() == 2 => {
+            let client = openforge_session_client::Client::connect(std::path::Path::new(&args[1]))?;
+            client.terminate_owned_sessions(std::time::Duration::from_secs(3))
+        }
         Some("--check-image") if args.len() == 1 => probe::describe(None),
         Some("--check-state") if args.len() == 1 => {
             let mut bytes = Vec::new();
