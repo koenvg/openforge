@@ -26,7 +26,7 @@ it.each([
     await new Promise(resolve => server.listen(path, resolve))
     await chmod(path, 0o600)
     await expect(exchangeDaemon(root, { token: 'secret-token' }, { kind: 'terminate' }))
-      .rejects.toThrow(`Daemon fixture terminate refused (${category})`)
+      .rejects.toMatchObject({ message: `Daemon fixture terminate refused (${category})`, daemonCode: category })
   } finally {
     await new Promise(resolve => server.close(resolve))
     await rm(root, { recursive: true, force: true })

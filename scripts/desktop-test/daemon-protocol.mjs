@@ -49,7 +49,7 @@ export async function exchangeDaemon(runtime, credentials, command) {
         const category = known.includes(failure) ? failure
           : failure && typeof failure === 'object' && Object.hasOwn(failure, 'host') ? 'host'
             : failure && typeof failure === 'object' && Object.hasOwn(failure, 'transport') ? 'transport' : 'invalidReply'
-        return finish(new Error(`Daemon fixture ${command.kind} refused (${category})`))
+        return finish(Object.assign(new Error(`Daemon fixture ${command.kind} refused (${category})`), { daemonCode: category }))
       }
       finish(null, reply.body.Ok)
     })

@@ -79,8 +79,22 @@ export async function createDaemonOwnershipRegistry({ mode, runRoot } = {}) {
         })
         if (result.kind !== 'done') throw new Error('Owned descendant cleanup failed; retaining resources')
       }
-      const result = await exchange(runtime, credentials, { kind: 'shutdownEmpty', controller: inventory.controller })
-      if (result.kind !== 'done') throw new Error('Owned daemon shutdown failed; retaining resources')
+      // Termination acknowledges process exit before the bounded PTY output drain
+      // completes. Only an explicit nonempty refusal is safe to retry; never replay
+      // termination or retry an unknown shutdown outcome.
+      const deadline = Date.now() + 5000
+      while (true) {
+        let result
+        try {
+          result = await exchange(runtime, credentials, { kind: 'shutdownEmpty', controller: inventory.controller })
+        } catch (error) {
+          if (error.daemonCode !== 'invalidRequest' || Date.now() >= deadline) throw error
+          await new Promise(resolvePromise => setTimeout(resolvePromise, 50))
+          continue
+        }
+        if (result.kind !== 'done') throw new Error('Owned daemon shutdown failed; retaining resources')
+        break
+      }
       await waitForExit(runtime)
       return { owned: true, resources: ownedResources, sessions: inventory.sessions.map(({ pid, pty }) => ({ pid, pty })) }
     },

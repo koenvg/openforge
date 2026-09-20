@@ -29,6 +29,8 @@ Provider-generated hook configuration already lives outside the app bundle, and 
 
 The packaged smoke test registers its newly allocated private runtime root before launching Electron. Cleanup uses that root's credentials and Session Protocol to terminate fixture PTYs, including daemon-supervised descendants, then shut down the empty detached daemon. It checks the installation's ownership descriptor for remaining holders before deleting fixture directories. Failed or uncertain cleanup retains resources and fails the test. Reuse registries never read borrowed credentials or terminate borrowed processes.
 
+A successful termination reply can precede the bounded PTY output drain. Fixture cleanup retries only an explicit `shutdownEmpty` / `invalidRequest` refusal for up to five seconds, retaining the same controller and never replaying termination. Unknown outcomes, transport failures, stale ownership, and deadline expiry retain resources and fail. Protocol diagnostics expose only the command and an allowlisted error category, not daemon error payloads or credentials.
+
 ## Verification
 
 Focused checks:
@@ -50,5 +52,5 @@ Validation scope was the scripts, Electron desktop shell, Rust Sidecar, and sess
 - Initial implementation checks passed: 657 scripts tests, 349 Electron tests, root and Electron TypeScript checks, lint, desktop IPC registry checks, workspace metadata, affected Rust test/check/build/clippy/format, native arm64 packaging, optimized launch/refusal, and isolated smoke.
 - Follow-up checks passed: the delayed/fragmented mock HTTP regression, all 13 gateway tests, the full post-merge Session Daemon contract command, 448 tests selected by `vitest run electron`, workflow tests and `actionlint`, Electron TypeScript, IPC, metadata, lint, and daemon clippy/format.
 - The accepted sockets explicitly use blocking reads; the response fixture collects complete headers rather than assuming one read contains them. The gateway suite passed in all three concurrent full contract copies. Two complete copies passed; the third timed out waiting for provider CLI receipts in separate Sidecar fixtures, tracked by KVG-5151. No suite serialization was added.
-- The follow-up full scripts runs are not green: unchanged inventory/Storybook CLI cases exceeded their five-second limits, including a four-worker run. Focused host-inventory and coverage reruns passed; one focused UI-inventory test still timed out. KVG-5153 tracks this gap. These failures are not counted as passes.
+- Earlier follow-up full scripts runs exceeded unchanged inventory/Storybook five-second deadlines (KVG-5153). The latest full scripts run passes all 668 tests, including delayed-drain cleanup, deadline expiry, unknown/stale refusals, and credential-safe protocol diagnostics. Earlier failed runs remain recorded rather than counted as passes.
 - Existing ignored tests remain ignored except the cross-boundary fixtures explicitly selected by the contract command. Trusted live replacement and the separate updater/source-install transaction were not validated. Native x64 launch evidence is now present; the updated arm64 CI lane still needs a passing run.
