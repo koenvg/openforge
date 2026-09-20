@@ -392,6 +392,9 @@ pub(super) fn spawn_batched_pty_event_emitter(
             tokio::time::interval(tokio::time::Duration::from_millis(PTY_FLUSH_INTERVAL_MS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+        let mut pr_output = terminal_sessions
+            .pr_discovery
+            .observer(&session_key, instance_id);
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
             event_publisher.publish(event_name, payload);
             Ok(())
@@ -406,7 +409,10 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                 .accepts_passive_output(&session_key, instance_id)
                                 .await
                             {
+                                if let Some(observer) = pr_output.as_mut() { observer.output(&text); }
                                 batcher.push_output(&text, &mut emit_pty_event);
+                            } else if let Some(observer) = pr_output.as_mut() {
+                                observer.gap();
                             }
                         }
                         Some(None) | None => break,
@@ -418,6 +424,9 @@ pub(super) fn spawn_batched_pty_event_emitter(
             }
         }
 
+        terminal_sessions
+            .pr_discovery
+            .finish(&session_key, instance_id);
         batcher.flush_pending(&mut emit_pty_event);
         let (exit_outcome, emit_agent_exit, observer) = match exit_action {
             PtyExitAction::Cleanup {

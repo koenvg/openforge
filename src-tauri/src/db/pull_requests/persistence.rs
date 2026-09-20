@@ -5,7 +5,37 @@ use super::super::pull_request_readiness::terminal_readiness_blockers_json;
 use super::super::sqlite::sqlite_id_list;
 use super::super::{current_unix_timestamp, Database};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AutomaticAssociation {
+    Created,
+    Refreshed,
+    OwnershipConflict,
+}
+
+pub(crate) struct AutomaticPr<'a> {
+    pub id: i64,
+    pub number: i64,
+    pub task_id: &'a str,
+    pub owner: &'a str,
+    pub repo: &'a str,
+    pub title: &'a str,
+    pub url: &'a str,
+    pub state: &'a str,
+    pub now: i64,
+    pub draft: bool,
+}
+
 impl Database {
+    pub(crate) fn associate_pull_request_automatically(
+        &self,
+        pr: AutomaticPr<'_>,
+    ) -> Result<AutomaticAssociation> {
+        self.persist_pull_request(
+            pr.id, pr.number, pr.task_id, pr.owner, pr.repo, pr.title, pr.url, pr.state, pr.now,
+            pr.now, pr.draft, true,
+        )
+    }
+
     /// Insert a PR comment into the database
     #[allow(clippy::too_many_arguments)]
     pub fn insert_pr_comment(
@@ -145,8 +175,65 @@ impl Database {
         updated_at: i64,
         draft: bool,
     ) -> Result<()> {
+        self.persist_pull_request(
+            id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at,
+            updated_at, draft, false,
+        )
+        .map(|_| ())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn persist_pull_request(
+        &self,
+        id: i64,
+        pr_number: i64,
+        ticket_id: &str,
+        repo_owner: &str,
+        repo_name: &str,
+        title: &str,
+        url: &str,
+        state: &str,
+        created_at: i64,
+        updated_at: i64,
+        draft: bool,
+        automatic: bool,
+    ) -> Result<AutomaticAssociation> {
         let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
+        let existing = {
+            let mut query = tx.prepare(
+                "SELECT id, ticket_id, repo_owner, repo_name, pr_number FROM pull_requests
+                 WHERE id = ?1 OR (repo_owner = ?2 COLLATE NOCASE AND repo_name = ?3 COLLATE NOCASE AND pr_number = ?4)",
+            )?;
+            let rows = query.query_map(
+                rusqlite::params![id, repo_owner, repo_name, pr_number],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
+                },
+            )?;
+            rows.collect::<Result<Vec<_>>>()?
+        };
+        if automatic
+            && existing.iter().any(|(_, task, owner, repo, number)| {
+                task != ticket_id
+                    || !owner.eq_ignore_ascii_case(repo_owner)
+                    || !repo.eq_ignore_ascii_case(repo_name)
+                    || *number != pr_number
+            })
+        {
+            return Ok(AutomaticAssociation::OwnershipConflict);
+        }
+        let outcome = if existing.is_empty() {
+            AutomaticAssociation::Created
+        } else {
+            AutomaticAssociation::Refreshed
+        };
         tx.execute(
             "INSERT INTO pull_requests (id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
@@ -188,17 +275,17 @@ impl Database {
              SET pr_id = ?1
              WHERE pr_id IN (
                SELECT id FROM pull_requests
-               WHERE repo_owner = ?2 AND repo_name = ?3 AND pr_number = ?4 AND id <> ?1
+               WHERE ((repo_owner = ?2 AND repo_name = ?3) OR (?5 AND repo_owner = ?2 COLLATE NOCASE AND repo_name = ?3 COLLATE NOCASE)) AND pr_number = ?4 AND id <> ?1
              )",
-            rusqlite::params![id, repo_owner, repo_name, pr_number],
+            rusqlite::params![id, repo_owner, repo_name, pr_number, automatic],
         )?;
         tx.execute(
             "DELETE FROM pull_requests
-             WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 AND id <> ?4",
-            rusqlite::params![repo_owner, repo_name, pr_number, id],
+             WHERE ((repo_owner = ?1 AND repo_name = ?2) OR (?5 AND repo_owner = ?1 COLLATE NOCASE AND repo_name = ?2 COLLATE NOCASE)) AND pr_number = ?3 AND id <> ?4",
+            rusqlite::params![repo_owner, repo_name, pr_number, id, automatic],
         )?;
         tx.commit()?;
-        Ok(())
+        Ok(outcome)
     }
 
     /// Update the head SHA for a pull request

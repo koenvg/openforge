@@ -26,10 +26,8 @@ impl PluginHost {
         let task_id = required_param_string(params, "taskId")?;
         let path = required_param_string(params, "path")?;
         let workspace_root = self.task_workspace_root_for_host(&task_id)?;
-        let full_path = crate::project_fs::resolve_existing_path(&workspace_root, Some(&path))
-            .map_err(|error| error.to_string())?;
         serde_json::to_value(
-            crate::project_fs::read_file_preview(&full_path)
+            crate::project_fs::read_file_preview(&workspace_root, &path)
                 .await
                 .map_err(|error| error.to_string())?,
         )

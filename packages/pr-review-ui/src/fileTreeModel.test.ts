@@ -43,6 +43,25 @@ describe('file-tree path model', () => {
     ])
   })
 
+  it('groups exact Unicode and literal path characters under one parent hierarchy', () => {
+    const directory = '03 Projects/Brussels Apartment Search'
+    const files = [
+      makeFile(`${directory}/Application email - Avenue de l'Orée 26.md`),
+      makeFile(`${directory}/ordinary.md`),
+      makeFile(`${directory}/proposal "final" \\notes.md`),
+    ]
+    const tree = buildFileTree(files)
+    const rows = flattenFileTree(tree, collectFileTreeDirectoryPaths(files))
+
+    expect(tree.children.size).toBe(1)
+    expect(rows.map(({ node }) => [node.name, node.file?.filename])).toEqual([
+      [directory, undefined],
+      ["Application email - Avenue de l'Orée 26.md", files[0].filename],
+      ['ordinary.md', files[1].filename],
+      ['proposal "final" \\notes.md', files[2].filename],
+    ])
+  })
+
   it('omits descendants of collapsed directories from visible rows', () => {
     const files = [makeFile('a/x.ts'), makeFile('b/y.ts')]
     const rows = flattenFileTree(buildFileTree(files), new Set(['a']))

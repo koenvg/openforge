@@ -80,15 +80,13 @@ pub(super) async fn handle_app_files_review_command(
             let project_id = payload_string(&request.payload, "projectId")?;
             let file_path = payload_string(&request.payload, "filePath")?;
             let project_root = app_project_root(state, &project_id)?;
-            let full_path = crate::project_fs::resolve_existing_path(
-                std::path::Path::new(&project_root),
-                Some(&file_path),
-            )
-            .map_err(app_project_fs_error)?;
             json_value(
-                crate::project_fs::read_file_preview(&full_path)
-                    .await
-                    .map_err(app_project_fs_error)?,
+                crate::project_fs::read_file_preview(
+                    std::path::Path::new(&project_root),
+                    &file_path,
+                )
+                .await
+                .map_err(app_project_fs_error)?,
             )?
         }
         "fs_write_file" => {
@@ -141,15 +139,13 @@ pub(super) async fn handle_app_files_review_command(
             let task_id = payload_string(&request.payload, "taskId")?;
             let file_path = payload_string(&request.payload, "filePath")?;
             let workspace_path = app_task_workspace_path(state, &task_id)?;
-            let full_path = crate::project_fs::resolve_existing_path(
-                std::path::Path::new(&workspace_path),
-                Some(&file_path),
-            )
-            .map_err(app_project_fs_error)?;
             json_value(
-                crate::project_fs::read_file_preview(&full_path)
-                    .await
-                    .map_err(app_project_fs_error)?,
+                crate::project_fs::read_file_preview(
+                    std::path::Path::new(&workspace_path),
+                    &file_path,
+                )
+                .await
+                .map_err(app_project_fs_error)?,
             )?
         }
         "task_fs_search_files" => {

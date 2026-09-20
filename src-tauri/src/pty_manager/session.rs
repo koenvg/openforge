@@ -23,6 +23,7 @@ pub(super) use lifecycle::{PtySession, NEXT_INSTANCE_ID};
 
 #[derive(Clone)]
 pub(super) struct TerminalSessions {
+    pub(super) pr_discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery,
     sessions: PtySessions,
     output_buffers: PtyOutputBuffers,
     attachment_hubs: super::attachment::PtyAttachmentHubs,
@@ -110,6 +111,7 @@ impl TerminalSessionFailure {
 impl TerminalSessions {
     pub(super) fn new() -> Self {
         Self {
+            pr_discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery::default(),
             sessions: std::sync::Arc::new(
                 tokio::sync::Mutex::new(std::collections::HashMap::new()),
             ),

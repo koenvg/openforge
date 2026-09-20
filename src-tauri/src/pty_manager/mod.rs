@@ -210,6 +210,12 @@ pub(crate) fn terminal_environment(
 }
 
 impl PtyManager {
+    pub(crate) fn configure_pr_discovery(
+        &self,
+        discovery: crate::github_runtime::task_pr_discovery::Discovery,
+    ) {
+        self.terminal_sessions.pr_discovery.configure(discovery);
+    }
     pub fn new() -> Self {
         let terminal_sessions = TerminalSessions::new();
         #[cfg(test)]

@@ -8,6 +8,72 @@ use std::sync::{
 };
 use tokio::sync::Notify;
 
+#[tokio::test]
+async fn automatic_reconciliation_cannot_undo_manual_reassignment() {
+    let (db, _dir) = make_test_db("reconciliation_preserves_manual");
+    let automatic = db
+        .create_task("automatic", "doing", None, None, None)
+        .unwrap();
+    let manual = db.create_task("manual", "doing", None, None, None).unwrap();
+    db.insert_pull_request_with_number(
+        -77,
+        7,
+        &manual.id,
+        "acme",
+        "widgets",
+        "manual",
+        "https://github.com/acme/widgets/pull/7",
+        "open",
+        1,
+        1,
+        false,
+    )
+    .unwrap();
+    let search_task = automatic.id.clone();
+    let detail_task = automatic.id.clone();
+    let router = Router::new()
+        .route(
+            "/user",
+            get(|| async { Json(serde_json::json!({"login":"me"})) }),
+        )
+        .route(
+            "/search/issues",
+            get(move || {
+                let task = search_task.clone();
+                async move {
+                    let mut result = review_request_search_response().await.0;
+                    result["items"][0]["title"] = task.into();
+                    Json(result)
+                }
+            }),
+        )
+        .route(
+            "/repos/acme/widgets/pulls/7",
+            get(move || {
+                let task = detail_task.clone();
+                async move {
+                    let mut result = review_request_detail_response().await.0;
+                    result["head"]["ref"] = task.into();
+                    Json(result)
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let client =
+        GitHubClient::with_test_api_base_url(GitHubClient::new(), format!("http://{address}"));
+    let db = Mutex::new(db);
+    sync_authored_task_prs(&client, &db, "test").await.unwrap();
+    server.abort();
+    let rows = acquire_db(&db).get_all_pull_requests().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].ticket_id, manual.id);
+    assert_eq!(rows[0].title, "manual");
+}
+
 async fn review_request_search_response() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "total_count": 1,

@@ -48,10 +48,8 @@ impl PluginHost {
         let project_id = required_param_string(params, "projectId")?;
         let path = required_param_string(params, "path")?;
         let project_root = self.project_root_for_host(&project_id)?;
-        let full_path = crate::project_fs::resolve_existing_path(&project_root, Some(&path))
-            .map_err(|error| error.to_string())?;
         serde_json::to_value(
-            crate::project_fs::read_file_preview(&full_path)
+            crate::project_fs::read_file_preview(&project_root, &path)
                 .await
                 .map_err(|error| error.to_string())?,
         )

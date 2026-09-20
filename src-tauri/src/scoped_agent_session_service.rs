@@ -803,11 +803,17 @@ impl ScopedAgentSessionService {
         &self,
         row: &ScopedAgentSessionRow,
     ) -> Result<ScopedAgentSessionState, ScopedAgentSessionError> {
+        let queue_position = lock(&self.database).scoped_agent_queue_position(&row.id)?;
+        let workspace_available = self
+            .workspaces
+            .is_available(row)
+            .map_err(ScopedAgentSessionError::Runtime)?;
+
         Ok(ScopedAgentSessionState {
             id: row.id.clone(),
             turn_id: row.pty_instance_id.map(|instance| instance.to_string()),
             status: row.status,
-            queue_position: lock(&self.database).scoped_agent_queue_position(&row.id)?,
+            queue_position,
             queue_reason: (row.status == ScopedAgentSessionStatus::Queued)
                 .then(|| "Waiting for an available scoped Agent Session slot".to_string()),
             accepts_input: matches!(
@@ -819,10 +825,7 @@ impl ScopedAgentSessionService {
                     | ScopedAgentSessionStatus::Aborted
                     | ScopedAgentSessionStatus::Interrupted
             ),
-            workspace_available: self
-                .workspaces
-                .is_available(row)
-                .map_err(ScopedAgentSessionError::Runtime)?,
+            workspace_available,
             error_code: row.error_code.clone(),
             error_message: row.error_message.clone(),
             created_at: row.created_at,

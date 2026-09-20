@@ -73,15 +73,17 @@ pub async fn get_task_diff_for_workspace(
         let untracked_output = tokio::process::Command::new("git")
             .arg("-C")
             .arg(worktree_path)
-            .args(["ls-files", "--others", "--exclude-standard"])
+            .args(["ls-files", "--others", "--exclude-standard", "-z"])
             .output()
             .await
             .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
 
         if untracked_output.status.success() {
-            let untracked_str = String::from_utf8_lossy(&untracked_output.stdout);
-            for filename in untracked_str.lines() {
-                let filename = filename.trim().to_string();
+            for filename_bytes in untracked_output.stdout.split(|byte| *byte == b'\0') {
+                if filename_bytes.is_empty() {
+                    continue;
+                }
+                let filename = String::from_utf8_lossy(filename_bytes).into_owned();
                 if filename.is_empty() {
                     continue;
                 }

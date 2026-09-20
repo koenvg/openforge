@@ -189,6 +189,7 @@ impl PtyManager {
         session_key: &str,
         remove_output_buffer: bool,
     ) {
+        self.terminal_sessions.pr_discovery.invalidate(session_key);
         if remove_output_buffer {
             self.terminal_sessions
                 .output_buffers

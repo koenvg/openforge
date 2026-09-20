@@ -56,6 +56,23 @@ impl std::error::Error for ProjectFsError {}
 
 pub(crate) type ProjectFsResult<T> = Result<T, ProjectFsError>;
 
+impl From<crate::authorized_fs::AuthorizedOpenError> for ProjectFsError {
+    fn from(error: crate::authorized_fs::AuthorizedOpenError) -> Self {
+        let kind = match error.kind() {
+            crate::authorized_fs::AuthorizedOpenErrorKind::BadRequest => {
+                ProjectFsErrorKind::BadRequest
+            }
+            crate::authorized_fs::AuthorizedOpenErrorKind::Forbidden => {
+                ProjectFsErrorKind::Forbidden
+            }
+            crate::authorized_fs::AuthorizedOpenErrorKind::Internal => ProjectFsErrorKind::Internal,
+        };
+        Self {
+            kind,
+            message: error.message(),
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectFileEntry {
@@ -363,16 +380,16 @@ fn decode_text_content(bytes: Vec<u8>) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-async fn read_file_bytes(full_path: &Path) -> ProjectFsResult<Vec<u8>> {
-    tokio::fs::read(full_path)
-        .await
-        .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))
-}
-
-async fn read_file_sample(full_path: &Path, sample_size: u64) -> ProjectFsResult<Vec<u8>> {
-    let file = tokio::fs::File::open(full_path)
+async fn read_file_bytes(file: tokio::fs::File) -> ProjectFsResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut file = file;
+    file.read_to_end(&mut bytes)
         .await
         .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))?;
+    Ok(bytes)
+}
+
+async fn read_file_sample(file: tokio::fs::File, sample_size: u64) -> ProjectFsResult<Vec<u8>> {
     let mut bytes = Vec::new();
     file.take(sample_size)
         .read_to_end(&mut bytes)
@@ -381,21 +398,29 @@ async fn read_file_sample(full_path: &Path, sample_size: u64) -> ProjectFsResult
     Ok(bytes)
 }
 
-pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<ProjectFileContent> {
+pub(crate) async fn read_file_preview(
+    project_root: &Path,
+    sub_path: &str,
+) -> ProjectFsResult<ProjectFileContent> {
     const MAX_INLINE_PREVIEW_SIZE: u64 = 1_048_576;
     const CONTENT_SAMPLE_SIZE: u64 = 8_192;
-    let metadata = tokio::fs::metadata(full_path).await.map_err(|error| {
-        ProjectFsError::internal(format!("Failed to read file metadata: {error}"))
-    })?;
-    if metadata.is_dir() {
-        return Err(ProjectFsError::bad_request(
-            "Path is a directory, not a file",
-        ));
-    }
-
-    let size = metadata.len();
-    let preview_metadata = file_preview_metadata(full_path);
+    let project_root = project_root.to_path_buf();
+    let sub_path = sub_path.to_string();
+    let opened = tokio::task::spawn_blocking(move || {
+        crate::authorized_fs::open_authorized_file(
+            &project_root,
+            &sub_path,
+            crate::authorized_fs::SymlinkPolicy::FollowWithinRoot,
+        )
+    })
+    .await
+    .map_err(|error| {
+        ProjectFsError::internal(format!("Failed to join authorized file open: {error}"))
+    })??;
+    let size = opened.metadata().len();
+    let preview_metadata = file_preview_metadata(opened.resolved_path());
     let mime_type = preview_metadata.mime_type_string();
+    let file = tokio::fs::File::from_std(opened.into_file());
     match preview_metadata.preview_type {
         ProjectFilePreviewType::Text => {
             if size > MAX_INLINE_PREVIEW_SIZE {
@@ -406,7 +431,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
                     size,
                 });
             }
-            let bytes = read_file_bytes(full_path).await?;
+            let bytes = read_file_bytes(file).await?;
             let content = String::from_utf8(bytes).map_err(|error| {
                 ProjectFsError::bad_request(format!("File is not valid UTF-8: {error}"))
             })?;
@@ -418,7 +443,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
             })
         }
         ProjectFilePreviewType::Image => {
-            let bytes = read_file_bytes(full_path).await?;
+            let bytes = read_file_bytes(file).await?;
             use base64::Engine;
             Ok(ProjectFileContent {
                 r#type: "image".to_string(),
@@ -437,7 +462,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
                 });
             }
 
-            let bytes = read_file_bytes(full_path).await?;
+            let bytes = read_file_bytes(file).await?;
             use base64::Engine;
             Ok(ProjectFileContent {
                 r#type: "video".to_string(),
@@ -448,7 +473,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
         }
         ProjectFilePreviewType::Binary => {
             if size > MAX_INLINE_PREVIEW_SIZE {
-                let sample = read_file_sample(full_path, CONTENT_SAMPLE_SIZE).await?;
+                let sample = read_file_sample(file, CONTENT_SAMPLE_SIZE).await?;
                 let is_text = is_utf8_text_sample(&sample);
                 return Ok(ProjectFileContent {
                     r#type: if is_text { "large-file" } else { "binary" }.to_string(),
@@ -462,7 +487,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
                 });
             }
 
-            let bytes = read_file_bytes(full_path).await?;
+            let bytes = read_file_bytes(file).await?;
             let content = decode_text_content(bytes);
             let Some(content) = content else {
                 return Ok(ProjectFileContent {
@@ -603,7 +628,9 @@ mod tests {
             .await
             .expect("video fixture");
 
-        let preview = read_file_preview(&video_path).await.expect("video preview");
+        let preview = read_file_preview(temp_dir.path(), "clip.mp4")
+            .await
+            .expect("video preview");
 
         assert_eq!(preview.r#type, "video");
         assert_eq!(preview.content, "AAECAw==");
@@ -622,7 +649,7 @@ mod tests {
             .await
             .expect("oversized video fixture");
 
-        let preview = read_file_preview(&video_path)
+        let preview = read_file_preview(temp_dir.path(), "clip.webm")
             .await
             .expect("large video metadata");
 
@@ -640,7 +667,7 @@ mod tests {
             .await
             .expect("LICENSE fixture");
 
-        let preview = read_file_preview(&license_path)
+        let preview = read_file_preview(temp_dir.path(), "LICENSE")
             .await
             .expect("extensionless text preview");
 
@@ -658,7 +685,7 @@ mod tests {
             .await
             .expect("large text fixture");
 
-        let preview = read_file_preview(&large_text_path)
+        let preview = read_file_preview(temp_dir.path(), "NOTICE")
             .await
             .expect("large extensionless text preview metadata");
 
@@ -675,7 +702,7 @@ mod tests {
             .await
             .expect("binary fixture");
 
-        let preview = read_file_preview(&binary_path)
+        let preview = read_file_preview(temp_dir.path(), "artifact")
             .await
             .expect("binary preview metadata");
 
