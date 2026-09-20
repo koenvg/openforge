@@ -106,7 +106,7 @@ The system SHALL bound parser state, pending discovery work, request concurrency
 
 ### Requirement: Slower reconciliation supplements local signals
 
-The system SHALL retain automatic task-link reconciliation with a 15-minute due interval, independent of the existing global review-list refresh cadence. It SHALL perform an initial reconciliation on the first eligible startup cycle, preserve existing focus and rate-limit gates for periodic work, and allow explicit manual synchronization to request reconciliation without waiting for the interval. Existing task-ID matching precedence for recovery SHALL remain branch, then title, then body, with ambiguous matches rejected.
+The system SHALL retain automatic task-link reconciliation with a 5-minute due interval, independent of the existing global review-list refresh cadence. It SHALL perform an initial reconciliation on the first eligible startup cycle, preserve existing focus and rate-limit gates for periodic work, and allow explicit manual synchronization to request reconciliation without waiting for the interval. Existing task-ID matching precedence for recovery SHALL remain branch, then title, then body, with ambiguous matches rejected.
 
 #### Scenario: PR is created outside the observed terminal
 - **WHEN** an authored PR has an unambiguous task reference but no local signal was observed
@@ -118,7 +118,7 @@ The system SHALL retain automatic task-link reconciliation with a 15-minute due 
 
 #### Scenario: App restarts or user requests synchronization
 - **WHEN** the first eligible startup cycle runs or the user requests manual GitHub synchronization
-- **THEN** reconciliation is requested without waiting for the 15-minute background interval
+- **THEN** reconciliation is requested without waiting for the 5-minute background interval
 
 ### Requirement: Remote PR status polling remains intact
 

@@ -63,6 +63,7 @@ pub(super) enum SyncOpenPrsError {
     GitHub(crate::github_client::GitHubError),
     Db(String),
     Clock(crate::unix_timestamp::UnixTimestampError),
+    IncompleteSearch,
 }
 
 impl SyncOpenPrsError {
@@ -84,6 +85,7 @@ impl SyncOpenPrsError {
             }
             Self::Db(_) => "database error".to_string(),
             Self::Clock(_) => "clock error".to_string(),
+            Self::IncompleteSearch => "incomplete authored PR details".to_string(),
         };
 
         format!("phase {phase}: {summary}")
@@ -96,6 +98,7 @@ impl fmt::Display for SyncOpenPrsError {
             Self::Db(message) => f.write_str(message),
             Self::GitHub(error) => write!(f, "{}", error),
             Self::Clock(error) => write!(f, "clock error: {}", error),
+            Self::IncompleteSearch => f.write_str("incomplete authored PR details"),
         }
     }
 }
@@ -166,20 +169,33 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     Ok(updated)
 }
 
+#[derive(Default)]
+pub(super) struct AuthoredPrSnapshot {
+    prs: Vec<crate::github_client::SearchPrResult>,
+    all_search_ids: Vec<i64>,
+}
+
 pub(super) async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     github_token: &str,
-) -> Result<usize, SyncOpenPrsError> {
+    events: &GitHubEventTarget,
+) -> Result<(usize, AuthoredPrSnapshot), SyncOpenPrsError> {
     let username = match read_or_fetch_github_username(github_client, db, github_token).await? {
         Some(username) => username,
-        None => return Ok(0),
+        None => return Ok((0, AuthoredPrSnapshot::default())),
     };
 
     let (github_prs, all_search_ids) = github_client
         .search_authored_prs(&username, github_token)
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
+
+    // A successful search can still contain failed detail lookups. Do not mark
+    // recovery successful when the complete search identifies missing results.
+    if !all_search_ids.is_empty() && github_prs.len() != all_search_ids.len() {
+        return Err(SyncOpenPrsError::IncompleteSearch);
+    }
 
     let task_ids = {
         let db_lock = acquire_db(db);
@@ -227,6 +243,14 @@ pub(super) async fn sync_authored_task_prs(
                         SyncOpenPrsError::Db(format!("Failed to update PR mergeability: {}", e))
                     })?;
                 synced += 1;
+                if outcome == crate::db::AutomaticAssociation::Created {
+                    events.emit(
+                        "task-pull-request-updated",
+                        serde_json::json!({
+                            "task_id": task_id, "pr_id": pr.id, "action": "linked"
+                        }),
+                    );
+                }
             }
         }
     }
@@ -235,7 +259,13 @@ pub(super) async fn sync_authored_task_prs(
         reconcile_stale_authored_task_prs(github_client, db, github_token, &all_search_ids).await?;
     }
 
-    Ok(synced)
+    Ok((
+        synced,
+        AuthoredPrSnapshot {
+            prs: github_prs,
+            all_search_ids,
+        },
+    ))
 }
 
 pub(super) async fn read_or_fetch_github_username(
@@ -401,6 +431,30 @@ pub(super) async fn poll_authored_prs(
         .search_authored_prs(&username, github_token)
         .await
         .map_err(PollPhaseError::GitHub)?;
+    poll_authored_prs_from_snapshot(
+        github_client,
+        db,
+        events,
+        github_token,
+        AuthoredPrSnapshot {
+            prs,
+            all_search_ids,
+        },
+    )
+    .await
+}
+
+pub(super) async fn poll_authored_prs_from_snapshot(
+    github_client: &GitHubClient,
+    db: &Mutex<Database>,
+    events: &GitHubEventTarget,
+    github_token: &str,
+    snapshot: AuthoredPrSnapshot,
+) -> Result<(), PollPhaseError> {
+    let AuthoredPrSnapshot {
+        prs,
+        all_search_ids,
+    } = snapshot;
     let stale_policy = if !all_search_ids.is_empty() || prs.is_empty() {
         AuthoredPrStalePolicy::DeleteMissing(&all_search_ids)
     } else {

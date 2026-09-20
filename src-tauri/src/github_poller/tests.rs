@@ -104,6 +104,7 @@ mod persistence_tests;
 mod poll_execution_tests;
 mod pr_execution_tests;
 mod pr_readiness_tests;
+mod recovery_tests;
 mod review_sync_tests;
 mod scheduling_tests;
 mod sync_logging_tests;
