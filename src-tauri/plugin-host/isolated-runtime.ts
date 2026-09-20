@@ -83,7 +83,8 @@ export function isPluginBackendWorker(): boolean {
 }
 
 export function startPluginBackendWorker(createRuntime: (hostCallbacks: HostCallbackHandler) => WorkerRuntime): void {
-  if (!parentPort) throw new Error('Plugin backend worker requires a parent message port')
+  const workerParentPort = parentPort
+  if (!workerParentPort) throw new Error('Plugin backend worker requires a parent message port')
 
   let callbackSequence = 0
   const pendingCallbacks = new Map<number, PendingCallback>()
@@ -91,7 +92,7 @@ export function startPluginBackendWorker(createRuntime: (hostCallbacks: HostCall
     const callbackId = ++callbackSequence
     return new Promise((resolve, reject) => {
       const onAbort = () => {
-        parentPort.postMessage({ type: 'host-callback-cancel', callbackId } satisfies ParentCallbackCancelMessage)
+        workerParentPort.postMessage({ type: 'host-callback-cancel', callbackId } satisfies ParentCallbackCancelMessage)
         pendingCallbacks.delete(callbackId)
         reject(options?.signal?.reason instanceof Error ? options.signal.reason : new Error('Plugin host callback aborted'))
       }
@@ -101,12 +102,12 @@ export function startPluginBackendWorker(createRuntime: (hostCallbacks: HostCall
         reject,
         removeAbortListener: () => options?.signal?.removeEventListener('abort', onAbort),
       })
-      parentPort.postMessage({ type: 'host-callback', callbackId, request } satisfies WorkerCallbackMessage)
+      workerParentPort.postMessage({ type: 'host-callback', callbackId, request } satisfies WorkerCallbackMessage)
     })
   }
   const runtime = createRuntime(hostCallbacks)
 
-  parentPort.on('message', (message: ParentMessage) => {
+  workerParentPort.on('message', (message: ParentMessage) => {
     if (message.type === 'host-callback-result') {
       const pending = pendingCallbacks.get(message.callbackId)
       if (!pending) return
@@ -118,8 +119,8 @@ export function startPluginBackendWorker(createRuntime: (hostCallbacks: HostCall
     }
     if (message.type !== 'rpc') return
     void runtime.handleJsonRpcRequest(message.request).then(
-      response => parentPort.postMessage({ type: 'rpc-result', requestId: message.requestId, response } satisfies WorkerResponseMessage),
-      error => parentPort.postMessage({
+      response => workerParentPort.postMessage({ type: 'rpc-result', requestId: message.requestId, response } satisfies WorkerResponseMessage),
+      error => workerParentPort.postMessage({
         type: 'rpc-result',
         requestId: message.requestId,
         response: errorResponse(message.request, error instanceof Error ? error.message : String(error)),
@@ -145,7 +146,7 @@ class PluginWorkerHandle {
       workerData: { role: PLUGIN_WORKER_ROLE },
     })
     this.worker.on('message', (message: WorkerMessage) => this.handleMessage(message))
-    this.worker.on('error', error => this.stop(error))
+    this.worker.on('error', error => this.stop(error instanceof Error ? error : new Error(String(error))))
     this.worker.on('exit', code => this.stop(new Error(`Plugin ${pluginId} backend worker exited with code ${code}`)))
   }
 

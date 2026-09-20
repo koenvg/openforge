@@ -27,6 +27,17 @@ describe('package build scripts', () => {
     )
   })
 
+  it('strictly type-checks the plugin host in CI', async () => {
+    const packageJson = await readJson('package.json')
+    const pluginHostConfig = await readJson('tsconfig.plugin-host.json')
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+
+    expect(packageJson.scripts['plugin-host:typecheck']).toBe('tsc -p tsconfig.plugin-host.json')
+    expect(pluginHostConfig.compilerOptions.strict).toBe(true)
+    expect(pluginHostConfig.files).toEqual(['src-tauri/plugin-host/index.ts'])
+    expect(ciWorkflow).toContain('pnpm plugin-host:typecheck')
+  })
+
   it('builds and tests every publishable workspace package', async () => {
     const rootPackage = await readJson('package.json')
     const publishablePackages = readWorkspacePackages(repoRoot).filter(({ manifest }) =>

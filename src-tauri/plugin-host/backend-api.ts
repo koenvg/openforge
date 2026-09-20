@@ -545,11 +545,11 @@ export function createBackendApi(
       },
     },
     projectConfig: {
-      async get<T extends JsonValue = JsonValue>(key: string, projectId: string | undefined = state.projectId): Promise<T | null> {
-        return await hostCallback<T | null>('openforge.projectConfig.get', { key, projectId: projectId ?? null })
+      async get<T extends JsonValue = JsonValue>(key: string, projectId?: string): Promise<T | null> {
+        return await hostCallback<T | null>('openforge.projectConfig.get', { key, projectId: projectId ?? state.projectId })
       },
-      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId: string | undefined = state.projectId): Promise<void> {
-        await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId: projectId ?? null })
+      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId?: string): Promise<void> {
+        await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId: projectId ?? state.projectId })
       },
     },
     backend: {
