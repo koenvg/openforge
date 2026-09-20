@@ -23,7 +23,7 @@
 ## 5. Live output and completion adapters
 
 - [x] 5.1 Wire accepted local PTY output in `pty_manager/events.rs` and session registration to the shared detector/discovery interface; verify current task-owned output triggers discovery while stale, replayed, unattributed, and detached-view cases behave as specified.
-- [ ] 5.2 Wire current daemon output in `pty_manager/daemon_transport.rs` through the same interface, resetting parser state on gaps and replacement without replay scanning; verify daemon output tests cover reconnect, ordering, hidden views, and a nonblocking saturated discovery queue.
+- [x] 5.2 Wire current daemon output in `pty_manager/daemon_transport.rs` through the same interface, resetting parser state on gaps and replacement without replay scanning; verify daemon output tests cover reconnect, ordering, hidden views, and a nonblocking saturated discovery queue.
 - [x] 5.3 Wire accepted normalized task-agent completion and successful current task-agent exit into the coordinator, including renewed-working cancellation; verify lifecycle tests cover OpenCode and another provider, stale/duplicate notifications, waiting-for-input, review sessions, and hook/exit deduplication.
 
 ## 6. Immediate UI delivery

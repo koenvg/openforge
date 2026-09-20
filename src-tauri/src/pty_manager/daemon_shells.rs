@@ -109,6 +109,13 @@ impl DaemonShells {
         ))
     }
 
+    pub(super) fn configure_pr_discovery(
+        &self,
+        discovery: crate::github_runtime::task_pr_discovery::Discovery,
+    ) {
+        self.transport.configure_pr_discovery(discovery);
+    }
+
     pub(crate) fn publisher(&self) -> RuntimeEventPublisher {
         self.transport.publisher()
     }

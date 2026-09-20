@@ -17,6 +17,7 @@ cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::daemon_shel
 cargo(['test', '--manifest-path', layout.manifestPath, 'app_invoke::tests::daemon_', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'app_invoke::tests::lifecycle::daemon_pi', '--', '--ignored'])
 process.env.OPENFORGE_TEST_DAEMON ??= layout.sessionCrates.daemon.binaryPath
+cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::daemon_transport::tests::', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'plugin_host::tests::shell_callbacks::', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'companion_gateway::terminal_tests::daemon::', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, '--test', 'session_daemon_sidecar', '--', '--ignored', '--nocapture'])

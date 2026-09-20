@@ -39,6 +39,8 @@ Resolve ownership through existing task/session registration. An agent session, 
 
 Maintain parser state per session key and PTY instance. For daemon delivery, also track contiguous output sequence. Reset on gaps, replacement, disconnect, and teardown. Do not feed snapshots or historical replay. A daemon continues without the sidecar while the app is closed, but missed output is recovered through reconciliation rather than replay scanning.
 
+Daemon inventory protocol v3 includes the immutable canonical spawn directory alongside `TerminalOwner` and the full PTY identity. The Sidecar registers this ownership with the shared discovery module and retains its existing worktree guard. Older checkpoints may omit the directory; those sessions remain recoverable but do not trigger PR discovery. On a transport disconnect, the adapter invalidates pending origins and resumes from a fresh inventory cursor rather than inspecting missed output.
+
 Parsing defaults are a 2 KiB candidate/carry limit and a bounded cache of 128 recently seen canonical PR identities per session. Strip SGR color sequences, recognize ordinary URL delimiters and trailing punctuation, and reject candidates containing cursor controls or unsupported escapes. Do not finalize a number at an arbitrary chunk boundary. Oversized or malformed candidates are discarded. Scanning is linear in incoming bytes and stores no transcript.
 
 Alternative rejected: a renderer subscription or per-component parser, because attachment lifetime and hidden-view recovery deliberately differ from session lifetime.

@@ -26,6 +26,8 @@ Frames are length-prefixed JSON with an explicit protocol version. Readers check
 
 Protocol v2 adds the authoritative terminal owner to each inventory session. A v1 peer is rejected rather than guessing whether a session is an agent or shell. Plugin and Companion consumers use that owner to enforce their existing terminal access boundaries. See [plugin and Companion terminal access](session-daemon-consumers.md).
 
+Protocol v3 also includes the immutable canonical spawn directory. Older peers are rejected explicitly. Older retained checkpoints without this directory can still restore terminals, but are ineligible for event-driven PR discovery.
+
 A connect acquires a new controller generation. Older controllers cannot read inventory, recover, write, resize or stop. Spawn and I/O retries retain their operation ID across reconnect; changed requests under the same ID are refused. The shared ledger retains validated requests and outcomes within its memory budget; command environments are not logged or returned as diagnostics. Admitted I/O advances its sequence even after an unknown outcome, and input is never automatically replayed under a new operation ID.
 
 Controller, ownership inventory and event cursor reconciliation run in one daemon dispatch. PTY readers publish authority output concurrently. Consumers replay events after the reconciled cursor and reconcile again on a gap. Recovery includes the unchanged PTY identity, authority watermark, portable VT, compatibility replay and parser continuation. Its event cursor precedes the snapshot barrier. Consumers discard output at or below the recovered watermark. The bridge discards a discontinuous journal suffix and requests existing transport reconciliation rather than forwarding it after an exit.
@@ -33,6 +35,12 @@ Controller, ownership inventory and event cursor reconciliation run in one daemo
 Retained exits are not live sessions. The bridge reattaches a live selected key instead of spawning another shell. A retained exited key is refused by spawn; creating another indexed tab is a separate operation.
 
 Root exits are observed independently of reader EOF. Output drains separately for at most 250 ms before the reader is stopped and crosses the authority barrier. Only then is a final recovery record retained and the exit event published. Exited sessions remain readable with `isLive: false`, including when they exit while the Sidecar is absent. Failure to retain recovery is explicit and does not turn an exited root into a live one.
+
+## Immediate task PR linking
+
+Current task-owned daemon output feeds the same bounded URL detector and GitHub verifier as local terminals. Linking does not require a visible terminal or app focus. The verifier checks the task's registered workspace, GitHub repository and branch before persisting a link and publishing the existing task PR update event.
+
+Discovery tracks daemon lifetime, PTY instance and output sequence. Duplicate output is ignored; gaps, disconnects and replacements discard incomplete URLs. Reconnect starts at current inventory, never scans snapshots or retained output, and leaves missed activity to existing reconciliation. GitHub work uses the shared nonblocking queue, so slow verification and queue overflow cannot stall terminal output. Reconciliation cadence is unchanged.
 
 ## Budgets and current limits
 

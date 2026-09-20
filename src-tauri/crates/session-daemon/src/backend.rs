@@ -202,12 +202,14 @@ impl HostBackend for Backend {
             .agent_runtime
             .prepare(&mut prepared, pty.clone())
             .map_err(HostError::from)?;
+        let cwd = request.command.cwd.canonicalize().ok();
         let process = Process::spawn(&prepared, pty.clone(), Arc::clone(&self.journal))
             .map_err(HostError::from)?;
         let metadata = Session {
             pty,
             session_key: key,
             owner: request.owner.clone(),
+            cwd,
             pid: process.pid(),
             exit_code: None,
             next_io_sequence: Some(1),
