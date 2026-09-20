@@ -7,6 +7,10 @@ use super::super::Database;
 use super::rows::{read_pr_comment_row, read_pr_row, PrCommentRow, PrRow};
 use super::UNADDRESSED_COMMENT_COUNT_SQL;
 
+pub(super) const PULL_REQUEST_BY_REPOSITORY_NUMBER_CLAUSE: &str =
+    "WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3
+     ORDER BY updated_at DESC LIMIT 1";
+
 impl Database {
     /// Get all open pull requests from the database
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
@@ -70,7 +74,7 @@ impl Database {
     ) -> Result<Option<PrRow>> {
         Ok(self
             .query_pull_requests(
-                "WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 ORDER BY updated_at DESC LIMIT 1",
+                PULL_REQUEST_BY_REPOSITORY_NUMBER_CLAUSE,
                 rusqlite::params![owner, repo, number],
             )?
             .into_iter()

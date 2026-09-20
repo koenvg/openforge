@@ -38,6 +38,67 @@ fn pull_requests_can_be_queried_for_one_task() {
 }
 
 #[test]
+fn repository_number_lookup_uses_the_case_sensitive_index() {
+    let (db, _temp_dir) = make_test_db("pr_repository_number_query_plan");
+    let task = db
+        .create_task("Linked task", "doing", None, None, None)
+        .expect("create task");
+    for (id, owner, repo, number, updated_at) in [
+        (101_i64, "owner", "repo", 77_i64, 100_i64),
+        (102_i64, "Owner", "repo", 77_i64, 200_i64),
+        (103_i64, "other", "repo", 77_i64, 300_i64),
+        (104_i64, "owner", "other", 77_i64, 400_i64),
+        (105_i64, "owner", "repo", 78_i64, 500_i64),
+    ] {
+        db.insert_pull_request_with_number(
+            id,
+            number,
+            &task.id,
+            owner,
+            repo,
+            "Pull request",
+            "https://github.com/owner/repo/pull/77",
+            "open",
+            1,
+            updated_at,
+            false,
+        )
+        .expect("insert pull request");
+    }
+
+    let pull_request = db
+        .get_pull_request_by_repository_number("owner", "repo", 77)
+        .expect("query pull request")
+        .expect("find exact repository identity");
+    assert_eq!(pull_request.id, 101);
+
+    let connection = db.connection();
+    let conn = connection.lock().expect("lock connection");
+    let query = format!(
+        "EXPLAIN QUERY PLAN SELECT id FROM pull_requests {}",
+        crate::db::pull_requests::queries::PULL_REQUEST_BY_REPOSITORY_NUMBER_CLAUSE
+    );
+    let details = conn
+        .prepare(&query)
+        .expect("prepare repository/number query plan")
+        .query_map(rusqlite::params!["owner", "repo", 77_i64], |row| {
+            row.get::<_, String>(3)
+        })
+        .expect("query repository/number plan")
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .expect("read repository/number plan");
+    let plan = details.join("\n");
+    assert!(
+        plan.contains("idx_pull_requests_repository_number"),
+        "query plan should use the repository/number index:\n{plan}"
+    );
+    assert!(
+        !plan.contains("USE TEMP B-TREE FOR ORDER BY"),
+        "query plan should use index order for duplicate rows:\n{plan}"
+    );
+}
+
+#[test]
 fn test_get_pr_comments_by_ids() {
     let (db, _temp_dir) = make_test_db("pr_comments_by_ids");
     insert_test_task(&db);
