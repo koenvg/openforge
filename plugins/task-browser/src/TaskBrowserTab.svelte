@@ -258,13 +258,13 @@
 
 <svelte:window onkeydown={handleDevToolsShortcut} />
 
-<div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-of-surface">
+<div data-task-browser-root class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-of-surface">
   <form
     data-testid="browser-navigation-toolbar"
-    class="flex min-h-[var(--of-control-height-touch)] shrink-0 items-center gap-1.5 border-b border-of-border bg-of-surface px-2"
+    class="browser-navigation-toolbar min-h-[var(--of-control-height-touch)] shrink-0 border-b border-of-border bg-of-surface px-2"
     onsubmit={submitAddress}
   >
-    <div class="flex shrink-0 items-center gap-0.5">
+    <div class="browser-navigation-controls flex shrink-0 items-center gap-0.5">
       <IconButton
         tooltipSide="bottom"
         label="Go back"
@@ -378,6 +378,55 @@
 </div>
 
 <style>
+  [data-task-browser-root] {
+    container: task-browser / inline-size;
+  }
+
+  .browser-navigation-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--of-space2);
+  }
+
+  @container task-browser (max-width: 68rem) {
+    .browser-navigation-toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(10rem, 1fr) auto auto;
+      padding-block: var(--of-space2);
+    }
+
+    .browser-navigation-toolbar :global(.visual-feedback-actions) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @container task-browser (max-width: 26rem) {
+    .browser-navigation-toolbar {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .browser-navigation-controls {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .browser-address-input {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .browser-address-input + :global(button) {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .browser-navigation-toolbar > :global(button[aria-pressed]) {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+  }
+
   .browser-address-input {
     box-sizing: border-box;
     min-height: var(--of-control-height);
