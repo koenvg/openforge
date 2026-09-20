@@ -260,6 +260,7 @@ describe('Electron Rust sidecar supervision', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:17642/app/readiness', {
       headers: { Authorization: 'Bearer token-123' },
+      signal: expect.any(AbortSignal),
     })
     expect(eventStream.start).toHaveBeenCalled()
     expect(eventStream.ready).toHaveBeenCalled()
@@ -356,6 +357,26 @@ describe('Electron Rust sidecar supervision', () => {
 
     expect(child.killCalls).toContain('SIGTERM')
   })
+
+  it('bounds a stalled readiness request without waiting for its network promise', async () => {
+    const child = new FakeChild()
+    await expect(startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn: () => child, fetch: () => new Promise(() => {}), sleep: async () => {}, healthTimeoutMs: 10,
+      createEventStream: () => new ScriptedEventStream(),
+    })).rejects.toThrow('sidecar readiness timed out')
+    expect(child.killCalls).toContain('SIGTERM')
+  }, 500)
+
+  it('bounds stalled event readiness and teardown so failed boot can reach recovery', async () => {
+    const child = new FakeChild()
+    await expect(startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn: () => child,
+      fetch: async () => ({ ok: true, json: async () => ({ status: 'ok', events: { available: true } }) }),
+      sleep: async () => {}, healthTimeoutMs: 10,
+      createEventStream: () => ({ start: () => new Promise<void>(() => {}), ready: () => new Promise<void>(() => {}), stop: () => {} }),
+    })).rejects.toThrow('event readiness timed out')
+    expect(child.killCalls).toContain('SIGTERM')
+  }, 500)
 
   it('reports initial app event stream failure before cleaning up sidecar readiness', async () => {
     class FailingEventStream extends ScriptedEventStream {

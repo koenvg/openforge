@@ -34,9 +34,19 @@ fn local_termination_authenticates_without_sidecar_and_stops_only_selected_insta
         image_protocol: None,
     };
     client.spawn("recovery-shell", &command).unwrap();
+    let rejected = Command::new(executable)
+        .arg("--terminate-sessions")
+        .arg(other_root.path())
+        .arg(client.controller().installation.as_str())
+        .arg(client.controller().lifetime.as_str())
+        .output()
+        .unwrap();
+    assert!(!rejected.status.success());
     let result = Command::new(executable)
         .arg("--terminate-sessions")
         .arg(root.path())
+        .arg(client.controller().installation.as_str())
+        .arg(client.controller().lifetime.as_str())
         .output()
         .unwrap();
     // Always clean up the isolated fixture, including on the red run.
@@ -56,6 +66,27 @@ fn local_termination_authenticates_without_sidecar_and_stops_only_selected_insta
     );
     assert!(survived);
     assert!(terminated);
+    let repeated = Command::new(executable)
+        .arg("--terminate-sessions")
+        .arg(root.path())
+        .arg(client.controller().installation.as_str())
+        .arg(client.controller().lifetime.as_str())
+        .output()
+        .unwrap();
+    assert!(
+        repeated.status.success(),
+        "a retry after lost shutdown acknowledgement must confirm the empty runtime"
+    );
+    let status = Command::new(executable)
+        .arg("--recovery-status")
+        .arg(root.path())
+        .arg(client.controller().installation.as_str())
+        .arg(client.controller().lifetime.as_str())
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    let status: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+    assert_eq!(status["state"], "cold-process-loss");
 }
 
 #[test]
@@ -171,4 +202,52 @@ fn launch_retry_does_not_replace_a_live_daemons_missing_credentials() {
         !recreated,
         "missing authentication requires reauthentication, not a new identity"
     );
+}
+
+#[test]
+#[ignore = "subprocess helper for launcher-loss fault injection"]
+fn launcher_exits_before_daemon_ready() {
+    let Some(root) = std::env::var_os("OF_RECOVERY_TEST_ROOT") else {
+        return;
+    };
+    let path = Path::new(&root);
+    assert!(Client::launch(&path.join("delayed-daemon"), path).is_err());
+}
+
+#[test]
+fn pending_launch_stays_singleton_after_launcher_process_loss() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+    let root = tempfile::Builder::new()
+        .prefix("of-launch-loss-")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let executable = env!("CARGO_BIN_EXE_openforge-session-daemon");
+    let delayed = root.path().join("delayed-daemon");
+    std::fs::write(
+        &delayed,
+        format!("#!/bin/sh\n/bin/sleep 8\nexec '{executable}' \"$@\"\n"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&delayed, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let launcher = Command::new(std::env::current_exe().unwrap())
+        .args(["--ignored", "--exact", "launcher_exits_before_daemon_ready"])
+        .env("OF_RECOVERY_TEST_ROOT", root.path())
+        .output()
+        .unwrap();
+    let retry = Client::launch(&delayed, root.path());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let attached = loop {
+        if let Ok(client) = Client::connect(root.path()) {
+            break client;
+        }
+        assert!(Instant::now() < deadline, "delayed host failed to start");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    attached.shutdown_empty().unwrap();
+    assert!(launcher.status.success());
+    assert!(matches!(
+        retry,
+        Err(openforge_session_protocol::Error::AlreadyRunning)
+    ));
 }

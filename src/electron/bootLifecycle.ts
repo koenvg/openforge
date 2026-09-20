@@ -1,4 +1,5 @@
 import { createFailureReport, reportFailure } from './failureReporting.js'
+import type { RecoveryFailure } from './restartOperation.js'
 import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown.js'
 import {
   RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
@@ -57,6 +58,7 @@ export interface BootLifecycleAdapter {
   registerPluginProtocolHandler(sidecarConfig: SidecarLaunchConfig | null): void
   applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void
   createMainWindow(): Promise<unknown>
+  recoverRestart?(failure: RecoveryFailure): Promise<boolean>
   quit(): void
 }
 
@@ -69,6 +71,7 @@ export interface BootLifecycleOptions {
 }
 
 export interface BootResult {
+  recovery?: boolean
   sidecar: SidecarReadinessHandle | null
   mainWindow: unknown | null
   degradations: BootDegradation[]
@@ -103,6 +106,7 @@ export async function bootOpenForgeDesktop(
   let sidecar: SidecarReadinessHandle | null = null
   let mainWindow: unknown | null = null
 
+  let recoveryFailure: RecoveryFailure = 'activation-failed'
   const shutdownCoordinator = new ShutdownCoordinator({
     adapters: [
       new RustSidecarShutdownAdapter({
@@ -173,7 +177,7 @@ export async function bootOpenForgeDesktop(
           severity: policy.sidecarFailure === 'fail' ? 'fatal' : 'error',
           cause: error,
           userMessage: 'OpenForge backend did not become ready.',
-          remediation: 'Stop stale OpenForge processes and launch again. If the failure repeats, rebuild the Rust sidecar.',
+          remediation: 'Use restart recovery to retry attachment or explicitly stop verified sessions. Do not kill processes based on their names.',
           decision: policy.sidecarFailure === 'fail' ? 'quit' : 'continue',
         }))
         if (policy.sidecarFailure === 'fail') throw error
@@ -185,6 +189,7 @@ export async function bootOpenForgeDesktop(
     adapter.registerPluginProtocolHandler(sidecar?.config ?? null)
     adapter.applyRendererCsp(sidecar?.config ?? null)
 
+    recoveryFailure = 'interface-restoration-incomplete'
     try {
       mainWindow = await adapter.createMainWindow()
     } catch (error) {
@@ -201,6 +206,9 @@ export async function bootOpenForgeDesktop(
     return { sidecar, mainWindow, degradations }
   } catch (error) {
     await cleanupStartedResources()
+    if (await adapter.recoverRestart?.(recoveryFailure)) {
+      return { recovery: true, sidecar: null, mainWindow: null, degradations }
+    }
     throw error
   }
 }

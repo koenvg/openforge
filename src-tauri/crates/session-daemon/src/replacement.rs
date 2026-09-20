@@ -446,9 +446,22 @@ impl Activation {
 pub(crate) fn run() -> Result<(), Error> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     match args.first().and_then(|argument| argument.to_str()) {
-        Some("--terminate-sessions") if args.len() == 2 => {
-            let client = openforge_session_client::Client::connect(std::path::Path::new(&args[1]))?;
-            client.terminate_owned_sessions(std::time::Duration::from_secs(3))
+        Some(mode @ ("--terminate-sessions" | "--recovery-status"))
+            if args.len() == 2 || args.len() == 4 =>
+        {
+            let expected = if args.len() == 4 {
+                Some((
+                    args[2].to_str().ok_or(Error::InvalidRequest)?,
+                    args[3].to_str().ok_or(Error::InvalidRequest)?,
+                ))
+            } else {
+                None
+            };
+            crate::recovery_cli::run(
+                std::path::Path::new(&args[1]),
+                expected,
+                mode == "--terminate-sessions",
+            )
         }
         Some("--check-image") if args.len() == 1 => probe::describe(None),
         Some("--check-state") if args.len() == 1 => {

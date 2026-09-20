@@ -8,6 +8,7 @@ mod replacement;
 pub mod runtime;
 use openforge_session_protocol::*;
 use runtime::{check_peer, io_error, RuntimeDirectory};
+use std::os::fd::AsRawFd;
 use std::os::unix::{net::UnixStream, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -51,9 +52,18 @@ impl Client {
             .stdin(Stdio::null())
             .stdout(runtime.log()?)
             .stderr(runtime.log()?);
+        let launch_fd = launch.as_raw_fd();
+        command.env("OPENFORGE_DAEMON_LAUNCH_FD", launch_fd.to_string());
         // SAFETY: setsid is async-signal-safe and uses no Rust state in the child.
         unsafe {
-            command.pre_exec(|| {
+            command.pre_exec(move || {
+                // Keep singleton launch authority in the child even if this launcher exits.
+                let flags = libc::fcntl(launch_fd, libc::F_GETFD);
+                if flags == -1
+                    || libc::fcntl(launch_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
                 if libc::setsid() == -1 {
                     return Err(std::io::Error::last_os_error());
                 }

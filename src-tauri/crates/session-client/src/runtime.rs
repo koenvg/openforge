@@ -166,6 +166,44 @@ impl RuntimeDirectory {
         Ok(file)
     }
 
+    /// Releases inherited launch authority after the caller holds daemon ownership.
+    /// # Errors
+    /// Rejects descriptors that do not identify this runtime's private launch lock.
+    /// # Safety
+    /// Call only during single-threaded daemon startup. Any descriptor named by
+    /// OPENFORGE_DAEMON_LAUNCH_FD must be inherited and have no Rust owner.
+    pub unsafe fn release_launch_guard(&self) -> Result<(), Error> {
+        use std::os::fd::{BorrowedFd, FromRawFd};
+        let Some(value) = std::env::var_os("OPENFORGE_DAEMON_LAUNCH_FD") else {
+            return Ok(());
+        };
+        let fd: i32 = value
+            .to_str()
+            .and_then(|value| value.parse().ok())
+            .filter(|fd| *fd >= 3)
+            .ok_or(Error::Unauthorized)?;
+        // SAFETY: fcntl inspects an integer descriptor without dereferencing memory.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } == -1 {
+            return Err(Error::Unauthorized);
+        }
+        let duplicate = {
+            // SAFETY: the dedicated inherited descriptor was checked and stays open for this borrow.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+            File::from(borrowed.try_clone_to_owned().map_err(io_error)?)
+        };
+        let metadata = duplicate.metadata().map_err(io_error)?;
+        let path = self.path.join("launch.lock");
+        check_private(&path, false)?;
+        let expected = fs::symlink_metadata(path).map_err(io_error)?;
+        if metadata.dev() != expected.dev() || metadata.ino() != expected.ino() {
+            return Err(Error::Unauthorized);
+        }
+        // SAFETY: the launcher passed this dedicated descriptor; no Rust owner exists in this image.
+        drop(unsafe { File::from_raw_fd(fd) });
+        std::env::remove_var("OPENFORGE_DAEMON_LAUNCH_FD");
+        Ok(())
+    }
+
     /// # Errors
     /// Refuses sockets not owned by this user in the private runtime.
     pub fn check_socket(&self) -> Result<(), Error> {

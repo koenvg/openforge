@@ -38,6 +38,10 @@ struct Connection {
 }
 
 impl DaemonTransport {
+    pub(super) fn root(&self) -> PathBuf {
+        self.0.root.clone()
+    }
+
     pub(super) fn configure_completion(
         &self,
         discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery,
@@ -235,7 +239,13 @@ impl DaemonTransport {
                 .lock()
                 .map_err(|_| Error::OutcomeUnknown)?;
             if slot.is_none() {
-                let client = Client::launch(&shared.executable, &shared.root)?;
+                let client = if std::env::var_os("OPENFORGE_RESTART_OPERATION").is_some() {
+                    // Recovery only attaches. An unavailable owner is not evidence
+                    // that starting another daemon or agent is safe.
+                    Client::connect(&shared.root)?
+                } else {
+                    Client::launch(&shared.executable, &shared.root)?
+                };
                 let cursor = client.inventory()?.cursor;
                 let mut discovery = DaemonOutput::new(shared.discovery.clone());
                 discovery.resume(cursor);

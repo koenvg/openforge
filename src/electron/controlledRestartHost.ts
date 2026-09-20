@@ -25,6 +25,12 @@ export async function createControlledRestartHost(options: {
   const installationId = createHash('sha256').update(JSON.stringify([options.root, daemonInstallation])).digest('hex')
   const store = new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId)
   const operation = new RestartOperation(join(options.root, 'restart-operation.json'), installationId)
+  const pending = await operation.status()
+  if (!options.operationId && pending?.phase === 'prepared'
+    && initial.controller.generation > pending.controller.generation) {
+    await options.backend?.cancel(pending.operationId)
+    await operation.cancel(pending.operationId)
+  }
   const acknowledged = options.operationId && await store.allWindowsAcknowledged(options.operationId)
   if (options.operationId && (await store.load(options.operationId) || acknowledged)) {
     if (!acknowledged || await operation.shutdownIntent() !== 'quit') await operation.reconnect(options.operationId, initial.controller)
@@ -45,15 +51,17 @@ export async function createControlledRestartHost(options: {
       }
       if (current.hasLegacySessions !== false) throw new Error('Controlled restart cannot preserve legacy processes')
       assertCurrent()
-      await options.backend?.detach(operationId)
+      // Persist authorization before the remote call: a lost acknowledgement
+      // cannot tell us whether the Sidecar has already detached.
       await operation.detach(operationId)
+      await options.backend?.detach(operationId)
       assertCurrent()
       await options.replace(operationId)
     },
     {
       prepare: async operationId => {
         const intent = options.intent ?? 'restart'
-        await operation.prepare(operationId, initial.controller, intent)
+        await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot)
         await options.backend?.prepare(operationId, intent)
       },
       cancel: async operationId => {

@@ -94,3 +94,62 @@ fn authorized_restart_preserves_shell_but_normal_quit_stops_daemon() {
     // SAFETY: signal zero does not modify the fixture process.
     assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
 }
+
+#[test]
+#[ignore = "requires built Session Daemon; run the session-daemon contract command"]
+fn lost_detach_request_can_recover_prepared_sessions_without_respawn() {
+    let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
+    fixture.start("prepared");
+    let instance = fixture.invoke("pty_spawn_shell", json!({
+        "taskId": "T-proof", "terminalIndex": 3, "cwd": fixture.root.path(), "cols": 80, "rows": 24,
+    }));
+    let operation = uuid::Uuid::new_v4().to_string();
+    fixture.invoke(
+        "prepare_app_restart",
+        json!({ "operationId": operation, "intent": "restart" }),
+    );
+    // Simulate a lost detach request and Sidecar failure before its acknowledgement.
+    stop_sidecar(&mut fixture);
+    fixture
+        .provider_env
+        .push(("OPENFORGE_RESTART_OPERATION".into(), operation.clone()));
+    fixture.start("recovered-preparation");
+    let restored = fixture.invoke(
+        "get_pty_buffer",
+        json!({ "shellSessionKey": fixture.shell_key }),
+    );
+    assert_eq!(restored["instanceId"], instance);
+    assert_eq!(restored["isLive"], true);
+    let inventory = fixture.invoke("get_restart_terminal_inventory", json!({}));
+    assert_eq!(
+        inventory["daemonRoot"],
+        fixture.daemon_root().to_str().unwrap()
+    );
+    fixture.invoke("commit_app_restart", json!({ "operationId": operation }));
+    stop_sidecar(&mut fixture);
+}
+
+#[test]
+#[ignore = "requires built Session Daemon; run the session-daemon contract command"]
+fn preparation_never_recreates_missing_live_daemon_credentials() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
+    fixture.start("authentication-loss");
+    fixture.invoke("get_restart_terminal_inventory", json!({}));
+    let path = fixture.daemon_root().join("session-v1/credentials.json");
+    let credentials = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    let operation = uuid::Uuid::new_v4().to_string();
+    let response = fixture.http.post(format!("http://127.0.0.1:{}/app/invoke", fixture.port))
+        .bearer_auth(&fixture.token).json(&json!({ "command": "prepare_app_restart", "payload": { "operationId": operation, "intent": "restart" } }))
+        .send().unwrap();
+    let recreated = path.exists();
+    fs::write(&path, credentials).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    fixture.invoke("cancel_app_restart", json!({ "operationId": operation }));
+    stop_sidecar(&mut fixture);
+    assert!(!response.status().is_success());
+    assert!(!recreated);
+}
