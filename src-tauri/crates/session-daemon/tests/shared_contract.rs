@@ -50,6 +50,24 @@ async fn daemon_satisfies_shared_spawn_retry_contract() {
         fixture.root.path(),
     )
     .await;
+    let inventory = Client::connect(fixture.root.path())
+        .unwrap()
+        .inventory()
+        .unwrap();
+    assert!(!inventory.sessions.is_empty());
+    for session in inventory.sessions {
+        assert_eq!(
+            serde_json::to_value(session).unwrap()["cwd"],
+            fixture
+                .root
+                .path()
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "inventory retains the immutable spawn directory for discovery after reconnect"
+        );
+    }
 }
 
 #[tokio::test]

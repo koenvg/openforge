@@ -1,5 +1,6 @@
 mod clock;
 mod coordinator;
+pub(crate) mod daemon;
 mod detector;
 mod execution;
 mod local;

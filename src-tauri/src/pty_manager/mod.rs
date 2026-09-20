@@ -214,6 +214,9 @@ impl PtyManager {
         &self,
         discovery: crate::github_runtime::task_pr_discovery::Discovery,
     ) {
+        if let Some(daemon) = &self.daemon_shells {
+            daemon.configure_pr_discovery(discovery.clone());
+        }
         self.terminal_sessions.pr_discovery.configure(discovery);
         if let Some(bridge) = &self.daemon_shells {
             bridge.configure_completion(self.terminal_sessions.pr_discovery.clone());

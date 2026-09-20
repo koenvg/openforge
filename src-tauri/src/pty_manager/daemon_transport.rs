@@ -1,6 +1,7 @@
 //! Shared controller and event lifetime for selected daemon sessions.
 //! Dropping the last handle stops polling, never the daemon or its PTYs.
 use crate::app_events::RuntimeEventPublisher;
+use crate::github_runtime::task_pr_discovery::{daemon::DaemonOutput, Discovery, LocalDiscovery};
 use base64::Engine;
 use openforge_session_client::Client;
 use openforge_session_protocol::{Error, Event};
@@ -22,13 +23,16 @@ struct Shared {
     executable: PathBuf,
     selects: Box<dyn Fn(&str) -> bool + Send + Sync>,
     connection: Mutex<Option<Connection>>,
-    discovery: Mutex<Option<crate::github_runtime::task_pr_discovery::LocalDiscovery>>,
+    completion: Mutex<Option<LocalDiscovery>>,
+    discovery: LocalDiscovery,
 }
 
 struct Connection {
     client: Client,
     cursor: u64,
     publisher: RuntimeEventPublisher,
+    discovery: DaemonOutput,
+    disconnected: bool,
 }
 
 impl DaemonTransport {
@@ -36,13 +40,13 @@ impl DaemonTransport {
         &self,
         discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery,
     ) {
-        *self.0.discovery.lock().unwrap_or_else(|p| p.into_inner()) = Some(discovery);
+        *self.0.completion.lock().unwrap_or_else(|p| p.into_inner()) = Some(discovery);
     }
     pub(super) fn completion(
         &self,
     ) -> Option<crate::github_runtime::task_pr_discovery::LocalDiscovery> {
         self.0
-            .discovery
+            .completion
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone()
@@ -58,8 +62,13 @@ impl DaemonTransport {
             executable,
             selects: Box::new(selects),
             connection: Mutex::new(None),
-            discovery: Mutex::new(None),
+            completion: Mutex::new(None),
+            discovery: LocalDiscovery::default(),
         }))
+    }
+
+    pub(super) fn configure_pr_discovery(&self, discovery: Discovery) {
+        self.0.discovery.configure(discovery);
     }
 
     pub(super) fn publisher(&self) -> RuntimeEventPublisher {
@@ -89,10 +98,14 @@ impl DaemonTransport {
             if slot.is_none() {
                 let client = Client::launch(&shared.executable, &shared.root)?;
                 let cursor = client.inventory()?.cursor;
+                let mut discovery = DaemonOutput::new(shared.discovery.clone());
+                discovery.resume(cursor);
                 *slot = Some(Connection {
                     client,
                     cursor,
                     publisher: publisher.clone(),
+                    discovery,
+                    disconnected: false,
                 });
                 let weak = Arc::downgrade(&shared);
                 std::thread::Builder::new()
@@ -145,14 +158,33 @@ fn pump(shared: &Shared) -> Result<(), Error> {
     let Some(connection) = slot.as_mut() else {
         return Ok(());
     };
+    let result = pump_connection(shared, connection);
+    if result.is_err() {
+        connection.discovery.disconnect();
+        connection.disconnected = true;
+    }
+    result
+}
+
+fn pump_connection(shared: &Shared, connection: &mut Connection) -> Result<(), Error> {
     let batch = connection.client.events(connection.cursor)?;
-    let current: Vec<_> = connection
-        .client
-        .inventory()?
+    let inventory = connection.client.inventory()?;
+    if connection.disconnected {
+        // Resume from current authority, not output accumulated while disconnected.
+        connection.cursor = inventory.cursor;
+        connection.discovery.resume(inventory.cursor);
+        connection.disconnected = false;
+        connection
+            .publisher
+            .publish("openforge-app-events-reconnected", &serde_json::json!({}));
+        return Ok(());
+    }
+    let current: Vec<_> = inventory
         .sessions
         .into_iter()
         .filter(|session| (shared.selects)(&session.session_key))
         .collect();
+    connection.discovery.accept(&current, &batch);
     if batch.gap {
         // Existing transport reconciliation requests fresh authority snapshots, not raw replay.
         connection
@@ -195,7 +227,7 @@ fn pump(shared: &Shared) -> Result<(), Error> {
                     {
                         if task_id == &session.session_key {
                             if let Some(discovery) = shared
-                                .discovery
+                                .completion
                                 .lock()
                                 .unwrap_or_else(|p| p.into_inner())
                                 .as_ref()
@@ -223,3 +255,6 @@ fn pump(shared: &Shared) -> Result<(), Error> {
     connection.cursor = batch.cursor;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

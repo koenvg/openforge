@@ -31,7 +31,7 @@ struct Registry {
     latest: HashMap<String, Weak<Origin>>,
 }
 
-/// Receives authoritative task ownership from PTY registration, never output text.
+/// Receives ownership from successful PTY registration or current daemon inventory, never output text.
 #[derive(Clone, Default)]
 pub(crate) struct LocalDiscovery(Arc<Mutex<Registry>>);
 

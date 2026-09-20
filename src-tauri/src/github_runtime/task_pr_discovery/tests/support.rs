@@ -195,6 +195,9 @@ impl Fixture {
             server,
         }
     }
+    pub(crate) fn release_requests(&self, count: usize) {
+        self.api.gate.add_permits(count);
+    }
     pub fn output(&self, number: i64) {
         self.local
             .observer("registered-shell", 1)

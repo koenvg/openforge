@@ -25,6 +25,9 @@ pub struct Session {
     pub pty: PtyIdentity,
     pub session_key: String,
     pub owner: TerminalOwner,
+    /// Immutable spawn directory. Older checkpoints omit it and are ineligible for discovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<std::path::PathBuf>,
     pub pid: u32,
     pub exit_code: Option<u32>,
     pub next_io_sequence: Option<u64>,

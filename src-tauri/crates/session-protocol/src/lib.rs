@@ -14,8 +14,8 @@ pub use messages::*;
 mod replacement;
 pub use replacement::*;
 
-// v2 exposes the authoritative owner so consumers cannot confuse shells with agents.
-pub const VERSION: u32 = 2;
+// v3 exposes the immutable spawn directory for verified task discovery after reconnect.
+pub const VERSION: u32 = 3;
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
