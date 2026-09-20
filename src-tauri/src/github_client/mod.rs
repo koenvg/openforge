@@ -23,8 +23,12 @@ mod checks;
 pub mod error;
 mod events;
 mod graphql;
+#[cfg(test)]
+pub(crate) mod hydration_test_api;
 mod pulls;
 mod rate_limit;
+mod refresh;
+pub(crate) use refresh::PrRefreshRequest;
 mod repos;
 mod response_cache;
 mod reviews;
@@ -62,7 +66,9 @@ pub struct GitHubClient {
     etag_cache: Arc<Mutex<EtagResponseCache>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
     refresh_lock: Arc<tokio::sync::Mutex<()>>,
+    pr_refresh_requests: Arc<refresh::PrRefreshRequests>,
     token_source: GitHubTokenSource,
+    respect_rate_limit: bool,
     #[cfg(test)]
     api_base_url: Option<String>,
 }
@@ -103,7 +109,9 @@ impl GitHubClient {
             etag_cache: Arc::new(Mutex::new(EtagResponseCache::new())),
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
             refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
+            pr_refresh_requests: Arc::default(),
             token_source: GitHubTokenSource::SecureStore,
+            respect_rate_limit: false,
             #[cfg(test)]
             api_base_url: None,
         }
@@ -121,6 +129,16 @@ impl GitHubClient {
     pub(crate) fn with_test_api_base_url(mut self, api_base_url: String) -> Self {
         self.api_base_url = Some(api_base_url);
         self
+    }
+
+    /// PR detail collection must stop sending new requests after any sibling
+    /// request observes the shared server deadline. Other explicit API actions
+    /// retain their existing admission policy.
+    pub(crate) fn for_pr_refresh(&self) -> Self {
+        Self {
+            respect_rate_limit: true,
+            ..self.clone()
+        }
     }
 
     pub(crate) async fn acquire_refresh_permit(&self) -> tokio::sync::OwnedMutexGuard<()> {

@@ -1,17 +1,22 @@
-use crate::app_events::{publish_app_event, AppEventSender};
+use crate::app_events::{AppEventSender, RuntimeEventPublisher};
 use serde::{Deserialize, Serialize};
 
 pub struct GitHubEventTarget {
-    app_event_tx: Option<AppEventSender>,
+    publisher: RuntimeEventPublisher,
 }
 
 impl GitHubEventTarget {
     pub fn sidecar(app_event_tx: Option<AppEventSender>) -> Self {
-        Self { app_event_tx }
+        Self {
+            publisher: RuntimeEventPublisher::new(None, app_event_tx),
+        }
     }
 
+    pub(crate) fn runtime(publisher: RuntimeEventPublisher) -> Self {
+        Self { publisher }
+    }
     pub(super) fn emit(&self, event_name: &str, payload: serde_json::Value) {
-        publish_app_event(&self.app_event_tx, event_name, &payload);
+        self.publisher.publish(event_name, &payload);
     }
 }
 

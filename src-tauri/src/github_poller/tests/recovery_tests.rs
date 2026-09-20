@@ -204,7 +204,7 @@ async fn recovery_reuses_authored_snapshot_and_notifies_only_new_links() {
     assert_eq!(f.api.authored_searches.load(Ordering::SeqCst), 1);
     let mut links = Vec::<Value>::new();
     while let Ok(event) = events.try_recv() {
-        if event.event_name == "task-pull-request-updated" {
+        if event.event_name == "task-pull-request-updated" && event.payload["action"] == "linked" {
             links.push(event.payload);
         }
     }
@@ -221,6 +221,36 @@ async fn recovery_reuses_authored_snapshot_and_notifies_only_new_links() {
     }
 }
 
+#[tokio::test]
+async fn reconciliation_hydrates_hidden_tasks_even_without_task_polling() {
+    let f = Fixture::new().await;
+    acquire_db(&f.db)
+        .update_task_status(&f.api.task_id, "backlog")
+        .unwrap();
+    let mut events = f.bus.sender().subscribe();
+    f.poll(PollScope::TaskLinkReconciliation).await;
+    let rows = f.links();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].ci_status.as_deref(), Some("success"));
+    assert!(rows[0].readiness_updated_at.is_some());
+    let actions: Vec<_> = std::iter::from_fn(|| events.try_recv().ok())
+        .filter(|e| e.event_name == "task-pull-request-updated")
+        .map(|e| e.payload["action"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(actions, ["linked", "updated"]);
+}
+
+#[tokio::test]
+async fn same_cycle_reconciliation_and_polling_publish_one_task_detail_update() {
+    let f = Fixture::new().await;
+    let mut events = f.bus.sender().subscribe();
+    f.poll(PollScope::Global).await;
+    let updates = std::iter::from_fn(|| events.try_recv().ok())
+        .filter(|e| e.event_name == "task-pull-request-updated" && e.payload["action"] == "updated")
+        .count();
+    assert_eq!(updates, 1);
+    assert_eq!(f.links()[0].ci_status.as_deref(), Some("success"));
+}
 #[tokio::test]
 async fn recovery_failed_execution_remains_due_and_manual_sync_bypasses_cadence() {
     let f = Fixture::new().await;

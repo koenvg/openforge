@@ -178,6 +178,7 @@ pub async fn refresh_task_github_status_for_sidecar(
     if open_prs.is_empty() {
         return Ok(PollResult::empty());
     }
+    let mut requests = super::refresh_requests::RefreshRequests::new(github_client, &open_prs);
     let _refresh_permit = github_client.acquire_refresh_permit().await;
 
     github_client.clear_rate_limit_reset();
@@ -198,7 +199,7 @@ pub async fn refresh_task_github_status_for_sidecar(
         &github_token,
         configured_github_username.as_deref(),
         open_prs,
-        &[],
+        &mut requests,
     )
     .await;
 

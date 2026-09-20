@@ -124,10 +124,18 @@ pub(super) async fn handle_app_github_review_command(
         "link_pull_request" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let pr_url = payload_string(&request.payload, "prUrl")?;
-            to_app_value(
-                crate::github_runtime::link_pull_request(&state.db, &task_id, &pr_url)
-                    .map_err(link_pull_request_error)?,
-            )?
+            let pr = crate::github_runtime::link_pull_request_and_hydrate(
+                &state.db,
+                &state.github_client,
+                crate::app_events::RuntimeEventPublisher::new(
+                    state.app.clone(),
+                    state.app_event_tx.clone(),
+                ),
+                &task_id,
+                &pr_url,
+            )
+            .map_err(link_pull_request_error)?;
+            to_app_value(pr)?
         }
         "get_pr_comments" => {
             let pr_id = payload_i64(&request.payload, "prId")?;

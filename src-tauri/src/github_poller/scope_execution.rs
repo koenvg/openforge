@@ -166,6 +166,7 @@ struct ScopePoll<'a> {
     scope: &'a PollScope,
     cycle_start: Instant,
     progress: ScopeProgress,
+    requests: super::refresh_requests::RefreshRequests,
 }
 
 impl<'a> ScopePoll<'a> {
@@ -176,6 +177,7 @@ impl<'a> ScopePoll<'a> {
         github_token: String,
         scope: &'a PollScope,
         cycle_start: Instant,
+        requests: super::refresh_requests::RefreshRequests,
     ) -> Self {
         Self {
             db,
@@ -185,6 +187,7 @@ impl<'a> ScopePoll<'a> {
             scope,
             cycle_start,
             progress: ScopeProgress::default(),
+            requests,
         }
     }
 
@@ -232,8 +235,14 @@ impl<'a> ScopePoll<'a> {
             "[GitHub Poller] Starting authored task PR link sync (scope={})",
             poll_scope_log_name(self.scope)
         );
-        match sync_authored_task_prs(self.github_client, self.db, &self.github_token, self.events)
-            .await
+        match sync_authored_task_prs(
+            self.github_client,
+            self.db,
+            &self.github_token,
+            self.events,
+            &mut self.requests,
+        )
+        .await
         {
             Ok((synced, snapshot)) => {
                 self.progress.task_links_succeeded =
@@ -324,7 +333,7 @@ impl<'a> ScopePoll<'a> {
                 &self.github_token,
                 configured_github_username,
                 open_prs,
-                &[],
+                &mut self.requests,
             )
             .await;
             let detail = format!(
@@ -445,6 +454,10 @@ pub(super) async fn poll_github_scope(
     events: &GitHubEventTarget,
     scope: &PollScope,
 ) -> ScopeExecution {
+    let requests = {
+        let prs = acquire_db(&db).get_open_prs().unwrap_or_default();
+        super::refresh_requests::RefreshRequests::new(github_client, &prs)
+    };
     let _refresh_permit = github_client.acquire_refresh_permit().await;
     let cycle_start = Instant::now();
     if let Some(execution) = active_rate_limit_execution(github_client) {
@@ -461,7 +474,15 @@ pub(super) async fn poll_github_scope(
         Err(execution) => return execution,
     };
 
-    ScopePoll::new(&db, github_client, events, github_token, scope, cycle_start)
-        .execute(projects)
-        .await
+    ScopePoll::new(
+        &db,
+        github_client,
+        events,
+        github_token,
+        scope,
+        cycle_start,
+        requests,
+    )
+    .execute(projects)
+    .await
 }

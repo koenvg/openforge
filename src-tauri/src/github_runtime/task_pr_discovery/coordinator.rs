@@ -98,7 +98,8 @@ impl Discovery {
     #[cfg(test)]
     pub(crate) async fn settled(&self) {
         tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+            // Capacity tests drain 256 discoveries plus their immediate detail requests.
+            std::time::Duration::from_secs(30),
             self.completion_barrier().await,
         )
         .await

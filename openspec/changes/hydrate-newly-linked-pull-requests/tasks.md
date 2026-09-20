@@ -1,3 +1,5 @@
+KVG-5132 delivers immediate backend detail retrieval only. Persisted fetch status, retry episodes, restart recovery, and fetch-status presentation remain in KVG-5133. Validation tasks below apply to the combined change and must be rerun after that work.
+
 ## 1. Hydration state and contracts
 
 - [ ] 1.1 Add failing persistence/migration tests for new-association pending state, legacy untracked rows, successful/partial outcomes, retained retry budgets after restart, and synthetic identity reconciliation; verify failures describe missing hydration behavior before implementation.
@@ -14,8 +16,8 @@
 
 - [ ] 3.1 Add failing fake-clock coordinator tests for immediate scheduling, duplicate coalescing, bounded pending work, shared request permits, 30-second attempt timeout, two retries at 2/10 seconds, reset deadlines, authentication failure, and persistent unknown mergeability; verify request counts and persisted outcomes rather than internal layout.
 - [ ] 3.2 Implement the backend hydration coordinator and bounded startup/pending recovery using persisted eligibility and attempt counts; verify tests from 3.1 pass, capacity is released during delays, and restart neither loses work nor resets retry budgets.
-- [ ] 3.3 Signal hydration after automatic-discovery and explicit-link commits without blocking link visibility; verify integration tests receive the initial association event before a delayed detail response and then observe full details without advancing a periodic polling clock.
-- [ ] 3.4 Connect recovery reconciliation and coalesce with same-cycle polling and concurrent manual refresh; verify a new recovery association hydrates once, an already complete association does not restart initial hydration, and incomplete work remains recoverable.
+- [x] 3.3 Signal hydration after automatic-discovery and explicit-link commits without blocking link visibility; verify integration tests receive the initial association event before a delayed detail response and then observe full details without advancing a periodic polling clock.
+- [x] 3.4 Connect recovery reconciliation and coalesce with same-cycle polling and concurrent manual refresh; verify a new recovery association hydrates once, an already complete association does not restart initial hydration, and incomplete work remains recoverable.
 - [ ] 3.5 Complete race and invalidation coverage for deletion, reassignment, head advance, synthetic-to-canonical identity, hidden tasks, and hydration-only state changes; verify outdated operations cannot restore links or overwrite newer data, and successful completion emits an update even when CI/review summaries are unchanged.
 
 ## 4. Task PR presentation

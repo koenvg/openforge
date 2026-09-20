@@ -16,8 +16,10 @@ pub use polling::{
     dismiss_review_pr, fetch_authored_prs, fetch_review_prs, get_authored_prs, get_review_prs,
     mark_review_pr_unviewed, mark_review_pr_viewed,
 };
+#[cfg(test)]
+pub use pr_actions::link_pull_request;
 pub use pr_actions::{
     enqueue_task_pull_request, get_pr_comments, get_pull_requests, get_pull_requests_for_task,
-    link_pull_request, merge_task_pull_request,
+    link_pull_request_and_hydrate, merge_task_pull_request,
 };
 pub use repo_resolution::get_project_repo;

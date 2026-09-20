@@ -109,6 +109,7 @@ pub(super) async fn collect_rest_readiness_sources(
     graphql_snapshot: Option<&GitHubReadinessSnapshot>,
     old_mergeable: Option<bool>,
     old_mergeable_state: Option<String>,
+    verified_details: Option<crate::github_client::PullRequest>,
 ) -> RestReadinessSources {
     let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot);
     let mut rest_ci_sha = graphql_snapshot
@@ -143,8 +144,16 @@ pub(super) async fn collect_rest_readiness_sources(
 
     let reviews_future =
         github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token);
-    let pr_details_future =
-        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token);
+    let pr_details_future = async {
+        match verified_details {
+            Some(details) => Ok(details),
+            None => {
+                github_client
+                    .get_pr_details(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token)
+                    .await
+            }
+        }
+    };
 
     let ((check_runs_result, combined_status_result), reviews_result, pr_details_result) =
         tokio::join!(ci_future, reviews_future, pr_details_future);
@@ -190,12 +199,10 @@ pub(super) async fn collect_rest_readiness_sources(
                         github_token
                     )
                 );
-                if let Ok(fresh_check_runs) = fresh_check_runs {
-                    check_runs = Some(fresh_check_runs);
-                }
-                if let Ok(fresh_combined_status) = fresh_combined_status {
-                    combined_status = Some(fresh_combined_status);
-                }
+                // A failed current-head request cannot reuse a successful response
+                // collected for the previous revision.
+                check_runs = fresh_check_runs.ok();
+                combined_status = fresh_combined_status.ok();
                 rest_ci_sha = details.head.sha.clone();
             }
         }
@@ -228,7 +235,7 @@ pub(super) async fn collect_rest_readiness_sources(
         .as_ref()
         .ok()
         .map(pr_is_queued_from_details)
-        .unwrap_or(false);
+        .unwrap_or(pr.is_queued);
     let (mergeable, mergeable_state) =
         mergeability_after_pr_details(&pr_details_result, old_mergeable, old_mergeable_state);
 
