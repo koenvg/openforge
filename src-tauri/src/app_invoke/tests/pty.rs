@@ -3,19 +3,33 @@ use base64::Engine;
 use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 
+const PTY_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 async fn with_pty_cleanup<E: std::fmt::Display>(
     behavior: impl std::future::Future<Output = ()>,
     cleanup: impl std::future::Future<Output = Result<(), E>>,
 ) {
+    with_pty_cleanup_timeout(behavior, cleanup, PTY_CLEANUP_TIMEOUT).await;
+}
+
+async fn with_pty_cleanup_timeout<E: std::fmt::Display>(
+    behavior: impl std::future::Future<Output = ()>,
+    cleanup: impl std::future::Future<Output = Result<(), E>>,
+    cleanup_timeout: std::time::Duration,
+) {
     let result = AssertUnwindSafe(behavior).catch_unwind().await;
-    let cleanup_result = cleanup.await;
-    if let Err(error) = &cleanup_result {
+    let cleanup_failure = match tokio::time::timeout(cleanup_timeout, cleanup).await {
+        Ok(Ok(())) => None,
+        Ok(Err(error)) => Some(error.to_string()),
+        Err(_) => Some(format!("timed out after {cleanup_timeout:?}")),
+    };
+    if let Some(error) = &cleanup_failure {
         eprintln!("PTY cleanup failed: {error}");
     }
     if let Err(primary) = result {
         std::panic::resume_unwind(primary);
     }
-    if let Err(error) = cleanup_result {
+    if let Some(error) = cleanup_failure {
         panic!("PTY cleanup failed: {error}");
     }
 }
@@ -57,58 +71,103 @@ async fn pty_cleanup_outcomes_preserve_behavioral_failures() {
 }
 
 #[tokio::test]
-async fn pty_cleanup_stops_shell_after_assertion_or_timeout_failure() {
-    for timeout in [false, true] {
-        let (state, _temp_dir) = test_state("app_invoke_pty_cleanup_failure");
-        invoke_ok(
-            &state,
-            "pty_spawn_shell",
-            json!({ "taskId": "T-cleanup", "cwd": "/tmp", "cols": 80, "rows": 24, "terminalIndex": 0 }),
-        )
-        .await;
-        let result = AssertUnwindSafe(with_pty_cleanup(
-            async {
-                if timeout {
-                    tokio::time::timeout(
-                        std::time::Duration::from_millis(1),
-                        std::future::pending::<()>(),
-                    )
-                    .await
-                    .expect("injected behavioral timeout");
-                } else {
-                    assert_eq!(1, 2, "injected behavioral assertion");
-                }
-            },
-            async {
-                state
-                    .pty_manager
-                    .as_ref()
-                    .expect("pty manager")
-                    .kill_shells_for_task("T-cleanup")
-                    .await
-            },
+async fn pty_cleanup_timeout_fails_instead_of_hanging() {
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        AssertUnwindSafe(with_pty_cleanup_timeout(
+            async {},
+            std::future::pending::<Result<(), &'static str>>(),
+            std::time::Duration::from_millis(10),
         ))
-        .catch_unwind()
-        .await;
-        let panic = result.expect_err("behavioral failure must survive cleanup");
-        let message = panic
-            .downcast::<String>()
-            .expect("behavioral panic message");
-        assert!(message.contains(if timeout {
-            "injected behavioral timeout"
-        } else {
-            "injected behavioral assertion"
-        }));
-        let buffer = invoke_ok(
-            &state,
-            "get_pty_buffer",
-            json!({ "shellSessionKey": "T-cleanup-shell-0" }),
-        )
-        .await;
-        assert_eq!(
-            buffer["isLive"], false,
-            "failed behavior must not leave a live shell"
-        );
+        .catch_unwind(),
+    )
+    .await
+    .expect("cleanup timeout handling must itself be bounded");
+    let panic = result.expect_err("cleanup timeout must fail the test");
+    let message = panic.downcast::<String>().expect("cleanup panic message");
+    assert!(message.contains("timed out after 10ms"));
+}
+
+async fn assert_pty_cleanup_after_behavioral_failure(case: usize) {
+    let timeout_failure = case % 2 == 1;
+    let task_id = format!("T-cleanup-{case}");
+    let session_key = format!("{task_id}-shell-0");
+    let (mut state, temp_dir) = test_state(&format!("app_invoke_pty_cleanup_failure_{case}"));
+    let pty_manager = state.pty_manager.as_mut().expect("pty manager");
+    pty_manager.set_test_shell_program("/bin/cat");
+    pty_manager.set_test_environment_variable("HOME", temp_dir.path().to_string_lossy());
+    pty_manager.set_test_environment_variable("ZDOTDIR", temp_dir.path().to_string_lossy());
+    pty_manager.set_test_environment_variable("ENV", "/dev/null");
+    pty_manager.set_test_environment_variable("HISTFILE", "/dev/null");
+
+    invoke_ok(
+        &state,
+        "pty_spawn_shell",
+        json!({
+            "taskId": task_id,
+            "cwd": temp_dir.path(),
+            "cols": 80,
+            "rows": 24,
+            "terminalIndex": 0
+        }),
+    )
+    .await;
+    let result = AssertUnwindSafe(with_pty_cleanup(
+        async {
+            if timeout_failure {
+                tokio::time::timeout(
+                    std::time::Duration::from_millis(1),
+                    std::future::pending::<()>(),
+                )
+                .await
+                .expect("injected behavioral timeout");
+            } else {
+                assert_eq!(1, 2, "injected behavioral assertion");
+            }
+        },
+        async {
+            state
+                .pty_manager
+                .as_ref()
+                .expect("pty manager")
+                .kill_shells_for_task(&task_id)
+                .await
+        },
+    ))
+    .catch_unwind()
+    .await;
+    let panic = result.expect_err("behavioral failure must survive cleanup");
+    let message = panic
+        .downcast::<String>()
+        .expect("behavioral panic message");
+    assert!(message.contains(if timeout_failure {
+        "injected behavioral timeout"
+    } else {
+        "injected behavioral assertion"
+    }));
+    let buffer = invoke_ok(
+        &state,
+        "get_pty_buffer",
+        json!({ "shellSessionKey": session_key }),
+    )
+    .await;
+    assert_eq!(
+        buffer["isLive"], false,
+        "failed behavior must not leave a live shell"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn pty_cleanup_stops_shell_after_assertion_or_timeout_failure() {
+    let cases = (0..12).map(|case| tokio::spawn(assert_pty_cleanup_after_behavioral_failure(case)));
+    let results = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        futures::future::join_all(cases),
+    )
+    .await
+    .expect("concurrent PTY cleanup validation must finish within 30 seconds");
+    for result in results {
+        result.expect("PTY cleanup validation task must complete");
     }
 }
 
