@@ -34,6 +34,16 @@ pnpm storybook:visual:update
 pnpm storybook:visual:check
 ```
 
+The header regression uses the production editor in the Components catalog. It checks the summary and every action before interaction at 360, 600, and 1000px widths, including save failure, keyboard navigation, and undo. The four-annotation Review Overflow story has 360×900 light and dark baselines.
+
+```sh
+pnpm storybook:components --ci
+# In another terminal:
+STORYBOOK_URL=http://localhost:6007 pnpm test storybook/stories/components/TaskBrowser.browser.test.ts
+```
+
+Without `STORYBOOK_URL`, the browser suite is skipped. The focused run also saves a native screenshot to `artifacts/task-browser-presentation/header/review-overflow-360x900.png` for inspection; it is not a canonical baseline.
+
 The visual manifest selects connected, empty, failed, disconnected, feedback-review, and component states across OpenForge light and dark themes. Canonical images use the pinned Linux workflow documented in [the visual review guide](storybook-visuals.md).
 
 Coverage remains incrementally adopted repository-wide. Uncovered sibling modules are not exclusions and are not claimed by this ticket. Task-specific verification results and remaining gaps are recorded in KVG-4702 Handoff Notes.

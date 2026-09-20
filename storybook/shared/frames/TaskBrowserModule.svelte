@@ -45,21 +45,19 @@
 
 <section class="flex min-h-screen flex-col bg-of-canvas p-6" aria-label="Task Browser visual feedback component">
   <div class="mx-auto flex w-full max-w-5xl min-h-[28rem] flex-col overflow-hidden border border-of-border bg-of-surface shadow-sm">
-    <header class="flex min-h-12 items-center justify-between gap-3 border-b border-of-border bg-of-panel px-3">
-      <div>
+    <header class="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-of-border bg-of-panel px-3 py-1">
+      <div class="shrink-0">
         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-of-text-muted">Task Browser</p>
         <h1 class="text-sm font-semibold text-of-text">Visual feedback</h1>
       </div>
       {#if ready}
-        <div class="flex items-center gap-2">
-          <VisualFeedbackEditor
-            available={true}
-            {editor}
-            reviewing={module === 'review'}
-            onReview={() => {}}
-            onSend={() => {}}
-          />
-        </div>
+        <VisualFeedbackEditor
+          available={true}
+          {editor}
+          reviewing={module === 'review'}
+          onReview={() => {}}
+          onSend={() => {}}
+        />
       {/if}
     </header>
 

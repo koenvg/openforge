@@ -53,6 +53,22 @@ export const Review: Story = {
     await markReady(canvasElement, id)
   },
 }
+export const ReviewOverflow: Story = {
+  args: { module: 'review' },
+  parameters: {
+    openforge: taskBrowserScenario('feedback', [
+      'Align the primary action',
+      'Keep the feedback summary readable',
+      'Keep every action visible',
+      'Use compact toolbar spacing',
+    ]),
+  },
+  play: async ({ canvasElement, id }) => {
+    await expect(within(canvasElement).findByText(/4 annotations$/)).resolves.toBeVisible()
+    await expect(within(canvasElement).findByRole('textbox', { name: 'Comment for annotation 4' })).resolves.toBeVisible()
+    await markReady(canvasElement, id)
+  },
+}
 export const EditReview: Story = {
   args: { module: 'review' },
   play: async ({ canvasElement }) => {
