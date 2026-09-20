@@ -47,6 +47,14 @@ const githubSyncTaskStatusPages = [
   'link-pull-request', 'refresh-with-local-response',
 ] .map(state => `pages-github-sync-task-status--${state}`)
 
+// KVG-4702 owns Task Browser. The removed demo-hello-world plugin has no live contribution.
+const taskBrowserPages = [
+  'populated', 'empty', 'loading', 'failure', 'disconnected', 'overflow',
+  'navigation', 'stop-loading', 'retry-connection', 'invalid-address', 'visual-feedback', 'send-feedback',
+].map(state => `pages-task-browser--${state}`)
+/** @param {string[]} states */
+const taskBrowserComponents = states => states.map(state => `components-task-browser--${state}`)
+
 /** @type {import('./coverage-types.ts').CoverageInventory} */
 const inventory = {
   pages: [
@@ -77,6 +85,8 @@ const inventory = {
     { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:reviewUI.registerRowAction:pr_walkthrough', stories: githubSyncReviewRowActionPages },
     { source: 'plugins/github-sync/src/task/TaskPullRequestStatus.svelte', stories: githubSyncTaskStatusPages },
     { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:taskUI.registerSection:task_pull_request_status', stories: githubSyncTaskStatusPages },
+    { source: 'plugins/task-browser/src/TaskBrowserTab.svelte', stories: taskBrowserPages },
+    { source: 'plugins/task-browser/src/index.ts', contribution: 'com.openforge.task-browser:taskUI.registerTab:browser', stories: taskBrowserPages },
     {"source":"src/components/attention/AttentionOverviewDialog.svelte","stories":["pages-attention-overview--populated","pages-attention-overview--empty","pages-attention-overview--loading","pages-attention-overview--failure","pages-attention-overview--long-content","pages-attention-overview--narrow","pages-attention-overview--open-task","pages-attention-overview--open-review","pages-attention-overview--reviews-hidden","pages-attention-overview--in-flight","pages-attention-overview--finish-loading","pages-attention-overview--retry-failure","pages-attention-overview--collapsed"]},
     {"source":"src/components/task-detail/SelfReviewWorkspace.svelte","stories":["pages-self-review--populated","pages-self-review--linked-pull-request","pages-self-review--github-comments","pages-self-review--empty","pages-self-review--loading","pages-self-review--failure","pages-self-review--long-content","pages-self-review--narrow","pages-self-review--send-feedback","pages-self-review--finish-loading"]},
     { source: 'src/components/task-detail/SelfReviewSidePanel.svelte', stories: ['pages-self-review--populated', 'pages-self-review--linked-pull-request', 'pages-self-review--github-comments', 'pages-self-review--narrow'] },
@@ -252,6 +262,8 @@ const inventory = {
     { source: 'plugins/task-schedules/src/components/TaskScheduleInspector.svelte', stories: scheduleComponents(['inspector', 'inspector-paused', 'inspector-completed', 'inspector-cancelled', 'inspector-history', 'inspector-long', 'inspector-updating', 'inspector-running', 'inspector-success', 'inspector-warning', 'inspector-failure']) },
     { source: 'plugins/task-schedules/src/components/TaskScheduleComposerSection.svelte', stories: scheduleComponents(['composer', 'composer-weekly', 'composer-monthly', 'composer-custom', 'composer-one-off', 'composer-narrow', 'composer-long', 'composer-mode', 'composer-required', 'composer-cron-validation', 'composer-date-validation', 'composer-saving']) },
     { source: 'plugins/task-schedules/src/components/TaskSchedulesDialogs.svelte', stories: scheduleComponents(['discard-dialog', 'delete-dialog', 'deleting-dialog']) },
+    { source: 'plugins/task-browser/src/VisualFeedbackEditor.svelte', stories: taskBrowserComponents(['available', 'feedback-actions', 'save-failure', 'review', 'edit-review']) },
+    { source: 'plugins/task-browser/src/VisualFeedbackReview.svelte', stories: taskBrowserComponents(['review', 'edit-review']) },
     { source: 'plugins/github-sync/src/task/PullRequestCard.svelte', stories: ['components-github-sync-pull-request-card--failed', 'components-github-sync-pull-request-card--running', 'components-github-sync-pull-request-card--passing', 'components-github-sync-pull-request-card--with-comment', 'components-github-sync-pull-request-card--collapsed'] },
     { source: 'plugins/github-sync/src/task/PullRequestLinkForm.svelte', stories: [
       'components-github-sync-pull-request-link-form--empty',

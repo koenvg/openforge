@@ -54,6 +54,32 @@ describe('StoryPluginAdapter', () => {
       { taskId: 'T-browser', id: 'main', url: 'https://example.com/second' },
     ])
   })
+  it('installs and resets the local browser-surface attachment adapter', async () => {
+    const adapter = createStoryPluginAdapter({
+      taskId: 'T-browser',
+      browserSurface: {
+        initialUrl: 'https://catalog.openforge.local/',
+        page: { heading: 'Local preview', body: 'No external page required.' },
+      },
+    })
+    adapters.push(adapter)
+    adapter.install()
+
+    const surface = await adapter.api.browserSurfaces.getOrCreate({ taskId: 'T-browser', id: 'main' })
+    const host = document.createElement('div')
+    await surface.attach(host)
+    expect(host.textContent).toContain('Local preview')
+
+    const firstApi = adapter.api
+    await adapter.reset()
+
+    expect(host.childElementCount).toBe(0)
+    expect(adapter.api).not.toBe(firstApi)
+    const resetSurface = await adapter.api.browserSurfaces.getOrCreate({ taskId: 'T-browser', id: 'main' })
+    const resetHost = document.createElement('div')
+    await resetSurface.attach(resetHost)
+    expect(resetHost.textContent).toContain('Local preview')
+  })
 
   it('records deterministic terminal operations without a PTY', async () => {
     const adapter = createStoryPluginAdapter({ taskId: 'T-terminal' })
