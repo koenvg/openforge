@@ -93,4 +93,33 @@ describe('StoryPluginAdapter', () => {
     await expect(adapter.api.storage.global.get('draft')).resolves.toBeNull()
     expect(adapter.calls.storageSets).toEqual([])
   })
+
+  it('recreates local backend methods with their original state on reset', async () => {
+    const adapter = createStoryPluginAdapter({
+      pluginId: 'com.openforge.integration-fixture',
+      backendMethods: () => {
+        let value = 'original'
+        return {
+          readFixture: { handler: async () => value },
+          writeFixture: { handler: async (payload) => { value = String(payload) } },
+        }
+      },
+    })
+    adapters.push(adapter)
+    adapter.install()
+
+    await adapter.api.backend.invoke('writeFixture', 'edited')
+    await expect(adapter.api.backend.invoke('readFixture')).resolves.toBe('edited')
+
+    await adapter.reset()
+
+    await expect(adapter.api.backend.invoke('readFixture')).resolves.toBe('original')
+    expect(adapter.calls.backendInvocations).toEqual([
+      {
+        method: 'readFixture',
+        qualifiedId: 'com.openforge.integration-fixture.readFixture',
+        payload: undefined,
+      },
+    ])
+  })
 })

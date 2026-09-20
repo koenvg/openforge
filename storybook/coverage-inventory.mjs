@@ -34,6 +34,18 @@ const schedulePages = [
 ].map(state => `pages-task-schedules--${state}`)
 /** @param {string[]} states */
 const scheduleComponents = states => states.map(state => `components-task-schedules--${state}`)
+const githubSyncSettingsPages = [
+  'connected', 'disconnected', 'save-configuration', 'connection-failure',
+  'save-failure', 'loading', 'failure',
+] .map(state => `pages-github-sync-settings-jira--${state}`)
+const githubSyncReviewRowActionPages = [
+  'available', 'unavailable-without-local-project', 'generating',
+  'generate-with-local-response', 'stop-generation',
+] .map(state => `pages-github-sync-review-row-action--${state}`)
+const githubSyncTaskStatusPages = [
+  'populated', 'empty', 'loading', 'failure', 'disabled-actions',
+  'link-pull-request', 'refresh-with-local-response',
+] .map(state => `pages-github-sync-task-status--${state}`)
 
 /** @type {import('./coverage-types.ts').CoverageInventory} */
 const inventory = {
@@ -59,6 +71,12 @@ const inventory = {
     ] },
     { source: 'plugins/task-schedules/src/components/TaskSchedulesView.svelte', stories: schedulePages },
     { source: 'plugins/task-schedules/src/index.ts', contribution: 'com.openforge.task-schedules:views.register:schedules', stories: schedulePages },
+    { source: 'plugins/github-sync/src/settings/JiraSettingsSection.svelte', stories: githubSyncSettingsPages },
+    { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:settings.registerSection:jira', stories: githubSyncSettingsPages },
+    { source: 'plugins/github-sync/src/review/pr/PrReviewRowAction.svelte', stories: githubSyncReviewRowActionPages },
+    { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:reviewUI.registerRowAction:pr_walkthrough', stories: githubSyncReviewRowActionPages },
+    { source: 'plugins/github-sync/src/task/TaskPullRequestStatus.svelte', stories: githubSyncTaskStatusPages },
+    { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:taskUI.registerSection:task_pull_request_status', stories: githubSyncTaskStatusPages },
     {"source":"src/components/attention/AttentionOverviewDialog.svelte","stories":["pages-attention-overview--populated","pages-attention-overview--empty","pages-attention-overview--loading","pages-attention-overview--failure","pages-attention-overview--long-content","pages-attention-overview--narrow","pages-attention-overview--open-task","pages-attention-overview--open-review","pages-attention-overview--reviews-hidden","pages-attention-overview--in-flight","pages-attention-overview--finish-loading","pages-attention-overview--retry-failure","pages-attention-overview--collapsed"]},
     {"source":"src/components/task-detail/SelfReviewWorkspace.svelte","stories":["pages-self-review--populated","pages-self-review--linked-pull-request","pages-self-review--github-comments","pages-self-review--empty","pages-self-review--loading","pages-self-review--failure","pages-self-review--long-content","pages-self-review--narrow","pages-self-review--send-feedback","pages-self-review--finish-loading"]},
     { source: 'src/components/task-detail/SelfReviewSidePanel.svelte', stories: ['pages-self-review--populated', 'pages-self-review--linked-pull-request', 'pages-self-review--github-comments', 'pages-self-review--narrow'] },
@@ -135,7 +153,7 @@ const inventory = {
     { source: 'src/components/settings/SettingsFocusFilterCard.svelte', stories: ['pages-project-settings--focus-filter'] },
     { source: 'src/components/settings/SettingsInstructionsCard.svelte', stories: ['pages-project-settings--instructions', 'pages-project-settings--long-content'] },
     { source: 'src/components/settings/SettingsPreferencesCard.svelte', stories: ['pages-global-settings--general', 'pages-global-settings--narrow'] },
-    { source: 'src/components/settings/SettingsCredentialsCard.svelte', stories: ['pages-global-settings--credentials'] },
+    { source: 'src/components/settings/SettingsCredentialsCard.svelte', stories: ['pages-global-settings--credentials', 'pages-global-settings--github-connected'] },
     { source: 'src/components/settings/SettingsAICard.svelte', stories: ['pages-global-settings--voice'] },
     { source: 'src/components/settings/SettingsDashboardProviderCard.svelte', stories: ['pages-project-settings--plugins', 'pages-global-settings--plugins'] },
     { source: 'src/components/settings/SettingsCompanionCard.svelte', stories: ['pages-global-settings--companion', 'pages-global-settings--companion-enabled'] },
@@ -235,6 +253,20 @@ const inventory = {
     { source: 'plugins/task-schedules/src/components/TaskScheduleComposerSection.svelte', stories: scheduleComponents(['composer', 'composer-weekly', 'composer-monthly', 'composer-custom', 'composer-one-off', 'composer-narrow', 'composer-long', 'composer-mode', 'composer-required', 'composer-cron-validation', 'composer-date-validation', 'composer-saving']) },
     { source: 'plugins/task-schedules/src/components/TaskSchedulesDialogs.svelte', stories: scheduleComponents(['discard-dialog', 'delete-dialog', 'deleting-dialog']) },
     { source: 'plugins/github-sync/src/task/PullRequestCard.svelte', stories: ['components-github-sync-pull-request-card--failed', 'components-github-sync-pull-request-card--running', 'components-github-sync-pull-request-card--passing', 'components-github-sync-pull-request-card--with-comment', 'components-github-sync-pull-request-card--collapsed'] },
+    { source: 'plugins/github-sync/src/task/PullRequestLinkForm.svelte', stories: [
+      'components-github-sync-pull-request-link-form--empty',
+      'components-github-sync-pull-request-link-form--validation',
+      'components-github-sync-pull-request-link-form--failure',
+      'components-github-sync-pull-request-link-form--linking',
+    ] },
+    { source: 'plugins/github-sync/src/review/pr/PrWalkthroughButton.svelte', stories: [
+      'components-github-sync-walkthrough-button--available',
+      'components-github-sync-walkthrough-button--generating',
+      'components-github-sync-walkthrough-button--ready',
+      'components-github-sync-walkthrough-button--new-commits',
+      'components-github-sync-walkthrough-button--failed',
+      'components-github-sync-walkthrough-button--aborted',
+    ] },
     { source: 'packages/pr-review-ui/src/ReviewPrCard.svelte', stories: ['components-github-sync-review-request-card--active', 'components-github-sync-review-request-card--viewed', 'components-github-sync-review-request-card--merged', 'components-github-sync-review-request-card--closed'] },
     { source: 'plugins/github-sync/src/review/pr/PrReviewListSection.svelte', stories: ['components-github-sync-review-requests--active-and-finished'] },
     {"source":"src/components/focus-board/TaskListItem.svelte","stories":["components-board-task-list-item--idle","components-board-task-list-item--backlog","components-board-task-list-item--active","components-board-task-list-item--needs-input","components-board-task-list-item--paused","components-board-task-list-item--agent-done","components-board-task-list-item--failed","components-board-task-list-item--interrupted","components-board-task-list-item--done","components-board-task-list-item--pr-draft","components-board-task-list-item--pr-open","components-board-task-list-item--ci-failed","components-board-task-list-item--changes-requested","components-board-task-list-item--ready-to-merge","components-board-task-list-item--ready-to-enqueue","components-board-task-list-item--pr-queued","components-board-task-list-item--pr-merged","components-board-task-list-item--pr-closed","components-board-task-list-item--ci-running","components-board-task-list-item--review-pending","components-board-task-list-item--unaddressed-comments","components-board-task-list-item--merge-conflict","components-board-task-list-item--merging","components-board-task-list-item--selected","components-board-task-list-item--dependency","components-board-task-list-item--long-content","components-board-task-list-item--keyboard-selection"]},

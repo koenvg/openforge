@@ -15,7 +15,17 @@ type Story = StoryObj<typeof meta>
 
 export const General: Story = { play: async ({ canvasElement }) => { await settingsReady(canvasElement) } }
 export const Agents: Story = { play: async ({ canvasElement }) => { await openSettingsSection(canvasElement, 'Agents', 'Global defaults') } }
-export const Credentials: Story = { play: async ({ canvasElement }) => { await openSettingsSection(canvasElement, 'GitHub & Credentials', 'Credentials') } }
+export const Credentials: Story = { play: async ({ canvasElement }) => {
+  const canvas = await openSettingsSection(canvasElement, 'GitHub & Credentials', 'Credentials')
+  await expect(canvas.getByText('GitHub credential not configured')).toBeVisible()
+} }
+export const GithubConnected: Story = {
+  parameters: { openforge: settingsScenario('global', 'github-connected') },
+  play: async ({ canvasElement }) => {
+    const canvas = await openSettingsSection(canvasElement, 'GitHub & Credentials', 'Credentials')
+    await expect(canvas.getByText('GitHub credential configured')).toBeVisible()
+  },
+}
 export const Voice: Story = { play: async ({ canvasElement }) => { await openSettingsSection(canvasElement, 'Voice & Whisper', 'Voice & Whisper') } }
 export const Plugins: Story = { play: async ({ canvasElement }) => { await openSettingsSection(canvasElement, 'Plugins', 'Default project dashboard') } }
 export const Companion: Story = { play: async ({ canvasElement }) => {

@@ -11,7 +11,7 @@ import { terminalFont } from '../../../src/lib/terminalFont'
 import { terminalFontSize } from '../../../src/lib/terminalFontSize'
 import { settleSettingsSaves } from '../../../src/lib/settingsSaveLifecycle'
 
-export type SettingsScenario = 'ready' | 'loading' | 'failure' | 'save-failure' | 'saving' | 'overrides' | 'disabled' | 'long' | 'provider-missing'
+export type SettingsScenario = 'ready' | 'loading' | 'failure' | 'save-failure' | 'saving' | 'overrides' | 'disabled' | 'long' | 'provider-missing' | 'github-connected'
 
 export function settingsScenario(mode: 'project' | 'global', state: SettingsScenario = 'ready'): StoryScenarioDefinition {
   const project = createProject(state === 'long' ? { name: 'OpenForge documentation and accessibility integration workspace', path: '/workspace/teams/platform/long-running-integration-and-accessibility-workspace' } : {})
@@ -26,7 +26,11 @@ export function settingsScenario(mode: 'project' | 'global', state: SettingsScen
       failures: state === 'failure' ? { [mode === 'project' ? 'get_project_config' : 'get_config']: 'Settings unavailable' }
         : state === 'save-failure' ? (mode === 'project' ? { update_project: 'Settings are read-only' }
           : { set_config: (payload: unknown) => (payload as { key: string }).key === 'task_id_prefix' ? 'Settings are read-only' : undefined }) : {},
-      config: { ai_provider: 'claude-code', task_id_prefix: 'OF', github_poll_interval: '60',
+      config: {
+        ai_provider: 'claude-code',
+        task_id_prefix: 'OF',
+        github_poll_interval: '60',
+        ...(state === 'github-connected' ? { github_token: 'ghp_catalog_token' } : {}),
         ...(state === 'long' ? { pr_review_guidance: longInstructions, pr_walkthrough_guidance: longInstructions } : {}),
       },
       projectConfig: { [project.id]: { run_command: 'pnpm dev',

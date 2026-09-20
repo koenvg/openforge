@@ -5029,5 +5029,25 @@
     },
     "ready": "[aria-label=\"Finished review requests\"] button[aria-expanded=\"true\"]",
     "expectedErrors": []
-  }
+  },
+  { "catalog": "pages", "story": "pages-global-settings--github-connected", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 900 }, "ready": "[role=status]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-settings-jira--connected", "theme": "openforge-light", "viewport": { "width": 1280, "height": 900 }, "ready": "button:has-text(\"Test connection\")", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-settings-jira--connected", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 900 }, "ready": "button:has-text(\"Test connection\")", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-settings-jira--disconnected", "theme": "openforge-light", "viewport": { "width": 1280, "height": 900 }, "ready": "button:has-text(\"Test connection\")", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-settings-jira--connection-failure", "theme": "openforge-light", "viewport": { "width": 1280, "height": 900 }, "ready": ".text-error", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-review-row-action--available", "theme": "openforge-light", "viewport": { "width": 1280, "height": 800 }, "ready": "button[aria-label=\"Generate walkthrough and AI review\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-review-row-action--available", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 800 }, "ready": "button[aria-label=\"Generate walkthrough and AI review\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-review-row-action--generating", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 800 }, "ready": "[aria-label=\"Generating walkthrough\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-review-row-action--unavailable-without-local-project", "theme": "openforge-light", "viewport": { "width": 1280, "height": 800 }, "ready": "[aria-label=\"Pull request review row\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-task-status--populated", "theme": "openforge-light", "viewport": { "width": 1280, "height": 800 }, "ready": "article[aria-label=\"Pull request #42\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-task-status--populated", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 800 }, "ready": "article[aria-label=\"Pull request #42\"]", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-task-status--empty", "theme": "openforge-light", "viewport": { "width": 1280, "height": 800 }, "ready": "section[aria-label=\"Pull Requests\"]:has([data-testid=\"task-pull-requests-empty\"])", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-task-status--failure", "theme": "openforge-dark", "viewport": { "width": 1280, "height": 800 }, "ready": "section[aria-label=\"Pull Requests\"]:has([role=alert])", "expectedErrors": [] },
+  { "catalog": "pages", "story": "pages-github-sync-task-status--disabled-actions", "theme": "openforge-light", "viewport": { "width": 1280, "height": 800 }, "ready": "button[aria-label=\"Merging…\"]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-pull-request-link-form--empty", "theme": "openforge-light", "viewport": { "width": 640, "height": 400 }, "ready": "[aria-label=\"Link a GitHub pull request\"]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-pull-request-link-form--failure", "theme": "openforge-dark", "viewport": { "width": 640, "height": 400 }, "ready": "[role=alert]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-pull-request-link-form--linking", "theme": "openforge-light", "viewport": { "width": 640, "height": 400 }, "ready": "button:has-text(\"Linking…\")", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-walkthrough-button--available", "theme": "openforge-light", "viewport": { "width": 480, "height": 320 }, "ready": "button[aria-label=\"Generate walkthrough and AI review\"]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-walkthrough-button--generating", "theme": "openforge-dark", "viewport": { "width": 480, "height": 320 }, "ready": "[aria-label=\"Generating walkthrough\"]", "expectedErrors": [] },
+  { "catalog": "components", "story": "components-github-sync-walkthrough-button--ready", "theme": "openforge-light", "viewport": { "width": 480, "height": 320 }, "ready": "[aria-label=\"Walkthrough ready\"]", "expectedErrors": [] }
 ]
