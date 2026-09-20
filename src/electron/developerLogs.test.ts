@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,7 +9,7 @@ function tempLogPath(): string {
 }
 
 describe('developer logs', () => {
-  it('writes the full current-session log trace to disk while keeping only a bounded UI tail in memory', () => {
+  it('writes log entries to disk while keeping only a bounded UI tail in memory', () => {
     const logFilePath = tempLogPath()
     const store = createDeveloperLogStore({ maxEntries: 2, logFilePath })
 
@@ -31,6 +31,64 @@ describe('developer logs', () => {
     })
     expect(readFileSync(logFilePath, 'utf8')).toContain('entry 1')
     expect(readFileSync(logFilePath, 'utf8')).toContain('entry 3')
+  })
+
+  it('rotates bounded log archives before appending a line beyond the file limit', () => {
+    const logFilePath = tempLogPath()
+    const store = createDeveloperLogStore({
+      logFilePath,
+      maxFileBytes: 1,
+      maxArchiveFiles: 2,
+    })
+
+    store.append('info', 'entry 1')
+    store.append('info', 'entry 2')
+    store.append('info', 'entry 3')
+
+    expect(readFileSync(logFilePath, 'utf8')).toContain('entry 3')
+    expect(readFileSync(`${logFilePath}.1`, 'utf8')).toContain('entry 2')
+    expect(readFileSync(`${logFilePath}.2`, 'utf8')).toContain('entry 1')
+    expect(existsSync(`${logFilePath}.3`)).toBe(false)
+  })
+
+  it('keeps the in-memory log available when disk persistence fails', () => {
+    const blockingPath = tempLogPath()
+    writeFileSync(blockingPath, 'not a directory')
+    const store = createDeveloperLogStore({ logFilePath: join(blockingPath, 'openforge.log') })
+
+    expect(() => store.append('error', 'startup failed')).not.toThrow()
+    expect(store.getRecentLogs()).toEqual([
+      expect.objectContaining({ level: 'error', message: 'startup failed' }),
+    ])
+  })
+
+  it('leaves archive rotation to the process holding the rotation lock', () => {
+    const logFilePath = tempLogPath()
+    const store = createDeveloperLogStore({ logFilePath, maxFileBytes: 1 })
+    store.append('info', 'entry 1')
+    mkdirSync(`${logFilePath}.rotation-lock`)
+
+    store.append('info', 'entry 2')
+
+    expect(readFileSync(logFilePath, 'utf8')).toContain('entry 1')
+    expect(readFileSync(logFilePath, 'utf8')).toContain('entry 2')
+    expect(existsSync(`${logFilePath}.1`)).toBe(false)
+  })
+
+  it('reclaims a stale rotation lock left by a terminated process', () => {
+    const logFilePath = tempLogPath()
+    const store = createDeveloperLogStore({ logFilePath, maxFileBytes: 1 })
+    store.append('info', 'entry 1')
+    const rotationLockPath = `${logFilePath}.rotation-lock`
+    mkdirSync(rotationLockPath)
+    const staleTime = new Date(Date.now() - 60_000)
+    utimesSync(rotationLockPath, staleTime, staleTime)
+
+    store.append('info', 'entry 2')
+
+    expect(readFileSync(logFilePath, 'utf8')).toContain('entry 2')
+    expect(readFileSync(`${logFilePath}.1`, 'utf8')).toContain('entry 1')
+    expect(existsSync(rotationLockPath)).toBe(false)
   })
 
   it('records delegated Electron and sidecar log output', () => {

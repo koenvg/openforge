@@ -1,6 +1,7 @@
 use super::*;
 use crate::app_events::{AppEventBus, AppEventCursor};
 use crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT;
+use std::sync::mpsc;
 use std::time::Duration;
 
 #[test]
@@ -223,6 +224,55 @@ async fn test_app_readiness_requires_backend_token_and_reports_readiness_state()
     assert_eq!(body["startupResume"]["resumedCount"], 1);
     assert_eq!(body["startupResume"]["failedCount"], 1);
     assert_eq!(body["degraded"][0]["area"], "startupResume");
+}
+
+#[tokio::test]
+async fn test_app_readiness_reports_database_contention_without_blocking_health() {
+    let (state, _temp_dir) = test_state("app_readiness_database_contention");
+    let database = state.db.clone();
+    let router = create_router(state);
+    let (locked_tx, locked_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let lock_owner = std::thread::spawn(move || {
+        let _guard = database.lock().expect("lock test database");
+        locked_tx.send(()).expect("report database lock acquired");
+        release_rx.recv().expect("wait to release database lock");
+    });
+    locked_rx.recv().expect("wait for database lock");
+
+    let readiness = tokio::time::timeout(
+        Duration::from_millis(100),
+        router.clone().oneshot(
+            Request::builder()
+                .uri("/app/readiness")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .expect("build request"),
+        ),
+    )
+    .await
+    .expect("readiness should not wait for the database lock")
+    .expect("request should succeed");
+    assert_eq!(readiness.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response_body_text(readiness).await,
+        "database connection is unavailable"
+    );
+
+    let health = router
+        .oneshot(
+            Request::builder()
+                .uri("/app/health")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+    assert_eq!(health.status(), StatusCode::OK);
+
+    release_tx.send(()).expect("release database lock");
+    lock_owner.join().expect("database lock owner should exit");
 }
 
 #[tokio::test]

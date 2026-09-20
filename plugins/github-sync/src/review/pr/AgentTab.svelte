@@ -18,6 +18,7 @@
     isLoading: boolean
     actionPending: boolean
     error: string | null
+    availabilityError: string | null
     walkthroughStatus?: WalkthroughAttemptState | null
     acceptedStepCount?: number
     mountTerminal: (scope: SessionScope, element: HTMLElement) => Promise<Disposable>
@@ -25,6 +26,7 @@
     onAbort: () => Promise<unknown>
     onRestart: () => Promise<unknown>
     onSendInput: (input: string) => Promise<unknown>
+    onRetryAvailability: () => Promise<unknown>
   }
 
   let {
@@ -35,6 +37,7 @@
     isLoading,
     actionPending,
     error,
+    availabilityError,
     walkthroughStatus = null,
     acceptedStepCount = 0,
     mountTerminal,
@@ -42,6 +45,7 @@
     onAbort,
     onRestart,
     onSendInput,
+    onRetryAvailability,
   }: Props = $props()
 
   let terminalElement = $state<HTMLElement>()
@@ -198,9 +202,24 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col bg-base-100" aria-label="Pull request review agent">
-  {#if isLoading || !projectResolved || !scope}
-    <div class="m-auto max-w-lg px-6 text-center" aria-live="polite">
-      <h3 class="m-0 text-base font-semibold text-base-content">Checking review agent availability…</h3>
+  {#if availabilityError !== null || isLoading || !projectResolved || !scope}
+    <div
+      class="m-auto max-w-lg px-6 text-center"
+      role={availabilityError !== null ? undefined : 'status'}
+      aria-live={availabilityError !== null ? undefined : 'polite'}
+      aria-atomic={availabilityError !== null ? undefined : 'true'}
+    >
+      {#if availabilityError !== null}
+        <div class="flex flex-col items-center gap-3">
+          <h3 class="m-0 text-base font-semibold text-base-content">Couldn’t check the review agent</h3>
+          <p class="m-0 text-sm text-error" role="alert">{availabilityError}</p>
+          <Button disabled={isLoading} onclick={() => { void onRetryAvailability().catch(() => undefined) }}>
+            Try again
+          </Button>
+        </div>
+      {:else}
+        <h3 class="m-0 text-base font-semibold text-base-content">Checking review agent availability…</h3>
+      {/if}
     </div>
   {:else if status === null}
     <div class="m-auto flex max-w-lg flex-col items-center gap-3 px-6 text-center">

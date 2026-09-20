@@ -35,11 +35,14 @@ function renderAgentTab(overrides: {
   status?: ScopedAgentSessionState | null
   walkthroughStatus?: 'generating' | 'ready' | 'no-submissions' | 'failed' | 'aborted' | null
   acceptedStepCount?: number
+  availabilityError?: string | null
+  error?: string | null
 } = {}) {
   const onStart = vi.fn(async () => undefined)
   const onAbort = vi.fn(async () => undefined)
   const onRestart = vi.fn(async () => undefined)
   const onSendInput = vi.fn(async () => undefined)
+  const onRetryAvailability = vi.fn(async () => undefined)
   const mountTerminal = vi.fn(async () => ({ dispose: vi.fn() }))
 
   render(AgentTab, {
@@ -50,7 +53,8 @@ function renderAgentTab(overrides: {
       status: overrides.status ?? null,
       isLoading: false,
       actionPending: false,
-      error: null,
+      error: overrides.error ?? null,
+      availabilityError: overrides.availabilityError ?? null,
       walkthroughStatus: overrides.walkthroughStatus ?? null,
       acceptedStepCount: overrides.acceptedStepCount ?? 0,
       mountTerminal,
@@ -58,10 +62,11 @@ function renderAgentTab(overrides: {
       onAbort,
       onRestart,
       onSendInput,
+      onRetryAvailability,
     },
   })
 
-  return { mountTerminal, onAbort, onRestart, onSendInput, onStart }
+  return { mountTerminal, onAbort, onRestart, onRetryAvailability, onSendInput, onStart }
 }
 
 describe('AgentTab', () => {
@@ -84,6 +89,19 @@ describe('AgentTab', () => {
     expect(screen.getByText('Review agent unavailable')).toBeTruthy()
     expect(screen.getByText(/local OpenForge Project linked to this repository is required/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Generate walkthrough' })).toHaveProperty('disabled', true)
+    expect(onStart).not.toHaveBeenCalled()
+  })
+
+  it('offers to retry when the session status check fails', async () => {
+    const { onRetryAvailability, onStart } = renderAgentTab({
+      availabilityError: 'The review agent did not respond. Try again.',
+    })
+
+    expect(screen.getByRole('alert').textContent).toContain('The review agent did not respond')
+    expect(screen.queryByRole('button', { name: 'Generate walkthrough' })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(onRetryAvailability).toHaveBeenCalledOnce()
     expect(onStart).not.toHaveBeenCalled()
   })
 
@@ -140,11 +158,13 @@ describe('AgentTab', () => {
       isLoading: false,
       actionPending: false,
       error: null,
+      availabilityError: null,
       mountTerminal,
       onStart: vi.fn(async () => undefined),
       onAbort,
       onRestart: vi.fn(async () => undefined),
       onSendInput: vi.fn(async () => undefined),
+      onRetryAvailability: vi.fn(async () => undefined),
     }
     const view = render(AgentTab, { props: baseProps })
     await waitFor(() => expect(mountTerminal).toHaveBeenCalledTimes(1))
@@ -179,11 +199,13 @@ describe('AgentTab', () => {
       isLoading: false,
       actionPending: false,
       error: null,
+      availabilityError: null,
       mountTerminal,
       onStart: vi.fn(async () => undefined),
       onAbort: vi.fn(async () => undefined),
       onRestart: vi.fn(async () => undefined),
       onSendInput: vi.fn(async () => undefined),
+      onRetryAvailability: vi.fn(async () => undefined),
     }
     const view = render(AgentTab, { props: baseProps })
     await waitFor(() => expect(mountTerminal).toHaveBeenCalledTimes(1))
@@ -215,11 +237,13 @@ describe('AgentTab', () => {
       isLoading: false,
       actionPending: false,
       error: null,
+      availabilityError: null,
       mountTerminal,
       onStart: vi.fn(async () => undefined),
       onAbort: vi.fn(async () => undefined),
       onRestart: vi.fn(async () => undefined),
       onSendInput: vi.fn(async () => undefined),
+      onRetryAvailability: vi.fn(async () => undefined),
     }
     const view = render(AgentTab, { props: baseProps })
     await screen.findByText('Terminal bridge unavailable')
