@@ -1,0 +1,125 @@
+name: Packaged Session Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaged-runtime:
+    name: Packaged Session Runtime (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            machine: arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - arch: x64
+            machine: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      npm_config_arch: ${{ matrix.arch }}
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Require native architecture and record runner evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/packaged-session-runtime
+          {
+            uname -a
+            node -p 'JSON.stringify({platform: process.platform, arch: process.arch})'
+            sysctl -n machdep.cpu.brand_string
+            translated="$(sysctl -in sysctl.proc_translated 2>/dev/null || true)"
+            echo "translated=${translated:-0}"
+            test "$(uname -m)" = "${{ matrix.machine }}"
+            test "$(node -p process.arch)" = "${{ matrix.arch }}"
+            test "$translated" != "1"
+          } 2>&1 | tee artifacts/packaged-session-runtime/architecture.log
+
+      - name: Resolve package and daemon paths
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          import { resolveRustSidecarLayout } from './scripts/rust-sidecar-layout.mjs'
+          const layout = resolveRustSidecarLayout()
+          appendFileSync(process.env.GITHUB_ENV, [
+            `DAEMON_MANIFEST=${layout.sessionCrates.daemon.manifestPath}`,
+            `DAEMON_TARGET_DIR=${layout.defaultCargoTargetDir}`,
+            `OPENFORGE_PACKAGED_RUNTIME=${join(layout.electronAppPath, 'Contents', 'MacOS', 'session-runtime')}`,
+          ].join('\n') + '\n')
+          NODE
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: packaged-session-runtime-${{ matrix.arch }}
+          cache-bin: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Package native Electron app
+        run: |
+          set -o pipefail
+          pnpm electron:package 2>&1 | tee artifacts/packaged-session-runtime/package.log
+
+      - name: Record packaged artifact identity
+        run: |
+          set -o pipefail
+          {
+            lipo -archs "$OPENFORGE_PACKAGED_RUNTIME/openforge-session-daemon"
+            shasum -a 256 "$OPENFORGE_PACKAGED_RUNTIME/openforge-session-daemon"
+            cat "$OPENFORGE_PACKAGED_RUNTIME/manifest.json"
+          } 2>&1 | tee artifacts/packaged-session-runtime/artifact-identity.log
+
+      - name: Prove staged launch, bundle removal, live refusal, and owned cleanup
+        run: |
+          set -o pipefail
+          cargo test --locked --release --manifest-path "$DAEMON_MANIFEST" \
+            --target-dir "$DAEMON_TARGET_DIR" --test packaged_release -- --nocapture \
+            2>&1 | tee artifacts/packaged-session-runtime/launch-refusal.log
+
+      - name: Smoke test packaged Electron
+        run: |
+          set -o pipefail
+          pnpm electron:smoke:packaged --skip-package 2>&1 | tee artifacts/packaged-session-runtime/smoke.log
+
+      - name: Upload architecture, artifact, and launch evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: packaged-session-runtime-${{ matrix.arch }}
+          path: artifacts/packaged-session-runtime/
+          if-no-files-found: error
+          retention-days: 14

@@ -28,20 +28,35 @@ fn packaged_launch_survives_bundle_removal_and_untrusted_release_refusal() {
     fs::create_dir_all(&daemon_root).unwrap();
     let bundle = tempfile::tempdir().unwrap();
     let source = bundle.path().join("session-runtime");
-    fs::create_dir(&source).unwrap();
     let executable = source.join("openforge-session-daemon");
     let packaging = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../scripts/electron-package/runtime-release.mjs")
         .canonicalize()
         .unwrap();
     let code = format!(
-        "import {{ packageRuntimeRelease }} from {}; await packageRuntimeRelease({{ daemonPath: process.argv[1], outputPath: process.argv[2], architecture: process.arch === 'arm64' ? 'arm64' : 'x86_64' }});",
+        r#"import {{ cp }} from 'node:fs/promises';
+        import {{ packageRuntimeRelease }} from {};
+        if (process.argv[3]) {{
+            await cp(process.argv[3], process.argv[2], {{ recursive: true, force: false, errorOnExist: true }});
+        }} else {{
+            await packageRuntimeRelease({{ daemonPath: process.argv[1], outputPath: process.argv[2], architecture: process.arch === 'arm64' ? 'arm64' : 'x86_64' }});
+        }}"#,
         serde_json::to_string(packaging.to_str().unwrap()).unwrap(),
+    );
+    let packaged_runtime = std::env::var_os("OPENFORGE_PACKAGED_RUNTIME").unwrap_or_default();
+    eprintln!(
+        "packaged runtime source: {}",
+        if packaged_runtime.is_empty() {
+            env!("CARGO_BIN_EXE_openforge-session-daemon").into()
+        } else {
+            packaged_runtime.to_string_lossy()
+        }
     );
     assert!(std::process::Command::new("node")
         .args(["--input-type=module", "-e", &code])
         .arg(env!("CARGO_BIN_EXE_openforge-session-daemon"))
         .arg(&source)
+        .arg(&packaged_runtime)
         .status()
         .unwrap()
         .success());
