@@ -1,20 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import SplitButtonTestWrapper from './SplitButtonTestWrapper.svelte'
+import { useBitsUiBodyScrollLockTestLifecycle } from '../../test/bitsUiTestLifecycle'
+
+useBitsUiBodyScrollLockTestLifecycle()
 
 describe('SplitButton', () => {
-  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
-  afterEach(async () => {
-    try {
-      cleanup()
-      await tick()
-      await vi.runAllTimersAsync()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it('labels the icon-only menu trigger without opening the menu on focus', async () => {
     render(SplitButtonTestWrapper)
     const trigger = screen.getByRole('button', { name: 'More actions' })
