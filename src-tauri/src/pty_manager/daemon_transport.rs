@@ -22,6 +22,7 @@ struct Shared {
     executable: PathBuf,
     selects: Box<dyn Fn(&str) -> bool + Send + Sync>,
     connection: Mutex<Option<Connection>>,
+    discovery: Mutex<Option<crate::github_runtime::task_pr_discovery::LocalDiscovery>>,
 }
 
 struct Connection {
@@ -31,6 +32,21 @@ struct Connection {
 }
 
 impl DaemonTransport {
+    pub(super) fn configure_completion(
+        &self,
+        discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery,
+    ) {
+        *self.0.discovery.lock().unwrap_or_else(|p| p.into_inner()) = Some(discovery);
+    }
+    pub(super) fn completion(
+        &self,
+    ) -> Option<crate::github_runtime::task_pr_discovery::LocalDiscovery> {
+        self.0
+            .discovery
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
     /// Selection is fixed for this controller lifetime, including key-scoped commands.
     pub(super) fn new(
         root: PathBuf,
@@ -42,6 +58,7 @@ impl DaemonTransport {
             executable,
             selects: Box::new(selects),
             connection: Mutex::new(None),
+            discovery: Mutex::new(None),
         }))
     }
 
@@ -172,7 +189,22 @@ fn pump(shared: &Shared) -> Result<(), Error> {
                         }),
                     );
                 }
-                Event::Exited { pty, .. } if pty == &session.pty => {
+                Event::Exited { pty, code } if pty == &session.pty => {
+                    if let openforge_session_protocol::TerminalOwner::Agent { task_id } =
+                        &session.owner
+                    {
+                        if task_id == &session.session_key {
+                            if let Some(discovery) = shared
+                                .discovery
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .as_ref()
+                            {
+                                discovery.agent_exited(task_id, pty.instance.value(), *code == 0);
+                                discovery.finish(task_id, pty.instance.value());
+                            }
+                        }
+                    }
                     connection.publisher.publish(
                         &format!("pty-exit-{}", session.session_key),
                         &serde_json::json!({ "instance_id": pty.instance }),

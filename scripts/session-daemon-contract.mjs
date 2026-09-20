@@ -13,6 +13,7 @@ for (const kind of ['host', 'protocol', 'client', 'daemon']) {
 }
 cargo(['build', '--manifest-path', layout.sessionCrates.daemon.manifestPath])
 cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::host::'])
+cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::daemon_shells::completion_tests', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'app_invoke::tests::daemon_', '--', '--ignored'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'app_invoke::tests::lifecycle::daemon_pi', '--', '--ignored'])
 process.env.OPENFORGE_TEST_DAEMON ??= layout.sessionCrates.daemon.binaryPath

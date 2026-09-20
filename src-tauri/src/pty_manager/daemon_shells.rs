@@ -12,6 +12,10 @@ use openforge_session_protocol::{Error, Session, ShellCommand};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(test)]
+#[path = "daemon_completion_tests.rs"]
+mod completion_tests;
+
 #[derive(Clone)]
 pub(crate) struct DaemonShells {
     transport: DaemonTransport,
@@ -47,6 +51,12 @@ impl PtyManager {
 }
 
 impl DaemonShells {
+    pub(super) fn configure_completion(
+        &self,
+        discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery,
+    ) {
+        self.transport.configure_completion(discovery);
+    }
     #[cfg(test)]
     pub(crate) fn new(root: PathBuf, executable: PathBuf, key: String) -> Self {
         Self::with_selection(root, executable, key, Default::default())
@@ -223,12 +233,24 @@ impl DaemonShells {
         command: ShellCommand,
         publisher: RuntimeEventPublisher,
     ) -> Result<u64, String> {
+        let discovery = self.transport.completion();
         self.run(publisher, move |client, key| {
             if let Some(session) = find(client, key)? {
                 if session.owner != command.owner {
                     return Err(Error::StalePty);
                 }
                 return if session.exit_code.is_none() {
+                    if let (
+                        Some(discovery),
+                        openforge_session_protocol::TerminalOwner::Agent { task_id },
+                    ) = (&discovery, &command.owner)
+                    {
+                        discovery.ensure_agent(
+                            task_id,
+                            command.command.cwd.clone(),
+                            session.pty.instance.value(),
+                        );
+                    }
                     Ok(session.pty.instance.value())
                 } else {
                     Err(Error::StalePty)
@@ -237,7 +259,13 @@ impl DaemonShells {
             use sha2::Digest;
             let hash = sha2::Sha256::digest(key.as_bytes());
             let operation = format!("spawn-{:x}", hash);
-            Ok(client.spawn(&operation, &command)?.pty.instance.value())
+            let instance = client.spawn(&operation, &command)?.pty.instance.value();
+            if let (Some(discovery), openforge_session_protocol::TerminalOwner::Agent { task_id }) =
+                (&discovery, &command.owner)
+            {
+                discovery.ensure_agent(task_id, command.command.cwd.clone(), instance);
+            }
+            Ok(instance)
         })
         .await
     }

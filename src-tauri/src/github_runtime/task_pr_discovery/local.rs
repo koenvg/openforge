@@ -9,11 +9,19 @@ use std::{
     time::Instant,
 };
 
+#[derive(Default)]
+pub(super) struct Completion {
+    pub generation: u64,
+    pub scheduled: bool,
+}
+
 pub(super) struct Origin {
     pub task_id: String,
     pub cwd: PathBuf,
     pub instance: u64,
     pub current: RwLock<bool>,
+    pub agent: bool,
+    pub completion: Mutex<Completion>,
 }
 
 #[derive(Default)]
@@ -23,7 +31,7 @@ struct Registry {
     latest: HashMap<String, Weak<Origin>>,
 }
 
-/// Receives ownership only from successful local PTY registration, never output text.
+/// Receives authoritative task ownership from PTY registration, never output text.
 #[derive(Clone, Default)]
 pub(crate) struct LocalDiscovery(Arc<Mutex<Registry>>);
 
@@ -32,6 +40,24 @@ impl LocalDiscovery {
         self.0.lock().unwrap_or_else(|p| p.into_inner()).discovery = Some(discovery);
     }
     pub(crate) fn register(&self, key: &str, task_id: &str, cwd: PathBuf, instance: u64) {
+        self.register_origin(key, task_id, cwd, instance, false);
+    }
+    pub(crate) fn ensure_agent(&self, task_id: &str, cwd: PathBuf, instance: u64) {
+        let matches = self
+            .0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .active
+            .get(task_id)
+            .is_some_and(|o| o.agent && o.instance == instance);
+        if !matches {
+            self.register_agent(task_id, cwd, instance);
+        }
+    }
+    pub(crate) fn register_agent(&self, task_id: &str, cwd: PathBuf, instance: u64) {
+        self.register_origin(task_id, task_id, cwd, instance, true);
+    }
+    fn register_origin(&self, key: &str, task_id: &str, cwd: PathBuf, instance: u64, agent: bool) {
         self.invalidate(key);
         let Ok(cwd) = cwd.canonicalize() else {
             return;
@@ -48,9 +74,61 @@ impl LocalDiscovery {
             cwd,
             instance,
             current: RwLock::new(true),
+            agent,
+            completion: Mutex::new(Completion::default()),
         });
         registry.latest.insert(key.into(), Arc::downgrade(&origin));
         registry.active.insert(key.into(), origin);
+    }
+    pub(crate) fn lifecycle(&self, change: &crate::agent_lifecycle::AgentLifecycleStatusChange) {
+        use crate::agent_lifecycle::AgentLifecycleEventKind;
+        if change.stage != "implementing" {
+            return;
+        }
+        let Some(instance) = change.pty_instance_id else {
+            return;
+        };
+        if change.status == "running" || change.status == "paused" || change.status == "failed" {
+            let registry = self.0.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(origin) = registry
+                .latest
+                .get(&change.task_id)
+                .and_then(Weak::upgrade)
+                .filter(|o| o.agent && o.instance == instance)
+            {
+                let mut completion = origin.completion.lock().unwrap_or_else(|p| p.into_inner());
+                completion.generation = completion.generation.wrapping_add(1);
+                completion.scheduled = false;
+            }
+        } else if change.previous_status == "running"
+            && change.status == "completed"
+            && matches!(
+                change.kind,
+                AgentLifecycleEventKind::BecameIdle | AgentLifecycleEventKind::Ended
+            )
+        {
+            self.agent_exited(&change.task_id, instance, true);
+        }
+    }
+    pub(crate) fn agent_exited(&self, key: &str, instance: u64, success: bool) {
+        let registry = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(origin) = registry
+            .latest
+            .get(key)
+            .and_then(Weak::upgrade)
+            .filter(|o| o.agent && o.instance == instance)
+        else {
+            return;
+        };
+        if success {
+            let mut completion = origin.completion.lock().unwrap_or_else(|p| p.into_inner());
+            if !completion.scheduled {
+                completion.scheduled = true;
+                if let Some(discovery) = &registry.discovery {
+                    discovery.complete(origin.clone(), completion.generation);
+                }
+            }
+        }
     }
     pub(crate) fn invalidate(&self, key: &str) {
         let mut registry = self.0.lock().unwrap_or_else(|p| p.into_inner());
@@ -104,7 +182,8 @@ impl OutputObserver {
             .feed(text.as_bytes(), Instant::now(), |candidate| {
                 self.discovery.submit(Signal {
                     origin: self.origin.clone(),
-                    candidate,
+                    candidate: Some(candidate),
+                    completion: None,
                 });
             });
     }

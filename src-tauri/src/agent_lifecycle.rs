@@ -192,6 +192,8 @@ pub struct AgentLifecycleNotification {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentLifecycleStatusChange {
+    pub previous_status: String,
+    pub stage: String,
     pub task_id: String,
     pub status: String,
     pub provider: String,

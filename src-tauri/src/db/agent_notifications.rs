@@ -154,6 +154,8 @@ pub(super) fn apply(
         .transpose()?;
     Ok(LifecycleApplication {
         change: Some(AgentLifecycleStatusChange {
+            previous_status: session.status.clone(),
+            stage: session.stage.clone(),
             task_id: notification.task_id.clone(),
             status: target.into(),
             provider: notification.provider.clone(),

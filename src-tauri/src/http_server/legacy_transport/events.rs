@@ -163,6 +163,9 @@ where
     Fut: std::future::Future<Output = Result<bool, String>> + Send + 'static,
 {
     if let Some(change) = status_change {
+        if let Some(manager) = &state.pty_manager {
+            manager.accept_pr_discovery_lifecycle(&change);
+        }
         emit_agent_status_changed(&state, &change);
         if change.status == "completed" {
             if let Some(manager) = state.pty_manager.as_ref() {
