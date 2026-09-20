@@ -2,7 +2,6 @@ use base64::{engine::general_purpose, Engine as _};
 use futures::future::join_all;
 use log::warn;
 use reqwest::header::{HeaderMap, LINK};
-use serde::{Deserialize, Serialize};
 
 use super::error::GitHubError;
 use super::types::*;
@@ -32,16 +31,6 @@ fn decode_base64_content(content: &str) -> Result<String, GitHubError> {
 
     String::from_utf8(decoded)
         .map_err(|e| GitHubError::ParseError(format!("UTF-8 decode error: {}", e)))
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct CachedSearchPrResults {
-    results: Vec<SearchPrResult>,
-    safe_search_ids: Vec<i64>,
-}
-
-fn should_cache_enriched_search_results(detail_error_count: usize) -> bool {
-    detail_error_count == 0
 }
 
 fn review_requested_pr_search_url(username: &str) -> String {
@@ -277,136 +266,150 @@ impl GitHubClient {
         Ok(all_comments)
     }
 
+    /// Return only complete, enriched search snapshots. Any search-page or detail
+    /// failure returns an error so callers must not reconcile stale rows.
+    /// GitHub limits Search to 1,000 matches; larger searches fail closed.
     async fn search_prs_with_details(
         &self,
         url: &str,
         token: &str,
     ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
-        match self.conditional_get(url, token).await? {
-            super::ConditionalResponse::NotModified(Some(cached_body)) => {
-                let cached: CachedSearchPrResults = serde_json::from_str(&cached_body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-                Ok((cached.results, cached.safe_search_ids))
+        // Cache each raw page independently. A 304 on page one says nothing about
+        // later pages or PR details, which must still be refreshed.
+        let mut items = Vec::new();
+        let mut seen_ids = std::collections::HashSet::new();
+        let mut expected_count = None;
+        let mut complete = false;
+        // GitHub Search exposes at most 1,000 matches, in pages of 100.
+        for page in 1..=10 {
+            let page_url = if page == 1 {
+                url.to_string()
+            } else {
+                format!("{url}&page={page}")
+            };
+            let response = self
+                .get_with_etag::<SearchResponse>(&page_url, token)
+                .await?;
+            if response.incomplete_results || response.total_count > 1_000 {
+                return Err(GitHubError::IncompleteSearch(
+                    "GitHub returned incomplete results or exceeded its 1,000-result limit".into(),
+                ));
             }
-            super::ConditionalResponse::NotModified(None) => Err(GitHubError::ParseError(
-                "Received 304 but no cached search response found".to_string(),
-            )),
-            super::ConditionalResponse::Fresh(response) => {
-                if !response.status().is_success() {
-                    return Err(Self::api_error_from_response(response).await);
+            if expected_count.is_some_and(|count| count != response.total_count) {
+                return Err(GitHubError::IncompleteSearch(
+                    "result count changed between pages".into(),
+                ));
+            }
+            expected_count = Some(response.total_count);
+            let empty_page = response.items.is_empty();
+            for item in response.items {
+                if !seen_ids.insert(item.id) {
+                    return Err(GitHubError::IncompleteSearch(
+                        "duplicate PR across search results".into(),
+                    ));
                 }
-
-                let etag = response
-                    .headers()
-                    .get("etag")
-                    .and_then(|v| v.to_str().ok())
-                    .map(String::from);
-                let body = response
-                    .text()
-                    .await
-                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-                let search_response: SearchResponse = serde_json::from_str(&body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-
-                let all_search_ids: Vec<i64> =
-                    search_response.items.iter().map(|item| item.id).collect();
-                let is_complete = search_response.total_count <= search_response.items.len();
-                let items_with_coords: Vec<(SearchItem, String, String)> = search_response
-                    .items
-                    .into_iter()
-                    .filter_map(|item| {
-                        let parts: Vec<&str> = item.repository_url.split('/').collect();
-                        if parts.len() < 2 {
-                            return None;
-                        }
-                        let owner = parts[parts.len() - 2].to_string();
-                        let repo = parts[parts.len() - 1].to_string();
-                        Some((item, owner, repo))
-                    })
-                    .collect();
-
-                let detail_futures: Vec<_> = items_with_coords
-                    .iter()
-                    .map(|(item, owner, repo)| self.get_pr_details(owner, repo, item.number, token))
-                    .collect();
-                let detail_results = join_all(detail_futures).await;
-
-                let mut results = Vec::new();
-                let mut detail_error_count = 0usize;
-                for ((item, owner, repo), pr_result) in
-                    items_with_coords.into_iter().zip(detail_results)
-                {
-                    match pr_result {
-                        Ok(pr_details) => {
-                            results.push(SearchPrResult {
-                                id: item.id,
-                                number: item.number,
-                                title: item.title,
-                                body: item.body,
-                                state: item.state,
-                                draft: item.draft.unwrap_or(false),
-                                html_url: item.html_url,
-                                user_login: item.user.login,
-                                user_avatar_url: item.user.avatar_url,
-                                repo_owner: owner,
-                                repo_name: repo,
-                                head_ref: pr_details.head.ref_name,
-                                base_ref: pr_details
-                                    .extra
-                                    .get("base")
-                                    .and_then(|b| b.get("ref"))
-                                    .and_then(|r| r.as_str())
-                                    .unwrap_or("main")
-                                    .to_string(),
-                                head_sha: pr_details.head.sha,
-                                additions: pr_details
-                                    .extra
-                                    .get("additions")
-                                    .and_then(|a| a.as_i64())
-                                    .unwrap_or(0),
-                                deletions: pr_details
-                                    .extra
-                                    .get("deletions")
-                                    .and_then(|d| d.as_i64())
-                                    .unwrap_or(0),
-                                changed_files: pr_details
-                                    .extra
-                                    .get("changed_files")
-                                    .and_then(|c| c.as_i64())
-                                    .unwrap_or(0),
-                                mergeable: pr_details.mergeable,
-                                mergeable_state: pr_details.mergeable_state,
-                                created_at: item.created_at,
-                                updated_at: item.updated_at,
-                                labels: item.labels,
-                            });
-                        }
-                        Err(e) => {
-                            detail_error_count += 1;
-                            warn!(
-                                "[GitHub] Failed to fetch PR details for PR #{}: {}",
-                                item.number,
-                                e.sanitized_log_message()
-                            );
-                        }
-                    }
-                }
-
-                let cached = CachedSearchPrResults {
-                    results,
-                    safe_search_ids: if is_complete { all_search_ids } else { vec![] },
-                };
-                if should_cache_enriched_search_results(detail_error_count) {
-                    let cached_body = serde_json::to_string(&cached)
-                        .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-                    self.cache_response_body(url, etag, &cached_body);
-                }
-
-                Ok((cached.results, cached.safe_search_ids))
+                items.push(item);
+            }
+            if items.len() == response.total_count {
+                complete = true;
+                break;
+            }
+            if empty_page || items.len() > response.total_count {
+                break;
             }
         }
+        if !complete {
+            return Err(GitHubError::IncompleteSearch(
+                "search pages did not cover the reported result count".into(),
+            ));
+        }
+        let all_search_ids: Vec<i64> = items.iter().map(|item| item.id).collect();
+        let items_with_coords: Vec<(SearchItem, String, String)> = items
+            .into_iter()
+            .map(|item| {
+                let repository = reqwest::Url::parse(&item.repository_url)
+                    .map_err(|_| GitHubError::IncompleteSearch("invalid repository URL".into()))?;
+                let parts: Vec<_> = repository.path().split('/').collect();
+                if parts.len() != 4
+                    || parts[1] != "repos"
+                    || parts[2].is_empty()
+                    || parts[3].is_empty()
+                {
+                    return Err(GitHubError::IncompleteSearch(
+                        "invalid repository coordinates".into(),
+                    ));
+                }
+                let owner = parts[2].to_string();
+                let repo = parts[3].to_string();
+                Ok((item, owner, repo))
+            })
+            .collect::<Result<_, GitHubError>>()?;
+
+        let mut detail_results = Vec::with_capacity(items_with_coords.len());
+        // Keep pagination from multiplying the previous 100-request fan-out.
+        for batch in items_with_coords.chunks(100) {
+            detail_results.extend(
+                join_all(batch.iter().map(|(item, owner, repo)| {
+                    self.get_pr_details(owner, repo, item.number, token)
+                }))
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, GitHubError>>()?,
+            );
+        }
+
+        let mut results = Vec::new();
+        for ((item, owner, repo), pr_details) in items_with_coords.into_iter().zip(detail_results) {
+            results.push(SearchPrResult {
+                id: item.id,
+                number: item.number,
+                title: item.title,
+                body: item.body,
+                state: item.state,
+                draft: item.draft.unwrap_or(false),
+                html_url: item.html_url,
+                user_login: item.user.login,
+                user_avatar_url: item.user.avatar_url,
+                repo_owner: owner,
+                repo_name: repo,
+                head_ref: pr_details.head.ref_name,
+                base_ref: pr_details
+                    .extra
+                    .get("base")
+                    .and_then(|b| b.get("ref"))
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("main")
+                    .to_string(),
+                head_sha: pr_details.head.sha,
+                additions: pr_details
+                    .extra
+                    .get("additions")
+                    .and_then(|a| a.as_i64())
+                    .unwrap_or(0),
+                deletions: pr_details
+                    .extra
+                    .get("deletions")
+                    .and_then(|d| d.as_i64())
+                    .unwrap_or(0),
+                changed_files: pr_details
+                    .extra
+                    .get("changed_files")
+                    .and_then(|c| c.as_i64())
+                    .unwrap_or(0),
+                mergeable: pr_details.mergeable,
+                mergeable_state: pr_details.mergeable_state,
+                created_at: item.created_at,
+                updated_at: item.updated_at,
+                labels: item.labels,
+            });
+        }
+
+        Ok((results, all_search_ids))
     }
 
+    /// Fetch all non-draft review requests, up to GitHub's 1,000-match search cap.
+    /// Only a complete search with every detail fetched returns `Ok`, including
+    /// a genuinely empty search. Errors must preserve previously stored rows.
     pub async fn search_review_requested_prs(
         &self,
         username: &str,
@@ -418,6 +421,9 @@ impl GitHubClient {
         Ok(exclude_draft_search_pr_results(prs, safe_search_ids))
     }
 
+    /// Fetch all open authored PRs, up to GitHub's 1,000-match search cap.
+    /// Only a complete search with every detail fetched returns `Ok`, including
+    /// a genuinely empty search. Errors must preserve previously stored rows.
     pub async fn search_authored_prs(
         &self,
         username: &str,
@@ -817,51 +823,6 @@ mod tests {
         let decoded = decode_base64_content("SGVsbG8gV29y\nbGQ=").unwrap();
 
         assert_eq!(decoded, "Hello World");
-    }
-
-    #[test]
-    fn search_pr_results_cache_round_trips_enriched_results_and_safe_ids() {
-        let cached = CachedSearchPrResults {
-            results: vec![SearchPrResult {
-                id: 42,
-                number: 7,
-                title: "T-42 Ready".to_string(),
-                body: Some("body".to_string()),
-                state: "open".to_string(),
-                draft: false,
-                html_url: "https://github.com/acme/repo/pull/7".to_string(),
-                user_login: "alice".to_string(),
-                user_avatar_url: None,
-                repo_owner: "acme".to_string(),
-                repo_name: "repo".to_string(),
-                head_ref: "T-42-ready".to_string(),
-                base_ref: "main".to_string(),
-                head_sha: "abc123".to_string(),
-                additions: 10,
-                deletions: 2,
-                changed_files: 1,
-                mergeable: Some(true),
-                mergeable_state: Some("clean".to_string()),
-                created_at: "2026-01-01T00:00:00Z".to_string(),
-                updated_at: "2026-01-02T00:00:00Z".to_string(),
-                labels: vec![],
-            }],
-            safe_search_ids: vec![42],
-        };
-
-        let body = serde_json::to_string(&cached).expect("cache payload should serialize");
-        let parsed: CachedSearchPrResults =
-            serde_json::from_str(&body).expect("cache payload should deserialize");
-
-        assert_eq!(parsed.safe_search_ids, vec![42]);
-        assert_eq!(parsed.results.len(), 1);
-        assert_eq!(parsed.results[0].head_ref, "T-42-ready");
-        assert_eq!(parsed.results[0].mergeable_state.as_deref(), Some("clean"));
-    }
-    #[test]
-    fn search_pr_results_cache_is_skipped_when_any_detail_fetch_failed() {
-        assert!(should_cache_enriched_search_results(0));
-        assert!(!should_cache_enriched_search_results(1));
     }
 
     #[test]

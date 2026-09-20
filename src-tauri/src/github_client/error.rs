@@ -11,6 +11,8 @@ pub enum GitHubError {
     ApiError { status: u16, message: String },
     /// Parse error (JSON deserialization failure)
     ParseError(String),
+    /// Search membership could not be established completely; keep existing rows.
+    IncompleteSearch(String),
 }
 
 impl GitHubError {
@@ -21,6 +23,7 @@ impl GitHubError {
                 format!("GitHub API error (status {status})")
             }
             GitHubError::ParseError(_) => "GitHub parse error".to_string(),
+            GitHubError::IncompleteSearch(_) => "GitHub incomplete search".to_string(),
         }
     }
 }
@@ -33,6 +36,7 @@ impl fmt::Display for GitHubError {
                 write!(f, "API error (status {}): {}", status, message)
             }
             GitHubError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            GitHubError::IncompleteSearch(msg) => write!(f, "Incomplete search: {msg}"),
         }
     }
 }

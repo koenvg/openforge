@@ -29,6 +29,8 @@ mod repos;
 mod response_cache;
 mod reviews;
 mod rules;
+#[cfg(test)]
+mod search_tests;
 mod transport;
 pub mod types;
 

@@ -168,6 +168,99 @@ async fn review_request_github_client() -> GitHubClient {
         .with_test_api_base_url(format!("http://{address}"))
 }
 
+#[tokio::test]
+async fn incomplete_search_snapshots_preserve_authored_and_review_rows() {
+    use axum::http::StatusCode;
+    for scenario in ["incomplete", "all_details_failed", "partial_details_failed"] {
+        let (db, _dir) = make_test_db(scenario);
+        db.set_config("github_username", "alice").unwrap();
+        db.upsert_authored_pr(
+            42,
+            7,
+            "Previously fetched",
+            None,
+            "open",
+            false,
+            "https://github.com/acme/widgets/pull/7",
+            "alice",
+            None,
+            "acme",
+            "widgets",
+            "feature",
+            "main",
+            "old-sha",
+            1,
+            0,
+            1,
+            Some("success"),
+            None,
+            None,
+            false,
+            None,
+            &[],
+            1,
+            2,
+        )
+        .unwrap();
+        let db = Arc::new(Mutex::new(db));
+        // Seed a currently requested review through the real refresh boundary.
+        let healthy = review_request_github_client().await;
+        crate::github_runtime::fetch_review_prs(&db, &healthy)
+            .await
+            .unwrap();
+        let authored_before =
+            serde_json::to_value(acquire_db(&db).get_all_authored_prs().unwrap()).unwrap();
+        let reviews_before =
+            serde_json::to_value(acquire_db(&db).get_all_review_prs().unwrap()).unwrap();
+        let router = Router::new()
+            .route("/search/issues", get(move || async move {
+                let mut body = review_request_search_response().await.0;
+                if scenario == "incomplete" {
+                    body = serde_json::json!({"total_count": 0, "incomplete_results": true, "items": []});
+                } else if scenario == "partial_details_failed" {
+                    let mut second = body["items"][0].clone();
+                    second["id"] = 43.into();
+                    second["number"] = 8.into();
+                    body["items"].as_array_mut().unwrap().push(second);
+                    body["total_count"] = 2.into();
+                }
+                Json(body)
+            }))
+            .route("/repos/acme/widgets/pulls/7", get(move || async move {
+                use axum::response::IntoResponse;
+                if scenario == "all_details_failed" {
+                    StatusCode::BAD_GATEWAY.into_response()
+                } else {
+                    review_request_detail_response().await.into_response()
+                }
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let failing = GitHubClient::with_test_token(Ok(Some("token".into())))
+            .with_test_api_base_url(format!("http://{address}"));
+        let events = GitHubEventTarget::sidecar(None);
+        assert!(poll_authored_prs(&failing, &db, &events, "token")
+            .await
+            .is_err());
+        assert!(poll_review_prs(&failing, &db, &events, "token")
+            .await
+            .is_err());
+        assert!(crate::github_runtime::fetch_review_prs(&db, &failing)
+            .await
+            .is_err());
+        assert_eq!(
+            serde_json::to_value(acquire_db(&db).get_all_authored_prs().unwrap()).unwrap(),
+            authored_before
+        );
+        assert_eq!(
+            serde_json::to_value(acquire_db(&db).get_all_review_prs().unwrap()).unwrap(),
+            reviews_before
+        );
+        server.abort();
+    }
+}
+
 async fn empty_review_search_response() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "total_count": 0, "items": [] }))
 }
