@@ -6,6 +6,15 @@ use crate::{
 
 #[tokio::test]
 async fn live_local_shell_output_links_first_pr_without_any_terminal_view() {
+    assert_live_shell_links("printf 'created https://github.com/acme/widgets/pull/42\\n'").await;
+}
+
+#[tokio::test]
+async fn live_local_shell_hyperlink_links_first_pr_without_any_terminal_view() {
+    assert_live_shell_links("printf 'Created \\033]8;;https://github.com/acme/widgets/pull/42\\007PR #42\\033]8;;\\007.\\n'").await;
+}
+
+async fn assert_live_shell_links(script: &str) {
     let f = Fixture::new(false, Some("test-token")).await;
     let mut manager = PtyManager::new();
     manager.set_pid_dir(f.dir.path().join("pids"));
@@ -13,7 +22,7 @@ async fn live_local_shell_output_links_first_pr_without_any_terminal_view() {
     let mut events = f.bus.sender().subscribe();
     let mut command = portable_pty::CommandBuilder::new("/bin/sh");
     command.arg("-c");
-    command.arg("printf 'created https://github.com/acme/widgets/pull/42\\n'");
+    command.arg(script);
     manager
         .spawn_shell_pty_with_command(
             PtySpawnContext {

@@ -169,6 +169,10 @@ pub(crate) struct OutputObserver {
 }
 impl OutputObserver {
     pub(crate) fn output(&mut self, text: &str) {
+        self.output_bytes(text.as_bytes());
+    }
+
+    pub(crate) fn output_bytes(&mut self, bytes: &[u8]) {
         if !*self
             .origin
             .current
@@ -178,14 +182,13 @@ impl OutputObserver {
             self.detector.reset();
             return;
         }
-        self.detector
-            .feed(text.as_bytes(), Instant::now(), |candidate| {
-                self.discovery.submit(Signal {
-                    origin: self.origin.clone(),
-                    candidate: Some(candidate),
-                    completion: None,
-                });
+        self.detector.feed(bytes, Instant::now(), |candidate| {
+            self.discovery.submit(Signal {
+                origin: self.origin.clone(),
+                candidate: Some(candidate),
+                completion: None,
             });
+        });
     }
     pub(crate) fn gap(&mut self) {
         self.detector.reset();

@@ -7,13 +7,28 @@ pub(crate) struct Candidate {
     pub number: i64,
 }
 
+const MAX_CANDIDATE_BYTES: usize = 2048;
+
+#[derive(Default)]
+enum Escape {
+    #[default]
+    Text,
+    Start,
+    Csi,
+    Osc,
+    OscEnd,
+    IgnoredString,
+    IgnoredStringEnd,
+}
+
 #[derive(Default)]
 pub(crate) struct Detector {
     carry: Vec<u8>,
-    escape: u8,
+    escape: Escape,
     discarded: bool,
     recent: std::collections::VecDeque<(Candidate, Instant)>,
     escape_len: usize,
+    osc: Vec<u8>,
 }
 
 impl Detector {
@@ -25,37 +40,65 @@ impl Detector {
         self.recent
             .retain(|(_, seen)| now.saturating_duration_since(*seen).as_secs() < 30);
         for &byte in bytes {
-            // OSC/DCS payloads are not visible text. Skip without retaining them.
-            if self.escape == 3 || self.escape == 4 {
-                if byte == 7 || (self.escape == 4 && byte == b'\\') {
-                    self.escape = 0;
-                } else {
-                    self.escape = if byte == 0x1b { 4 } else { 3 };
-                }
-                continue;
-            }
-            if self.escape != 0 {
-                self.escape_len += 1;
-                if self.escape_len + self.carry.len() > 2048 {
-                    self.reject();
-                    continue;
-                }
-            }
             match self.escape {
-                1 => {
-                    if byte == b'[' {
-                        self.escape = 2;
-                    } else if b"]PX^_".contains(&byte) {
-                        self.reject();
-                        self.escape = 3;
+                Escape::Osc | Escape::OscEnd => {
+                    if matches!(self.escape, Escape::OscEnd) {
+                        if byte == b'\\' {
+                            self.finish_osc(now, &mut emit);
+                        } else {
+                            self.osc.clear();
+                            self.skip_string_byte(byte);
+                        }
+                    } else if byte == 7 {
+                        self.finish_osc(now, &mut emit);
+                    } else if byte == 0x1b {
+                        self.escape = Escape::OscEnd;
+                    } else if byte.is_ascii_control()
+                        || !byte.is_ascii()
+                        || self.osc.len() == MAX_CANDIDATE_BYTES
+                    {
+                        self.osc.clear();
+                        self.escape = Escape::IgnoredString;
                     } else {
-                        self.reject();
+                        self.osc.push(byte);
                     }
                     continue;
                 }
-                2 => {
+                Escape::IgnoredString | Escape::IgnoredStringEnd => {
+                    self.skip_string_byte(byte);
+                    continue;
+                }
+                Escape::Csi => {
+                    self.escape_len += 1;
+                    if self.escape_len + self.carry.len() > MAX_CANDIDATE_BYTES {
+                        self.reject();
+                        continue;
+                    }
+                }
+                Escape::Text | Escape::Start => {}
+            }
+            match self.escape {
+                Escape::Start => {
+                    match byte {
+                        b'[' => {
+                            self.escape_len += 1;
+                            self.escape = Escape::Csi;
+                        }
+                        b']' => {
+                            self.reject();
+                            self.escape = Escape::Osc;
+                        }
+                        b'P' | b'X' | b'^' | b'_' => {
+                            self.reject();
+                            self.escape = Escape::IgnoredString;
+                        }
+                        _ => self.reject(),
+                    }
+                    continue;
+                }
+                Escape::Csi => {
                     if byte == b'm' {
-                        self.escape = 0;
+                        self.escape = Escape::Text;
                     } else if !byte.is_ascii_digit() && !b";:".contains(&byte) {
                         self.reject();
                     }
@@ -64,18 +107,12 @@ impl Detector {
                 _ => {}
             }
             if byte == 0x1b {
-                self.escape = 1;
+                self.escape = Escape::Start;
                 self.escape_len = 1;
             } else if b" \t\r\n\"'`<>()[]{}".contains(&byte) {
                 if !self.discarded {
                     if let Some(candidate) = parse_candidate(&self.carry) {
-                        if !self.recent.iter().any(|(pr, _)| pr == &candidate) {
-                            if self.recent.len() == 128 {
-                                self.recent.pop_front();
-                            }
-                            self.recent.push_back((candidate.clone(), now));
-                            emit(candidate);
-                        }
+                        self.emit_candidate(candidate, now, &mut emit);
                     }
                 }
                 self.carry.clear();
@@ -83,7 +120,7 @@ impl Detector {
             } else if byte.is_ascii_control() || !byte.is_ascii() {
                 self.reject();
             } else if !self.discarded {
-                if self.carry.len() == 2048 {
+                if self.carry.len() == MAX_CANDIDATE_BYTES {
                     self.reject();
                 } else {
                     self.carry.push(byte);
@@ -92,9 +129,48 @@ impl Detector {
         }
     }
 
+    fn finish_osc(&mut self, now: Instant, emit: &mut impl FnMut(Candidate)) {
+        let candidate = self.osc.strip_prefix(b"8;").and_then(|payload| {
+            let separator = payload.iter().position(|&byte| byte == b';')?;
+            parse_candidate(&payload[separator + 1..])
+        });
+        self.osc.clear();
+        self.escape = Escape::Text;
+        if let Some(candidate) = candidate {
+            self.emit_candidate(candidate, now, emit);
+        }
+    }
+
+    fn skip_string_byte(&mut self, byte: u8) {
+        self.escape =
+            if byte == 7 || (matches!(self.escape, Escape::IgnoredStringEnd) && byte == b'\\') {
+                Escape::Text
+            } else if byte == 0x1b {
+                Escape::IgnoredStringEnd
+            } else {
+                Escape::IgnoredString
+            };
+    }
+
+    fn emit_candidate(
+        &mut self,
+        candidate: Candidate,
+        now: Instant,
+        emit: &mut impl FnMut(Candidate),
+    ) {
+        if self.recent.iter().any(|(pr, _)| pr == &candidate) {
+            return;
+        }
+        if self.recent.len() == 128 {
+            self.recent.pop_front();
+        }
+        self.recent.push_back((candidate.clone(), now));
+        emit(candidate);
+    }
+
     fn reject(&mut self) {
         self.carry.clear();
-        self.escape = 0;
+        self.escape = Escape::Text;
         self.discarded = true;
     }
 }
@@ -137,8 +213,45 @@ fn parse_candidate(bytes: &[u8]) -> Option<Candidate> {
 }
 
 #[cfg(test)]
+#[path = "detector/hyperlinks.rs"]
+mod hyperlinks;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recognizes_hyperlink_targets_only_after_complete_opening_at_every_split() {
+        let expected = vec![Candidate {
+            owner: "acme".into(),
+            repo: "widgets".into(),
+            number: 2549,
+        }];
+        for terminator in ["\x07", "\x1b\\"] {
+            for params in ["", "id=pr-2549"] {
+                let opening = format!(
+                    "\x1b]8;{params};https://github.com/Acme/widgets/pull/2549{terminator}"
+                );
+                for split in 0..opening.len() {
+                    let mut detector = Detector::default();
+                    let mut found = Vec::new();
+                    let now = Instant::now();
+                    detector.feed(&opening.as_bytes()[..split], now, |pr| found.push(pr));
+                    assert!(found.is_empty(), "emitted before terminator at {split}");
+                    detector.feed(&opening.as_bytes()[split..], now, |pr| found.push(pr));
+                    assert_eq!(found, expected, "split {split}, {opening:?}");
+                    detector.feed(b"PR #2549\x1b]8;;\x07", now, |pr| found.push(pr));
+                    assert_eq!(found, expected);
+                }
+                let mut detector = Detector::default();
+                let mut found = Vec::new();
+                for byte in opening.as_bytes().chunks(1) {
+                    detector.feed(byte, Instant::now(), |pr| found.push(pr));
+                }
+                assert_eq!(found, expected);
+            }
+        }
+    }
 
     #[test]
     fn unsupported_terminal_controls_never_supply_url_boundaries_or_hidden_urls() {
