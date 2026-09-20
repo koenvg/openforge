@@ -27,6 +27,7 @@ function createHarness(overrides = {}) {
     verifyDesktopBridge: vi.fn(async () => { operations.push('verify') }),
     selectSeededTask: vi.fn(async () => { operations.push('select') }),
     armTerminalGate: vi.fn(async () => { operations.push('arm'); return { id: 'gate-1', state: 'armed' } }),
+    waitForTaskView: vi.fn(async () => { operations.push('navigation-ready') }),
     attachTerminalView: vi.fn(async () => {
       operations.push('attach-start')
       await attachment
@@ -78,7 +79,7 @@ describe('first-attachment invariant scenario', () => {
     })
 
     expect(harness.operations).toEqual([
-      'verify', 'select', 'arm', 'attach-start', 'wait', 'resume', 'attach-finish',
+      'verify', 'select', 'navigation-ready', 'arm', 'attach-start', 'wait', 'resume', 'attach-finish',
       'screenshot-1', 'emit', 'drain', 'screenshot-2', 'capture',
     ])
     expect(harness.driver.armTerminalGate).toHaveBeenCalledWith('acquisition', 'T-1-shell-0', { timeoutMs: 8_000 })
@@ -96,6 +97,25 @@ describe('first-attachment invariant scenario', () => {
       },
     })
   })
+  it('surfaces attachment navigation failure instead of waiting for the acquisition gate timeout', async () => {
+    const harness = createHarness({
+      attachTerminalView: vi.fn(async () => { throw new Error('Terminal navigation failed') }),
+      waitForTerminalGate: vi.fn(() => new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('acquisition gate timed out')), 10)
+      })),
+    })
+
+    await expect(runFirstAttachmentScenario({
+      context: harness.context,
+      options: { scenarioTimeoutMs: 8_000 },
+    }, {
+      createDriver: () => harness.driver,
+      createMarker: () => 'first-attachment-marker',
+    })).rejects.toThrow('Terminal navigation failed')
+
+    expect(harness.driver.cancelTerminalGate).toHaveBeenCalledWith('gate-1')
+  })
+
 
   it('rejects missing visible output from the presentation drain', async () => {
     const harness = createHarness({

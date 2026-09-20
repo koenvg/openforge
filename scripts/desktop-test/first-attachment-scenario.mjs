@@ -44,11 +44,15 @@ export async function runFirstAttachmentScenario({ context, options }, dependenc
   try {
     await driver.verifyDesktopBridge()
     await driver.selectSeededTask(manifest)
+    await driver.waitForTaskView('Terminal')
     gate = await driver.armTerminalGate('acquisition', terminalKey, {
       timeoutMs: Math.min(options.scenarioTimeoutMs, 20_000),
     })
     attachment = driver.attachTerminalView(manifest.taskId)
-    await driver.waitForTerminalGate(gate.id, 'reached')
+    await Promise.race([
+      driver.waitForTerminalGate(gate.id, 'reached'),
+      attachment.then(() => new Promise(() => {})),
+    ])
     await driver.resumeTerminalGate(gate.id)
     released = true
     const attached = await attachment

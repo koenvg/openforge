@@ -131,6 +131,16 @@ describe('desktop app driver', () => {
     expect(harness.backToTaskBoard.click.mock.invocationCallOrder[0])
       .toBeLessThan(harness.project.click.mock.invocationCallOrder[0])
   })
+  it('waits for a task view control to become actionable without selecting it', async () => {
+    const harness = createPage()
+    const driver = createDesktopAppDriver(harness.page, { timeoutMs: 8_000 })
+
+    await driver.waitForTaskView('Terminal')
+
+    expect(harness.taskWorkbenchTabs.getByRole).toHaveBeenCalledWith('button', { name: 'Terminal' })
+    expect(harness.terminalTab.click).toHaveBeenCalledWith({ trial: true, timeout: 8_000 })
+  })
+
 
   it('types terminal commands through the focused terminal landmark', async () => {
     const harness = createPage()

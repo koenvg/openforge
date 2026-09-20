@@ -58,6 +58,13 @@ export function createDesktopAppDriver(page, options = {}) {
       .click()
   }
 
+  async function waitForTaskView(name) {
+    await page
+      .getByRole('navigation', { name: 'Task workbench tabs' })
+      .getByRole('button', { name })
+      .click({ trial: true, timeout: timeoutMs })
+  }
+
   async function focusTerminal() {
     await page.getByRole('tab', { name: /^Shell 1\b/i }).click()
     await page.waitForFunction(
@@ -295,6 +302,7 @@ export function createDesktopAppDriver(page, options = {}) {
     typeTerminalCommand,
     waitForTerminalGate,
     waitForVisibleTerminalText,
+    waitForTaskView,
     waitForUiQuiescence,
     verifyDesktopBridge,
   }
