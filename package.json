@@ -13,6 +13,7 @@
     "ghostty:prepare": "node scripts/prepare-ghostty-vt.mjs",
     "build:plugin-sdk-runtime": "node scripts/build-plugin-sdk-runtime.mjs",
     "build:plugins": "pnpm --filter @openforge-app/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
+    "plugin-host:typecheck": "tsc -p tsconfig.plugin-host.json",
     "dev:plugin-artifacts": "node scripts/build-dev-plugin-artifacts.mjs",
     "dev": "vite",
     "storybook:pages": "storybook dev -p 6006 -c storybook/pages",

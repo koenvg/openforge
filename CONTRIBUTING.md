@@ -88,6 +88,9 @@ pnpm exec vitest run src/components/ProjectFileTree.test.ts
 # TypeScript
 pnpm exec tsc --noEmit
 
+# Plugin host TypeScript
+pnpm plugin-host:typecheck
+
 # Rust tests
 cd "$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" && cargo test
 
