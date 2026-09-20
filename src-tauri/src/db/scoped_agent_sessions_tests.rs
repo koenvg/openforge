@@ -123,6 +123,81 @@ fn runtime_transitions_ignore_stale_pty_instances() {
 }
 
 #[test]
+fn interactive_turns_are_fenced_by_pty_and_turn_identity() {
+    let (db, _temp_dir) = make_test_db("scoped_agent_interactive_turns");
+    let project = db
+        .create_project("Repository", "/tmp/repository")
+        .expect("create Project");
+    db.create_scoped_agent_session(&new_session(
+        "sas-turns",
+        "com.example.review",
+        "head-a",
+        &project.id,
+        "scoped-agent-v1-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    ))
+    .expect("create session");
+    db.mark_scoped_agent_session_running("sas-turns", "claude-session", 41)
+        .expect("mark running");
+
+    assert_eq!(
+        db.begin_scoped_agent_turn("sas-turns", 41, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    assert_eq!(
+        db.begin_scoped_agent_turn("sas-turns", 41, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Duplicate,
+    );
+    assert_eq!(
+        db.begin_scoped_agent_turn("sas-turns", 41, "turn-b")
+            .unwrap(),
+        ScopedTurnTransition::Rejected,
+    );
+    let active = db.scoped_agent_session_by_id("sas-turns").unwrap().unwrap();
+    assert_eq!(active.status, ScopedAgentSessionStatus::Running);
+    assert_eq!(active.turn_id.as_deref(), Some("turn-a"));
+    assert_eq!(
+        db.pause_scoped_agent_turn("sas-turns", 40, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Rejected,
+    );
+    assert_eq!(
+        db.pause_scoped_agent_turn("sas-turns", 41, "turn-other")
+            .unwrap(),
+        ScopedTurnTransition::Rejected,
+    );
+    assert_eq!(
+        db.pause_scoped_agent_turn("sas-turns", 41, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    assert_eq!(
+        db.pause_scoped_agent_turn("sas-turns", 41, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Duplicate,
+    );
+    assert_eq!(
+        db.begin_scoped_agent_turn("sas-turns", 41, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Duplicate,
+    );
+
+    let paused = db.scoped_agent_session_by_id("sas-turns").unwrap().unwrap();
+    assert_eq!(paused.status, ScopedAgentSessionStatus::Paused);
+    assert_eq!(paused.turn_id.as_deref(), Some("turn-a"));
+
+    assert_eq!(
+        db.begin_scoped_agent_turn("sas-turns", 41, "turn-b")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    let running = db.scoped_agent_session_by_id("sas-turns").unwrap().unwrap();
+    assert_eq!(running.status, ScopedAgentSessionStatus::Running);
+    assert_eq!(running.turn_id.as_deref(), Some("turn-b"));
+}
+
+#[test]
 fn scheduler_queues_the_fifth_session_and_promotes_fifo() {
     let (db, _temp_dir) = make_test_db("scoped_agent_session_scheduler");
     let project = db

@@ -811,7 +811,7 @@ impl ScopedAgentSessionService {
 
         Ok(ScopedAgentSessionState {
             id: row.id.clone(),
-            turn_id: row.pty_instance_id.map(|instance| instance.to_string()),
+            turn_id: row.turn_id.clone(),
             status: row.status,
             queue_position,
             queue_reason: (row.status == ScopedAgentSessionStatus::Queued)

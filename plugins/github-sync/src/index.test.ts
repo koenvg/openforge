@@ -25,7 +25,7 @@ vi.mock('./task/TaskPullRequestStatus.svelte', () => ({
 import { get } from 'svelte/store'
 import backend from './backend'
 import { pendingReviewPrOpen } from './lib/stores'
-import plugin, { PrReviewRowActionComponent, PrReviewViewComponent, TaskPullRequestStatusComponent } from './index'
+import plugin, { PrReviewViewComponent, TaskPullRequestStatusComponent } from './index'
 import packageJson from '../package.json'
 
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
@@ -48,7 +48,6 @@ function makePluginContext(subscriptions: FrontendPluginContext['subscriptions']
 
 function makeRuntimeHarness() {
   const sectionDisposable = { dispose: vi.fn() }
-  const rowActionDisposable = { dispose: vi.fn() }
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn(async () => null)
   const backendInvoke = vi.fn(async () => null)
@@ -62,7 +61,7 @@ function makeRuntimeHarness() {
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskUI: { registerSection: vi.fn(() => sectionDisposable) },
-    reviewUI: { registerRowAction: vi.fn(() => rowActionDisposable) },
+    reviewUI: { registerRowAction: vi.fn(() => ({ dispose: vi.fn() })) },
     settings: { registerSection: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })), invokeGlobal },
     backend: { invoke: backendInvoke, whenReady: backendWhenReady },
@@ -73,7 +72,7 @@ function makeRuntimeHarness() {
     },
   } as unknown as FrontendOpenForgeAPI
   const context = makePluginContext(subscriptions)
-  return { api, context, subscriptions, sectionDisposable, rowActionDisposable, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
+  return { api, context, subscriptions, sectionDisposable, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
 }
 const commandInvocationContext: PluginCommandInvocationContext = {
   taskId: null,
@@ -169,28 +168,6 @@ describe('github-sync plugin', () => {
       else await subscription.dispose()
     }))
     expect(sectionDisposable.dispose).toHaveBeenCalledOnce()
-  })
-
-  it('registers and disposes the walkthrough control shown on every review row', async () => {
-    const { api, context, subscriptions, rowActionDisposable } = makeRuntimeHarness()
-
-    await plugin.activate(api, context)
-
-    // The host renders this on each review-requested pull-request row (the attention
-    // overview today), so the same control the PR list shows follows the pull request.
-    expect(api.reviewUI.registerRowAction).toHaveBeenCalledWith({
-      id: 'pr_walkthrough',
-      order: 10,
-      component: PrReviewRowActionComponent,
-    })
-    expect(subscriptions.add).toHaveBeenCalledWith(rowActionDisposable)
-
-    const registered = vi.mocked(subscriptions.add).mock.calls.map(([subscription]) => subscription)
-    await Promise.all(registered.map(async (subscription) => {
-      if (typeof subscription === 'function') await subscription()
-      else await subscription.dispose()
-    }))
-    expect(rowActionDisposable.dispose).toHaveBeenCalledOnce()
   })
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {

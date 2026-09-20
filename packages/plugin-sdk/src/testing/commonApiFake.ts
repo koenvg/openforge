@@ -521,6 +521,17 @@ export class TestingCommonApiFake {
     this.emitChangedScopedQueuePositions(previousQueuePositions)
   }
 
+  pauseScopedAgentSession(scope: SessionScope): void {
+    const session = this.requireScopedAgentSession(scope)
+    if (session.status !== 'running' || session.turnId === null) {
+      throw new ScopedAgentSessionError('NOT_READY', 'Scoped Agent Session has no active turn')
+    }
+    session.status = 'paused'
+    session.acceptsInput = true
+    session.updatedAt = this.nextScopedAgentSessionTime()
+    this.emitScopedAgentSessionChange(scope)
+  }
+
   mountScopedAgentTerminal(scope: SessionScope, element: HTMLElement): Disposable {
     assertSessionScope(scope)
     this.requireScopedAgentSession(scope)
@@ -695,7 +706,7 @@ export class TestingCommonApiFake {
           const createdAt = this.nextScopedAgentSessionTime()
           const session: TestingScopedAgentSession = {
             id: `sas-${++this.scopedAgentSessionSequence}`,
-            turnId: queued ? null : this.nextScopedAgentTurnId(),
+            turnId: null,
             scope: { ...request.scope },
             ownerPluginId: this.services.pluginId,
             status: queued ? 'queued' : 'running',
@@ -737,9 +748,13 @@ export class TestingCommonApiFake {
             session.workspaceAvailable = !queued
             session.errorCode = null
             session.errorMessage = null
-            session.turnId = queued ? null : this.nextScopedAgentTurnId()
+            session.turnId = null
           } else if (session.status !== 'running' && session.status !== 'paused') {
             throw new ScopedAgentSessionError('NOT_READY', `Scoped Agent Session is not ready for input in status ${session.status}`)
+          }
+          if (session.status !== 'queued') {
+            session.status = 'running'
+            session.turnId = this.nextScopedAgentTurnId()
           }
           session.acceptsInput = session.status !== 'queued'
           session.updatedAt = this.nextScopedAgentSessionTime()

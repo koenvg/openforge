@@ -144,10 +144,6 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onOpenAuthoredPr: openUrl,
     onStartTaskFromAuthoredPr: getContext().projectId ? list.startTaskFromAuthoredPr : undefined,
     pluralize: list.pluralize,
-    walkthroughByPr: walkthroughs.byPr,
-    canGenerateWalkthrough: walkthroughs.canGenerate,
-    onGenerateWalkthrough: walkthroughs.generate,
-    onStopWalkthrough: walkthroughs.stop,
   })
 
   let detailModel = $derived(selectedPr.current ? {
@@ -177,23 +173,22 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onPendingCommentsChange: setPendingComments,
     onToggleFileReviewed: reviewedFiles.toggle,
     walkthroughReady: walkthrough.available,
+    onActivateAgent: agentSession.activate,
+    canGenerateWalkthrough: agentSession.projectId !== null
+      && agentSession.status?.acceptsInput === true
+      && !agentSession.actionPending
+      && walkthrough.walkthrough?.state !== 'generating',
+    isGeneratingWalkthrough: walkthrough.isStarting || walkthrough.walkthrough?.state === 'generating',
+    onGenerateWalkthrough: walkthrough.generate,
     agentSession: {
       scope: agentSession.scope,
       projectResolved: agentSession.projectResolved,
       projectId: agentSession.projectId,
       status: agentSession.status,
       isLoading: agentSession.isLoading,
-      actionPending: agentSession.actionPending || walkthrough.isStarting,
       error: agentSession.error,
       availabilityError: agentSession.availabilityError,
-      walkthroughStatus: walkthrough.walkthrough?.state ?? null,
-      acceptedStepCount: walkthrough.steps?.length ?? 0,
       mountTerminal: api.agentSessions.mountTerminal,
-      onStart: walkthrough.generate,
-      onAbort: walkthrough.walkthrough?.state === 'generating' ? walkthrough.stop : agentSession.abort,
-      onRestart: walkthrough.regenerate,
-      onSendInput: agentSession.sendInput,
-      onRetryAvailability: agentSession.retryAvailability,
     },
     reviewThreads,
     reviewFollowUpUnavailableReason: followUps.unavailableReason,

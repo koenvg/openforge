@@ -535,7 +535,7 @@ describe('review workspace', () => {
     await waitFor(() => expect(workspace.detail!.reviewThreads[0].status).toBe('resolved'))
   })
 
-  it('shares walkthrough generation and polling between the list and selected review', async () => {
+  it('keeps walkthrough generation and polling on the selected review', async () => {
     const { workspace, responses } = await setup()
     await workspace.list.onSelectPr(pr)
     const walkthrough = workspace.detail!.walkthrough
@@ -543,12 +543,10 @@ describe('review workspace', () => {
     vi.useFakeTimers()
     await walkthrough.generate()
     expect(walkthrough.walkthrough?.state).toBe('generating')
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('generating')
     responses.set('getPrWalkthrough', readyWalkthrough)
     await vi.advanceTimersByTimeAsync(2500)
     expect(walkthrough.walkthrough?.state).toBe('ready')
     expect(workspace.detail!.walkthroughReady).toBe(true)
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('ready')
   })
 
   it('re-reads an active walkthrough immediately after a submitted step is persisted', async () => {
@@ -564,19 +562,6 @@ describe('review workspace', () => {
 
     await waitFor(() => expect(calls.get('getPrWalkthrough')).toHaveLength(readsBefore + 1))
     await waitFor(() => expect(workspace.detail!.walkthrough.walkthrough?.state).toBe('ready'))
-  })
-
-  it('generates in the project matched to the pull request repository', async () => {
-    const { workspace, calls } = await setup('global', {
-      'project-1': 'acme/other',
-      'project-2': 'acme/app',
-    })
-
-    await workspace.list.onGenerateWalkthrough(pr)
-
-    expect(calls.get('startAgentWalkthrough')).toContainEqual(expect.objectContaining({
-      projectId: 'project-2',
-    }))
   })
 
   it('does not offer a batching path or start a fresh session for a follow-up', async () => {
@@ -624,7 +609,6 @@ describe('review workspace', () => {
     finish(readyWalkthrough)
     await vi.advanceTimersByTimeAsync(2500)
     expect(walkthrough.walkthrough?.state).toBe('aborted')
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.state).toBe('aborted')
     expect(vi.getTimerCount()).toBe(0)
   })
 
@@ -685,7 +669,6 @@ describe('review workspace', () => {
     finish({ ...readyWalkthrough, state: 'generating' })
     responses.set('getPrWalkthrough', readyWalkthrough)
     await vi.advanceTimersByTimeAsync(5000)
-    expect(workspace.list.walkthroughByPr.get(pr.id)?.scope.revision).toBe('new-head')
     expect(workspace.detail!.walkthrough.walkthrough?.scope.revision).toBe('new-head')
   })
 

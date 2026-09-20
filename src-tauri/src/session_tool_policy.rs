@@ -9,6 +9,35 @@ use thiserror::Error;
 
 pub(crate) const REVIEW_READ_ONLY: &str = "review-read-only";
 const POLICY_HOOK_ARGUMENT: &str = "--openforge-session-policy-hook";
+const SCOPED_LIFECYCLE_HOOK_SOURCE: &str = r#"
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const crypto = require('node:crypto');
+(async () => {
+  for await (const _ of process.stdin) {}
+  const eventType = process.argv[1];
+  const sessionId = process.env.OPENFORGE_SCOPED_SESSION_ID;
+  const instance = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
+  const configPath = process.env.OPENFORGE_AGENT_CONFIG;
+  const stateDir = process.env.CLAUDE_CONFIG_DIR;
+  if (!sessionId || !Number.isSafeInteger(instance) || instance < 1 || !configPath || !stateDir) return;
+  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  const turnPath = path.join(stateDir, '.openforge-turn-id');
+  let turnId = null;
+  if (eventType === 'user-prompt-submit') {
+    turnId = crypto.randomUUID();
+    await fs.writeFile(turnPath, turnId, { mode: 0o600 });
+  } else {
+    try { turnId = (await fs.readFile(turnPath, 'utf8')).trim() || null; } catch {}
+  }
+  const response = await fetch(`http://127.0.0.1:${config.port}/hooks/scoped-agent-lifecycle`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${config.token}` },
+    body: JSON.stringify({ eventType, ptyInstanceId: instance, turnId }),
+  });
+  if (!response.ok) throw new Error('scoped lifecycle hook rejected');
+})().catch(() => { console.error('[openforge] scoped lifecycle hook failed'); process.exitCode = 1; });
+"#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SessionToolPolicy {
@@ -226,12 +255,28 @@ pub(crate) fn generate_review_read_only_settings(
         shell_words::quote(&executable.to_string_lossy()),
         POLICY_HOOK_ARGUMENT
     );
+    let lifecycle_command = |event: &str| {
+        format!(
+            "node -e {} {}",
+            shell_words::quote(SCOPED_LIFECYCLE_HOOK_SOURCE),
+            shell_words::quote(event)
+        )
+    };
     let settings = json!({
         "permissions": {
             "allow": ["Read", "Grep", "Glob", "Bash"],
             "deny": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Task", "WebFetch", "WebSearch"]
         },
         "hooks": {
+            "UserPromptSubmit": [{
+                "hooks": [{"type": "command", "command": lifecycle_command("user-prompt-submit")}]
+            }],
+            "Stop": [{
+                "hooks": [{"type": "command", "command": lifecycle_command("stop")}]
+            }],
+            "SessionEnd": [{
+                "hooks": [{"type": "command", "command": lifecycle_command("session-end")}]
+            }],
             "PreToolUse": [{
                 "matcher": "*",
                 "hooks": [{"type": "command", "command": command}]
@@ -414,6 +459,19 @@ mod tests {
             serde_json::from_slice(&fs::read(environment.settings_path).expect("read settings"))
                 .expect("JSON");
         assert_eq!(settings["hooks"]["PreToolUse"][0]["matcher"], "*");
+        for lifecycle in ["UserPromptSubmit", "Stop", "SessionEnd"] {
+            let command = settings["hooks"][lifecycle][0]["hooks"][0]["command"]
+                .as_str()
+                .expect("lifecycle command");
+            assert!(
+                command.contains("OPENFORGE_SCOPED_SESSION_ID"),
+                "{lifecycle}: {command}"
+            );
+            assert!(
+                command.contains("scoped-agent-lifecycle"),
+                "{lifecycle}: {command}"
+            );
+        }
         assert!(settings["permissions"]["deny"]
             .as_array()
             .expect("deny list")

@@ -291,11 +291,35 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         scoped_runtime.clone(),
     );
     let completion_service = scoped_agent_sessions.clone();
+    let completion_db = Arc::clone(&db_arc);
+    let completion_app = app.clone();
     scoped_runtime.set_completion_observer(Arc::new(move |session_id, instance_id, succeeded| {
         let service = completion_service.clone();
+        let database = Arc::clone(&completion_db);
+        let app = completion_app.clone();
         tokio::spawn(async move {
-            if let Err(error) = service.complete(&session_id, instance_id, succeeded).await {
-                warn!("[scoped-agent-session] failed to record provider exit: {error}");
+            match service.complete(&session_id, instance_id, succeeded).await {
+                Ok(true) => {
+                    if let Ok(Some(row)) =
+                        db::acquire_db(&database).scoped_agent_session_by_id(&session_id)
+                    {
+                        app_events::publish_app_event_to_runtime(
+                            Some(&app),
+                            &None,
+                            "scoped-agent-session-changed",
+                            &serde_json::json!({
+                                "pluginId": row.owner_plugin_id,
+                                "namespace": row.namespace,
+                                "targetKey": row.target_key,
+                                "revision": row.revision,
+                            }),
+                        );
+                    }
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    warn!("[scoped-agent-session] failed to record provider exit: {error}");
+                }
             }
         });
     }));

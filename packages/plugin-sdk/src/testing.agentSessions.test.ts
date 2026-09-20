@@ -340,7 +340,7 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     await expect(api.agentSessions.status(first)).resolves.toMatchObject({ status: 'completed', acceptsInput: true })
   })
 
-  it('continues an aborted turn in the same scoped session with a new turn id', async () => {
+  it('continues an aborted idle session with a new turn id', async () => {
     const api = createMockOpenForgeApi()
     const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
     const started = await api.agentSessions.start({
@@ -354,7 +354,7 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     const aborted = await api.agentSessions.abort(scope)
     const retried = await api.agentSessions.input(scope, 'Retry the walkthrough')
 
-    expect(started.turnId).toEqual(expect.any(String))
+    expect(started.turnId).toBeNull()
     expect(aborted).toMatchObject({
       id: started.id, status: 'aborted', turnId: started.turnId, acceptsInput: true,
     })

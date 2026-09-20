@@ -2,7 +2,20 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use thiserror::Error;
 
-const SELECT_COLUMNS: &str = "id, owner_plugin_id, namespace, target_key, revision, project_id, checkout_revision, resolved_commit, provider, provider_session_id, tool_policy, terminal_key, pty_instance_id, status, queue_sequence, error_code, error_message, created_at, updated_at, last_used_at";
+const SELECT_COLUMNS: &str = "id, owner_plugin_id, namespace, target_key, revision, project_id, checkout_revision, resolved_commit, provider, provider_session_id, tool_policy, terminal_key, pty_instance_id, turn_id, status, queue_sequence, error_code, error_message, created_at, updated_at, last_used_at";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScopedTurnTransition {
+    Applied,
+    Duplicate,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScopedTurnEvent {
+    Begin,
+    Pause,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -72,6 +85,7 @@ pub(crate) struct ScopedAgentSessionRow {
     pub tool_policy: String,
     pub terminal_key: String,
     pub pty_instance_id: Option<u64>,
+    pub turn_id: Option<String>,
     pub status: ScopedAgentSessionStatus,
     pub queue_sequence: Option<u64>,
     pub error_code: Option<String>,
@@ -130,12 +144,12 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionRow> 
             )
         })?;
     let queue_sequence = row
-        .get::<_, Option<i64>>(14)?
+        .get::<_, Option<i64>>(15)?
         .map(u64::try_from)
         .transpose()
         .map_err(|error| {
             rusqlite::Error::FromSqlConversionFailure(
-                14,
+                15,
                 rusqlite::types::Type::Integer,
                 Box::new(error),
             )
@@ -154,13 +168,14 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionRow> 
         tool_policy: row.get(10)?,
         terminal_key: row.get(11)?,
         pty_instance_id,
-        status: ScopedAgentSessionStatus::parse(&row.get::<_, String>(13)?)?,
+        turn_id: row.get(13)?,
+        status: ScopedAgentSessionStatus::parse(&row.get::<_, String>(14)?)?,
         queue_sequence,
-        error_code: row.get(15)?,
-        error_message: row.get(16)?,
-        created_at: row.get(17)?,
-        updated_at: row.get(18)?,
-        last_used_at: row.get(19)?,
+        error_code: row.get(16)?,
+        error_message: row.get(17)?,
+        created_at: row.get(18)?,
+        updated_at: row.get(19)?,
+        last_used_at: row.get(20)?,
     })
 }
 
@@ -489,6 +504,89 @@ impl super::Database {
         Ok(())
     }
 
+    pub(crate) fn begin_scoped_agent_turn(
+        &self,
+        id: &str,
+        pty_instance_id: u64,
+        turn_id: &str,
+    ) -> Result<ScopedTurnTransition, ScopedAgentSessionStoreError> {
+        self.transition_scoped_agent_turn(id, pty_instance_id, turn_id, ScopedTurnEvent::Begin)
+    }
+
+    pub(crate) fn pause_scoped_agent_turn(
+        &self,
+        id: &str,
+        pty_instance_id: u64,
+        turn_id: &str,
+    ) -> Result<ScopedTurnTransition, ScopedAgentSessionStoreError> {
+        self.transition_scoped_agent_turn(id, pty_instance_id, turn_id, ScopedTurnEvent::Pause)
+    }
+
+    fn transition_scoped_agent_turn(
+        &self,
+        id: &str,
+        pty_instance_id: u64,
+        turn_id: &str,
+        event: ScopedTurnEvent,
+    ) -> Result<ScopedTurnTransition, ScopedAgentSessionStoreError> {
+        let pty_instance_id = i64::try_from(pty_instance_id).map_err(|error| {
+            ScopedAgentSessionStoreError::Database(rusqlite::Error::ToSqlConversionFailure(
+                Box::new(error),
+            ))
+        })?;
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        let current = tx
+            .query_row(
+                "SELECT pty_instance_id, turn_id, status FROM scoped_agent_sessions WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<i64>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((current_instance, current_turn, current_status)) = current else {
+            return Ok(ScopedTurnTransition::Rejected);
+        };
+        if current_instance != Some(pty_instance_id)
+            || !matches!(current_status.as_str(), "running" | "paused")
+        {
+            return Ok(ScopedTurnTransition::Rejected);
+        }
+        let target_status = match event {
+            ScopedTurnEvent::Begin => {
+                if current_turn.as_deref() == Some(turn_id) {
+                    return Ok(ScopedTurnTransition::Duplicate);
+                }
+                match (current_status.as_str(), current_turn.is_none()) {
+                    ("running", true) | ("paused", _) => "running",
+                    _ => return Ok(ScopedTurnTransition::Rejected),
+                }
+            }
+            ScopedTurnEvent::Pause => {
+                if current_turn.as_deref() != Some(turn_id) {
+                    return Ok(ScopedTurnTransition::Rejected);
+                }
+                if current_status == "paused" {
+                    return Ok(ScopedTurnTransition::Duplicate);
+                }
+                "paused"
+            }
+        };
+        let now = super::current_unix_timestamp()?;
+        tx.execute(
+            "UPDATE scoped_agent_sessions SET status = ?2, turn_id = ?3,
+                    updated_at = ?4, last_used_at = ?4 WHERE id = ?1",
+            params![id, target_status, turn_id, now],
+        )?;
+        tx.commit()?;
+        Ok(ScopedTurnTransition::Applied)
+    }
+
     pub(crate) fn schedule_scoped_agent_continuation(
         &self,
         id: &str,
@@ -566,7 +664,7 @@ impl super::Database {
         let now = super::current_unix_timestamp()?;
         tx.execute(
             "UPDATE scoped_agent_sessions SET status = ?2, queue_sequence = ?3,
-                    pty_instance_id = NULL, error_code = NULL, error_message = NULL,
+                    pty_instance_id = NULL, turn_id = NULL, error_code = NULL, error_message = NULL,
                     updated_at = ?4, last_used_at = ?4
               WHERE id = ?1 AND status IN ('completed', 'failed', 'aborted', 'interrupted')",
             params![

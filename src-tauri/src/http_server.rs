@@ -26,6 +26,7 @@ mod legacy_transport;
 mod notifications;
 mod plugin_management;
 mod review_threads;
+mod scoped_agent_lifecycle;
 mod server_lifecycle;
 
 // Keep the pre-split `http_server::*` surface stable for crate callers and tests.

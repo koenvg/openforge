@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS scoped_agent_sessions (
     tool_policy TEXT NOT NULL CHECK(length(CAST(tool_policy AS BLOB)) > 0),
     terminal_key TEXT NOT NULL UNIQUE CHECK(length(CAST(terminal_key AS BLOB)) > 0),
     pty_instance_id INTEGER CHECK(pty_instance_id IS NULL OR pty_instance_id >= 0),
+    turn_id TEXT,
     status TEXT NOT NULL CHECK(status IN (
         'queued', 'starting', 'running', 'paused', 'completed', 'failed', 'aborted', 'interrupted'
     )),
@@ -121,6 +122,24 @@ CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_owner_project
 
 pub(super) fn ensure_scoped_agent_sessions_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(SCOPED_AGENT_SESSIONS_SQL)
+}
+
+fn ensure_scoped_agent_turn_id_column(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "scoped_agent_sessions")? {
+        return Ok(());
+    }
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('scoped_agent_sessions') WHERE name = 'turn_id'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute(
+            "ALTER TABLE scoped_agent_sessions ADD COLUMN turn_id TEXT",
+            [],
+        )?;
+    }
+    Ok(())
 }
 
 macro_rules! define_migrations {
@@ -2023,6 +2042,10 @@ INSERT OR IGNORE INTO config (key, value)
                 .map_err(rusqlite_migration::HookError::RusqliteError)?;
         }
         Ok(())
+    }),
+    M::up_with_hook("", |tx| {
+        ensure_scoped_agent_turn_id_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
 );
 
@@ -5314,6 +5337,7 @@ mod tests {
                 "tool_policy",
                 "terminal_key",
                 "pty_instance_id",
+                "turn_id",
                 "status",
                 "queue_sequence",
                 "error_code",

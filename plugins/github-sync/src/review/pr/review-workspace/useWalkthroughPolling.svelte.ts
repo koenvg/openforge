@@ -24,28 +24,17 @@ type Status = {
 const empty: Status = { walkthrough: null, isLoading: false, isStarting: false, loadError: null, revision: 0 }
 const keyOf = (pr: ReviewPullRequest) => `${pr.id}:${pr.head_sha}`
 
-/** One poll owner per PR head, shared by list buttons and the walkthrough model. */
+/** One poll owner per PR head, shared by list readiness and the selected walkthrough. */
 export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: GithubSyncPrReviewClient) {
   const selectedPr = fromStore(selectedReviewPr)
   let statuses = $state<Map<string, Status>>(new Map())
   let byPr = $state<Map<number, WalkthroughRecordV1 | null>>(new Map())
-  let projectIdsByRepo = $state<Map<string, string>>(new Map())
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const versions = new Map<string, number>()
   const requests = new Map<string, Promise<WalkthroughRecordV1 | null>>()
   const latestHeads = new Map<number, string>()
   const latestPullRequests = new Map<number, ReviewPullRequest>()
   let disposed = false
-
-  async function refreshProjectIds(): Promise<Map<string, string>> {
-    const resolved = await resolveProjectIdsByRepo(api)
-    if (!disposed) projectIdsByRepo = new Map(resolved)
-    return resolved
-  }
-
-  function canGenerate(pr: ReviewPullRequest): boolean {
-    return projectIdsByRepo.has(projectRepoKey(pr.repo_owner, pr.repo_name))
-  }
 
   function status(pr: ReviewPullRequest | null): Status {
     return pr ? statuses.get(keyOf(pr)) ?? empty : empty
@@ -127,7 +116,7 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     const version = cancel(pr)
     let projectId: string | undefined
     try {
-      const resolved = await refreshProjectIds()
+      const resolved = await resolveProjectIdsByRepo(api)
       projectId = resolved.get(projectRepoKey(pr.repo_owner, pr.repo_name))
     } catch (error) {
       console.error('Failed to resolve a local project for walkthrough generation:', error)
@@ -219,10 +208,6 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
     },
   )
 
-  void refreshProjectIds().catch((error) => {
-    console.error('Failed to resolve local projects for walkthrough generation:', error)
-  })
-
   return {
     status,
     get byPr() { return byPr },
@@ -235,7 +220,6 @@ export function useWalkthroughPolling(api: FrontendOpenForgeAPI, githubSync: Git
       const walkthrough = pr ? status(pr).walkthrough : null
       return !!pr && (walkthroughButtonState(walkthrough, pr.head_sha) === 'ready' || (walkthrough?.steps.length ?? 0) > 0)
     },
-    canGenerate,
     refreshStatus,
     async refreshVisible(prs: ReviewPullRequest[]) { await Promise.all(prs.map(refreshStatus)) },
     generate,

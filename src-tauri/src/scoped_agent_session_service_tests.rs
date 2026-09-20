@@ -1,5 +1,5 @@
 use super::*;
-use crate::db::test_helpers::make_test_db;
+use crate::db::{test_helpers::make_test_db, ScopedTurnTransition};
 
 #[derive(Default)]
 struct FakeWorkspace {
@@ -368,6 +368,75 @@ async fn start_watch_input_completion_and_readback() {
         ScopedAgentSessionStatus::Completed
     );
 }
+
+#[tokio::test]
+async fn idle_launch_turn_hooks_continuation_and_exit_share_one_terminal() {
+    let f = fixture("scoped_interactive_lifecycle");
+    let mut req = request(&f.project_id, 1);
+    req.initial_input.clear();
+
+    let running = f.service.start(req.clone()).await.unwrap();
+    assert_eq!(running.status, ScopedAgentSessionStatus::Running);
+    assert_eq!(lock(&f.runtime.launches).len(), 1);
+    assert!(lock(&f.runtime.launches)[0].input.is_empty());
+
+    assert_eq!(
+        lock(&f.service.database)
+            .begin_scoped_agent_turn(&running.id, 1, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    assert_eq!(
+        lock(&f.service.database)
+            .pause_scoped_agent_turn(&running.id, 1, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    assert_eq!(
+        lock(&f.service.database)
+            .begin_scoped_agent_turn(&running.id, 1, "turn-a")
+            .unwrap(),
+        ScopedTurnTransition::Duplicate,
+    );
+
+    f.service
+        .input(
+            &req.owner_plugin_id,
+            &req.scope,
+            "continue in the same terminal",
+        )
+        .await
+        .unwrap();
+    assert_eq!(lock(&f.runtime.launches).len(), 1);
+    assert_eq!(
+        lock(&f.runtime.inputs).as_slice(),
+        ["continue in the same terminal"]
+    );
+    assert_eq!(
+        lock(&f.service.database)
+            .begin_scoped_agent_turn(&running.id, 1, "turn-b")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+    assert_eq!(
+        lock(&f.service.database)
+            .pause_scoped_agent_turn(&running.id, 1, "turn-b")
+            .unwrap(),
+        ScopedTurnTransition::Applied,
+    );
+
+    assert!(f.service.complete(&running.id, 1, true).await.unwrap());
+    assert_eq!(
+        f.service
+            .status(&req.owner_plugin_id, &req.scope)
+            .unwrap()
+            .unwrap()
+            .status,
+        ScopedAgentSessionStatus::Completed,
+    );
+    assert_eq!(lock(&f.runtime.launches).len(), 1);
+}
+
 #[tokio::test]
 async fn fifth_session_queues_without_workspace_then_promotes_fifo() {
     let f = fixture("scoped_queue");
@@ -481,7 +550,7 @@ async fn abort_and_continuation_keep_identity_and_filter_stale_exit() {
     let f = fixture("scoped_abort");
     let req = request(&f.project_id, 1);
     let first = f.service.start(req.clone()).await.unwrap();
-    assert_eq!(first.turn_id.as_deref(), Some("1"));
+    assert_eq!(first.turn_id, None);
     f.service.complete(&first.id, 1, true).await.unwrap();
     f.service
         .input(&req.owner_plugin_id, &req.scope, "continue")
@@ -502,7 +571,7 @@ async fn abort_and_continuation_keep_identity_and_filter_stale_exit() {
         .await
         .unwrap();
     assert_eq!(aborted.status, ScopedAgentSessionStatus::Aborted);
-    assert_eq!(aborted.turn_id.as_deref(), Some("2"));
+    assert_eq!(aborted.turn_id, None);
     assert_eq!(lock(&f.runtime.aborted).len(), 1);
     let retried = f
         .service
@@ -510,7 +579,7 @@ async fn abort_and_continuation_keep_identity_and_filter_stale_exit() {
         .await
         .unwrap();
     assert_eq!(retried.id, first.id);
-    assert_eq!(retried.turn_id.as_deref(), Some("3"));
+    assert_eq!(retried.turn_id, None);
     assert!(!f.service.complete(&first.id, 2, true).await.unwrap());
 }
 

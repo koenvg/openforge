@@ -9,6 +9,7 @@ import {
 type ActiveGeneration = {
   attemptId: string
   sessionId: string
+  baselineTurnId: string | null
   turnId: string | null
   observer: Disposable
 }
@@ -45,8 +46,8 @@ export class WalkthroughGenerationCoordinator implements Disposable {
         throw new Error('The pull request Agent session is already running.')
       }
       const existing = await this.openforge.agentSessions.status(params.scope)
-      if (existing && !TERMINAL_STATUSES.has(existing.status)) {
-        throw new Error('The pull request Agent session is already running.')
+      if (!existing || !existing.acceptsInput) {
+        throw new Error('Open the Agent tab and wait for the review agent before generating a walkthrough.')
       }
 
       const attemptId = this.createAttemptId()
@@ -64,21 +65,12 @@ export class WalkthroughGenerationCoordinator implements Disposable {
       })
       try {
         const prompt = typeof params.prompt === 'function' ? params.prompt(attemptId) : params.prompt
-        const session = existing === null
-          ? await this.openforge.agentSessions.start({
-              scope: params.scope,
-              projectId: params.projectId,
-              checkoutRevision: params.scope.revision,
-              initialInput: prompt,
-              toolPolicy: 'review-read-only',
-            })
-          : TERMINAL_STATUSES.has(existing.status)
-            ? await this.openforge.agentSessions.input(params.scope, prompt)
-            : (() => { throw new Error('The pull request Agent session is already running.') })()
+        const session = await this.openforge.agentSessions.input(params.scope, prompt)
         this.replaceActive(params.scope, {
           attemptId,
           sessionId: session.id,
-          turnId: session.turnId,
+          baselineTurnId: existing.turnId,
+          turnId: session.turnId !== null && session.turnId !== existing.turnId ? session.turnId : null,
           observer,
         })
         await this.reconcileState(params.scope, attemptId, session)
@@ -145,13 +137,16 @@ export class WalkthroughGenerationCoordinator implements Disposable {
   ): Promise<void> {
     const active = this.active.get(scopeKey(scope))
     if (!active || active.attemptId !== attemptId || active.sessionId !== state.id) return
-    if (active.turnId === null && state.turnId !== null) active.turnId = state.turnId
-    if (active.turnId !== state.turnId || !TERMINAL_STATUSES.has(state.status)) return
+    if (active.turnId === null && state.turnId !== null && state.turnId !== active.baselineTurnId) {
+      active.turnId = state.turnId
+    }
+    if (active.turnId !== state.turnId) return
+    if (state.status !== 'paused' && !TERMINAL_STATUSES.has(state.status)) return
 
     await finishWalkthroughAttempt(this.openforge, {
       scope,
       attemptId,
-      outcome: state.status === 'completed'
+      outcome: state.status === 'paused' || state.status === 'completed'
         ? { status: 'completed' }
         : state.status === 'aborted'
           ? { status: 'aborted', code: state.errorCode, message: state.errorMessage }

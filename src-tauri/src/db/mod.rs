@@ -78,7 +78,7 @@ pub use review_threads::{
 };
 pub(crate) use scoped_agent_sessions::{
     NewScopedAgentSession, ScopedAgentSessionRow, ScopedAgentSessionStatus,
-    ScopedAgentSessionStoreError,
+    ScopedAgentSessionStoreError, ScopedTurnTransition,
 };
 pub(crate) use scoped_workspaces::{NewScopedWorkspace, ScopedWorkspaceRow};
 #[cfg(test)]

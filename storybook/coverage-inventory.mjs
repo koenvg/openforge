@@ -38,10 +38,6 @@ const githubSyncSettingsPages = [
   'connected', 'disconnected', 'save-configuration', 'connection-failure',
   'save-failure', 'loading', 'failure',
 ] .map(state => `pages-github-sync-settings-jira--${state}`)
-const githubSyncReviewRowActionPages = [
-  'available', 'unavailable-without-local-project', 'generating',
-  'generate-with-local-response', 'stop-generation',
-] .map(state => `pages-github-sync-review-row-action--${state}`)
 const githubSyncTaskStatusPages = [
   'populated', 'empty', 'loading', 'failure', 'disabled-actions',
   'link-pull-request', 'refresh-with-local-response',
@@ -81,8 +77,6 @@ const inventory = {
     { source: 'plugins/task-schedules/src/index.ts', contribution: 'com.openforge.task-schedules:views.register:schedules', stories: schedulePages },
     { source: 'plugins/github-sync/src/settings/JiraSettingsSection.svelte', stories: githubSyncSettingsPages },
     { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:settings.registerSection:jira', stories: githubSyncSettingsPages },
-    { source: 'plugins/github-sync/src/review/pr/PrReviewRowAction.svelte', stories: githubSyncReviewRowActionPages },
-    { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:reviewUI.registerRowAction:pr_walkthrough', stories: githubSyncReviewRowActionPages },
     { source: 'plugins/github-sync/src/task/TaskPullRequestStatus.svelte', stories: githubSyncTaskStatusPages },
     { source: 'plugins/github-sync/src/index.ts', contribution: 'com.openforge.github-sync:taskUI.registerSection:task_pull_request_status', stories: githubSyncTaskStatusPages },
     { source: 'plugins/task-browser/src/TaskBrowserTab.svelte', stories: taskBrowserPages },
@@ -270,14 +264,6 @@ const inventory = {
       'components-github-sync-pull-request-link-form--validation',
       'components-github-sync-pull-request-link-form--failure',
       'components-github-sync-pull-request-link-form--linking',
-    ] },
-    { source: 'plugins/github-sync/src/review/pr/PrWalkthroughButton.svelte', stories: [
-      'components-github-sync-walkthrough-button--available',
-      'components-github-sync-walkthrough-button--generating',
-      'components-github-sync-walkthrough-button--ready',
-      'components-github-sync-walkthrough-button--new-commits',
-      'components-github-sync-walkthrough-button--failed',
-      'components-github-sync-walkthrough-button--aborted',
     ] },
     { source: 'packages/pr-review-ui/src/ReviewPrCard.svelte', stories: ['components-github-sync-review-request-card--active', 'components-github-sync-review-request-card--viewed', 'components-github-sync-review-request-card--merged', 'components-github-sync-review-request-card--closed'] },
     { source: 'plugins/github-sync/src/review/pr/PrReviewListSection.svelte', stories: ['components-github-sync-review-requests--active-and-finished'] },

@@ -34,6 +34,13 @@ async function fixture() {
     registry.backendApi,
     () => `attempt-${++sequence}`,
   )
+  await registry.backendApi.agentSessions.start({
+    scope,
+    projectId: 'P-1',
+    checkoutRevision: scope.revision,
+    initialInput: '',
+    toolPolicy: 'review-read-only',
+  })
   return { registry, snapshot, coordinator }
 }
 
@@ -68,7 +75,10 @@ describe('WalkthroughGenerationCoordinator', () => {
     expect(attemptId).toBe('attempt-1')
     expect(registry.calls.scopedAgentSessionStarts).toMatchObject([{
       scope, projectId: 'P-1', checkoutRevision: 'head-a',
-      initialInput: 'Generate and submit steps', toolPolicy: 'review-read-only',
+      initialInput: '', toolPolicy: 'review-read-only',
+    }])
+    expect(registry.calls.scopedAgentSessionInputs).toEqual([{
+      scope, input: 'Generate and submit steps',
     }])
 
     await submitWalkthroughStep(registry.backendApi, {
@@ -78,7 +88,7 @@ describe('WalkthroughGenerationCoordinator', () => {
         files: [{ filename: 'src/app.ts', hunk_indexes: [0] }],
       },
     }, context())
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await settleEvents()
     expect(await stored(registry)).toMatchObject({ state: 'ready', attemptId, steps: [{ id: 'first' }] })
   })
@@ -86,7 +96,7 @@ describe('WalkthroughGenerationCoordinator', () => {
   it('settles completed runs without accepted steps as no-submissions', async () => {
     const { registry, snapshot, coordinator } = await fixture()
     await coordinator.start({ prId: 42, projectId: 'P-1', scope, snapshot, prompt: 'Generate' })
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await settleEvents()
     expect(await stored(registry)).toMatchObject({ state: 'no-submissions', steps: [] })
   })
@@ -129,7 +139,10 @@ describe('WalkthroughGenerationCoordinator', () => {
     expect(secondSession?.id).toBe(firstSession?.id)
     expect(secondSession?.turnId).not.toBe(firstSession?.turnId)
     expect(second).toBe('attempt-2')
-    expect(registry.calls.scopedAgentSessionInputs).toMatchObject([{ scope, input: 'Retry' }])
+    expect(registry.calls.scopedAgentSessionInputs).toEqual([
+      { scope, input: 'First' },
+      { scope, input: 'Retry' },
+    ])
   })
 
   it('keeps the live attempt when a duplicate start is requested', async () => {
@@ -172,7 +185,7 @@ describe('WalkthroughGenerationCoordinator', () => {
         files: [{ filename: 'src/app.ts', hunk_indexes: [0] }],
       },
     }, context())
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await registry.backendApi.agentSessions.input(scope, 'Explain the first step')
     registry.completeScopedAgentSession(scope, false)
     await settleEvents()

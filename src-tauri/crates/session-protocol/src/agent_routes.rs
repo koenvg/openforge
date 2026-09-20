@@ -61,6 +61,7 @@ pub fn scoped_agent_route_allowed(method: &str, path: &str) -> bool {
                 | "/review_threads/reply"
                 | "/review_threads/status"
                 | "/plugin_commands/invoke"
+                | "/hooks/scoped-agent-lifecycle"
         )
 }
 
@@ -83,7 +84,14 @@ mod tests {
     #[test]
     fn scoped_agents_get_only_named_review_thread_routes() {
         assert!(scoped_agent_route_allowed("POST", "/review_threads/create"));
-        assert!(scoped_agent_route_allowed("POST", "/plugin_commands/invoke"));
+        assert!(scoped_agent_route_allowed(
+            "POST",
+            "/plugin_commands/invoke"
+        ));
+        assert!(scoped_agent_route_allowed(
+            "POST",
+            "/hooks/scoped-agent-lifecycle"
+        ));
         for (method, path) in [
             ("POST", "/create_task"),
             ("POST", "/plugin_commands/list"),

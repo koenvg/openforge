@@ -51,6 +51,10 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
     agentSession: AgentSessionProps
+    onActivateAgent: () => Promise<unknown>
+    canGenerateWalkthrough: boolean
+    isGeneratingWalkthrough: boolean
+    onGenerateWalkthrough: () => Promise<unknown>
     // The Walkthrough tab is only offered once a walkthrough for the current head
     // sha has finished generating (owned by PrReviewView). Optional so the section
     // renders (tab hidden) before the parent wires status in.
@@ -109,6 +113,10 @@
     onPendingCommentsChange,
     onToggleFileReviewed,
     agentSession,
+    onActivateAgent,
+    canGenerateWalkthrough,
+    isGeneratingWalkthrough,
+    onGenerateWalkthrough,
     onRemove,
     walkthroughReady = false,
     reviewThreads = [],
@@ -148,6 +156,10 @@
     }
   })
 
+  $effect(() => {
+    if (activeTab === 'agent') void onActivateAgent().catch(() => undefined)
+  })
+
   // The "Files changed" tab filters non-application files out of the tree and diff, but the
   // tab badge and the Walkthrough tab keep the full changed-file list.
   let visibleFiles = $derived(filterApplicationFiles(files, includeNonApplicationFiles))
@@ -184,6 +196,13 @@
       <Button variant="ghost" size="xs" class="shrink-0 text-base-content/50" onclick={onBackToList}>← Back</Button>
       <Badge variant="info" class="shrink-0">{pr.repo_owner}/{pr.repo_name}</Badge>
       <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{pr.title}</h2>
+      {#if activeTab === 'agent'}
+        <Button
+          size="xs"
+          disabled={!canGenerateWalkthrough || isGeneratingWalkthrough}
+          onclick={() => { void onGenerateWalkthrough().catch(() => undefined) }}
+        >{isGeneratingWalkthrough ? 'Generating…' : 'Generate walkthrough'}</Button>
+      {/if}
       <Button
         variant="ghost"
         size="xs"

@@ -224,8 +224,6 @@ mod tests {
                 status: crate::db::ScopedAgentSessionStatus::Starting,
                 queue_sequence: None,
             }).unwrap();
-            db.mark_scoped_agent_session_running("sas-1", "conversation-1", 7)
-                .unwrap();
             project.id
         };
         let identities = state.agent_generation_identities.clone();
@@ -244,7 +242,91 @@ mod tests {
             })
             .unwrap();
         let token = credential.token().to_string();
-        let router = super::super::create_router(state);
+        let router = super::super::create_router(state.clone());
+
+        let lifecycle = |event_type: &str, instance: u64, turn_id: Option<&str>| {
+            Request::builder()
+                .uri("/hooks/scoped-agent-lifecycle")
+                .method("POST")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "eventType": event_type,
+                        "ptyInstanceId": instance,
+                        "turnId": turn_id,
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+        let startup_prompt =
+            router
+                .clone()
+                .oneshot(lifecycle("user-prompt-submit", 7, Some("turn-1")));
+        let persist_running = async {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            crate::db::acquire_db(&state.db)
+                .mark_scoped_agent_session_running("sas-1", "conversation-1", 7)
+                .unwrap();
+        };
+        let (startup_response, ()) = tokio::join!(startup_prompt, persist_running);
+        assert_eq!(
+            startup_response.unwrap().status(),
+            StatusCode::NO_CONTENT,
+            "the first prompt hook must survive the launch-to-persistence race",
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(lifecycle("user-prompt-submit", 6, Some("turn-stale")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT,
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(lifecycle("stop", 7, Some("turn-wrong")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT,
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(lifecycle("stop", 7, Some("turn-1")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT,
+        );
+        let paused = crate::db::acquire_db(&state.db)
+            .scoped_agent_session_by_id("sas-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(paused.status, crate::db::ScopedAgentSessionStatus::Paused);
+        assert_eq!(paused.turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(lifecycle("session-end", 6, Some("turn-1")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT,
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(lifecycle("session-end", 7, Some("turn-1")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT,
+        );
 
         let task_route = router
             .clone()
