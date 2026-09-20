@@ -14,6 +14,17 @@ const finishedRequests = [mergedReviewRequest, closedReviewRequest]
 const allReviewRequests = [...activeRequests, ...finishedRequests]
 const repository = 'openforge/openforge'
 
+function reviewRequestPresentation() {
+  return {
+    activeCount: activeRequests.length,
+    filtered: [...allReviewRequests],
+    finishedCount: finishedRequests.length,
+    groupedActive: new Map([[repository, [...activeRequests]]]),
+    groupedFinished: new Map([[repository, [...finishedRequests]]]),
+    keyboardNavigable: [...activeRequests],
+  }
+}
+
 const meta = {
   title: 'Components/GitHub Sync/Review Requests',
   component: PrReviewListSection,
@@ -33,14 +44,7 @@ const meta = {
     error: null,
     authoredError: null,
     githubTokenConfigured: true,
-    reviewRequests: {
-      activeCount: activeRequests.length,
-      filtered: allReviewRequests,
-      finishedCount: finishedRequests.length,
-      groupedActive: new Map([[repository, activeRequests]]),
-      groupedFinished: new Map([[repository, finishedRequests]]),
-      keyboardNavigable: activeRequests,
-    },
+    reviewRequests: reviewRequestPresentation(),
     filteredAuthoredPrs: [],
     allReviewPrs: allReviewRequests,
     allAuthoredPrs: [],
@@ -67,6 +71,16 @@ const meta = {
     onGenerateWalkthrough: fn(),
     onStopWalkthrough: fn(),
   },
+  render: (args) => ({
+    Component: PrReviewListSection,
+    props: {
+      ...args,
+      excludedRepos: new Set<string>(),
+      reviewRequests: reviewRequestPresentation(),
+      groupedAuthoredPrs: new Map(),
+      walkthroughByPr: new Map(),
+    },
+  }),
 } satisfies Meta<typeof PrReviewListSection>
 export default meta
 
@@ -88,5 +102,8 @@ export const ActiveAndFinished: Story = {
     await expect(mergedTitle.closest('.vim-focus')).toBeNull()
     await expect(closedTitle.closest('.vim-focus')).toBeNull()
     await expect(canvas.getAllByRole('button', { name: 'Generate walkthrough and AI review' })).toHaveLength(2)
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    await expect(canvas.getByText(activeReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Finished (2)' })).toHaveAttribute('aria-expanded', 'true')
   },
 }
