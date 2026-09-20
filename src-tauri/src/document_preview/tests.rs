@@ -30,7 +30,7 @@ async fn explicit_pdf_read_returns_bytes_without_changing_metadata_only_preview(
         bytes
     );
 
-    let metadata = crate::project_fs::read_file_preview(&root.path().join("report.PDF"))
+    let metadata = crate::project_fs::read_file_preview(root.path(), "report.PDF")
         .await
         .unwrap();
     assert_eq!(metadata.r#type, "document");
@@ -106,7 +106,7 @@ async fn rejects_untrusted_paths_and_sanitizes_missing_files() {
         "nested\\..\\safe.pdf",
     ] {
         let result = read_document(root.path().to_path_buf(), path.into()).await;
-        let error = result.err().expect("unsafe path must fail");
+        let error = result.expect_err("unsafe path must fail");
         assert!(
             error.starts_with("DOCUMENT_PREVIEW_BAD_REQUEST:"),
             "{path:?}: {error}"
@@ -143,8 +143,7 @@ async fn rejects_descendant_links_even_when_the_target_is_inside_the_root() {
     ] {
         let error = read_document(root.path().to_path_buf(), path.into())
             .await
-            .err()
-            .expect("must reject links and directories");
+            .expect_err("must reject links and directories");
         assert!(
             error.starts_with("DOCUMENT_PREVIEW_FORBIDDEN:"),
             "{path}: {error}"

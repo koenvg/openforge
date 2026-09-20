@@ -12,6 +12,13 @@ The implementation adds descriptor-relative Unix reads, a shared bounded reader,
 
 PDF.js is pinned to 6.3.289. All 200 CMap/font/WASM/ICC assets were compared byte-for-byte against the installed release; the license and registered stylesheet are present in the plugin build. The worker is bundled from that same release and instantiated through an explicitly owned Blob module Worker. The repository Node minimum is now 22.13 to match this dependency.
 
+## PR #2537 CI fixes
+
+- Merged current `main` and updated the PDF metadata regression to the new root-plus-relative-path `read_file_preview` signature. Strict Clippy also required replacing three `err().expect()` assertions with `expect_err()`.
+- Restricted header wrapping to PDFs, restoring every non-PDF visual baseline. Updated the PDF story readiness contract and its single reviewed canonical baseline for the new missing-document/Retry state; the fixture intentionally provides metadata without document bytes.
+- After these fixes: 2,241 main Rust tests passed; `cargo clippy --all-targets -- -D warnings` passed; root tests passed 7,136 tests across 833 files (same browser exclusions, 36 skipped and 3 expected failures); File Viewer tests/build, TypeScript, lint, and all 470 canonical Linux visual cases passed.
+- Android CI failed on Maven Central HTTP 429 while downloading Kotlin artifacts. A job rerun passed without dependency or build configuration changes.
+
 ## Passing checks
 
 - Rust: `cargo test`, `cargo check`, `cargo build`, `cargo clippy`, `cargo fmt -- --check`. The principal test binary reported 2,204 passing tests; auxiliary suites also passed. Existing ignored tests were not enabled. Platform exercised: macOS.

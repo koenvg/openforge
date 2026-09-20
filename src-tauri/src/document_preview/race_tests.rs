@@ -115,8 +115,7 @@ async fn observed_changes_reject_bytes_and_growth_over_limit_takes_precedence() 
         } else {
             assert!(
                 result
-                    .err()
-                    .expect(mutation)
+                    .expect_err(mutation)
                     .starts_with("DOCUMENT_PREVIEW_CHANGED:"),
                 "{mutation}"
             );

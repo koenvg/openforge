@@ -2433,7 +2433,7 @@
       "width": 1280,
       "height": 800
     },
-    "ready": "text=Document preview unavailable",
+    "ready": "text=This PDF or its project is no longer available.",
     "expectedErrors": []
   },
   {
