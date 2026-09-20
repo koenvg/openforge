@@ -1,7 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MermaidDiagramPreview from './MermaidDiagramPreview.svelte'
 import MermaidDiagramPreviewTestWrapper from './MermaidDiagramPreviewTestWrapper.svelte'
+import { useBitsUiBodyScrollLockTestLifecycle } from '../../test/bitsUiTestLifecycle'
+
+useBitsUiBodyScrollLockTestLifecycle()
 
 const SVG = '<svg role="img" aria-label="Deployment flow" viewBox="0 0 200 100"><text>Safe diagram</text></svg>'
 
@@ -40,11 +43,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', MockResizeObserver)
 })
 
-afterEach(async () => {
-  cleanup()
-  // Bits UI restores body scroll in a delayed cleanup. Let that finish while
-  // jsdom's document is still available so the timer cannot leak across files.
-  await new Promise(resolve => setTimeout(resolve, 30))
+afterEach(() => {
   vi.unstubAllGlobals()
 })
 

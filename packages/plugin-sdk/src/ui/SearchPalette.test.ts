@@ -1,27 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import SearchPaletteTestWrapper from './SearchPaletteTestWrapper.svelte'
+import { useBitsUiBodyScrollLockTestLifecycle } from '../../test/bitsUiTestLifecycle'
+
+useBitsUiBodyScrollLockTestLifecycle()
 
 describe('SDK search palette', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  })
-
-  afterEach(async () => {
-    try {
-      cleanup()
-      await tick()
-      // Bits UI releases the body scroll lock on a delayed callback after unmount.
-      // Run it before JSDOM tears down this test's document.
-      await vi.runAllTimersAsync()
-      expect(vi.getTimerCount()).toBe(0)
-      expect(document.body.style.overflow).not.toBe('hidden')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
   it('renders caller result information outside the selectable options', () => {
     render(SearchPaletteTestWrapper)
     const summary = screen.getByText('Showing top 3 results')
