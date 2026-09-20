@@ -74,6 +74,10 @@ export async function taskFsReadFile(taskId: string, filePath: string): Promise<
   return invoke<FileContent>('task_fs_read_file', { taskId, filePath })
 }
 
+export async function taskFsReadDocument(taskId: string, filePath: string): Promise<DocumentPreviewRead> {
+  return invoke<DocumentPreviewRead>('task_fs_read_document', { taskId, filePath })
+}
+
 export async function taskFsSearchFiles(taskId: string, query: string, limit: number = 50): Promise<string[]> {
   return invoke<string[]>('task_fs_search_files', { taskId, query, limit })
 }

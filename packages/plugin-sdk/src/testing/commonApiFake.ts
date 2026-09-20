@@ -985,6 +985,13 @@ export class TestingCommonApiFake {
             if (!file) throw new Error(`Task workspace file not found: ${taskId}:${path}`)
             return file
           },
+          readDocument: async ({ taskId, path }) => {
+            const workspace = this.services.taskWorkspaces[taskId]
+            if (workspace?.error) throw new Error(workspace.error)
+            const document = workspace?.documents?.[path]
+            if (!document) throw new Error('DOCUMENT_PREVIEW_NOT_FOUND: task document fixture unavailable')
+            return document
+          },
           searchFiles: async ({ taskId, query }) =>
             testingTaskWorkspace(this.services.taskWorkspaces, taskId).searches?.[query] ?? [],
         },

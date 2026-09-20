@@ -181,3 +181,93 @@ async fn host_filesystem_callbacks_route_to_resolved_task_workspace() {
         .expect_err("task workspace traversal must fail");
     assert!(traversal.contains("Path traversal detected"));
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn task_document_callback_returns_exact_limit_bytes_and_sanitized_failures() {
+    use base64::Engine;
+    let (database, _db_dir) = crate::db::test_helpers::make_test_db("task_document_callback");
+    let project_root = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let project = database
+        .create_project("PDF", project_root.path().to_str().unwrap())
+        .unwrap();
+    let task = database
+        .create_task("PDF", "doing", Some(&project.id), None, None)
+        .unwrap();
+    database
+        .create_task_workspace_record(
+            &task.id,
+            &project.id,
+            root.path().to_str().unwrap(),
+            project_root.path().to_str().unwrap(),
+            "git_worktree",
+            None,
+            "pi",
+        )
+        .unwrap();
+    std::fs::write(project_root.path().join("max.PDF"), b"%PDF-project").unwrap();
+    let mut bytes = vec![42; 16_777_216];
+    bytes[..8].copy_from_slice(b"%PDF-1.7");
+    std::fs::write(root.path().join("max.PDF"), &bytes).unwrap();
+    std::fs::write(root.path().join("empty.pdf"), b"").unwrap();
+    std::os::unix::fs::symlink("max.PDF", root.path().join("link.pdf")).unwrap();
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+    let result = host
+        .handle_host_callback(
+            "openforge.fs.task.readDocument",
+            &json!({"taskId": task.id, "path": "max.PDF"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result["size"], 16_777_216);
+    assert_eq!(result["data"].as_str().unwrap().len(), 22_369_624);
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(result["data"].as_str().unwrap())
+            .unwrap(),
+        bytes
+    );
+    let unavailable = host
+        .handle_host_callback(
+            "openforge.fs.task.readDocument",
+            &json!({"taskId": task.id, "path": "empty.pdf"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        unavailable,
+        json!({"status":"unavailable","reason":"invalid-document","size":0,"maxBytes":16_777_216})
+    );
+    for (request, prefix) in [
+        (
+            json!({"taskId": task.id, "path":"link.pdf"}),
+            "DOCUMENT_PREVIEW_FORBIDDEN:",
+        ),
+        (
+            json!({"taskId": task.id, "path":"missing.pdf"}),
+            "DOCUMENT_PREVIEW_NOT_FOUND:",
+        ),
+        (
+            json!({"taskId":"missing", "path":"max.PDF"}),
+            "DOCUMENT_PREVIEW_NOT_FOUND:",
+        ),
+        (
+            json!({"task_id":task.id, "path":"max.PDF"}),
+            "DOCUMENT_PREVIEW_BAD_REQUEST:",
+        ),
+        (
+            json!({"taskId":task.id, "path":"max.PDF", "root":project.path}),
+            "DOCUMENT_PREVIEW_BAD_REQUEST:",
+        ),
+    ] {
+        let error = host
+            .handle_host_callback("openforge.fs.task.readDocument", &request)
+            .await
+            .unwrap_err();
+        assert!(error.starts_with(prefix), "{error}");
+        assert!(!error.contains(root.path().to_str().unwrap()));
+    }
+}

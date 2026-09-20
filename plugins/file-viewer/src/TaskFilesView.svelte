@@ -3,6 +3,8 @@
   import FilesView from './FilesView.svelte'
   import { createTaskWorkspaceSource } from './lib/workspaceSource'
 
+  import { onDestroy } from 'svelte'
+  import type { Disposable } from '@openforge-app/plugin-sdk'
   interface Props {
     api: FrontendOpenForgeAPI
     context: OpenForgeContextSnapshot
@@ -10,7 +12,28 @@
   }
 
   let { api, context, taskId }: Props = $props()
-  const workspaceSource = $derived(createTaskWorkspaceSource(api, taskId))
+  let documentRevision = $state(0)
+  let subscription: Disposable | undefined
+  let subscribedApi: FrontendOpenForgeAPI | undefined
+  let subscribedProject: string | null | undefined
+  const workspaceSource = $derived(createTaskWorkspaceSource(api, taskId, documentRevision))
+
+  // A host task invalidation can replace the workspace without changing taskId.
+  // Dispose by explicit subscription identity, not prop-keyed effect cleanup.
+  $effect(() => {
+    const projectId = context.projectId
+    if (subscribedApi === api && subscribedProject === projectId) return
+    subscription?.dispose()
+    subscription = undefined
+    subscribedApi = api
+    subscribedProject = projectId
+    if (projectId && api.tasks?.onDidChange) {
+      subscription = api.tasks.onDidChange(projectId, event => {
+        if ((event.taskId === null || event.taskId === taskId) && event.reason !== 'attention') documentRevision++
+      })
+    }
+  })
+  onDestroy(() => { subscription?.dispose(); subscription = undefined })
 </script>
 
 <FilesView

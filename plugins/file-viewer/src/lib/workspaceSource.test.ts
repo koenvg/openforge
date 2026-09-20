@@ -24,15 +24,16 @@ const content: FileContent = {
 }
 
 describe('project workspace source', () => {
-  it('routes explicit project document reads and never falls back on older hosts', async () => {
+  it.each(['project', 'task'] as const)('routes explicit %s document reads and never falls back on older hosts', async scope => {
     const readDocument = vi.fn().mockResolvedValue({ status: 'unavailable', reason: 'invalid-document', size: 0, maxBytes: 16777216 })
     const readFile = vi.fn()
-    const api = { fs: { readDocument, readFile } } as unknown as FrontendOpenForgeAPI
-    const source = createProjectWorkspaceSource(api, 'P-1')
+    const api = { fs: { readDocument, readFile, task: { readDocument, readFile } } } as unknown as FrontendOpenForgeAPI
+    const createSource = scope === 'task' ? createTaskWorkspaceSource : createProjectWorkspaceSource
+    const source = createSource(api, 'scope-1')
     await expect(source.readDocument!('a.pdf')).resolves.toMatchObject({ status: 'unavailable' })
-    expect(readDocument).toHaveBeenCalledWith({ projectId: 'P-1', path: 'a.pdf' })
+    expect(readDocument).toHaveBeenCalledWith({ [scope === 'task' ? 'taskId' : 'projectId']: 'scope-1', path: 'a.pdf' })
     expect(readFile).not.toHaveBeenCalled()
-    const old = createProjectWorkspaceSource({ fs: { readFile } } as unknown as FrontendOpenForgeAPI, 'P-1')
+    const old = createSource({ fs: { readFile, task: { readFile } } } as unknown as FrontendOpenForgeAPI, 'scope-1')
     await expect(old.readDocument!('a.pdf')).rejects.toThrow('DOCUMENT_PREVIEW_UNAVAILABLE_HOST:')
   })
 

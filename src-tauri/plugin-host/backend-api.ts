@@ -233,6 +233,18 @@ export function createBackendApi(
     return await invokeHostCallback<T>(runtime.hostCallbacks, method, params, options)
   }
 
+  const documentCallback = async (method: 'openforge.fs.readDocument' | 'openforge.fs.task.readDocument', request: object): Promise<DocumentPreviewRead> => {
+    try {
+      return await hostCallback<DocumentPreviewRead>(method, objectCallbackParams(request))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message === `OpenForge host capability is unavailable: ${method}` || message === `unsupported plugin host callback method: ${method}`) {
+        throw new Error('DOCUMENT_PREVIEW_UNAVAILABLE_HOST: document reads are unavailable')
+      }
+      throw error
+    }
+  }
+
   const scopedHostCallback = async <T>(method: string, params: Record<string, unknown>): Promise<T> => {
     try {
       return await hostCallback<T>(method, { ...params, pluginId: state.pluginId })
@@ -426,12 +438,13 @@ export function createBackendApi(
     fs: {
       readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.readDir', objectCallbackParams(request)),
       readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', objectCallbackParams(request)),
-      readDocument: async request => await hostCallback<DocumentPreviewRead>('openforge.fs.readDocument', objectCallbackParams(request)),
+      readDocument: request => documentCallback('openforge.fs.readDocument', request),
       writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', objectCallbackParams(request)) },
       searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', objectCallbackParams(request)),
       task: {
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.task.readDir', objectCallbackParams(request)),
         readFile: async request => await hostCallback<FileContent>('openforge.fs.task.readFile', objectCallbackParams(request)),
+        readDocument: request => documentCallback('openforge.fs.task.readDocument', request),
         searchFiles: async request => await hostCallback<string[]>('openforge.fs.task.searchFiles', objectCallbackParams(request)),
       },
       userData: {

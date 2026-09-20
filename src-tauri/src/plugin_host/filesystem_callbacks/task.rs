@@ -4,6 +4,24 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 impl PluginHost {
+    pub(in crate::plugin_host) async fn read_task_document_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct DocumentRequest {
+            task_id: String,
+            path: String,
+        }
+        let request: DocumentRequest = serde_json::from_value(params.clone())
+            .map_err(|_| "DOCUMENT_PREVIEW_BAD_REQUEST: expected taskId and path".to_string())?;
+        let database = self.database_state_for_host().map_err(|_| {
+            "DOCUMENT_PREVIEW_UNAVAILABLE_HOST: task documents are unavailable".to_string()
+        })?;
+        crate::document_preview::read_task_document(&database, &request.task_id, request.path).await
+    }
+
     pub(in crate::plugin_host) async fn read_task_dir_for_host(
         &self,
         params: &Value,

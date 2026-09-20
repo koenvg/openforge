@@ -708,16 +708,16 @@ Project file methods are available to frontend and backend plugins:
 
 - `openforge.fs.readDir(...)`, `readFile(...)`, `writeFile(...)`, and `searchFiles(...)` stay inside the requested OpenForge Project.
 
-`openforge.fs.readDocument({ projectId, path })` is an additive, explicit PDF-byte read for trusted project frontends and backend plugins. Ordinary `readFile` PDF results remain metadata-only (`type: 'document'`, empty `content`); listings never request document bytes. Task-workspace document reads are not included in this first-page release.
+`openforge.fs.readDocument({ projectId, path })` and `openforge.fs.task.readDocument({ taskId, path })` explicitly read PDF bytes for trusted frontend and backend plugins. Ordinary `readFile` PDF results remain metadata-only (`type: 'document'`, empty `content`); listings never request document bytes. Task reads resolve the live workspace on every request, never fall back to the project checkout, and accept no caller-provided root.
 
 The exported `DocumentPreviewRead` union is either:
 
 - `{ status: 'ready', mimeType: 'application/pdf', encoding: 'base64', data, size, revision, modifiedAt }`: `size` is the raw byte count, `revision` is the SHA-256 digest of those bytes, and `modifiedAt` is Unix milliseconds or null.
 - `{ status: 'unavailable', reason: 'too-large' | 'unsupported-format' | 'invalid-document', size, maxBytes }`: no encoded data is returned.
 
-The host chooses the root from its project record and rechecks that record before returning. Paths must be relative; traversal, absolute/drive/UNC/URL paths, descendant symlinks, and nonregular files are rejected. A host-selected root may itself be a symlink. This policy is stricter than ordinary preview reads. Unix hosts use descriptor-relative opening; hosts without that primitive fail closed rather than use a path-based fallback.
+The host chooses the root from its project or task workspace records and rechecks identity before returning. Removed tasks, changed workspace records, and roots replaced at the same path cannot publish the old document. Paths must be relative; traversal, absolute/drive/UNC/URL paths, descendant symlinks, and nonregular files are rejected. A host-selected root may itself be a symlink. This policy is stricter than ordinary preview reads. Unix hosts use descriptor-relative opening; hosts without that primitive fail closed rather than use a path-based fallback.
 
-Reads accept case-insensitive `.pdf` extensions and require `%PDF-` within the first 1,024 bytes. The raw limit is 16,777,216 bytes (16 MiB), with at most one extra byte read to detect growth. Maximum base64 length is 22,369,624 characters. Observed file changes reject the read. Two operations share admission across both host transports; further requests fail immediately instead of queuing.
+Reads accept case-insensitive `.pdf` extensions and require `%PDF-` within the first 1,024 bytes. The raw limit is 16,777,216 bytes (16 MiB), with at most one extra byte read to detect growth. Maximum base64 length is 22,369,624 characters. Observed file changes reject the read. Project and task reads share two admission slots across both host transports; further requests fail immediately instead of queuing.
 
 The read response deadline is 15 seconds. Cancellation is cooperative: a timed-out or abandoned blocking OS read retains its admission slot until it actually exits; late results are discarded. A timeout does not prove that stalled filesystem I/O stopped. Decoded bytes belong to the caller: release them after transferring to the PDF worker and on selection changes, hiding, or disposal. Do not cache document bytes across workspaces.
 

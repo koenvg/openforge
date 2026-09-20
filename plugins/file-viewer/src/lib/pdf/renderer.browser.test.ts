@@ -12,7 +12,7 @@ import { pdfAssets } from '../../../pdfAssets'
 import { pdfFixture } from '../../../tests/pdfFixture'
 
 // Use Koen's existing Arc session only. This never launches another browser.
-it.skipIf(!process.env.ARC_CDP_URL)('renders first-page text with the real packaged worker, blocks actions and releases resources', async () => {
+it.skipIf(!process.env.ARC_CDP_URL).each(['project', 'task'] as const)('renders %s first-page text with the real packaged worker, blocks actions and releases resources', async scope => {
   const root = resolve(import.meta.dirname, '../../..')
   const output = await mkdtemp(resolve(tmpdir(), 'openforge-pdf-'))
   await build({
@@ -100,9 +100,10 @@ it.skipIf(!process.env.ARC_CDP_URL)('renders first-page text with the real packa
     }, Array.from(pdfFixture()))
     expect(failure.failure).toContain('PDF_WORKER:')
     expect(failure.remaining).toBe(0)
-    const layout = await page.evaluate(async bytes => {
-      const api = globalThis as unknown as { mountPdfViewer(bytes: number[]): () => void }
-      api.mountPdfViewer(bytes)
+    const layout = await page.evaluate(async ({ bytes, scope }) => {
+      const api = globalThis as unknown as { mountPdfViewer(bytes: number[], scope: 'project' | 'task'): () => void }
+      const dispose = api.mountPdfViewer(bytes, scope)
+      Object.assign(globalThis, { disposePdfViewer: dispose })
       const start = performance.now()
       while (!document.querySelector('.textLayer span') && performance.now() - start < 10000) await new Promise(resolve => setTimeout(resolve, 20))
       const button = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Return focus'))!
@@ -114,15 +115,24 @@ it.skipIf(!process.env.ARC_CDP_URL)('renders first-page text with the real packa
       document.body.style.zoom = '1'
       button.focus()
       return { narrow, zoomed, text: main.textContent, selectable: !!main.querySelector('.textLayer span') }
-    }, Array.from(pdfFixture({ pages: 2, tagged: true })))
+    }, { bytes: Array.from(pdfFixture({ pages: 2, tagged: true })), scope })
     expect(layout.selectable).toBe(true)
-    expect(layout.text).toContain('project-guide.pdf')
+    expect(layout.text).toContain(`${scope}-guide.pdf`)
     expect(layout.text).toContain('Page 1 of 2')
     expect(layout.narrow).toBe(true)
     expect(layout.zoomed).toBe(true)
     await page.key('Enter')
     expect(await page.evaluate(async () => document.activeElement?.id, null)).toBe('fixture-tree-file')
-    await writeFile('/tmp/KVG-5075-preview.png', Buffer.from(await page.screenshot(), 'base64'))
+    await writeFile(`/tmp/KVG-5077-${scope}-preview.png`, Buffer.from(await page.screenshot(), 'base64'))
+    await page.evaluate(async () => {
+      (globalThis as unknown as { disposePdfViewer(): void }).disposePdfViewer()
+    }, null)
+    const cleaned = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      return (globalThis as unknown as { pdfTestResources: { active: number; urls: number } }).pdfTestResources
+    }, null)
+    expect(cleaned.active).toBe(0)
+    expect(cleaned.urls).toBe(0)
     expect(page.requests.filter(url => !url.startsWith(`http://127.0.0.1:${port}/`) && !/^(blob:|data:|chrome-extension:)/.test(url)).map(url => new URL(url).origin)).toEqual([])
   } finally {
     await page?.close()

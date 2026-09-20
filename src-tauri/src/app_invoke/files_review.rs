@@ -122,6 +122,28 @@ pub(super) async fn handle_app_files_review_command(
                 ))?
             }
         }
+        "task_fs_read_document" => {
+            #[derive(serde::Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct DocumentRequest {
+                task_id: String,
+                file_path: String,
+            }
+            let payload: DocumentRequest = serde_json::from_value(request.payload.clone())
+                .map_err(|_| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "DOCUMENT_PREVIEW_BAD_REQUEST: expected taskId and filePath".to_string(),
+                    )
+                })?;
+            crate::document_preview::read_task_document(
+                &state.db,
+                &payload.task_id,
+                payload.file_path,
+            )
+            .await
+            .map_err(|error| (StatusCode::BAD_REQUEST, error))?
+        }
         "task_fs_read_dir" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let dir_path = payload_optional_string(&request.payload, "dirPath")?;

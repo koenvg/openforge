@@ -4,11 +4,13 @@ import { createPluginHostRuntime } from './index'
 import { expectOnlyPluginHostStderr, unicodeLineSeparatorFixturePath, writeBackendModule } from './backend-module.test-fixtures'
 
 describe('plugin-host backend host APIs', () => {
-  it('round-trips maximum project document bytes through the backend runtime callback', async () => {
+  it.each(['project', 'task'] as const)('round-trips maximum %s document bytes through the backend runtime callback', async scope => {
+    const method = scope === 'task' ? 'fs.task.readDocument' : 'fs.readDocument'
+    const request = scope === 'task' ? { taskId: 'T-1', path: 'max.pdf' } : { projectId: 'P-1', path: 'max.pdf' }
     const backendPath = await writeBackendModule(`
       export default { activate(api, context) {
         context.subscriptions.add(api.backend.registerMethod('read', {
-          handler: () => api.fs.readDocument({ projectId: 'P-1', path: 'max.pdf' })
+          handler: () => api.${method}(${JSON.stringify(request)})
         }))
       } }
     `)
@@ -18,7 +20,7 @@ describe('plugin-host backend host APIs', () => {
     const hostCallbacks = vi.fn(async (_request: { method: string; params: Record<string, unknown> }) => document)
     const runtime = createPluginHostRuntime({ hostCallbacks })
     await expect(runtime.invokeBackend({ pluginId: 'pdf', backendPath, command: 'read' })).resolves.toEqual(document)
-    expect(hostCallbacks.mock.calls[0][0]).toMatchObject({ method: 'openforge.fs.readDocument', params: { projectId: 'P-1', path: 'max.pdf' } })
+    expect(hostCallbacks.mock.calls[0][0]).toMatchObject({ method: `openforge.${method}`, params: request })
   })
 
   it('routes backend task APIs through host callbacks and normalizes implementation runs', async () => {

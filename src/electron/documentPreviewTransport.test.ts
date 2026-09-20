@@ -4,7 +4,9 @@ import { expect, it, vi } from 'vitest'
 import { handleElectronInvoke } from './backendBridge'
 import { sidecarConfig } from './backendBridge.testUtils'
 
-it('delivers a 16 MiB project document through the real HTTP response decoder and Electron adapter', async () => {
+it.each(['project', 'task'] as const)('delivers a 16 MiB %s document through the real HTTP response decoder and Electron adapter', async scope => {
+  const command = scope === 'task' ? 'task_fs_read_document' : 'fs_read_document'
+  const payload = scope === 'task' ? { taskId: 'T-1', filePath: 'large.pdf' } : { projectId: 'P-1', filePath: 'large.pdf' }
   const data = Buffer.alloc(16_777_216, 32).toString('base64')
   expect(data.length).toBe(22_369_624)
   const response = JSON.stringify({ value: { status: 'ready', mimeType: 'application/pdf', encoding: 'base64', data, size: 16_777_216, revision: 'test-revision', modifiedAt: null } })
@@ -21,14 +23,14 @@ it('delivers a 16 MiB project document through the real HTTP response decoder an
   })
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
   try {
-    const result = await handleElectronInvoke({ command: 'fs_read_document', payload: { projectId: 'P-1', filePath: 'large.pdf' } }, {
+    const result = await handleElectronInvoke({ command, payload }, {
       sidecarConfig: { ...sidecarConfig(), port: (server.address() as { port: number }).port, token: 'document-test' },
       fetch: globalThis.fetch, openExternal: vi.fn(),
     }) as { data: string; size: number }
     expect(authorization).toBe('Bearer document-test')
-    expect(request).toEqual({ command: 'fs_read_document', payload: { projectId: 'P-1', filePath: 'large.pdf' } })
+    expect(request).toEqual({ command, payload })
     expect(result.data.length).toBe(data.length)
-    expect(Buffer.from(result.data, 'base64').byteLength).toBe(16_777_216)
+    expect(Buffer.from(result.data, 'base64').equals(Buffer.alloc(16_777_216, 32))).toBe(true)
     expect(result.size).toBe(16_777_216)
   } finally {
     await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()))

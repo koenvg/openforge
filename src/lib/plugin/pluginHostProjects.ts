@@ -7,6 +7,7 @@ import {
   fsSearchFiles,
   taskFsReadDir,
   taskFsReadFile,
+  taskFsReadDocument,
   taskFsSearchFiles,
   getProjectAttention,
   getProjectConfig,
@@ -29,6 +30,7 @@ type ProjectHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'searchFiles'
   | 'readTaskDir'
   | 'readTaskFile'
+  | 'readTaskDocument'
   | 'searchTaskFiles'
   | 'getAttention'
   | 'getProjectConfig'
@@ -89,6 +91,7 @@ export function createPluginProjectHostCapabilities(): ProjectHostCapabilities {
     searchFiles: searchProjectFiles,
     readTaskDir,
     readTaskFile,
+    readTaskDocument: (request) => taskFsReadDocument(request.taskId, request.path),
     searchTaskFiles,
     getAttention: () => getProjectAttention(),
     getProjectConfig: (projectId, key) => getProjectConfig(projectId, key),

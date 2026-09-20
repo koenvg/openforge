@@ -9,9 +9,19 @@ pub(super) fn read(
     root: &Path,
     path: &str,
     operation: &Operation,
-) -> Result<DocumentPreviewRead, String> {
+) -> Result<(DocumentPreviewRead, secure_open::RootGuard), String> {
     operation.checkpoint()?;
-    let mut file = secure_open::open(root, path, operation)?;
+    let (mut file, root) = secure_open::open(root, path, operation)?;
+    let document = read_opened(&mut file, path, operation)?;
+    root.verify()?;
+    Ok((document, root))
+}
+
+fn read_opened(
+    file: &mut std::fs::File,
+    path: &str,
+    operation: &Operation,
+) -> Result<DocumentPreviewRead, String> {
     operation.checkpoint()?;
     let metadata = file.metadata().map_err(secure_open::io_error)?;
     if metadata.len() > MAX_DOCUMENT_PREVIEW_BYTES {

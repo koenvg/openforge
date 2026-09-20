@@ -156,6 +156,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       task: {
         readDir: unavailable('fs.task.readDir'),
         readFile: unavailable('fs.task.readFile'),
+        readDocument: async () => { throw new Error('DOCUMENT_PREVIEW_UNAVAILABLE_HOST: task documents are unavailable') },
         searchFiles: unavailable('fs.task.searchFiles'),
       },
     },

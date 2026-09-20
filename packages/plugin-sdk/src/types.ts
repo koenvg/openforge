@@ -559,6 +559,8 @@ export interface TaskScopedFileRequest {
 export interface TaskFileSystemAPI {
   readDir(request: { taskId: string; path?: string | null }): Promise<FileEntry[]>
   readFile(request: TaskScopedFileRequest): Promise<FileContent>
+  /** Authorized live-workspace PDF bytes. Missing workspaces never use the project checkout. */
+  readDocument(request: TaskScopedFileRequest): Promise<DocumentPreviewRead>
   searchFiles(request: { taskId: string; query: string; limit?: number }): Promise<string[]>
 }
 

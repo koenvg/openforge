@@ -5,6 +5,7 @@ export type FileBrowserWorkspaceIdentity = `${string}:${string}`
 
 export interface FileBrowserWorkspaceSource {
   readonly identity: FileBrowserWorkspaceIdentity
+  readonly documentRevision?: number
   readDirectory(path: string | null): Promise<FileEntry[]>
   readFile(path: string): Promise<FileContent>
   readDocument?(path: string): Promise<import('@openforge-app/plugin-sdk').DocumentPreviewRead>
@@ -38,11 +39,17 @@ export function createProjectWorkspaceSource(
 export function createTaskWorkspaceSource(
   api: FrontendOpenForgeAPI,
   taskId: string,
+  documentRevision = 0,
 ): FileBrowserWorkspaceSource {
   return {
     identity: taskWorkspaceIdentity(taskId),
+    documentRevision,
     readDirectory: (path) => api.fs.task.readDir({ taskId, path }),
     readFile: (path) => api.fs.task.readFile({ taskId, path }),
+    readDocument: async (path) => {
+      if (!api.fs.task.readDocument) throw new Error('DOCUMENT_PREVIEW_UNAVAILABLE_HOST: task documents are unavailable')
+      return api.fs.task.readDocument({ taskId, path })
+    },
     searchFiles: (query, limit) => api.fs.task.searchFiles({ taskId, query, limit }),
   }
 }

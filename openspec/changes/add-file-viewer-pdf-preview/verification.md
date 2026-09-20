@@ -1,3 +1,59 @@
+# KVG-5077 verification checkpoint
+
+Status: task-workspace implementation and affected-system checks complete, with the known Rust test isolation failure and manual/platform gaps listed below. This does not complete KVG-5076 or the entire OpenSpec change.
+
+## Delivered task-workspace scope
+
+- Authenticated `task_fs_read_document` and `openforge.fs.task.readDocument` resolve only live host task/workspace records. Caller roots and snake_case identities are rejected; missing workspaces never fall back to project files. Metadata-only reads remain unchanged.
+- Project/task reads share the existing two-read admission limit, 15-second response deadline, descriptor-relative symlink-denying reader, 16,777,216-byte limit, and bounded response contract. Timed-out blocking I/O retains its permit until exit.
+- Revalidation covers task/project/workspace records and the opened root's device/inode before publication. Replacing a directory at the same pathname cannot publish bytes from the old root.
+- Public task SDK, frontend/backend adapters, typed desktop IPC, generated registry, unavailable-host behavior, and explicit document fixtures are wired end to end. Both transports round-trip the exact maximum base64 payload with byte equality.
+- Task File Viewer reuses the shared first-page renderer. Task changes invalidate its document identity; delayed reads, hidden panes, retries, plugin deactivation, and destruction release owned resources and reject stale results. No page/zoom controls were added.
+- Packaged-host testing exposed Electron's wrapped document errors. A failing regression preceded the category-extraction fix; UI messages remain sanitized and project-specific copy is unchanged.
+
+## Test-first evidence
+
+- The initial authenticated task command test failed with the expected unimplemented-command response before routing existed.
+- The root-replacement regression initially returned old bytes from a replaced workspace directory; the descriptor-backed root guard made it pass.
+- Task SDK/workspace routing and task PDF dispatch tests failed before those capabilities were wired.
+- The wrapped-error regression failed with the generic renderer message before the stable document category was recognized.
+
+## Affected-system verification
+
+Commands ran with `TMPDIR=/tmp`; Arc-backed PDF tests used `ARC_CDP_URL=http://127.0.0.1:9222`.
+
+- Root: `pnpm test --maxWorkers=2 --testTimeout=30000`: 844 files passed, 9 skipped; 7,186 tests passed, 3 expected failures, 35 skipped. An earlier four-worker run hit seven five-second timeouts; all affected tests passed at the original timeout with one worker before the successful full retry.
+- File Viewer: `pnpm --filter @openforge-app/plugin-file-viewer test --maxWorkers=2`: 20 files / 113 tests passed, including both real project/task Arc PDF cases. Package build and package TypeScript check passed.
+- Plugin SDK: package tests passed 635 tests / 76 files, with 3 expected failures; package build, `check:entrypoints`, and `check:contract` passed.
+- Root TypeScript, lint, `electron:contract:check`, and `packages:metadata:check` passed. Root tests include Electron transport/policy, app/frontend runtime, and backend plugin-host tests.
+- Rust: the unfiltered suite hit the pre-existing `pty_manager::attachment_tests::attachment_writes_only_valid_utf8_to_the_bound_agent_pty` isolation failure involving preserved `~/.openforge/pids-dev/interactive-agent-pty.pid` metadata. Existing KVG-5123 tracks it; recovery data was not removed.
+- Rust retry: `cargo test -- --skip pty_manager::attachment_tests::attachment_writes_only_valid_utf8_to_the_bound_agent_pty` passed 2,263 principal tests (17 ignored, 1 filtered), plus auxiliary suites. `cargo check`, `cargo build`, `cargo clippy --all-targets -- -D warnings`, and `cargo fmt -- --check` passed.
+- `pnpm build:plugins`, `pnpm build`, and `pnpm electron:build` passed. No canonical visual baseline changed; the existing project PDF story copy/readiness remains unchanged.
+
+Logs are local `/tmp/KVG-5077-*-final.log`, `/tmp/KVG-5077-cargo-*.log`, and `/tmp/KVG-5077-timeout-recheck.log`.
+
+## Packaged Electron evidence
+
+Built `/tmp/KVG-5077-PDF.app` with production renderer/Electron bundles and the current **debug** Rust sidecar, then installed the freshly built File Viewer into isolated app-data/user-data directories. The regular installed app and user workspaces were untouched.
+
+A CDP-driven smoke mounted the exported task component using the packaged host's `plugin://com.openforge.file-viewer/dist/frontend.js` and authenticated desktop command transport. It used real temporary host task/workspace records, a two-page tagged/malicious-action PDF, and a different same-name project PDF. This is an isolated component smoke inside the packaged shell, not a claim of full task-tab navigation or signed release testing.
+
+Verified live-task byte equality, traversal rejection, real Blob worker creation under production CSP, selectable text, tagged structure, bounded canvas dimensions, Enter-key return to the selected tree entry, five hide/show cycles, and missing-workspace invalidation without project fallback. No document-action request or page error occurred. Six workers were created, at most one was active, and the final live worker/blob-URL counts were both zero. Event subscription disposal was also checked.
+
+The final run sampled a peak **765,840 KiB** RSS across the isolated Electron process tree at 500 ms intervals. This includes startup and non-PDF app processes, is not baseline-subtracted, and does not establish a PDF memory ceiling or pathological-input memory bound.
+
+Local evidence (ephemeral): `/tmp/KVG-5077-packaged-pdf.mjs`, `/tmp/KVG-5077-packaged-result.json`, `/tmp/KVG-5077-packaged-app.log`, and reviewed screenshot `/tmp/KVG-5077-packaged-task.png`. The Arc cases separately cover narrow layout/200% CSS zoom, scanned/password/corrupt fixtures, budgets/deadlines, and cleanup using the same task/project workspace adapters.
+
+## Remaining coverage and scope
+
+- Linux secure-open execution and Windows fail-closed execution were not run; macOS was exercised.
+- Manual screen-reader reading order/announcements, multilingual/complex-font PDFs, and pathological compressed-image memory profiling remain unverified.
+- The packaged check used an isolated debug-sidecar app and direct component mount. Signed/release distribution, normal task-tab navigation, and full-app task-switch memory profiling remain gaps.
+- Existing ignored/skipped suites were not enabled. Canonical Linux visual screenshots were not regenerated; no baseline-affecting project layout/copy change was retained.
+- Page navigation/zoom remains KVG-5076. Broader incomplete OpenSpec items stay unchecked. KVG-5072/KVG-5074 remain separate; the discovered PTY isolation issue already has KVG-5123, so no duplicate cleanup task was created.
+
+---
+
 # KVG-5075 verification checkpoint
 
 Status: implementation in progress; not ready to mark the complete change finished.

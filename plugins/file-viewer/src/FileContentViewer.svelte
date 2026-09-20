@@ -305,7 +305,7 @@
             </p>
           </div>
         </div>
-      {:else if content.type === 'document' && content.mimeType === 'application/pdf' && workspaceSource?.identity.startsWith('project:')}
+      {:else if content.type === 'document' && content.mimeType === 'application/pdf' && workspaceSource !== null}
         <PdfPreview {workspaceSource} {filePath} {modifiedAt} />
       {:else if content.type === 'document'}
         <div class="flex-1 flex items-center justify-center p-6">
