@@ -4098,508 +4098,68 @@
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--idle",
+    "story": "components-board-task-list-item--agent-workflow-gallery",
     "theme": "openforge-light",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 820
     },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"agent-workflow\"]",
     "expectedErrors": []
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--idle",
+    "story": "components-board-task-list-item--agent-workflow-gallery",
     "theme": "openforge-dark",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 820
     },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"agent-workflow\"]",
     "expectedErrors": []
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--backlog",
+    "story": "components-board-task-list-item--pull-request-progress-gallery",
     "theme": "openforge-light",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 900
     },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"pull-request-progress\"]",
     "expectedErrors": []
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--backlog",
+    "story": "components-board-task-list-item--pull-request-progress-gallery",
     "theme": "openforge-dark",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 900
     },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"pull-request-progress\"]",
     "expectedErrors": []
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--active",
+    "story": "components-board-task-list-item--pull-request-attention-gallery",
     "theme": "openforge-light",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 650
     },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"pull-request-attention\"]",
     "expectedErrors": []
   },
   {
     "catalog": "components",
-    "story": "components-board-task-list-item--active",
+    "story": "components-board-task-list-item--pull-request-attention-gallery",
     "theme": "openforge-dark",
     "viewport": {
-      "width": 560,
-      "height": 360
+      "width": 1600,
+      "height": 650
     },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--needs-input",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--needs-input",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--paused",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--paused",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--agent-done",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--agent-done",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--failed",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--failed",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--interrupted",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--interrupted",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--done",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--done",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-draft",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-draft",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-open",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-open",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ci-failed",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ci-failed",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--changes-requested",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--changes-requested",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ready-to-merge",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ready-to-merge",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ready-to-enqueue",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ready-to-enqueue",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-queued",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-queued",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-merged",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-merged",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-closed",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--pr-closed",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ci-running",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--ci-running",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--review-pending",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--review-pending",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--unaddressed-comments",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--unaddressed-comments",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--merge-conflict",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--merge-conflict",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--merging",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-board-task-list-item--merging",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 560,
-      "height": 360
-    },
-    "ready": ".task-list-item",
+    "ready": "[data-task-list-gallery-ready=\"pull-request-attention\"]",
     "expectedErrors": []
   },
   {

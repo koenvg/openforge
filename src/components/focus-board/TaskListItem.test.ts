@@ -79,7 +79,42 @@ const baseProps = {
   onContextMenu: vi.fn(),
 }
 
+const taskListPresentations = [
+  ['backlog', 'Backlog', 'neutral', 'lucide-layers'],
+  ['idle', 'Idle', 'neutral', 'lucide-circle-dot'],
+  ['active', 'Active', 'success', 'lucide-circle-dot'],
+  ['needs-input', 'Needs Input', 'warning', 'lucide-circle-dot'],
+  ['paused', 'Paused', 'neutral', 'lucide-circle-dot'],
+  ['agent-done', 'Done', 'success', 'lucide-circle-check'],
+  ['failed', 'Failed', 'danger', 'lucide-circle-alert'],
+  ['interrupted', 'Stopped', 'neutral', 'lucide-circle-alert'],
+  ['done', 'Done', 'neutral', 'lucide-circle-check'],
+  ['pr-draft', 'PR Draft', 'neutral', 'lucide-circle-dot'],
+  ['pr-open', 'PR Open', 'neutral', 'lucide-circle-dot'],
+  ['ci-running', 'CI Running', 'neutral', 'lucide-circle-dot'],
+  ['review-pending', 'Review Pending', 'neutral', 'lucide-circle-dot'],
+  ['ci-failed', 'CI Failed', 'danger', 'lucide-circle-alert'],
+  ['changes-requested', 'Changes Req.', 'danger', 'lucide-circle-alert'],
+  ['unaddressed-comments', 'Unaddressed Comments', 'warning', 'lucide-circle-dot'],
+  ['ready-to-merge', 'Ready to Merge', 'info', 'lucide-circle-dot'],
+  ['ready-to-enqueue', 'Ready to Enqueue', 'info', 'lucide-circle-dot'],
+  ['pr-queued', 'Queued', 'info', 'lucide-circle-dot'],
+  ['pr-merged', 'Merged', 'neutral', 'lucide-circle-check'],
+  ['pr-closed', 'Closed', 'neutral', 'lucide-circle-dot'],
+  ['merge-conflict', 'Merge Conflict', 'danger', 'lucide-circle-alert'],
+] as const satisfies readonly (readonly [TaskState, string, string, string])[]
+
 describe('TaskListItem', () => {
+  it.each(taskListPresentations)('renders the documented label, icon, badge, and actions for %s', (state, label, badgeVariant, iconClass) => {
+    render(TaskListItem, { props: { ...baseProps, state } })
+
+    const badge = screen.getByText(label).closest('[data-variant]')
+    expect(badge?.getAttribute('data-variant')).toBe(badgeVariant)
+    expect(badge?.querySelector(`.${iconClass}`)).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'More actions for T-100' })).toBeTruthy()
+  })
+
   it('renders task ID', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.getByText('T-100')).toBeTruthy()
