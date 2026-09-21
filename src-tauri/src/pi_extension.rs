@@ -87,6 +87,13 @@ async function emitBus(name, data) {
 "#;
 
     fn run_pi_extension_scenario(scenario: &str) -> Value {
+        run_pi_extension_scenario_with_inherited_agent_config(scenario, None)
+    }
+
+    fn run_pi_extension_scenario_with_inherited_agent_config(
+        scenario: &str,
+        inherited_agent_config: Option<&str>,
+    ) -> Value {
         let script = [
             PI_EXTENSION_SOURCE,
             PI_EXTENSION_TEST_HARNESS,
@@ -100,11 +107,15 @@ async function emitBus(name, data) {
             .tempfile()
             .expect("create Pi extension test script");
         std::fs::write(script_file.path(), script).expect("write Pi extension test script");
-        let output = Command::new("node")
+        let mut command = Command::new("node");
+        command
             .arg("--experimental-strip-types")
-            .arg(script_file.path())
-            .output()
-            .expect("run Pi extension test script");
+            .arg(script_file.path());
+        if let Some(agent_config) = inherited_agent_config {
+            command.env("OPENFORGE_AGENT_CONFIG", agent_config);
+        }
+        command.env_remove("OPENFORGE_AGENT_CONFIG");
+        let output = command.output().expect("run Pi extension test script");
         assert!(
             output.status.success(),
             "node failed: {}",
@@ -157,6 +168,25 @@ await emitPi("agent_settled");
         assert!(payloads
             .iter()
             .all(|payload| payload["provider_session_id"] == "pi-session-123"));
+    }
+
+    #[test]
+    fn pi_extension_fixture_clears_inherited_agent_config() {
+        let result = run_pi_extension_scenario_with_inherited_agent_config(
+            r#"
+await emitPi("agent_start");
+await emitPi("agent_settled");
+"#,
+            Some("/sentinel/live-agent-config.json"),
+        );
+        let kinds: Vec<_> = result["payloads"]
+            .as_array()
+            .expect("payloads should be an array")
+            .iter()
+            .map(|payload| payload["kind"].as_str().expect("kind should be a string"))
+            .collect();
+
+        assert_eq!(kinds, ["started", "ended"]);
     }
 
     #[test]
