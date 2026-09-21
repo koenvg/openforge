@@ -190,19 +190,31 @@ describe('CommonAPIFake agentSessions.list', () => {
 })
 
 describe('CommonAPIFake scoped Agent Sessions', () => {
-  it('models unavailable provider authentication with the public error category', async () => {
+  it('starts without a tool policy or authentication preflight', async () => {
     const api = createMockOpenForgeApi()
-    api.__testing.registry.setScopedAgentSessionAuthenticationAvailable(false)
 
     await expect(api.agentSessions.start({
       scope: { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' },
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
+    })).resolves.toMatchObject({ status: 'running' })
+  })
+
+  it('rejects a legacy raw toolPolicy before creating a session', async () => {
+    const api = createMockOpenForgeApi()
+    const legacy = {
+      scope: { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' },
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
       toolPolicy: 'review-read-only',
-    })).rejects.toMatchObject<Partial<ScopedAgentSessionError>>({
-      code: 'AUTHENTICATION_UNAVAILABLE',
-    })
+    }
+
+    await expect(api.agentSessions.start(legacy)).rejects.toThrow(
+      'Scoped Agent Session start no longer accepts toolPolicy',
+    )
+    expect(api.__testing.calls.scopedAgentSessionStarts).toEqual([])
   })
 
   it('starts and reads one scope without changing task-scoped list results', async () => {
@@ -214,7 +226,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review this pull request',
-      toolPolicy: 'review-read-only',
     })
 
     expect(started).toMatchObject({ status: 'running', queuePosition: null, acceptsInput: true })
@@ -240,7 +251,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
         projectId: 'P-1',
         checkoutRevision: 'head-a',
         initialInput: 'Review',
-        toolPolicy: 'review-read-only',
       }))
     }
 
@@ -262,7 +272,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     })
     await start(0)
     await expect(start(0)).rejects.toMatchObject<Partial<ScopedAgentSessionError>>({ code: 'DUPLICATE_SCOPE' })
@@ -283,14 +292,12 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     })
     await api.agentSessions.start({
       scope: newScope,
       projectId: 'P-1',
       checkoutRevision: 'head-b',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     })
 
     await expect(api.agentSessions.status(oldScope)).resolves.toBeNull()
@@ -317,7 +324,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
         projectId: 'P-1',
         checkoutRevision: 'head-a',
         initialInput: 'Review',
-        toolPolicy: 'review-read-only',
       })
     }
 
@@ -345,7 +351,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     })
     api.__testing.registry.completeScopedAgentSession(first)
 
@@ -363,7 +368,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Generate the walkthrough',
-      toolPolicy: 'review-read-only',
     })
 
     const aborted = await api.agentSessions.abort(scope)
@@ -386,7 +390,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: '',
-      toolPolicy: 'review-read-only',
     })
 
     const marked = await api.agentSessions.input(
@@ -412,7 +415,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Generate the walkthrough',
-      toolPolicy: 'review-read-only',
     })
 
     api.__testing.registry.completeScopedAgentSession(scope, false)
@@ -432,7 +434,6 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     })
     const first = await api.agentSessions.mountTerminal(scope, document.createElement('div'))
     const second = await api.agentSessions.mountTerminal(scope, document.createElement('div'))

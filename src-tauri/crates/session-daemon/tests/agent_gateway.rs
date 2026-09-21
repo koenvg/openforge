@@ -37,7 +37,7 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn scoped_agent_keeps_its_restricted_config_instead_of_receiving_task_credentials() {
+fn scoped_agent_keeps_its_scope_bound_config_instead_of_receiving_task_credentials() {
     use openforge_session_host::{PreparedCommand, TerminalOwner};
     let fixture = Fixture::new();
     let client = fixture.connect();
@@ -47,7 +47,7 @@ fn scoped_agent_keeps_its_restricted_config_instead_of_receiving_task_credential
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "printf '%s\\n' \"$OPENFORGE_AGENT_CONFIG\" \"$OPENFORGE_PTY_INSTANCE_ID\" \"${OPENFORGE_BACKEND_TOKEN-unset}\" > receipt.tmp; mv receipt.tmp receipt; exec sleep 120".into()],
             cwd: fixture.0.path().into(),
-            env: [("OPENFORGE_AGENT_CONFIG".into(), "/restricted/scoped.json".into()), ("OPENFORGE_BACKEND_TOKEN".into(), "controller-secret".into())].into(),
+            env: [("OPENFORGE_AGENT_CONFIG".into(), "/scoped/session.json".into()), ("OPENFORGE_BACKEND_TOKEN".into(), "controller-secret".into())].into(),
         },
         columns: 80, rows: 24, image_protocol: None,
     }).unwrap();
@@ -62,7 +62,7 @@ fn scoped_agent_keeps_its_restricted_config_instead_of_receiving_task_credential
     assert_eq!(
         receipt,
         format!(
-            "/restricted/scoped.json\n{}\nunset\n",
+            "/scoped/session.json\n{}\nunset\n",
             session.pty.instance.value()
         )
     );

@@ -7,14 +7,54 @@ use super::super::super::commands::PiSessionTarget;
 use super::super::super::events::{PtyExitObserver, PtyExitPolicy};
 use super::super::super::{PtyError, PtyManager, PtySpawnContext, TerminalImageProtocol};
 use super::super::provider_adapter::{
-    AgentPtyProviderAdapter, ClaudeCodePtyAdapter, CodexPtyAdapter, GrokPtyAdapter,
-    OpenCodePtyAdapter, PiPtyAdapter, ScopedClaudeCodePtyAdapter, ScopedClaudeCodePtyConfig,
+    AgentPtyProviderAdapter, ProviderPtyAdapter, ScopedAgentPtyAdapter,
 };
 use super::process::{resolve_pty_cwd, AgentProcessRequest, SpawnedPty};
 use super::registration::SessionRegistrationRequest;
 use super::streams::{AgentEventStreamRequest, AgentStreamState};
 
+enum AgentPtyOwner {
+    Task,
+    Scoped {
+        session_id: String,
+        credential_path: std::path::PathBuf,
+        exit_observer: PtyExitObserver,
+    },
+}
+
 impl PtyManager {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn spawn_scoped_provider_pty(
+        &self,
+        adapter: ProviderPtyAdapter,
+        session_key: &str,
+        scoped_session_id: &str,
+        cwd: &Path,
+        credential_path: std::path::PathBuf,
+        cols: u16,
+        rows: u16,
+        event_publisher: RuntimeEventPublisher,
+        exit_observer: PtyExitObserver,
+    ) -> Result<u64, PtyError> {
+        self.spawn_provider_pty(
+            adapter,
+            PtySpawnContext {
+                task_id: session_key,
+                cwd,
+                cols,
+                rows,
+                event_publisher,
+            },
+            None,
+            AgentPtyOwner::Scoped {
+                session_id: scoped_session_id.to_string(),
+                credential_path,
+                exit_observer,
+            },
+        )
+        .await
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn_opencode_run_pty(
         &self,
@@ -30,8 +70,8 @@ impl PtyManager {
         event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
         let model_name = model.map(|model| format!("{}/{}", model.provider_id, model.model_id));
-        self.spawn_agent_pty(
-            OpenCodePtyAdapter::new(
+        self.spawn_provider_pty(
+            ProviderPtyAdapter::opencode(
                 prompt,
                 resume_session_id,
                 continue_session,
@@ -46,6 +86,7 @@ impl PtyManager {
                 event_publisher,
             },
             None,
+            AgentPtyOwner::Task,
         )
         .await
     }
@@ -62,8 +103,8 @@ impl PtyManager {
         rows: u16,
         event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
-        self.spawn_agent_pty(
-            CodexPtyAdapter::new(prompt, resume_session_id, continue_session),
+        self.spawn_provider_pty(
+            ProviderPtyAdapter::codex(prompt, resume_session_id, continue_session),
             PtySpawnContext {
                 task_id,
                 cwd,
@@ -72,6 +113,7 @@ impl PtyManager {
                 event_publisher,
             },
             None,
+            AgentPtyOwner::Task,
         )
         .await
     }
@@ -109,8 +151,8 @@ impl PtyManager {
         rows: u16,
         event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
-        self.spawn_agent_pty(
-            ClaudeCodePtyAdapter::new(
+        self.spawn_provider_pty(
+            ProviderPtyAdapter::claude_code(
                 prompt,
                 resume_session_id,
                 continue_session,
@@ -125,6 +167,7 @@ impl PtyManager {
                 event_publisher,
             },
             None,
+            AgentPtyOwner::Task,
         )
         .await
     }
@@ -141,8 +184,8 @@ impl PtyManager {
         event_publisher: RuntimeEventPublisher,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
-        self.spawn_agent_pty(
-            PiPtyAdapter::new(prompt, session_target, None),
+        self.spawn_provider_pty(
+            ProviderPtyAdapter::pi(prompt, session_target),
             PtySpawnContext {
                 task_id,
                 cwd,
@@ -151,6 +194,7 @@ impl PtyManager {
                 event_publisher,
             },
             terminal_image_protocol,
+            AgentPtyOwner::Task,
         )
         .await
     }
@@ -189,8 +233,8 @@ impl PtyManager {
         rows: u16,
         event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
-        self.spawn_agent_pty(
-            GrokPtyAdapter::new(
+        self.spawn_provider_pty(
+            ProviderPtyAdapter::grok(
                 prompt,
                 resume_session_id,
                 continue_session,
@@ -207,52 +251,42 @@ impl PtyManager {
             // Grok has no inline-image renderer, so it gets the same `None` as
             // Claude/Codex/OpenCode; only Pi threads a terminal image protocol.
             None,
+            AgentPtyOwner::Task,
         )
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn spawn_scoped_claude_pty(
+    async fn spawn_provider_pty(
         &self,
-        session_key: &str,
-        scoped_session_id: &str,
-        cwd: &Path,
-        prompt: &str,
-        provider_session_id: &str,
-        resume: bool,
-        settings_path: &Path,
-        sandbox_profile: String,
-        credential_path: Option<std::path::PathBuf>,
-        scoped_state_dir: std::path::PathBuf,
-        launch_context: crate::claude_launch_context::ClaudeLaunchContext,
-        cols: u16,
-        rows: u16,
-        event_publisher: RuntimeEventPublisher,
-        exit_observer: PtyExitObserver,
+        adapter: ProviderPtyAdapter,
+        context: PtySpawnContext<'_>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
+        owner: AgentPtyOwner,
     ) -> Result<u64, PtyError> {
-        self.spawn_agent_pty_with_exit_policy(
-            ScopedClaudeCodePtyAdapter::new(ScopedClaudeCodePtyConfig {
-                prompt: prompt.to_string(),
-                provider_session_id: provider_session_id.to_string(),
-                resume,
-                settings_path: settings_path.to_path_buf(),
-                sandbox_profile,
+        match owner {
+            AgentPtyOwner::Task => {
+                self.spawn_agent_pty_with_exit_policy(
+                    adapter,
+                    context,
+                    terminal_image_protocol,
+                    PtyExitPolicy::TaskAgent,
+                )
+                .await
+            }
+            AgentPtyOwner::Scoped {
+                session_id,
                 credential_path,
-                scoped_state_dir,
-                scoped_session_id: scoped_session_id.to_string(),
-                launch_context,
-            }),
-            PtySpawnContext {
-                task_id: session_key,
-                cwd,
-                cols,
-                rows,
-                event_publisher,
-            },
-            None,
-            PtyExitPolicy::ScopedAgent(exit_observer),
-        )
-        .await
+                exit_observer,
+            } => {
+                self.spawn_agent_pty_with_exit_policy(
+                    ScopedAgentPtyAdapter::new(adapter, &session_id, credential_path),
+                    context,
+                    terminal_image_protocol,
+                    PtyExitPolicy::ScopedAgent(exit_observer),
+                )
+                .await
+            }
+        }
     }
 
     pub(in crate::pty_manager::session) async fn spawn_agent_pty<A: AgentPtyProviderAdapter>(

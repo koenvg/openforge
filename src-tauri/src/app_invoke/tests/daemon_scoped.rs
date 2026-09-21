@@ -25,34 +25,22 @@ async fn scoped_agent_uses_daemon_but_is_interrupted_before_restart_handoff() {
     manager.set_test_environment_variable("PATH", format!("{}:/usr/bin:/bin", bin.display()));
     manager.set_test_environment_variable("HOME", fixture.0.path().to_string_lossy());
     let key = format!("scoped-agent-v1-{}", "a".repeat(64));
-    let credential = fixture.0.path().join("restricted.json");
+    let credential = fixture.0.path().join("scoped-agent.json");
     let observed = std::sync::Arc::new(std::sync::Mutex::new(None));
     let observer = observed.clone();
     let instance = manager
-        .spawn_scoped_claude_pty(
+        .spawn_scoped_provider_pty(
+            crate::pty_manager::ProviderPtyAdapter::claude_code(
+                "review",
+                None,
+                false,
+                &fixture.0.path().join("hooks.json"),
+                None,
+            ),
             &key,
             "scoped-1",
             fixture.0.path(),
-            "review",
-            "provider-1",
-            false,
-            &fixture.0.path().join("settings.json"),
-            "(version 1)(allow default)".into(),
-            Some(credential.clone()),
-            fixture.0.path().into(),
-            crate::claude_launch_context::ClaudeLaunchContext::for_test(
-                provider,
-                std::collections::HashMap::from([
-                    (
-                        "PATH".to_string(),
-                        format!("{}:/usr/bin:/bin", bin.display()),
-                    ),
-                    (
-                        "HOME".to_string(),
-                        fixture.0.path().to_string_lossy().into_owned(),
-                    ),
-                ]),
-            ),
+            credential.clone(),
             80,
             24,
             crate::app_events::RuntimeEventPublisher::new(

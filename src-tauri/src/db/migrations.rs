@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS scoped_agent_sessions (
     resolved_commit TEXT,
     provider TEXT NOT NULL CHECK(length(CAST(provider AS BLOB)) > 0),
     provider_session_id TEXT,
-    tool_policy TEXT NOT NULL CHECK(length(CAST(tool_policy AS BLOB)) > 0),
     terminal_key TEXT NOT NULL UNIQUE CHECK(length(CAST(terminal_key AS BLOB)) > 0),
     pty_instance_id INTEGER CHECK(pty_instance_id IS NULL OR pty_instance_id >= 0),
     turn_id TEXT,
@@ -121,8 +120,109 @@ CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_owner_project
 "#;
 
 pub(super) fn ensure_scoped_agent_sessions_table(conn: &Connection) -> Result<()> {
+    remove_scoped_agent_tool_policy(conn)?;
     conn.execute_batch(SCOPED_AGENT_SESSIONS_SQL)?;
     conn.execute_batch(SCOPED_AGENT_SESSION_EVENTS_SQL)
+}
+
+fn remove_scoped_agent_tool_policy(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "scoped_agent_sessions")? {
+        return Ok(());
+    }
+    let has_tool_policy: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('scoped_agent_sessions') WHERE name = 'tool_policy'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_tool_policy {
+        return Ok(());
+    }
+
+    let has_events = table_exists(conn, "scoped_agent_session_events")?;
+    if has_events {
+        conn.execute_batch(
+            r#"
+CREATE TEMP TABLE scoped_agent_session_events_policy_backup AS
+SELECT sequence, session_id, owner_plugin_id, namespace, target_key, revision,
+       turn_id, status, workspace_available, error_code, error_message,
+       created_at, updated_at
+  FROM scoped_agent_session_events;
+DROP TABLE scoped_agent_session_events;
+            "#,
+        )?;
+    }
+
+    conn.execute_batch(
+        r#"
+CREATE TABLE scoped_agent_sessions_without_tool_policy (
+    id TEXT PRIMARY KEY CHECK(length(CAST(id AS BLOB)) > 0),
+    owner_plugin_id TEXT NOT NULL CHECK(length(CAST(owner_plugin_id AS BLOB)) > 0),
+    namespace TEXT NOT NULL
+        CHECK(length(CAST(namespace AS BLOB)) BETWEEN 1 AND 128 AND instr(namespace, char(0)) = 0),
+    target_key TEXT NOT NULL
+        CHECK(length(CAST(target_key AS BLOB)) BETWEEN 1 AND 2048 AND instr(target_key, char(0)) = 0),
+    revision TEXT NOT NULL
+        CHECK(length(CAST(revision AS BLOB)) BETWEEN 1 AND 256 AND instr(revision, char(0)) = 0),
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    checkout_revision TEXT NOT NULL CHECK(length(CAST(checkout_revision AS BLOB)) > 0),
+    resolved_commit TEXT,
+    provider TEXT NOT NULL CHECK(length(CAST(provider AS BLOB)) > 0),
+    provider_session_id TEXT,
+    terminal_key TEXT NOT NULL UNIQUE CHECK(length(CAST(terminal_key AS BLOB)) > 0),
+    pty_instance_id INTEGER CHECK(pty_instance_id IS NULL OR pty_instance_id >= 0),
+    turn_id TEXT,
+    status TEXT NOT NULL CHECK(status IN (
+        'queued', 'starting', 'running', 'paused', 'completed', 'failed', 'aborted', 'interrupted'
+    )),
+    queue_sequence INTEGER CHECK(queue_sequence IS NULL OR queue_sequence > 0),
+    error_code TEXT,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL,
+    UNIQUE(namespace, target_key, revision)
+);
+INSERT INTO scoped_agent_sessions_without_tool_policy (
+    id, owner_plugin_id, namespace, target_key, revision, project_id,
+    checkout_revision, resolved_commit, provider, provider_session_id,
+    terminal_key, pty_instance_id, turn_id, status, queue_sequence,
+    error_code, error_message, created_at, updated_at, last_used_at
+)
+SELECT id, owner_plugin_id, namespace, target_key, revision, project_id,
+       checkout_revision, resolved_commit, provider, provider_session_id,
+       terminal_key, pty_instance_id, turn_id, status, queue_sequence,
+       error_code, error_message, created_at, updated_at, last_used_at
+  FROM scoped_agent_sessions;
+DROP TABLE scoped_agent_sessions;
+ALTER TABLE scoped_agent_sessions_without_tool_policy RENAME TO scoped_agent_sessions;
+CREATE INDEX idx_scoped_agent_sessions_logical_scope
+    ON scoped_agent_sessions(namespace, target_key);
+CREATE INDEX idx_scoped_agent_sessions_scheduler
+    ON scoped_agent_sessions(status, queue_sequence, created_at, id);
+CREATE INDEX idx_scoped_agent_sessions_owner_project
+    ON scoped_agent_sessions(owner_plugin_id, project_id);
+        "#,
+    )?;
+
+    if has_events {
+        conn.execute_batch(SCOPED_AGENT_SESSION_EVENTS_SQL)?;
+        conn.execute_batch(
+            r#"
+INSERT INTO scoped_agent_session_events (
+    sequence, session_id, owner_plugin_id, namespace, target_key, revision,
+    turn_id, status, workspace_available, error_code, error_message,
+    created_at, updated_at
+)
+SELECT sequence, session_id, owner_plugin_id, namespace, target_key, revision,
+       turn_id, status, workspace_available, error_code, error_message,
+       created_at, updated_at
+  FROM scoped_agent_session_events_policy_backup;
+DROP TABLE scoped_agent_session_events_policy_backup;
+            "#,
+        )?;
+    }
+
+    Ok(())
 }
 
 pub(super) const SCOPED_AGENT_SESSION_EVENTS_SQL: &str = r#"
@@ -2077,6 +2177,11 @@ INSERT OR IGNORE INTO config (key, value)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     })
     .down("ALTER TABLE review_prs DROP COLUMN reviewed_head_sha"),
+    M::up_with_hook("", |tx| {
+        remove_scoped_agent_tool_policy(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    })
+    .down(""),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -5479,7 +5584,6 @@ mod tests {
                 "resolved_commit",
                 "provider",
                 "provider_session_id",
-                "tool_policy",
                 "terminal_key",
                 "pty_instance_id",
                 "turn_id",
@@ -5502,6 +5606,101 @@ mod tests {
             )
             .expect("check Task Agent Session isolation");
         assert_eq!(task_columns, 0);
+    }
+
+    #[test]
+    fn scoped_agent_policy_removal_preserves_rows_events_and_indexes() {
+        let (_temp_dir, path) = temporary_database_path();
+        let project_id;
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            project_id = db
+                .create_project("Repository", "/tmp/repository")
+                .expect("create Project")
+                .id;
+            db.create_scoped_agent_session(&crate::db::NewScopedAgentSession {
+                id: "sas-policy-upgrade",
+                owner_plugin_id: "com.example.review",
+                namespace: "github-pr",
+                target_key: "owner/repo#42",
+                revision: "head-a",
+                project_id: &project_id,
+                checkout_revision: "head-a",
+                provider: "pi",
+                terminal_key:
+                    "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                status: crate::db::ScopedAgentSessionStatus::Starting,
+                queue_sequence: None,
+            })
+            .expect("seed scoped session");
+            db.mark_scoped_agent_session_running("sas-policy-upgrade", Some("pi-conversation"), 41)
+                .expect("mark session running");
+            db.begin_scoped_agent_turn("sas-policy-upgrade", 41, "turn-a")
+                .expect("record lifecycle event");
+
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock pre-upgrade database");
+            conn.execute(
+                "ALTER TABLE scoped_agent_sessions ADD COLUMN tool_policy TEXT NOT NULL DEFAULT 'review-read-only'",
+                [],
+            )
+            .expect("restore legacy policy column");
+            conn.pragma_update(None, "user_version", LATEST_USER_VERSION - 1)
+                .expect("rewind to migration boundary");
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let session = db
+            .scoped_agent_session_by_id("sas-policy-upgrade")
+            .expect("read upgraded session")
+            .expect("preserved session");
+        assert_eq!(session.project_id, project_id);
+        assert_eq!(session.provider, "pi");
+        assert_eq!(
+            session.provider_session_id.as_deref(),
+            Some("pi-conversation")
+        );
+        assert_eq!(session.turn_id.as_deref(), Some("turn-a"));
+
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+        let policy_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('scoped_agent_sessions') WHERE name = 'tool_policy'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check removed column");
+        assert_eq!(policy_columns, 0);
+        let event_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM scoped_agent_session_events WHERE session_id = 'sas-policy-upgrade'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count preserved events");
+        assert_eq!(event_count, 1);
+        for index in [
+            "idx_scoped_agent_sessions_logical_scope",
+            "idx_scoped_agent_sessions_scheduler",
+            "idx_scoped_agent_sessions_owner_project",
+        ] {
+            assert!(conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |row| row.get::<_, bool>(0),
+                )
+                .expect("check recreated index"));
+        }
+        let foreign_key_errors = conn
+            .prepare("PRAGMA foreign_key_check")
+            .expect("prepare foreign key check")
+            .query_map([], |_| Ok(()))
+            .expect("run foreign key check")
+            .collect::<Result<Vec<_>>>()
+            .expect("read foreign key check");
+        assert!(foreign_key_errors.is_empty());
     }
 
     #[test]

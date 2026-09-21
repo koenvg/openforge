@@ -13,7 +13,6 @@ mod builtin_plugins;
 mod claude_authoritative;
 mod claude_background_work;
 mod claude_hooks;
-mod claude_launch_context;
 mod cli_installer;
 mod codex_hooks;
 pub mod command_discovery;
@@ -75,7 +74,6 @@ mod self_review_runtime;
     dead_code,
     reason = "policy selection is reached through the upcoming scoped-session Plugin SDK integration"
 )]
-mod session_tool_policy;
 mod sidecar_logger;
 mod startup_resume;
 mod task_attention;
@@ -286,11 +284,10 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
-    let scoped_runtime = Arc::new(scoped_agent_session_service::ScopedClaudeRuntime::new(
+    let scoped_runtime = Arc::new(scoped_agent_session_service::ScopedProviderRuntime::new(
         app.clone(),
         pty_manager.clone(),
         app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
-        app_data_dir.join("scoped-session-policies"),
     ));
     let scoped_agent_sessions = scoped_agent_session_service::ScopedAgentSessionService::new(
         Arc::clone(&db_arc),
@@ -395,9 +392,6 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    if let Some(exit_code) = session_tool_policy::run_policy_hook_if_requested() {
-        std::process::exit(exit_code);
-    }
     if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
     }

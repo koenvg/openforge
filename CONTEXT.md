@@ -52,10 +52,6 @@ _Avoid_: Hidden Task, Implementation Run, headless generation
 A host-owned repository checkout for one **Session Scope** and resolved revision, reused across that session's turns.
 _Avoid_: Plugin workspace, Task workspace, caller-owned checkout
 
-**Session Tool Policy**:
-A named host rule set that fixes which tools and host routes a **Scoped Agent Session** can use.
-_Avoid_: Permission mode, provider flags, plugin tool configuration
-
 **In-Flight Task**:
 A **Task** with pending work that does not currently need user attention, including work started from **Out of Focus**.
 _Avoid_: In-flight session, running session
@@ -510,7 +506,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Scoped Agent Session** belongs to exactly one **Session Scope** and no **Implementation Run**.
 - One live **Scoped Agent Session** may exist per **Session Scope**.
 - A **Scoped Workspace** is host-owned and can outlive one provider process so the next turn can reuse it.
-- A plugin selects a **Session Tool Policy** by name and cannot widen it with provider options or user approval.
+- A **Scoped Agent Session** uses its Project's configured provider with the same local settings, skills, plugins, hooks, MCP servers, authentication, and permissions as a Task-owned **Agent Session**.
+- A provider in a **Scoped Agent Session** has the ordinary local authority of that provider and OS user, while its OpenForge credential remains bound to the exact plugin, Project, session, and **Session Scope**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
 - A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as the initial prompt.

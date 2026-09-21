@@ -42,7 +42,6 @@ pub(crate) struct ScopedAgentPrincipal {
     pub namespace: String,
     pub target_key: String,
     pub revision: String,
-    pub tool_policy: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,7 +217,6 @@ mod tests {
             namespace: "github-pr".into(),
             target_key: "owner/repo#42".into(),
             revision: "head-a".into(),
-            tool_policy: "review-read-only".into(),
         }
     }
 

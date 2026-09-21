@@ -12,6 +12,7 @@ use super::PtyError;
 mod host_adapter;
 mod lifecycle;
 mod provider_adapter;
+pub(crate) use provider_adapter::ProviderPtyAdapter;
 mod spawn;
 
 pub(super) use lifecycle::{

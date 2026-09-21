@@ -6,31 +6,13 @@ use crate::scoped_agent_session_service::{
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StartScopedAgentSessionPayload {
     plugin_id: String,
     scope: OwnedSessionScope,
     project_id: String,
     checkout_revision: String,
     initial_input: String,
-    tool_policy: String,
-}
-
-#[cfg(test)]
-mod scoped_error_mapping_tests {
-    use super::*;
-
-    #[test]
-    fn authentication_unavailable_maps_to_the_stable_http_category() {
-        let (status, message) =
-            map_scoped_error(ScopedAgentSessionError::AuthenticationUnavailable);
-
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(
-            message,
-            "AUTHENTICATION_UNAVAILABLE: Provider authentication is unavailable; authenticate the normal provider first"
-        );
-    }
 }
 
 #[derive(Deserialize)]
@@ -219,7 +201,6 @@ pub(super) async fn handle(
                     project_id: payload.project_id,
                     checkout_revision: payload.checkout_revision,
                     initial_input: payload.initial_input,
-                    tool_policy: payload.tool_policy,
                 })
                 .await
                 .map_err(map_scoped_error)?;
@@ -305,17 +286,10 @@ fn map_scoped_error(error: ScopedAgentSessionError) -> (StatusCode, String) {
         ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::OwnershipConflict {
             ..
         }) => (StatusCode::FORBIDDEN, "FORBIDDEN"),
-        ScopedAgentSessionError::ToolPolicy(_) => {
-            (StatusCode::BAD_REQUEST, "UNSUPPORTED_TOOL_POLICY")
-        }
         ScopedAgentSessionError::InputTooLarge => (StatusCode::BAD_REQUEST, "INPUT_TOO_LARGE"),
         ScopedAgentSessionError::ProjectNotFound(_) => (StatusCode::NOT_FOUND, "PROJECT_NOT_FOUND"),
         ScopedAgentSessionError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
         ScopedAgentSessionError::NotReady(_) => (StatusCode::CONFLICT, "NOT_READY"),
-        ScopedAgentSessionError::AuthenticationUnavailable => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "AUTHENTICATION_UNAVAILABLE",
-        ),
         ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::NotFound { .. }) => {
             (StatusCode::NOT_FOUND, "NOT_FOUND")
         }

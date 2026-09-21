@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Let a pull request reviewer watch one read-only review agent work at the current head, receive its walkthrough and review comments as they are submitted, and continue the same conversation with follow-up questions.
+Let a pull request reviewer watch the Project's configured agent work at the current head, receive its walkthrough and review comments as they are submitted, and continue the same conversation with follow-up questions.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ Every pull request detail view SHALL show an Agent tab whether or not a session 
 - **THEN** the Agent tab keeps the same tab position and keyboard shortcut
 
 ### Requirement: The review agent is visible and continues one conversation
-Starting review work SHALL run a Scoped Agent Session in a host-owned checkout of the pull request head under the host's read-only review policy. The Agent tab SHALL mount the host-rendered terminal so the reviewer can see live output, retained output, failures, and permission interactions. Follow-up input from that tab SHALL continue the same session in the same Scoped Workspace. The session MUST NOT edit the checkout, even after interactive user approval.
+Starting review work SHALL run a Scoped Agent Session in a host-owned checkout of the pull request head with the Project's configured provider and that provider's normal local configuration and permission behavior. The Agent tab SHALL mount the host-rendered terminal so the reviewer can see live output, retained output, failures, and permission interactions. Follow-up input from that tab SHALL continue the same session in the same Scoped Workspace. OpenForge MUST NOT enforce an immutable review checkout or prevent the provider from accessing other local resources allowed by its ordinary configuration and the current OS user.
 
 #### Scenario: Reviewer watches generation
 - **WHEN** the reviewer starts walkthrough generation from the pull request page
@@ -41,10 +41,17 @@ Starting review work SHALL run a Scoped Agent Session in a host-owned checkout o
 - **THEN** the question continues the same scoped conversation in the same checkout
 - **AND** its answer appears in the Agent tab
 
+#### Scenario: Project uses another provider
+- **WHEN** the pull request's local Project is configured to use a supported provider other than Claude Code
+- **THEN** review work starts that provider with its normal local configuration
+
 #### Scenario: Agent requests a mutation
-- **WHEN** the review agent requests a file mutation and the reviewer approves the provider prompt
-- **THEN** the host's final policy check still refuses the mutation
-- **AND** the Scoped Workspace remains unchanged
+- **WHEN** the review agent requests a file mutation and the provider's normal permission behavior allows it
+- **THEN** the mutation may change the Scoped Workspace and remains visible to later turns in that review session
+
+#### Scenario: Review agent uses local extensions
+- **WHEN** the configured provider normally loads a user or Project skill, plugin, hook, command, or MCP server
+- **THEN** the review session can load and use that extension under the provider's normal rules
 
 ### Requirement: Walkthrough steps are checked and stored on submission
 The review agent SHALL submit each complete walkthrough step through an agent-authorized OpenForge CLI command instead of returning a walkthrough payload in its final text. A submission SHALL contain a non-empty step id, title, summary, and at least one file reference. Each file path SHALL exactly match a file in the complete changed-file set captured for that pull request head. A file reference SHALL either select the whole file or contain unique zero-based hunk indexes that exist in that file's patch.

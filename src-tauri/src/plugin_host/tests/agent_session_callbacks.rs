@@ -283,8 +283,27 @@ async fn plugin_host_scoped_agent_session_callbacks_round_trip_lifecycle_and_err
         "projectId": project_id,
         "checkoutRevision": "main",
         "initialInput": "Review this",
-        "toolPolicy": "review-read-only",
     });
+
+    let legacy_error = host
+        .handle_host_callback(
+            "openforge.agentSessions.start",
+            &json!({
+                "pluginId": "com.example.reviewer",
+                "scope": {
+                    "namespace": "review",
+                    "targetKey": "PR-legacy",
+                    "revision": "sha-legacy",
+                },
+                "projectId": project_id,
+                "checkoutRevision": "main",
+                "initialInput": "Review this",
+                "toolPolicy": "review-read-only",
+            }),
+        )
+        .await
+        .expect_err("legacy toolPolicy must be rejected");
+    assert!(legacy_error.starts_with("INVALID_SCOPE:"));
 
     let started = host
         .handle_host_callback("openforge.agentSessions.start", &start)

@@ -346,7 +346,6 @@ describe('review workspace', () => {
       projectId: 'project-1',
       checkoutRevision: 'head',
       initialInput: 'Review this pull request',
-      toolPolicy: 'review-read-only',
     })
 
     workspace.list.onRemove(pr)
@@ -509,7 +508,6 @@ describe('review workspace', () => {
       projectId: 'project-1',
       checkoutRevision: 'head',
       initialInput: 'Review this pull request.',
-      toolPolicy: 'review-read-only',
     })
     await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
 
@@ -555,7 +553,6 @@ describe('review workspace', () => {
       projectId: 'project-1',
       checkoutRevision: 'head',
       initialInput: 'Review this pull request.',
-      toolPolicy: 'review-read-only',
     })
     await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
 
@@ -686,7 +683,6 @@ describe('review workspace', () => {
       projectId: 'project-2',
       checkoutRevision: 'head',
       initialInput: 'Review this pull request.',
-      toolPolicy: 'review-read-only',
     })
     await waitFor(() => expect(workspace.detail!.reviewFollowUpUnavailableReason).toBeNull())
     workspace.detail!.onCreateReviewThread!('login.ts', 2, 'RIGHT', 'Why this change?')

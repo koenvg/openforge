@@ -39,8 +39,8 @@ async function fixture(statuses, provider, { agentConfig = true } = {}) {
       pi: '(kind) => reportPiLifecycle("agent.end")',
       opencode: '(kind) => postOpenForgeEvent({ type: kind === "ended" ? "session.idle" : "permission.asked", properties: {sessionID: "ses_waiting"} })',
       codex: '(kind) => postLifecycleEvent(kind, kind === "ended" ? "Stop" : "PermissionRequest")',
-      "claude-code": `(kind) => reportOpenForgeShellHook("claude-code", kind, kind === "ended" ? "stop" : "notification-permission", {}, ${JSON.stringify(legacyBase)})`,
-      grok: `(kind) => reportOpenForgeShellHook("grok", kind, kind === "ended" ? "stop" : "notification-permission", {}, ${JSON.stringify(legacyBase)})`,
+      "claude-code": `(kind) => reportOpenForgeShellHook("claude-code", kind, kind === "ended" ? "stop" : "notification-permission", { session_id: "hook-sub-session" }, ${JSON.stringify(legacyBase)})`,
+      grok: `(kind) => reportOpenForgeShellHook("grok", kind, kind === "ended" ? "stop" : "notification-permission", { session_id: "hook-sub-session" }, ${JSON.stringify(legacyBase)})`,
     }[provider];
   }
   const errors = [];
@@ -100,6 +100,9 @@ describe("provider lifecycle transport", () => {
       expect(received[0].body.payload.kind).toBe("ended");
       // Pi reports a settled turn as waiting for the next input, not a permission decision.
       expect(received[2].body.payload.kind).toBe(provider === "pi" ? "ended" : "requested_permission");
+      if (provider === "claude-code" || provider === "grok") {
+        expect(received[0].body.payload.provider_session_id).toBe(`${provider === "grok" ? "grok" : "claude"}-session-9`);
+      }
     });
     it(`${provider} native adapter exposes exhausted acceptance`, async () => {
       const { send, received, errors } = await fixture([503, 503, 503, 503], provider);

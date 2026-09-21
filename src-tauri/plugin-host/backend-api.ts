@@ -251,7 +251,7 @@ export function createBackendApi(
       return await hostCallback<T>(method, { ...params, pluginId: state.pluginId })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      const match = message.match(/(?:^|\b)(INVALID_SCOPE|DUPLICATE_SCOPE|CAPACITY|UNSUPPORTED_TOOL_POLICY|INPUT_TOO_LARGE|PROJECT_NOT_FOUND|FORBIDDEN|NOT_FOUND|NOT_READY|HOST_UNAVAILABLE|INTERNAL):\s*(.*)$/s)
+      const match = message.match(/(?:^|\b)(INVALID_SCOPE|DUPLICATE_SCOPE|CAPACITY|INPUT_TOO_LARGE|PROJECT_NOT_FOUND|FORBIDDEN|NOT_FOUND|NOT_READY|HOST_UNAVAILABLE|INTERNAL):\s*(.*)$/s)
       if (!match) throw error
       throw new ScopedAgentSessionError(match[1] as ScopedAgentSessionErrorCode, match[2] || message)
     }

@@ -39,29 +39,11 @@ describe('plugin scoped Agent Session host', () => {
   it('injects plugin ownership into lifecycle IPC calls', async () => {
     ipc.startScopedAgentSession.mockResolvedValue(running)
     const host = createPluginAgentSessionHostCapabilities('com.example.review')
-    const request = { scope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review', toolPolicy: 'review-read-only' }
+    const request = { scope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review' }
 
     await host.startScopedAgentSession(request)
 
     expect(ipc.startScopedAgentSession).toHaveBeenCalledWith('com.example.review', request)
-  })
-
-  it('preserves the authentication-unavailable error category from the host', async () => {
-    ipc.startScopedAgentSession.mockRejectedValue(new Error(
-      'AUTHENTICATION_UNAVAILABLE: Provider authentication is unavailable; authenticate the normal provider first',
-    ))
-    const host = createPluginAgentSessionHostCapabilities('com.example.review')
-
-    await expect(host.startScopedAgentSession({
-      scope,
-      projectId: 'P-1',
-      checkoutRevision: 'main',
-      initialInput: 'Review',
-      toolPolicy: 'review-read-only',
-    })).rejects.toMatchObject({
-      code: 'AUTHENTICATION_UNAVAILABLE',
-      message: 'Provider authentication is unavailable; authenticate the normal provider first',
-    })
   })
 
   it('shows queued state before attaching the host terminal', async () => {

@@ -30,45 +30,6 @@ pub(crate) fn build_claude_args(
     args
 }
 
-pub(crate) fn build_scoped_claude_args(
-    prompt: &str,
-    provider_session_id: &str,
-    resume: bool,
-    settings_path: &Path,
-    sandbox_profile: &str,
-    claude_executable: &Path,
-) -> Vec<String> {
-    let mut args = vec![
-        "-p".to_string(),
-        sandbox_profile.to_string(),
-        claude_executable.to_string_lossy().into_owned(),
-    ];
-    if resume {
-        args.extend(["--resume".to_string(), provider_session_id.to_string()]);
-    } else {
-        args.extend(["--session-id".to_string(), provider_session_id.to_string()]);
-    }
-    args.extend([
-        "--permission-mode".to_string(),
-        "manual".to_string(),
-        "--restricted".to_string(),
-        "--disable-slash-commands".to_string(),
-        "--tools".to_string(),
-        "Read,Grep,Glob,Bash".to_string(),
-        "--setting-sources".to_string(),
-        String::new(),
-        "--strict-mcp-config".to_string(),
-        "--mcp-config".to_string(),
-        r#"{"mcpServers":{}}"#.to_string(),
-        "--settings".to_string(),
-        settings_path.to_string_lossy().into_owned(),
-    ]);
-    if !prompt.is_empty() {
-        args.push(prompt.to_string());
-    }
-    args
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PiSessionTarget {
     New(String),
@@ -222,60 +183,6 @@ pub(crate) fn get_shell_path() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn scoped_claude_args_are_host_owned_and_isolate_setting_sources() {
-        let args = build_scoped_claude_args(
-            "review this",
-            "conversation-1",
-            false,
-            Path::new("/private/policy.json"),
-            "(version 1)",
-            Path::new("/usr/local/bin/claude"),
-        );
-        assert_eq!(&args[..3], ["-p", "(version 1)", "/usr/local/bin/claude"]);
-        assert!(args
-            .windows(2)
-            .any(|pair| pair == ["--session-id", "conversation-1"]));
-        assert!(args
-            .windows(2)
-            .any(|pair| pair == ["--setting-sources", ""]));
-        assert!(args
-            .windows(2)
-            .any(|pair| pair == ["--permission-mode", "manual"]));
-        assert!(args.contains(&"--restricted".to_string()));
-        assert!(args.contains(&"--disable-slash-commands".to_string()));
-        assert!(args.contains(&"--strict-mcp-config".to_string()));
-        assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
-    }
-
-    #[test]
-    fn scoped_claude_new_and_resumed_commands_keep_their_explicit_conversation_ids() {
-        let new_args = build_scoped_claude_args(
-            "first turn",
-            "conversation-new",
-            false,
-            Path::new("/private/policy.json"),
-            "(version 1)",
-            Path::new("/usr/local/bin/claude"),
-        );
-        let resumed_args = build_scoped_claude_args(
-            "next turn",
-            "conversation-existing",
-            true,
-            Path::new("/private/policy.json"),
-            "(version 1)",
-            Path::new("/usr/local/bin/claude"),
-        );
-
-        assert!(new_args
-            .windows(2)
-            .any(|pair| pair == ["--session-id", "conversation-new"]));
-        assert!(resumed_args
-            .windows(2)
-            .any(|pair| pair == ["--resume", "conversation-existing"]));
-        assert!(!resumed_args.contains(&"conversation-new".to_string()));
-    }
 
     #[test]
     fn build_pi_args_assigns_id_to_new_agent_session() {

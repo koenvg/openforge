@@ -2,7 +2,7 @@ use crate::{
     db::{Database, ScopedAgentSessionRow},
     scoped_agent_session_service::{
         AcquiredSessionWorkspace, RuntimeFuture, ScopedAgentSessionService, ScopedLaunchRequest,
-        ScopedSessionRuntime, ScopedSessionWorkspace,
+        ScopedLaunchResult, ScopedSessionRuntime, ScopedSessionWorkspace,
     },
 };
 use std::{
@@ -19,13 +19,16 @@ pub(crate) struct TestScopedSessionRuntime {
 }
 
 impl ScopedSessionRuntime for TestScopedSessionRuntime {
-    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, u64> {
+    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, ScopedLaunchResult> {
         Box::pin(async move {
             self.output_revisions
                 .lock()
                 .expect("lock output revisions")
                 .insert(request.terminal_key, 0);
-            Ok(41)
+            Ok(ScopedLaunchResult {
+                pty_instance_id: 41,
+                provider_session_id: request.provider_session_id,
+            })
         })
     }
 

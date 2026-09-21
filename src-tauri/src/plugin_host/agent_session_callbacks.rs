@@ -41,6 +41,12 @@ impl PluginHost {
         &self,
         params: &Value,
     ) -> Result<Value, String> {
+        if params.get("toolPolicy").is_some() {
+            return Err(
+                "INVALID_SCOPE: Scoped Agent Session start no longer accepts toolPolicy"
+                    .to_string(),
+            );
+        }
         let plugin_id = required_param_string(params, "pluginId")?;
         let scope = Self::scoped_session_scope(params)?;
         let state = self
@@ -51,7 +57,6 @@ impl PluginHost {
                 project_id: required_param_string(params, "projectId")?,
                 checkout_revision: required_param_string(params, "checkoutRevision")?,
                 initial_input: required_param_string(params, "initialInput")?,
-                tool_policy: required_param_string(params, "toolPolicy")?,
             })
             .await
             .map_err(scoped_error)?;
@@ -280,28 +285,13 @@ fn scoped_error(error: ScopedAgentSessionError) -> String {
             ..
         })
         | ScopedAgentSessionError::Forbidden => "FORBIDDEN",
-        ScopedAgentSessionError::ToolPolicy(_) => "UNSUPPORTED_TOOL_POLICY",
         ScopedAgentSessionError::InputTooLarge => "INPUT_TOO_LARGE",
         ScopedAgentSessionError::ProjectNotFound(_) => "PROJECT_NOT_FOUND",
         ScopedAgentSessionError::NotReady(_) => "NOT_READY",
-        ScopedAgentSessionError::AuthenticationUnavailable => "AUTHENTICATION_UNAVAILABLE",
         ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::NotFound { .. }) => {
             "NOT_FOUND"
         }
         ScopedAgentSessionError::Storage(_) | ScopedAgentSessionError::Runtime(_) => "INTERNAL",
     };
     format!("{code}: {error}")
-}
-
-#[cfg(test)]
-mod scoped_error_mapping_tests {
-    use super::*;
-
-    #[test]
-    fn authentication_unavailable_maps_to_the_stable_plugin_host_category() {
-        assert_eq!(
-            scoped_error(ScopedAgentSessionError::AuthenticationUnavailable),
-            "AUTHENTICATION_UNAVAILABLE: Provider authentication is unavailable; authenticate the normal provider first"
-        );
-    }
 }

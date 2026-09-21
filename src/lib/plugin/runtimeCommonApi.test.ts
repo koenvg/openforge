@@ -265,7 +265,6 @@ describe('RuntimeCommonApiRegistry', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: 'Review',
-      toolPolicy: 'review-read-only',
     }
 
     await expect(api.start(startRequest)).resolves.toBe(state)

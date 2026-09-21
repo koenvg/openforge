@@ -1,14 +1,11 @@
-use crate::{
-    claude_launch_context::ClaudeLaunchContext,
-    user_environment::{find_tool_on_path, user_environment, user_tool_path},
-};
+use crate::user_environment::{find_tool_on_path, user_environment, user_tool_path};
 use log::info;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::super::commands::{
     build_claude_args, build_codex_args, build_grok_args, build_opencode_tui_args, build_pi_args,
-    build_scoped_claude_args, PiSessionTarget,
+    PiSessionTarget,
 };
 use super::super::PtyError;
 use super::invalid_workspace_cwd;
@@ -28,7 +25,237 @@ pub(super) trait AgentPtyProviderAdapter {
     fn pid_file_name(&self, task_id: &str) -> String;
 }
 
-pub(super) struct ClaudeCodePtyAdapter {
+pub(crate) enum ProviderPtyAdapter {
+    ClaudeCode(ClaudeCodePtyAdapter),
+    Codex(CodexPtyAdapter),
+    OpenCode(OpenCodePtyAdapter),
+    Pi(PiPtyAdapter),
+    Grok(GrokPtyAdapter),
+}
+
+impl ProviderPtyAdapter {
+    pub(crate) fn claude_code(
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        hooks_settings_path: &Path,
+        permission_mode: Option<&str>,
+    ) -> Self {
+        Self::ClaudeCode(ClaudeCodePtyAdapter::new(
+            prompt,
+            resume_session_id,
+            continue_session,
+            hooks_settings_path,
+            permission_mode,
+        ))
+    }
+
+    pub(crate) fn codex(
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+    ) -> Self {
+        Self::Codex(CodexPtyAdapter::new(
+            prompt,
+            resume_session_id,
+            continue_session,
+        ))
+    }
+
+    pub(crate) fn opencode(
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        agent: Option<&str>,
+        model: Option<&str>,
+    ) -> Self {
+        Self::OpenCode(OpenCodePtyAdapter::new(
+            prompt,
+            resume_session_id,
+            continue_session,
+            agent,
+            model,
+        ))
+    }
+
+    pub(crate) fn pi(prompt: &str, session_target: PiSessionTarget) -> Self {
+        Self::Pi(PiPtyAdapter::new(prompt, session_target, None))
+    }
+
+    pub(crate) fn grok(
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        permission_mode: Option<&str>,
+        model: Option<&str>,
+    ) -> Self {
+        Self::Grok(GrokPtyAdapter::new(
+            prompt,
+            resume_session_id,
+            continue_session,
+            permission_mode,
+            model,
+        ))
+    }
+}
+
+impl AgentPtyProviderAdapter for ProviderPtyAdapter {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.label(),
+            Self::Codex(adapter) => adapter.label(),
+            Self::OpenCode(adapter) => adapter.label(),
+            Self::Pi(adapter) => adapter.label(),
+            Self::Grok(adapter) => adapter.label(),
+        }
+    }
+
+    fn command_name(&self) -> &str {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.command_name(),
+            Self::Codex(adapter) => adapter.command_name(),
+            Self::OpenCode(adapter) => adapter.command_name(),
+            Self::Pi(adapter) => adapter.command_name(),
+            Self::Grok(adapter) => adapter.command_name(),
+        }
+    }
+
+    fn command_args(&self) -> Vec<String> {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.command_args(),
+            Self::Codex(adapter) => adapter.command_args(),
+            Self::OpenCode(adapter) => adapter.command_args(),
+            Self::Pi(adapter) => adapter.command_args(),
+            Self::Grok(adapter) => adapter.command_args(),
+        }
+    }
+
+    fn prepare(&mut self, cwd: &Path) -> Result<(), PtyError> {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.prepare(cwd),
+            Self::Codex(adapter) => adapter.prepare(cwd),
+            Self::OpenCode(adapter) => adapter.prepare(cwd),
+            Self::Pi(adapter) => adapter.prepare(cwd),
+            Self::Grok(adapter) => adapter.prepare(cwd),
+        }
+    }
+
+    fn extra_env(&self, session_key: &str, instance_id: u64) -> HashMap<String, String> {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.extra_env(session_key, instance_id),
+            Self::Codex(adapter) => adapter.extra_env(session_key, instance_id),
+            Self::OpenCode(adapter) => adapter.extra_env(session_key, instance_id),
+            Self::Pi(adapter) => adapter.extra_env(session_key, instance_id),
+            Self::Grok(adapter) => adapter.extra_env(session_key, instance_id),
+        }
+    }
+
+    fn removed_env(&self) -> &'static [&'static str] {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.removed_env(),
+            Self::Codex(adapter) => adapter.removed_env(),
+            Self::OpenCode(adapter) => adapter.removed_env(),
+            Self::Pi(adapter) => adapter.removed_env(),
+            Self::Grok(adapter) => adapter.removed_env(),
+        }
+    }
+
+    fn base_environment(&self) -> Option<&HashMap<String, String>> {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.base_environment(),
+            Self::Codex(adapter) => adapter.base_environment(),
+            Self::OpenCode(adapter) => adapter.base_environment(),
+            Self::Pi(adapter) => adapter.base_environment(),
+            Self::Grok(adapter) => adapter.base_environment(),
+        }
+    }
+
+    fn pid_file_name(&self, session_key: &str) -> String {
+        match self {
+            Self::ClaudeCode(adapter) => adapter.pid_file_name(session_key),
+            Self::Codex(adapter) => adapter.pid_file_name(session_key),
+            Self::OpenCode(adapter) => adapter.pid_file_name(session_key),
+            Self::Pi(adapter) => adapter.pid_file_name(session_key),
+            Self::Grok(adapter) => adapter.pid_file_name(session_key),
+        }
+    }
+}
+
+pub(super) struct ScopedAgentPtyAdapter<A> {
+    inner: A,
+    scoped_session_id: String,
+    credential_path: PathBuf,
+}
+
+impl<A> ScopedAgentPtyAdapter<A> {
+    pub(super) fn new(inner: A, scoped_session_id: &str, credential_path: PathBuf) -> Self {
+        Self {
+            inner,
+            scoped_session_id: scoped_session_id.to_string(),
+            credential_path,
+        }
+    }
+}
+
+impl<A: AgentPtyProviderAdapter> AgentPtyProviderAdapter for ScopedAgentPtyAdapter<A> {
+    fn label(&self) -> &'static str {
+        self.inner.label()
+    }
+
+    fn command_name(&self) -> &str {
+        self.inner.command_name()
+    }
+
+    fn command_args(&self) -> Vec<String> {
+        self.inner.command_args()
+    }
+
+    fn prepare(&mut self, cwd: &Path) -> Result<(), PtyError> {
+        self.inner.prepare(cwd)
+    }
+
+    fn extra_env(&self, _session_key: &str, instance_id: u64) -> HashMap<String, String> {
+        HashMap::from([
+            ("OPENFORGE_TASK_ID".to_string(), String::new()),
+            (
+                "OPENFORGE_SCOPED_SESSION_ID".to_string(),
+                self.scoped_session_id.clone(),
+            ),
+            (
+                "OPENFORGE_AGENT_CONFIG".to_string(),
+                self.credential_path.to_string_lossy().into_owned(),
+            ),
+            (
+                "OPENFORGE_PTY_INSTANCE_ID".to_string(),
+                instance_id.to_string(),
+            ),
+            (
+                "OPENFORGE_HTTP_PORT".to_string(),
+                crate::claude_hooks::get_http_server_port().to_string(),
+            ),
+        ])
+    }
+
+    fn removed_env(&self) -> &'static [&'static str] {
+        &[
+            "CLAUDE_TASK_ID",
+            "OPENFORGE_AGENT_CONFIG",
+            "OPENFORGE_AGENT_TOKEN",
+            "OPENFORGE_BACKEND_TOKEN",
+            "OPENFORGE_TASK_ID",
+        ]
+    }
+
+    fn base_environment(&self) -> Option<&HashMap<String, String>> {
+        self.inner.base_environment()
+    }
+
+    fn pid_file_name(&self, session_key: &str) -> String {
+        self.inner.pid_file_name(session_key)
+    }
+}
+
+pub(crate) struct ClaudeCodePtyAdapter {
     prompt: String,
     resume_session_id: Option<String>,
     continue_session: bool,
@@ -88,6 +315,7 @@ impl AgentPtyProviderAdapter for ClaudeCodePtyAdapter {
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
         HashMap::from([
             ("OPENFORGE_TASK_ID".to_string(), task_id.to_string()),
+            ("OPENFORGE_SCOPED_SESSION_ID".to_string(), String::new()),
             ("CLAUDE_TASK_ID".to_string(), task_id.to_string()),
             (
                 "OPENFORGE_PTY_INSTANCE_ID".to_string(),
@@ -101,117 +329,7 @@ impl AgentPtyProviderAdapter for ClaudeCodePtyAdapter {
     }
 }
 
-pub(super) struct ScopedClaudeCodePtyAdapter {
-    prompt: String,
-    provider_session_id: String,
-    resume: bool,
-    settings_path: PathBuf,
-    sandbox_profile: String,
-    credential_path: Option<PathBuf>,
-    scoped_state_dir: PathBuf,
-    scoped_session_id: String,
-    launch_context: ClaudeLaunchContext,
-}
-
-pub(super) struct ScopedClaudeCodePtyConfig {
-    pub prompt: String,
-    pub provider_session_id: String,
-    pub resume: bool,
-    pub settings_path: PathBuf,
-    pub sandbox_profile: String,
-    pub credential_path: Option<PathBuf>,
-    pub scoped_state_dir: PathBuf,
-    pub scoped_session_id: String,
-    pub launch_context: ClaudeLaunchContext,
-}
-
-impl ScopedClaudeCodePtyAdapter {
-    pub(super) fn new(config: ScopedClaudeCodePtyConfig) -> Self {
-        Self {
-            prompt: config.prompt,
-            provider_session_id: config.provider_session_id,
-            resume: config.resume,
-            settings_path: config.settings_path,
-            sandbox_profile: config.sandbox_profile,
-            credential_path: config.credential_path,
-            scoped_state_dir: config.scoped_state_dir,
-            scoped_session_id: config.scoped_session_id,
-            launch_context: config.launch_context,
-        }
-    }
-}
-
-impl AgentPtyProviderAdapter for ScopedClaudeCodePtyAdapter {
-    fn label(&self) -> &'static str {
-        "Scoped Claude"
-    }
-    fn command_name(&self) -> &str {
-        "/usr/bin/sandbox-exec"
-    }
-    fn command_args(&self) -> Vec<String> {
-        build_scoped_claude_args(
-            &self.prompt,
-            &self.provider_session_id,
-            self.resume,
-            &self.settings_path,
-            &self.sandbox_profile,
-            self.launch_context.executable(),
-        )
-    }
-    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
-        Ok(())
-    }
-    fn extra_env(&self, _session_key: &str, instance_id: u64) -> HashMap<String, String> {
-        let mut environment = HashMap::from([
-            (
-                "OPENFORGE_SCOPED_SESSION_ID".to_string(),
-                self.scoped_session_id.clone(),
-            ),
-            (
-                "OPENFORGE_PTY_INSTANCE_ID".to_string(),
-                instance_id.to_string(),
-            ),
-            ("GIT_PAGER".to_string(), "cat".to_string()),
-            ("GIT_EXTERNAL_DIFF".to_string(), String::new()),
-            ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
-            (
-                "OPENFORGE_SCOPED_STATE_DIR".to_string(),
-                self.scoped_state_dir.to_string_lossy().into_owned(),
-            ),
-            (
-                "TMPDIR".to_string(),
-                self.scoped_state_dir
-                    .join("tmp")
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-        ]);
-        if let Some(path) = &self.credential_path {
-            environment.insert(
-                "OPENFORGE_AGENT_CONFIG".to_string(),
-                path.to_string_lossy().into_owned(),
-            );
-        }
-        environment
-    }
-    fn removed_env(&self) -> &'static [&'static str] {
-        &[
-            "CLAUDE_TASK_ID",
-            "OPENFORGE_AGENT_CONFIG",
-            "OPENFORGE_AGENT_TOKEN",
-            "OPENFORGE_BACKEND_TOKEN",
-            "OPENFORGE_TASK_ID",
-        ]
-    }
-    fn base_environment(&self) -> Option<&HashMap<String, String>> {
-        Some(self.launch_context.environment())
-    }
-    fn pid_file_name(&self, session_key: &str) -> String {
-        format!("{session_key}-claude.pid")
-    }
-}
-
-pub(super) struct OpenCodePtyAdapter {
+pub(crate) struct OpenCodePtyAdapter {
     prompt: String,
     resume_session_id: Option<String>,
     continue_session: bool,
@@ -271,7 +389,7 @@ impl AgentPtyProviderAdapter for OpenCodePtyAdapter {
     }
 }
 
-pub(super) struct CodexPtyAdapter {
+pub(crate) struct CodexPtyAdapter {
     prompt: String,
     resume_session_id: Option<String>,
     continue_session: bool,
@@ -330,7 +448,7 @@ impl AgentPtyProviderAdapter for CodexPtyAdapter {
 
 type PiNodeCwdPreflight = fn(&Path, &HashMap<String, String>) -> Result<(), String>;
 
-pub(super) struct PiPtyAdapter {
+pub(crate) struct PiPtyAdapter {
     prompt: String,
     session_target: PiSessionTarget,
     extension_path: Option<PathBuf>,
@@ -391,7 +509,7 @@ impl AgentPtyProviderAdapter for PiPtyAdapter {
     }
 }
 
-pub(super) struct GrokPtyAdapter {
+pub(crate) struct GrokPtyAdapter {
     prompt: String,
     resume_session_id: Option<String>,
     continue_session: bool,
@@ -462,6 +580,7 @@ impl AgentPtyProviderAdapter for GrokPtyAdapter {
 fn openforge_agent_env(task_id: &str, instance_id: u64) -> HashMap<String, String> {
     HashMap::from([
         ("OPENFORGE_TASK_ID".to_string(), task_id.to_string()),
+        ("OPENFORGE_SCOPED_SESSION_ID".to_string(), String::new()),
         (
             "OPENFORGE_PTY_INSTANCE_ID".to_string(),
             instance_id.to_string(),
@@ -565,6 +684,84 @@ mod tests {
     }
 
     #[test]
+    fn scoped_owner_reuses_normal_adapter_and_replaces_task_credentials() {
+        let adapter = ScopedAgentPtyAdapter::new(
+            CodexPtyAdapter::new("continue", None, true),
+            "sas-1",
+            PathBuf::from("/tmp/scoped-agent.json"),
+        );
+
+        assert_eq!(adapter.command_name(), "codex");
+        assert_eq!(
+            adapter.command_args(),
+            vec![
+                "--profile",
+                crate::codex_hooks::OPENFORGE_CODEX_PROFILE_NAME,
+                "resume",
+                "--last",
+                "continue",
+            ]
+        );
+        let env = adapter.extra_env("scoped-key", 17);
+        assert_eq!(
+            env.get("OPENFORGE_SCOPED_SESSION_ID").map(String::as_str),
+            Some("sas-1")
+        );
+        assert_eq!(
+            env.get("OPENFORGE_AGENT_CONFIG").map(String::as_str),
+            Some("/tmp/scoped-agent.json")
+        );
+        assert_eq!(
+            env.get("OPENFORGE_PTY_INSTANCE_ID").map(String::as_str),
+            Some("17")
+        );
+        assert_eq!(env.get("OPENFORGE_TASK_ID").map(String::as_str), Some(""));
+        assert!(adapter.removed_env().contains(&"OPENFORGE_TASK_ID"));
+        assert!(adapter.removed_env().contains(&"OPENFORGE_BACKEND_TOKEN"));
+    }
+
+    #[test]
+    fn every_provider_keeps_its_normal_command_under_scoped_ownership() {
+        let hooks = PathBuf::from("/tmp/openforge-hooks.json");
+        let adapters = vec![
+            ProviderPtyAdapter::claude_code(
+                "continue",
+                Some("provider-session"),
+                false,
+                &hooks,
+                None,
+            ),
+            ProviderPtyAdapter::codex("continue", Some("provider-session"), false),
+            ProviderPtyAdapter::opencode("continue", Some("provider-session"), false, None, None),
+            ProviderPtyAdapter::pi(
+                "continue",
+                PiSessionTarget::Existing("provider-session".to_string()),
+            ),
+            ProviderPtyAdapter::grok("continue", Some("provider-session"), false, None, None),
+        ];
+
+        for normal in adapters {
+            let command_name = normal.command_name().to_string();
+            let command_args = normal.command_args();
+            let scoped = ScopedAgentPtyAdapter::new(
+                normal,
+                "sas-provider-matrix",
+                PathBuf::from("/tmp/scoped-agent.json"),
+            );
+
+            assert_eq!(scoped.command_name(), command_name);
+            assert_eq!(scoped.command_args(), command_args);
+            assert!(command_args.iter().any(|arg| arg == "provider-session"));
+            let env = scoped.extra_env("scoped-key", 73);
+            assert_eq!(
+                env.get("OPENFORGE_SCOPED_SESSION_ID").map(String::as_str),
+                Some("sas-provider-matrix")
+            );
+            assert_eq!(env.get("OPENFORGE_TASK_ID").map(String::as_str), Some(""));
+        }
+    }
+
+    #[test]
     fn grok_adapter_prepare_is_non_fatal() {
         // Fix 2 regression guard: prepare() must always return Ok(()), even
         // when the Grok hook install fails (unwritable ~/.grok, read-only
@@ -608,50 +805,6 @@ mod tests {
             Some(&"42".to_string())
         );
         assert!(!env.contains_key("OPENFORGE_HTTP_PORT"));
-    }
-
-    #[test]
-    fn scoped_claude_adapter_keeps_provider_configuration_and_openforge_state_separate() {
-        let adapter = ScopedClaudeCodePtyAdapter::new(ScopedClaudeCodePtyConfig {
-            prompt: "review this".to_string(),
-            provider_session_id: "provider-session".to_string(),
-            resume: false,
-            settings_path: PathBuf::from("/tmp/scoped-state/settings.json"),
-            sandbox_profile: "(version 1)".to_string(),
-            credential_path: Some(PathBuf::from("/tmp/openforge-agent.json")),
-            scoped_state_dir: PathBuf::from("/tmp/scoped-state"),
-            scoped_session_id: "scoped-session".to_string(),
-            launch_context: ClaudeLaunchContext::for_test(
-                "/usr/local/bin/claude",
-                HashMap::from([(
-                    "CLAUDE_CONFIG_DIR".to_string(),
-                    "/Users/test/custom-claude".to_string(),
-                )]),
-            ),
-        });
-
-        let environment = adapter.extra_env("scoped-key", 42);
-
-        assert_eq!(
-            environment.get("OPENFORGE_SCOPED_STATE_DIR"),
-            Some(&"/tmp/scoped-state".to_string())
-        );
-        assert_eq!(
-            environment.get("TMPDIR"),
-            Some(&"/tmp/scoped-state/tmp".to_string())
-        );
-        assert!(!environment.contains_key("CLAUDE_CONFIG_DIR"));
-        assert_eq!(
-            adapter
-                .base_environment()
-                .and_then(|environment| environment.get("CLAUDE_CONFIG_DIR"))
-                .map(String::as_str),
-            Some("/Users/test/custom-claude")
-        );
-        assert_eq!(
-            &adapter.command_args()[..3],
-            ["-p", "(version 1)", "/usr/local/bin/claude"]
-        );
     }
 
     #[test]

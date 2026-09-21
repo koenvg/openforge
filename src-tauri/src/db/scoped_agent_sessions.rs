@@ -2,7 +2,7 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use thiserror::Error;
 
-const SELECT_COLUMNS: &str = "id, owner_plugin_id, namespace, target_key, revision, project_id, checkout_revision, resolved_commit, provider, provider_session_id, tool_policy, terminal_key, pty_instance_id, turn_id, status, queue_sequence, error_code, error_message, created_at, updated_at, last_used_at";
+const SELECT_COLUMNS: &str = "id, owner_plugin_id, namespace, target_key, revision, project_id, checkout_revision, resolved_commit, provider, provider_session_id, terminal_key, pty_instance_id, turn_id, status, queue_sequence, error_code, error_message, created_at, updated_at, last_used_at";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ScopedTurnTransition {
@@ -82,7 +82,6 @@ pub(crate) struct ScopedAgentSessionRow {
     pub resolved_commit: Option<String>,
     pub provider: String,
     pub provider_session_id: Option<String>,
-    pub tool_policy: String,
     pub terminal_key: String,
     pub pty_instance_id: Option<u64>,
     pub turn_id: Option<String>,
@@ -119,7 +118,6 @@ pub(crate) struct NewScopedAgentSession<'a> {
     pub project_id: &'a str,
     pub checkout_revision: &'a str,
     pub provider: &'a str,
-    pub tool_policy: &'a str,
     pub terminal_key: &'a str,
     pub status: ScopedAgentSessionStatus,
     pub queue_sequence: Option<u64>,
@@ -147,23 +145,23 @@ pub(crate) enum ScopedAgentSessionStoreError {
 
 fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionRow> {
     let pty_instance_id = row
-        .get::<_, Option<i64>>(12)?
+        .get::<_, Option<i64>>(11)?
         .map(u64::try_from)
         .transpose()
         .map_err(|error| {
             rusqlite::Error::FromSqlConversionFailure(
-                12,
+                11,
                 rusqlite::types::Type::Integer,
                 Box::new(error),
             )
         })?;
     let queue_sequence = row
-        .get::<_, Option<i64>>(15)?
+        .get::<_, Option<i64>>(14)?
         .map(u64::try_from)
         .transpose()
         .map_err(|error| {
             rusqlite::Error::FromSqlConversionFailure(
-                15,
+                14,
                 rusqlite::types::Type::Integer,
                 Box::new(error),
             )
@@ -179,17 +177,16 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionRow> 
         resolved_commit: row.get(7)?,
         provider: row.get(8)?,
         provider_session_id: row.get(9)?,
-        tool_policy: row.get(10)?,
-        terminal_key: row.get(11)?,
+        terminal_key: row.get(10)?,
         pty_instance_id,
-        turn_id: row.get(13)?,
-        status: ScopedAgentSessionStatus::parse(&row.get::<_, String>(14)?)?,
+        turn_id: row.get(12)?,
+        status: ScopedAgentSessionStatus::parse(&row.get::<_, String>(13)?)?,
         queue_sequence,
-        error_code: row.get(16)?,
-        error_message: row.get(17)?,
-        created_at: row.get(18)?,
-        updated_at: row.get(19)?,
-        last_used_at: row.get(20)?,
+        error_code: row.get(15)?,
+        error_message: row.get(16)?,
+        created_at: row.get(17)?,
+        updated_at: row.get(18)?,
+        last_used_at: row.get(19)?,
     })
 }
 
@@ -312,9 +309,9 @@ fn create_on_connection(
     conn.execute(
         "INSERT INTO scoped_agent_sessions (
             id, owner_plugin_id, namespace, target_key, revision, project_id,
-            checkout_revision, provider, tool_policy, terminal_key, status,
+            checkout_revision, provider, terminal_key, status,
             queue_sequence, created_at, updated_at, last_used_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?13)",
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?12)",
         params![
             session.id,
             session.owner_plugin_id,
@@ -324,7 +321,6 @@ fn create_on_connection(
             session.project_id,
             session.checkout_revision,
             session.provider,
-            session.tool_policy,
             session.terminal_key,
             session.status.as_str(),
             queue_sequence,
@@ -598,7 +594,7 @@ impl super::Database {
     pub(crate) fn mark_scoped_agent_session_running(
         &self,
         id: &str,
-        provider_session_id: &str,
+        provider_session_id: Option<&str>,
         pty_instance_id: u64,
     ) -> Result<(), ScopedAgentSessionStoreError> {
         let pty_instance_id = i64::try_from(pty_instance_id).map_err(|error| {
@@ -622,6 +618,34 @@ impl super::Database {
             });
         }
         Ok(())
+    }
+
+    pub(crate) fn set_scoped_agent_provider_session_id(
+        &self,
+        id: &str,
+        provider: &str,
+        pty_instance_id: u64,
+        provider_session_id: &str,
+    ) -> Result<bool, ScopedAgentSessionStoreError> {
+        if provider_session_id.is_empty() {
+            return Ok(false);
+        }
+        let pty_instance_id = i64::try_from(pty_instance_id).map_err(|error| {
+            ScopedAgentSessionStoreError::Database(rusqlite::Error::ToSqlConversionFailure(
+                Box::new(error),
+            ))
+        })?;
+        let conn = self.lock_conn()?;
+        let now = super::current_unix_timestamp()?;
+        let changed = conn.execute(
+            "UPDATE scoped_agent_sessions
+                SET provider_session_id = ?4, updated_at = ?5, last_used_at = ?5
+              WHERE id = ?1 AND provider = ?2 AND pty_instance_id = ?3
+                AND status IN ('running', 'paused')
+                AND (provider_session_id IS NULL OR provider_session_id = ?4)",
+            params![id, provider, pty_instance_id, provider_session_id, now],
+        )?;
+        Ok(changed == 1)
     }
 
     pub(crate) fn begin_scoped_agent_turn(

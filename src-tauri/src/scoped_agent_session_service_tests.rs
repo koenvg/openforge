@@ -168,10 +168,6 @@ impl ScopedSessionWorkspace for GatedRotationWorkspace {
 
 #[derive(Default)]
 struct FakeRuntime {
-    authentication_error: Mutex<Option<String>>,
-    authentication_checks: Mutex<usize>,
-    authentication_fails_after: Mutex<Option<usize>>,
-    authentication_fails_during_launch: Mutex<bool>,
     launches: Mutex<Vec<ScopedLaunchRequest>>,
     failed_targets: Mutex<Vec<String>>,
     failed_disposals: Mutex<Vec<String>>,
@@ -188,37 +184,19 @@ struct OutputGate {
     resume: tokio::sync::Notify,
 }
 impl ScopedSessionRuntime for FakeRuntime {
-    fn verify_authentication<'a>(&'a self) -> RuntimeFuture<'a, ()> {
+    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, ScopedLaunchResult> {
         Box::pin(async move {
-            let checks = {
-                let mut checks = lock(&self.authentication_checks);
-                *checks += 1;
-                *checks
-            };
-            if lock(&self.authentication_fails_after)
-                .is_some_and(|successful_checks| checks > successful_checks)
-            {
-                return Err("authentication expired".to_string());
-            }
-            match lock(&self.authentication_error).clone() {
-                Some(error) => Err(error),
-                None => Ok(()),
-            }
-        })
-    }
-
-    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, u64> {
-        Box::pin(async move {
-            if *lock(&self.authentication_fails_during_launch) {
-                return Err("AUTHENTICATION_UNAVAILABLE".to_string());
-            }
             let should_fail = lock(&self.failed_targets).contains(&request.scope.target_key);
             let mut launches = lock(&self.launches);
+            let provider_session_id = request.provider_session_id.clone();
             launches.push(request);
             if should_fail {
                 return Err("injected launch failure".to_string());
             }
-            Ok(launches.len() as u64)
+            Ok(ScopedLaunchResult {
+                pty_instance_id: launches.len() as u64,
+                provider_session_id,
+            })
         })
     }
     fn input<'a>(&'a self, _: &'a str, input: &'a str) -> RuntimeFuture<'a, ()> {
@@ -263,12 +241,15 @@ struct InvalidatingRuntime {
 }
 
 impl ScopedSessionRuntime for InvalidatingRuntime {
-    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, u64> {
+    fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, ScopedLaunchResult> {
         Box::pin(async move {
             lock(&self.database)
                 .abort_scoped_agent_session(&request.session_id, SCOPED_EXECUTION_LIMIT)
                 .map_err(|error| error.to_string())?;
-            Ok(77)
+            Ok(ScopedLaunchResult {
+                pty_instance_id: 77,
+                provider_session_id: request.provider_session_id,
+            })
         })
     }
 
@@ -297,6 +278,7 @@ impl ScopedSessionRuntime for InvalidatingRuntime {
 }
 struct Fixture {
     service: ScopedAgentSessionService,
+    database: Arc<Mutex<Database>>,
     runtime: Arc<FakeRuntime>,
     workspace: Arc<FakeWorkspace>,
     project_id: String,
@@ -311,17 +293,65 @@ fn fixture(name: &str) -> Fixture {
         .unwrap();
     let runtime = Arc::new(FakeRuntime::default());
     let workspace = Arc::new(FakeWorkspace::default());
-    let service = ScopedAgentSessionService::new(
-        Arc::new(Mutex::new(db)),
-        workspace.clone(),
-        runtime.clone(),
-    );
+    let database = Arc::new(Mutex::new(db));
+    let service =
+        ScopedAgentSessionService::new(database.clone(), workspace.clone(), runtime.clone());
     Fixture {
         service,
+        database,
         runtime,
         workspace,
         project_id: project.id,
         _temp: temp,
+    }
+}
+
+#[tokio::test]
+async fn scoped_session_pins_the_project_provider_across_continuation() {
+    let f = fixture("scoped_provider_pinning");
+    let req = request(&f.project_id, 1);
+    let started = f.service.start(req.clone()).await.unwrap();
+    assert_eq!(lock(&f.runtime.launches)[0].provider, "claude-code");
+    f.service.complete(&started.id, 1, true).await.unwrap();
+
+    lock(&f.database)
+        .set_project_config(&f.project_id, "ai_provider", "codex")
+        .unwrap();
+    f.service
+        .input(&req.owner_plugin_id, &req.scope, "continue")
+        .await
+        .unwrap();
+
+    let launches = lock(&f.runtime.launches);
+    assert_eq!(launches.len(), 2);
+    assert_eq!(launches[1].provider, "claude-code");
+    assert!(launches[1].resume);
+}
+
+#[tokio::test]
+async fn every_configured_provider_runs_a_multi_turn_scoped_lifecycle() {
+    for provider in ["claude-code", "codex", "pi", "opencode", "grok"] {
+        let f = fixture(&format!("scoped_provider_{provider}"));
+        lock(&f.database)
+            .set_project_config(&f.project_id, "ai_provider", provider)
+            .unwrap();
+        let req = request(&f.project_id, 1);
+        let started = f.service.start(req.clone()).await.unwrap();
+        f.service.complete(&started.id, 1, true).await.unwrap();
+        f.service
+            .input(&req.owner_plugin_id, &req.scope, "continue")
+            .await
+            .unwrap();
+        f.service
+            .abort(&req.owner_plugin_id, &req.scope)
+            .await
+            .unwrap();
+
+        let launches = lock(&f.runtime.launches);
+        assert_eq!(launches.len(), 2, "{provider}");
+        assert!(launches.iter().all(|launch| launch.provider == provider));
+        assert!(!launches[0].resume);
+        assert!(launches[1].resume);
     }
 }
 fn request(project: &str, index: usize) -> StartScopedAgentSession {
@@ -335,143 +365,7 @@ fn request(project: &str, index: usize) -> StartScopedAgentSession {
         project_id: project.into(),
         checkout_revision: "HEAD".into(),
         initial_input: format!("review {index}"),
-        tool_policy: "review-read-only".into(),
     }
-}
-
-#[tokio::test]
-async fn unavailable_authentication_rejects_admission_without_session_workspace_or_process() {
-    let f = fixture("scoped_authentication_admission");
-    *lock(&f.runtime.authentication_error) = Some("not signed in".to_string());
-    let req = request(&f.project_id, 1);
-
-    let error = f.service.start(req.clone()).await.unwrap_err();
-
-    assert!(matches!(
-        error,
-        ScopedAgentSessionError::AuthenticationUnavailable
-    ));
-    assert_eq!(*lock(&f.runtime.authentication_checks), 1);
-    assert!(lock(&f.runtime.launches).is_empty());
-    assert!(lock(&f.workspace.acquired).is_empty());
-    assert!(f
-        .service
-        .status(&req.owner_plugin_id, &req.scope)
-        .unwrap()
-        .is_none());
-}
-
-#[tokio::test]
-async fn authentication_is_rechecked_before_workspace_and_process_launch() {
-    let f = fixture("scoped_authentication_final_check");
-    *lock(&f.runtime.authentication_fails_after) = Some(1);
-    let req = request(&f.project_id, 1);
-
-    let error = f.service.start(req.clone()).await.unwrap_err();
-
-    assert!(matches!(
-        error,
-        ScopedAgentSessionError::AuthenticationUnavailable
-    ));
-    assert_eq!(*lock(&f.runtime.authentication_checks), 2);
-    assert!(lock(&f.runtime.launches).is_empty());
-    assert!(lock(&f.workspace.acquired).is_empty());
-    let state = f
-        .service
-        .status(&req.owner_plugin_id, &req.scope)
-        .unwrap()
-        .expect("failed session remains inspectable");
-    assert_eq!(state.status, ScopedAgentSessionStatus::Failed);
-    assert_eq!(
-        state.error_code.as_deref(),
-        Some("AUTHENTICATION_UNAVAILABLE")
-    );
-}
-
-#[tokio::test]
-async fn unavailable_authentication_rejects_completed_session_continuation_before_scheduling() {
-    let f = fixture("scoped_authentication_continuation");
-    let req = request(&f.project_id, 1);
-    let running = f.service.start(req.clone()).await.unwrap();
-    f.service.complete(&running.id, 1, true).await.unwrap();
-    *lock(&f.runtime.authentication_error) = Some("signed out".to_string());
-
-    let error = f
-        .service
-        .input(&req.owner_plugin_id, &req.scope, "continue")
-        .await
-        .unwrap_err();
-
-    assert!(matches!(
-        error,
-        ScopedAgentSessionError::AuthenticationUnavailable
-    ));
-    assert_eq!(lock(&f.runtime.launches).len(), 1);
-    assert!(lock(&f.workspace.protected).is_empty());
-    assert_eq!(
-        f.service
-            .status(&req.owner_plugin_id, &req.scope)
-            .unwrap()
-            .unwrap()
-            .status,
-        ScopedAgentSessionStatus::Completed
-    );
-}
-
-#[tokio::test]
-async fn queued_session_rechecks_authentication_when_promoted() {
-    let f = fixture("scoped_authentication_promotion");
-    let mut states = Vec::new();
-    for index in 1..=5 {
-        states.push(
-            f.service
-                .start(request(&f.project_id, index))
-                .await
-                .unwrap(),
-        );
-    }
-    assert_eq!(states[4].status, ScopedAgentSessionStatus::Queued);
-    *lock(&f.runtime.authentication_error) = Some("signed out while queued".to_string());
-
-    f.service.complete(&states[0].id, 1, true).await.unwrap();
-
-    assert_eq!(lock(&f.runtime.launches).len(), 4);
-    assert_eq!(lock(&f.workspace.acquired).len(), 4);
-    let promoted = f
-        .service
-        .status("com.example.review", &request(&f.project_id, 5).scope)
-        .unwrap()
-        .expect("promoted session remains inspectable");
-    assert_eq!(promoted.status, ScopedAgentSessionStatus::Failed);
-    assert_eq!(
-        promoted.error_code.as_deref(),
-        Some("AUTHENTICATION_UNAVAILABLE")
-    );
-}
-
-#[tokio::test]
-async fn authentication_loss_in_the_final_runtime_probe_returns_the_typed_error() {
-    let f = fixture("scoped_authentication_runtime_probe");
-    *lock(&f.runtime.authentication_fails_during_launch) = true;
-    let req = request(&f.project_id, 1);
-
-    let error = f.service.start(req.clone()).await.unwrap_err();
-
-    assert!(matches!(
-        error,
-        ScopedAgentSessionError::AuthenticationUnavailable
-    ));
-    assert!(lock(&f.runtime.launches).is_empty());
-    let state = f
-        .service
-        .status(&req.owner_plugin_id, &req.scope)
-        .unwrap()
-        .expect("failed session remains inspectable");
-    assert_eq!(state.status, ScopedAgentSessionStatus::Failed);
-    assert_eq!(
-        state.error_code.as_deref(),
-        Some("AUTHENTICATION_UNAVAILABLE")
-    );
 }
 
 #[tokio::test]
@@ -772,21 +666,13 @@ async fn queued_continuation_protects_its_existing_workspace() {
     assert!(lock(&f.workspace.protected).contains(&first.id));
 }
 #[tokio::test]
-async fn rejects_large_input_and_unknown_policy_before_side_effects() {
+async fn rejects_large_input_before_side_effects() {
     let f = fixture("scoped_validation");
     let mut req = request(&f.project_id, 1);
     req.initial_input = "x".repeat(SCOPED_INPUT_LIMIT_BYTES + 1);
     assert!(matches!(
         f.service.start(req).await,
         Err(ScopedAgentSessionError::InputTooLarge)
-    ));
-    let mut req = request(&f.project_id, 2);
-    req.tool_policy = "allow-all".into();
-    assert!(matches!(
-        f.service.start(req).await,
-        Err(ScopedAgentSessionError::ToolPolicy(
-            SessionToolPolicyError::UnknownPolicy(_)
-        ))
     ));
     assert!(lock(&f.runtime.launches).is_empty());
     assert!(lock(&f.workspace.acquired).is_empty());

@@ -37,9 +37,9 @@ fn lifecycle_hook_endpoint(event_type: &str) -> Option<&'static str> {
 
 /// Grok hooks are installed globally (`~/.grok/hooks/openforge.json`) and
 /// fire for every `grok` invocation, so the guard keeps the hook inert for
-/// the user's own non-OpenForge sessions. `[ -z ] ||` rather than `[ -n ] &&`
-/// so the command still exits 0 when the variable is unset, instead of
-/// propagating the non-zero exit of a short-circuited `&&`.
+/// the user's own non-OpenForge sessions. The paired empty checks cover both
+/// Task and Scoped Agent ownership, while `||` keeps the command successful
+/// when neither owner variable is set.
 ///
 /// Grok reads hook stdout as a permission decision and exit code 2 as a deny,
 /// and it refuses to run a hook naming a variable its hook environment lacks.
@@ -54,7 +54,9 @@ fn lifecycle_hook_command(port: u16, event_type: &str) -> String {
     let legacy_url = format!("http://127.0.0.1:{port}/hooks/grok-{endpoint}");
     let report =
         crate::notification_hooks::shell_command("grok", kind, event_type, Some(&legacy_url));
-    format!("[ -z \"$OPENFORGE_TASK_ID\" ] || {report} >/dev/null; exit 0")
+    format!(
+        "[ -z \"$OPENFORGE_TASK_ID\" ] && [ -z \"$OPENFORGE_SCOPED_SESSION_ID\" ] || {report} >/dev/null; exit 0"
+    )
 }
 
 pub(crate) fn build_hooks_json(port: u16) -> Value {
@@ -234,7 +236,8 @@ mod tests {
             let (_embedded_source, arguments) = rest.split_once("' ").expect(cmd);
 
             assert_eq!(
-                guard, "[ -z \"$OPENFORGE_TASK_ID\" ] || ",
+                guard,
+                "[ -z \"$OPENFORGE_TASK_ID\" ] && [ -z \"$OPENFORGE_SCOPED_SESSION_ID\" ] || ",
                 "{hook_key} command must stay inert for the user's own Grok sessions"
             );
             assert_eq!(
@@ -244,8 +247,8 @@ mod tests {
                      'http://127.0.0.1:{port}/hooks/grok-{event_type}' >/dev/null; exit 0"
                 ),
                 "{hook_key} command is pinned exactly because each part carries a Grok \
-                 constraint: it may name no environment variable beyond \
-                 $OPENFORGE_TASK_ID (Grok drops a hook naming an unresolvable one), \
+                 constraint: it may name no environment variable beyond the two \
+                 OpenForge ownership variables (Grok drops a hook naming an unresolvable one), \
                  it may write nothing to stdout (read as a permission decision), and \
                  it must exit 0 (exit code 2 is read as a deny)"
             );
@@ -291,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn grok_hook_commands_name_only_the_task_id_environment_variable() {
+    fn grok_hook_commands_name_only_the_openforge_owner_environment_variables() {
         let json = build_hooks_json(54321);
 
         for hook_key in [
@@ -311,7 +314,7 @@ mod tests {
             names.dedup();
             assert_eq!(
                 names,
-                ["OPENFORGE_TASK_ID"],
+                ["OPENFORGE_SCOPED_SESSION_ID", "OPENFORGE_TASK_ID"],
                 "{hook_key} command names environment Grok will require before \
                  execution; JavaScript template literals in the embedded source \
                  count as named variables: {cmd}"

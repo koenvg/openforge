@@ -5,7 +5,7 @@ pub mod opencode;
 pub mod pi;
 
 use crate::app_events::RuntimeEventPublisher;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::db::AgentSessionRow;
 use claude_code::ClaudeCodeProvider;
@@ -87,6 +87,25 @@ impl ProviderStartContext {
     }
 }
 
+pub(crate) struct ScopedProviderStartContext<'a> {
+    pub session_key: &'a str,
+    pub scoped_session_id: &'a str,
+    pub workspace_path: &'a Path,
+    pub prompt: &'a str,
+    pub provider_session_id: Option<&'a str>,
+    pub resume: bool,
+    pub credential_path: PathBuf,
+    pub cols: u16,
+    pub rows: u16,
+    pub event_publisher: RuntimeEventPublisher,
+    pub exit_observer: crate::pty_manager::PtyExitObserver,
+}
+
+pub(crate) struct ScopedProviderSessionResult {
+    pub pty_instance_id: u64,
+    pub provider_session_id: Option<String>,
+}
+
 // ============================================================================
 // Provider Enum (enum dispatch — no dyn Trait, no async-trait)
 // ============================================================================
@@ -113,6 +132,98 @@ impl Provider {
             "grok" => Ok(Provider::Grok(GrokProvider::new(pty_mgr))),
             other => Err(format!("Unknown provider: {}", other)),
         }
+    }
+
+    pub(crate) async fn start_scoped(
+        &self,
+        context: ScopedProviderStartContext<'_>,
+    ) -> Result<ScopedProviderSessionResult, ProviderError> {
+        let continue_session = context.resume && context.provider_session_id.is_none();
+        let (pty_manager, adapter, provider_session_id) = match self {
+            Provider::ClaudeCode(provider) => {
+                let hooks = crate::claude_hooks::generate_hooks_settings(
+                    crate::claude_hooks::get_http_server_port(),
+                )
+                .map_err(|error| ProviderError::Other(error.to_string()))?;
+                (
+                    &provider.pty_mgr,
+                    crate::pty_manager::ProviderPtyAdapter::claude_code(
+                        context.prompt,
+                        context.provider_session_id,
+                        continue_session,
+                        &hooks,
+                        None,
+                    ),
+                    context.provider_session_id.map(str::to_string),
+                )
+            }
+            Provider::Codex(provider) => (
+                &provider.pty_mgr,
+                crate::pty_manager::ProviderPtyAdapter::codex(
+                    context.prompt,
+                    context.provider_session_id,
+                    continue_session,
+                ),
+                context.provider_session_id.map(str::to_string),
+            ),
+            Provider::OpenCode(provider) => (
+                &provider.pty_mgr,
+                crate::pty_manager::ProviderPtyAdapter::opencode(
+                    context.prompt,
+                    context.provider_session_id,
+                    continue_session,
+                    None,
+                    None,
+                ),
+                context.provider_session_id.map(str::to_string),
+            ),
+            Provider::Pi(provider) => {
+                let provider_session_id = if context.resume {
+                    context.provider_session_id.map(str::to_string)
+                } else {
+                    Some(uuid::Uuid::new_v4().to_string())
+                };
+                let target = match (&provider_session_id, context.resume) {
+                    (Some(id), true) => crate::pty_manager::PiSessionTarget::Existing(id.clone()),
+                    (Some(id), false) => crate::pty_manager::PiSessionTarget::New(id.clone()),
+                    (None, true) => crate::pty_manager::PiSessionTarget::ContinueLatest,
+                    (None, false) => unreachable!("new Pi sessions allocate an identity"),
+                };
+                (
+                    &provider.pty_mgr,
+                    crate::pty_manager::ProviderPtyAdapter::pi(context.prompt, target),
+                    provider_session_id,
+                )
+            }
+            Provider::Grok(provider) => (
+                &provider.pty_mgr,
+                crate::pty_manager::ProviderPtyAdapter::grok(
+                    context.prompt,
+                    context.provider_session_id,
+                    continue_session,
+                    None,
+                    None,
+                ),
+                context.provider_session_id.map(str::to_string),
+            ),
+        };
+        let pty_instance_id = pty_manager
+            .spawn_scoped_provider_pty(
+                adapter,
+                context.session_key,
+                context.scoped_session_id,
+                context.workspace_path,
+                context.credential_path,
+                context.cols,
+                context.rows,
+                context.event_publisher,
+                context.exit_observer,
+            )
+            .await?;
+        Ok(ScopedProviderSessionResult {
+            pty_instance_id,
+            provider_session_id,
+        })
     }
 
     // ------------------------------------------------------------------

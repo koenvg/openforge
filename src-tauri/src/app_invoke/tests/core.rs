@@ -24,7 +24,6 @@ async fn scoped_agent_session_desktop_commands_round_trip_camel_case_lifecycle()
         "projectId": project_id,
         "checkoutRevision": "main",
         "initialInput": "Review this",
-        "toolPolicy": "review-read-only",
     });
 
     let started = invoke_ok(&state, "start_scoped_agent_session", start_payload.clone()).await;
@@ -79,6 +78,43 @@ async fn scoped_agent_session_desktop_commands_round_trip_camel_case_lifecycle()
         invoke_ok(&state, "get_scoped_agent_session_status", status_payload).await,
         serde_json::Value::Null,
     );
+}
+
+#[tokio::test]
+async fn scoped_agent_session_start_rejects_the_removed_tool_policy_field() {
+    let (state, _db_temp_dir, _app_dir) =
+        test_state_with_backend_app("app_invoke_scoped_agent_session_rejects_tool_policy");
+    let project_id = crate::db::acquire_db(&state.db)
+        .create_project("Scoped sessions", "/repo")
+        .expect("create Project fixture")
+        .id;
+    let (service, _runtime) =
+        crate::scoped_agent_session_test_support::test_scoped_agent_session_service(
+            state.db.clone(),
+        );
+    state.app.as_ref().expect("backend app").manage(service);
+
+    let error = invoke(
+        &state,
+        "start_scoped_agent_session",
+        json!({
+            "pluginId": "com.example.reviewer",
+            "scope": {
+                "namespace": "review",
+                "targetKey": "PR-legacy",
+                "revision": "sha-legacy",
+            },
+            "projectId": project_id,
+            "checkoutRevision": "main",
+            "initialInput": "Review this",
+            "toolPolicy": "review-read-only",
+        }),
+    )
+    .await
+    .expect_err("the removed toolPolicy field must be rejected");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert!(error.1.contains("unknown field `toolPolicy`"));
 }
 
 #[tokio::test]
