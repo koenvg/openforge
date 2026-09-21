@@ -139,7 +139,7 @@ describe('plugin-sdk public UI exports', () => {
       peerDependencies?: Record<string, string>
     }
 
-    expect(packageJson.dependencies?.['bits-ui']).toBe('^2.19.0')
+    expect(packageJson.dependencies?.['bits-ui']).toBe('^2.19.2')
     expect(packageJson.dependencies?.['@internationalized/date']).toBe('^3.12.4')
     expect(packageJson.peerDependencies?.svelte).toBe('^5.0.0')
   })

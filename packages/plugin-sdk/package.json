@@ -133,7 +133,7 @@
   "dependencies": {
     "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "catalog:",
-    "bits-ui": "^2.19.0",
+    "bits-ui": "^2.19.2",
     "dompurify": "catalog:",
     "github-slugger": "catalog:",
     "marked": "catalog:",
