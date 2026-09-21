@@ -27,7 +27,7 @@ function createLocalRuntime(definition: TerminalStoryDefinition) {
     transport,
     environment: {
       openLink: async () => {},
-      themePresentation: derived(selectedTheme, createTerminalThemeSnapshot),
+      themePresentation: derived(selectedTheme, theme => createTerminalThemeSnapshot(theme)),
       fontFamily: terminalFontFamily,
       fontSize: terminalFontSize,
     },

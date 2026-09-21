@@ -17,12 +17,14 @@ pub(crate) use session::{
 use libghostty_vt::{
     fmt::{Format, Formatter, FormatterOptions},
     snapshot::Decoder,
+    style::{Palette, RgbColor},
     terminal::{
         ConformanceLevel, DeviceAttributeFeature, DeviceAttributes, DeviceType,
         PrimaryDeviceAttributes, SecondaryDeviceAttributes, TertiaryDeviceAttributes,
     },
     Terminal,
 };
+use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(test)]
@@ -79,6 +81,7 @@ pub(crate) enum TerminalModelTestFault {
     CreateFailure,
     BlockFirstCommand(TerminalModelQueueSaturationGate),
     PanicOnFirstCommand,
+    ColorProfileUpdateFailure,
 }
 
 #[cfg_attr(not(test), derive(Clone, Copy, Debug, PartialEq, Eq))]
@@ -88,6 +91,7 @@ pub(crate) struct TerminalModelOptions {
     pub(crate) rows: u16,
     pub(crate) max_scrollback_bytes: usize,
     pub(crate) max_continuation_bytes: usize,
+    pub(crate) color_profile: TerminalColorProfile,
     #[cfg(test)]
     pub(crate) test_fault: TerminalModelTestFault,
 }
@@ -99,9 +103,15 @@ impl TerminalModelOptions {
             rows,
             max_scrollback_bytes: DEFAULT_SCROLLBACK_BYTES,
             max_continuation_bytes: MAX_SNAPSHOT_CONTINUATION_BYTES,
+            color_profile: TerminalColorProfile::default(),
             #[cfg(test)]
             test_fault: TerminalModelTestFault::None,
         }
+    }
+
+    pub(crate) fn with_color_profile(mut self, color_profile: TerminalColorProfile) -> Self {
+        self.color_profile = color_profile;
+        self
     }
 
     #[cfg(test)]
@@ -126,6 +136,10 @@ pub(crate) enum TerminalModelError {
 pub(crate) trait TerminalModel {
     fn feed(&mut self, bytes: &[u8]) -> Result<(), TerminalModelError>;
     fn resize(&mut self, cols: u16, rows: u16) -> Result<(), TerminalModelError>;
+    fn update_color_profile(
+        &mut self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), TerminalModelError>;
     fn encode_snapshot(&self) -> Result<Vec<u8>, TerminalModelError>;
     fn format_portable_vt(&self) -> Result<Vec<u8>, TerminalModelError>;
     fn take_protocol_replies(&mut self) -> Vec<Vec<u8>>;
@@ -136,6 +150,7 @@ type ProtocolReplies = Rc<RefCell<VecDeque<Vec<u8>>>>;
 pub(crate) struct GhosttyTerminalModel {
     terminal: Terminal<'static, 'static>,
     protocol_replies: ProtocolReplies,
+    color_profile: TerminalColorProfile,
 }
 
 impl GhosttyTerminalModel {
@@ -144,14 +159,15 @@ impl GhosttyTerminalModel {
         terminal
             .set_scrollback_max_bytes(Some(options.max_scrollback_bytes))?
             .set_continuation_max_bytes(options.max_continuation_bytes)?;
-        Self::from_terminal(terminal)
+        apply_color_profile(&mut terminal, options.color_profile)?;
+        Self::from_terminal(terminal, options.color_profile)
     }
 
     pub(crate) fn decode_snapshot(snapshot: &[u8]) -> Result<Self, TerminalModelError> {
         let decoder = Decoder::new_buf(snapshot)?;
         let mut terminal = decoder.decode()?;
         terminal.set_continuation_max_bytes(MAX_SNAPSHOT_CONTINUATION_BYTES)?;
-        Self::from_terminal(terminal)
+        Self::from_terminal(terminal, TerminalColorProfile::default())
     }
 
     fn ensure_snapshot_continuation_available(&self) -> Result<(), TerminalModelError> {
@@ -184,7 +200,10 @@ impl GhosttyTerminalModel {
         }
     }
 
-    fn from_terminal(mut terminal: Terminal<'static, 'static>) -> Result<Self, TerminalModelError> {
+    fn from_terminal(
+        mut terminal: Terminal<'static, 'static>,
+        color_profile: TerminalColorProfile,
+    ) -> Result<Self, TerminalModelError> {
         let protocol_replies = Rc::new(RefCell::new(VecDeque::new()));
         let callback_replies = Rc::clone(&protocol_replies);
         terminal.on_pty_write(move |_terminal, bytes| {
@@ -211,7 +230,33 @@ impl GhosttyTerminalModel {
         Ok(Self {
             terminal,
             protocol_replies,
+            color_profile,
         })
+    }
+
+    pub(super) fn color_profile(&self) -> TerminalColorProfile {
+        self.color_profile
+    }
+}
+
+fn apply_color_profile(
+    terminal: &mut Terminal<'_, '_>,
+    profile: TerminalColorProfile,
+) -> Result<(), TerminalModelError> {
+    let palette = Palette(profile.xterm_palette().map(ghostty_rgb));
+    terminal
+        .set_default_fg_color(Some(ghostty_rgb(profile.foreground)))?
+        .set_default_bg_color(Some(ghostty_rgb(profile.background)))?
+        .set_default_cursor_color(Some(ghostty_rgb(profile.cursor)))?
+        .set_default_color_palette(Some(palette))?;
+    Ok(())
+}
+
+const fn ghostty_rgb(color: TerminalRgbColor) -> RgbColor {
+    RgbColor {
+        r: color.red,
+        g: color.green,
+        b: color.blue,
     }
 }
 
@@ -223,6 +268,15 @@ impl TerminalModel for GhosttyTerminalModel {
 
     fn resize(&mut self, cols: u16, rows: u16) -> Result<(), TerminalModelError> {
         self.terminal.resize(cols, rows, 0, 0)?;
+        Ok(())
+    }
+
+    fn update_color_profile(
+        &mut self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), TerminalModelError> {
+        apply_color_profile(&mut self.terminal, profile)?;
+        self.color_profile = profile;
         Ok(())
     }
 
@@ -371,6 +425,130 @@ mod tests {
         assert_eq!(replies.len(), 5);
         assert!(replies[0].starts_with(b"\x1b["));
         assert!(model.take_protocol_replies().is_empty());
+    }
+
+    #[test]
+    fn terminal_model_profile_answers_batched_colour_queries_once() {
+        use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
+
+        let mut profile = TerminalColorProfile {
+            foreground: TerminalRgbColor::new(17, 34, 51),
+            background: TerminalRgbColor::new(68, 85, 102),
+            cursor: TerminalRgbColor::new(119, 136, 153),
+            ..Default::default()
+        };
+        profile.ansi_colors[1] = TerminalRgbColor::new(170, 187, 204);
+        let options = TerminalModelOptions::new(80, 24).with_color_profile(profile);
+        let mut model = GhosttyTerminalModel::new(options)
+            .expect("terminal model should initialize with a colour profile");
+
+        model
+            .feed(b"\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07\x1b]4;1;?\x07")
+            .expect("batched colour queries should feed");
+
+        let replies = model.take_protocol_replies();
+        assert_eq!(replies.len(), 4);
+        let replies = replies
+            .iter()
+            .map(|reply| String::from_utf8_lossy(reply))
+            .collect::<Vec<_>>();
+        assert!(replies[0].contains("rgb:1111/2222/3333"));
+        assert!(replies[1].contains("rgb:4444/5555/6666"));
+        assert!(replies[2].contains("rgb:7777/8888/9999"));
+        assert!(replies[3].contains("4;1;rgb:aaaa/bbbb/cccc"));
+        assert!(model.take_protocol_replies().is_empty());
+    }
+
+    #[test]
+    fn codex_colour_query_probe_survives_live_switch_and_snapshot_recovery() {
+        use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
+        use std::collections::HashSet;
+
+        fn query_batch() -> Vec<u8> {
+            let mut queries = b"\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07".to_vec();
+            for index in 0..16 {
+                queries.extend_from_slice(format!("\x1b]4;{index};?\x07").as_bytes());
+            }
+            queries
+        }
+
+        fn query(model: &mut GhosttyTerminalModel, batch: &[u8]) -> Vec<Vec<u8>> {
+            model.feed(batch).expect("Codex colour queries should feed");
+            let replies = model.take_protocol_replies();
+            assert_eq!(replies.len(), 19, "each query must receive one reply");
+            let identifiers = ["10", "11", "12"]
+                .into_iter()
+                .map(str::to_string)
+                .chain((0..16).map(|index| format!("4;{index}")))
+                .collect::<Vec<_>>();
+            for (index, identifier) in identifiers.iter().enumerate() {
+                let expected = format!("\x1b]{identifier};rgb:");
+                assert!(
+                    replies[index]
+                        .windows(expected.len())
+                        .any(|part| part == expected.as_bytes()),
+                    "reply {index} did not match query {identifier}"
+                );
+            }
+            assert!(model.take_protocol_replies().is_empty());
+            replies
+        }
+
+        fn luminance(color: TerminalRgbColor) -> f64 {
+            let channel = |value: u8| {
+                let value = f64::from(value) / 255.0;
+                if value <= 0.04045 {
+                    value / 12.92
+                } else {
+                    ((value + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(color.red)
+                + 0.7152 * channel(color.green)
+                + 0.0722 * channel(color.blue)
+        }
+
+        let light = TerminalColorProfile::default();
+        let contrast = (luminance(light.foreground).max(luminance(light.background)) + 0.05)
+            / (luminance(light.foreground).min(luminance(light.background)) + 0.05);
+        assert!(contrast >= 4.5, "light profile contrast was {contrast:.2}");
+        let distinct = light
+            .ansi_colors
+            .into_iter()
+            .map(|color| (color.red, color.green, color.blue))
+            .collect::<HashSet<_>>();
+        assert!(distinct.len() >= 12);
+        let batch = query_batch();
+        let mut model =
+            GhosttyTerminalModel::new(TerminalModelOptions::new(80, 24).with_color_profile(light))
+                .expect("terminal model should initialize");
+        let light_replies = query(&mut model, &batch);
+
+        let mut dark = light;
+        dark.background = TerminalRgbColor::new(12, 14, 18);
+        dark.foreground = TerminalRgbColor::new(238, 241, 245);
+        dark.cursor = TerminalRgbColor::new(166, 180, 255);
+        for (index, color) in dark.ansi_colors.iter_mut().enumerate() {
+            let channel = u8::try_from(index).unwrap();
+            *color = TerminalRgbColor::new(32 + channel * 7, 48 + channel * 5, 64 + channel * 3);
+        }
+        model
+            .update_color_profile(dark)
+            .expect("live profile switch should apply");
+        let dark_replies = query(&mut model, &batch);
+        assert_ne!(dark_replies, light_replies);
+
+        let snapshot = model
+            .format_portable_vt()
+            .expect("authority snapshot should format");
+        let mut recovered =
+            GhosttyTerminalModel::new(TerminalModelOptions::new(80, 24).with_color_profile(dark))
+                .expect("recovery model should initialize");
+        recovered
+            .feed(&snapshot)
+            .expect("authority snapshot should recover");
+        recovered.take_protocol_replies();
+        assert_eq!(query(&mut recovered, &batch), dark_replies);
     }
 
     #[test]

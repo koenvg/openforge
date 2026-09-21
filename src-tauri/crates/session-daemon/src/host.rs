@@ -137,6 +137,18 @@ impl Host {
             Command::Inventory { controller } => {
                 Ok(Response::Inventory(self.inventory(&controller)?))
             }
+            Command::SetTerminalColorProfile {
+                controller,
+                operation,
+                profile,
+            } => {
+                self.runtime.block_on(self.host.set_terminal_color_profile(
+                    &controller,
+                    operation,
+                    profile,
+                ))?;
+                Ok(Response::Done)
+            }
             Command::Spawn {
                 controller,
                 operation,

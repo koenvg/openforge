@@ -35,6 +35,22 @@ impl PtyManager {
 }
 
 impl HostBackend for ExistingBackend {
+    async fn set_terminal_color_profile(
+        &self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        *self
+            .manager
+            .terminal_color_profile
+            .write()
+            .map_err(|_| HostError::OutcomeUnknown)? = profile;
+        self.manager
+            .terminal_sessions
+            .update_color_profile(profile)
+            .await
+            .map_err(HostError::Backend)
+    }
+
     async fn inventory(&self) -> Result<Vec<BackendSession>, HostError> {
         self.manager
             .process_diagnostic_sessions()

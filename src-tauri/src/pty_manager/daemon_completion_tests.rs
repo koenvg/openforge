@@ -17,6 +17,7 @@ async fn daemon_agent_exit_discovers_without_daemon_output_integration() {
         executable,
         String::new(),
         [(f.task_id.clone(), "pi".into())].into(),
+        Arc::new(std::sync::RwLock::new(TerminalColorProfile::default())),
     )
     .for_key(&f.task_id);
     bridge.configure_completion(f.local.clone());
@@ -118,9 +119,15 @@ async fn assert_daemon_hyperlink_links(agent: bool) {
             executable,
             String::new(),
             [(key.clone(), "pi".into())].into(),
+            Arc::new(std::sync::RwLock::new(TerminalColorProfile::default())),
         )
     } else {
-        DaemonShells::new(root.path().into(), executable, key.clone())
+        DaemonShells::new(
+            root.path().into(),
+            executable,
+            key.clone(),
+            Arc::new(std::sync::RwLock::new(TerminalColorProfile::default())),
+        )
     }
     .for_key(&key);
     bridge.configure_completion(f.local.clone());

@@ -4,7 +4,7 @@ import { createHost } from './terminalRuntimeHost.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 import type { TerminalViewFactory, TerminalViewFactoryOptions } from './terminalView'
-import type { TerminalThemeSnapshot, ThemeMode } from './theme'
+import { getTerminalThemeSnapshot, getTerminalViewTheme, type TerminalThemeSnapshot, type ThemeMode } from './theme'
 
 describe('Terminal Session configuration', () => {
   it('samples host configuration once for each new Terminal Session', async () => {
@@ -44,6 +44,7 @@ describe('Terminal Session configuration', () => {
   })
 
   it('applies host presentation snapshots reactively without recreating the terminal view', async () => {
+    const lightFallback = getTerminalThemeSnapshot('light')
     const light: TerminalThemeSnapshot = {
       appearance: 'light',
       terminalTheme: {
@@ -54,6 +55,7 @@ describe('Terminal Session configuration', () => {
         brightBlack: '#555555', brightRed: '#ff2222', brightGreen: '#22cc22', brightYellow: '#ddaa22',
         brightBlue: '#2222ff', brightMagenta: '#cc22cc', brightCyan: '#22bbbb', brightWhite: '#ffffff',
       },
+      colorProfile: lightFallback.colorProfile,
     }
     const dark: TerminalThemeSnapshot = {
       appearance: 'dark',
@@ -64,6 +66,14 @@ describe('Terminal Session configuration', () => {
         red: '#ff7788',
         brightRed: '#ff99aa',
       },
+      colorProfile: {
+        ...light.colorProfile,
+        background: { red: 16, green: 18, blue: 22 },
+        foreground: { red: 245, green: 247, blue: 250 },
+        ansiColors: light.colorProfile.ansiColors.map((color, index) => index === 1
+          ? { red: 255, green: 119, blue: 136 }
+          : color),
+      },
     }
     const themePresentation = writable(light)
     const host = createHost()
@@ -72,7 +82,7 @@ describe('Terminal Session configuration', () => {
     const view = createFakeTerminalView()
     const createTerminalView = vi.fn((options: TerminalViewFactoryOptions) => {
       expect(options.appearance).toBe('light')
-      expect(options.theme).toEqual(light.terminalTheme)
+      expect(options.theme).toEqual(getTerminalViewTheme(light))
       return view
     })
     const runtime = createTerminalRuntime({ ...host, createTerminalView })
@@ -81,8 +91,8 @@ describe('Terminal Session configuration', () => {
     themePresentation.set(dark)
 
     expect(createTerminalView).toHaveBeenCalledTimes(1)
-    expect(view.setTheme).toHaveBeenCalledWith(dark.terminalTheme)
-    expect(dark.terminalTheme.red).toBe('#ff7788')
+    expect(view.setTheme).toHaveBeenCalledWith(getTerminalViewTheme(dark))
+    expect(vi.mocked(view.setTheme).mock.calls[0][0].red).toBe('#FF7788')
     runtime.dispose()
   })
 })

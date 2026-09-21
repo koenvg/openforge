@@ -6,6 +6,7 @@ use crate::app_events::RuntimeEventPublisher;
 use crate::github_runtime::task_pr_discovery::{daemon::DaemonOutput, Discovery, LocalDiscovery};
 use base64::Engine;
 use openforge_session_client::Client;
+use openforge_session_host::TerminalColorProfile;
 use openforge_session_protocol::{Error, Event};
 use restart::Restart;
 use std::path::PathBuf;
@@ -29,6 +30,7 @@ struct Shared {
     completion: Mutex<Option<LocalDiscovery>>,
     discovery: LocalDiscovery,
     restart: Restart,
+    color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
 }
 
 struct Connection {
@@ -63,6 +65,7 @@ impl DaemonTransport {
     pub(super) fn new(
         root: PathBuf,
         executable: PathBuf,
+        color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
         selects: impl Fn(&str) -> bool + Send + Sync + 'static,
     ) -> Self {
         Self(Arc::new(Shared {
@@ -73,6 +76,7 @@ impl DaemonTransport {
             completion: Mutex::new(None),
             discovery: LocalDiscovery::default(),
             restart: Restart::default(),
+            color_profile,
         }))
     }
 
@@ -176,6 +180,15 @@ impl DaemonTransport {
                     Client::launch(&shared.executable, &shared.root)?
                 };
                 let client = client.with_operation_retirement(&shared.executable)?;
+                let profile = *shared
+                    .color_profile
+                    .read()
+                    .map_err(|_| Error::OutcomeUnknown)?;
+                let operation = format!(
+                    "terminal-profile-reconcile-{}",
+                    client.controller().generation.value()
+                );
+                publish_color_profile(&client, &operation, profile)?;
                 let cursor = client.inventory()?.cursor;
                 let mut discovery = DaemonOutput::new(shared.discovery.clone());
                 discovery.resume(cursor);
@@ -234,6 +247,14 @@ impl DaemonTransport {
         .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
     }
+}
+
+pub(super) fn publish_color_profile(
+    client: &Client,
+    operation: &str,
+    profile: TerminalColorProfile,
+) -> Result<(), Error> {
+    client.set_terminal_color_profile(operation, profile)
 }
 
 fn pump(shared: &Shared) -> Result<(), Error> {

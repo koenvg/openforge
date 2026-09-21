@@ -1,6 +1,7 @@
 use super::super::{
     GhosttyTerminalModel, TerminalModel, TerminalModelError, MAX_SNAPSHOT_CONTINUATION_BYTES,
 };
+use openforge_session_host::TerminalColorProfile;
 use serde::{Deserialize, Serialize};
 
 const FORMAT: u32 = 1;
@@ -12,12 +13,14 @@ pub(crate) const MAX_TERMINAL_CHECKPOINT_BYTES: usize = 16 * 1024 * 1024;
 pub(super) enum RetainedChange {
     Feed { bytes: Vec<u8> },
     Resize { cols: u16, rows: u16 },
+    ColorProfile { profile: TerminalColorProfile },
 }
 impl RetainedChange {
     fn size(&self) -> usize {
         match self {
             Self::Feed { bytes } => bytes.len(),
             Self::Resize { .. } => 4,
+            Self::ColorProfile { .. } => std::mem::size_of::<TerminalColorProfile>(),
         }
     }
 }
@@ -34,6 +37,8 @@ pub(crate) struct TerminalModelCheckpoint {
     pub(super) instance_id: u64,
     pub(super) watermark: u64,
     model: Vec<u8>,
+    #[serde(default)]
+    color_profile: TerminalColorProfile,
     changes: Vec<RetainedChange>,
     pub(super) compatibility_replay: Vec<u8>,
     pub(super) continuation: Vec<u8>,
@@ -80,6 +85,7 @@ impl TerminalModelCheckpoint {
                 instance_id,
                 watermark,
                 model: model_bytes,
+                color_profile: model.color_profile(),
                 changes: Vec::new(),
                 compatibility_replay: Vec::new(),
                 continuation: model
@@ -93,6 +99,7 @@ impl TerminalModelCheckpoint {
         };
         checkpoint.instance_id = instance_id;
         checkpoint.watermark = watermark;
+        checkpoint.color_profile = model.color_profile();
         checkpoint.compatibility_replay = compatibility_replay;
         checkpoint.validate()?;
         Ok(checkpoint)
@@ -119,6 +126,7 @@ impl TerminalModelCheckpoint {
             + match &change {
                 RetainedChange::Feed { bytes } => bytes.len(),
                 RetainedChange::Resize { .. } => 0,
+                RetainedChange::ColorProfile { .. } => 0,
             };
         if checkpoint.changes.len() >= MAX_RETAINED_CHANGES
             || total.saturating_add(change.size()) > MAX_SNAPSHOT_CONTINUATION_BYTES
@@ -138,10 +146,14 @@ impl TerminalModelCheckpoint {
         self.validate()?;
         let mut model = GhosttyTerminalModel::decode_snapshot(&self.model)
             .map_err(|error| error.to_string())?;
+        model
+            .update_color_profile(self.color_profile)
+            .map_err(|error| error.to_string())?;
         for change in &self.changes {
             match change {
                 RetainedChange::Feed { bytes } => model.feed(bytes),
                 RetainedChange::Resize { cols, rows } => model.resize(*cols, *rows),
+                RetainedChange::ColorProfile { profile } => model.update_color_profile(*profile),
             }
             .map_err(|error| error.to_string())?;
             model.take_protocol_replies();

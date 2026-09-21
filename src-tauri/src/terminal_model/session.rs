@@ -31,6 +31,7 @@ use worker_session::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
 
     struct DropSignal(mpsc::SyncSender<()>);
 
@@ -349,6 +350,83 @@ mod tests {
         assert!(worker.session().diagnostics().iter().any(|diagnostic| {
             diagnostic.phase == "resize" && diagnostic.message.contains("timed out")
         }));
+    }
+
+    #[test]
+    fn color_profile_updates_are_ordered_and_preserve_program_overrides_until_reset() {
+        let initial = TerminalColorProfile {
+            foreground: TerminalRgbColor::new(17, 34, 51),
+            ..Default::default()
+        };
+        let options = TerminalModelOptions::new(80, 24).with_color_profile(initial);
+        let (session, feeder) =
+            TerminalModelSession::start("profile-order-shell".to_string(), 194, options)
+                .expect("terminal model worker should start");
+
+        feeder.feed(b"\x1b]10;?\x07");
+        session
+            .portable_snapshot()
+            .expect("first query should cross the actor barrier");
+
+        feeder.feed(b"\x1b]10;#aabbcc\x07\x1b]10;?\x07");
+        let mut updated = initial;
+        updated.foreground = TerminalRgbColor::new(68, 85, 102);
+        session
+            .update_color_profile(updated)
+            .expect("live profile update should succeed");
+        feeder.feed(b"\x1b]10;?\x07\x1b]110\x07\x1b]10;?\x07");
+        session
+            .portable_snapshot()
+            .expect("later queries should cross the actor barrier");
+
+        let replies = session
+            .take_protocol_replies()
+            .into_iter()
+            .map(|reply| String::from_utf8_lossy(&reply).into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(replies.len(), 4);
+        assert!(replies[0].contains("rgb:1111/2222/3333"));
+        assert!(replies[1].contains("rgb:aaaa/bbbb/cccc"));
+        assert!(replies[2].contains("rgb:aaaa/bbbb/cccc"));
+        assert!(replies[3].contains("rgb:4444/5555/6666"));
+    }
+
+    #[test]
+    fn color_profile_update_submission_is_bounded_when_queue_is_saturated() {
+        let worker = BlockedTerminalModelWorker::start("profile-queue-shell", 195);
+        let result = worker.run_session_operation("colour profile update", |session| {
+            session.update_color_profile(TerminalColorProfile::default())
+        });
+
+        assert!(matches!(
+            result,
+            Ok(Err(error)) if error.contains("command submission timed out")
+        ));
+        assert!(worker.session().diagnostics().iter().any(|diagnostic| {
+            diagnostic.phase == "update-color-profile" && diagnostic.message.contains("timed out")
+        }));
+    }
+
+    #[test]
+    fn color_profile_update_failure_disables_the_authoritative_model() {
+        let options = TerminalModelOptions::new(80, 24)
+            .with_test_fault(super::super::TerminalModelTestFault::ColorProfileUpdateFailure);
+        let (session, _feeder) =
+            TerminalModelSession::start("profile-failure-shell".to_string(), 196, options)
+                .expect("terminal model worker should start");
+
+        let error = session
+            .update_color_profile(TerminalColorProfile::default())
+            .expect_err("injected update failure should be returned");
+
+        assert!(error.contains("injected terminal colour profile update failure"));
+        assert!(session.diagnostics().iter().any(|diagnostic| {
+            diagnostic.phase == "update-color-profile"
+                && diagnostic
+                    .message
+                    .contains("injected terminal colour profile update failure")
+        }));
+        assert!(session.portable_snapshot().is_err());
     }
 
     #[test]

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PNG } from 'pngjs'
 import {
   assertPresentation,
+  assertTerminalColourProfileProbe,
   assertTerminalScreenshotCursorAtCell,
   assertTerminalScreenshotHasInk,
   comparePngBuffers,
@@ -18,6 +19,36 @@ function png(colors) {
 }
 
 describe('terminal presentation harness runner', () => {
+  it('checks a Codex-shaped colour query batch across live switching and recovery', () => {
+    const profile = (offset) => ({
+      version: 1,
+      background: { red: offset, green: offset, blue: offset },
+      foreground: { red: 255 - offset, green: 255 - offset, blue: 255 - offset },
+      cursor: { red: 127, green: 127, blue: 127 },
+      ansiColors: Array.from({ length: 16 }, (_, index) => ({ red: index + offset, green: index, blue: 255 - index })),
+    })
+    const presentation = {
+      lines: [{
+        cells: Array.from({ length: 16 }, (_, index) => ({
+          text: index.toString(16).toUpperCase(),
+          foreground: { value: index },
+        })),
+      }],
+    }
+    const probe = {
+      queryCount: 19,
+      inputEventsAfterQueries: [],
+      lightProfile: profile(0),
+      darkProfile: profile(8),
+      livePresentation: presentation,
+      recoveryPresentation: presentation,
+    }
+
+    expect(() => assertTerminalColourProfileProbe(probe)).not.toThrow()
+    expect(() => assertTerminalColourProfileProbe({ ...probe, inputEventsAfterQueries: ['reply'] }))
+      .toThrow('escaped into PTY writes')
+  })
+
   it('asserts text, style, width, and active-buffer semantics without renderer internals', () => {
     const recording = {
       id: 'fixture',

@@ -13,7 +13,7 @@ const runtime = createTerminalRuntime({
   transport,
   environment: {
     openLink: (shellSessionKey, url) => openTerminalLink(shellSessionKey, url),
-    themeMode,
+    themePresentation,
     loggerName: 'myTerminalSurface',
   },
 })
@@ -27,6 +27,12 @@ The interface is exported from the package root and `@openforge-app/terminal-run
 
 The desktop host creates one `TerminalSessionService` and gives each Terminal Surface an owner-scoped client. Clients share sessions by Shell Session Key, while bulk release affects only sessions owned by that client.
 
+## Theme presentation
+
+Hosts should supply `themePresentation`, a readable `TerminalThemeSnapshot` containing both renderer tokens and the normalized RGB authority profile already accepted by the backend. `themeMode` remains a standalone light/dark compatibility input.
+
+Terminal Runtime derives every xterm core colour from `colorProfile`; renderer-only selection and cursor-accent values remain in `terminalTheme`. A live snapshot updates every existing view without recreating its Terminal Session or attachment. Because assigning an xterm base theme clears xterm's local OSC colour changes, an attached view then recovers from Ghostty so program overrides are reapplied. Detached views recover when attached. Renderer-generated query replies are filtered from user input because the Rust authority is the only response owner.
+
 ## Renderer conformance
 
-`TerminalView` exposes semantic presentation capture and renderer-frame drain evidence for conformance tests and benchmarks. See [`conformance/README.md`](conformance/README.md) for the shared KVG-3903 recording corpus, interaction matrix, visual bounds, and memory metrics.
+`TerminalView` exposes semantic presentation capture and renderer-frame drain evidence for conformance tests and benchmarks. See [`conformance/README.md`](conformance/README.md) for the shared KVG-3903 recording corpus, Codex startup colour-query probe, interaction matrix, visual bounds, and memory metrics.

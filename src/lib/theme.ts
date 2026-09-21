@@ -1,12 +1,19 @@
 import { derived, writable, type Readable } from 'svelte/store'
 import { getConfig, setConfig } from './ipc'
+import { setTerminalColorProfile } from './ipc/terminal'
 import {
   BUILTIN_DARK_THEME_ID,
   BUILTIN_LIGHT_THEME_ID,
   LIGHT_THEME,
+  type ThemeDefinition,
 } from './themeContract'
 import { createThemeDocumentAdapter } from './themeDocumentAdapter'
 import { prepareThemeStylesheets } from './themeStylesheetLoader'
+import {
+  resolveTerminalThemeSnapshot,
+  TerminalThemeResolutionError,
+} from './terminalThemePresentation'
+import type { TerminalColorProfile, TerminalThemeSnapshot } from '@openforge-app/terminal-runtime'
 import {
   createThemeRegistry,
   type ThemeDiagnostic,
@@ -21,11 +28,14 @@ interface ThemeRuntimeOptions {
   persistThemeId(themeId: string): Promise<void>
   reportDiagnostic?: (diagnostic: ThemeDiagnostic) => void
   logError?: (message: string, error: unknown) => void
+  resolveTerminalTheme?: (theme: ThemeDefinition) => TerminalThemeSnapshot
+  publishTerminalColorProfile?: (profile: TerminalColorProfile) => Promise<void>
 }
 
 export interface ThemeRuntime {
   readonly registry: ThemeRegistry
   readonly themeMode: Readable<ThemeMode>
+  readonly terminalThemePresentation: Readable<TerminalThemeSnapshot>
   initialize(): Promise<void>
   applyTheme(mode: ThemeMode): Promise<void>
 }
@@ -39,10 +49,18 @@ function migrateStoredThemeId(storedThemeId: string | null): string {
 export function createThemeRuntime(options: ThemeRuntimeOptions): ThemeRuntime {
   const adapter = createThemeDocumentAdapter(options.root)
   adapter.apply(LIGHT_THEME)
+  const resolveTerminalTheme = options.resolveTerminalTheme ?? resolveTerminalThemeSnapshot
+  const terminalThemeStore = writable(resolveTerminalTheme(LIGHT_THEME))
 
   const registry = createThemeRegistry({
     prepareTheme: (theme, signal) => prepareThemeStylesheets(options.root.ownerDocument, theme, signal),
     applyTheme: adapter.apply,
+    commitTheme: async (theme) => {
+      const presentation = resolveTerminalTheme(theme)
+      await options.publishTerminalColorProfile?.(presentation.colorProfile)
+      terminalThemeStore.set(presentation)
+    },
+    isUnavailableThemeError: (error) => error instanceof TerminalThemeResolutionError,
     persistSelection: options.persistThemeId,
     reportDiagnostic: options.reportDiagnostic,
   })
@@ -75,6 +93,7 @@ export function createThemeRuntime(options: ThemeRuntimeOptions): ThemeRuntime {
   return Object.freeze({
     registry,
     themeMode,
+    terminalThemePresentation: { subscribe: terminalThemeStore.subscribe },
     initialize,
     applyTheme: applyLegacyTheme,
   })
@@ -96,6 +115,9 @@ const globalThemeRuntime = createThemeRuntime({
   root: document.documentElement,
   getStoredThemeId: () => getConfig('theme'),
   persistThemeId: (themeId) => setConfig('theme', themeId),
+  publishTerminalColorProfile: typeof window !== 'undefined' && window.openforge
+    ? setTerminalColorProfile
+    : undefined,
   reportDiagnostic: recordThemeDiagnostic,
 })
 
@@ -103,6 +125,7 @@ export const themeRegistry = globalThemeRuntime.registry
 export const themeMode = globalThemeRuntime.themeMode
 export const availableThemes = themeRegistry.availableThemes
 export const selectedTheme = themeRegistry.selectedTheme
+export const terminalThemePresentation = globalThemeRuntime.terminalThemePresentation
 
 /** Legacy light/dark adapter retained while settings callers migrate to stable ids. */
 export function applyTheme(mode: ThemeMode): void {

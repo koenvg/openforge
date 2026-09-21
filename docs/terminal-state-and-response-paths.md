@@ -39,6 +39,24 @@ The built-in Terminal plugin requests view attachments from the same host-owned 
 
 Ghostty's `on_pty_write` replies go directly through the Shell Session Key and PTY-instance-scoped ordered writer. xterm discards any responses it generates while rendering the Ghostty-owned state, so a query has one response owner.
 
+## Terminal colour profile
+
+The selected application theme is the policy owner for terminal defaults. After the theme's tokens and optional plugin stylesheets are active, the renderer resolves the canvas, terminal foreground, background, cursor, and 16 ANSI colours through the browser's CSS engine. Transparent values are composited to opaque sRGB and normalized to a versioned RGB profile. The entire profile must resolve; otherwise selection falls back to OpenForge Light instead of publishing a partial palette.
+
+Theme commit ordering is deliberate:
+
+```text
+activate theme CSS and tokens
+  -> resolve one complete opaque RGB profile
+  -> persist it as the installation commit point
+  -> update every healthy live Ghostty authority
+  -> publish the matching Terminal Runtime presentation and selected theme
+```
+
+The Sidecar stores the last accepted profile in the installation daemon root. Once that durable write succeeds, later fanout failure cannot reject the selection and send the UI back to an older theme. Every healthy model still receives the update; a model that rejects it disables itself, and a disconnected Session Daemon receives the committed profile during reconciliation before a later spawn. The same commit updates the isolated legacy PTY manager path. Ghostty installs the profile before accepting child output. A live update is one ordered actor command per model; it changes defaults while retaining application OSC colour overrides. An OSC reset exposes the latest selected default.
+
+Terminal Runtime derives xterm's background, foreground, cursor, and core ANSI values from that same normalized profile. Changing the base xterm theme would otherwise clear xterm's local OSC overrides, so an attached view immediately recovers the Ghostty snapshot after the update. The Shell Session Key, PTY instance, Terminal Session, and attachment stay unchanged. A detached view is marked for the same recovery on its next attachment.
+
 ## Snapshot and reconnect
 
 `get_pty_buffer` returns a portable VT snapshot for a live Terminal Session containing:
@@ -50,6 +68,8 @@ Ghostty's `on_pty_write` replies go directly through the Shell Session Key and P
 - base64-encoded parser continuation, captured with the same watermark; empty continuation means parser ground
 
 Terminal Runtime registers transport listeners before requesting restoration. It applies bounded compatibility replay so xterm can reconstruct renderer-owned state such as inline images. A byte-oriented CAN then cancels unfinished replay parser/UTF-8 input before portable VT restores canonical presentation. The captured parser continuation is applied last, so subsequent live bytes can complete split escape sequences or UTF-8 characters. All three payloads belong to one actor-captured PTY instance and watermark. Terminal Runtime discards frames at or below that watermark and applies contiguous later frames. A sequence gap requests a fresh Ghostty snapshot rather than using OpenForge's raw PTY replay buffer as canonical state.
+
+Ghostty checkpoints retain the selected profile, all 256 effective palette entries, and application overrides. Portable VT recovery therefore restores the same query answers and presentation. Checkpoints written before the profile field existed use OpenForge Light.
 
 Completed Agent Sessions may still display persisted raw replay after their live Terminal Session has ended. That replay is historical presentation data and cannot generate a reply accepted by a PTY.
 

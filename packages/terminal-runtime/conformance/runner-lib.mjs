@@ -47,6 +47,50 @@ export function assertPresentation(recording, presentation) {
   }
 }
 
+function relativeLuminance(color) {
+  const channel = value => {
+    const normalized = value / 255
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+}
+
+function contrastRatio(first, second) {
+  const lighter = Math.max(relativeLuminance(first), relativeLuminance(second))
+  const darker = Math.min(relativeLuminance(first), relativeLuminance(second))
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function assertPaletteLine(presentation, phase) {
+  const cells = presentation.lines.flatMap(line => line.cells).filter(cell => /^[0-9A-F]$/.test(cell.text))
+  if (cells.length !== 16) throw new Error(`${phase}: expected 16 presented ANSI samples, found ${cells.length}`)
+  cells.forEach((cell, index) => {
+    if (cell.foreground.value !== index) {
+      throw new Error(`${phase}: ANSI sample ${index} used palette index ${cell.foreground.value}`)
+    }
+  })
+}
+
+export function assertTerminalColourProfileProbe(probe) {
+  if (probe.queryCount !== 19) throw new Error(`Codex startup batch contained ${probe.queryCount} colour queries`)
+  if (probe.inputEventsAfterQueries.length !== 0) {
+    throw new Error('xterm-generated colour replies escaped into PTY writes')
+  }
+  for (const [name, profile] of [
+    ['light', probe.lightProfile],
+    ['dark', probe.darkProfile],
+  ]) {
+    const distinctAnsi = new Set(profile.ansiColors.map(color => `${color.red},${color.green},${color.blue}`))
+    if (distinctAnsi.size < 12) throw new Error(`${name}: core ANSI colours are not sufficiently distinct`)
+    const contrast = contrastRatio(profile.foreground, profile.background)
+    if (contrast < 4.5) throw new Error(`${name}: foreground contrast ${contrast.toFixed(2)} is below 4.5`)
+  }
+  assertPaletteLine(probe.livePresentation, 'live profile switch')
+  assertPaletteLine(probe.recoveryPresentation, 'snapshot recovery')
+}
+
 export function assertTerminalScreenshotHasInk(screenshotBuffer, options) {
   const image = PNG.sync.read(screenshotBuffer)
   const inset = options.insetPixels ?? 0

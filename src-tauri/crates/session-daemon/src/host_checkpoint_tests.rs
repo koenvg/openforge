@@ -1,4 +1,5 @@
 use super::*;
+use openforge_session_host::TerminalRgbColor;
 use std::{
     collections::BTreeMap,
     time::{Duration, Instant},
@@ -14,6 +15,16 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
     };
     let mut host = Host::new(installation.clone(), runtime.clone()).unwrap();
     let controller = connect(&mut host, installation.clone());
+    let initial_profile = TerminalColorProfile {
+        foreground: TerminalRgbColor::new(17, 34, 51),
+        ..Default::default()
+    };
+    host.handle(Command::SetTerminalColorProfile {
+        controller: controller.clone(),
+        operation: OperationId::parse("profile-initial").unwrap(),
+        profile: initial_profile,
+    })
+    .unwrap();
     let command = ShellCommand {
         owner: TerminalOwner::Shell { task_id: "checkpoint".into(), index: Some(3) },
         command: PreparedCommand {
@@ -30,6 +41,28 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
     let Response::Spawned(session) = host.handle(spawn).unwrap() else {
         panic!("spawn response");
     };
+    assert_eq!(
+        host.backend.color_profiles().unwrap(),
+        (
+            initial_profile,
+            vec![(session.pty.clone(), initial_profile)]
+        )
+    );
+    let mut updated_profile = initial_profile;
+    updated_profile.background = TerminalRgbColor::new(68, 85, 102);
+    host.handle(Command::SetTerminalColorProfile {
+        controller: controller.clone(),
+        operation: OperationId::parse("profile-updated").unwrap(),
+        profile: updated_profile,
+    })
+    .unwrap();
+    assert_eq!(
+        host.backend.color_profiles().unwrap(),
+        (
+            updated_profile,
+            vec![(session.pty.clone(), updated_profile)]
+        )
+    );
     let input = Command::Io {
         controller: controller.clone(),
         operation: OperationId::parse("input").unwrap(),
@@ -72,6 +105,13 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
     let checkpoint = serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
     let mut restored = Host::restore(checkpoint, installation.clone(), runtime).unwrap();
     assert_eq!(
+        restored.backend.color_profiles().unwrap(),
+        (
+            updated_profile,
+            vec![(session.pty.clone(), updated_profile)]
+        )
+    );
+    assert_eq!(
         serde_json::to_value(lock(&restored.backend.journal).events(0).unwrap()).unwrap(),
         events
     );
@@ -88,6 +128,13 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
         Err(Error::StaleController)
     ));
     let current = connect(&mut restored, installation);
+    restored
+        .handle(Command::SetTerminalColorProfile {
+            controller: current.clone(),
+            operation: OperationId::parse("profile-updated").unwrap(),
+            profile: updated_profile,
+        })
+        .unwrap();
     let Response::Spawned(retried) = restored
         .handle(Command::Spawn {
             controller: current.clone(),
@@ -139,6 +186,37 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
         std::io::Error::last_os_error().raw_os_error(),
         Some(libc::ESRCH)
     );
+}
+
+#[test]
+fn backend_checkpoint_without_a_profile_restores_the_light_fallback() {
+    let root = tempfile::tempdir().unwrap();
+    let installation = InstallationId::parse("old-profile-checkpoint").unwrap();
+    let runtime = crate::agent_config::AgentRuntime {
+        directory: root.path().into(),
+        port: 1234,
+    };
+    let mut host = Host::new(installation.clone(), runtime.clone()).unwrap();
+    connect(&mut host, installation.clone());
+    let (checkpoint, pause) = host.checkpoint().unwrap();
+    let mut value = serde_json::to_value(checkpoint).unwrap();
+    value["backend"]
+        .as_object_mut()
+        .unwrap()
+        .remove("color_profile");
+
+    let restored = Host::restore(
+        serde_json::from_value(value).unwrap(),
+        installation,
+        runtime,
+    )
+    .unwrap();
+    assert_eq!(
+        restored.backend.color_profiles().unwrap(),
+        (TerminalColorProfile::default(), Vec::new())
+    );
+    drop(restored);
+    drop(pause);
 }
 fn connect(host: &mut Host, installation: InstallationId) -> Controller {
     let Response::Inventory(inventory) = host.handle(Command::Connect { installation }).unwrap()

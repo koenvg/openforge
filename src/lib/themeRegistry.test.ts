@@ -93,6 +93,25 @@ describe('theme registry', () => {
     expect(persistSelection).toHaveBeenCalledWith(DARK_THEME.id)
   })
 
+  it('commits a theme only after its prepared stylesheets are active', async () => {
+    let active = false
+    const commitTheme = vi.fn(async () => {
+      expect(active).toBe(true)
+    })
+    const registry = createThemeRegistry({
+      prepareTheme: vi.fn(async () => ({
+        activate: () => { active = true },
+        dispose: () => { active = false },
+      })),
+      commitTheme,
+    })
+
+    await registry.selectTheme(DARK_THEME.id)
+
+    expect(commitTheme).toHaveBeenCalledWith(expect.objectContaining({ id: DARK_THEME.id }))
+    expect(active).toBe(true)
+  })
+
   it('unregisters an inactive contribution without changing selection', async () => {
     const persistSelection = vi.fn(async () => undefined)
     const registry = createThemeRegistry({ persistSelection })

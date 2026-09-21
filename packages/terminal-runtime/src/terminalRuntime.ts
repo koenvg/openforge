@@ -21,7 +21,11 @@ import { applyTerminalFontSize } from './terminalFontSizePropagation'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import type { TerminalViewFactory } from './terminalView'
 import { createXtermTerminalView } from './xtermTerminalView'
-import { getTerminalThemeSnapshot, themePresentation as defaultThemePresentation } from './theme'
+import {
+  getTerminalThemeSnapshot,
+  getTerminalViewTheme,
+  themePresentation as defaultThemePresentation,
+} from './theme'
 
 export type { TerminalOutputObservation } from './terminalOutputObservation'
 export type { TerminalImageProtocol } from './terminalImages'
@@ -107,7 +111,7 @@ export function createTerminalRuntime({
         terminalKey: shellSessionKey,
         appearance: themeSnapshot.appearance,
         themeMode: themeSnapshot.appearance,
-        theme: themeSnapshot.terminalTheme,
+        theme: getTerminalViewTheme(themeSnapshot),
         fontFamily: get(activeFontFamily),
         fontSize: get(activeFontSize),
         openLink: url => environment.openLink(url),

@@ -16,7 +16,7 @@ it.each([
   const path = join(root, 'control.sock')
   const server = createServer(socket => {
     socket.once('data', () => {
-      const body = Buffer.from(JSON.stringify({ version: 3, body: { Err: failure } }))
+      const body = Buffer.from(JSON.stringify({ version: 4, body: { Err: failure } }))
       const header = Buffer.alloc(4)
       header.writeUInt32BE(body.length)
       socket.end(Buffer.concat([header, body]))

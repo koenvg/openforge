@@ -61,6 +61,7 @@ import {
   startCompanionPairing,
   setCompanionTailscaleHostname,
   setProcessMemoryHistoryEnabled,
+  setTerminalColorProfile,
   startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
@@ -301,6 +302,10 @@ describe("ipc spawnShellPty", () => {
 	});
 
 	it("keeps renderer PTY payloads aligned with the Rust decoder contract fixtures", async () => {
+		const profile = ptyFixture("set_terminal_color_profile", "set_terminal_color_profile");
+		await setTerminalColorProfile(profile.payload.profile as import('@openforge-app/terminal-runtime').TerminalColorProfile);
+		expect(invokeMock).toHaveBeenLastCalledWith(profile.command, profile.payload);
+
 		const spawnShell = ptyFixture("pty_spawn_shell", "spawn_shell_with_index");
 		await spawnShellPty("T-pty", "/tmp/openforge-worktree", 80, 24, 2);
 		expect(invokeMock).toHaveBeenLastCalledWith(spawnShell.command, spawnShell.payload);

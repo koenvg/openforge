@@ -13,6 +13,26 @@ impl Client {
     }
 }
 impl PtyHost for Client {
+    async fn set_terminal_color_profile(
+        &self,
+        controller: &Controller,
+        operation: OperationId,
+        profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        let response = self
+            .host_request(Command::SetTerminalColorProfile {
+                controller: controller.clone(),
+                operation,
+                profile,
+            })
+            .await?;
+        if matches!(response, Response::Done) {
+            Ok(())
+        } else {
+            Err(HostError::OutcomeUnknown)
+        }
+    }
+
     async fn connect(&self, installation: &InstallationId) -> Result<Connection, HostError> {
         let response = self
             .host_request(Command::Connect {

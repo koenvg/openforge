@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
+vi.mock('../ipc/terminal', () => ({ setTerminalColorProfile: vi.fn(async () => undefined) }))
 import {
   activatePlugin, appEnabledPluginIds, clearLoadedPluginMock, deactivatePluginById,
   deactivatePluginLoaderMock, disablePluginForApp, enabledPluginIds, get,

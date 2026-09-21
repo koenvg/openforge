@@ -1,6 +1,14 @@
 use super::super::TerminalModelOptions;
 use super::*;
+use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
 use std::sync::{Arc, Mutex};
+
+fn rgb_reply(color: TerminalRgbColor) -> String {
+    format!(
+        "rgb:{0:02x}{0:02x}/{1:02x}{1:02x}/{2:02x}{2:02x}",
+        color.red, color.green, color.blue
+    )
+}
 
 #[test]
 fn restored_continuation_tracks_only_the_current_sequence_after_ground_is_crossed() {
@@ -229,4 +237,117 @@ fn checkpoint_restores_parser_image_replay_and_output_position_without_replaying
         .unwrap()
         .iter()
         .all(|event| !matches!(event, TerminalModelEvent::ProtocolReply { .. })));
+}
+
+#[test]
+fn checkpoint_restores_profile_palette_overrides_and_parser_continuation() {
+    let initial = TerminalColorProfile {
+        foreground: TerminalRgbColor::new(17, 34, 51),
+        ..Default::default()
+    };
+    let (session, feeder) = TerminalModelSession::start_with_event_sink(
+        "profile-checkpoint".into(),
+        47,
+        TerminalModelOptions::new(80, 24).with_color_profile(initial),
+        Arc::new(|_| {}),
+    )
+    .unwrap();
+    feeder.feed(b"\x1b]10;#010203\x07\x1b]4;7;#0a0b0c\x07\x1b[31");
+    let mut updated = initial;
+    updated.background = TerminalRgbColor::new(68, 85, 102);
+    updated.cursor = TerminalRgbColor::new(119, 136, 153);
+    updated.ansi_colors[1] = TerminalRgbColor::new(170, 187, 204);
+    session.update_color_profile(updated).unwrap();
+    let saved = session.checkpoint().unwrap();
+    drop(session);
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&events);
+    let (resumed, feeder) = TerminalModelSession::restore_with_event_sink(
+        "profile-checkpoint".into(),
+        saved,
+        Arc::new(move |event| observed.lock().unwrap().push(event)),
+    )
+    .unwrap();
+    let mut queries = b"m\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07".to_vec();
+    for index in 0..=255 {
+        queries.extend_from_slice(format!("\x1b]4;{index};?\x07").as_bytes());
+    }
+    feeder.feed(&queries);
+    let snapshot = resumed.portable_snapshot().unwrap();
+    assert!(snapshot.continuation.is_empty());
+
+    let replies = events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event {
+            TerminalModelEvent::ProtocolReply { bytes, .. } => {
+                Some(String::from_utf8_lossy(bytes).into_owned())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(replies.len(), 259);
+    assert!(replies[0].contains(&rgb_reply(TerminalRgbColor::new(1, 2, 3))));
+    assert!(replies[1].contains(&rgb_reply(updated.background)));
+    assert!(replies[2].contains(&rgb_reply(updated.cursor)));
+
+    let mut expected_palette = updated.xterm_palette();
+    expected_palette[7] = TerminalRgbColor::new(10, 11, 12);
+    for (index, color) in expected_palette.into_iter().enumerate() {
+        assert!(
+            replies[index + 3].contains(&format!("4;{index};{}", rgb_reply(color))),
+            "palette reply {index} did not contain the restored colour"
+        );
+    }
+}
+
+#[test]
+fn checkpoint_without_profile_uses_light_defaults_without_clearing_overrides() {
+    let old_profile = TerminalColorProfile {
+        background: TerminalRgbColor::new(1, 2, 3),
+        ..Default::default()
+    };
+    let (session, feeder) = TerminalModelSession::start_with_event_sink(
+        "old-profile-checkpoint".into(),
+        48,
+        TerminalModelOptions::new(80, 24).with_color_profile(old_profile),
+        Arc::new(|_| {}),
+    )
+    .unwrap();
+    feeder.feed(b"\x1b]10;#0a0b0c\x07");
+    let mut saved = serde_json::to_value(session.checkpoint().unwrap()).unwrap();
+    saved
+        .as_object_mut()
+        .expect("checkpoint should serialize as an object")
+        .remove("colorProfile");
+    drop(session);
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&events);
+    let checkpoint = serde_json::from_value(saved).unwrap();
+    let (resumed, feeder) = TerminalModelSession::restore_with_event_sink(
+        "old-profile-checkpoint".into(),
+        checkpoint,
+        Arc::new(move |event| observed.lock().unwrap().push(event)),
+    )
+    .unwrap();
+    feeder.feed(b"\x1b]10;?\x07\x1b]11;?\x07");
+    resumed.portable_snapshot().unwrap();
+
+    let replies = events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event {
+            TerminalModelEvent::ProtocolReply { bytes, .. } => {
+                Some(String::from_utf8_lossy(bytes).into_owned())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(replies.len(), 2);
+    assert!(replies[0].contains(&rgb_reply(TerminalRgbColor::new(10, 11, 12))));
+    assert!(replies[1].contains(&rgb_reply(TerminalColorProfile::default().background)));
 }

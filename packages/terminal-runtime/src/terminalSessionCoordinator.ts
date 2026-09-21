@@ -223,6 +223,25 @@ export function createTerminalSessionCoordinator({
     attachment.refresh()
   }
 
+  function setTheme(theme: TerminalViewTheme): void {
+    view.setTheme(theme)
+    if (!attachment.isActive()) {
+      attachment.markNeedsRecovery()
+      return
+    }
+
+    const recoveryWasPending = authority.isRecoveryPending()
+    void authority.recoverFromAuthority()
+      .then(() => recoveryWasPending ? authority.recoverFromAuthority() : undefined)
+      .catch(error => {
+        attachment.markNeedsRecovery()
+        console.error(terminalLogMessage(
+          environment.loggerName,
+          'failed to reapply authoritative terminal colours after a theme change:',
+        ), error)
+      })
+  }
+
   function diagnostics(): TerminalSessionDiagnostics {
     const lifecycle = pty.getLifecycleState()
     const viewDiagnostics = attachment.diagnostics()
@@ -270,7 +289,7 @@ export function createTerminalSessionCoordinator({
     resetPresentation: () => view.replaceSnapshot({ data: '', ptyInstanceId: null, sequence: 0 }),
     focus: () => attachment.focus(),
     refresh: () => attachment.refresh(),
-    setTheme: theme => view.setTheme(theme),
+    setTheme,
     setFontFamily: fontFamily => view.setFontFamily(fontFamily),
     setFontSize: fontSize => view.setFontSize(fontSize),
     diagnostics,

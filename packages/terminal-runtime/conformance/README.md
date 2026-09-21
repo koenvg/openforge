@@ -34,6 +34,8 @@ The semantic matrix runs through both an Agent Terminal and a Terminal plugin sh
 - cursor presentation, OSC 8 links, and alternate-screen state
 - resize and reflow, detach and reattach, and reconnect bootstrap
 - device-pixel ratios 1 and 2, with dark and light themes
+- renderer filtering for a Codex-shaped batch of foreground, background, cursor, and 16 ANSI colour queries, plus live palette switching and snapshot recovery
+- native replies to that 19-query batch through a live PTY across light, dark, and contributed profiles, with the same PTY identity before and after recovery
 - keyboard, SGR mouse input, selection, and Chromium IME composition
 
 `TerminalView.capturePresentation()` supplies deterministic, renderer-neutral rows and cells. Text, cell widths, styles, buffer choice, and selection are asserted as data. `TerminalView.drainPresentation()` resolves only after queued writes parse, xterm reports a renderer frame, and two browser animation frames let the compositor present it. Throughput, first interaction, recovery, and screenshot timings all stop at that drain evidence rather than at `writeLive()` enqueue.

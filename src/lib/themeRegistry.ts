@@ -47,6 +47,8 @@ export interface ThemePreparation {
 interface ThemeRegistryOptions {
   prepareTheme?: (theme: RegisteredTheme, signal: AbortSignal) => Promise<ThemePreparation>
   applyTheme?: (theme: RegisteredTheme) => void | Promise<void>
+  commitTheme?: (theme: RegisteredTheme) => void | Promise<void>
+  isUnavailableThemeError?: (error: unknown) => boolean
   persistSelection?: (themeId: string) => void | Promise<void>
   reportDiagnostic?: (diagnostic: ThemeDiagnostic) => void
 }
@@ -109,6 +111,16 @@ export function createThemeRegistry(options: ThemeRegistryOptions = {}) {
     const applied = options.applyTheme?.(theme)
     if (applied) await applied
     prepared?.activate()
+    try {
+      const committed = options.commitTheme?.(theme)
+      if (committed) await committed
+    } catch (error) {
+      prepared?.dispose()
+      const current = get(snapshotStore).selectedTheme
+      const restored = options.applyTheme?.(current)
+      if (restored) await restored
+      throw error
+    }
     activePreparation?.dispose()
     activePreparation = prepared
     publish(theme)
@@ -132,11 +144,26 @@ export function createThemeRegistry(options: ThemeRegistryOptions = {}) {
           prepared?.dispose()
           return get(snapshotStore).selectedTheme
         }
-        await applySelection(selected, prepared)
-        prepared = undefined // Ownership transferred to the active selection.
+        let committed = selected
+        try {
+          await applySelection(selected, prepared)
+          prepared = undefined // Ownership transferred to the active selection.
+        } catch (error) {
+          prepared = undefined // Failed selection disposed its preparation.
+          if (selected === fallbackTheme || !options.isUnavailableThemeError?.(error)) throw error
+          activePreparation?.dispose()
+          activePreparation = undefined
+          const applied = options.applyTheme?.(fallbackTheme)
+          if (applied) await applied
+          const fallbackCommitted = options.commitTheme?.(fallbackTheme)
+          if (fallbackCommitted) await fallbackCommitted
+          publish(fallbackTheme)
+          reportUnavailable(themeId, 'invalid-or-unavailable')
+          committed = fallbackTheme
+        }
         if (!requested) reportUnavailable(themeId, 'invalid-or-unavailable')
-        await options.persistSelection?.(selected.id)
-        return selected
+        await options.persistSelection?.(committed.id)
+        return committed
       })
     } catch (error) {
       prepared?.dispose()
@@ -188,6 +215,8 @@ export function createThemeRegistry(options: ThemeRegistryOptions = {}) {
           if (applied) await applied
           activePreparation?.dispose()
           activePreparation = undefined
+          const committed = options.commitTheme?.(fallbackTheme)
+          if (committed) await committed
         }
         let changed = false
         for (const registered of registrations) {

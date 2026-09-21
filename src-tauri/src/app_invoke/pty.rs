@@ -1,6 +1,6 @@
 use super::pty_payload::{
     PtyE2eFixtureOutputPayload, PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload,
-    PtyTaskPayload, PtyWritePayload,
+    PtyTaskPayload, PtyWritePayload, TerminalColorProfilePayload,
 };
 use super::*;
 use serde::Serialize;
@@ -132,6 +132,14 @@ pub(super) async fn handle_app_pty_command(
     }
 
     let value = match request.command.as_str() {
+        "set_terminal_color_profile" => {
+            let payload = TerminalColorProfilePayload::decode(&request.command, &request.payload)?;
+            pty_manager
+                .set_terminal_color_profile(payload.profile)
+                .await
+                .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            serde_json::Value::Null
+        }
         "pty_spawn_shell" => {
             let app = state.app.clone();
             let payload = PtySpawnShellPayload::decode(&request.command, &request.payload)?;

@@ -7,6 +7,7 @@ export const desktopIpcFunctionDomains = {
   controlledRestart: 'app-shell',
   restartApp: 'app-shell',
   getRestartTerminalInventory: 'agent-session-pty',
+  setTerminalColorProfile: 'agent-session-pty',
   createTask: 'tasks-projects',
   updateTaskInitialPrompt: 'tasks-projects',
   updateTaskTitle: 'tasks-projects',

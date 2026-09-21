@@ -7,6 +7,7 @@ use super::{PtyBufferState, TerminalViewSnapshot};
 use crate::app_events::RuntimeEventPublisher;
 use base64::Engine;
 use openforge_session_client::Client;
+use openforge_session_host::TerminalColorProfile;
 use openforge_session_protocol::{Error, Session, ShellCommand};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,9 +41,20 @@ impl Selection {
 
 impl PtyManager {
     pub(crate) fn enable_installation_daemon(&mut self, root: PathBuf, executable: PathBuf) {
+        let profile_path = super::terminal_color_profile::path(&root);
+        let profile = super::terminal_color_profile::load(&profile_path);
+        *self
+            .terminal_color_profile
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = profile;
+        *self
+            .terminal_color_profile_path
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(profile_path);
         self.daemon_shells = Some(DaemonShells::from_selection(
             root,
             executable,
+            Arc::clone(&self.terminal_color_profile),
             Selection {
                 shell_key: "*".into(),
                 agent_keys: Default::default(),
@@ -55,7 +67,12 @@ impl PtyManager {
 #[cfg(test)]
 impl PtyManager {
     pub(crate) fn enable_daemon_shell(&mut self, root: PathBuf, executable: PathBuf, key: String) {
-        self.daemon_shells = Some(DaemonShells::new(root, executable, key));
+        self.daemon_shells = Some(DaemonShells::new(
+            root,
+            executable,
+            key,
+            Arc::clone(&self.terminal_color_profile),
+        ));
     }
     pub(crate) fn enable_daemon_pi(&mut self, root: PathBuf, executable: PathBuf, key: String) {
         self.daemon_shells = Some(DaemonShells::with_selection(
@@ -63,6 +80,7 @@ impl PtyManager {
             executable,
             String::new(),
             [(key, "pi".into())].into(),
+            Arc::clone(&self.terminal_color_profile),
         ));
     }
 }
@@ -75,8 +93,13 @@ impl DaemonShells {
         self.transport.configure_completion(discovery);
     }
     #[cfg(test)]
-    pub(crate) fn new(root: PathBuf, executable: PathBuf, key: String) -> Self {
-        Self::with_selection(root, executable, key, Default::default())
+    pub(crate) fn new(
+        root: PathBuf,
+        executable: PathBuf,
+        key: String,
+        color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
+    ) -> Self {
+        Self::with_selection(root, executable, key, Default::default(), color_profile)
     }
 
     fn with_selection(
@@ -84,10 +107,12 @@ impl DaemonShells {
         executable: PathBuf,
         key: String,
         agent_keys: std::collections::BTreeMap<String, String>,
+        color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
     ) -> Self {
         Self::from_selection(
             root,
             executable,
+            color_profile,
             Selection {
                 shell_key: key,
                 agent_keys,
@@ -96,18 +121,27 @@ impl DaemonShells {
         )
     }
 
-    fn from_selection(root: PathBuf, executable: PathBuf, selection: Selection) -> Self {
+    fn from_selection(
+        root: PathBuf,
+        executable: PathBuf,
+        color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
+        selection: Selection,
+    ) -> Self {
         let selection = Arc::new(selection);
         let event_selection = Arc::clone(&selection);
         Self {
-            transport: DaemonTransport::new(root, executable, move |key| event_selection.owns(key)),
+            transport: DaemonTransport::new(root, executable, color_profile, move |key| {
+                event_selection.owns(key)
+            }),
             selection,
             key: None,
             fence: None,
         }
     }
 
-    pub(super) fn from_environment() -> Option<Self> {
+    pub(super) fn from_environment(
+        color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
+    ) -> Option<Self> {
         if !cfg!(debug_assertions) || std::env::var("OPENFORGE_E2E").as_deref() != Ok("1") {
             return None;
         }
@@ -132,7 +166,19 @@ impl DaemonShells {
             std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH")?.into(),
             key,
             agent_keys,
+            color_profile,
         ))
+    }
+
+    pub(crate) async fn publish_color_profile(
+        &self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), String> {
+        let operation = format!("terminal-profile-{}", uuid::Uuid::new_v4());
+        self.run(self.publisher(), move |client, _| {
+            super::daemon_transport::publish_color_profile(client, &operation, profile)
+        })
+        .await
     }
 
     pub(super) fn configure_pr_discovery(

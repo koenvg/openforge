@@ -9,12 +9,16 @@ pub use io::{ControllerFence, HostAttachment};
 mod operation_window;
 pub use operation_window::OperationWindow;
 mod state;
+mod terminal_color_profile;
 mod types;
 pub use backend::{
     BackendAttachment, BackendOutput, BackendOutputStream, BackendSession, HostBackend,
 };
 pub use identity::*;
 pub use state::{HostState, MAX_HOST_CHECKPOINT_BYTES};
+pub use terminal_color_profile::{
+    TerminalColorProfile, TerminalRgbColor, TERMINAL_COLOR_PROFILE_VERSION,
+};
 pub use types::*;
 
 use state::{Mutation, Receipt};
@@ -32,6 +36,12 @@ pub trait PtyHost: Send + Sync {
         &self,
         controller: &Controller,
     ) -> impl Future<Output = Result<Vec<HostedSession>, HostError>> + Send;
+    fn set_terminal_color_profile(
+        &self,
+        controller: &Controller,
+        operation: OperationId,
+        profile: TerminalColorProfile,
+    ) -> impl Future<Output = Result<(), HostError>> + Send;
     fn spawn(
         &self,
         controller: &Controller,
@@ -91,6 +101,34 @@ impl<B> InProcessHost<B> {
 }
 
 impl<B: HostBackend> PtyHost for InProcessHost<B> {
+    async fn set_terminal_color_profile(
+        &self,
+        controller: &Controller,
+        operation: OperationId,
+        profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        profile.validate()?;
+        let mut state = Arc::clone(&self.state).lock_owned().await;
+        self.validate(&state, controller)?;
+        let mutation = Mutation::SetTerminalColorProfile(profile);
+        if state.retry(&operation, &mutation)?.is_some() {
+            return Ok(());
+        }
+        state.begin(
+            operation.clone(),
+            mutation,
+            std::mem::size_of::<TerminalColorProfile>(),
+        )?;
+        let backend = self.backend.clone();
+        tokio::spawn(async move {
+            let result = backend.set_terminal_color_profile(profile).await;
+            state.finish(&operation, result.clone().map(|()| Receipt::Done));
+            result
+        })
+        .await
+        .map_err(|_| HostError::OutcomeUnknown)?
+    }
+
     async fn attach_recover(
         &self,
         controller: &Controller,

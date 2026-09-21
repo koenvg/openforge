@@ -1,4 +1,3 @@
-import { derived } from 'svelte/store'
 import {
   createTerminalRuntime,
   createTerminalSessionService,
@@ -16,8 +15,7 @@ import {
 import { openUrl } from './ipc'
 import { terminalFontFamily } from './terminalFont'
 import { terminalFontSize } from './terminalFontSize'
-import { selectedTheme } from './theme'
-import { createTerminalThemeSnapshot } from './terminalThemePresentation'
+import { terminalThemePresentation } from './theme'
 import { notifySessionMessageSent } from './openAttentionOnSessionSubmit'
 
 export const reconcileRestartTerminalInventory = restartTerminalControl.reconcile
@@ -34,8 +32,6 @@ const transport = createDesktopTerminalTransport({
   afterReadReplay: checkpointTerminalAuthorityRead,
   beforeConnectionRestored: restartTerminalControl.reconnect,
 })
-
-const terminalThemePresentation = derived(selectedTheme, createTerminalThemeSnapshot)
 
 const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
   sampleSessionConfiguration: () => ({ renderer: 'xterm' }),

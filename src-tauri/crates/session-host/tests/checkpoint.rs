@@ -10,6 +10,13 @@ struct ResourceState {
     next: u64,
 }
 impl HostBackend for Resources {
+    async fn set_terminal_color_profile(
+        &self,
+        _profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+
     async fn inventory(&self) -> Result<Vec<BackendSession>, HostError> {
         Ok(self
             .0
