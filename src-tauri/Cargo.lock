@@ -1756,6 +1756,7 @@ dependencies = [
  "libc",
  "openforge-session-host",
  "openforge-session-protocol",
+ "ring",
  "serde",
  "serde_json",
  "sha2",

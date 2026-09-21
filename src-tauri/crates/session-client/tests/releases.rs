@@ -188,3 +188,162 @@ fn current_and_recovery_versions_coexist_until_their_independent_references_comp
     assert_eq!(store.cleanup(&runtime).unwrap(), vec![old]);
     assert!(current.executable().exists());
 }
+
+#[test]
+fn published_staging_rejects_a_manifest_signed_by_an_untrusted_publisher() {
+    use openforge_session_client::releases::PublisherTrust;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+
+    let root = tempfile::tempdir().unwrap();
+    let runtime = RuntimeDirectory::open(root.path()).unwrap();
+    let store = ReleaseStore::open(&runtime).unwrap();
+    let source = bundle();
+    let signer = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
+    let trusted = Ed25519KeyPair::from_seed_unchecked(&[8; 32]).unwrap();
+    let trust =
+        PublisherTrust::new(vec![trusted.public_key().as_ref().try_into().unwrap()]).unwrap();
+    let manifest = fs::read(source.path().join("manifest.json")).unwrap();
+    let mut message = b"openforge-session-release-v1\0".to_vec();
+    message.extend_from_slice(&manifest);
+    let signature = signer.sign(&message);
+
+    assert!(store
+        .stage_published(source.path(), &trust, signature.as_ref())
+        .is_err());
+    let entries: Vec<_> = fs::read_dir(runtime.path().join("releases"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(entries, vec!["owner"]);
+}
+
+#[test]
+fn published_staging_accepts_an_independently_signed_manifest_without_enabling_replacement() {
+    use openforge_session_client::releases::PublisherTrust;
+
+    // Node's crypto.sign generated these Ed25519 vectors with test seed [7; 32].
+    // These keys are fixtures, never installed publisher configuration.
+    let public_key = hex_bytes("ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c");
+    let (signature, expected_id) = match std::env::consts::ARCH {
+        "aarch64" => (
+            "868ba7030830688532c93180c990275a5403cc4bf1d7b7f59b57d642dba1cbd1c139efecfbe63e5a4daf7c0264e7302a3e544dba7c5a8de214bc138716b17f06",
+            "8e11fe11a2d2ccb8b2737cfa2fe3d9935f12f73c6ffe1152969623845b72480b",
+        ),
+        "x86_64" => (
+            "796230561f47e2e0b8dd76456ae9323f37ae765ea73dd39eb2d6fa50ef8348307d1e17b17e2e6e2e6cbc97e5e71675470106149e6ad9ded30dfc18faef9ad00d",
+            "0b5e2063102271ab9dc2824286a9bd1c88bbe286774f20005e0b29b0dd0126cd",
+        ),
+        _ => return,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let runtime = RuntimeDirectory::open(root.path()).unwrap();
+    let store = ReleaseStore::open(&runtime).unwrap();
+    let source = bundle();
+    let trust = PublisherTrust::new(vec![public_key.try_into().unwrap()]).unwrap();
+    let release = store
+        .stage_published(source.path(), &trust, &hex_bytes(signature))
+        .unwrap();
+
+    assert_eq!(release.id(), expected_id);
+    drop(source);
+    assert_eq!(fs::read(release.executable()).unwrap(), b"daemon");
+    assert!(store.preflight(&runtime, &release, Some(&release)).is_err());
+}
+
+fn hex_bytes(value: &str) -> Vec<u8> {
+    value
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn published_staging_never_downgrades_missing_or_invalid_signatures_to_integrity_only() {
+    use openforge_session_client::releases::PublisherTrust;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+
+    let signer = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
+    let trust =
+        PublisherTrust::new(vec![signer.public_key().as_ref().try_into().unwrap()]).unwrap();
+    for variant in [
+        "missing",
+        "truncated",
+        "corrupt-signature",
+        "wrong-context",
+        "changed-manifest",
+        "changed-file",
+        "changed-cache",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = RuntimeDirectory::open(root.path()).unwrap();
+        let store = ReleaseStore::open(&runtime).unwrap();
+        let source = bundle();
+        let manifest_path = source.path().join("manifest.json");
+        let manifest = fs::read(&manifest_path).unwrap();
+        let mut message = b"openforge-session-release-v1\0".to_vec();
+        message.extend_from_slice(&manifest);
+        let mut signature = signer.sign(&message).as_ref().to_vec();
+        match variant {
+            "missing" => signature.clear(),
+            "truncated" => {
+                signature.pop();
+            }
+            "corrupt-signature" => signature[0] ^= 1,
+            "wrong-context" => signature = signer.sign(&manifest).as_ref().to_vec(),
+            "changed-manifest" => {
+                let mut changed = manifest.clone();
+                changed.push(b' ');
+                fs::write(&manifest_path, changed).unwrap();
+            }
+            "changed-file" => fs::write(source.path().join("hook.js"), b"tampered").unwrap(),
+            "changed-cache" => {
+                let release = store
+                    .stage_published(source.path(), &trust, &signature)
+                    .unwrap();
+                fs::set_permissions(release.executable(), fs::Permissions::from_mode(0o700))
+                    .unwrap();
+                fs::write(release.executable(), b"tampered").unwrap();
+                fs::set_permissions(release.executable(), fs::Permissions::from_mode(0o500))
+                    .unwrap();
+            }
+            _ => unreachable!(),
+        }
+        assert!(
+            store
+                .stage_published(source.path(), &trust, &signature)
+                .is_err(),
+            "{variant}"
+        );
+    }
+}
+
+#[test]
+fn published_staging_accepts_rotated_pinned_keys_but_requires_a_configured_trust_root() {
+    use openforge_session_client::releases::PublisherTrust;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+
+    assert!(PublisherTrust::new(vec![]).is_err());
+    assert!(PublisherTrust::new(vec![[0; 32]; 17]).is_err());
+    let previous = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
+    let current = Ed25519KeyPair::from_seed_unchecked(&[8; 32]).unwrap();
+    let trust = PublisherTrust::new(vec![
+        previous.public_key().as_ref().try_into().unwrap(),
+        current.public_key().as_ref().try_into().unwrap(),
+    ])
+    .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let runtime = RuntimeDirectory::open(root.path()).unwrap();
+    let store = ReleaseStore::open(&runtime).unwrap();
+    let source = bundle();
+    let mut message = b"openforge-session-release-v1\0".to_vec();
+    message.extend_from_slice(&fs::read(source.path().join("manifest.json")).unwrap());
+    for signer in [&previous, &current] {
+        let release = store
+            .stage_published(source.path(), &trust, signer.sign(&message).as_ref())
+            .unwrap();
+        assert_eq!(fs::read(release.executable()).unwrap(), b"daemon");
+    }
+}
