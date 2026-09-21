@@ -197,7 +197,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'))
 
-    await packageElectronApp({ repoRoot: root })
+    await packageElectronApp({ repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'] })
 
     await expect(stat(join(output, 'Contents/MacOS/Alternate Forge'))).resolves.toBeTruthy()
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
@@ -277,6 +277,24 @@ describe('Electron macOS packaging helpers', () => {
     expect(expectedDarwinArchForTarget('x86_64-apple-darwin')).toBe('x86_64')
     expect(expectedDarwinArchForTarget('')).toBe(null)
   })
+  it('checks daemon architecture for native builds without an explicit Rust target', async () => {
+    await expect(assertPackageArchitectureCompatibility({
+      appExecutablePath: '/app/Open Forge', sidecarPath: '/app/sidecar', daemonPath: '/app/daemon',
+      readExecutableArchitectures: async path => path.endsWith('/daemon') ? [] : ['arm64', 'x86_64'],
+    })).rejects.toThrow(/Session Daemon architecture/)
+  })
+
+  it.each(['aarch64-apple-darwin', 'x86_64-apple-darwin'])('rejects a mismatched daemon in a %s package', async cargoBuildTarget => {
+    const expected = expectedDarwinArchForTarget(cargoBuildTarget)
+    await expect(assertPackageArchitectureCompatibility({
+      cargoBuildTarget,
+      appExecutablePath: '/app/Open Forge',
+      sidecarPath: '/app/openforge-sidecar',
+      daemonPath: '/app/openforge-session-daemon',
+      readExecutableArchitectures: async path => path.endsWith('session-daemon') ? [] : [expected],
+    })).rejects.toThrow(/Session Daemon architecture/)
+  })
+
 
   it('rejects target packages whose Electron runtime architecture does not match the Rust sidecar', async () => {
     await expect(assertPackageArchitectureCompatibility({
@@ -407,6 +425,7 @@ describe('Electron macOS packaging helpers', () => {
 
     await packageElectronApp({
       repoRoot: root,
+      readExecutableArchitectures: async () => ['arm64', 'x86_64'],
       hydrateElectronTemplate: async ({ electronPackageRoot, electronTemplatePath }) => {
         hydrateCalls.push({ electronPackageRoot, electronTemplatePath })
         await mkdir(join(template, 'Contents/MacOS'), { recursive: true })
@@ -460,7 +479,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-skill.md'), 'configured openforge skill docs\n')
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-plugin-dev-skill.md'), 'configured openforge plugin dev skill docs\n')
 
-    await packageElectronApp({ repoRoot: root })
+    await packageElectronApp({ repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'] })
 
     const output = electronBundlePath(root)
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('configured openforge cli')
@@ -523,7 +542,7 @@ describe('Electron macOS packaging helpers', () => {
 
     await expect(readBuiltinPluginCatalog(root)).resolves.toEqual(builtInPluginCatalog)
 
-    await packageElectronApp({ repoRoot: root })
+    await packageElectronApp({ repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'] })
     const packagedElectronMain = await import(pathToFileURL(
       join(output, 'Contents/Resources/app/dist-electron/main.js'),
     ).href)
@@ -533,6 +552,11 @@ describe('Electron macOS packaging helpers', () => {
     const daemonPath = join(output, 'Contents/MacOS/openforge-session-daemon')
     await expect(readFile(daemonPath, 'utf8')).resolves.toContain('echo daemon')
     expect((await stat(daemonPath)).mode & 0o111).toBe(0o111)
+    const runtimeDir = join(output, 'Contents/MacOS/session-runtime')
+    const releaseManifest = JSON.parse(await readFile(join(runtimeDir, 'manifest.json'), 'utf8'))
+    expect(releaseManifest.files.some(file => file.path === 'openforge-session-daemon')).toBe(true)
+    expect(releaseManifest.files.some(file => file.path.startsWith('openforge-cli/'))).toBe(true)
+    await expect(readFile(join(runtimeDir, 'openforge-session-daemon'), 'utf8')).resolves.toContain('echo daemon')
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
     for (const { directoryName } of builtInPluginCatalog) {

@@ -4,6 +4,7 @@ mod host;
 mod operations;
 mod output;
 mod recovery;
+pub mod releases;
 mod replacement;
 pub mod runtime;
 use openforge_session_protocol::*;
@@ -45,7 +46,25 @@ impl Client {
         // A live owner can be temporarily unreachable during exec or startup.
         // Only the daemon's lifetime lock can establish that no owner exists.
         drop(runtime.claim()?);
-        let mut command = std::process::Command::new(executable);
+        // Keep the staged lease until the detached daemon has claimed ownership.
+        // Reattachment above intentionally does not need the replaced app bundle.
+        let staged = match executable.parent() {
+            Some(source)
+                if source
+                    .file_name()
+                    .is_some_and(|name| name == "session-runtime") =>
+            {
+                let store = releases::ReleaseStore::open(&runtime)?;
+                let release = store.stage(source)?;
+                // Keep launch intent across a launcher crash or incomplete restart.
+                // Explicit completion may release this pin only after daemon exit.
+                store.retain(&release, &format!("session-{}", release.id()))?;
+                Some(release)
+            }
+            _ => None,
+        };
+        let launch_path = staged.as_ref().map(|release| release.executable());
+        let mut command = std::process::Command::new(launch_path.as_deref().unwrap_or(executable));
         command
             .arg(root)
             .env_clear()

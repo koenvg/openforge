@@ -259,7 +259,12 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     {
         let executable = match std::env::var_os("OPENFORGE_SESSION_DAEMON_PATH") {
             Some(path) => PathBuf::from(path),
-            None => std::env::current_exe()?.with_file_name("openforge-session-daemon"),
+            None if cfg!(debug_assertions) => {
+                std::env::current_exe()?.with_file_name("openforge-session-daemon")
+            }
+            None => std::env::current_exe()?
+                .with_file_name("session-runtime")
+                .join("openforge-session-daemon"),
         };
         let root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
             .map(PathBuf::from)

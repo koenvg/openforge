@@ -14,6 +14,7 @@ import {
   waitForPlaywrightPage,
 } from './electron-process.mjs'
 import { APP_NAME, electronBundlePath } from './electron-package.mjs'
+import { createDaemonOwnershipRegistry } from './desktop-test/daemon-ownership.mjs'
 
 export const DEFAULT_SMOKE_TIMEOUT_MS = 45_000
 export const DEFAULT_INVOKE_TIMEOUT_MS = 20_000
@@ -262,6 +263,7 @@ export async function runPackagedElectronSmoke({
 
   // macOS temporary paths can exceed the daemon's Unix socket path limit.
   const runtimeRoot = await mkdtemp(join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'of-packaged-smoke-'))
+  const daemonOwnership = await createDaemonOwnershipRegistry({ mode: 'isolated', runRoot: runtimeRoot })
   const port = debugPort ?? await allocateLoopbackPort()
   const backendPort = await allocateLoopbackPort()
   const env = createPackagedSmokeEnv({ runtimeRoot, backendPort })
@@ -304,6 +306,9 @@ export async function runPackagedElectronSmoke({
     await closeElectronGracefully(browser, child)
     await stopChild(child)
     await browser?.close().catch(() => {})
+    // Detached owners are outside Electron's process tree. Refuse directory deletion
+    // if authenticated descendant teardown or daemon exit cannot be established.
+    await daemonOwnership.cleanup()
     if (!keepRuntimeDirs) {
       await rm(runtimeRoot, { recursive: true, force: true })
     } else {

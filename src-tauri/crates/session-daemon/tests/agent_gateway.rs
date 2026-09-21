@@ -178,14 +178,48 @@ fn sidecar_response(
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
-        let mut bytes = [0; 8192];
-        let count = stream.read(&mut bytes).unwrap();
-        let headers = String::from_utf8_lossy(&bytes[..count]).to_ascii_lowercase();
+        let mut bytes = Vec::new();
+        while !bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+            let mut chunk = [0; 1024];
+            let count = stream.read(&mut chunk).unwrap();
+            assert!(count > 0, "mock Sidecar request ended before its headers");
+            bytes.extend_from_slice(&chunk[..count]);
+            assert!(
+                bytes.len() <= 8192,
+                "mock Sidecar headers exceed fixture limit"
+            );
+        }
+        let headers = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
         assert!(headers.contains("authorization: bearer private-sidecar-token"));
         assert!(headers.contains("x-openforge-agent-task: t-fixture"));
         write!(stream, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
     });
     (endpoint, thread)
+}
+
+#[test]
+fn mock_sidecar_waits_for_delayed_fragmented_request_headers() {
+    let (endpoint, served) = sidecar("{\"ok\":true}");
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", endpoint.port)).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    // Accept must be safe before the sender supplies any bytes, including on macOS
+    // where an accepted socket can inherit the listener's nonblocking mode.
+    std::thread::sleep(Duration::from_millis(100));
+    for part in [
+        "GET /projects HTTP/1.1\r\nHost: 127.0.0.1\r\n",
+        "Authorization: Bearer private-sidecar-token\r\n",
+        "X-OpenForge-Agent-Task: T-fixture\r\nConnection: close\r\n\r\n",
+    ] {
+        stream.write_all(part.as_bytes()).unwrap();
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    served.join().unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(response.ends_with("{\"ok\":true}"));
 }
 
 #[test]
@@ -293,6 +327,7 @@ fn notification_is_accepted_during_outage_and_duplicate_keeps_its_position() {
                 Err(error) => panic!("{error}"),
             }
         };
+        stream.set_nonblocking(false).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
