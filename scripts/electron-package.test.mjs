@@ -1,7 +1,7 @@
 import { mkdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   APP_NAME,
   ELECTRON_APP_PACKAGE_NAME,
@@ -158,6 +158,13 @@ async function writeAlternateDataIdentityManifest(repoRoot) {
 }
 
 describe('Electron macOS packaging helpers', () => {
+  beforeEach(() => {
+    vi.stubEnv('CARGO_BUILD_TARGET', '')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('places the Electron install bundle in the existing release bundle tree', () => {
     expect(resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig }).electronAppPath).toBe('/repo/src-tauri/target/release/bundle/electron/macos/Open Forge.app')
   })
