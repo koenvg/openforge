@@ -625,9 +625,13 @@ mod tests {
         }
         std::os::unix::fs::symlink(&actual_config, &configured_link).expect("configuration link");
 
-        let profile =
-            macos_sandbox_profile(&workspace, &scoped_state, &[configured_link.clone()], &home)
-                .expect("sandbox profile");
+        let profile = macos_sandbox_profile(
+            &workspace,
+            &scoped_state,
+            std::slice::from_ref(&configured_link),
+            &home,
+        )
+        .expect("sandbox profile");
 
         assert!(profile.contains(&actual_config.to_string_lossy().to_string()));
         assert!(!profile.contains(&configured_link.to_string_lossy().to_string()));
