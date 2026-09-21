@@ -371,6 +371,93 @@
       "status": "passed"
     }
   ],
+  "integration": {
+    "baseRevision": "c64eab0317ad9bb61b861dabcaf086d5a2dbfca3",
+    "upstreamRemovalRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
+    "counts": {
+      "total": 455,
+      "catalogs": {
+        "pages": 238,
+        "components": 217
+      },
+      "themes": {
+        "openforge-light": 277,
+        "openforge-dark": 178
+      },
+      "viewports": {
+        "1280x800": 133,
+        "1000x720": 31,
+        "360x900": 8,
+        "600x400": 2,
+        "320x480": 1,
+        "400x360": 2,
+        "900x700": 7,
+        "480x320": 8,
+        "320x320": 2,
+        "720x600": 2,
+        "320x240": 3,
+        "1280x900": 69,
+        "900x900": 7,
+        "640x640": 5,
+        "480x240": 2,
+        "1280x1200": 4,
+        "960x800": 2,
+        "320x800": 1,
+        "640x600": 3,
+        "800x500": 5,
+        "360x800": 2,
+        "800x700": 5,
+        "800x750": 2,
+        "800x600": 11,
+        "800x900": 4,
+        "360x1700": 2,
+        "640x400": 12,
+        "360x450": 1,
+        "640x800": 3,
+        "360x500": 1,
+        "360x320": 1,
+        "360x240": 2,
+        "360x300": 1,
+        "900x600": 1,
+        "640x480": 16,
+        "480x400": 3,
+        "360x480": 2,
+        "240x120": 1,
+        "160x120": 1,
+        "480x480": 2,
+        "640x720": 4,
+        "900x800": 12,
+        "900x640": 1,
+        "320x640": 2,
+        "1920x1080": 2,
+        "640x280": 17,
+        "420x800": 8,
+        "1600x820": 2,
+        "1600x900": 4,
+        "1600x650": 2,
+        "560x360": 6,
+        "1280x240": 8,
+        "1440x900": 2,
+        "768x900": 1,
+        "1440x1000": 3,
+        "1100x600": 1,
+        "480x800": 2,
+        "620x1000": 1,
+        "480x900": 6,
+        "1100x800": 1
+      }
+    },
+    "upstreamRemovedIdentities": [
+      "pages/pages-github-sync-review-row-action--available--openforge-light--1280x800",
+      "pages/pages-github-sync-review-row-action--available--openforge-dark--1280x800",
+      "pages/pages-github-sync-review-row-action--generating--openforge-dark--1280x800",
+      "pages/pages-github-sync-review-row-action--unavailable-without-local-project--openforge-light--1280x800",
+      "components/components-github-sync-walkthrough-button--available--openforge-light--480x320",
+      "components/components-github-sync-walkthrough-button--generating--openforge-dark--480x320",
+      "components/components-github-sync-walkthrough-button--ready--openforge-light--480x320"
+    ],
+    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, so the integrated manifest has 455 cases while the isolated KVG-5141 after measurement remains 462."
+  },
   "review": {
     "changedImages": [
       "components/components-board-task-list-item--agent-workflow-gallery--openforge-light--1600x820",
@@ -3765,27 +3852,31 @@
     },
     {
       "identity": "pages/pages-github-sync-review-row-action--available--openforge-light--1280x800",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical pages appearance for pages-github-sync-review-row-action--available in openforge-light at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "pages/pages-github-sync-review-row-action--available--openforge-dark--1280x800",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical pages appearance for pages-github-sync-review-row-action--available in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "pages/pages-github-sync-review-row-action--generating--openforge-dark--1280x800",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical pages appearance for pages-github-sync-review-row-action--generating in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "pages/pages-github-sync-review-row-action--unavailable-without-local-project--openforge-light--1280x800",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical pages appearance for pages-github-sync-review-row-action--unavailable-without-local-project in openforge-light at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "pages/pages-github-sync-task-status--populated--openforge-light--1280x800",
@@ -3837,21 +3928,24 @@
     },
     {
       "identity": "components/components-github-sync-walkthrough-button--available--openforge-light--480x320",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical components appearance for components-github-sync-walkthrough-button--available in openforge-light at 480x320.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "components/components-github-sync-walkthrough-button--generating--openforge-dark--480x320",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical components appearance for components-github-sync-walkthrough-button--generating in openforge-dark at 480x320.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     },
     {
       "identity": "components/components-github-sync-walkthrough-button--ready--openforge-light--480x320",
-      "disposition": "retained",
+      "disposition": "removed-upstream",
+      "removedByRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
       "risk": "Canonical components appearance for components-github-sync-walkthrough-button--ready in openforge-light at 480x320.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     }
   ]
 }

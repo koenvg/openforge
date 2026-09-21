@@ -5,26 +5,47 @@ import { identity } from './manifest.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const readJson = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'))
+const countBy = values =>
+  Object.fromEntries(
+    values.reduce((counts, value) => counts.set(value, (counts.get(value) ?? 0) + 1), new Map()),
+  )
 
 describe('storybook visual coverage inventory', () => {
   it('accounts for every before identity and reconciles its replacements to the current manifest', () => {
     const inventory = readJson('storybook/visual-coverage-inventory.json')
-    const currentIds = new Set(readJson('storybook/visual-manifest.json').map(identity))
+    const currentManifest = readJson('storybook/visual-manifest.json')
+    const currentIds = new Set(currentManifest.map(identity))
     const inventoriedIds = inventory.cases.map(entry => entry.identity)
     const retainedIds = inventory.cases.filter(entry => entry.disposition === 'retained').map(entry => entry.identity)
     const replaced = inventory.cases.filter(entry => entry.disposition === 'replaced')
+    const removedUpstream = inventory.cases.filter(entry => entry.disposition === 'removed-upstream')
     const replacementIds = new Set(replaced.map(entry => entry.appearanceCoverage))
 
     expect(inventory.version).toBe(1)
     expect(inventoriedIds).toHaveLength(inventory.before.counts.total)
     expect(new Set(inventoriedIds).size).toBe(inventoriedIds.length)
     expect(new Set([...retainedIds, ...replacementIds])).toEqual(currentIds)
+    expect(new Set(removedUpstream.map(entry => entry.identity))).toEqual(
+      new Set(inventory.integration.upstreamRemovedIdentities),
+    )
+    expect(inventory.integration.baseRevision).toMatch(/^[0-9a-f]{40}$/)
+    expect(inventory.integration.counts).toEqual({
+      total: currentManifest.length,
+      catalogs: countBy(currentManifest.map(entry => entry.catalog)),
+      themes: countBy(currentManifest.map(entry => entry.theme)),
+      viewports: countBy(currentManifest.map(entry => `${entry.viewport.width}x${entry.viewport.height}`)),
+    })
 
     for (const entry of inventory.cases) {
       expect(entry.risk.trim()).not.toBe('')
       expect(entry.rationale.trim()).not.toBe('')
       if (entry.disposition === 'retained') {
         expect(currentIds.has(entry.identity), entry.identity).toBe(true)
+        continue
+      }
+      if (entry.disposition === 'removed-upstream') {
+        expect(currentIds.has(entry.identity), entry.identity).toBe(false)
+        expect(entry.removedByRevision).toBe(inventory.integration.upstreamRemovalRevision)
         continue
       }
 
