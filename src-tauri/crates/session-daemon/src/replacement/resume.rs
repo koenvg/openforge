@@ -1,4 +1,6 @@
-use super::{checkpoint, descriptors, images, version, Manager, Resources, IMAGE_VERSION};
+#[cfg(feature = "replacement-fixtures")]
+use super::IMAGE_VERSION;
+use super::{checkpoint, descriptors, images, version, Manager, Resources};
 use crate::host::Host;
 use openforge_session_client::runtime::RuntimeDirectory;
 use openforge_session_protocol::Error;
