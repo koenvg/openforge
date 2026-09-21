@@ -60,7 +60,7 @@ const inventory = {
       'pages-task-creation--no-commits', 'pages-task-creation--long-content', 'pages-task-creation--narrow',
       'pages-task-creation--loading', 'pages-task-creation--defaults-failure', 'pages-task-creation--validation',
       'pages-task-creation--failure', 'pages-task-creation--saving', 'pages-task-creation--add-to-backlog',
-      'pages-task-creation--start-task', 'pages-task-creation--cancel-and-reopen', 'pages-task-creation--edit-prompt',
+      'pages-task-creation--start-task', 'pages-task-creation--dismiss-retains-draft', 'pages-task-creation--edit-prompt',
     ] },
     { source: 'src/components/project/ProjectSetupDialog.svelte', stories: [
       'pages-project-setup--empty', 'pages-project-setup--new-repository', 'pages-project-setup--clone-repository',
