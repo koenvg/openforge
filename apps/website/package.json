@@ -12,7 +12,7 @@
     "test:gpu": "node scripts/checkHeroLightning.mjs"
   },
   "dependencies": {
-    "astro": "^7.2.10",
+    "astro": "^7.3.2",
     "gsap": "^3.15.0",
     "vgpu": "^0.3.1"
   },

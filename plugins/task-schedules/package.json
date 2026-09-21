@@ -10,7 +10,7 @@
   "dependencies": {
     "@lucide/svelte": "catalog:",
     "@openforge-app/plugin-sdk": "workspace:*",
-    "cronstrue": "^3.24.0"
+    "cronstrue": "^3.27.0"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
