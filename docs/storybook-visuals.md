@@ -79,6 +79,38 @@ Parent totals include child invocation time, but parent capture counts exclude c
 
 Handled failures retain timing evidence for work already attempted. Invalid environment/input overrides are rejected before filesystem writes, and hard process termination cannot guarantee a final timing file. Rendering, tolerances, and existing report formats are unchanged.
 
+## Snapshot selection and coverage inventory
+
+`storybook/visual-coverage-inventory.json` records all 502 identities from revision `f4b94552f7f8e51dd2eadc7a439189bc05b2cb06`. Each entry states its visual risk and why it remains or which gallery and behavioral assertion replace it. The inventory test reconciles retained and replacement identities to the current manifest, confirms that replaced isolated stories still exist, and protects runner representatives and documented regressions.
+
+Use these rules when curating later component and page families:
+
+- Keep a separate case for a distinct responsive layout, overflow condition, interaction state, renderer, or documented regression.
+- Replace repeated business states only when a readable gallery covers appearance and a rendered test covers label, icon, badge, and action mapping.
+- Capture shared galleries in light and dark. Extra state cases may use one theme only when theme rendering is not a distinct risk.
+- Keep isolated development stories after moving their canonical screenshot coverage into a gallery.
+- Keep runner representatives and named regression cases until a reviewed case or probe provides equivalent protection.
+- Review replacement images first, then delete approved obsolete PNGs explicitly. Never regenerate baselines to hide a failure.
+
+### KVG-5141 task-list slice
+
+The task-list family moved from 52 isolated captures to six gallery captures plus six retained interaction and layout captures. The three galleries cover agent workflow, normal pull request progress, and pull request attention states in both themes. Selected, dependency, and long-content cases remain isolated in both themes. The keyboard-selection story and every other original story remain in the development catalog.
+
+All six gallery PNGs were inspected at full size. Their headings, state keys, badges, actions, titles, PR chips, and reason rows are visible without clipping in both themes. The 46 mapped isolated status PNGs were then removed explicitly. The canonical runner reported no missing, obsolete, or unexpected baselines.
+
+| Measurement | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Manifest cases | 502 | 462 | -40 (-8.0%) |
+| Task-list cases | 52 | 12 | -40 (-76.9%) |
+| Canonical capture attempts | 1,074 | 994 | -80 |
+| Baseline phase | 712,631 ms | 439,356 ms | -273,275 ms (-38.3%) |
+| Repeatability phase | 480,984 ms | 439,848 ms | -41,136 ms (-8.6%) |
+| Total canonical run | 1,306,672 ms | 994,574 ms | -312,098 ms (-23.9%) |
+
+Both full runs passed on the same Apple M5 MacBook Air with 10 cores and 32 GiB RAM, Docker arm64, the pinned Playwright 1.62.1 Noble image, and Chromium 151.0.7922.34. The before run used the revision above. The after run used its KVG-5141 working tree. The total reduction is measured, but normal run-to-run variance means it cannot be attributed only to the 40 removed cases.
+
+This ticket intentionally stops at the task-list family. The manifest remains above the parent change's 200 to 250 case target because shared-component and page curation belong to later tickets for tasks 2.3 and 3.1. Those tickets must extend the inventory rather than deleting unique risk to reach the target.
+
 ## Manifest contract
 
 Each entry declares `catalog`, stable Storybook `story` ID, `theme`, integer `viewport.width` and `viewport.height`, a visible Playwright `ready` selector, and `expectedErrors`. Catalogs are limited to `pages` and `components`. Accepted theme IDs are `openforge-light` and `openforge-dark`; Workshop themes are intentionally excluded from canonical screenshot testing. Unknown fields and theme IDs fail rather than being ignored.

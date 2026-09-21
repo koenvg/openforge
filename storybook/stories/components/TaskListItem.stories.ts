@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite'
 import { expect, fn, userEvent, within } from 'storybook/test'
 import TaskListItem from '../../../src/components/focus-board/TaskListItem.svelte'
+import TaskListItemGallery from './TaskListItemGallery.svelte'
 import { createPullRequest, createTask } from '../../shared/fixtures/appFixtures'
 
 const meta = {
@@ -15,6 +16,24 @@ const meta = {
 } satisfies Meta<typeof TaskListItem>
 export default meta
 type Story = StoryObj<typeof meta>
+
+function galleryPlay(expectedCount: number) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement)
+    const cases = canvas.getAllByRole('article')
+    const viewport = canvasElement.ownerDocument.documentElement
+
+    await expect(cases).toHaveLength(expectedCount)
+    for (const item of cases) {
+      await expect(item).toBeVisible()
+      const bounds = item.getBoundingClientRect()
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.top).toBeGreaterThanOrEqual(0)
+      expect(Math.ceil(bounds.right)).toBeLessThanOrEqual(viewport.clientWidth)
+      expect(Math.ceil(bounds.bottom)).toBeLessThanOrEqual(viewport.clientHeight)
+    }
+  }
+}
 
 export const Idle: Story = {}
 export const Backlog: Story = { args: { state: 'backlog', task: createTask({ status: 'backlog' }) } }
@@ -39,6 +58,18 @@ export const ReviewPending: Story = { args: { state: 'review-pending', pullReque
 export const UnaddressedComments: Story = { args: { state: 'unaddressed-comments', pullRequests: [createPullRequest({ unaddressed_comment_count: 3 })] } }
 export const MergeConflict: Story = { args: { state: 'merge-conflict', pullRequests: [createPullRequest()] } }
 export const Merging: Story = { args: { state: 'ready-to-merge', isMerging: true, pullRequests: [createPullRequest()] } }
+export const AgentWorkflowGallery: Story = {
+  render: () => ({ Component: TaskListItemGallery, props: { gallery: 'agent-workflow' } }),
+  play: galleryPlay(9),
+}
+export const PullRequestProgressGallery: Story = {
+  render: () => ({ Component: TaskListItemGallery, props: { gallery: 'pull-request-progress' } }),
+  play: galleryPlay(9),
+}
+export const PullRequestAttentionGallery: Story = {
+  render: () => ({ Component: TaskListItemGallery, props: { gallery: 'pull-request-attention' } }),
+  play: galleryPlay(5),
+}
 export const Selected: Story = { args: { isSelected: true, isFocused: true } }
 export const Dependency: Story = { args: { state: 'backlog', task: createTask({ status: 'backlog', dependsOn: ['T-41'] }), dependencyHint: 'Waiting for T-41: Define the greeting API' } }
 export const LongContent: Story = { args: {
