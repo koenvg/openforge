@@ -413,7 +413,6 @@ jobs:
     name: Packaged Electron Smoke
     timeout-minutes: 20
     runs-on: macos-14
-    needs: [frontend, npm-packages, rust]
     env:
       CARGO_BUILD_TARGET: aarch64-apple-darwin
       npm_config_arch: arm64
@@ -498,7 +497,6 @@ jobs:
     name: Live Electron Terminal Invariants
     timeout-minutes: 30
     runs-on: macos-14
-    needs: [frontend, rust]
     steps:
       - uses: actions/checkout@v6
 
