@@ -46,7 +46,7 @@ describe('pull request Review Thread follow-ups', () => {
     })
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     await followUps.load(pullRequest)
     const thread = await followUps.askLine('src/review.ts', 18, 'RIGHT', 'Why is this safe?')
 
@@ -70,7 +70,7 @@ describe('pull request Review Thread follow-ups', () => {
     const { registry, agentSession, followUps } = setup()
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     await followUps.load(pullRequest)
     registry.frontendApi.agentSessions.input = vi.fn(async () => {
       throw new Error('Provider input failed')
@@ -91,7 +91,7 @@ describe('pull request Review Thread follow-ups', () => {
     const { registry, agentSession, followUps } = setup()
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     const existing = await registry.frontendApi.reviewThreads.create({
       namespace: 'github',
       targetKey: 'gh:acme/web#1421',
@@ -119,7 +119,7 @@ describe('pull request Review Thread follow-ups', () => {
     const { registry, agentSession, followUps } = setup()
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     await followUps.load(pullRequest)
     const asked = await followUps.askStep('validation', 'What happens on retry?')
 
@@ -142,7 +142,7 @@ describe('pull request Review Thread follow-ups', () => {
     const { registry, agentSession, followUps } = setup()
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     const created = await registry.frontendApi.reviewThreads.create({
       namespace: 'github',
       targetKey: 'gh:acme/web#1421',
@@ -194,7 +194,7 @@ describe('pull request Review Thread follow-ups', () => {
     const { registry, agentSession, followUps } = setup()
 
     await agentSession.observe(pullRequest)
-    await agentSession.start()
+    await agentSession.activate()
     await followUps.load(pullRequest)
     const created = await registry.frontendApi.reviewThreads.create({
       namespace: 'github',

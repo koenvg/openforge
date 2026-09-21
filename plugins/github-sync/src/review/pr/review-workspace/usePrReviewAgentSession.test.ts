@@ -38,10 +38,10 @@ describe('pull request review Agent Session controller', () => {
       expect(controller.isLoading).toBe(false)
       expect(controller.availabilityError).toBe('The review agent did not respond. Try again. If it keeps happening, restart OpenForge.')
 
-      await controller.retryAvailability()
+      await controller.activate()
 
       expect(resolveProject).toHaveBeenCalledTimes(2)
-      expect(registry.frontendApi.agentSessions.status).toHaveBeenCalledTimes(2)
+      expect(registry.frontendApi.agentSessions.status).toHaveBeenCalledTimes(3)
       expect(controller.availabilityError).toBeNull()
     } finally {
       vi.useRealTimers()
@@ -82,7 +82,7 @@ describe('pull request review Agent Session controller', () => {
       expect(controller.availabilityError).toContain('The review agent did not respond')
       expect(controller.error).toBe('Temporary status failure')
 
-      await controller.retryAvailability()
+      await controller.activate()
 
       expect(controller.availabilityError).toBeNull()
       expect(controller.error).toBeNull()
@@ -91,7 +91,7 @@ describe('pull request review Agent Session controller', () => {
     }
   })
 
-  it('starts the current head in the matching local Project and shared review scope', async () => {
+  it('activates the current head as an idle interactive session in the matching local Project', async () => {
     const registry = createOpenForgeRegistryFake({
       pluginId: 'com.openforge.github-sync',
       projectId: 'P-1',
@@ -102,7 +102,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
 
     expect(registry.calls.scopedAgentSessionStarts).toEqual([{
       scope: {
@@ -112,10 +112,36 @@ describe('pull request review Agent Session controller', () => {
       },
       projectId: 'P-1',
       checkoutRevision: 'head-a',
-      initialInput: expect.stringContaining('Keep the review session visible'),
+      initialInput: '',
       toolPolicy: 'review-read-only',
     }])
     expect(controller.status).toMatchObject({ status: 'running' })
+  })
+
+  it('joins repeated activation and reuses the existing session when the Agent tab reopens', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync',
+      projectId: 'P-1',
+    })
+    const realStart = registry.frontendApi.agentSessions.start.bind(registry.frontendApi.agentSessions)
+    let releaseStart!: () => void
+    const startGate = new Promise<void>(resolve => { releaseStart = resolve })
+    registry.frontendApi.agentSessions.start = vi.fn(async request => {
+      await startGate
+      return realStart(request)
+    })
+    const controller = createPrReviewAgentSessionController(registry.frontendApi, async () => 'P-1')
+    await controller.observe(pullRequest)
+
+    const first = controller.activate()
+    const repeated = controller.activate()
+    releaseStart()
+    const [firstSession, repeatedSession] = await Promise.all([first, repeated])
+    const reopened = await controller.activate()
+
+    expect(registry.frontendApi.agentSessions.start).toHaveBeenCalledOnce()
+    expect(repeatedSession?.id).toBe(firstSession?.id)
+    expect(reopened?.id).toBe(firstSession?.id)
   })
 
   it('continues completed turns in the same session and workspace', async () => {
@@ -129,7 +155,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    const started = await controller.start()
+    const started = await controller.activate()
     registry.frontendApi.__testing.registry.completeScopedAgentSession(controller.scope!)
     await controller.sendInput('Check the error path too.')
     registry.frontendApi.__testing.registry.completeScopedAgentSession(controller.scope!)
@@ -154,7 +180,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    const started = await controller.start()
+    const started = await controller.activate()
     const continued = await controller.sendInput('Check the active error path.')
 
     expect(continued.id).toBe(started?.id)
@@ -163,25 +189,6 @@ describe('pull request review Agent Session controller', () => {
       scope: controller.scope,
       input: 'Check the active error path.',
     }])
-  })
-
-  it('aborts active work without releasing its retained output', async () => {
-    const registry = createOpenForgeRegistryFake({
-      pluginId: 'com.openforge.github-sync',
-      projectId: 'P-1',
-    })
-    const controller = createPrReviewAgentSessionController(
-      registry.frontendApi,
-      async () => 'P-1',
-    )
-
-    await controller.observe(pullRequest)
-    await controller.start()
-    await controller.abort()
-
-    expect(controller.status).toMatchObject({ status: 'aborted' })
-    expect(registry.calls.scopedAgentSessionAborts).toEqual([controller.scope])
-    expect(registry.calls.scopedAgentSessionReleases).toEqual([])
   })
 
   it('aborts and releases the scoped session when its pull request is removed', async () => {
@@ -195,7 +202,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     await controller.releaseForPullRequest(pullRequest)
 
     expect(registry.calls.scopedAgentSessionAborts).toEqual([controller.scope])
@@ -225,7 +232,7 @@ describe('pull request review Agent Session controller', () => {
     }
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     await controller.observe(otherPullRequest)
     await controller.releaseForPullRequest({ ...pullRequest, head_sha: 'head-b' })
 
@@ -250,9 +257,9 @@ describe('pull request review Agent Session controller', () => {
     }
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     await controller.observe({ ...pullRequest, head_sha: 'head-b' })
-    await controller.start()
+    await controller.activate()
 
     expect(registry.calls.scopedAgentSessionAborts).toContainEqual(oldScope)
     expect(registry.calls.scopedAgentSessionReleases).toContainEqual(oldScope)
@@ -278,7 +285,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    const start = controller.start()
+    const start = controller.activate()
     const release = controller.releaseForPullRequest(pullRequest)
     allowStart()
     await Promise.all([start, release])
@@ -311,12 +318,12 @@ describe('pull request review Agent Session controller', () => {
     }
 
     await controller.observe(pullRequest)
-    const oldStart = controller.start()
+    const oldStart = controller.activate()
     await vi.waitFor(() => expect(registry.frontendApi.agentSessions.start).toHaveBeenCalledOnce())
     const rotate = controller.observe({ ...pullRequest, head_sha: 'head-b' })
     allowStart()
     await Promise.all([oldStart, rotate])
-    await controller.start()
+    await controller.activate()
 
     expect(registry.calls.scopedAgentSessionAborts).toContainEqual(oldScope)
     expect(registry.calls.scopedAgentSessionReleases).toContainEqual(oldScope)
@@ -341,11 +348,11 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     await controller.observe({ ...pullRequest, head_sha: 'head-b' })
     expect(controller.error).toBe('Temporary release failure')
 
-    await controller.start()
+    await controller.activate()
 
     expect(releaseAttempts).toBe(2)
     expect(registry.calls.scopedAgentSessionStarts.map(call => call.scope.revision)).toEqual(['head-a', 'head-b'])
@@ -375,7 +382,7 @@ describe('pull request review Agent Session controller', () => {
     }
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     await controller.observe(otherPullRequest)
     registry.frontendApi.__testing.registry.completeScopedAgentSession(firstScope)
     await Promise.resolve()
@@ -413,7 +420,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     expect(controller.status).toMatchObject({ status: 'queued', queuePosition: 1 })
 
     await registry.frontendApi.agentSessions.abort(occupiedScopes[0])
@@ -432,13 +439,14 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     registry.frontendApi.__testing.registry.completeScopedAgentSession(controller.scope!)
     await vi.waitFor(() => {
       expect(controller.status).toMatchObject({ status: 'completed', acceptsInput: true })
     })
 
-    await controller.restart()
+    await controller.releaseForPullRequest(pullRequest)
+    await controller.activate()
     registry.frontendApi.__testing.registry.completeScopedAgentSession(controller.scope!, false)
     await vi.waitFor(() => {
       expect(controller.status).toMatchObject({
@@ -468,7 +476,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    await controller.start()
+    await controller.activate()
     registry.frontendApi.__testing.registry.completeScopedAgentSession(controller.scope!)
     await vi.waitFor(() => expect(controller.status?.status).toBe('completed'))
 
@@ -502,7 +510,7 @@ describe('pull request review Agent Session controller', () => {
     )
 
     await controller.observe(pullRequest)
-    const existingStatus = await controller.start()
+    const existingStatus = await controller.activate()
     const observeCurrent = controller.observe({ ...pullRequest, number: 1422, head_sha: 'head-b' })
     await vi.waitFor(() => expect(resolveCurrent).toBeTypeOf('function'))
     staleListener()

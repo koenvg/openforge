@@ -224,7 +224,7 @@ interface AgentSessionsAPI {
 }
 ```
 
-The frontend type adds `mountTerminal(scope, element)`. Events are coalescible invalidations scoped to the exact triple, not snapshots or output chunks. State includes the stable scoped session id, lifecycle status, queue position and reason when queued, whether input is accepted, workspace availability, error code and message, and timestamps. It does not include the internal terminal key or host path.
+The frontend type adds `mountTerminal(scope, element)`. Frontend events remain coalescible invalidations scoped to the exact triple. Backend events carry state snapshots: ordinary state and output changes may coalesce, while provider-turn transitions are durably ordered and replayed so a later turn cannot hide an earlier turn's completion. State includes the stable scoped session id, lifecycle status, queue position and reason when queued, whether input is accepted, workspace availability, error code and message, and timestamps. It does not include the internal terminal key or host path.
 
 Every host bridge supplies the caller plugin id from trusted invocation context. It never accepts that id from the request payload. CommonAPIFake implements the same defaults: four execution slots and 32 queued starts, duplicate-scope ownership, state transitions, and invalidations. Fake time and explicit completion helpers keep tests deterministic.
 

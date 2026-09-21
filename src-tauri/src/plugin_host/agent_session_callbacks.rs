@@ -78,6 +78,42 @@ impl PluginHost {
     ) -> Result<Value, String> {
         let plugin_id = required_param_string(params, "pluginId")?;
         let scope = Self::scoped_session_scope(params)?;
+        let after_sequence = optional_param_u64(params, "afterSequence")?;
+        let (transitions, cursor, mut has_more) = {
+            let db_state = self.database_state_for_host()?;
+            let db = crate::db::acquire_db(db_state.as_ref());
+            match after_sequence {
+                Some(after_sequence) => {
+                    let mut transitions = db
+                        .scoped_agent_session_events_after(
+                            &plugin_id,
+                            &scope.namespace,
+                            &scope.target_key,
+                            &scope.revision,
+                            after_sequence,
+                            101,
+                        )
+                        .map_err(|error| error.to_string())?;
+                    let has_more = transitions.len() > 100;
+                    transitions.truncate(100);
+                    let cursor = transitions
+                        .last()
+                        .map_or(after_sequence, |transition| transition.sequence);
+                    (transitions, cursor, has_more)
+                }
+                None => {
+                    let cursor = db
+                        .latest_scoped_agent_session_event_sequence(
+                            &plugin_id,
+                            &scope.namespace,
+                            &scope.target_key,
+                            &scope.revision,
+                        )
+                        .map_err(|error| error.to_string())?;
+                    (Vec::new(), cursor, false)
+                }
+            }
+        };
         let service = self.scoped_agent_session_service_for_host()?;
         let state = service.status(&plugin_id, &scope).map_err(scoped_error)?;
         let output_revision = if state.is_some() {
@@ -85,9 +121,46 @@ impl PluginHost {
         } else {
             None
         };
+        let latest_sequence = {
+            let db_state = self.database_state_for_host()?;
+            let latest = crate::db::acquire_db(db_state.as_ref())
+                .latest_scoped_agent_session_event_sequence(
+                    &plugin_id,
+                    &scope.namespace,
+                    &scope.target_key,
+                    &scope.revision,
+                )
+                .map_err(|error| error.to_string())?;
+            latest
+        };
+        has_more |= latest_sequence > cursor;
+        let transitions = transitions
+            .into_iter()
+            .map(|transition| {
+                serde_json::json!({
+                    "sequence": transition.sequence,
+                    "state": {
+                        "id": transition.session_id,
+                        "turnId": transition.turn_id,
+                        "status": transition.status,
+                        "queuePosition": null,
+                        "queueReason": null,
+                        "acceptsInput": true,
+                        "workspaceAvailable": transition.workspace_available,
+                        "errorCode": transition.error_code,
+                        "errorMessage": transition.error_message,
+                        "createdAt": transition.created_at,
+                        "updatedAt": transition.updated_at,
+                    },
+                })
+            })
+            .collect::<Vec<_>>();
         Ok(serde_json::json!({
             "state": state,
             "outputRevision": output_revision,
+            "cursor": cursor,
+            "transitions": transitions,
+            "hasMore": has_more,
         }))
     }
 

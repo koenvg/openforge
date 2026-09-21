@@ -9,7 +9,8 @@ import {
 type ActiveGeneration = {
   attemptId: string
   sessionId: string
-  turnId: string | null
+  turnId: string
+  turnObserved: boolean
   observer: Disposable
 }
 
@@ -22,6 +23,10 @@ const TERMINAL_STATUSES = new Set<ScopedAgentSessionState['status']>([
 
 function scopeKey(scope: SessionScope): string {
   return `${scope.namespace}\u0000${scope.targetKey}\u0000${scope.revision}`
+}
+
+function promptWithTurnIdentity(prompt: string, turnId: string): string {
+  return `${prompt}\n\n<!-- openforge-turn-id:${turnId} -->`
 }
 
 export class WalkthroughGenerationCoordinator implements Disposable {
@@ -45,8 +50,11 @@ export class WalkthroughGenerationCoordinator implements Disposable {
         throw new Error('The pull request Agent session is already running.')
       }
       const existing = await this.openforge.agentSessions.status(params.scope)
-      if (existing && !TERMINAL_STATUSES.has(existing.status)) {
-        throw new Error('The pull request Agent session is already running.')
+      if (!existing || !existing.acceptsInput) {
+        throw new Error('Open the Agent tab and wait for the review agent before generating a walkthrough.')
+      }
+      if (existing.status === 'running' && existing.turnId !== null) {
+        throw new Error('Wait for the current Agent turn to finish before generating a walkthrough.')
       }
 
       const attemptId = this.createAttemptId()
@@ -63,22 +71,16 @@ export class WalkthroughGenerationCoordinator implements Disposable {
           : this.reconcile(params.scope, attemptId))
       })
       try {
-        const prompt = typeof params.prompt === 'function' ? params.prompt(attemptId) : params.prompt
-        const session = existing === null
-          ? await this.openforge.agentSessions.start({
-              scope: params.scope,
-              projectId: params.projectId,
-              checkoutRevision: params.scope.revision,
-              initialInput: prompt,
-              toolPolicy: 'review-read-only',
-            })
-          : TERMINAL_STATUSES.has(existing.status)
-            ? await this.openforge.agentSessions.input(params.scope, prompt)
-            : (() => { throw new Error('The pull request Agent session is already running.') })()
+        const rawPrompt = typeof params.prompt === 'function' ? params.prompt(attemptId) : params.prompt
+        const session = await this.openforge.agentSessions.input(
+          params.scope,
+          promptWithTurnIdentity(rawPrompt, attemptId),
+        )
         this.replaceActive(params.scope, {
           attemptId,
           sessionId: session.id,
-          turnId: session.turnId,
+          turnId: attemptId,
+          turnObserved: session.turnId === attemptId,
           observer,
         })
         await this.reconcileState(params.scope, attemptId, session)
@@ -106,7 +108,7 @@ export class WalkthroughGenerationCoordinator implements Disposable {
       const current = await this.openforge.agentSessions.status(scope)
       if (current
         && current.id === active.sessionId
-        && (active.turnId === null || current.turnId === active.turnId)
+        && (!active.turnObserved || current.turnId === active.turnId)
         && !TERMINAL_STATUSES.has(current.status)) {
         await this.openforge.agentSessions.abort(scope)
       }
@@ -145,13 +147,29 @@ export class WalkthroughGenerationCoordinator implements Disposable {
   ): Promise<void> {
     const active = this.active.get(scopeKey(scope))
     if (!active || active.attemptId !== attemptId || active.sessionId !== state.id) return
-    if (active.turnId === null && state.turnId !== null) active.turnId = state.turnId
-    if (active.turnId !== state.turnId || !TERMINAL_STATUSES.has(state.status)) return
+    if (state.turnId === active.turnId) active.turnObserved = true
+    if (!active.turnObserved && TERMINAL_STATUSES.has(state.status)) {
+      await finishWalkthroughAttempt(this.openforge, {
+        scope,
+        attemptId,
+        outcome: state.status === 'aborted'
+          ? { status: 'aborted', code: state.errorCode, message: state.errorMessage }
+          : {
+              status: 'failed',
+              code: state.errorCode || 'session-ended-before-turn',
+              message: state.errorMessage || 'The Agent session ended before accepting the walkthrough prompt.',
+            },
+      })
+      this.clearActive(scope, attemptId)
+      return
+    }
+    if (active.turnId !== state.turnId) return
+    if (state.status !== 'paused' && !TERMINAL_STATUSES.has(state.status)) return
 
     await finishWalkthroughAttempt(this.openforge, {
       scope,
       attemptId,
-      outcome: state.status === 'completed'
+      outcome: state.status === 'paused' || state.status === 'completed'
         ? { status: 'completed' }
         : state.status === 'aborted'
           ? { status: 'aborted', code: state.errorCode, message: state.errorMessage }

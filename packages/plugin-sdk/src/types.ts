@@ -942,8 +942,9 @@ export interface ScopedAgentSessionState {
 }
 
 /**
- * Coalescible session change. Backend observers include the state snapshot that
- * caused the event so consumers can bind terminal handling to an exact turn.
+ * Scoped session change. Frontend delivery may coalesce invalidations. Backend
+ * observers receive durable provider-turn snapshots in order; other state and
+ * terminal-output changes may coalesce to the latest snapshot.
  */
 export interface ScopedAgentSessionChangeEvent extends SessionScope {
   state?: ScopedAgentSessionState | null

@@ -127,6 +127,15 @@ function assertSessionScope(scope: unknown): asserts scope is SessionScope {
   }
 }
 
+function normalizeSessionScope(scope: unknown): SessionScope {
+  assertSessionScope(scope)
+  return {
+    namespace: scope.namespace,
+    targetKey: scope.targetKey,
+    revision: scope.revision,
+  }
+}
+
 function unavailableCapability(name: string): never {
   throw new Error(`OpenForge host capability is unavailable: ${name}`)
 }
@@ -182,40 +191,40 @@ export class RuntimeCommonApiRegistry {
           ? this.services.host.listAgentSessions(request)
           : unavailableCapability('agentSessions.list'),
         start: async (request) => {
-          assertSessionScope(request?.scope)
+          const scope = normalizeSessionScope(request?.scope)
           return this.services.host.startScopedAgentSession
-            ? this.services.host.startScopedAgentSession(request)
+            ? this.services.host.startScopedAgentSession({ ...request, scope })
             : unavailableCapability('agentSessions.start')
         },
         status: async (scope) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           return this.services.host.getScopedAgentSessionStatus
-            ? this.services.host.getScopedAgentSessionStatus(scope)
+            ? this.services.host.getScopedAgentSessionStatus(normalizedScope)
             : unavailableCapability('agentSessions.status')
         },
         input: async (scope, input) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           return this.services.host.inputScopedAgentSession
-            ? this.services.host.inputScopedAgentSession(scope, input)
+            ? this.services.host.inputScopedAgentSession(normalizedScope, input)
             : unavailableCapability('agentSessions.input')
         },
         abort: async (scope) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           return this.services.host.abortScopedAgentSession
-            ? this.services.host.abortScopedAgentSession(scope)
+            ? this.services.host.abortScopedAgentSession(normalizedScope)
             : unavailableCapability('agentSessions.abort')
         },
         release: async (scope) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           return this.services.host.releaseScopedAgentSession
-            ? this.services.host.releaseScopedAgentSession(scope)
+            ? this.services.host.releaseScopedAgentSession(normalizedScope)
             : unavailableCapability('agentSessions.release')
         },
         onDidChange: (scope, handler) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           assertHandler('events', handler)
           const subscription = this.services.host.subscribeScopedAgentSessionChanges
-            ? this.services.host.subscribeScopedAgentSessionChanges(scope, handler)
+            ? this.services.host.subscribeScopedAgentSessionChanges(normalizedScope, handler)
             : unavailableCapability('agentSessions.onDidChange')
           return this.services.trackDisposable(subscription)
         },
@@ -360,7 +369,7 @@ export class RuntimeCommonApiRegistry {
       agentSessions: {
         ...api.agentSessions,
         mountTerminal: async (scope, element) => {
-          assertSessionScope(scope)
+          const normalizedScope = normalizeSessionScope(scope)
           if (!(element instanceof HTMLElement)) {
             throw new TypeError('Scoped Agent Session terminal mount requires an HTMLElement')
           }
@@ -368,7 +377,7 @@ export class RuntimeCommonApiRegistry {
             return unavailableCapability('agentSessions.mountTerminal')
           }
           return this.services.trackDisposable(
-            await this.services.host.mountScopedAgentSessionTerminal(scope, element),
+            await this.services.host.mountScopedAgentSessionTerminal(normalizedScope, element),
           )
         },
       },

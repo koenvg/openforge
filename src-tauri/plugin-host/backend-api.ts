@@ -261,6 +261,11 @@ export function createBackendApi(
     disposed: boolean
     polling: boolean
     previous: string
+    previousOutputRevision: number | null | undefined
+    cursor: number | null
+    ready: Promise<void>
+    markReady: (() => void) | null
+    readyError: unknown
     handlers: Set<(event: ScopedAgentSessionChangeEvent) => void>
     interval: ReturnType<typeof setInterval> | null
   }
@@ -272,34 +277,79 @@ export function createBackendApi(
     const key = JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
     let observer = scopedSessionObservers.get(key)
     if (!observer) {
+      let markReady!: () => void
+      const ready = new Promise<void>(resolve => { markReady = resolve })
       const created: ScopedSessionObserver = {
         disposed: false,
         polling: false,
         previous: '',
+        previousOutputRevision: undefined,
+        cursor: null,
+        ready,
+        markReady,
+        readyError: null,
         handlers: new Set(),
         interval: null,
       }
       const poll = async () => {
         if (created.disposed || created.polling) return
         created.polling = true
+        let pollAgain = false
         try {
           const current = await scopedHostCallback<{
             state: ScopedAgentSessionState | null
             outputRevision: number | null
+            cursor?: number
+            transitions?: Array<{ sequence: number, state: ScopedAgentSessionState }>
+            hasMore?: boolean
           }>(
-            'openforge.agentSessions.observe', { scope },
+            'openforge.agentSessions.observe', created.cursor === null
+              ? { scope }
+              : { scope, afterSequence: created.cursor },
           )
           if (created.disposed) return
-          const next = JSON.stringify(current)
-          if (!created.previous || created.previous !== next) {
+          const next = JSON.stringify({
+            state: current.state,
+            outputRevision: current.outputRevision,
+          })
+          const transitions = current.transitions ?? []
+          const isInitialObservation = created.cursor === null
+          if (!isInitialObservation && transitions.length > 0) {
+            for (const transition of transitions) {
+              const event = { ...scope, state: transition.state }
+              for (const currentHandler of [...created.handlers]) currentHandler(event)
+            }
+            const finalTransition = transitions.at(-1)
+            const currentDiffersFromFinalTransition = JSON.stringify(finalTransition?.state) !== JSON.stringify(current.state)
+            const outputRevisionChanged = created.previousOutputRevision !== undefined
+              && created.previousOutputRevision !== current.outputRevision
+            if (!current.hasMore && (currentDiffersFromFinalTransition || outputRevisionChanged)) {
+              const event = { ...scope, state: current.state }
+              for (const currentHandler of [...created.handlers]) currentHandler(event)
+            }
+          } else if (!isInitialObservation && !current.hasMore && created.previous !== next) {
             const event = { ...scope, state: current.state }
             for (const currentHandler of [...created.handlers]) currentHandler(event)
           }
-          created.previous = next
-        } catch {
+          created.cursor = current.cursor ?? created.cursor ?? 0
+          if (!current.hasMore) {
+            created.previous = next
+            created.previousOutputRevision = current.outputRevision
+          }
+          pollAgain = current.hasMore === true
+          created.readyError = null
+          created.markReady?.()
+          created.markReady = null
+        } catch (error) {
           // Direct operations retain structured failures; this is an invalidation poll.
+          if (created.cursor === null) {
+            created.readyError = error
+            created.markReady?.()
+            created.markReady = null
+          }
         } finally {
           created.polling = false
+          if (pollAgain && !created.disposed) void poll()
         }
       }
       void poll()
@@ -317,9 +367,19 @@ export function createBackendApi(
         if (observer.handlers.size > 0) return
         observer.disposed = true
         if (observer.interval) clearInterval(observer.interval)
+        observer.markReady?.()
+        observer.markReady = null
         scopedSessionObservers.delete(key)
       },
     }
+  }
+
+  const waitForScopedSessionObserver = async (scope: SessionScope): Promise<void> => {
+    const key = JSON.stringify([scope.namespace, scope.targetKey, scope.revision])
+    const observer = scopedSessionObservers.get(key)
+    if (!observer) return
+    await observer.ready
+    if (observer.readyError) throw observer.readyError
   }
 
   let didWarnLegacyTaskReads = false
@@ -364,9 +424,12 @@ export function createBackendApi(
       status: async (scope: SessionScope) => await scopedHostCallback<ScopedAgentSessionState | null>(
         'openforge.agentSessions.status', { scope },
       ),
-      input: async (scope: SessionScope, input: string) => await scopedHostCallback<ScopedAgentSessionState>(
-        'openforge.agentSessions.input', { scope, input },
-      ),
+      input: async (scope: SessionScope, input: string) => {
+        await waitForScopedSessionObserver(scope)
+        return await scopedHostCallback<ScopedAgentSessionState>(
+          'openforge.agentSessions.input', { scope, input },
+        )
+      },
       abort: async (scope: SessionScope) => await scopedHostCallback<ScopedAgentSessionState>(
         'openforge.agentSessions.abort', { scope },
       ),

@@ -353,7 +353,7 @@ describe('PrReviewView finished review requests', () => {
     expect(mergedTitle).toBeTruthy()
     expect(mergedTitle.closest('.vim-focus')).toBeNull()
     expect(screen.getByLabelText('1 active review request').textContent).toBe('1')
-    expect(screen.getAllByRole('button', { name: 'Generate walkthrough and AI review' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Generate walkthrough/i })).toBeNull()
 
     const finishedToggle = screen.getByRole('button', { name: 'Finished (1)' })
     expect(finishedToggle.getAttribute('aria-expanded')).toBe('true')
@@ -1328,8 +1328,8 @@ describe('PrReviewView walkthrough generation', () => {
     renderPrReviewView(registry)
 
     await screen.findByText('Fix authentication middleware')
-    await waitFor(() => expect(resolveProjects).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Generate walkthrough and AI review' })).toBeNull()
+    expect(resolveProjects).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /Generate walkthrough/i })).toBeNull()
   })
 
   it('keeps Agent available and explains when the repository has no local Project', async () => {
@@ -1345,68 +1345,52 @@ describe('PrReviewView walkthrough generation', () => {
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
     await fireEvent.click(await screen.findByRole('tab', { name: 'Agent' }))
 
-    expect(await screen.findByText('Review agent unavailable')).toBeTruthy()
-    expect(screen.getByText('A local OpenForge Project linked to this repository is required to start the review agent.')).toBeTruthy()
+    expect(await screen.findByText('A local OpenForge Project linked to this repository is required to start the review agent.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Generate walkthrough' })).toHaveProperty('disabled', true)
   })
 
-  it('starts a background generation from the card without opening or marking the PR read', async () => {
+  it('starts one idle agent on Agent-tab activation and keeps Generate in the pull request header', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
     registerPrReviewBackends(registry, () => [baseDiff], [basePr])
-
     renderPrReviewView(registry)
 
-    await screen.findByText('Fix authentication middleware')
-    await fireEvent.click(await screen.findByRole('button', { name: 'Generate walkthrough and AI review' }))
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    expect(registry.calls.scopedAgentSessionStarts).toHaveLength(0)
 
-    await waitFor(() =>
-      expect(registry.calls.backendInvocations.some((c) => c.method === 'startAgentWalkthrough')).toBe(true),
-    )
+    await fireEvent.click(await screen.findByRole('tab', { name: 'Agent' }))
+    await waitFor(() => expect(registry.calls.scopedAgentSessionStarts).toHaveLength(1))
+    expect(registry.calls.scopedAgentSessionStarts[0]).toMatchObject({ initialInput: '' })
+    const generate = screen.getByRole('button', { name: 'Generate walkthrough' })
+    expect(generate).toHaveProperty('disabled', false)
+    await fireEvent.click(generate)
+    await waitFor(() => expect(
+      registry.calls.backendInvocations.some(call => call.method === 'startAgentWalkthrough'),
+    ).toBe(true))
 
-    const call = registry.calls.backendInvocations.find((c) => c.method === 'startAgentWalkthrough')
-    expect(call?.payload).toMatchObject({
-      repoOwner: 'acme',
-      repoName: 'repo',
-      prNumber: 42,
-      headRef: 'fix/auth',
-      baseRef: 'main',
-      headSha: 'head-sha',
-      reviewPrId: 12345,
-      projectId: 'project-1',
-    })
-    // Plan 2 compiles the combined prompt server-side, so the caller sends none.
-    expect((call?.payload as Record<string, unknown>).prompt).toBeUndefined()
-
-    // Generation is a background action: the PR stays on the list and unread.
-    expect(get(selectedReviewPr)).toBeNull()
-    expect(registry.calls.backendInvocations.some((c) => c.method === 'markReviewPrViewed')).toBe(false)
+    await fireEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    await fireEvent.click(screen.getByRole('tab', { name: 'Agent' }))
+    await waitFor(() => expect(registry.calls.scopedAgentSessionStarts).toHaveLength(1))
   })
 
-  it('stops an in-flight generation from the card without deleting its attempt record', async () => {
-    const generating: WalkthroughRecordV1 = {
-      version: 1,
-      prId: basePr.id,
-      scope: { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: basePr.head_sha },
-      attemptId: 'attempt-1',
-      state: 'generating',
-      steps: [],
-      error: null,
-      createdAt: 0,
-      updatedAt: 0,
-    }
-    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
-    registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', () => generating)
-
+  it('starts the agent when Project resolution finishes after the Agent tab opens', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync', projectId: 'project-1', viewId: GLOBAL_VIEW_ID,
+    })
+    const { resolveProjects } = registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    let resolveProject!: (projects: Record<string, string>) => void
+    resolveProjects.mockReturnValue(new Promise(resolve => { resolveProject = resolve }))
     renderPrReviewView(registry)
 
-    await screen.findByText('Fix authentication middleware')
-    await fireEvent.click(await screen.findByRole('button', { name: 'Stop walkthrough generation' }))
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await fireEvent.click(await screen.findByRole('tab', { name: 'Agent' }))
+    expect(registry.calls.scopedAgentSessionStarts).toHaveLength(0)
 
-    await waitFor(() =>
-      expect(registry.calls.backendInvocations.some((c) => c.method === 'abortAgentWalkthrough')).toBe(true),
-    )
-    const abortCall = registry.calls.backendInvocations.find((c) => c.method === 'abortAgentWalkthrough')
-    expect(abortCall?.payload).toMatchObject({ attemptId: 'attempt-1' })
-    expect(registry.calls.backendInvocations.some((c) => c.method === 'deletePrWalkthrough')).toBe(false)
+    resolveProject({ 'acme/repo': 'project-1' })
+
+    await waitFor(() => expect(registry.calls.scopedAgentSessionStarts).toHaveLength(1))
+    expect(registry.calls.scopedAgentSessionStarts[0]).toMatchObject({ initialInput: '' })
   })
 
   it('reveals the Walkthrough tab only for a PR whose walkthrough is ready for the current head sha', async () => {

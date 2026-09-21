@@ -58,8 +58,4 @@
   onRemove={noOp}
   onOpenAuthoredPr={noOp}
   pluralize={(count, singular, plural = `${singular}s`) => count === 1 ? singular : plural}
-  walkthroughByPr={new Map()}
-  canGenerateWalkthrough={() => true}
-  onGenerateWalkthrough={noOp}
-  onStopWalkthrough={noOp}
 />

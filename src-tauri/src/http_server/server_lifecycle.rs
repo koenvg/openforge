@@ -1,6 +1,6 @@
 use super::{
-    internal_transport, legacy_transport, plugin_management, review_threads, AppState,
-    SidecarReadinessState, TaskClaims,
+    internal_transport, legacy_transport, plugin_management, review_threads,
+    scoped_agent_lifecycle, AppState, SidecarReadinessState, TaskClaims,
 };
 use crate::{
     app_events::{AppEventBus, InMemoryAppEventAdapter},
@@ -28,6 +28,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(legacy_transport::router())
         .merge(plugin_management::router())
         .merge(review_threads::router())
+        .merge(scoped_agent_lifecycle::router())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             super::agent_ingress::authorize,

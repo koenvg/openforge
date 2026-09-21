@@ -32,7 +32,6 @@ export const ActiveAndFinished: Story = {
     await expect(closedTitle).toBeVisible()
     await expect(mergedTitle.closest('.vim-focus')).toBeNull()
     await expect(closedTitle.closest('.vim-focus')).toBeNull()
-    await expect(canvas.getAllByRole('button', { name: 'Generate walkthrough and AI review' })).toHaveLength(2)
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
     await expect(canvas.getByText(activeReviewRequest.title)).toBeVisible()
     await expect(canvas.getByRole('button', { name: 'Finished (2)' })).toHaveAttribute('aria-expanded', 'true')

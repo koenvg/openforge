@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isClosedOrMergedPullRequest, type AuthoredPullRequest, type ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import type { AuthoredPullRequest, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -10,9 +10,6 @@
   import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
   import RepositoryFilterSection from './RepositoryFilterSection.svelte'
-  import PrWalkthroughButton from './PrWalkthroughButton.svelte'
-  import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
-  import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
 
   interface Props {
     headerTitle: string
@@ -59,14 +56,6 @@
     onOpenAuthoredPr: (url: string) => void
     onStartTaskFromAuthoredPr?: (pr: AuthoredPullRequest) => void
     pluralize: (count: number, singular: string, plural?: string) => string
-    // Per-PR walkthrough status (owned by PrReviewView) and the trigger to start
-    // a background walkthrough+AI-review generation from the card. Optional so the
-    // list renders (all cards 'idle') before the parent wires generation.
-    walkthroughByPr?: Map<number, WalkthroughRecordV1 | null>
-    canGenerateWalkthrough?: (pr: ReviewPullRequest) => boolean
-    onGenerateWalkthrough?: (pr: ReviewPullRequest) => void
-    /** Stops an in-flight generation for this PR. Optional; a no-op until wired. */
-    onStopWalkthrough?: (pr: ReviewPullRequest) => void
   }
 
   let {
@@ -107,10 +96,6 @@
     onOpenAuthoredPr,
     onStartTaskFromAuthoredPr,
     pluralize,
-    walkthroughByPr = new Map(),
-    canGenerateWalkthrough = () => false,
-    onGenerateWalkthrough = () => {},
-    onStopWalkthrough = () => {},
   }: Props = $props()
 
   const finishedSectionKey = pluginSectionKey('com.openforge.github-sync', 'finished-review-requests')
@@ -127,8 +112,6 @@
       <div class="flex flex-col gap-3">
         {#each prs as pr}
           {@const keyboardIndex = reviewRequests.keyboardNavigable.indexOf(pr)}
-          {@const wtState = walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha)}
-          {@const isFinished = isClosedOrMergedPullRequest(pr.state)}
           <div
             data-vim-pr-item={keyboardNavigable ? '' : undefined}
             class={keyboardNavigable && keyboardIndex === focusedIndex ? 'vim-focus' : ''}
@@ -139,15 +122,7 @@
               onClick={() => onSelectPr(pr)}
               onMarkUnread={() => onMarkUnread(pr)}
               onRemove={() => onRemove(pr)}
-            >
-              {#snippet footer()}
-                {#if wtState === 'generating' || wtState === 'ready' || (!isFinished && canGenerateWalkthrough(pr))}
-                  <div class="pt-1">
-                    <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} onStop={() => onStopWalkthrough(pr)} />
-                  </div>
-                {/if}
-              {/snippet}
-            </ReviewPrCard>
+            />
           </div>
         {/each}
       </div>

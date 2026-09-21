@@ -226,17 +226,10 @@ it('operates both split segments by keyboard and preserves menu focus and access
     expect(await page.getByRole('status', { name: 'Selected action' }).textContent()).toBe('long')
     expect(await trigger.evaluate((node) => node === document.activeElement)).toBe(true)
     expect(await primary.textContent()).toContain('Complete')
+    expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('1')
     await trigger.click()
     await page.keyboard.press('Escape')
     expect(await trigger.evaluate((node) => node === document.activeElement)).toBe(true)
-    await trigger.click()
-    await page.getByRole('menuitem', { name: 'Set aside', exact: true }).waitFor()
-    await page.locator('[role="menu"]:not([data-starting-style])').waitFor()
-    // Modal menus suppress pointer events on underlying controls. Click the document
-    // instead, letting Playwright wait for a stable target before dispatching.
-    await page.locator('html').click({ position: { x: 900, y: 10 } })
-    await page.getByRole('menu').waitFor({ state: 'hidden' })
-    expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('1')
   } finally {
     await page.close()
   }

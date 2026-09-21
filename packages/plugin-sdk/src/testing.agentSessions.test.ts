@@ -340,7 +340,7 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     await expect(api.agentSessions.status(first)).resolves.toMatchObject({ status: 'completed', acceptsInput: true })
   })
 
-  it('continues an aborted turn in the same scoped session with a new turn id', async () => {
+  it('continues an aborted idle session with a new turn id', async () => {
     const api = createMockOpenForgeApi()
     const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
     const started = await api.agentSessions.start({
@@ -354,13 +354,39 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     const aborted = await api.agentSessions.abort(scope)
     const retried = await api.agentSessions.input(scope, 'Retry the walkthrough')
 
-    expect(started.turnId).toEqual(expect.any(String))
+    expect(started.turnId).toBeNull()
     expect(aborted).toMatchObject({
       id: started.id, status: 'aborted', turnId: started.turnId, acceptsInput: true,
     })
     expect(retried.id).toBe(started.id)
     expect(retried.turnId).toEqual(expect.any(String))
     expect(retried.turnId).not.toBe(started.turnId)
+  })
+
+  it('uses only a strict end-of-prompt marker as the programmatic turn id', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
+    await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: '',
+      toolPolicy: 'review-read-only',
+    })
+
+    const marked = await api.agentSessions.input(
+      scope,
+      'Generate\n\n<!-- openforge-turn-id:attempt-42 -->',
+    )
+    expect(marked.turnId).toBe('attempt-42')
+    api.__testing.registry.pauseScopedAgentSession(scope)
+
+    const ordinary = await api.agentSessions.input(
+      scope,
+      'Mention <!-- openforge-turn-id:not-a-receipt --> inside the prompt',
+    )
+    expect(ordinary.turnId).toEqual(expect.any(String))
+    expect(ordinary.turnId).not.toBe('not-a-receipt')
   })
 
   it('allows continuation after a failed turn', async () => {

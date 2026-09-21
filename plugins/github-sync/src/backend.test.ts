@@ -40,14 +40,16 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
     handler: (input: unknown, context: PluginCommandInvocationContext) => Promise<unknown>
     [key: string]: unknown
   }>()
+  const idleSession = {
+    id: 'sas-1', turnId: null, status: 'running' as const, queuePosition: null,
+    queueReason: null, acceptsInput: true, workspaceAvailable: true,
+    errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 1,
+  }
+  const activeSession = { ...idleSession, turnId: 'turn-1' }
   const agentSessions = {
-    start: vi.fn(async () => ({
-      id: 'sas-1', turnId: 'turn-1', status: 'running', queuePosition: null,
-      queueReason: null, acceptsInput: true, workspaceAvailable: true,
-      errorCode: null, errorMessage: null, createdAt: 1, updatedAt: 1,
-    })),
-    status: vi.fn(async () => null),
-    input: vi.fn(),
+    start: vi.fn(async () => idleSession),
+    status: vi.fn(async () => idleSession),
+    input: vi.fn(async () => activeSession),
     abort: vi.fn(),
     release: vi.fn(),
     list: vi.fn(),
@@ -208,18 +210,18 @@ describe('startAgentWalkthrough backend handler', () => {
     await expect(getRestartedWalkthrough()).resolves.toMatchObject({ state: 'aborted' })
   })
 
-  it('starts the visible scoped Agent session for the project without parsed output generation', async () => {
+  it('sends the walkthrough prompt to the visible scoped Agent session without parsed output generation', async () => {
     const { invokeGlobal, handlers, agentSessions } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')
     expect(handler).toBeTypeOf('function')
 
     await handler!(walkthroughRequest({ projectId: 'project-frontend' }))
 
-    expect(agentSessions.start).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-frontend',
-      scope: { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
-      initialInput: expect.stringContaining('submit-walkthrough-step'),
-    }))
+    expect(agentSessions.start).not.toHaveBeenCalled()
+    expect(agentSessions.input).toHaveBeenCalledWith(
+      { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
+      expect.stringContaining('submit-walkthrough-step'),
+    )
     expect(invokeGlobal).not.toHaveBeenCalledWith('openforge.agentGenerateInRepo', expect.anything())
   })
 

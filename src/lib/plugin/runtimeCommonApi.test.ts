@@ -1,6 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const scopedSessionIpc = vi.hoisted(() => ({
+  startScopedAgentSession: vi.fn(),
+  getScopedAgentSessionStatus: vi.fn(),
+  inputScopedAgentSession: vi.fn(),
+  abortScopedAgentSession: vi.fn(),
+  releaseScopedAgentSession: vi.fn(),
+}))
+const scopedTerminal = vi.hoisted(() => ({ acquire: vi.fn(), attach: vi.fn(), release: vi.fn() }))
+const scopedEvents = vi.hoisted(() => ({ subscribe: vi.fn(), ready: vi.fn() }))
+
+vi.mock('../ipc', () => scopedSessionIpc)
+vi.mock('../terminalSessionService', () => ({ scopedAgentTerminalSessions: scopedTerminal }))
+vi.mock('./pluginHostEvents', () => ({
+  subscribeToPluginHostEvent: scopedEvents.subscribe,
+  waitForPluginHostEventSubscription: scopedEvents.ready,
+}))
+
 import { RuntimeCommonApiRegistry } from './runtimeCommonApi'
 import { RuntimeRegistryServices } from './runtimeContributionSupport'
+import { createPluginAgentSessionHostCapabilities } from './pluginHostAgentSessions'
 
 describe('RuntimeCommonApiRegistry', () => {
   it('owns command and event contributions shared by frontend and backend APIs', async () => {
@@ -211,7 +230,8 @@ describe('RuntimeCommonApiRegistry', () => {
   })
 
   it('binds scoped Agent Session lifecycle and invalidations to the plugin runtime host', async () => {
-    const scope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    const rawScope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    const scope = new Proxy(rawScope, {})
     const state = {
       id: 'sas-1', status: 'running' as const, queuePosition: null, queueReason: null,
       acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null,
@@ -258,6 +278,59 @@ describe('RuntimeCommonApiRegistry', () => {
     expect(handler).toHaveBeenCalledWith(scope)
     await subscription.dispose()
     expect(unsubscribe).toHaveBeenCalledOnce()
+
+    for (const forwarded of [
+      startScopedAgentSession.mock.calls[0][0].scope,
+      getScopedAgentSessionStatus.mock.calls[0][0],
+      inputScopedAgentSession.mock.calls[0][0],
+      abortScopedAgentSession.mock.calls[0][0],
+      releaseScopedAgentSession.mock.calls[0][0],
+      subscribeScopedAgentSessionChanges.mock.calls[0][0],
+    ]) {
+      expect(forwarded).toEqual(rawScope)
+      expect(forwarded).not.toBe(scope)
+      expect(() => structuredClone(forwarded)).not.toThrow()
+    }
+  })
+
+  it('keeps terminal elements renderer-local while normalizing rune-derived scopes', async () => {
+    vi.clearAllMocks()
+    const rawScope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }
+    const scope = new Proxy(rawScope, {})
+    const element = document.createElement('div')
+    const detach = vi.fn()
+    scopedEvents.subscribe.mockReturnValue(vi.fn())
+    scopedEvents.ready.mockResolvedValue(undefined)
+    scopedTerminal.acquire.mockResolvedValue({ key: 'scoped-terminal' })
+    scopedTerminal.attach.mockResolvedValue({ detach })
+    scopedSessionIpc.getScopedAgentSessionStatus.mockImplementation((_pluginId, forwardedScope) => {
+      expect(forwardedScope).toEqual(rawScope)
+      expect(forwardedScope).not.toBe(scope)
+      expect(() => structuredClone(forwardedScope)).not.toThrow()
+      return Promise.resolve({
+        id: 'sas-1', turnId: null, status: 'running', queuePosition: null, queueReason: null,
+        acceptsInput: true, workspaceAvailable: true, errorCode: null, errorMessage: null,
+        createdAt: 1, updatedAt: 2,
+      })
+    })
+    const host = createPluginAgentSessionHostCapabilities('github')
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'github',
+      projectId: 'P-1',
+      host,
+    }))
+
+    const mounted = await registry.createFrontendApi().agentSessions.mountTerminal(scope, element)
+
+    expect(scopedSessionIpc.getScopedAgentSessionStatus).toHaveBeenCalledWith('github', rawScope)
+    expect(scopedSessionIpc.getScopedAgentSessionStatus.mock.calls.flat()).not.toContain(element)
+    expect(scopedTerminal.attach).toHaveBeenCalledWith(
+      { key: 'scoped-terminal' },
+      expect.any(HTMLDivElement),
+    )
+    expect(element.contains(scopedTerminal.attach.mock.calls[0][1])).toBe(true)
+    await mounted.dispose()
+    expect(detach).toHaveBeenCalledOnce()
   })
 
   it('warns once per activation while preserving every legacy Task list result', async () => {

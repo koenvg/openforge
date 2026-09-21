@@ -35,14 +35,6 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback
 }
 
-export function initialReviewInputForPullRequest(pr: ReviewPullRequest): string {
-  return [
-    `Review pull request #${pr.number}, "${pr.title}", in ${pr.repo_owner}/${pr.repo_name}.`,
-    `Inspect head revision ${pr.head_sha} in the read-only workspace.`,
-    'Report your findings and answer follow-up questions without editing files.',
-  ].join(' ')
-}
-
 export function createPrReviewAgentSessionController(
   api: FrontendOpenForgeAPI,
   resolveProject: ProjectResolver = pr => resolveProjectIdForRepo(api, pr.repo_owner, pr.repo_name),
@@ -238,19 +230,14 @@ export function createPrReviewAgentSessionController(
     isLoading = false
   }
 
-  async function retryAvailability(): Promise<void> {
-    const currentPr = pr
-    const currentScope = scope
-    if (!currentPr || !currentScope || isLoading) return
-    await loadAvailability(currentPr, currentScope, observation)
-  }
-
   async function startCurrentSession(
     currentPr: ReviewPullRequest,
     currentScope: SessionScope,
     currentProjectId: string,
   ): Promise<ScopedAgentSessionState | null> {
     const key = scopeKey(currentScope)
+    const pendingStart = pendingStartByScope.get(key)
+    if (pendingStart) return pendingStart
     const startPromise = (async () => {
       await ensureScopeReady(currentScope)
       if (!sameScope(scope, currentScope)) return null
@@ -258,7 +245,7 @@ export function createPrReviewAgentSessionController(
         scope: currentScope,
         projectId: currentProjectId,
         checkoutRevision: currentPr.head_sha,
-        initialInput: initialReviewInputForPullRequest(currentPr),
+        initialInput: '',
         toolPolicy: 'review-read-only',
       })
     })()
@@ -272,11 +259,17 @@ export function createPrReviewAgentSessionController(
     }
   }
 
-  async function start(): Promise<ScopedAgentSessionState | null> {
+  async function activate(): Promise<ScopedAgentSessionState | null> {
+    if (availabilityError && pr && scope && !isLoading) {
+      await loadAvailability(pr, scope, observation)
+    }
     const currentPr = pr
     const currentScope = scope
     const currentProjectId = projectId
-    if (!currentPr || !currentScope || !currentProjectId || status !== null || actionPending) return status
+    if (!currentPr || !currentScope || !currentProjectId || status !== null) return status
+
+    const pendingStart = pendingStartByScope.get(scopeKey(currentScope))
+    if (pendingStart) return pendingStart
 
     actionPending = true
     error = null
@@ -306,45 +299,6 @@ export function createPrReviewAgentSessionController(
       return nextStatus
     } catch (cause) {
       if (sameScope(scope, currentScope)) error = errorMessage(cause, 'Failed to send the message.')
-      throw cause
-    } finally {
-      if (sameScope(scope, currentScope)) actionPending = false
-    }
-  }
-
-  async function abort(): Promise<ScopedAgentSessionState | null> {
-    const currentScope = scope
-    if (!currentScope || status === null || !ACTIVE_STATUSES.has(status.status)) return status
-
-    actionPending = true
-    error = null
-    try {
-      const nextStatus = await api.agentSessions.abort(currentScope)
-      if (sameScope(scope, currentScope)) status = nextStatus
-      return nextStatus
-    } catch (cause) {
-      if (sameScope(scope, currentScope)) error = errorMessage(cause, 'Failed to stop the review agent.')
-      throw cause
-    } finally {
-      if (sameScope(scope, currentScope)) actionPending = false
-    }
-  }
-
-  async function restart(): Promise<ScopedAgentSessionState | null> {
-    const currentPr = pr
-    const currentScope = scope
-    const currentProjectId = projectId
-    if (!currentPr || !currentScope || !currentProjectId || actionPending) return status
-
-    actionPending = true
-    error = null
-    try {
-      await cleanupScope(currentScope)
-      if (!sameScope(scope, currentScope)) return null
-      status = null
-      return await startCurrentSession(currentPr, currentScope, currentProjectId)
-    } catch (cause) {
-      if (sameScope(scope, currentScope)) error = errorMessage(cause, 'Failed to restart the review agent.')
       throw cause
     } finally {
       if (sameScope(scope, currentScope)) actionPending = false
@@ -386,11 +340,8 @@ export function createPrReviewAgentSessionController(
     get error() { return error },
     get availabilityError() { return availabilityError },
     observe,
-    retryAvailability,
-    start,
+    activate,
     sendInput,
-    abort,
-    restart,
     releaseForPullRequest,
     dispose,
   }

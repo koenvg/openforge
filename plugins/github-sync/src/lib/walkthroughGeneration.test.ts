@@ -34,6 +34,13 @@ async function fixture() {
     registry.backendApi,
     () => `attempt-${++sequence}`,
   )
+  await registry.backendApi.agentSessions.start({
+    scope,
+    projectId: 'P-1',
+    checkoutRevision: scope.revision,
+    initialInput: '',
+    toolPolicy: 'review-read-only',
+  })
   return { registry, snapshot, coordinator }
 }
 
@@ -68,7 +75,10 @@ describe('WalkthroughGenerationCoordinator', () => {
     expect(attemptId).toBe('attempt-1')
     expect(registry.calls.scopedAgentSessionStarts).toMatchObject([{
       scope, projectId: 'P-1', checkoutRevision: 'head-a',
-      initialInput: 'Generate and submit steps', toolPolicy: 'review-read-only',
+      initialInput: '', toolPolicy: 'review-read-only',
+    }])
+    expect(registry.calls.scopedAgentSessionInputs).toEqual([{
+      scope, input: 'Generate and submit steps\n\n<!-- openforge-turn-id:attempt-1 -->',
     }])
 
     await submitWalkthroughStep(registry.backendApi, {
@@ -78,7 +88,7 @@ describe('WalkthroughGenerationCoordinator', () => {
         files: [{ filename: 'src/app.ts', hunk_indexes: [0] }],
       },
     }, context())
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await settleEvents()
     expect(await stored(registry)).toMatchObject({ state: 'ready', attemptId, steps: [{ id: 'first' }] })
   })
@@ -86,7 +96,7 @@ describe('WalkthroughGenerationCoordinator', () => {
   it('settles completed runs without accepted steps as no-submissions', async () => {
     const { registry, snapshot, coordinator } = await fixture()
     await coordinator.start({ prId: 42, projectId: 'P-1', scope, snapshot, prompt: 'Generate' })
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await settleEvents()
     expect(await stored(registry)).toMatchObject({ state: 'no-submissions', steps: [] })
   })
@@ -129,7 +139,23 @@ describe('WalkthroughGenerationCoordinator', () => {
     expect(secondSession?.id).toBe(firstSession?.id)
     expect(secondSession?.turnId).not.toBe(firstSession?.turnId)
     expect(second).toBe('attempt-2')
-    expect(registry.calls.scopedAgentSessionInputs).toMatchObject([{ scope, input: 'Retry' }])
+    expect(registry.calls.scopedAgentSessionInputs).toEqual([
+      { scope, input: 'First\n\n<!-- openforge-turn-id:attempt-1 -->' },
+      { scope, input: 'Retry\n\n<!-- openforge-turn-id:attempt-2 -->' },
+    ])
+  })
+
+  it('rejects Generate while a direct terminal turn is active', async () => {
+    const { registry, snapshot, coordinator } = await fixture()
+    await registry.backendApi.agentSessions.input(scope, 'Reviewer follow-up')
+
+    await expect(coordinator.start({
+      prId: 42, projectId: 'P-1', scope, snapshot, prompt: 'Generate',
+    })).rejects.toThrow('current Agent turn')
+    expect(registry.calls.scopedAgentSessionInputs).toEqual([
+      { scope, input: 'Reviewer follow-up' },
+    ])
+    expect(await registry.backendApi.storage.global.get(walkthroughStorageKey(42, 'head-a'))).toBeNull()
   })
 
   it('keeps the live attempt when a duplicate start is requested', async () => {
@@ -172,11 +198,31 @@ describe('WalkthroughGenerationCoordinator', () => {
         files: [{ filename: 'src/app.ts', hunk_indexes: [0] }],
       },
     }, context())
-    registry.completeScopedAgentSession(scope)
+    registry.pauseScopedAgentSession(scope)
     await registry.backendApi.agentSessions.input(scope, 'Explain the first step')
     registry.completeScopedAgentSession(scope, false)
     await settleEvents()
 
     expect(await stored(registry)).toMatchObject({ state: 'ready', attemptId, steps: [{ id: 'first' }] })
+  })
+
+  it('fails the attempt when the provider exits before accepting a new generation turn', async () => {
+    const { registry, snapshot, coordinator } = await fixture()
+    await registry.backendApi.agentSessions.input(scope, 'Earlier reviewer prompt')
+    registry.pauseScopedAgentSession(scope)
+    const baseline = await registry.backendApi.agentSessions.status(scope)
+    vi.spyOn(registry.backendApi.agentSessions, 'input').mockResolvedValueOnce(baseline!)
+
+    const attemptId = await coordinator.start({
+      prId: 42, projectId: 'P-1', scope, snapshot, prompt: 'Generate',
+    })
+    registry.completeScopedAgentSession(scope, false)
+    await settleEvents()
+
+    expect(await stored(registry)).toMatchObject({
+      state: 'failed',
+      attemptId,
+      error: { code: 'PROVIDER_EXITED', message: 'Provider process exited unsuccessfully' },
+    })
   })
 })
