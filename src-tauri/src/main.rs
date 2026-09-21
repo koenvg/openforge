@@ -52,6 +52,7 @@ mod process_memory;
 mod process_memory_history;
 mod project_board;
 mod project_fs;
+mod provider_file_installer;
 mod provider_runtime;
 pub mod providers;
 mod pty_manager;

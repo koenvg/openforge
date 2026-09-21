@@ -33,18 +33,18 @@ fn codex_hooks_profile_path_for_home(codex_home: &Path) -> PathBuf {
 
 pub(crate) fn ensure_codex_hooks_installed() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let codex_home = codex_home_dir().ok_or("could not determine Codex home directory")?;
-    let install_dir = codex_home.join("openforge");
-    fs::create_dir_all(&install_dir)?;
-
-    let hook_path = install_dir.join("openforge-hook.js");
-    fs::write(&hook_path, CODEX_HOOK_SOURCE)?;
+    let hook_path = codex_home.join("openforge/openforge-hook.js");
+    crate::provider_file_installer::install_provider_file(
+        &hook_path,
+        CODEX_HOOK_SOURCE.as_bytes(),
+    )?;
 
     let profile_path = codex_hooks_profile_path_for_home(&codex_home);
+    crate::provider_file_installer::validate_provider_file(&profile_path)?;
     let existing_profile = read_existing_codex_profile(&profile_path)?;
-    fs::write(
-        &profile_path,
-        render_codex_hooks_profile_preserving_state(&hook_path, existing_profile.as_deref()),
-    )?;
+    let profile =
+        render_codex_hooks_profile_preserving_state(&hook_path, existing_profile.as_deref());
+    crate::provider_file_installer::install_provider_file(&profile_path, profile.as_bytes())?;
 
     Ok(profile_path)
 }

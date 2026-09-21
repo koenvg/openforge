@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::PathBuf;
 
 const OPENCODE_PLUGIN_SOURCE: &str = concat!(
@@ -23,9 +22,11 @@ pub fn get_opencode_plugin_install_dir() -> Option<PathBuf> {
 pub fn ensure_opencode_plugin_installed() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let install_dir =
         get_opencode_plugin_install_dir().ok_or("could not determine config directory")?;
-    fs::create_dir_all(&install_dir)?;
     let plugin_path = install_dir.join("openforge.ts");
-    fs::write(&plugin_path, OPENCODE_PLUGIN_SOURCE)?;
+    crate::provider_file_installer::install_provider_file(
+        &plugin_path,
+        OPENCODE_PLUGIN_SOURCE.as_bytes(),
+    )?;
     Ok(plugin_path)
 }
 

@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::PathBuf;
 
 const PI_EXTENSION_SOURCE: &str = concat!(
@@ -14,9 +13,11 @@ pub fn get_pi_extension_install_dir() -> Option<PathBuf> {
 pub fn ensure_pi_extension_installed() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let install_dir =
         get_pi_extension_install_dir().ok_or("Could not determine config directory")?;
-    fs::create_dir_all(&install_dir)?;
     let extension_path = install_dir.join("openforge.ts");
-    fs::write(&extension_path, PI_EXTENSION_SOURCE)?;
+    crate::provider_file_installer::install_provider_file(
+        &extension_path,
+        PI_EXTENSION_SOURCE.as_bytes(),
+    )?;
     Ok(extension_path)
 }
 
