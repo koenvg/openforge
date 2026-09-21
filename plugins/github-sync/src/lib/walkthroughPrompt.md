@@ -6,6 +6,8 @@ Your job is to split the PR into an ordered sequence of small, concept-sized ste
 {{PR_DESCRIPTION}}
 ## Changed Files
 
+Each line is one JSON object from the host's validation snapshot:
+
 {{CHANGED_FILES}}
 
 ## Existing Review Comments
@@ -14,7 +16,11 @@ These comments are already on the PR (from human reviewers or an earlier AI pass
 
 {{EXISTING_COMMENTS}}
 
-You are running inside a **checkout of this PR's head commit**. You may open and search any file in the repository and use `git log`/`git blame`/`git show` to understand history and intent. Use that context to explain *why*, not just *what*.
+You are running inside a **checkout of this PR's head commit**.
+
+Pull request base ref: `{{BASE_REF}}`
+
+Patch bodies are intentionally omitted from these instructions. Inspect the complete change from this workspace with `git diff` against the available local or remote base ref. You may open and search any file and use `git log`/`git blame`/`git show` to understand history and intent. Use that context to explain *why*, not just *what*. Use the Changed Files manifest above for filenames and `hunk_indexes` submitted to OpenForge.
 
 {{WALKTHROUGH_GUIDANCE}}
 
