@@ -164,6 +164,23 @@ impl Client {
         result
     }
 
+    /// Publishes the installation terminal colour defaults in operation-stream order.
+    /// # Errors
+    /// Returns admission, validation, fencing, or unknown-outcome errors.
+    pub fn set_terminal_color_profile_ordered(
+        &self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), Error> {
+        match self.ordered_mutation(|operation| Command::SetTerminalColorProfile {
+            controller: self.controller.clone(),
+            operation,
+            profile,
+        })? {
+            Response::Done => Ok(()),
+            _ => Err(Error::InvalidRequest),
+        }
+    }
+
     /// Starts a terminal using a client-owned operation identity.
     /// # Errors
     /// Returns admission errors or an explicit unknown outcome, never automatically replaying.

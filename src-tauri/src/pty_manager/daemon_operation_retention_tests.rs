@@ -1,5 +1,5 @@
 use super::*;
-use openforge_session_protocol::{PreparedCommand, TerminalOwner};
+use openforge_session_protocol::{PreparedCommand, TerminalColorProfile, TerminalOwner};
 
 #[tokio::test]
 #[ignore = "build the Session Daemon first; isolated daemon contract test"]
@@ -15,8 +15,15 @@ async fn daemon_input_refusal_and_reconnect_preserve_live_terminal_and_diagnosti
         index: Some(0),
     };
     let key = owner.session_key();
-    let bridge =
-        DaemonShells::new(root.path().into(), executable.clone(), key.clone()).for_key(&key);
+    let color_profile =
+        std::sync::Arc::new(std::sync::RwLock::new(TerminalColorProfile::default()));
+    let bridge = DaemonShells::new(
+        root.path().into(),
+        executable.clone(),
+        key.clone(),
+        std::sync::Arc::clone(&color_profile),
+    )
+    .for_key(&key);
     let publisher = RuntimeEventPublisher::new(None, None);
     let instance = bridge
         .spawn(
@@ -84,7 +91,8 @@ async fn daemon_input_refusal_and_reconnect_preserve_live_terminal_and_diagnosti
             >= 2
     );
     assert!(!diagnostics.to_string().contains("after-refusal"));
-    let next = DaemonShells::new(root.path().into(), executable, key.clone()).for_key(&key);
+    let next =
+        DaemonShells::new(root.path().into(), executable, key.clone(), color_profile).for_key(&key);
     let (next_client, after) = next.session_client().await.unwrap().unwrap();
     assert_eq!(after.pty, before.pty);
     assert_eq!(after.pid, before.pid);

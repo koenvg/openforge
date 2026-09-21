@@ -29,6 +29,18 @@ fn current_daemon_attachment_needs_no_replacement_image() {
         .with_operation_retirement(Path::new("/nonexistent/not-needed"))
         .unwrap();
     assert_eq!(attached.capabilities().unwrap().pid, pid);
+    attached
+        .set_terminal_color_profile_ordered(TerminalColorProfile::default())
+        .unwrap();
+    attached.flush_operation_receipts().unwrap();
+    assert_eq!(
+        attached
+            .inventory()
+            .unwrap()
+            .capacity
+            .retained_request_bytes,
+        0
+    );
     let session = attached
         .spawn_ordered(&shell(fixture.root.path(), 0))
         .unwrap();

@@ -28,6 +28,13 @@ impl HostBackend for Backend {
             .collect())
     }
 
+    async fn set_terminal_color_profile(
+        &self,
+        _profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+
     async fn spawn_prepared(&self, request: &SpawnRequest) -> Result<PtyInstanceId, HostError> {
         let mut resources = self.0.lock().unwrap();
         resources.next_instance += 1;
@@ -85,6 +92,33 @@ fn shell(index: u32) -> SpawnRequest {
         rows: 24,
         image_protocol: None,
     }
+}
+
+#[test]
+fn acknowledging_terminal_color_profile_releases_retained_bytes() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let state = Arc::new(tokio::sync::Mutex::new(HostState::new()));
+        let installation = InstallationId::parse("profile-retention").unwrap();
+        let host = InProcessHost::new(Backend::default(), installation.clone(), Arc::clone(&state));
+        let controller = host.connect(&installation).await.unwrap().controller;
+        host.open_operation_stream(&controller).await.unwrap();
+        host.set_terminal_color_profile(&controller, operation(1), TerminalColorProfile::default())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            state.lock().await.capacity().retained_request_bytes,
+            std::mem::size_of::<TerminalColorProfile>()
+        );
+        host.acknowledge_operations(&controller, 1, 1)
+            .await
+            .unwrap();
+        assert_eq!(state.lock().await.capacity().retained_request_bytes, 0);
+    });
 }
 
 #[test]

@@ -184,11 +184,7 @@ impl DaemonTransport {
                     .color_profile
                     .read()
                     .map_err(|_| Error::OutcomeUnknown)?;
-                let operation = format!(
-                    "terminal-profile-reconcile-{}",
-                    client.controller().generation.value()
-                );
-                publish_color_profile(&client, &operation, profile)?;
+                publish_color_profile(&client, profile)?;
                 let cursor = client.inventory()?.cursor;
                 let mut discovery = DaemonOutput::new(shared.discovery.clone());
                 discovery.resume(cursor);
@@ -251,10 +247,9 @@ impl DaemonTransport {
 
 pub(super) fn publish_color_profile(
     client: &Client,
-    operation: &str,
     profile: TerminalColorProfile,
 ) -> Result<(), Error> {
-    client.set_terminal_color_profile(operation, profile)
+    client.set_terminal_color_profile_ordered(profile)
 }
 
 fn pump(shared: &Shared) -> Result<(), Error> {

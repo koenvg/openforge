@@ -174,9 +174,8 @@ impl DaemonShells {
         &self,
         profile: TerminalColorProfile,
     ) -> Result<(), String> {
-        let operation = format!("terminal-profile-{}", uuid::Uuid::new_v4());
         self.run(self.publisher(), move |client, _| {
-            super::daemon_transport::publish_color_profile(client, &operation, profile)
+            super::daemon_transport::publish_color_profile(client, profile)
         })
         .await
     }

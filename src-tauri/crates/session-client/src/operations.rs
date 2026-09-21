@@ -2,21 +2,6 @@ use crate::Client;
 use openforge_session_protocol::*;
 
 impl Client {
-    /// Publishes the installation terminal colour defaults using a retry-safe operation ID.
-    /// # Errors
-    /// Rejects invalid profiles, stale controllers, and conflicting operation reuse.
-    pub fn set_terminal_color_profile(
-        &self,
-        operation: &str,
-        profile: TerminalColorProfile,
-    ) -> Result<(), Error> {
-        self.done(Command::SetTerminalColorProfile {
-            controller: self.controller.clone(),
-            operation: OperationId::parse(operation).map_err(|_| Error::InvalidRequest)?,
-            profile,
-        })
-    }
-
     /// Retries must retain the operation ID, including after reconnect.
     /// # Errors
     /// Returns protocol admission, fencing and process creation errors.
