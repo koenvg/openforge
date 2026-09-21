@@ -6,6 +6,50 @@ import { createXtermTerminalView } from './xtermTerminalView'
 const bytes = (text: string) => new TextEncoder().encode(text)
 
 describe('real xterm presentation recovery', () => {
+  it('a newer replacement cancels the remaining writes of an older snapshot', async () => {
+    const view = createXtermTerminalView({
+      terminalKey: 'replacement', themeMode: 'dark', openLink: async () => undefined,
+      fontReadiness: { status: 'ready' }, enableImages: false,
+    })
+    try {
+      await Promise.all([
+        view.replaceSnapshot({ compatibilityData: bytes('OLD HISTORY'), data: bytes('OLD SCREEN'), ptyInstanceId: null, sequence: 0 }),
+        view.replaceSnapshot({ data: bytes('NEW SCREEN'), ptyInstanceId: null, sequence: 0 }),
+      ])
+      expect(view.capturePresentation().lines[0]?.text).toBe('NEW SCREEN')
+    } finally {
+      view.dispose()
+    }
+  })
+
+  it.each(['hide', 'detach'] as const)('%s cancels an in-flight snapshot before it can overwrite a reopened view', async action => {
+    const view = createXtermTerminalView({
+      terminalKey: 'cancellation', themeMode: 'dark', openLink: async () => undefined,
+      fontReadiness: { status: 'ready' }, enableImages: false,
+    })
+    try {
+      const pending = view.replaceSnapshot({ data: bytes('STALE'), ptyInstanceId: null, sequence: 0 })
+      if (action === 'hide') view.setVisible(false)
+      else view.unmount()
+      await pending
+      expect(view.capturePresentation().lines).toEqual([])
+      await view.replaceSnapshot({ data: bytes('CURRENT'), ptyInstanceId: null, sequence: 0 })
+      expect(view.capturePresentation().lines[0]?.text).toBe('CURRENT')
+    } finally {
+      view.dispose()
+    }
+  })
+
+  it('settles a pending replacement when its view is disposed', async () => {
+    const view = createXtermTerminalView({
+      terminalKey: 'dispose-replay', themeMode: 'dark', openLink: async () => undefined,
+      fontReadiness: { status: 'ready' }, enableImages: false,
+    })
+    const pending = view.replaceSnapshot({ data: bytes('NEVER PRESENT'), ptyInstanceId: null, sequence: 0 })
+    view.dispose()
+    await pending
+  }, 1000)
+
   it('refuses incomplete live recovery without clearing the existing presentation', async () => {
     const view = createXtermTerminalView({
       terminalKey: 'recovery', themeMode: 'dark', openLink: async () => undefined,

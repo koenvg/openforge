@@ -70,6 +70,8 @@ export function createTerminalAuthorityCoordinator({
 
   function resetForPtyInstance(instanceId: number | null): void {
     outputSequence = 0
+    view.invalidateSnapshot()
+    attachment.markNeedsRecovery()
     terminalModelSequence = null
     pendingTerminalModelOutput.length = 0
     synchronizeTerminalOutputObservation(terminalOutputObservation, instanceId)
@@ -136,7 +138,7 @@ export function createTerminalAuthorityCoordinator({
         ptyInstanceId: null,
         sequence: outputSequence,
       })
-      attachment.finishSnapshotRender(renderRevision)
+      attachment.finishSnapshotRender(pty.getCurrentInstance() === null ? renderRevision : null)
       return
     }
 
@@ -175,12 +177,24 @@ export function createTerminalAuthorityCoordinator({
       ptyInstanceId: replay.ptyInstanceId,
       sequence: outputSequence,
     })
+    if (pty.getCurrentInstance() !== replay.ptyInstanceId) {
+      attachment.markNeedsRecovery()
+      return
+    }
     if (attachment.finishSnapshotRender(renderRevision)) flushPendingOutput()
   }
 
   async function recoverFromAuthority(): Promise<void> {
     if (isDisposed()) return
-    if (terminalReplayRecovery) return terminalReplayRecovery
+    if (terminalReplayRecovery) {
+      await terminalReplayRecovery
+      // A spawn or replacement may invalidate the snapshot being parsed. Do
+      // not let callers for the new generation settle on the old recovery.
+      if (!isDisposed() && attachment.isActive() && attachment.needsRecovery()) {
+        await recoverFromAuthority()
+      }
+      return
+    }
 
     const renderRevision = attachment.currentRenderRevision()
     const requestedInstance = pty.getCurrentInstance()

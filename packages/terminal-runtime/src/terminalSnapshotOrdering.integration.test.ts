@@ -99,6 +99,38 @@ describe('terminal snapshot ordering', () => {
     })
   })
 
+  it.each([7, null])('restores the new PTY generation when it changes from %s during snapshot parsing', async initialInstance => {
+    const key = 'T-replaced-during-replay-shell-0'
+    let instance: number | null = initialInstance
+    let finishOld!: () => void
+    const oldReplacement = new Promise<void>(resolve => { finishOld = resolve })
+    const view = createFakeTerminalView({
+      replaceSnapshot: vi.fn(snapshot => snapshot.ptyInstanceId === initialInstance ? oldReplacement : Promise.resolve()),
+    })
+    const host = createHost()
+    host.getPtyBuffer = async () => instance === null
+      ? { buffer: 'historical output', isLive: false, instanceId: null }
+      : {
+        buffer: null, isLive: true, instanceId: instance,
+        snapshot: { instanceId: instance, watermark: 0, data: btoa(`generation ${instance}`) },
+      }
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
+    try {
+      const entry = await runtime.acquire(key)
+      const attached = attachTestTerminal(runtime, entry)
+      await vi.waitFor(() => expect(view.replaceSnapshot).toHaveBeenCalledOnce())
+      instance = 8
+      const spawn = initialInstance === null ? runtime.beginPtySpawn(entry) : null
+      if (initialInstance === null) expect(spawn).not.toBeNull()
+      const restored = spawn ? spawn.started(instance) : runtime.restorePtyInstance(key, instance)
+      finishOld()
+      await Promise.all([attached, restored])
+      expect(view.replaceSnapshot).toHaveBeenLastCalledWith(expect.objectContaining({ ptyInstanceId: 8 }))
+    } finally {
+      runtime.dispose()
+    }
+  })
+
   it('recovers from Ghostty authority when live output skips a sequence', async () => {
     const shellSessionKey = 'T-sequence-gap-shell-0'
     const view = createFakeTerminalView()

@@ -1,0 +1,540 @@
+{
+  "checks": [
+    "agent/dpr1/presentation-ansi-styles",
+    "agent/dpr1/presentation-glyphs",
+    "agent/dpr1/presentation-unicode",
+    "agent/dpr1/presentation-cursor-link",
+    "agent/dpr1/presentation-cursor-underline",
+    "agent/dpr1/presentation-alternate-screen",
+    "agent/dpr2/presentation-ansi-styles",
+    "agent/dpr2/presentation-glyphs",
+    "agent/dpr2/presentation-unicode",
+    "agent/dpr2/presentation-cursor-link",
+    "agent/dpr2/presentation-cursor-underline",
+    "agent/dpr2/presentation-alternate-screen",
+    "plugin-shell/dpr1/presentation-ansi-styles",
+    "plugin-shell/dpr1/presentation-glyphs",
+    "plugin-shell/dpr1/presentation-unicode",
+    "plugin-shell/dpr1/presentation-cursor-link",
+    "plugin-shell/dpr1/presentation-cursor-underline",
+    "plugin-shell/dpr1/presentation-alternate-screen",
+    "plugin-shell/dpr2/presentation-ansi-styles",
+    "plugin-shell/dpr2/presentation-glyphs",
+    "plugin-shell/dpr2/presentation-unicode",
+    "plugin-shell/dpr2/presentation-cursor-link",
+    "plugin-shell/dpr2/presentation-cursor-underline",
+    "plugin-shell/dpr2/presentation-alternate-screen",
+    "resize-reflow/detach-reattach",
+    "runtime/live-during-replay/stale-pty/parser-continuation/resize/scroll-during-load",
+    "inline-image-pixels-retained",
+    "restored-scrollback-scrolls",
+    "runtime/detach-reopen-fresh-authority",
+    "pty-generation-change-during-replay",
+    "alternate-screen/parser-continuation/cancellation/disposal"
+  ],
+  "result": {
+    "samples": [
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 960,
+        "height": 540,
+        "text": ""
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 960,
+        "height": 540,
+        "text": ""
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "idewidewide\nhistory-390 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-391 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-392 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-393 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-394 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-395 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-396 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-397 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-398 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-399 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide\nhistory-400 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidew\nidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "widewidewide\nhistory-1590 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1591 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1592 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1593 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1594 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1595 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1596 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1597 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1598 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1599 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-1600 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "widewidewide\nhistory-3490 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3491 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3492 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3493 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3494 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3495 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3496 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3497 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3498 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3499 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-3500 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "widewidewide\nhistory-5890 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5891 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5892 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5893 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5894 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5895 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5896 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5897 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5898 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5899 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide\nhistory-5900 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nwidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      }
+    ],
+    "presentation": {
+      "geometry": {
+        "cols": 121,
+        "rows": 23
+      },
+      "activeBuffer": "normal",
+      "cursor": {
+        "x": 11,
+        "y": 2
+      },
+      "selectionText": "",
+      "lines": [
+        {
+          "row": 0,
+          "text": "CURRENT ",
+          "wrapped": false,
+          "cells": [
+            {
+              "column": 0,
+              "text": "C",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 1,
+              "text": "U",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 2,
+              "text": "R",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 3,
+              "text": "R",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 4,
+              "text": "E",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 5,
+              "text": "N",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 6,
+              "text": "T",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 7,
+              "text": " ",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "text": "ready> LIVE",
+          "wrapped": false,
+          "cells": [
+            {
+              "column": 0,
+              "text": "r",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 1,
+              "text": "e",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 2,
+              "text": "a",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 3,
+              "text": "d",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 4,
+              "text": "y",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 5,
+              "text": ">",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 6,
+              "text": " ",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 7,
+              "text": "L",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 8,
+              "text": "I",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 9,
+              "text": "V",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 10,
+              "text": "E",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            }
+          ]
+        }
+      ]
+    },
+    "inert": false,
+    "geometry": {
+      "cols": 121,
+      "rows": 23
+    }
+  },
+  "failures": [
+    "unavailable"
+  ],
+  "gaps": [
+    "Pinned Chromium golden-pixel comparison and IME are not run in shared Arc. Native model probes do not establish frontend image history prepend support."
+  ]
+}

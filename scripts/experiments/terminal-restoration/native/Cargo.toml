@@ -1,0 +1,12 @@
+[package]
+name = "terminal-restoration-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", rev = "de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec", version = "=0.2.1" }
+serde_json = "1"
+base64 = "0.22"

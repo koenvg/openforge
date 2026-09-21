@@ -80,6 +80,7 @@ vi.mock('@xterm/addon-webgl', () => ({
 describe('xterm TerminalView adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.terminal.write.mockReset()
     mocks.writeParsedCallbacks.length = 0
     mocks.renderCallbacks.length = 0
     mocks.animationFrameCallbacks.length = 0
@@ -230,6 +231,262 @@ describe('xterm TerminalView adapter', () => {
 
     expect(view.fit()).toBeNull()
     expect(mocks.fit).not.toHaveBeenCalled()
+  })
+
+  it('conceals snapshot playback without losing layout, then reveals only a rendered completed screen', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'restoration', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    const host = container.firstElementChild as HTMLElement
+    Object.defineProperties(host, {
+      clientWidth: { configurable: true, value: 640 },
+      clientHeight: { configurable: true, value: 480 },
+    })
+    const restoring = view.replaceSnapshot({ data: 'historical output', ptyInstanceId: null, sequence: 0 })
+    expect(host.style.opacity).toBe('0')
+    expect(view.fit()).toEqual({ cols: 80, rows: 24 })
+    await restoring
+    expect(host.style.opacity).toBe('0')
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    await Promise.resolve()
+    expect(host.style.opacity).toBe('0')
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.style.opacity).not.toBe('0')
+    view.dispose()
+  })
+  it('keeps a hidden and reopened attachment concealed until a fresh snapshot renders', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'restoration', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    const host = container.firstElementChild as HTMLElement
+    const present = async () => {
+      mocks.writeParsedCallbacks[0]?.()
+      mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+      mocks.animationFrameCallbacks.shift()?.(1)
+      mocks.animationFrameCallbacks.shift()?.(2)
+      await Promise.resolve()
+    }
+    await view.replaceSnapshot({ data: 'OLD', ptyInstanceId: null, sequence: 0 })
+    await present()
+    expect(host.style.opacity).not.toBe('0')
+    view.setVisible(false)
+    view.unmount()
+    view.mount(container)
+    view.setVisible(true)
+    expect(host.style.opacity).toBe('0')
+    await present()
+    expect(host.style.opacity).toBe('0')
+    await view.replaceSnapshot({ data: 'CURRENT', ptyInstanceId: null, sequence: 0 })
+    await present()
+    expect(host.style.opacity).not.toBe('0')
+    view.dispose()
+  })
+
+
+  it('opens an empty terminal and accepts ordinary live output without a reveal-frame delay', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'empty', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.setVisible(false)
+    view.mount(container)
+    view.setVisible(true)
+    await view.replaceSnapshot({ data: '', ptyInstanceId: null, sequence: 0 })
+    const host = container.firstElementChild as HTMLElement
+    expect(host.style.opacity).not.toBe('0')
+    view.writeLive({ data: 'prompt', ptyInstanceId: 1, sequence: 1 })
+    expect(host.style.opacity).not.toBe('0')
+    expect(mocks.animationFrameCallbacks).toHaveLength(0)
+    view.dispose()
+  })
+
+  it('reveals a snapshot restored before mounting only after its first mounted render', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const view = createXtermTerminalView({
+      terminalKey: 'late-mount', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    await view.replaceSnapshot({ data: 'READY', ptyInstanceId: null, sequence: 0 })
+    const container = document.createElement('div')
+    view.mount(container)
+    const host = container.firstElementChild as HTMLElement
+    expect(host.style.opacity).toBe('0')
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.style.opacity).not.toBe('0')
+    view.dispose()
+  })
+
+  it('does not expose the previous painted screen when replacing populated output with empty output', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'clear', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    view.writeLive({ data: 'OLD', ptyInstanceId: 1, sequence: 1 })
+    mocks.writeParsedCallbacks[0]?.()
+    await view.replaceSnapshot({ data: '', ptyInstanceId: null, sequence: 0 })
+    const host = container.firstElementChild as HTMLElement
+    expect(host.style.opacity).toBe('0')
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.style.opacity).not.toBe('0')
+    view.dispose()
+  })
+
+  it('makes replay inert and defers requested focus until the completed screen is usable', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'focus', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    await view.replaceSnapshot({ data: 'READY', ptyInstanceId: null, sequence: 0 })
+    const host = container.firstElementChild as HTMLElement
+    expect(host.inert).toBe(true)
+    view.focus()
+    expect(mocks.terminal.focus).not.toHaveBeenCalled()
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.inert).toBe(false)
+    expect(mocks.terminal.focus).toHaveBeenCalledOnce()
+    view.dispose()
+  })
+
+  it('reveals a successfully restored hidden terminal when it becomes visible', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'hidden-restore', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.setVisible(false)
+    view.mount(container)
+    await view.replaceSnapshot({ data: 'CURRENT', ptyInstanceId: null, sequence: 0 })
+    view.setVisible(false) // An unchanged visibility notification must not cancel restoration.
+    view.setVisible(true)
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect((container.firstElementChild as HTMLElement).inert).toBe(false)
+    view.dispose()
+  })
+
+  it('keeps failed replay concealed and lets a successful retry reveal normally', async () => {
+    mocks.terminal.write.mockImplementation((data, callback) => {
+      if (data === 'FAIL') throw new Error('parse failed')
+      callback?.()
+    })
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'retry', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    const host = container.firstElementChild as HTMLElement
+    await expect(view.replaceSnapshot({ data: 'FAIL', ptyInstanceId: null, sequence: 0 })).rejects.toThrow('parse failed')
+    expect(host.inert).toBe(true)
+    await view.replaceSnapshot({ data: 'RETRY', ptyInstanceId: null, sequence: 0 })
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.inert).toBe(false)
+    view.dispose()
+  })
+
+  it.each(['hide', 'detach', 'dispose', 'replace', 'invalidate'] as const)('ignores an already resolved reveal callback after %s', async action => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'stale-reveal', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    const host = container.firstElementChild as HTMLElement
+    await view.replaceSnapshot({ data: 'OLD', ptyInstanceId: null, sequence: 0 })
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    let replacement: Promise<void> | undefined
+    if (action === 'hide') view.setVisible(false)
+    else if (action === 'detach') view.unmount()
+    else if (action === 'dispose') view.dispose()
+    else if (action === 'invalidate') view.invalidateSnapshot()
+    else replacement = view.replaceSnapshot({ data: 'NEW', ptyInstanceId: null, sequence: 0 })
+    await Promise.resolve()
+    expect(host.inert).toBe(true)
+    await replacement
+    view.dispose()
+  })
+
+  it('presentation drain includes making the restored screen usable', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'usable', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    await view.replaceSnapshot({ data: 'READY', ptyInstanceId: null, sequence: 0 })
+    const host = container.firstElementChild as HTMLElement
+    const presented = view.drainPresentation().then(() => { expect(host.inert).toBe(false) })
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await presented
+    view.dispose()
+  })
+
+  it('keeps consecutive empty replacements concealed until old pixels have been repainted', async () => {
+    mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'clear-twice', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(container)
+    view.writeLive({ data: 'OLD', ptyInstanceId: 1, sequence: 1 })
+    mocks.writeParsedCallbacks[0]?.()
+    await view.replaceSnapshot({ data: '', ptyInstanceId: null, sequence: 0 })
+    await view.replaceSnapshot({ data: '', ptyInstanceId: null, sequence: 0 })
+    const host = container.firstElementChild as HTMLElement
+    expect(host.inert).toBe(true)
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(host.inert).toBe(false)
+    view.dispose()
   })
 
   it('drains only after xterm parses queued writes and presents a renderer frame', async () => {

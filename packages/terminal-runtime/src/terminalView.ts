@@ -118,6 +118,13 @@ export interface TerminalView {
   unmount(): void
   isMountedIn(container: HTMLElement): boolean
   bootstrap(data: TerminalViewData, ptyInstanceId: number | null, sequence: number): void
+  /** Fence pending snapshot writes and conceal old content until fresh restoration. */
+  invalidateSnapshot(): void
+  /**
+   * Replaces parsed state, cancelling superseded restoration writes. Historical
+   * playback remains concealed until rendered; drainPresentation also waits
+   * for that reveal. This does not make replay faster.
+   */
   replaceSnapshot(snapshot: TerminalViewSnapshot): Promise<void>
   writeLive(output: TerminalViewLiveOutput): void
   drainPresentation(): Promise<TerminalViewPresentationEvidence>
