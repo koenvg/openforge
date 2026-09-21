@@ -166,6 +166,20 @@ it('offers native recovery after failed Sidecar boot without creating a renderer
   expect(adapter.quit).not.toHaveBeenCalled()
 })
 
+it('enters recovery before starting a Sidecar when update launch authorization is unavailable', async () => {
+  const adapter = new FakeBootLifecycleAdapter()
+  Object.assign(adapter, {
+    preflightUpdateLaunch: async () => { throw new Error('Trusted update launch verification unavailable') },
+    recoverRestart: async () => true,
+  })
+  const result = await bootOpenForgeDesktop(adapter, bootOptions())
+  expect(result).toMatchObject({ recovery: true, sidecar: null, mainWindow: null })
+  expect(adapter.operations).not.toContain('create-sidecar-config')
+  expect(adapter.operations).not.toContain('start-sidecar-readiness')
+  expect(adapter.operations).not.toContain('create-main-window')
+  expect(adapter.quit).not.toHaveBeenCalled()
+})
+
 describe('Electron Boot Lifecycle Module seam', () => {
   it('keeps the Rust sidecar shutdown budgets ordered to avoid false quit-time cleanup failures', () => {
     expect(SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS).toBe(250)

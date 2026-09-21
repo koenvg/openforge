@@ -9,6 +9,7 @@ import type { RestartTerminalController } from './restartWorkspace.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
 
 const messages: Record<RecoveryFailure, string> = {
+  'update-verification-unavailable': 'Update launch verification is unavailable. The Sidecar was not started, so it cannot change the database. A trusted compatible update is required.',
   'preparation-failed': 'Restart preparation did not finish.',
   'activation-failed': 'The replacement backend did not become ready.',
   'relaunch-delayed': 'The replacement app has not attached yet.',

@@ -62,7 +62,8 @@ it('rejects another restart after replacement is authorized but Electron has not
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-it.each(['restart', 'update'] as const)('retains %s intent across controller replacement until the workspace is restored', async intent => {
+it('retains restart intent across controller replacement until the workspace is restored', async () => {
+  const intent = 'restart' as const
   const root = await mkdtemp(join(tmpdir(), 'openforge-controlled-restart-'))
   try {
     const controller = { installation: 'daemon-installation', lifetime: 'daemon', generation: 1 }

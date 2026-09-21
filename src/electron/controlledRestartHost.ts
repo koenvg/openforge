@@ -4,6 +4,7 @@ import { RestartOperation } from './restartOperation.js'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { RestartWorkspaceStore } from './restartWorkspaceStore.js'
 import type { RestartTerminalInventory } from './restartWorkspace.js'
+import { parseUpdateTarget, requireUpdateDriver, verifyUpdateReadiness, type AppUpdateDriver } from './appUpdateVerification.js'
 
 export interface RestartBackend {
   prepare(operationId: string, intent: 'restart' | 'update'): Promise<void>
@@ -17,14 +18,33 @@ export async function createControlledRestartHost(options: {
   operationId: string | null
   intent?: 'restart' | 'update'
   backend?: RestartBackend
+  update?: AppUpdateDriver
   inventory(): Promise<RestartTerminalInventory>
   replace(operationId: string): Promise<void>
 }): Promise<RestartWorkspaceIpc> {
+  if (options.intent === 'update') requireUpdateDriver(options.update)
   const initial = await options.inventory()
   const daemonInstallation = initial.controller.installation
   const installationId = createHash('sha256').update(JSON.stringify([options.root, daemonInstallation])).digest('hex')
   const store = new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId)
   const operation = new RestartOperation(join(options.root, 'restart-operation.json'), installationId)
+  async function validateCompletion(): Promise<void> {
+    const record = await operation.status()
+    const current = await options.inventory()
+    if (current.controller.installation !== initial.controller.installation
+      || current.controller.lifetime !== initial.controller.lifetime
+      || current.controller.generation !== initial.controller.generation) {
+      throw new Error('Restart controller changed before restoration completed')
+    }
+    if (record?.intent === 'update') {
+      try {
+        await verifyUpdateReadiness(options.update, record.updateTarget, current.controller)
+      } catch (error) {
+        await operation.fail(record.operationId, 'activation-failed')
+        throw error
+      }
+    }
+  }
   const pending = await operation.status()
   if (!options.operationId && pending?.phase === 'prepared'
     && initial.controller.generation > pending.controller.generation) {
@@ -35,6 +55,7 @@ export async function createControlledRestartHost(options: {
   if (options.operationId && (await store.load(options.operationId) || acknowledged)) {
     if (!acknowledged || await operation.shutdownIntent() !== 'quit') await operation.reconnect(options.operationId, initial.controller)
     if (acknowledged) {
+      await validateCompletion()
       await options.backend?.commit(options.operationId)
       await operation.commit(options.operationId)
     }
@@ -56,30 +77,34 @@ export async function createControlledRestartHost(options: {
       await operation.detach(operationId)
       await options.backend?.detach(operationId)
       assertCurrent()
-      await options.replace(operationId)
+      const record = await operation.status()
+      if (record?.intent === 'update') {
+        if (!record.updateTarget) throw new Error('Update target is missing')
+        await requireUpdateDriver(options.update).replace(record.updateTarget)
+      } else {
+        await options.replace(operationId)
+      }
     },
     {
       prepare: async operationId => {
         const intent = options.intent ?? 'restart'
-        await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot)
+        const target = intent === 'update'
+          ? parseUpdateTarget(await requireUpdateDriver(options.update).preflight({ installationId, operationId }))
+          : undefined
+        await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot, target)
         await options.backend?.prepare(operationId, intent)
       },
       cancel: async operationId => {
         // A failed relaunch must never turn an authorized replacement into Quit.
-        if (await operation.shutdownIntent() === 'quit') {
+        const record = await operation.status()
+        if (record?.operationId === operationId && record.phase === 'prepared') {
           await options.backend?.cancel(operationId)
           await operation.cancel(operationId)
         }
       },
-      validateCompletion: async () => {
-        const current = await options.inventory()
-        if (current.controller.installation !== initial.controller.installation
-          || current.controller.lifetime !== initial.controller.lifetime
-          || current.controller.generation !== initial.controller.generation) {
-          throw new Error('Restart controller changed before restoration completed')
-        }
-      },
+      validateCompletion,
       complete: async operationId => {
+        await validateCompletion()
         await options.backend?.commit(operationId)
         await operation.commit(operationId)
       },

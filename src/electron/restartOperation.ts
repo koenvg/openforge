@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto'
 import { isAbsolute, join } from 'node:path'
 import { CrashSafeFilePersistence } from './crashSafeFilePersistence.js'
 import type { RestartTerminalController } from './restartWorkspace.js'
+import { parseUpdateTarget, type UpdateTarget } from './appUpdateVerification.js'
 
 export type ShutdownIntent = 'quit' | 'restart' | 'update'
-export type RecoveryFailure = 'preparation-failed' | 'activation-failed' | 'relaunch-delayed' | 'interface-restoration-incomplete' | 'cold-process-loss'
+export type RecoveryFailure = 'preparation-failed' | 'activation-failed' | 'relaunch-delayed' | 'interface-restoration-incomplete' | 'cold-process-loss' | 'update-verification-unavailable'
 type Phase = 'prepared' | 'detached' | 'reconnecting' | 'committed' | 'cancelled' | 'terminated'
 export interface RestartOperationRecord {
   version: 1
@@ -14,6 +15,7 @@ export interface RestartOperationRecord {
   phase: Phase
   controller: RestartTerminalController
   daemonRoot?: string
+  updateTarget?: UpdateTarget
   failure?: RecoveryFailure
 }
 const terminal = (phase: Phase) => ['committed', 'cancelled', 'terminated'].includes(phase)
@@ -41,11 +43,15 @@ export class RestartOperation {
     return this.persistence.runExclusive(() => this.read())
   }
 
-  prepare(operationId: string, controller: RestartTerminalController, intent: Exclude<ShutdownIntent, 'quit'>, daemonRoot?: string): Promise<void> {
+  prepare(operationId: string, controller: RestartTerminalController, intent: Exclude<ShutdownIntent, 'quit'>, daemonRoot?: string, updateTarget?: UpdateTarget): Promise<void> {
     return this.persistence.runExclusive(async () => {
       const current = await this.read()
       if (current && !terminal(current.phase)) throw new Error('Restart already in progress')
-      await this.write({ version: 1, installationId: this.installationId, operationId, controller, intent, phase: 'prepared', daemonRoot })
+      const target = updateTarget === undefined ? undefined : parseUpdateTarget(updateTarget)
+      if (target && (intent !== 'update' || target.operationId !== operationId || target.installationId !== this.installationId)) {
+        throw new Error('Update target belongs to a different operation or installation')
+      }
+      await this.write({ version: 1, installationId: this.installationId, operationId, controller, intent, phase: 'prepared', daemonRoot, updateTarget: target })
     })
   }
 
@@ -130,8 +136,15 @@ async function readRecord(path: string): Promise<RestartOperationRecord | null> 
     || typeof value.controller?.installation !== 'string' || typeof value.controller.lifetime !== 'string'
     || !Number.isSafeInteger(value.controller.generation) || value.controller.generation < 1
     || (value.daemonRoot !== undefined && (typeof value.daemonRoot !== 'string' || !isAbsolute(value.daemonRoot)))
-    || (value.failure !== undefined && !['preparation-failed', 'activation-failed', 'relaunch-delayed', 'interface-restoration-incomplete', 'cold-process-loss'].includes(value.failure))) {
+    || (value.failure !== undefined && !['preparation-failed', 'activation-failed', 'relaunch-delayed', 'interface-restoration-incomplete', 'cold-process-loss', 'update-verification-unavailable'].includes(value.failure))) {
     throw new Error('Invalid restart operation record')
+  }
+  if (value.updateTarget !== undefined) {
+    const target = parseUpdateTarget(value.updateTarget)
+    if (value.intent !== 'update' || target.installationId !== value.installationId || target.operationId !== value.operationId) {
+      throw new Error('Update target belongs to a different operation or installation')
+    }
+    value.updateTarget = target
   }
   return value as RestartOperationRecord
 }

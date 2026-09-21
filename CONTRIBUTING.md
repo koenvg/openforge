@@ -139,15 +139,13 @@ Package the renderer, Electron main/preload files, plugins, and Rust sidecar int
 pnpm electron:package
 ```
 
-Build and copy the app to `/Applications`:
+Source installation is currently blocked. `pnpm electron:install` refuses before building, stopping processes, refreshing the CLI, or changing an installed bundle. Trusted-release verification and the verified install-to-relaunch helper must be available before this path can be enabled.
 
-```bash
-pnpm electron:install
-```
+Use `pnpm electron:package` to build without installing. Do not manually replace a running app bundle and expect sessions to survive. First adoption from a pre-daemon build interrupts existing sessions and requires explicit approval; that approval flow is not implemented yet.
 
-`pnpm electron:install` resolves the app path from `openforge-backend-layout.json`, closes an existing Open Forge instance, installs the app, and removes its quarantine flag.
+Electron also refuses an incomplete update before starting its Sidecar while trusted launch verification is unavailable. Native recovery remains available, and the refusal does not discard the session handoff. This prevents update recovery from accidentally running a different domain backend against the database. Ordinary session-preserving Restart is unaffected.
 
-Rust-only validation does not require a prebuilt `dist/` renderer bundle. Release packaging is owned by Electron; use `pnpm electron:install` for a complete local build and installation.
+Rust-only validation does not require a prebuilt `dist/` renderer bundle. Release packaging is owned by Electron; use `pnpm electron:package` for a complete local build.
 
 `pnpm build:plugin-sdk-runtime` builds the Plugin SDK browser runtime from current source and installed dependencies into `dist-electron/plugin-host/plugin-sdk/index.js`. The dev artifact build and Electron build also generate it. No checked-in runtime snapshot needs regeneration. Run `pnpm exec vitest run scripts/build-plugin-sdk-runtime.test.mjs` to check the output paths and standalone module exports.
 
