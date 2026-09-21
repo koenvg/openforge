@@ -47,6 +47,19 @@ mod tests {
     }
 
     #[test]
+    fn opencode_fixture_clears_inherited_agent_config() {
+        let payloads = evaluate_posted_payloads_for_events_with_inherited_agent_config(
+            r#"[
+                { type: 'session.created', properties: { session: { id: 'ses_fixture' } } }
+]"#,
+            Some("/sentinel/live-agent-config.json"),
+        );
+
+        assert_eq!(payloads.len(), 1);
+        assert_eq!(payloads[0]["kind"], "started");
+    }
+
+    #[test]
     fn opencode_plugin_reports_lifecycle_events_to_openforge_hook() {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("event: async"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_TASK_ID"));
@@ -277,8 +290,16 @@ process.stdout.write(result === null || result === undefined ? "null" : String(r
     }
 
     fn evaluate_posted_payloads_for_events(events_js: &str) -> Vec<serde_json::Value> {
-        let stdout = run_opencode_plugin_script(&format!(
-            r#"
+        evaluate_posted_payloads_for_events_with_inherited_agent_config(events_js, None)
+    }
+
+    fn evaluate_posted_payloads_for_events_with_inherited_agent_config(
+        events_js: &str,
+        inherited_agent_config: Option<&str>,
+    ) -> Vec<serde_json::Value> {
+        let stdout = run_opencode_plugin_script_with_inherited_agent_config(
+            &format!(
+                r#"
 process.env.OPENFORGE_TASK_ID = "T-PLUGIN";
 process.env.OPENFORGE_PTY_INSTANCE_ID = "42";
 process.env.OPENFORGE_HTTP_PORT = "38123";
@@ -292,11 +313,20 @@ for (const event of {events_js}) {{
 }}
 process.stdout.write(JSON.stringify(payloads));
 "#
-        ));
+            ),
+            inherited_agent_config,
+        );
         serde_json::from_str(&stdout).expect("payloads should be valid json")
     }
 
     fn run_opencode_plugin_script(script_body: &str) -> String {
+        run_opencode_plugin_script_with_inherited_agent_config(script_body, None)
+    }
+
+    fn run_opencode_plugin_script_with_inherited_agent_config(
+        script_body: &str,
+        inherited_agent_config: Option<&str>,
+    ) -> String {
         let source =
             OPENCODE_PLUGIN_SOURCE.replace("export const OpenForgePlugin", "const OpenForgePlugin");
         let script = format!("{source}\n{script_body}");
@@ -306,10 +336,13 @@ process.stdout.write(JSON.stringify(payloads));
             .tempfile()
             .expect("create plugin test script");
         std::fs::write(script_file.path(), script).expect("write plugin test script");
-        let output = std::process::Command::new("node")
-            .arg(script_file.path())
-            .output()
-            .expect("run node for opencode plugin test");
+        let mut command = std::process::Command::new("node");
+        command.arg(script_file.path());
+        if let Some(agent_config) = inherited_agent_config {
+            command.env("OPENFORGE_AGENT_CONFIG", agent_config);
+        }
+        command.env_remove("OPENFORGE_AGENT_CONFIG");
+        let output = command.output().expect("run node for opencode plugin test");
 
         assert!(
             output.status.success(),
