@@ -41,8 +41,12 @@ impl PtyManager {
     ) -> Result<u64, PtyError> {
         let cwd = resolve_pty_cwd(context.cwd)?;
         adapter.prepare(&cwd)?;
-        let mut env: std::collections::BTreeMap<String, String> = std::env::vars().collect();
-        env.extend(crate::user_environment::user_environment());
+        let mut env: std::collections::BTreeMap<String, String> = match adapter.base_environment() {
+            Some(environment) => environment.clone().into_iter().collect(),
+            None => crate::user_environment::agent_environment()
+                .into_iter()
+                .collect(),
+        };
         #[cfg(test)]
         env.extend(self.test_environment.clone());
         env.insert("PWD".into(), cwd.to_string_lossy().into_owned());

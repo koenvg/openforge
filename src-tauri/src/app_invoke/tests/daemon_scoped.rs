@@ -40,6 +40,19 @@ async fn scoped_agent_uses_daemon_but_is_interrupted_before_restart_handoff() {
             "(version 1)(allow default)".into(),
             Some(credential.clone()),
             fixture.0.path().into(),
+            crate::claude_launch_context::ClaudeLaunchContext::for_test(
+                provider,
+                std::collections::HashMap::from([
+                    (
+                        "PATH".to_string(),
+                        format!("{}:/usr/bin:/bin", bin.display()),
+                    ),
+                    (
+                        "HOME".to_string(),
+                        fixture.0.path().to_string_lossy().into_owned(),
+                    ),
+                ]),
+            ),
             80,
             24,
             crate::app_events::RuntimeEventPublisher::new(

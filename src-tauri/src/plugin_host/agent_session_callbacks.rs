@@ -284,10 +284,24 @@ fn scoped_error(error: ScopedAgentSessionError) -> String {
         ScopedAgentSessionError::InputTooLarge => "INPUT_TOO_LARGE",
         ScopedAgentSessionError::ProjectNotFound(_) => "PROJECT_NOT_FOUND",
         ScopedAgentSessionError::NotReady(_) => "NOT_READY",
+        ScopedAgentSessionError::AuthenticationUnavailable => "AUTHENTICATION_UNAVAILABLE",
         ScopedAgentSessionError::Storage(ScopedAgentSessionStoreError::NotFound { .. }) => {
             "NOT_FOUND"
         }
         ScopedAgentSessionError::Storage(_) | ScopedAgentSessionError::Runtime(_) => "INTERNAL",
     };
     format!("{code}: {error}")
+}
+
+#[cfg(test)]
+mod scoped_error_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn authentication_unavailable_maps_to_the_stable_plugin_host_category() {
+        assert_eq!(
+            scoped_error(ScopedAgentSessionError::AuthenticationUnavailable),
+            "AUTHENTICATION_UNAVAILABLE: Provider authentication is unavailable; authenticate the normal provider first"
+        );
+    }
 }

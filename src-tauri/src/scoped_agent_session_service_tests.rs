@@ -168,6 +168,10 @@ impl ScopedSessionWorkspace for GatedRotationWorkspace {
 
 #[derive(Default)]
 struct FakeRuntime {
+    authentication_error: Mutex<Option<String>>,
+    authentication_checks: Mutex<usize>,
+    authentication_fails_after: Mutex<Option<usize>>,
+    authentication_fails_during_launch: Mutex<bool>,
     launches: Mutex<Vec<ScopedLaunchRequest>>,
     failed_targets: Mutex<Vec<String>>,
     failed_disposals: Mutex<Vec<String>>,
@@ -184,8 +188,30 @@ struct OutputGate {
     resume: tokio::sync::Notify,
 }
 impl ScopedSessionRuntime for FakeRuntime {
+    fn verify_authentication<'a>(&'a self) -> RuntimeFuture<'a, ()> {
+        Box::pin(async move {
+            let checks = {
+                let mut checks = lock(&self.authentication_checks);
+                *checks += 1;
+                *checks
+            };
+            if lock(&self.authentication_fails_after)
+                .is_some_and(|successful_checks| checks > successful_checks)
+            {
+                return Err("authentication expired".to_string());
+            }
+            match lock(&self.authentication_error).clone() {
+                Some(error) => Err(error),
+                None => Ok(()),
+            }
+        })
+    }
+
     fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, u64> {
         Box::pin(async move {
+            if *lock(&self.authentication_fails_during_launch) {
+                return Err("AUTHENTICATION_UNAVAILABLE".to_string());
+            }
             let should_fail = lock(&self.failed_targets).contains(&request.scope.target_key);
             let mut launches = lock(&self.launches);
             launches.push(request);
@@ -311,6 +337,141 @@ fn request(project: &str, index: usize) -> StartScopedAgentSession {
         initial_input: format!("review {index}"),
         tool_policy: "review-read-only".into(),
     }
+}
+
+#[tokio::test]
+async fn unavailable_authentication_rejects_admission_without_session_workspace_or_process() {
+    let f = fixture("scoped_authentication_admission");
+    *lock(&f.runtime.authentication_error) = Some("not signed in".to_string());
+    let req = request(&f.project_id, 1);
+
+    let error = f.service.start(req.clone()).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        ScopedAgentSessionError::AuthenticationUnavailable
+    ));
+    assert_eq!(*lock(&f.runtime.authentication_checks), 1);
+    assert!(lock(&f.runtime.launches).is_empty());
+    assert!(lock(&f.workspace.acquired).is_empty());
+    assert!(f
+        .service
+        .status(&req.owner_plugin_id, &req.scope)
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn authentication_is_rechecked_before_workspace_and_process_launch() {
+    let f = fixture("scoped_authentication_final_check");
+    *lock(&f.runtime.authentication_fails_after) = Some(1);
+    let req = request(&f.project_id, 1);
+
+    let error = f.service.start(req.clone()).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        ScopedAgentSessionError::AuthenticationUnavailable
+    ));
+    assert_eq!(*lock(&f.runtime.authentication_checks), 2);
+    assert!(lock(&f.runtime.launches).is_empty());
+    assert!(lock(&f.workspace.acquired).is_empty());
+    let state = f
+        .service
+        .status(&req.owner_plugin_id, &req.scope)
+        .unwrap()
+        .expect("failed session remains inspectable");
+    assert_eq!(state.status, ScopedAgentSessionStatus::Failed);
+    assert_eq!(
+        state.error_code.as_deref(),
+        Some("AUTHENTICATION_UNAVAILABLE")
+    );
+}
+
+#[tokio::test]
+async fn unavailable_authentication_rejects_completed_session_continuation_before_scheduling() {
+    let f = fixture("scoped_authentication_continuation");
+    let req = request(&f.project_id, 1);
+    let running = f.service.start(req.clone()).await.unwrap();
+    f.service.complete(&running.id, 1, true).await.unwrap();
+    *lock(&f.runtime.authentication_error) = Some("signed out".to_string());
+
+    let error = f
+        .service
+        .input(&req.owner_plugin_id, &req.scope, "continue")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        ScopedAgentSessionError::AuthenticationUnavailable
+    ));
+    assert_eq!(lock(&f.runtime.launches).len(), 1);
+    assert!(lock(&f.workspace.protected).is_empty());
+    assert_eq!(
+        f.service
+            .status(&req.owner_plugin_id, &req.scope)
+            .unwrap()
+            .unwrap()
+            .status,
+        ScopedAgentSessionStatus::Completed
+    );
+}
+
+#[tokio::test]
+async fn queued_session_rechecks_authentication_when_promoted() {
+    let f = fixture("scoped_authentication_promotion");
+    let mut states = Vec::new();
+    for index in 1..=5 {
+        states.push(
+            f.service
+                .start(request(&f.project_id, index))
+                .await
+                .unwrap(),
+        );
+    }
+    assert_eq!(states[4].status, ScopedAgentSessionStatus::Queued);
+    *lock(&f.runtime.authentication_error) = Some("signed out while queued".to_string());
+
+    f.service.complete(&states[0].id, 1, true).await.unwrap();
+
+    assert_eq!(lock(&f.runtime.launches).len(), 4);
+    assert_eq!(lock(&f.workspace.acquired).len(), 4);
+    let promoted = f
+        .service
+        .status("com.example.review", &request(&f.project_id, 5).scope)
+        .unwrap()
+        .expect("promoted session remains inspectable");
+    assert_eq!(promoted.status, ScopedAgentSessionStatus::Failed);
+    assert_eq!(
+        promoted.error_code.as_deref(),
+        Some("AUTHENTICATION_UNAVAILABLE")
+    );
+}
+
+#[tokio::test]
+async fn authentication_loss_in_the_final_runtime_probe_returns_the_typed_error() {
+    let f = fixture("scoped_authentication_runtime_probe");
+    *lock(&f.runtime.authentication_fails_during_launch) = true;
+    let req = request(&f.project_id, 1);
+
+    let error = f.service.start(req.clone()).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        ScopedAgentSessionError::AuthenticationUnavailable
+    ));
+    assert!(lock(&f.runtime.launches).is_empty());
+    let state = f
+        .service
+        .status(&req.owner_plugin_id, &req.scope)
+        .unwrap()
+        .expect("failed session remains inspectable");
+    assert_eq!(state.status, ScopedAgentSessionStatus::Failed);
+    assert_eq!(
+        state.error_code.as_deref(),
+        Some("AUTHENTICATION_UNAVAILABLE")
+    );
 }
 
 #[tokio::test]

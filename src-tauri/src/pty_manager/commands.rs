@@ -36,11 +36,12 @@ pub(crate) fn build_scoped_claude_args(
     resume: bool,
     settings_path: &Path,
     sandbox_profile: &str,
+    claude_executable: &Path,
 ) -> Vec<String> {
     let mut args = vec![
         "-p".to_string(),
         sandbox_profile.to_string(),
-        "claude".to_string(),
+        claude_executable.to_string_lossy().into_owned(),
     ];
     if resume {
         args.extend(["--resume".to_string(), provider_session_id.to_string()]);
@@ -230,8 +231,9 @@ mod tests {
             false,
             Path::new("/private/policy.json"),
             "(version 1)",
+            Path::new("/usr/local/bin/claude"),
         );
-        assert_eq!(&args[..3], ["-p", "(version 1)", "claude"]);
+        assert_eq!(&args[..3], ["-p", "(version 1)", "/usr/local/bin/claude"]);
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--session-id", "conversation-1"]));
@@ -245,6 +247,34 @@ mod tests {
         assert!(args.contains(&"--disable-slash-commands".to_string()));
         assert!(args.contains(&"--strict-mcp-config".to_string()));
         assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
+    }
+
+    #[test]
+    fn scoped_claude_new_and_resumed_commands_keep_their_explicit_conversation_ids() {
+        let new_args = build_scoped_claude_args(
+            "first turn",
+            "conversation-new",
+            false,
+            Path::new("/private/policy.json"),
+            "(version 1)",
+            Path::new("/usr/local/bin/claude"),
+        );
+        let resumed_args = build_scoped_claude_args(
+            "next turn",
+            "conversation-existing",
+            true,
+            Path::new("/private/policy.json"),
+            "(version 1)",
+            Path::new("/usr/local/bin/claude"),
+        );
+
+        assert!(new_args
+            .windows(2)
+            .any(|pair| pair == ["--session-id", "conversation-new"]));
+        assert!(resumed_args
+            .windows(2)
+            .any(|pair| pair == ["--resume", "conversation-existing"]));
+        assert!(!resumed_args.contains(&"conversation-new".to_string()));
     }
 
     #[test]

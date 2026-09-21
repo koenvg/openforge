@@ -22,6 +22,7 @@ use thiserror::Error;
 pub(crate) const SCOPED_EXECUTION_LIMIT: usize = 4;
 pub(crate) const SCOPED_QUEUE_LIMIT: usize = 32;
 pub(crate) const SCOPED_INPUT_LIMIT_BYTES: usize = 64 * 1024;
+pub(crate) const AUTHENTICATION_UNAVAILABLE_CODE: &str = "AUTHENTICATION_UNAVAILABLE";
 pub(crate) type RuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 pub(crate) type ScopedCompletionObserver = Arc<dyn Fn(String, u64, bool) + Send + Sync>;
 
@@ -97,6 +98,9 @@ pub(crate) trait ScopedSessionWorkspace: Send + Sync {
 }
 
 pub(crate) trait ScopedSessionRuntime: Send + Sync {
+    fn verify_authentication<'a>(&'a self) -> RuntimeFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
     fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, u64>;
     fn input<'a>(&'a self, terminal_key: &'a str, input: &'a str) -> RuntimeFuture<'a, ()>;
     fn abort<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()>;
@@ -218,6 +222,8 @@ pub(crate) enum ScopedAgentSessionError {
     Forbidden,
     #[error("Scoped Agent Session is not ready for input in status {0}")]
     NotReady(String),
+    #[error("Provider authentication is unavailable; authenticate the normal provider first")]
+    AuthenticationUnavailable,
     #[error("Scoped Agent Session runtime failed: {0}")]
     Runtime(String),
 }
@@ -322,6 +328,10 @@ impl ScopedAgentSessionService {
                 .map_err(|e| ScopedAgentSessionError::Runtime(e.to_string()))?
         };
         SessionToolPolicy::resolve(&request.tool_policy, &provider)?;
+        self.runtime
+            .verify_authentication()
+            .await
+            .map_err(|_| ScopedAgentSessionError::AuthenticationUnavailable)?;
         let promoted = self.release_previous_revision(&request).await?;
         let id = format!("sas-{}", uuid::Uuid::new_v4());
         let row = lock(&self.database).admit_scoped_agent_session(
@@ -400,6 +410,10 @@ impl ScopedAgentSessionService {
             | ScopedAgentSessionStatus::Failed
             | ScopedAgentSessionStatus::Aborted
             | ScopedAgentSessionStatus::Interrupted => {
+                self.runtime
+                    .verify_authentication()
+                    .await
+                    .map_err(|_| ScopedAgentSessionError::AuthenticationUnavailable)?;
                 let lease = self
                     .workspaces
                     .protect(&row)
@@ -642,6 +656,18 @@ impl ScopedAgentSessionService {
         {
             return Ok(());
         }
+        if self.runtime.verify_authentication().await.is_err() {
+            lock(&self.pending).remove(&row.id);
+            lock(&self.workspace_leases).remove(&row.id);
+            let (_, promoted) = lock(&self.database).fail_starting_scoped_agent_session(
+                &row.id,
+                AUTHENTICATION_UNAVAILABLE_CODE,
+                "Provider authentication is unavailable; authenticate the normal provider first",
+                SCOPED_EXECUTION_LIMIT,
+            )?;
+            Box::pin(self.launch_promoted(promoted)).await;
+            return Err(ScopedAgentSessionError::AuthenticationUnavailable);
+        }
         let pending = lock(&self.pending).get(&row.id).cloned().ok_or_else(|| {
             ScopedAgentSessionError::Runtime("queued launch input was lost".into())
         })?;
@@ -699,16 +725,31 @@ impl ScopedAgentSessionService {
         }
         .await;
         if let Err(error) = launch {
+            let authentication_unavailable = error == AUTHENTICATION_UNAVAILABLE_CODE;
+            let error_code = if authentication_unavailable {
+                AUTHENTICATION_UNAVAILABLE_CODE
+            } else {
+                "START_FAILED"
+            };
+            let error_message = if authentication_unavailable {
+                "Provider authentication is unavailable; authenticate the normal provider first"
+            } else {
+                &error
+            };
             lock(&self.pending).remove(&row.id);
             lock(&self.workspace_leases).remove(&row.id);
             let (_, promoted) = lock(&self.database).fail_starting_scoped_agent_session(
                 &row.id,
-                "START_FAILED",
-                &error,
+                error_code,
+                error_message,
                 SCOPED_EXECUTION_LIMIT,
             )?;
             Box::pin(self.launch_promoted(promoted)).await;
-            return Err(ScopedAgentSessionError::Runtime(error));
+            return Err(if authentication_unavailable {
+                ScopedAgentSessionError::AuthenticationUnavailable
+            } else {
+                ScopedAgentSessionError::Runtime(error)
+            });
         }
         Ok(())
     }

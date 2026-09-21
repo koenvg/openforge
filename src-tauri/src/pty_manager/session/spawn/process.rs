@@ -4,9 +4,10 @@ use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::{
     TerminalModelEvent, TerminalModelFeeder, TerminalModelOptions, TerminalModelSession,
 };
-use crate::user_environment::user_environment;
+use crate::user_environment::agent_environment;
 use log::{info, warn};
 use portable_pty::CommandBuilder;
+use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -128,9 +129,11 @@ impl PtyManager {
         command: &mut CommandBuilder,
         cwd: &Path,
         terminal_image_protocol: Option<TerminalImageProtocol>,
+        base_environment: Option<&HashMap<String, String>>,
     ) {
+        command.env_clear();
         command.cwd(cwd);
-        for (key, value) in user_environment() {
+        for (key, value) in base_environment.cloned().unwrap_or_else(agent_environment) {
             command.env(key, value);
         }
         #[cfg(test)]
@@ -270,7 +273,12 @@ impl PtyManager {
         for arg in adapter.command_args() {
             command.arg(arg);
         }
-        self.configure_pty_command(&mut command, request.cwd, request.terminal_image_protocol);
+        self.configure_pty_command(
+            &mut command,
+            request.cwd,
+            request.terminal_image_protocol,
+            adapter.base_environment(),
+        );
         for key in adapter.removed_env() {
             command.env_remove(key);
         }
@@ -313,7 +321,7 @@ impl PtyManager {
             mut command,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
-        self.configure_pty_command(&mut command, cwd, terminal_image_protocol);
+        self.configure_pty_command(&mut command, cwd, terminal_image_protocol, None);
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
             session_key: session_key.to_string(),

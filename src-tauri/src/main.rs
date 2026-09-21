@@ -13,6 +13,7 @@ mod builtin_plugins;
 mod claude_authoritative;
 mod claude_background_work;
 mod claude_hooks;
+mod claude_launch_context;
 mod cli_installer;
 mod codex_hooks;
 pub mod command_discovery;

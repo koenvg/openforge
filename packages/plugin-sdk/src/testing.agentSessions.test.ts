@@ -190,6 +190,21 @@ describe('CommonAPIFake agentSessions.list', () => {
 })
 
 describe('CommonAPIFake scoped Agent Sessions', () => {
+  it('models unavailable provider authentication with the public error category', async () => {
+    const api = createMockOpenForgeApi()
+    api.__testing.registry.setScopedAgentSessionAuthenticationAvailable(false)
+
+    await expect(api.agentSessions.start({
+      scope: { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' },
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: 'Review',
+      toolPolicy: 'review-read-only',
+    })).rejects.toMatchObject<Partial<ScopedAgentSessionError>>({
+      code: 'AUTHENTICATION_UNAVAILABLE',
+    })
+  })
+
   it('starts and reads one scope without changing task-scoped list results', async () => {
     const api = createMockOpenForgeApi()
     const scope = { namespace: 'github-pr', targetKey: 'acme/openforge#42', revision: 'head-a' }

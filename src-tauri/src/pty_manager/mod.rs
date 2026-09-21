@@ -61,7 +61,7 @@ struct ResizeStartGate {
 #[cfg(test)]
 use commands::resolve_shell_path;
 #[cfg(test)]
-pub(crate) use commands::{build_claude_args, get_shell_path};
+pub(crate) use commands::{build_claude_args, build_scoped_claude_args, get_shell_path};
 #[cfg(test)]
 use events::{
     finalize_pty_exit, find_utf8_boundary, pty_output_channel, read_pty_output_loop,

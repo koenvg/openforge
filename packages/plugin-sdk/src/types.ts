@@ -905,6 +905,7 @@ export type ScopedAgentSessionErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'NOT_READY'
+  | 'AUTHENTICATION_UNAVAILABLE'
   | 'HOST_UNAVAILABLE'
   | 'INTERNAL'
 

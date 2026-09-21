@@ -145,6 +145,10 @@ export class TestingOpenForgeRegistryFake {
     this.commonApi.pauseScopedAgentSession(scope)
   }
 
+  setScopedAgentSessionAuthenticationAvailable(available: boolean): void {
+    this.commonApi.setScopedAgentSessionAuthenticationAvailable(available)
+  }
+
   invokeAgentCommand<TOutput>(
     qualifiedId: string,
     payload: unknown,
