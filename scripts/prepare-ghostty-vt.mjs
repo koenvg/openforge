@@ -252,7 +252,11 @@ export function prepareRustDependencies({ runCommand = run } = {}) {
     throw new Error(`Cargo.lock does not pin libghostty-vt to ${WRAPPER_REVISION}`)
   }
   const layout = resolveRustSidecarLayout({ repoRoot: repositoryRoot })
-  const manifests = [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]
+  const manifests = [
+    layout.manifestPath,
+    layout.sessionCrates.daemon.manifestPath,
+    join(layout.backendCrateRootPath, 'ghostty-compat', 'Cargo.toml'),
+  ]
   const options = {
     cwd: repositoryRoot,
     env: {

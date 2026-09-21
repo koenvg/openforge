@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { join } from 'node:path'
 import { extractPackageArchive, fetchWithRetry, prepareRustDependencies, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
@@ -11,27 +12,31 @@ describe('Ghostty dependency preparation', () => {
         if (options.env.CARGO_NET_OFFLINE !== 'false') throw new Error('network still disabled')
       })
       expect(() => prepareRustDependencies({ runCommand })).not.toThrow()
-      expect(runCommand).toHaveBeenCalledTimes(4)
+      expect(runCommand).toHaveBeenCalledTimes(6)
       expect(process.env.CARGO_NET_OFFLINE).toBe('true')
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
-  it('never requests an online fetch when both lockfiles are cached', () => {
+  it('never requests an online fetch when all lockfiles are cached', () => {
     const runCommand = vi.fn()
     prepareRustDependencies({ runCommand })
-    expect(runCommand).toHaveBeenCalledTimes(2)
+    expect(runCommand).toHaveBeenCalledTimes(3)
     for (const [, args] of runCommand.mock.calls) expect(args).toContain('--offline')
   })
 
-  it('prefetches the daemon lockfile before CI switches Cargo offline', () => {
+  it('prefetches standalone lockfiles before CI switches Cargo offline', () => {
     const runCommand = vi.fn((_command, args) => {
       if (args.includes('--offline')) throw new Error('cold cache')
     })
     prepareRustDependencies({ runCommand })
     const layout = resolveRustSidecarLayout()
-    for (const manifest of [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]) {
+    for (const manifest of [
+      layout.manifestPath,
+      layout.sessionCrates.daemon.manifestPath,
+      join(layout.backendCrateRootPath, 'ghostty-compat', 'Cargo.toml'),
+    ]) {
       expect(runCommand).toHaveBeenCalledWith('cargo', ['fetch', '--locked', '--manifest-path', manifest], expect.any(Object))
     }
   })
