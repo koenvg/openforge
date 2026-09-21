@@ -30,6 +30,7 @@ pub struct ReviewPrRow {
     pub updated_at: i64,
     pub viewed_at: Option<i64>,
     pub viewed_head_sha: Option<String>,
+    pub reviewed_head_sha: Option<String>,
     /// GitHub labels on the PR. Serialized to the frontend as an array; empty
     /// when the PR has no labels. Persisted as a nullable JSON-TEXT column.
     pub labels: Vec<PrLabel>,
@@ -142,7 +143,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, ci_status, mergeable, mergeable_state, merged_at, created_at, updated_at, viewed_at, viewed_head_sha, labels
+                    changed_files, ci_status, mergeable, mergeable_state, merged_at, created_at, updated_at, viewed_at, viewed_head_sha, reviewed_head_sha, labels
              FROM review_prs
              WHERE dismissed_at IS NULL
              ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
@@ -174,7 +175,8 @@ impl super::Database {
                 updated_at: row.get(22)?,
                 viewed_at: row.get(23)?,
                 viewed_head_sha: row.get(24)?,
-                labels: super::parse_labels_column(row.get(25)?),
+                reviewed_head_sha: row.get(25)?,
+                labels: super::parse_labels_column(row.get(26)?),
             })
         })?;
         let mut result = Vec::new();
@@ -203,6 +205,24 @@ impl super::Database {
         let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE review_prs SET viewed_at = NULL, viewed_head_sha = NULL WHERE id = ?1",
+            rusqlite::params![pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_review_pr_reviewed(&self, pr_id: i64, head_sha: &str) -> Result<()> {
+        let conn = self.lock_conn()?;
+        conn.execute(
+            "UPDATE review_prs SET reviewed_head_sha = ?1 WHERE id = ?2",
+            rusqlite::params![head_sha, pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_review_pr_needs_review(&self, pr_id: i64) -> Result<()> {
+        let conn = self.lock_conn()?;
+        conn.execute(
+            "UPDATE review_prs SET reviewed_head_sha = NULL WHERE id = ?1",
             rusqlite::params![pr_id],
         )?;
         Ok(())
@@ -756,6 +776,77 @@ mod tests {
         assert_eq!(prs[0].viewed_head_sha, Some("sha1".to_string()));
 
         drop(db);
+    }
+
+    #[test]
+    fn test_mark_review_pr_reviewed_records_supplied_head_without_changing_unread_state() {
+        let (db, _temp_dir) = make_test_db("review_pr_mark_reviewed");
+        db.upsert_review_pr(&review_pr_row(1, 10, "current-sha", 2000))
+            .expect("upsert failed");
+
+        db.mark_review_pr_reviewed(1, "reviewed-sha")
+            .expect("mark reviewed failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs[0].reviewed_head_sha.as_deref(), Some("reviewed-sha"));
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
+    }
+
+    #[test]
+    fn test_mark_review_pr_needs_review_clears_only_reviewed_head() {
+        let (db, _temp_dir) = make_test_db("review_pr_mark_needs_review");
+        db.upsert_review_pr(&review_pr_row(1, 10, "sha1", 2000))
+            .expect("upsert failed");
+        db.mark_review_pr_viewed(1, "sha1")
+            .expect("mark viewed failed");
+        db.mark_review_pr_reviewed(1, "sha1")
+            .expect("mark reviewed failed");
+
+        db.mark_review_pr_needs_review(1)
+            .expect("mark needs review failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert!(prs[0].reviewed_head_sha.is_none());
+        assert!(prs[0].viewed_at.is_some());
+        assert_eq!(prs[0].viewed_head_sha.as_deref(), Some("sha1"));
+    }
+
+    #[test]
+    fn test_upsert_retains_reviewed_head_when_current_head_changes() {
+        let (db, _temp_dir) = make_test_db("review_pr_retain_reviewed_head");
+        db.upsert_review_pr(&review_pr_row(1, 10, "abc", 2000))
+            .expect("upsert failed");
+        db.mark_review_pr_viewed(1, "abc")
+            .expect("mark viewed failed");
+        db.mark_review_pr_reviewed(1, "abc")
+            .expect("mark reviewed failed");
+
+        db.upsert_review_pr(&review_pr_row(1, 10, "def", 3000))
+            .expect("update head failed");
+
+        let prs = db.get_all_review_prs().expect("get_all failed");
+        assert_eq!(prs[0].head_sha, "def");
+        assert_eq!(prs[0].reviewed_head_sha.as_deref(), Some("abc"));
+        assert!(prs[0].viewed_at.is_none());
+        assert!(prs[0].viewed_head_sha.is_none());
+    }
+
+    #[test]
+    fn test_reviewed_head_sha_serializes_as_nullable_shared_contract_field() {
+        let (db, _temp_dir) = make_test_db("review_pr_reviewed_head_serialization");
+        db.upsert_review_pr(&review_pr_row(1, 10, "abc", 2000))
+            .expect("upsert failed");
+
+        let initial = serde_json::to_value(&db.get_all_review_prs().expect("get_all failed")[0])
+            .expect("serialize review request");
+        assert_eq!(initial["reviewed_head_sha"], serde_json::Value::Null);
+
+        db.mark_review_pr_reviewed(1, "abc")
+            .expect("mark reviewed failed");
+        let reviewed = serde_json::to_value(&db.get_all_review_prs().expect("get_all failed")[0])
+            .expect("serialize reviewed request");
+        assert_eq!(reviewed["reviewed_head_sha"], "abc");
     }
 
     #[test]

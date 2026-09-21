@@ -14,7 +14,7 @@ export function attentionScenario(kind: AttentionScenario = 'populated'): StoryS
     html_url: 'https://github.com/openforge/docs/pull/51', user_login: 'contributor', user_avatar_url: null,
     repo_owner: 'openforge', repo_name: 'docs', head_ref: 'keyboard-navigation', base_ref: 'main', head_sha: 'abc123',
     additions: 12, deletions: 3, changed_files: 2, mergeable: true, mergeable_state: 'clean',
-    created_at: project.created_at, updated_at: project.updated_at, viewed_at: null, viewed_head_sha: null, labels: [],
+    created_at: project.created_at, updated_at: project.updated_at, viewed_at: null, viewed_head_sha: null, reviewed_head_sha: null, labels: [],
   }]
   function row(id: string, title: string, state: TaskAttentionRow['state'], projectId = project.id): TaskAttentionRow {
     return {

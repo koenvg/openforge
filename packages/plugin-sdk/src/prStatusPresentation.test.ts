@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPrStatusBadgeStatus, getPrStatusChips, type PrInput, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
+import { getPrStatusBadgeStatus, getPrStatusChips, getReviewRequestProgress, type PrInput, type PrStatusChipSpec } from '@openforge-app/plugin-sdk/prStatusPresentation'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 describe('getPrStatusChips shared package API', () => {
@@ -79,6 +79,7 @@ describe('getPrStatusChips shared package API', () => {
       updated_at: 2,
       viewed_at: null,
       viewed_head_sha: null,
+      reviewed_head_sha: null,
       labels: [],
     }
 
@@ -126,5 +127,41 @@ describe('getPrStatusChips shared package API', () => {
     expect(getPrStatusBadgeStatus(chip('merge', 'done'))).toBe('success')
     expect(getPrStatusBadgeStatus(chip('merge', 'closed'))).toBe('expired')
     expect(getPrStatusBadgeStatus(chip('draft', 'muted'))).toBeNull()
+  })
+})
+
+describe('getReviewRequestProgress', () => {
+  const open = {
+    state: 'open',
+    merged_at: null,
+    head_sha: 'current',
+    reviewed_head_sha: null,
+  }
+
+  it('reports an unreviewed current head as review needed', () => {
+    expect(getReviewRequestProgress(open)).toEqual(expect.objectContaining({
+      kind: 'review-needed',
+      label: 'Review needed',
+    }))
+  })
+
+  it('reports a matching reviewed head as reviewed', () => {
+    expect(getReviewRequestProgress({ ...open, reviewed_head_sha: 'current' })).toEqual(expect.objectContaining({
+      kind: 'reviewed',
+      label: 'Reviewed',
+    }))
+  })
+
+  it('reports a different reviewed head as updated since review', () => {
+    expect(getReviewRequestProgress({ ...open, reviewed_head_sha: 'previous' })).toEqual(expect.objectContaining({
+      kind: 'updated-since-review',
+      label: 'Updated since review',
+    }))
+  })
+
+  it('suppresses open review progress for closed and merged pull requests', () => {
+    expect(getReviewRequestProgress({ ...open, state: 'closed' })).toBeNull()
+    expect(getReviewRequestProgress({ ...open, state: 'merged' })).toBeNull()
+    expect(getReviewRequestProgress({ ...open, state: 'closed', merged_at: 1 })).toBeNull()
   })
 })

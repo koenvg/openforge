@@ -223,6 +223,14 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<void>(openforge, 'markReviewPrUnviewed', request),
     }))
 
+    context.subscriptions.add(openforge.backend.registerMethod<{ prId: number; headSha: string }, void>('markReviewPrReviewed', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'markReviewPrReviewed', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ prId: number }, void>('markReviewPrNeedsReview', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'markReviewPrNeedsReview', request),
+    }))
+
     context.subscriptions.add(openforge.backend.registerMethod<{ prId: number }, void>('dismissReviewPr', {
       handler: (request) => invokeHostCommand<void>(openforge, 'dismissReviewPr', request),
     }))

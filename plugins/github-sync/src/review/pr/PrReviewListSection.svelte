@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { AuthoredPullRequest, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
-  import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
+  import { pluginSectionKey, setSectionCollapsed } from '@openforge-app/plugin-sdk/collapsibleSectionState'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
@@ -25,12 +27,15 @@
     isLoadingAuthored: boolean
     error: string | null
     authoredError: string | null
+    reviewStatusError: string | null
     githubTokenConfigured: boolean | null
     reviewRequests: {
-      activeCount: number
+      needsReviewCount: number
+      reviewedCount: number
       filtered: ReviewPullRequest[]
       finishedCount: number
-      groupedActive: Map<string, ReviewPullRequest[]>
+      groupedNeedsReview: Map<string, ReviewPullRequest[]>
+      groupedReviewed: Map<string, ReviewPullRequest[]>
       groupedFinished: Map<string, ReviewPullRequest[]>
       keyboardNavigable: ReviewPullRequest[]
     }
@@ -53,6 +58,8 @@
     onSelectPr: (pr: ReviewPullRequest) => void
     onMarkUnread: (pr: ReviewPullRequest) => void
     onRemove: (pr: ReviewPullRequest) => void
+    onMarkReviewed: (pr: ReviewPullRequest) => void
+    onMarkNeedsReview: (pr: ReviewPullRequest) => void
     onOpenAuthoredPr: (url: string) => void
     onStartTaskFromAuthoredPr?: (pr: AuthoredPullRequest) => void
     pluralize: (count: number, singular: string, plural?: string) => string
@@ -72,6 +79,7 @@
     isLoadingAuthored,
     error,
     authoredError,
+    reviewStatusError,
     githubTokenConfigured,
     reviewRequests,
     filteredAuthoredPrs,
@@ -93,12 +101,19 @@
     onSelectPr,
     onMarkUnread,
     onRemove,
+    onMarkReviewed,
+    onMarkNeedsReview,
     onOpenAuthoredPr,
     onStartTaskFromAuthoredPr,
     pluralize,
   }: Props = $props()
 
   const finishedSectionKey = pluginSectionKey('com.openforge.github-sync', 'finished-review-requests')
+  const reviewedSectionKey = pluginSectionKey('com.openforge.github-sync', 'reviewed-review-requests')
+
+  onMount(() => {
+    setSectionCollapsed(reviewedSectionKey, true)
+  })
 </script>
 
 {#snippet reviewGroups(groups: Map<string, ReviewPullRequest[]>, idPrefix: string, keyboardNavigable: boolean)}
@@ -121,6 +136,8 @@
               selected={false}
               onClick={() => onSelectPr(pr)}
               onMarkUnread={() => onMarkUnread(pr)}
+              onMarkReviewed={() => onMarkReviewed(pr)}
+              onMarkNeedsReview={() => onMarkNeedsReview(pr)}
               onRemove={() => onRemove(pr)}
             />
           </div>
@@ -168,8 +185,8 @@
             <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
             <Badge
               variant="info"
-              aria-label={`${reviewRequests.activeCount} active ${pluralize(reviewRequests.activeCount, 'review request')}`}
-            >{reviewRequests.activeCount}</Badge>
+              aria-label={`${reviewRequests.needsReviewCount} ${pluralize(reviewRequests.needsReviewCount, 'review request')} needing review`}
+            >{reviewRequests.needsReviewCount}</Badge>
           </div>
           <Button
             variant="ghost"
@@ -227,7 +244,31 @@
               {/snippet}
             </PluginViewState>
           {:else}
-            {@render reviewGroups(reviewRequests.groupedActive, 'active-review-repo', true)}
+            {#if reviewStatusError}
+              <Alert variant="danger" role="alert" aria-live="polite" class="mb-4">{reviewStatusError}</Alert>
+            {/if}
+
+            <section aria-labelledby="needs-review-heading">
+              <h2 id="needs-review-heading" class="m-0 mb-4 text-sm font-semibold text-base-content">
+                Needs your review ({reviewRequests.needsReviewCount})
+              </h2>
+              {@render reviewGroups(reviewRequests.groupedNeedsReview, 'needs-review-repo', true)}
+            </section>
+
+            {#if reviewRequests.reviewedCount > 0}
+              <div class="mt-2">
+                <CollapsibleSection
+                  sectionKey={reviewedSectionKey}
+                  title={`Reviewed (${reviewRequests.reviewedCount})`}
+                  label="Reviewed pull requests"
+                  cardId="reviewed-review-requests"
+                >
+                  <div class="pt-4">
+                    {@render reviewGroups(reviewRequests.groupedReviewed, 'reviewed-review-repo', false)}
+                  </div>
+                </CollapsibleSection>
+              </div>
+            {/if}
 
             {#if reviewRequests.finishedCount > 0}
               <div class="mt-2">

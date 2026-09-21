@@ -29,5 +29,5 @@
 
 {#if workspace.postReview}
   {@const prompt = workspace.postReview}
-  <PostReviewDialog pr={prompt.pr} onKeep={prompt.onKeep} onRemove={prompt.onRemove} />
+  <PostReviewDialog pr={prompt.pr} trackingError={prompt.trackingError} onKeep={prompt.onKeep} onRemove={prompt.onRemove} />
 {/if}

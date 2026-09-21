@@ -12,6 +12,7 @@ import { useWalkthroughPolling } from './review-workspace/useWalkthroughPolling.
 import { createWalkthroughReview } from './review-workspace/walkthroughReview.svelte'
 import { createPrReviewAgentSessionController } from './review-workspace/usePrReviewAgentSession.svelte'
 import { createReviewThreadFollowUpController } from './review-workspace/useReviewThreadFollowUps.svelte'
+import { createReviewProgressMutations } from './review-workspace/reviewProgressMutations'
 export type { WalkthroughReview } from './review-workspace/walkthroughReview.svelte'
 
 export interface ReviewWorkspaceContext {
@@ -38,7 +39,13 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const walkthroughs = useWalkthroughPolling(api, githubSync)
   const agentSession = createPrReviewAgentSessionController(api)
   const followUps = createReviewThreadFollowUpController(api, agentSession)
-  const selection = useSelectedPrReview(api, githubSync, followUps, walkthroughs, agentSession)
+  const reviewProgress = createReviewProgressMutations(githubSync, {
+    getPullRequests: () => reviewPrs.current,
+    setPullRequests: value => { reviewPrs.current = value },
+    getSelectedPr: () => selectedPr.current,
+    setSelectedPr: value => { selectedPr.current = value },
+  })
+  const selection = useSelectedPrReview(api, githubSync, followUps, walkthroughs, reviewProgress, agentSession)
   const walkthrough = createWalkthroughReview(
     walkthroughs, githubSync, () => selectedPr.current, () => files.current,
     () => selection.activeTab === 'walkthrough',
@@ -49,7 +56,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     getScope: () => api.navigation.get().currentView?.endsWith('pr_review_global') ? 'global' : 'repo',
     getProjectName: () => getContext().projectName,
     getProjectId: () => getContext().projectId,
-    walkthroughs,
+    walkthroughs, reviewProgress,
     onSelectPr: selection.select,
     onBackToList: selection.backToList,
   })
@@ -120,6 +127,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     isLoadingAuthored: list.isLoadingAuthored,
     error: list.error,
     authoredError: list.authoredError,
+    reviewStatusError: list.reviewStatusError,
     githubTokenConfigured: list.githubTokenConfigured,
     reviewRequests: list.reviewRequests,
     filteredAuthoredPrs: list.filteredAuthoredPrs,
@@ -141,6 +149,8 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onSelectPr: selection.select,
     onMarkUnread: selection.markUnread,
     onRemove: selection.removeReviewPr,
+    onMarkReviewed: list.markReviewed,
+    onMarkNeedsReview: list.markNeedsReview,
     onOpenAuthoredPr: openUrl,
     onStartTaskFromAuthoredPr: getContext().projectId ? list.startTaskFromAuthoredPr : undefined,
     pluralize: list.pluralize,
@@ -218,6 +228,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
 
   let postReviewModel = $derived(selection.postReviewPr ? {
     pr: selection.postReviewPr,
+    trackingError: selection.postReviewTrackingError,
     onKeep: selection.keepAfterReview,
     onRemove: selection.removeAfterReview,
   } : null)

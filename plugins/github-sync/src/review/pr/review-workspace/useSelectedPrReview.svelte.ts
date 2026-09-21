@@ -25,6 +25,7 @@ import { isInputFocused } from '../../../lib/domUtils'
 import { resolveProjectIdForRepo } from '../../../lib/projectRepoResolution'
 import { fetchGithubFileContents } from '../githubFileContents'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
+import type { ReviewProgressMutations } from './reviewProgressMutations'
 
 export type PrDetailTab = 'overview' | 'files' | 'agent' | 'walkthrough'
 
@@ -51,6 +52,7 @@ export function useSelectedPrReview(
   githubSync: GithubSyncPrReviewClient,
   reviewThreadFollowUps: ReviewThreadFollowUpState,
   walkthroughState: WalkthroughState,
+  reviewProgress: ReviewProgressMutations,
   agentSessionLifecycle?: AgentSessionLifecycle,
 ) {
   const manualComments = fromStore(pendingManualComments)
@@ -71,6 +73,7 @@ export function useSelectedPrReview(
   // The PR a "You reviewed this PR" prompt is currently offered for, or null when
   // no prompt is showing. Set right after a successful in-app review submission.
   let postReviewPr = $state<ReviewPullRequest | null>(null)
+  let postReviewTrackingError = $state<string | null>(null)
   let loadSequence = 0
   let viewInvokedSubscription: { dispose(): void | Promise<void> } | null = null
 
@@ -191,6 +194,7 @@ export function useSelectedPrReview(
   function keepAfterReview(): void {
     const pr = postReviewPr
     postReviewPr = null
+    postReviewTrackingError = null
     if (pr) void returnToReviewList(pr)
   }
 
@@ -198,6 +202,7 @@ export function useSelectedPrReview(
   function removeAfterReview(): void {
     const pr = postReviewPr
     postReviewPr = null
+    postReviewTrackingError = null
     if (!pr) return
     removeReviewPr(pr)
     void returnToReviewList(pr)
@@ -329,6 +334,8 @@ export function useSelectedPrReview(
     comments: ReviewSubmissionComment[]
     commitId: string
   }): Promise<void> {
+    const submittedPr = selectedPr.current
+    if (!submittedPr) throw new Error('No pull request is selected for review submission')
     const previousComments = reviewCommentsStore.current
     try {
       await githubSync.submitPullRequestReview({
@@ -342,14 +349,23 @@ export function useSelectedPrReview(
       })
     } catch (cause) {
       if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) {
+        const trackingError = await markSubmittedCommitReviewed(submittedPr, request.commitId)
         await postPendingReplies(request)
-        promptRemovalAfterReview()
+        promptRemovalAfterReview(submittedPr, trackingError)
         return
       }
       throw cause
     }
+    const trackingError = await markSubmittedCommitReviewed(submittedPr, request.commitId)
     await postPendingReplies(request)
-    promptRemovalAfterReview()
+    promptRemovalAfterReview(submittedPr, trackingError)
+  }
+
+  async function markSubmittedCommitReviewed(pr: ReviewPullRequest, commitId: string): Promise<string | null> {
+    const result = await reviewProgress.update(pr, commitId)
+    if (result.persisted || result.superseded) return null
+    console.error('Review submitted, but local review status could not be saved:', result.error)
+    return 'Your review was submitted to GitHub, but OpenForge could not save its local review status. Use Mark reviewed in the list to try again.'
   }
 
   /**
@@ -357,8 +373,9 @@ export function useSelectedPrReview(
    * Removal never happens automatically, so this prompt is how a review clears the
    * clutter. Only meaningful with a PR open, which is always the case on submit.
    */
-  function promptRemovalAfterReview(): void {
-    if (selectedPr.current) postReviewPr = selectedPr.current
+  function promptRemovalAfterReview(pr: ReviewPullRequest, trackingError: string | null): void {
+    postReviewPr = pullRequests.current.find(candidate => candidate.id === pr.id) ?? pr
+    postReviewTrackingError = trackingError
   }
 
   async function postPendingReplies(request: {
@@ -554,6 +571,7 @@ export function useSelectedPrReview(
     get replyPostingError() { return replyPostingError },
     get isPostingReplies() { return isPostingReplies },
     get postReviewPr() { return postReviewPr },
+    get postReviewTrackingError() { return postReviewTrackingError },
     retryReplies,
     removeReviewPr,
     removeFromDetail,

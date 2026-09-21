@@ -100,6 +100,14 @@ export async function markReviewPrUnviewed(prId: number): Promise<void> {
   return invoke('mark_review_pr_unviewed', { prId });
 }
 
+export async function markReviewPrReviewed(prId: number, headSha: string): Promise<void> {
+  return invoke('mark_review_pr_reviewed', { prId, headSha });
+}
+
+export async function markReviewPrNeedsReview(prId: number): Promise<void> {
+  return invoke('mark_review_pr_needs_review', { prId });
+}
+
 export async function getPrFileDiffs(owner: string, repo: string, prNumber: number): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_pr_file_diffs", { owner, repo, prNumber });
 }

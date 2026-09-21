@@ -54,6 +54,7 @@ function makePr(over: Partial<ReviewPullRequest>): ReviewPullRequest {
     updated_at: 0,
     viewed_at: null,
     viewed_head_sha: null,
+    reviewed_head_sha: null,
     labels: [],
     ...over,
   }

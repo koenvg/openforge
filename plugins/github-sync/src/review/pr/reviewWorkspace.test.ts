@@ -12,7 +12,7 @@ const pr: ReviewPullRequest = {
   html_url: 'https://github.com/acme/app/pull/42', user_login: 'alice', user_avatar_url: null,
   repo_owner: 'acme', repo_name: 'app', head_ref: 'fix', base_ref: 'main', head_sha: 'head',
   additions: 1, deletions: 0, changed_files: 1, ci_status: null, mergeable: null, mergeable_state: null, merged_at: null,
-  created_at: 1, updated_at: 1, viewed_at: null, viewed_head_sha: null, labels: [],
+  created_at: 1, updated_at: 1, viewed_at: null, viewed_head_sha: null, reviewed_head_sha: null, labels: [],
 }
 const file: PrFileDiff = {
   sha: 'file-sha', filename: 'login.ts', status: 'modified', additions: 1, deletions: 0,
@@ -55,7 +55,8 @@ async function setup(
     resolveProjectIdsByRepo: Object.fromEntries(Object.entries(projectRepos).map(([id, repo]) => [repo.toLowerCase(), id])),
     getReviewPrs: [pr], fetchReviewPrs: [{ ...pr, title: 'Updated login' }],
     getAuthoredPrs: [], fetchAuthoredPrs: [], getPrWalkthrough: null,
-    markReviewPrViewed: null, markReviewPrUnviewed: null, dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
+    markReviewPrViewed: null, markReviewPrUnviewed: null, markReviewPrReviewed: null, markReviewPrNeedsReview: null,
+    dismissReviewPr: null, getPrFileDiffs: [file], getReviewComments: [],
     getPrTicket: { snapshot: null, jiraConfigured: false },
     startAgentWalkthrough: { attemptId: 'attempt-1' },
     deletePrWalkthrough: null, abortAgentWalkthrough: null,
@@ -290,6 +291,7 @@ describe('review workspace', () => {
     expect(workspace.detail!.pendingReplies).toEqual([])
     expect(workspace.detail!.replyPostingError).toBeNull()
     expect(calls.get('submitPrReview')).toHaveLength(1)
+    expect(calls.get('markReviewPrReviewed')).toEqual([{ prId: pr.id, headSha: 'head' }])
   })
 
   it('does not let posting on a previous PR block or clear the current PR posting state', async () => {
@@ -384,11 +386,101 @@ describe('review workspace', () => {
     })
 
     expect(workspace.postReview?.pr.id).toBe(1)
+    expect(calls.get('markReviewPrReviewed')).toEqual([{ prId: pr.id, headSha: 'head' }])
     workspace.postReview!.onKeep()
     expect(workspace.postReview).toBeNull()
     expect(workspace.detail).toBeNull()
     expect(workspace.list.reviewRequests.filtered).toHaveLength(1)
+    expect(workspace.list.reviewRequests.needsReviewCount).toBe(0)
+    expect(workspace.list.reviewRequests.reviewedCount).toBe(1)
     expect(calls.get('dismissReviewPr')).toBeUndefined()
+  })
+
+  it('records the submitted commit so a concurrent new head stays in needs review', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    responses.set('fetchReviewPrs', [{ ...pr, head_sha: 'new-head' }])
+    await workspace.list.onRefreshPrs()
+
+    await workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'APPROVE', body: 'LGTM', comments: [],
+    })
+
+    expect(calls.get('markReviewPrReviewed')).toEqual([{ prId: pr.id, headSha: 'head' }])
+    workspace.postReview!.onKeep()
+    expect(workspace.list.reviewRequests.reviewedCount).toBe(0)
+    expect(workspace.list.reviewRequests.needsReviewCount).toBe(1)
+    expect(workspace.list.reviewRequests.filtered[0]).toMatchObject({
+      head_sha: 'new-head',
+      reviewed_head_sha: 'head',
+    })
+  })
+
+  it('records the submitted review against its initiating PR after navigation changes', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    let finishSubmission!: () => void
+    responses.set('submitPrReview', () => new Promise<void>(resolve => { finishSubmission = resolve }))
+
+    const submission = workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'APPROVE', body: 'LGTM', comments: [],
+    })
+    await waitFor(() => expect(finishSubmission).toBeTypeOf('function'))
+    workspace.detail!.onBackToList()
+    const nextPr = { ...pr, id: 2, number: 43, head_sha: 'next-head' }
+    await workspace.list.onSelectPr(nextPr)
+
+    finishSubmission()
+    await submission
+
+    expect(calls.get('markReviewPrReviewed')).toContainEqual({ prId: pr.id, headSha: 'head' })
+    expect(workspace.detail!.pr).toMatchObject({ id: nextPr.id, reviewed_head_sha: null })
+    expect(workspace.postReview?.pr.id).toBe(pr.id)
+  })
+
+  it('serializes rapid manual review status changes so persisted state matches the UI', async () => {
+    const { workspace, responses, calls } = await setup()
+    let finishReviewed!: () => void
+    let finishNeedsReview!: () => void
+    responses.set('markReviewPrReviewed', () => new Promise<void>(resolve => { finishReviewed = resolve }))
+    responses.set('markReviewPrNeedsReview', () => new Promise<void>(resolve => { finishNeedsReview = resolve }))
+
+    const markReviewed = workspace.list.onMarkReviewed(pr)
+    await waitFor(() => expect(finishReviewed).toBeTypeOf('function'))
+    const markNeedsReview = workspace.list.onMarkNeedsReview(workspace.list.reviewRequests.filtered[0])
+
+    expect(workspace.list.reviewRequests.needsReviewCount).toBe(1)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(calls.get('markReviewPrNeedsReview')).toBeUndefined()
+    finishReviewed()
+    await waitFor(() => expect(finishNeedsReview).toBeTypeOf('function'))
+    finishNeedsReview()
+    await Promise.all([markReviewed, markNeedsReview])
+
+    expect(calls.get('markReviewPrReviewed')).toEqual([{ prId: pr.id, headSha: 'head' }])
+    expect(calls.get('markReviewPrNeedsReview')).toEqual([{ prId: pr.id }])
+    expect(workspace.list.reviewRequests.filtered[0].reviewed_head_sha).toBeNull()
+  })
+
+  it('reports local tracking failure after GitHub succeeds without resubmitting the review', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    responses.set('markReviewPrReviewed', () => { throw new Error('database unavailable') })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'APPROVE', body: 'LGTM', comments: [],
+    })).resolves.toBeUndefined()
+
+    expect(workspace.postReview?.trackingError).toContain('submitted to GitHub')
+    workspace.postReview!.onKeep()
+    expect(workspace.list.reviewRequests.needsReviewCount).toBe(1)
+    expect(workspace.list.reviewRequests.reviewedCount).toBe(0)
+    expect(calls.get('submitPrReview')).toHaveLength(1)
+    expect(calls.get('markReviewPrReviewed')).toHaveLength(1)
   })
 
   it('removes the PR when the post-review prompt is answered with remove', async () => {
@@ -401,6 +493,7 @@ describe('review workspace', () => {
     })
 
     expect(workspace.postReview?.pr.id).toBe(1)
+    expect(calls.get('markReviewPrReviewed')).toEqual([{ prId: pr.id, headSha: 'head' }])
     workspace.postReview!.onRemove()
     expect(workspace.postReview).toBeNull()
     expect(workspace.detail).toBeNull()
