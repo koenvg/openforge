@@ -134,7 +134,8 @@ describe('xterm terminal view rendering', () => {
 
     view.setVisible(true)
 
-    expect(mocks.terminalRefresh).toHaveBeenCalledOnce()
+    expect(mocks.terminalRefresh).toHaveBeenCalledWith(0, view.geometry.rows - 1)
+    view.dispose()
   })
 
   it('refreshes the terminal without clearing the shared WebGL atlas when delayed fonts become ready', async () => {

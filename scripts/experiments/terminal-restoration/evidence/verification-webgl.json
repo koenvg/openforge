@@ -1,0 +1,533 @@
+{
+  "checks": [
+    "agent/dpr1/presentation-ansi-styles",
+    "agent/dpr1/presentation-glyphs",
+    "agent/dpr1/presentation-unicode",
+    "agent/dpr1/presentation-cursor-link",
+    "agent/dpr1/presentation-cursor-underline",
+    "agent/dpr1/presentation-alternate-screen",
+    "agent/dpr2/presentation-ansi-styles",
+    "agent/dpr2/presentation-glyphs",
+    "agent/dpr2/presentation-unicode",
+    "agent/dpr2/presentation-cursor-link",
+    "agent/dpr2/presentation-cursor-underline",
+    "agent/dpr2/presentation-alternate-screen",
+    "plugin-shell/dpr1/presentation-ansi-styles",
+    "plugin-shell/dpr1/presentation-glyphs",
+    "plugin-shell/dpr1/presentation-unicode",
+    "plugin-shell/dpr1/presentation-cursor-link",
+    "plugin-shell/dpr1/presentation-cursor-underline",
+    "plugin-shell/dpr1/presentation-alternate-screen",
+    "plugin-shell/dpr2/presentation-ansi-styles",
+    "plugin-shell/dpr2/presentation-glyphs",
+    "plugin-shell/dpr2/presentation-unicode",
+    "plugin-shell/dpr2/presentation-cursor-link",
+    "plugin-shell/dpr2/presentation-cursor-underline",
+    "plugin-shell/dpr2/presentation-alternate-screen",
+    "resize-reflow/detach-reattach",
+    "runtime/live-during-replay/stale-pty/parser-continuation/resize/scroll-during-load",
+    "inline-image-pixels-retained",
+    "restored-scrollback-scrolls",
+    "runtime/detach-reopen-fresh-authority",
+    "pty-generation-change-during-replay",
+    "alternate-screen/parser-continuation/cancellation/disposal"
+  ],
+  "result": {
+    "samples": [
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 960,
+        "height": 540,
+        "text": ""
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 960,
+        "height": 540,
+        "text": ""
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "history-678 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-679 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-680 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-681 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-682 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-683 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-684 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-685 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-686 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-687 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-688 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-689 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-690 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-691 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-692 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-693 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-694 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-695 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-696 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-697 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-698 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-699 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-700 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "history-2478 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2479 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2480 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2481 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2482 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2483 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2484 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2485 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2486 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2487 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2488 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2489 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2490 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2491 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2492 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2493 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2494 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2495 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2496 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2497 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2498 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2499 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-2500 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "history-5478 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5479 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5480 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5481 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5482 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5483 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5484 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5485 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5486 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5487 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5488 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5489 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5490 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5491 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5492 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5493 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5494 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5495 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5496 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5497 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5498 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5499 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide\nhistory-5500 widewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewidewide"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      },
+      {
+        "inert": true,
+        "opacity": "0",
+        "width": 800,
+        "height": 540,
+        "text": "CURRENT \nready> LIVE"
+      }
+    ],
+    "presentation": {
+      "geometry": {
+        "cols": 135,
+        "rows": 23
+      },
+      "activeBuffer": "normal",
+      "cursor": {
+        "x": 11,
+        "y": 2
+      },
+      "selectionText": "",
+      "lines": [
+        {
+          "row": 0,
+          "text": "CURRENT ",
+          "wrapped": false,
+          "cells": [
+            {
+              "column": 0,
+              "text": "C",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 1,
+              "text": "U",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 2,
+              "text": "R",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 3,
+              "text": "R",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 4,
+              "text": "E",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 5,
+              "text": "N",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 6,
+              "text": "T",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 7,
+              "text": " ",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "text": "ready> LIVE",
+          "wrapped": false,
+          "cells": [
+            {
+              "column": 0,
+              "text": "r",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 1,
+              "text": "e",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 2,
+              "text": "a",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 3,
+              "text": "d",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 4,
+              "text": "y",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 5,
+              "text": ">",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 6,
+              "text": " ",
+              "width": 1,
+              "foreground": {
+                "mode": 0,
+                "value": -1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 7,
+              "text": "L",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 8,
+              "text": "I",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 9,
+              "text": "V",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            },
+            {
+              "column": 10,
+              "text": "E",
+              "width": 1,
+              "foreground": {
+                "mode": 16777216,
+                "value": 1
+              },
+              "background": {
+                "mode": 0,
+                "value": -1
+              },
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "dim": false,
+              "inverse": false,
+              "invisible": false,
+              "strikethrough": false,
+              "overline": false
+            }
+          ]
+        }
+      ]
+    },
+    "inert": false,
+    "geometry": {
+      "cols": 135,
+      "rows": 23
+    }
+  },
+  "failures": [
+    "context-lost"
+  ],
+  "gaps": [
+    "Pinned Chromium golden-pixel comparison and IME are not run in shared Arc. Native model probes do not establish frontend image history prepend support."
+  ]
+}

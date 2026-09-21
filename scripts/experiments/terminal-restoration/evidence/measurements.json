@@ -1,0 +1,46 @@
+{
+  "task": "KVG-5199",
+  "baseCommit": "3bdc8e0af7c5182c3a862389516767e72dea32a0",
+  "environment": { "os": "darwin-arm64", "cpu": "Apple M5", "browser": "Chrome/153.0.8010.53", "browserHost": "Arc", "dpr": 1 },
+  "fixture": { "lines": 30000, "inlineImages": 60, "bytes": 28401599, "sha256": "fb86424b2d0f69145af29606307336e582776d45085ea7b4c48d48001ef12c53" },
+  "units": { "timings": "milliseconds", "heap": "MiB" },
+  "runs": [
+    { "name": "baseline-webgl", "geometry": [132, 22], "fetchMs": 107.8, "decodeMs": 820.3, "parseMs": 395.1, "historyCompleteMs": 1323.2, "usableMs": 1334.5, "maxReplayRafGapMs": 26, "visibleHistoricalSamples": 58, "recordedFrames": 25, "heapBeforeMiB": 7.76, "heapAfterMiB": 250.52 },
+    { "name": "baseline-fallback", "geometry": [118, 22], "fetchMs": 65.5, "decodeMs": 823.8, "parseMs": 838.2, "historyCompleteMs": 1727.5, "usableMs": 1738.4, "maxReplayRafGapMs": 13.2, "visibleHistoricalSamples": 131, "recordedFrames": 52, "heapBeforeMiB": 7.21, "heapAfterMiB": 80.92 },
+    { "name": "final-webgl", "geometry": [132, 22], "fetchMs": 94.6, "decodeMs": 969.4, "parseMs": 1020.7, "historyCompleteMs": 2084.7, "usableMs": 2090.8, "maxReplayRafGapMs": 47.7, "visibleHistoricalSamples": 0, "recordedFrames": 7, "heapBeforeMiB": 7.54, "heapAfterMiB": 264.39 },
+    { "name": "final-fallback", "geometry": [118, 22], "fetchMs": 66.3, "decodeMs": 909.7, "parseMs": 718.6, "historyCompleteMs": 1694.6, "usableMs": 1708.9, "maxReplayRafGapMs": 13.5, "visibleHistoricalSamples": 0, "recordedFrames": 4, "heapBeforeMiB": 7.24, "heapAfterMiB": 65.44 },
+    { "name": "final2-webgl", "geometry": [132, 22], "fetchMs": 65.2, "decodeMs": 819.5, "parseMs": 362.1, "historyCompleteMs": 1246.8, "usableMs": 1256.4, "maxReplayRafGapMs": 29.5, "visibleHistoricalSamples": 0, "recordedFrames": 4, "heapBeforeMiB": 7.78, "heapAfterMiB": 270.95 },
+    { "name": "final2-fallback", "geometry": [118, 22], "fetchMs": 62.2, "decodeMs": 842.9, "parseMs": 672.7, "historyCompleteMs": 1577.8, "usableMs": 1587.1, "maxReplayRafGapMs": 15.3, "visibleHistoricalSamples": 0, "recordedFrames": 4, "heapBeforeMiB": 7.23, "heapAfterMiB": 62.13 }
+  ],
+  "native": {
+    "geometry": [132, 22], "snapshotBytes": 5107786, "readAndBase64DecodeMs": 21.237584,
+    "vtParseMs": 135.635959, "snapshotEncodeMs": 4.5195,
+    "trials": 5, "readyMedianMs": 0.148083, "finishMedianMs": 6.206667, "oneShotMedianMs": 6.028584,
+    "maxPageMs": 0.373375, "pages": 18, "prependedRows": 6480,
+    "maximumRssBytes": 207257600, "peakFootprintBytes": 201704000,
+    "allReadyScreensContainFinalMarker": true, "allFinishedScreensMatchOriginal": true,
+    "frontendScreenFirstUsableMs": null, "frontendHistoryCompletionMs": null,
+    "frontendBlocker": "xterm 6.0.0 has no public history-prepend operation"
+  },
+  "verification": {
+    "runtimeFiles": 57, "runtimePassed": 298, "runtimeSkippedOptInBenchmark": 1,
+    "optInProfilerOffTestsPassedSeparately": 2,
+    "hostAndConformanceUnitFiles": 39, "hostAndConformanceUnitPassed": 269,
+    "nativeTestsPassed": 5, "arcChecksPerRenderer": 31,
+    "webglContextLoss": "passed", "webglUnavailableFallback": "passed",
+    "runtimeTypes": "passed", "rootTypes": "passed", "pluginHostTypes": "passed", "desktopContract": "passed",
+    "nativeCheck": "passed", "nativeClippy": "passed", "nativeFormat": "passed"
+  },
+  "limitations": [
+    "One baseline and two after-change trials per renderer are observations, not an acceleration or overhead estimate. The slow WebGL after-change trial is retained.",
+    "Compare within each renderer; fallback and WebGL font fitting produced different column counts.",
+    "Browser fetch is local HTTP fixture plus JSON parsing, not backend IPC. Browser decode is base64, not Ghostty binary decoding.",
+    "Replay rAF gaps exclude synchronous base64 decoding, which blocked the browser for 0.8 to 1.0 seconds.",
+    "Browser heap is a sampled component, not peak or total process RSS. Native RSS is for the whole standalone process.",
+    "Native and browser consume identical input bytes but keep their production retention policies: 8 MiB Ghostty history versus 10000 xterm scrollback rows.",
+    "Native READY latency is not frontend usability. The prototype starts from an in-memory binary snapshot and does not stream backend IPC.",
+    "Native FINISH timing includes formatting the READY screen. Image pixels are verified in xterm, not in the native VT formatter.",
+    "Full raw frames, traces, fixtures and logs remain in ignored artifacts/terminal-restoration. Selected frames and this summary are durable evidence.",
+    "The stock Chromium golden-pixel and IME runner and full Electron/PTY performance scenario were not run. Arc semantic, lifecycle, image and fallback checks were run instead."
+  ]
+}

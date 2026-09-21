@@ -1,0 +1,57 @@
+[
+  {
+    "name": "profiler-off",
+    "command": "pnpm performance:terminal:profiler-off",
+    "exit": 0
+  },
+  {
+    "name": "runtime-tests",
+    "command": "pnpm --filter @openforge-app/terminal-runtime test",
+    "exit": 0
+  },
+  {
+    "name": "runtime-types",
+    "command": "pnpm --filter @openforge-app/terminal-runtime build",
+    "exit": 0
+  },
+  {
+    "name": "host-terminal-tests",
+    "command": "pnpm exec vitest run src/lib/terminalPluginSharedImplementation.test.ts src/lib/terminalTestProbe.test.ts src/lib/terminalThemePresentation.test.ts src/lib/terminalSessionServiceBoundary.test.ts src/lib/ipc/terminal.input-order.test.ts src/lib/terminalOptions.test.ts src/lib/terminalShortcutController.test.ts src/lib/terminalFontSize.test.ts src/lib/restartTerminalControl.test.ts src/lib/terminalSessionService.lifecycle.test.ts src/lib/terminalE2eGates.test.ts src/lib/terminalSessionService.input.test.ts src/lib/terminalShortcuts.test.ts src/lib/terminalSessionService.attachment.test.ts src/lib/agentTerminalPanel.test.ts src/lib/terminalSessionService.reconnect.test.ts src/lib/desktopTerminalTransport.test.ts src/lib/terminalFont.test.ts src/lib/terminalTransportAdapters.integration.test.ts src/lib/terminalPluginPackage.test.ts src/components/task-detail/TerminalTaskPane.test.ts src/components/task-detail/TaskTerminal.test.ts src/components/task-detail/TerminalTabs.test.ts src/components/task-detail/TaskDetailView.terminalSessionService-mock.test.ts src/components/task-detail/AgentTerminalShell.test.ts plugins/terminal/src/TerminalTaskPane.test.ts plugins/terminal/src/lib/terminalPool.test.ts plugins/terminal/src/lib/stores.test.ts plugins/terminal/src/lib/ipc.test.ts plugins/terminal/src/lib/projectTerminal.test.ts plugins/terminal/src/lib/trustedPluginTerminalTransport.test.ts plugins/terminal/src/TerminalProjectView.test.ts plugins/terminal/src/TaskTerminal.test.ts plugins/terminal/src/TerminalTabs.test.ts plugins/terminal/src/terminalShortcuts.test.ts plugins/terminal/src/index.test.ts packages/terminal-runtime/conformance",
+    "exit": 0
+  },
+  {
+    "name": "root-types",
+    "command": "pnpm exec tsc --noEmit",
+    "exit": 0
+  },
+  {
+    "name": "plugin-host-types",
+    "command": "pnpm plugin-host:typecheck",
+    "exit": 0
+  },
+  {
+    "name": "desktop-contract",
+    "command": "pnpm electron:contract:check",
+    "exit": 0
+  },
+  {
+    "name": "native-tests-release",
+    "command": "cargo test --release --locked --offline --manifest-path scripts/experiments/terminal-restoration/native/Cargo.toml -- --nocapture",
+    "exit": 0
+  },
+  {
+    "name": "native-check",
+    "command": "cargo check --locked --offline --manifest-path scripts/experiments/terminal-restoration/native/Cargo.toml",
+    "exit": 0
+  },
+  {
+    "name": "native-clippy",
+    "command": "cargo clippy --locked --offline --manifest-path scripts/experiments/terminal-restoration/native/Cargo.toml --all-targets -- -D warnings",
+    "exit": 0
+  },
+  {
+    "name": "native-format",
+    "command": "cargo fmt --manifest-path scripts/experiments/terminal-restoration/native/Cargo.toml -- --check",
+    "exit": 0
+  }
+]

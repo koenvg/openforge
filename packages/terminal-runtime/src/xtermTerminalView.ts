@@ -60,6 +60,30 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   let visibilityManaged = false
   let refreshPending = false
   let disposed = false
+  let snapshotGeneration = 0
+  let snapshotReady = true
+  let revealGeneration: number | null = null
+  let revealPending: Promise<void> | null = null
+  let hasOutput = false
+  let snapshotPaintPending = false
+  let focusPending = false
+
+  function setConcealed(concealed: boolean): void {
+    // Opacity preserves dimensions and keeps xterm's renderer active. Neither
+    // display:none nor visibility:hidden can provide that rendering guarantee.
+    if (concealed) {
+      focusPending ||= hostDiv.contains(document.activeElement)
+      hostDiv.style.opacity = '0'
+    } else {
+      hostDiv.style.removeProperty('opacity')
+    }
+    hostDiv.inert = concealed
+    if (!concealed && focusPending && visible && hostDiv.parentNode) {
+      focusPending = false
+      if (document.activeElement === document.body) terminal.focus()
+    }
+  }
+
   function notifyRendererFailure(failure: TerminalViewRendererFailure): void {
     for (const listener of rendererFailureListeners) listener(failure)
   }
@@ -142,7 +166,24 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     refresh,
   })
 
+  function revealWhenReady(): void {
+    if (!snapshotReady || hostDiv.style.opacity !== '0'
+      || !opened || !visible || !hostDiv.parentNode || disposed
+      || revealGeneration === snapshotGeneration) return
+    const generation = snapshotGeneration
+    revealGeneration = generation
+    revealPending = presentation.drain().then(() => {
+      if (disposed || generation !== snapshotGeneration || !visible || !hostDiv.parentNode) return
+      snapshotPaintPending = false
+      setConcealed(false)
+      revealGeneration = null
+    }, () => {
+      if (revealGeneration === generation) revealGeneration = null
+    })
+  }
+
   function write(data: string | Uint8Array, ptyInstanceId?: number | null): void {
+    hasOutput ||= hasData(data)
     presentation.recordWrite(ptyInstanceId)
     terminal.write(data)
   }
@@ -161,18 +202,33 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     if (snapshot.ptyInstanceId !== null && snapshot.continuationData === undefined) {
       throw new Error('Live terminal recovery requires explicit parser continuation')
     }
+    const generation = ++snapshotGeneration
+    snapshotReady = false
+    const isCurrent = () => !disposed && snapshotGeneration === generation
+    const snapshotHasOutput = hasData(snapshot.data) || hasData(snapshot.compatibilityData) || hasData(snapshot.continuationData)
+    const conceal = hasOutput || snapshotHasOutput || snapshotPaintPending
+    snapshotPaintPending = conceal
+    hasOutput = snapshotHasOutput
+    if (conceal) setConcealed(true)
     await new Promise<void>(resolve => terminal.write('', resolve))
-    if (disposed) return
+    if (!isCurrent()) return
     imageSupport.reset()
     terminal.reset()
     if (hasData(snapshot.compatibilityData)) {
       await writeAndWait(snapshot.compatibilityData)
+      if (!isCurrent()) return
       // Cancel the replay's unfinished parser/UTF-8 input before portable VT.
       // Use bytes so xterm's byte decoder also leaves any partial code point.
       await writeAndWait(new Uint8Array([0x18]))
+      if (!isCurrent()) return
     }
     if (hasData(snapshot.data)) await writeAndWait(snapshot.data)
+    if (!isCurrent()) return
     if (hasData(snapshot.continuationData)) await writeAndWait(snapshot.continuationData)
+    if (!isCurrent()) return
+    snapshotReady = true
+    if (!conceal) setConcealed(false)
+    else revealWhenReady()
   }
   return {
     get geometry() {
@@ -190,6 +246,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       container.appendChild(hostDiv)
       if (opened) {
         if (refreshPending) fitAndRefreshWhenVisible()
+        revealWhenReady()
         return
       }
       reportFontReadinessBeforeOpen()
@@ -197,18 +254,28 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       opened = true
       options.performanceTrace?.mark('xtermMount', { terminalKey: options.terminalKey })
       webglRenderer.load()
+      revealWhenReady()
     },
     setVisible(nextVisible) {
+      if (visibilityManaged && visible === nextVisible) return
       visibilityManaged = true
-      if (visible === nextVisible) return
+      if (!nextVisible) {
+        snapshotGeneration += 1
+        // Cancel unfinished writes, but retain completed state for remount.
+        // PTY replacement invalidates that state explicitly via invalidateSnapshot().
+        setConcealed(true)
+      }
       visible = nextVisible
       if (!visible) {
         presentation.detach()
         return
       }
       if (refreshPending) fitAndRefreshWhenVisible()
+      revealWhenReady()
     },
     unmount() {
+      snapshotGeneration += 1
+      setConcealed(true)
       visible = false
       terminal.blur()
       presentation.detach()
@@ -220,18 +287,27 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     bootstrap(data) {
       write(data)
     },
+    invalidateSnapshot() {
+      snapshotGeneration += 1
+      snapshotReady = false
+      setConcealed(true)
+      presentation.detach()
+    },
     replaceSnapshot,
     writeLive(output) {
       write(output.data, output.ptyInstanceId)
     },
-    drainPresentation() {
-      return presentation.drain()
+    async drainPresentation() {
+      const evidence = await presentation.drain()
+      await revealPending
+      return evidence
     },
     capturePresentation() {
       return presentation.capture()
     },
     focus() {
-      terminal.focus()
+      if (hostDiv.inert) focusPending = true
+      else terminal.focus()
     },
     reset() {
       imageSupport.reset()

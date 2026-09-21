@@ -13,6 +13,7 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     unmount: vi.fn(),
     isMountedIn: vi.fn(() => false),
     bootstrap: vi.fn(),
+    invalidateSnapshot: vi.fn(),
     replaceSnapshot: vi.fn(async () => undefined),
     writeLive: vi.fn(),
     drainPresentation: vi.fn(async () => ({
