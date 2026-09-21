@@ -56,7 +56,7 @@ Fetch measures a local HTTP fixture plus JSON parsing, not production IPC. Base6
 
 Snapshot writes still occur in their original order: compatibility replay, parser cancellation, authoritative portable VT, then parser continuation. Each stage waits for xterm's write callback. Replacement and attachment generations fence later stages and delayed reveal callbacks. Empty snapshots into an unused terminal and ordinary live writes have no new loading timer. Clearing previously painted output still waits for a clean frame.
 
-`replaceSnapshot()` remains a parsing boundary, allowing the authority coordinator to flush queued live output in order. `drainPresentation()` also waits for reveal readiness. A restored offscreen or not-yet-mounted view can reveal when it becomes presentable. A hidden attachment instead waits for fresh authority before showing old content again.
+`replaceSnapshot()` remains a parsing boundary, allowing the authority coordinator to flush queued live output in order. `drainPresentation()` also waits for reveal readiness. A restored offscreen or not-yet-mounted view can reveal when it becomes presentable. Hiding cancels unfinished restoration, but preserves completed state so a simple remount can reveal it after repainting. PTY replacement explicitly invalidates completed state until fresh authority arrives.
 
 The runtime explicitly invalidates pending snapshots when the PTY generation changes. A new spawn or restored PTY that overlaps an older recovery waits for a fresh snapshot rather than treating the old recovery as success. Tests reproduced and fixed this race for both an old live PTY and historical output without a live PTY.
 
@@ -153,6 +153,8 @@ Chosen scope: full Terminal Runtime package, affected host/terminal-plugin contr
 - Both conformance surfaces at DPR 1 and 2 in Arc, plus real runtime restoration, image pixels, scrolling, resizing, cancellation, generation replacement and both WebGL fallback paths.
 
 The latest counts and commands are in [measurements](evidence/measurements.json) and [validation commands](evidence/validation.json).
+
+CI follow-up: the concurrent lifecycle visual check exposed a completed terminal staying concealed after hide/remount without another snapshot. The adapter now preserves completed state across hiding while still cancelling unfinished work. The unchanged 24-cycle conformance scenario passed in Arc with zero differing pixels after this fix. All package, host, static, native and 31-per-renderer Arc checks passed again. The opt-in profiler benchmark initially measured 3.125% overhead against its 2% limit, then passed on one isolated retry; that variability is not evidence of a concealment performance change.
 
 Not run: the stock runner's pinned Chromium golden-image comparisons and IME interaction, the full Electron/preload/sidecar/real-PTY performance scenario, and repository-wide/backend Rust suites. The Arc checks are real browser rendering but do not claim full desktop end-to-end coverage. Native per-tab RSS and a correct frontend incremental-history benchmark remain unavailable for the reasons above.
 

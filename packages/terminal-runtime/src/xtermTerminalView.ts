@@ -261,7 +261,8 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       visibilityManaged = true
       if (!nextVisible) {
         snapshotGeneration += 1
-        snapshotReady = false
+        // Cancel unfinished writes, but retain completed state for remount.
+        // PTY replacement invalidates that state explicitly via invalidateSnapshot().
         setConcealed(true)
       }
       visible = nextVisible

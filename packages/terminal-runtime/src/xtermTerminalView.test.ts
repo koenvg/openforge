@@ -261,7 +261,7 @@ describe('xterm TerminalView adapter', () => {
     expect(host.style.opacity).not.toBe('0')
     view.dispose()
   })
-  it('keeps a hidden and reopened attachment concealed until a fresh snapshot renders', async () => {
+  it('reveals a completed terminal after hide and remount without another snapshot', async () => {
     mocks.terminal.write.mockImplementation((_data, callback) => callback?.())
     const container = document.createElement('div')
     const view = createXtermTerminalView({
@@ -286,7 +286,7 @@ describe('xterm TerminalView adapter', () => {
     view.setVisible(true)
     expect(host.style.opacity).toBe('0')
     await present()
-    expect(host.style.opacity).toBe('0')
+    expect(host.style.opacity).not.toBe('0')
     await view.replaceSnapshot({ data: 'CURRENT', ptyInstanceId: null, sequence: 0 })
     await present()
     expect(host.style.opacity).not.toBe('0')
