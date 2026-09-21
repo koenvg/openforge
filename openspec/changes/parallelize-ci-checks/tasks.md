@@ -22,6 +22,6 @@
 ## 4. End-to-end validation and tuning
 
 - [x] 4.1 Run full affected frontend/test-infrastructure tests and static checks, affected workspace checks and contracts, visual unit tests, and the complete canonical visual suite; verify all existing selection, capture, diagnostic, and regression guarantees remain intact.
-- [ ] 4.2 Exercise successful and intentionally failed aggregate paths, including cancellation or absent artifacts, in workflow tests and a CI trial; verify required status identities and review reporting remain correct without modifying branch protection automatically.
-- [ ] 4.3 Compare repeated complete serial/sharded runs on equivalent revisions and runner classes; verify lower elapsed time, report runner-minute tradeoffs, and tune shard counts if setup or queue pressure offsets gains.
+- [x] 4.2 Exercise successful and intentionally failed aggregate paths, including cancellation or absent artifacts, in workflow tests and a CI trial; verify required status identities and review reporting remain correct without modifying branch protection automatically.
+- [x] 4.3 Compare repeated complete serial/sharded runs on equivalent revisions and runner classes; verify lower elapsed time, report runner-minute tradeoffs, and tune shard counts if setup or queue pressure offsets gains.
 - [ ] 4.4 Verify the complete CI workflow still passes package readiness, Rust, desktop smoke/invariants, terminal conformance, and mobile jobs; record skipped or inaccessible checks explicitly before rollout.
