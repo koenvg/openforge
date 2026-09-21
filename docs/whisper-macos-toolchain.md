@@ -65,3 +65,18 @@ cargo test --locked --release --manifest-path src-tauri/Cargo.toml \
 ```
 
 The downloader verifies SHA-256 hashes for the quantized tiny English model and upstream JFK speech sample. The ignored tests are explicitly invoked in CI and fail if fixtures are missing. Each checks recognized speech, not merely model loading. GPU-enabled inference permits whisper's normal CPU fallback; the uploaded voice log shows whether Metal initialized on the runner.
+
+## Validated repair
+
+[Native macOS 15 validation](https://github.com/koenvg/openforge/actions/runs/35576392524) passed at commit `10b3e43e5`:
+
+- Native Electron packaging and packaged-app smoke test.
+- All 14 CPU compilation commands use the portable baseline.
+- Both speech tests passed. Metal initialized the runner's Apple Paravirtual device; CPU-only inference also recognized the expected speech.
+- Backend tests: 2,343 passed. Cargo check and Clippy passed.
+
+Local validation additionally passed all 97 Electron script tests, the target-policy checks, renderer and Electron TypeScript checks, Rust formatting, release build, and strict all-targets Clippy. The local backend suite passed after unsetting inherited `OPENFORGE_AGENT_CONFIG`; existing task KVG-5174 covers that test-fixture isolation issue.
+
+Validation covered the backend and packaging tooling. Intel native packaging and renderer behavioral tests were not rerun. Existing ignored backend tests remain excluded; the two new speech tests were explicitly run. The full backend suite uses the normal debug test profile; release-mode coverage comes from packaging and speech inference.
+
+Cleanup task KVG-5180 covers packaging unit tests that inherit `CARGO_BUILD_TARGET`. The native workflow clears that variable only for its unit-test step.
