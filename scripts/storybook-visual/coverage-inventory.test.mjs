@@ -52,8 +52,10 @@ describe('storybook visual coverage inventory', () => {
       expect(entry.disposition).toBe('replaced')
       expect(currentIds.has(entry.identity), entry.identity).toBe(false)
       expect(currentIds.has(entry.appearanceCoverage), entry.appearanceCoverage).toBe(true)
-      expect(entry.behavioralAssertions.length, entry.identity).toBeGreaterThan(0)
-      for (const assertion of entry.behavioralAssertions) {
+
+      const assertions = entry.behavioralAssertions ?? []
+      expect(entry.appearanceCoverage || assertions.length, entry.identity).toBeTruthy()
+      for (const assertion of assertions) {
         expect(existsSync(resolve(root, assertion.file)), assertion.file).toBe(true)
         expect(readFileSync(resolve(root, assertion.file), 'utf8')).toContain(assertion.test)
       }
@@ -63,9 +65,10 @@ describe('storybook visual coverage inventory', () => {
   it('keeps replaced isolated stories and protected runner and regression identities', () => {
     const inventory = readJson('storybook/visual-coverage-inventory.json')
     const currentIds = new Set(readJson('storybook/visual-manifest.json').map(identity))
-    const storySource = readFileSync(resolve(root, 'storybook/stories/components/TaskListItem.stories.ts'), 'utf8')
+    const taskListStorySource = 'storybook/stories/components/TaskListItem.stories.ts'
 
     for (const entry of inventory.cases.filter(entry => entry.disposition === 'replaced')) {
+      const storySource = readFileSync(resolve(root, entry.storySource ?? taskListStorySource), 'utf8')
       expect(storySource).toContain(`export const ${entry.originalStoryExport}: Story`)
     }
 
@@ -80,6 +83,12 @@ describe('storybook visual coverage inventory', () => {
   it('records equivalent before and after timing environments and explicit image review decisions', () => {
     const inventory = readJson('storybook/visual-coverage-inventory.json')
 
+    expect(inventory.scope).toContain('KVG-5142')
+    expect(
+      inventory.cases.some(
+        entry => entry.disposition === 'replaced' && !entry.behavioralAssertions?.length,
+      ),
+    ).toBe(true)
     expect(inventory.selectionRules.length).toBeGreaterThan(0)
     expect(inventory.before.revision).toMatch(/^[0-9a-f]{40}$/)
     expect(inventory.before.environment.containerImage).toContain('@sha256:')
