@@ -14,7 +14,11 @@ export async function verifyRepeatedCapture(entry, first, second, output) {
   await writeFile(join(directory, 'first.png'), first)
   await writeFile(join(directory, 'second.png'), second)
   await writeFile(join(directory, 'difference.png'), comparison.difference)
-  const results = [{ id, pixels: comparison.pixels, matches: false, images: ['first', 'second', 'difference'] }]
+  const previous = await readFile(join(root, 'results.json'), 'utf8').then(JSON.parse).catch(error => {
+    if (error.code === 'ENOENT') return []
+    throw error
+  })
+  const results = [...previous.filter(result => result.id !== id), { id, pixels: comparison.pixels, matches: false, images: ['first', 'second', 'difference'] }]
   await writeFile(join(root, 'results.json'), JSON.stringify(results, null, 2))
   await writeFile(join(root, 'index.html'), report(results))
   throw new Error(`${id}: repeated capture must pass (${comparison.pixels} changed pixels). Review ${root}/index.html`)

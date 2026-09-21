@@ -27,14 +27,24 @@ pnpm i
 pnpm storybook:visual:check
 pnpm storybook:visual:update
 pnpm storybook:visual:test
+pnpm storybook:visual:shard --shard-index 2 --shard-count 4
+pnpm storybook:visual:probes
 pnpm storybook:visual:unit
 ```
 
-`check` builds both catalogs in a disposable Linux container and compares them with `storybook/baselines`. It mounts the checkout and approved images read-only. Current images, differences, environment details, and `index.html` go to ignored `artifacts/storybook-visual`. Each run replaces the previous artifacts. Do not run these commands concurrently.
+`check` builds both catalogs in a disposable Linux container and compares them with `storybook/baselines`. It mounts the checkout and approved images read-only. Current images, differences, environment details, and `index.html` go to ignored `artifacts/storybook-visual`. The legacy `check`, `update`, and full `test` commands replace that directory. Do not run those three commands concurrently, or update baselines while a check, shard, or probe is running.
 
 `update` uses the same capture path but writes only the images selected by `storybook/visual-manifest.json`. It validates all selected captures before writing any of them. It lists obsolete PNGs without deleting them. Review and remove obsolete images explicitly, then run `check`. Never update screenshots just to silence a failure.
 
 `test` checks every declared baseline, then compares each initial `current.png` with one fresh capture in a new browser context. This is two full-matrix passes, not three. Missing initial artifacts fail rather than triggering replacement captures.
+
+`shard --shard-index 2 --shard-count 4` runs the second of four deterministic partitions. Indices are one-based positive integers, must not exceed the count, and counts cannot exceed the manifest size. Unknown, repeated, missing, or malformed flags fail explicitly. Identities are sorted lexically and assigned round-robin. Every assigned identity receives its baseline comparison and one independent repeatability capture. Shards do not run regression probes. Partition membership can change when the manifest grows; reproduce with the same revision, manifest, index, and count.
+
+`probes` runs terminal readiness, cursor stability, readiness/diagnostic checks, capture stability, and bounded runner fault probes once, without either full-matrix pass. It uses the complete manifest to find the existing protected representatives. Both partial commands validate the entire manifest, built story catalogs, and baseline inventory before selecting anything.
+
+Every shard or standalone probe invocation creates a unique directory under `artifacts/storybook-visual-runs/`, printed at startup. Shard directory names include the index and count. These runs can execute concurrently without overwriting each other or the full command's report. Each still builds both catalogs inside its own pinned container and uses read-only approved baselines. Host `VISUAL_*` selection/path overrides are not a public API; use the flags above.
+
+All modes write `evidence.json` alongside the existing reports. It records the Git revision and dirty-checkout flag, SHA-256 of the exact manifest bytes, complete expected identities, assigned identities and shard index/count, pinned image and actual browser environment, expected phases, and each attempted phase's outcome and successfully completed case identities. Failed validation or setup leaves incomplete fields rather than claiming completion. A partial report is not full validation; run `pnpm storybook:visual:test` for every case and every probe.
 
 Runner regression probes use exactly two identities: `pages/application-shell--expanded--openforge-light--1280x800` and `components/components-button--primary--openforge-light--480x240`. Missing or duplicate representatives fail explicitly. The probes run the real command against a disposable manifest and matching baseline inventory. They test button-color failure, update evidence, unexpected diagnostics, missing/obsolete/unexpected baselines, duplicate identities, and restoration. Adding unrelated stories does not grow these probes or narrow the normal full-matrix check.
 

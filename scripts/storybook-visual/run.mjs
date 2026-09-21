@@ -1,16 +1,21 @@
 import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright'
-import { validateManifest, validateBaselines, identity } from './manifest.mjs'
+import { identity } from './manifest.mjs'
+import { resolveShard, planExecution, createEvidence, executePhases } from './execution.mjs'
+import { verifyRepeatFromInitial } from './repetition.mjs'
 import { compare, report, verifyDiagnostics } from './comparison.mjs'
 import { capture, serve } from './capture.mjs'
-import { selfTest } from './self-test.mjs'
+import { regressionPhases } from './self-test.mjs'
 import { createTimings } from './timings.mjs'
 import { resolveVisualInputs } from './inputs.mjs'
 
 const mode = process.argv[2]
-if (!['check', 'update', 'test'].includes(mode) || process.platform !== 'linux' || process.arch !== 'arm64' || !process.env.VISUAL_IMAGE) throw new Error('Use the root storybook:visual commands to run in the pinned Linux container')
+if (process.argv.length !== 3 || process.platform !== 'linux' || process.arch !== 'arm64' || !process.env.VISUAL_IMAGE) throw new Error('Use the root storybook:visual commands to run in the pinned Linux container')
+resolveShard(mode, process.env)
 const { output, baselineRoot, manifestPath } = resolveVisualInputs(mode, process.env)
+const manifestBytes = await readFile(manifestPath)
+const evidence = createEvidence({ mode, revision: process.env.VISUAL_REVISION, dirty: process.env.VISUAL_DIRTY === 'true', manifestBytes })
 const json = async path => JSON.parse(await readFile(path, 'utf8'))
 async function files(root) {
   return (await readdir(root, { withFileTypes: true })).map(entry => entry.name)
@@ -32,20 +37,23 @@ let server
 try {
   await rm(output, { recursive: true, force: true }).catch(error => { if (error.code !== 'EBUSY') throw error })
   await mkdir(output, { recursive: true })
-  const entries = await timings.measure('validation', async () => {
-    const entries = validateManifest(await json(manifestPath), {
-      pages: await json('storybook-static/pages/index.json'), components: await json('storybook-static/components/index.json'),
-    })
-    const obsolete = validateBaselines(entries, await baselineFiles(), mode === 'test' ? 'check' : mode)
-    console.log(`Obsolete baselines: ${obsolete.join(', ') || 'none'}`)
-    return entries
-  })
+  const plan = await timings.measure('validation', async () => planExecution({
+    mode, env: process.env, manifest: JSON.parse(manifestBytes),
+    indexes: { pages: await json('storybook-static/pages/index.json'), components: await json('storybook-static/components/index.json') },
+    baselineFiles: await baselineFiles(),
+  }))
+  const { entries } = plan
+  console.log(`Obsolete baselines: ${plan.obsolete.join(', ') || 'none'}`)
+  evidence.assignment = { shard: plan.shard, identities: plan.assignedIdentities }
+  evidence.expectedIdentities = plan.expectedIdentities
+  evidence.expectedPhases = plan.phases
   server = await serve('storybook-static')
   // Partial tile repainting can vary rounded-border pixels across identical contexts.
   browser = await chromium.launch({ headless: true, args: ['--disable-gpu', '--disable-partial-raster', '--force-color-profile=srgb'] })
-  await save(join(output, 'environment.json'), JSON.stringify({ image: process.env.VISUAL_IMAGE, chromium: browser.version(), scale: 1, locale: 'en-US', timezone: 'UTC', time: '2026-01-02T09:30:00.000Z' }, null, 2))
+  evidence.environment = { image: process.env.VISUAL_IMAGE, chromium: browser.version(), platform: process.platform, arch: process.arch, scale: 1, locale: 'en-US', timezone: 'UTC', time: '2026-01-02T09:30:00.000Z' }
+  await save(join(output, 'environment.json'), JSON.stringify(evidence.environment, null, 2))
   const pending = []
-  await timings.measure('baseline', async () => {
+  const baseline = async completed => {
     for (const entry of entries) {
       const id = identity(entry)
       const result = { id, images: [] }
@@ -73,17 +81,37 @@ try {
         } else result.added = true
         verifyDiagnostics(diagnostics, entry.expectedErrors)
         if (mode === 'update') pending.push([baselinePath, current])
+        if (mode === 'update' || result.matches) completed(id)
       } catch (error) {
         result.error = error.message
       }
     }
-    if (results.some(result => result.error || (mode !== 'update' && !result.matches))) throw new Error('Visual check failed. Review artifacts/storybook-visual/index.html')
-  })
-  // Do not replace any baselines if another selected story failed readiness or diagnostics.
-  for (const [path, bytes] of pending) await save(path, bytes)
-  if (mode === 'test') await selfTest({ browser, url: server.url, entries, output, timings })
-  console.log(`Visual ${mode}: ${entries.length} cases passed`)
+    if (results.some(result => result.error || (mode !== 'update' && !result.matches))) throw new Error('Visual check failed. Review index.html')
+    // Never replace baselines if any selected story failed readiness or diagnostics.
+    for (const [path, bytes] of pending) await save(path, bytes)
+  }
+  const repeatability = async completed => {
+    const failures = []
+    for (const entry of entries) {
+      try {
+        await verifyRepeatFromInitial(entry, output, () => capture(browser, server.url, entry, { timings, phase: 'repeatability' }))
+        completed(identity(entry))
+      } catch (error) {
+        failures.push(error.message)
+        results.push({ id: `${identity(entry)}/repeatability`, error: error.message, images: [] })
+      }
+    }
+    if (failures.length) throw new Error(failures.join('\n'))
+  }
+  await executePhases(plan, {
+    baseline, repeatability,
+    ...regressionPhases({ browser, url: server.url, entries: plan.allEntries, output, timings }),
+  }, { evidence, timings })
+  evidence.status = 'passed'
+  console.log(`Visual ${mode}: ${entries.length} cases passed; phases: ${plan.phases.join(', ')}`)
 } catch (error) {
+  evidence.status = 'failed'
+  evidence.error = error.message
   results.push({ id: 'run', error: error.message, images: [] })
   console.error(error.message)
   process.exitCode = 1
@@ -101,4 +129,6 @@ try {
       process.exitCode = 1
     }
   }
+  evidence.status = process.exitCode ? 'failed' : evidence.status
+  await save(join(output, 'evidence.json'), JSON.stringify(evidence, null, 2))
 }

@@ -82,3 +82,15 @@ it('compares against the persisted sample with the declared tolerance and keeps 
   expect(await readFile(join(output, 'self-test/repeated', id, 'first.png'))).toEqual(image(10))
   expect(await readFile(join(output, 'self-test/repeated', id, 'second.png'))).toEqual(image(255))
 })
+
+it('retains the report for every failed identity when a shard continues after failure', async () => {
+  const output = await mkdtemp(join(tmpdir(), 'visual-repetition-'))
+  directories.push(output)
+  const other = { ...entry, story: 'another-story' }
+  await expect(verifyRepeatedCapture(entry, image(0), image(255), output)).rejects.toThrow('repeated capture must pass')
+  await expect(verifyRepeatedCapture(other, image(0), image(255), output)).rejects.toThrow('repeated capture must pass')
+  const root = join(output, 'self-test/repeated')
+  const results = JSON.parse(await readFile(join(root, 'results.json'), 'utf8'))
+  expect(results.map(result => result.id)).toEqual(['components/sdk-overlays--modal--openforge-light--2x1', 'components/another-story--openforge-light--2x1'])
+  for (const result of results) expect(await readFile(join(root, 'index.html'), 'utf8')).toContain(`${result.id}/first.png`)
+})
