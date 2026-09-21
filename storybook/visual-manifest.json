@@ -9,7 +9,6 @@
   { "catalog": "components", "story": "components-task-browser--feedback-actions", "theme": "openforge-dark", "viewport": { "width": 1000, "height": 720 }, "ready": "body[data-task-browser-ready='components-task-browser--feedback-actions']", "expectedErrors": [] },
   { "catalog": "components", "story": "components-task-browser--review", "theme": "openforge-light", "viewport": { "width": 1000, "height": 720 }, "ready": "body[data-task-browser-ready='components-task-browser--review']", "expectedErrors": [] },
   { "catalog": "components", "story": "components-task-browser--review", "theme": "openforge-dark", "viewport": { "width": 1000, "height": 720 }, "ready": "body[data-task-browser-ready='components-task-browser--review']", "expectedErrors": [] },
-  { "catalog": "components", "story": "components-task-browser--review-overflow", "theme": "openforge-light", "viewport": { "width": 360, "height": 900 }, "ready": "body[data-task-browser-ready='components-task-browser--review-overflow']", "expectedErrors": [] },
   { "catalog": "components", "story": "components-task-browser--review-overflow", "theme": "openforge-dark", "viewport": { "width": 360, "height": 900 }, "ready": "body[data-task-browser-ready='components-task-browser--review-overflow']", "expectedErrors": [] },
   { "catalog": "components", "story": "components-inline-palette-controls--populated", "theme": "openforge-light", "viewport": { "width": 600, "height": 400 }, "ready": "[role=listbox] [role=option][aria-selected=true]", "expectedErrors": [] },
   { "catalog": "components", "story": "components-inline-palette-controls--populated", "theme": "openforge-dark", "viewport": { "width": 600, "height": 400 }, "ready": "[role=listbox] [role=option][aria-selected=true]", "expectedErrors": [] },
@@ -21,12 +20,10 @@
   { "catalog": "pages", "story": "pages-action-palette--theme-override", "theme": "openforge-light", "viewport": { "width": 900, "height": 700 }, "ready": "body[data-navigation-ready=\"pages-action-palette--theme-override\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-light", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--menu", "theme": "openforge-dark", "viewport": { "width": 480, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "openforge-light", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--long-label", "theme": "openforge-dark", "viewport": { "width": 320, "height": 320 }, "ready": "[role=menu]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "openforge-light", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--sizes-variants-and-disabled", "theme": "openforge-dark", "viewport": { "width": 720, "height": 600 }, "ready": "[aria-label=\"Split button examples\"]", "expectedErrors": [] },
   { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "openforge-light", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
-  { "catalog": "components", "story": "sdk-split-button--keyboard", "theme": "openforge-dark", "viewport": { "width": 320, "height": 240 }, "ready": "button[aria-label=\"More report actions\"]:focus-visible", "expectedErrors": [] },
   {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
@@ -450,17 +447,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-plugin-sdk-actions--narrow-overflow",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 360,
-      "height": 800
-    },
-    "ready": "button:has-text('Create a follow-up')",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-plugin-sdk-actions--keyboard",
     "theme": "openforge-light",
     "viewport": {
@@ -522,17 +508,6 @@
   {
     "catalog": "components",
     "story": "components-plugin-sdk-fields--validation",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 800,
-      "height": 750
-    },
-    "ready": "text=Instructions are required.",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-fields--validation",
     "theme": "openforge-dark",
     "viewport": {
       "width": 800,
@@ -545,17 +520,6 @@
     "catalog": "components",
     "story": "components-plugin-sdk-fields--narrow-overflow",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 360,
-      "height": 900
-    },
-    "ready": "[data-testid=sdk-fields]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-fields--narrow-overflow",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 360,
       "height": 900
@@ -653,17 +617,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-plugin-sdk-selectors--narrow-overflow",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 360,
-      "height": 900
-    },
-    "ready": "[role=listbox]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-plugin-sdk-selectors--empty",
     "theme": "openforge-light",
     "viewport": {
@@ -743,17 +696,6 @@
     "catalog": "components",
     "story": "components-plugin-sdk-presentation--narrow-overflow",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 360,
-      "height": 1700
-    },
-    "ready": "[aria-label='File type examples']",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-presentation--narrow-overflow",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 360,
       "height": 1700
@@ -1000,17 +942,6 @@
       "maxChannelDelta": 1,
       "reason": "Consecutive pinned Linux captures after the Studio redesign differ at 12 antialiased border pixels by one channel level. Larger or more widespread changes remain failures."
     }
-  },
-  {
-    "catalog": "components",
-    "story": "components-plugin-sdk-navigation--selected",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 640,
-      "height": 400
-    },
-    "ready": "button[aria-current=page]",
-    "expectedErrors": []
   },
   {
     "catalog": "pages",
@@ -3508,17 +3439,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-board-ready-filter--active",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 640,
-      "height": 280
-    },
-    "ready": "#storybook-root button",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-board-ready-filter--empty",
     "theme": "openforge-light",
     "viewport": {
@@ -4049,17 +3969,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-workspace-inspector--active",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 420,
-      "height": 800
-    },
-    "ready": "[data-testid=\"task-info-panel\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-workspace-inspector--completed",
     "theme": "openforge-light",
     "viewport": {
@@ -4254,17 +4163,6 @@
     "catalog": "components",
     "story": "components-task-workspace-toolbar--active",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 240
-    },
-    "ready": "text=Normalize the greeting",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-workspace-toolbar--active",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 240

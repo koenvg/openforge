@@ -7,7 +7,7 @@
 
 - [x] 2.1 Add any missing task-status mapping assertions before snapshot removal; verify focused behavioral tests fail without the expected mapping and pass with the existing correct behavior.
 - [x] 2.2 Add small task-list variant galleries without deleting isolated stories; verify both-theme pinned-container captures show all labels and variants without clipping and preserve separate unique layout/interaction cases.
-- [ ] 2.3 Curate remaining shared component state/theme cases using the inventory; verify retained coverage includes theme-sensitive controls, focus, overlays, overflow, and known regression identities.
+- [x] 2.3 Curate remaining shared component state/theme cases using the inventory; verify retained coverage includes theme-sensitive controls, focus, overlays, overflow, and known regression identities.
 
 ## 3. Curate page cases and baselines
 

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scope": "KVG-5141 task-list gallery slice of curate-storybook-snapshots",
+  "scope": "KVG-5141 task-list galleries and KVG-5142 shared-component curation slice of curate-storybook-snapshots",
   "selectionRules": [
     "Retain a separate case when it covers a distinct responsive layout, overflow condition, interaction state, renderer, or documented regression.",
     "Replace repeated business-state screenshots only when a readable gallery covers appearance and a rendered behavioral assertion covers label, icon, badge, and action mapping.",
@@ -141,7 +141,19 @@
       "components/components-board-task-list-item--merge-conflict--openforge-light--560x360",
       "components/components-board-task-list-item--merge-conflict--openforge-dark--560x360",
       "components/components-board-task-list-item--merging--openforge-light--560x360",
-      "components/components-board-task-list-item--merging--openforge-dark--560x360"
+      "components/components-board-task-list-item--merging--openforge-dark--560x360",
+      "components/components-task-browser--review-overflow--openforge-light--360x900",
+      "components/sdk-split-button--long-label--openforge-light--320x320",
+      "components/sdk-split-button--keyboard--openforge-dark--320x240",
+      "components/components-plugin-sdk-actions--narrow-overflow--openforge-dark--360x800",
+      "components/components-plugin-sdk-fields--validation--openforge-light--800x750",
+      "components/components-plugin-sdk-fields--narrow-overflow--openforge-dark--360x900",
+      "components/components-plugin-sdk-selectors--narrow-overflow--openforge-dark--360x900",
+      "components/components-plugin-sdk-presentation--narrow-overflow--openforge-dark--360x1700",
+      "components/components-plugin-sdk-navigation--selected--openforge-dark--640x400",
+      "components/components-board-ready-filter--active--openforge-dark--640x280",
+      "components/components-task-workspace-inspector--active--openforge-dark--420x800",
+      "components/components-task-workspace-toolbar--active--openforge-dark--1280x240"
     ],
     "timing": {
       "status": "passed",
@@ -164,8 +176,8 @@
     }
   },
   "after": {
-    "revision": "working tree based on f4b94552f7f8e51dd2eadc7a439189bc05b2cb06",
-    "recordedAt": "2026-09-21T07:03:00Z",
+    "revision": "working tree based on b5083aa6c8d80f7bf8a4e64ec28dbd1d876d1a97",
+    "recordedAt": "2026-09-21T10:45:02.802Z",
     "environment": {
       "containerImage": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:941cc91e5022880ac1d14ae90b476b624deb6399dbbc28d612d5d5bd7928fcbd",
       "chromium": "151.0.7922.34",
@@ -178,76 +190,76 @@
       "frozenTime": "2026-01-02T09:30:00.000Z"
     },
     "counts": {
-      "total": 462,
+      "total": 443,
       "catalogs": {
-        "pages": 242,
-        "components": 220
+        "pages": 238,
+        "components": 205
       },
       "themes": {
-        "openforge-light": 281,
-        "openforge-dark": 181
+        "openforge-light": 274,
+        "openforge-dark": 169
       },
       "viewports": {
+        "1280x800": 133,
         "1000x720": 31,
-        "1100x600": 1,
-        "1100x800": 1,
-        "1280x1200": 4,
-        "1280x240": 8,
-        "1280x800": 137,
-        "1280x900": 69,
-        "1440x1000": 3,
-        "1440x900": 2,
-        "1600x650": 2,
-        "1600x820": 2,
-        "1600x900": 4,
-        "160x120": 1,
-        "1920x1080": 2,
-        "240x120": 1,
-        "320x240": 3,
-        "320x320": 2,
+        "360x900": 5,
+        "600x400": 2,
         "320x480": 1,
-        "320x640": 2,
+        "400x360": 2,
+        "900x700": 7,
+        "480x320": 8,
+        "320x320": 1,
+        "720x600": 2,
+        "320x240": 2,
+        "1280x900": 69,
+        "900x900": 7,
+        "640x640": 5,
+        "480x240": 2,
+        "1280x1200": 4,
+        "960x800": 2,
         "320x800": 1,
-        "360x1700": 2,
+        "640x600": 3,
+        "800x500": 5,
+        "360x800": 1,
+        "800x700": 5,
+        "800x750": 1,
+        "800x600": 11,
+        "800x900": 4,
+        "360x1700": 1,
+        "640x400": 11,
+        "360x450": 1,
+        "640x800": 3,
+        "360x500": 1,
+        "360x320": 1,
         "360x240": 2,
         "360x300": 1,
-        "360x320": 1,
-        "360x450": 1,
-        "360x480": 2,
-        "360x500": 1,
-        "360x800": 2,
-        "360x900": 8,
-        "400x360": 2,
-        "420x800": 8,
-        "480x240": 2,
-        "480x320": 11,
-        "480x400": 3,
-        "480x480": 2,
-        "480x800": 2,
-        "480x900": 6,
-        "560x360": 6,
-        "600x400": 2,
-        "620x1000": 1,
-        "640x280": 17,
-        "640x400": 12,
-        "640x480": 16,
-        "640x600": 3,
-        "640x640": 5,
-        "640x720": 4,
-        "640x800": 3,
-        "720x600": 2,
-        "768x900": 1,
-        "800x500": 5,
-        "800x600": 11,
-        "800x700": 5,
-        "800x750": 2,
-        "800x900": 4,
         "900x600": 1,
-        "900x640": 1,
-        "900x700": 7,
+        "640x480": 16,
+        "480x400": 3,
+        "360x480": 2,
+        "240x120": 1,
+        "160x120": 1,
+        "480x480": 2,
+        "640x720": 4,
         "900x800": 12,
-        "900x900": 7,
-        "960x800": 2
+        "900x640": 1,
+        "320x640": 2,
+        "1920x1080": 2,
+        "640x280": 16,
+        "420x800": 7,
+        "1600x820": 2,
+        "1600x900": 4,
+        "1600x650": 2,
+        "560x360": 6,
+        "1280x240": 7,
+        "1440x900": 2,
+        "768x900": 1,
+        "1440x1000": 3,
+        "1100x600": 1,
+        "480x800": 2,
+        "620x1000": 1,
+        "480x900": 6,
+        "1100x800": 1
       }
     },
     "taskListCases": 12,
@@ -261,30 +273,42 @@
     ],
     "timing": {
       "status": "passed",
-      "elapsedMs": 994574,
+      "elapsedMs": 1533033,
       "captures": {
-        "attempted": 994,
-        "completed": 991,
+        "attempted": 956,
+        "completed": 953,
         "failed": 3
       },
       "phases": {
-        "validation": 5,
-        "baseline": 439356,
-        "repeatability": 439848,
-        "terminalReadiness": 35066,
-        "cursorStability": 5153,
-        "readinessDiagnostics": 4302,
-        "captureStability": 61869,
-        "runnerProbes": 8825
+        "validation": 6,
+        "baseline": 883706,
+        "repeatability": 529376,
+        "terminalReadiness": 37530,
+        "cursorStability": 5219,
+        "readinessDiagnostics": 4359,
+        "captureStability": 63234,
+        "runnerProbes": 9422
       }
     }
   },
   "measuredChange": {
     "manifestCases": {
       "before": 502,
-      "after": 462,
-      "delta": -40,
-      "percent": -7.97
+      "after": 443,
+      "delta": -59,
+      "percent": -11.75
+    },
+    "componentCases": {
+      "before": 260,
+      "after": 205,
+      "delta": -55,
+      "percent": -21.15
+    },
+    "currentSliceCases": {
+      "before": 455,
+      "after": 443,
+      "delta": -12,
+      "percent": -2.64
     },
     "taskListCases": {
       "before": 52,
@@ -292,31 +316,37 @@
       "delta": -40,
       "percent": -76.92
     },
+    "captureAttempts": {
+      "before": 1074,
+      "after": 956,
+      "delta": -118,
+      "percent": -10.99
+    },
     "elapsedMs": {
       "before": 1306672,
-      "after": 994574,
-      "delta": -312098,
-      "percent": -23.88
+      "after": 1533033,
+      "delta": 226361,
+      "percent": 17.32
     },
     "baselineMs": {
       "before": 712631,
-      "after": 439356,
-      "delta": -273275,
-      "percent": -38.35
+      "after": 883706,
+      "delta": 171075,
+      "percent": 24.01
     },
     "repeatabilityMs": {
       "before": 480984,
-      "after": 439848,
-      "delta": -41136,
-      "percent": -8.55
+      "after": 529376,
+      "delta": 48392,
+      "percent": 10.06
     },
-    "note": "Timings are measured full canonical runs on the same host and pinned container. The elapsed reduction includes normal run-to-run variance and is not attributed solely to the 40-case reduction."
+    "note": "The full canonical runs used the same host and pinned container. The curated manifest attempted 118 fewer captures, but this measured run took 226361ms longer, so no runtime saving is claimed. The timing difference is reported as observed run-to-run variance rather than an estimate."
   },
   "validation": [
     {
       "command": "pnpm i",
       "status": "passed",
-      "details": "Lockfile was current; 640 workspace packages were installed."
+      "details": "Lockfile was current; 645 workspace packages were installed."
     },
     {
       "command": "pnpm storybook:visual:test (before)",
@@ -326,22 +356,22 @@
     {
       "command": "pnpm storybook:visual:test (after)",
       "status": "passed",
-      "details": "462 cases passed baseline comparison, repeatability, and all probes with no missing, obsolete, or unexpected baselines."
+      "details": "443 cases passed baseline comparison, repeatability, and all probes with no missing, obsolete, or unexpected baselines; 953 of 956 captures completed and the three intentional probe failures behaved as expected."
     },
     {
-      "command": "pnpm exec vitest run src/components/focus-board/TaskListItem.test.ts scripts/storybook-visual/coverage-inventory.test.mjs scripts/storybook-visual/manifest.test.mjs",
+      "command": "pnpm exec vitest run scripts/storybook-visual/coverage-inventory.test.mjs",
       "status": "passed",
-      "details": "88 tests passed."
+      "details": "3 focused inventory tests passed after the expected red scope assertion."
     },
     {
       "command": "pnpm storybook:visual:unit",
       "status": "passed",
-      "details": "101 tests passed after installing the Playwright 1.62.1 Chromium browser required by the repository guide."
+      "details": "17 files and 123 tests passed. The first local rerun found the upgraded Playwright browser missing; pnpm exec playwright install chromium restored the repository-required browser before the passing rerun."
     },
     {
       "command": "env -u OPENFORGE_AGENT_CONFIG pnpm test",
       "status": "passed",
-      "details": "851 files passed, 11 skipped; 7,265 tests passed, 3 expected failures, and 43 skipped. The environment override was removed so CLI fixtures used their own HTTP servers instead of the live Implementation Run bridge."
+      "details": "859 files passed and 11 skipped; 7,334 tests passed, 3 expected failures, and 43 skipped. The initial run inherited the live Implementation Run bridge and failed unrelated CLI fixtures; removing that override let the fixtures use their own HTTP servers."
     },
     {
       "command": "pnpm exec tsc --noEmit",
@@ -372,30 +402,30 @@
     }
   ],
   "integration": {
-    "baseRevision": "c64eab0317ad9bb61b861dabcaf086d5a2dbfca3",
+    "baseRevision": "b5083aa6c8d80f7bf8a4e64ec28dbd1d876d1a97",
     "upstreamRemovalRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
     "counts": {
-      "total": 455,
+      "total": 443,
       "catalogs": {
         "pages": 238,
-        "components": 217
+        "components": 205
       },
       "themes": {
-        "openforge-light": 277,
-        "openforge-dark": 178
+        "openforge-light": 274,
+        "openforge-dark": 169
       },
       "viewports": {
         "1280x800": 133,
         "1000x720": 31,
-        "360x900": 8,
+        "360x900": 5,
         "600x400": 2,
         "320x480": 1,
         "400x360": 2,
         "900x700": 7,
         "480x320": 8,
-        "320x320": 2,
+        "320x320": 1,
         "720x600": 2,
-        "320x240": 3,
+        "320x240": 2,
         "1280x900": 69,
         "900x900": 7,
         "640x640": 5,
@@ -405,13 +435,13 @@
         "320x800": 1,
         "640x600": 3,
         "800x500": 5,
-        "360x800": 2,
+        "360x800": 1,
         "800x700": 5,
-        "800x750": 2,
+        "800x750": 1,
         "800x600": 11,
         "800x900": 4,
-        "360x1700": 2,
-        "640x400": 12,
+        "360x1700": 1,
+        "640x400": 11,
         "360x450": 1,
         "640x800": 3,
         "360x500": 1,
@@ -430,13 +460,13 @@
         "900x640": 1,
         "320x640": 2,
         "1920x1080": 2,
-        "640x280": 17,
-        "420x800": 8,
+        "640x280": 16,
+        "420x800": 7,
         "1600x820": 2,
         "1600x900": 4,
         "1600x650": 2,
         "560x360": 6,
-        "1280x240": 8,
+        "1280x240": 7,
         "1440x900": 2,
         "768x900": 1,
         "1440x1000": 3,
@@ -456,7 +486,7 @@
       "components/components-github-sync-walkthrough-button--generating--openforge-dark--480x320",
       "components/components-github-sync-walkthrough-button--ready--openforge-light--480x320"
     ],
-    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, so the integrated manifest has 455 cases while the isolated KVG-5141 after measurement remains 462."
+    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, and KVG-5142 removes 12 redundant theme captures while retaining each exact state or layout in the opposite theme. The integrated manifest now has 443 cases."
   },
   "review": {
     "changedImages": [
@@ -513,9 +543,21 @@
       "components/components-board-task-list-item--merge-conflict--openforge-light--560x360",
       "components/components-board-task-list-item--merge-conflict--openforge-dark--560x360",
       "components/components-board-task-list-item--merging--openforge-light--560x360",
-      "components/components-board-task-list-item--merging--openforge-dark--560x360"
+      "components/components-board-task-list-item--merging--openforge-dark--560x360",
+      "components/components-task-browser--review-overflow--openforge-light--360x900",
+      "components/sdk-split-button--long-label--openforge-light--320x320",
+      "components/sdk-split-button--keyboard--openforge-dark--320x240",
+      "components/components-plugin-sdk-actions--narrow-overflow--openforge-dark--360x800",
+      "components/components-plugin-sdk-fields--validation--openforge-light--800x750",
+      "components/components-plugin-sdk-fields--narrow-overflow--openforge-dark--360x900",
+      "components/components-plugin-sdk-selectors--narrow-overflow--openforge-dark--360x900",
+      "components/components-plugin-sdk-presentation--narrow-overflow--openforge-dark--360x1700",
+      "components/components-plugin-sdk-navigation--selected--openforge-dark--640x400",
+      "components/components-board-ready-filter--active--openforge-dark--640x280",
+      "components/components-task-workspace-inspector--active--openforge-dark--420x800",
+      "components/components-task-workspace-toolbar--active--openforge-dark--1280x240"
     ],
-    "decision": "Reviewed all six gallery images at full size in both themes. Every external label, status badge, action, title, PR chip, and reason row is visible without clipping. Approved the 46 mapped isolated status baselines for explicit removal; retained selected, dependency, and long-content baselines."
+    "decision": "Reviewed all six task-list gallery images at full size in both themes and approved their 46 mapped isolated baselines for removal. For KVG-5142, reviewed the 12 removed shared-component captures beside their retained opposite-theme cases. Each exact state or narrow, overflow, or focus layout remains captured, while representative controls and overlays retain both-theme coverage. Approved all 12 obsolete images for explicit removal."
   },
   "cases": [
     {
@@ -580,9 +622,12 @@
     },
     {
       "identity": "components/components-task-browser--review-overflow--openforge-light--360x900",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-browser--review-overflow in openforge-light at 360x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Light-theme Task Browser review overflow at the narrow 360x900 viewport.",
+      "rationale": "The retained dark case keeps the same review content and narrow overflow layout. Feedback Actions and Review retain both-theme coverage, so this duplicate light capture adds no distinct theme risk. The development story remains available.",
+      "appearanceCoverage": "components/components-task-browser--review-overflow--openforge-dark--360x900",
+      "storySource": "storybook/stories/components/TaskBrowser.stories.ts",
+      "originalStoryExport": "ReviewOverflow"
     },
     {
       "identity": "components/components-task-browser--review-overflow--openforge-dark--360x900",
@@ -652,9 +697,12 @@
     },
     {
       "identity": "components/sdk-split-button--long-label--openforge-light--320x320",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for sdk-split-button--long-label in openforge-light at 320x320.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Light-theme split-button long-label wrapping and open-menu layout at 320x320.",
+      "rationale": "The retained dark case keeps the same long-label and menu geometry. Menu and SizesVariantsAndDisabled retain both-theme control coverage, so this duplicate light capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/sdk-split-button--long-label--openforge-dark--320x320",
+      "storySource": "storybook/stories/components/SdkSplitButton.stories.ts",
+      "originalStoryExport": "LongLabel"
     },
     {
       "identity": "components/sdk-split-button--long-label--openforge-dark--320x320",
@@ -682,9 +730,12 @@
     },
     {
       "identity": "components/sdk-split-button--keyboard--openforge-dark--320x240",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for sdk-split-button--keyboard in openforge-dark at 320x240.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme split-button keyboard focus ring and restored menu-trigger focus.",
+      "rationale": "The retained light case keeps the same keyboard-driven focus state and interaction assertion. Menu and SizesVariantsAndDisabled retain both-theme control coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/sdk-split-button--keyboard--openforge-light--320x240",
+      "storySource": "storybook/stories/components/SdkSplitButton.stories.ts",
+      "originalStoryExport": "Keyboard"
     },
     {
       "identity": "pages/pages-task-creation--inherited-defaults--openforge-light--1280x900",
@@ -1090,9 +1141,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-actions--narrow-overflow--openforge-dark--360x800",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-actions--narrow-overflow in openforge-dark at 360x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Plugin SDK action controls in the narrow overflow layout.",
+      "rationale": "The retained light case keeps the same narrow overflow geometry. Default retains both-theme action-control coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-actions--narrow-overflow--openforge-light--360x800",
+      "storySource": "storybook/stories/components/sdk/Actions.stories.ts",
+      "originalStoryExport": "NarrowOverflow"
     },
     {
       "identity": "components/components-plugin-sdk-actions--keyboard--openforge-light--800x500",
@@ -1126,9 +1180,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-fields--validation--openforge-light--800x750",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-fields--validation in openforge-light at 800x750.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Light-theme Plugin SDK field validation styling and error text.",
+      "rationale": "The retained dark case keeps the same validation state, and its story assertion checks the accessible error mapping. Default retains both-theme field-control coverage, so this duplicate light capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-fields--validation--openforge-dark--800x750",
+      "storySource": "storybook/stories/components/sdk/Fields.stories.ts",
+      "originalStoryExport": "Validation"
     },
     {
       "identity": "components/components-plugin-sdk-fields--validation--openforge-dark--800x750",
@@ -1144,9 +1201,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-fields--narrow-overflow--openforge-dark--360x900",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-fields--narrow-overflow in openforge-dark at 360x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Plugin SDK fields in the narrow overflow layout.",
+      "rationale": "The retained light case keeps the same narrow overflow geometry. Default retains both-theme field-control coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-fields--narrow-overflow--openforge-light--360x900",
+      "storySource": "storybook/stories/components/sdk/Fields.stories.ts",
+      "originalStoryExport": "NarrowOverflow"
     },
     {
       "identity": "components/components-plugin-sdk-selectors--default--openforge-light--800x600",
@@ -1198,9 +1258,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-selectors--narrow-overflow--openforge-dark--360x900",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-selectors--narrow-overflow in openforge-dark at 360x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Plugin SDK selector listbox in the narrow overflow layout.",
+      "rationale": "The retained light case keeps the same narrow overflow listbox and the story assertion keeps the 27-option behavior. Default and Open retain both-theme selector and overlay coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-selectors--narrow-overflow--openforge-light--360x900",
+      "storySource": "storybook/stories/components/sdk/Selectors.stories.ts",
+      "originalStoryExport": "NarrowOverflow"
     },
     {
       "identity": "components/components-plugin-sdk-selectors--empty--openforge-light--800x600",
@@ -1252,9 +1315,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-presentation--narrow-overflow--openforge-dark--360x1700",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-presentation--narrow-overflow in openforge-dark at 360x1700.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Plugin SDK presentation examples in the 360px narrow overflow layout.",
+      "rationale": "The retained light case keeps the same tall narrow layout. Default retains both-theme presentation coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-presentation--narrow-overflow--openforge-light--360x1700",
+      "storySource": "storybook/stories/components/sdk/Presentation.stories.ts",
+      "originalStoryExport": "NarrowOverflow"
     },
     {
       "identity": "components/components-plugin-sdk-navigation--default--openforge-light--640x400",
@@ -1381,9 +1447,12 @@
     },
     {
       "identity": "components/components-plugin-sdk-navigation--selected--openforge-dark--640x400",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-plugin-sdk-navigation--selected in openforge-dark at 640x400.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Plugin SDK navigation selected state.",
+      "rationale": "The retained light case keeps the same selected-state geometry. Default retains both-theme navigation-control coverage, while Collapsed retains another dark state, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-plugin-sdk-navigation--selected--openforge-light--640x400",
+      "storySource": "storybook/stories/components/sdk/Navigation.stories.ts",
+      "originalStoryExport": "Selected"
     },
     {
       "identity": "pages/pages-task-detail--review--openforge-dark--1280x800",
@@ -2620,9 +2689,12 @@
     },
     {
       "identity": "components/components-board-ready-filter--active--openforge-dark--640x280",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-board-ready-filter--active in openforge-dark at 640x280.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Ready Filter active-state appearance.",
+      "rationale": "The retained light case keeps the same active state. Default retains both-theme Ready Filter coverage and the Toggle story asserts behavior, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-board-ready-filter--active--openforge-light--640x280",
+      "storySource": "storybook/stories/components/BacklogReadyFilter.stories.ts",
+      "originalStoryExport": "Active"
     },
     {
       "identity": "components/components-board-ready-filter--empty--openforge-light--640x280",
@@ -2914,9 +2986,12 @@
     },
     {
       "identity": "components/components-task-workspace-inspector--active--openforge-dark--420x800",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-inspector--active in openforge-dark at 420x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Task Inspector active-state layout.",
+      "rationale": "The retained light case keeps the same active-state content and layout. Backlog retains both-theme Task Inspector coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-task-workspace-inspector--active--openforge-light--420x800",
+      "storySource": "storybook/stories/components/TaskInspector.stories.ts",
+      "originalStoryExport": "Active"
     },
     {
       "identity": "components/components-task-workspace-inspector--completed--openforge-light--420x800",
@@ -3636,9 +3711,12 @@
     },
     {
       "identity": "components/components-task-workspace-toolbar--active--openforge-dark--1280x240",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-toolbar--active in openforge-dark at 1280x240.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark-theme Task Toolbar active-state controls and spacing.",
+      "rationale": "The retained light case keeps the same active controls and spacing. Backlog retains both-theme Task Toolbar coverage, so this duplicate dark capture adds no distinct risk. The development story remains available.",
+      "appearanceCoverage": "components/components-task-workspace-toolbar--active--openforge-light--1280x240",
+      "storySource": "storybook/stories/components/TaskToolbar.stories.ts",
+      "originalStoryExport": "Active"
     },
     {
       "identity": "components/components-task-workspace-toolbar--failed--openforge-light--1280x240",
