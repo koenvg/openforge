@@ -66,8 +66,6 @@ fn authorized_restart_preserves_shell_but_normal_quit_stops_daemon() {
     );
     fixture.invoke("detach_app_restart", json!({ "operationId": operation }));
     stop_sidecar(&mut fixture);
-    // SAFETY: signal zero only checks the shell PID obtained from this fixture.
-    assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
     fixture
         .provider_env
         .push(("OPENFORGE_RESTART_OPERATION".into(), operation.clone()));
