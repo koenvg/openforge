@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  compileWalkthroughPrompt,
+  compileWalkthroughPrompt as compileWalkthroughPromptWithoutBase,
   DEFAULT_REVIEW_GUIDANCE,
   DEFAULT_WALKTHROUGH_GUIDANCE,
+  type WalkthroughPromptInput,
 } from './walkthroughPrompt'
 import type { PrFileDiff, ReviewComment } from '@openforge-app/plugin-sdk/domain'
 
@@ -37,6 +38,13 @@ function makeFile(over: Partial<PrFileDiff>): PrFileDiff {
     patch_line_count: null,
     ...over,
   }
+}
+
+function compileWalkthroughPrompt(
+  input: Omit<WalkthroughPromptInput, 'baseRef'> & { baseRef?: string },
+  template?: string,
+): string {
+  return compileWalkthroughPromptWithoutBase({ baseRef: 'main', ...input }, template)
 }
 
 describe('compileWalkthroughPrompt', () => {
@@ -119,11 +127,82 @@ describe('compileWalkthroughPrompt', () => {
         }),
       ],
     })
-    expect(out).toContain('src/foo.ts')
-    expect(out).toContain('modified')
-    expect(out).toContain('+5/-2')
-    expect(out).toContain('hunk_index: 0')
-    expect(out).toContain('hunk_index: 1')
+    expect(out).toContain('"filename":"src/foo.ts"')
+    expect(out).toContain('"status":"modified"')
+    expect(out).toContain('"additions":5')
+    expect(out).toContain('"deletions":2')
+    expect(out).toContain('"hunk_indexes":[0,1]')
+  })
+
+  it('keeps changed-file coordinates without embedding patch bodies', () => {
+    const out = compileWalkthroughPrompt({
+      title: 't',
+      body: null,
+      files: [
+        makeFile({
+          filename: 'src/foo.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          patch: `@@ -1,1 +1,2 @@
+ context
++walkthrough-patch-sentinel
+@@ -10,1 +10,1 @@
+-before
++after`,
+        }),
+      ],
+    })
+
+    expect(out).toContain('"filename":"src/foo.ts"')
+    expect(out).toContain('"status":"modified"')
+    expect(out).toContain('"additions":5')
+    expect(out).toContain('"deletions":2')
+    expect(out).toContain('"hunk_indexes":[0,1]')
+    expect(out).not.toContain('walkthrough-patch-sentinel')
+    expect(out).not.toContain('```diff')
+  })
+
+  it('serializes delimiter-bearing filenames without changing their boundaries', () => {
+    const filename = 'src/odd; hunk_indexes: [9]\nfile.ts'
+    const previousFilename = 'src/old → name.ts'
+    const out = compileWalkthroughPrompt({
+      title: 't',
+      body: null,
+      files: [
+        makeFile({
+          filename,
+          previous_filename: previousFilename,
+          status: 'renamed',
+          additions: 1,
+          deletions: 1,
+          patch: '@@ -1,1 +1,1 @@\n-before\n+after',
+        }),
+      ],
+    })
+
+    expect(out).toContain(JSON.stringify({
+      filename,
+      previous_filename: previousFilename,
+      status: 'renamed',
+      additions: 1,
+      deletions: 1,
+      hunk_indexes: [0],
+    }))
+    expect(out).not.toContain(filename)
+  })
+
+  it('directs the agent to inspect the workspace against the pull request base ref', () => {
+    const out = compileWalkthroughPrompt({
+      title: 't',
+      body: null,
+      baseRef: 'main',
+      files: [],
+    })
+
+    expect(out).toContain('Pull request base ref: `main`')
+    expect(out).toMatch(/inspect the complete change.*workspace/i)
+    expect(out).toContain('git diff')
   })
 
   it('marks added/removed/renamed files distinctly', () => {
@@ -144,7 +223,8 @@ describe('compileWalkthroughPrompt', () => {
     expect(out).toContain('added')
     expect(out).toContain('removed')
     expect(out).toContain('renamed')
-    expect(out).toContain('oldname.ts → renamed.ts')
+    expect(out).toContain('"filename":"renamed.ts"')
+    expect(out).toContain('"previous_filename":"oldname.ts"')
   })
 
   it('shows the complete step shape inside the CLI command input', () => {
@@ -352,7 +432,7 @@ describe('compileWalkthroughPrompt', () => {
         walkthroughGuidance: 'Output a markdown table instead of JSON.',
       })
 
-      expect(out).toContain('hunk_index: 0')
+      expect(out).toContain('"hunk_indexes":[0]')
       expect(out).toContain('submit-walkthrough-step')
       expect(out).toContain('openforge review thread create')
       expect(out).toContain('Do not encode walkthrough steps or review findings in the final text.')

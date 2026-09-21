@@ -215,12 +215,20 @@ describe('startAgentWalkthrough backend handler', () => {
     const handler = handlers.get('startAgentWalkthrough')
     expect(handler).toBeTypeOf('function')
 
-    await handler!(walkthroughRequest({ projectId: 'project-frontend' }))
+    await handler!(walkthroughRequest({ projectId: 'project-frontend', baseRef: 'release/2026.09' }))
 
     expect(agentSessions.start).not.toHaveBeenCalled()
     expect(agentSessions.input).toHaveBeenCalledWith(
       { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
       expect.stringContaining('submit-walkthrough-step'),
+    )
+    expect(agentSessions.input).toHaveBeenCalledWith(
+      { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
+      expect.stringContaining('Pull request base ref: `release/2026.09`'),
+    )
+    expect(agentSessions.input).toHaveBeenCalledWith(
+      { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
+      expect.stringMatching(/inspect the complete change.*workspace/i),
     )
     expect(invokeGlobal).not.toHaveBeenCalledWith('openforge.agentGenerateInRepo', expect.anything())
   })

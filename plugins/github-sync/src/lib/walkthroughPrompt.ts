@@ -31,6 +31,7 @@ export const DEFAULT_WALKTHROUGH_GUIDANCE = defaultWalkthroughGuidance
 export interface WalkthroughPromptInput {
   title: string
   body: string | null
+  baseRef: string
   files: PrFileDiff[]
   /** Comments already on the PR (human or earlier AI), so the agent doesn't repeat them. */
   existingComments?: ReviewComment[]
@@ -140,10 +141,10 @@ function formatExistingComments(comments: ReviewComment[]): string {
 
 /**
  * Fills the prompt template with this PR's title, description, and changed-file
- * diffs, plus the two configurable guidance blocks (resolved by the caller from
- * the `pr_review_guidance` / `pr_walkthrough_guidance` settings). Only the
+ * manifest, plus the two configurable guidance blocks (resolved by the caller
+ * from the `pr_review_guidance` / `pr_walkthrough_guidance` settings). Only the
  * `{{…}}` placeholders are substituted; function replacements are used so `$`
- * sequences in titles/bodies/diffs are literal.
+ * sequences in titles and bodies are literal.
  */
 export function compileWalkthroughPrompt(
   input: WalkthroughPromptInput,
@@ -200,6 +201,7 @@ export function compileWalkthroughPrompt(
     .replace(/\{\{JIRA_TICKET\}\}\n?/, () => ticketSection)
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
     .replace('{{CHANGED_FILES}}', () => changedFiles)
+    .replace('{{BASE_REF}}', () => input.baseRef)
     .replace('{{EXISTING_COMMENTS}}', () => existingComments)
     .replace('{{ATTEMPT_ID}}', () => attemptId)
     .replace('{{STEP_COMMAND}}', () => stepCommand)
@@ -212,25 +214,12 @@ export function compileWalkthroughPrompt(
 }
 
 function fileSection(file: PrFileDiff): string {
-  const header = file.previous_filename
-    ? `### ${file.previous_filename} → ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})`
-    : `### ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})`
-
-  const lines: string[] = [header]
-
-  const hunks = parseHunks(file.patch)
-  if (hunks.length === 0) {
-    lines.push('(no patch content available)')
-    return lines.join('\n')
-  }
-
-  for (const hunk of hunks) {
-    lines.push('')
-    lines.push(`hunk_index: ${hunk.index}`)
-    lines.push('```diff')
-    lines.push(hunk.text)
-    lines.push('```')
-  }
-
-  return lines.join('\n')
+  return JSON.stringify({
+    filename: file.filename,
+    previous_filename: file.previous_filename,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    hunk_indexes: parseHunks(file.patch).map(hunk => hunk.index),
+  })
 }

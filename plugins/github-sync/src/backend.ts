@@ -374,6 +374,7 @@ export default defineBackendPlugin({
           prompt: attemptId => compileWalkthroughPrompt({
             title: request.prTitle,
             body: request.prBody,
+            baseRef: request.baseRef,
             files,
             existingComments,
             ticket: ticketSnapshot?.item ?? null,
