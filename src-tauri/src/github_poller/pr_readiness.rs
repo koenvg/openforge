@@ -107,10 +107,11 @@ pub(super) async fn collect_rest_readiness_sources(
     github_token: &str,
     pr: &PrRow,
     graphql_snapshot: Option<&GitHubReadinessSnapshot>,
-    old_mergeable: Option<bool>,
-    old_mergeable_state: Option<String>,
+    previous_mergeability: (Option<bool>, Option<String>),
     verified_details: Option<crate::github_client::PullRequest>,
+    reviews_result: Result<Vec<PrReview>, crate::github_client::GitHubError>,
 ) -> RestReadinessSources {
+    let (old_mergeable, old_mergeable_state) = previous_mergeability;
     let needs_rest_ci = needs_rest_ci_for_snapshot(graphql_snapshot);
     let mut rest_ci_sha = graphql_snapshot
         .and_then(queued_validation_sha)
@@ -142,8 +143,6 @@ pub(super) async fn collect_rest_readiness_sources(
         }
     };
 
-    let reviews_future =
-        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, github_token);
     let pr_details_future = async {
         match verified_details {
             Some(details) => Ok(details),
@@ -155,8 +154,8 @@ pub(super) async fn collect_rest_readiness_sources(
         }
     };
 
-    let ((check_runs_result, combined_status_result), reviews_result, pr_details_result) =
-        tokio::join!(ci_future, reviews_future, pr_details_future);
+    let ((check_runs_result, combined_status_result), pr_details_result) =
+        tokio::join!(ci_future, pr_details_future);
 
     let mut check_runs = check_runs_result.and_then(|result| match result {
         Ok(check_runs) => Some(check_runs),

@@ -21,6 +21,7 @@ use std::{
 struct Api {
     authored_searches: AtomicUsize,
     requests: AtomicUsize,
+    review_requests: AtomicUsize,
     external_stage: AtomicUsize,
     fail_search: AtomicBool,
     fail_details: AtomicBool,
@@ -34,6 +35,9 @@ async fn respond(
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
     api.requests.fetch_add(1, Ordering::SeqCst);
+    if uri.path() == "/repos/acme/widgets/pulls/7/reviews" {
+        api.review_requests.fetch_add(1, Ordering::SeqCst);
+    }
     if uri.path() == "/repos/acme/widgets/pulls/7" && api.fail_details.load(Ordering::SeqCst) {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -314,14 +318,48 @@ async fn linked_pr_status_polling_observes_external_ci_review_comments_and_merge
     );
     let searches = f.api.authored_searches.load(Ordering::SeqCst);
     f.api.external_stage.store(1, Ordering::SeqCst);
+    let reviews_before = f.api.review_requests.load(Ordering::SeqCst);
     let changed = f.poll(PollScope::InactiveTaskPrs(None)).await;
     assert_eq!(changed.outcome, PollOutcome::Completed);
     assert!(changed.new_comments > 0);
     assert_eq!(changed.ci_changes, 1);
     assert_eq!(changed.review_changes, 1);
+    assert_eq!(
+        f.api.review_requests.load(Ordering::SeqCst) - reviews_before,
+        1,
+        "one detail refresh should retrieve PR reviews once"
+    );
     let links = f.links();
     assert_eq!(links[0].ci_status.as_deref(), Some("failure"));
     assert_eq!(links[0].review_status.as_deref(), Some("approved"));
+    let comments = acquire_db(&f.db)
+        .get_comments_for_pr(links[0].id)
+        .expect("read persisted comments");
+    assert_eq!(
+        comments
+            .iter()
+            .map(|comment| (
+                comment.id,
+                comment.comment_type.as_str(),
+                comment.body.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (-81, "review_body", "Looks good"),
+            (82, "issue_comment", "External comment"),
+        ]
+    );
+    let reviewers: Vec<crate::github_client::PrReviewer> =
+        serde_json::from_str(links[0].reviewers.as_deref().expect("persisted reviewers"))
+            .expect("parse persisted reviewers");
+    assert_eq!(
+        reviewers,
+        vec![crate::github_client::PrReviewer {
+            login: "reviewer".to_string(),
+            kind: crate::github_client::PrReviewerKind::User,
+            state: crate::github_client::PrReviewerState::Approved,
+        }]
+    );
     f.api.external_stage.store(2, Ordering::SeqCst);
     let merged = f.poll(PollScope::InactiveTaskPrs(None)).await;
     assert_eq!(merged.outcome, PollOutcome::Completed);
