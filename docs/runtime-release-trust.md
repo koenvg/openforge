@@ -8,7 +8,7 @@ Published releases require publisher signatures. Local source builds require sep
 
 `ReleaseStore::stage` checks integrity only. `ReleaseStore::stage_published` additionally checks a detached Ed25519 signature against the installed host's pinned `PublisherTrust` keys. Both use the same manifest bytes throughout staging and verify every declared runtime file. Neither method authorizes app replacement or daemon activation. `ReleaseStore::preflight` continues to refuse production replacement.
 
-The host must obtain its pinned keys from the trusted release process. Never construct its trust set from a downloaded manifest, an IPC request, or environment configuration. This change does not configure a production publisher key or issue local-build approvals.
+The installed publisher key is pinned in `src/electron/updatePublisher.json`, shared by Electron and Rust's embedded `PublisherTrust::production()`. The owner generated and approved this key. Never construct the production trust set from a downloaded manifest, an IPC request, or environment configuration. The private signing key is not in the repository.
 
 ## Signing format
 
@@ -29,10 +29,20 @@ The key must be an Ed25519 PKCS#8 PEM file owned by the current user, with no gr
 
 Pass the detached signature bytes and the independently pinned keys to `stage_published`. Do not regard the resulting staged handle as a durable approval record. Later authorization must reverify the selected artifacts and bind the complete app, Sidecar, daemon, CLI, and helper to the update operation.
 
+## Complete app authorization
+
+`UpdateBundleStore` copies the entire app into a private staging directory and measures resources, file permissions, framework symlinks, and executable identities. It rejects escaping links and missing required components. Source mutation does not change the staged copy; subsequent verification rejects changes to the copy. This does not yet prove platform compatibility or live daemon transition support.
+
+Complete-app publisher signatures use `openforge-app-update-v1\0` followed by the canonical bytes from `updateManifestBytes`. Runtime signatures cannot authorize the whole app. `UpdateAuthorizationStore.authorizePublished` verifies the installed publisher key and never falls back to local approval.
+
+Local authorization uses a native confirmation dialog with Cancel as the default. It shows the destination and exact build identity and does not grant first-adoption interruption approval. After confirmation, the store verifies the bytes again and writes an authenticated record bound to the installation, operation, destination, staged path, and manifest identity. The installation-private HMAC key is separate from the release signing key. Altered records and cross-operation or cross-installation replay are rejected.
+
+These modules are not yet connected to a production installer or helper. Reading an authorization authenticates the record only; the consumer must reverify artifact bytes, enforce current-operation ownership, and serialize replacement. Partial or corrupt authorization files fail closed rather than granting authority.
+
 ## Remaining prerequisites
 
-- Provision the publisher's public trust anchor through an authenticated release process and keep its private key in protected signing infrastructure.
-- Bind the complete target, including the app and helper, to publisher trust or explicit local-build approval.
+- Back up the private signing key securely and configure protected release signing infrastructure.
+- Connect complete-target authorization to the authenticated helper and the install/update coordinator.
 - Authenticate helper handoff and crash recovery, delegate source installs, and verify compatible daemon activation.
 - Demonstrate install-to-relaunch continuity and failure recovery in isolated packaged builds before enabling updates.
 

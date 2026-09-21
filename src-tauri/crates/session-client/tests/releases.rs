@@ -347,3 +347,21 @@ fn published_staging_accepts_rotated_pinned_keys_but_requires_a_configured_trust
         assert_eq!(fs::read(release.executable()).unwrap(), b"daemon");
     }
 }
+
+#[test]
+fn production_publisher_trust_is_pinned_and_rejects_fixture_keys() {
+    use openforge_session_client::releases::PublisherTrust;
+    use ring::signature::Ed25519KeyPair;
+
+    let trust = PublisherTrust::production().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let runtime = RuntimeDirectory::open(root.path()).unwrap();
+    let store = ReleaseStore::open(&runtime).unwrap();
+    let source = bundle();
+    let fixture_key = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
+    let mut message = b"openforge-session-release-v1\0".to_vec();
+    message.extend_from_slice(&fs::read(source.path().join("manifest.json")).unwrap());
+    assert!(store
+        .stage_published(source.path(), &trust, fixture_key.sign(&message).as_ref())
+        .is_err());
+}

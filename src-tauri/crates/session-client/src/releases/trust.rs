@@ -13,6 +13,42 @@ pub struct PublisherTrust {
 }
 
 impl PublisherTrust {
+    /// Uses the publisher keys embedded in the installed app and daemon client.
+    /// Artifacts, IPC and environment variables cannot add trust anchors.
+    /// # Errors
+    /// Refuses malformed build-time publisher configuration.
+    pub fn production() -> Result<Self, Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct Configuration {
+            version: u32,
+            ed25519_public_keys: Vec<String>,
+        }
+        let configuration: Configuration = serde_json::from_str(include_str!(
+            "../../../../../src/electron/updatePublisher.json"
+        ))
+        .map_err(|_| Error::Unauthorized)?;
+        if configuration.version != 1 {
+            return Err(Error::Unauthorized);
+        }
+        let keys = configuration
+            .ed25519_public_keys
+            .iter()
+            .map(|hex| {
+                if hex.len() != 64 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                    return Err(Error::Unauthorized);
+                }
+                let mut key = [0; 32];
+                for (index, byte) in key.iter_mut().enumerate() {
+                    *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16)
+                        .map_err(|_| Error::Unauthorized)?;
+                }
+                Ok(key)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Self::new(keys)
+    }
+
     /// # Errors
     /// Refuses empty or excessively large publisher key sets.
     pub fn new(keys: Vec<[u8; 32]>) -> Result<Self, Error> {

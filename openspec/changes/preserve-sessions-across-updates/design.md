@@ -161,7 +161,7 @@ Published releases require a publisher signature anchored in keys pinned by the 
 
 The runtime staging prerequisite uses Ed25519 signatures over `openforge-session-release-v1\0` followed by the exact runtime manifest bytes. The manifest binds the runtime files; staging verifies their hashes and permissions before publication. This runtime signature does not authorize replacement of the entire app or prove daemon transition compatibility. Production enablement still requires full-target authorization, a verified helper, and isolated continuity evidence.
 
-The installed publisher key set must be supplied through the trusted release process, not artifact metadata, IPC, or runtime environment overrides. No production publisher key is configured by this implementation. Local-build authorization must be issued only after an explicit trusted-host approval; it is not a caller-supplied boolean or an environment switch.
+The installed publisher key set must be supplied through the trusted release process, not artifact metadata, IPC, or runtime environment overrides. The owner-approved key is pinned in `src/electron/updatePublisher.json` and embedded in the Rust verifier. Local-build authorization must be issued only after explicit trusted-host approval; it is not a caller-supplied boolean or an environment switch. The complete-app authorization modules exist but are not yet connected to the production helper or installer.
 
 ## Risks / Trade-offs
 
