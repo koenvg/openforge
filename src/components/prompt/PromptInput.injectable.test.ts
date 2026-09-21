@@ -22,4 +22,18 @@ describe('PromptInput injectable button', () => {
     await rerender({ ...base, injectableInsertRequest: { id: 1, text: '/refactor ' } })
     expect(textarea.value).toContain('/refactor ')
   })
+
+  it('removes named skill tokens without touching the rest of the prompt', async () => {
+    const base = { projectId: 'P-1', onSubmit: vi.fn(), value: 'Please /refactor the API and $commit later' }
+    const { container, rerender } = render(PromptInput, {
+      props: { ...base, injectableRemoveNamedTokensRequest: null },
+    })
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.value).toContain('/refactor')
+
+    await rerender({ ...base, injectableRemoveNamedTokensRequest: { id: 1, names: ['refactor'] } })
+    expect(textarea.value).not.toMatch(/(^|\s)\/refactor(\s|$)/)
+    expect(textarea.value).toContain('the API')
+    expect(textarea.value).toContain('$commit')
+  })
 })

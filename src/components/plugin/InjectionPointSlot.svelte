@@ -10,10 +10,13 @@
     location: InjectionPointLocation
     projectId: string | null
     taskId: string | null
+    provider: string | null
     onInsert: (text: string) => void
+    promptText?: string
+    onRemoveNamedTokens?: (names: readonly string[]) => void
   }
 
-  let { location, projectId, taskId, onInsert }: Props = $props()
+  let { location, projectId, taskId, provider, onInsert, promptText, onRemoveNamedTokens }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -108,7 +111,7 @@
           />
         {/snippet}
         {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
-        <Component {...renderProps} {location} {projectId} {taskId} {onInsert} />
+        <Component {...renderProps} {location} {projectId} {taskId} {provider} {onInsert} {promptText} {onRemoveNamedTokens} />
       </svelte:boundary>
     </div>
   {/if}

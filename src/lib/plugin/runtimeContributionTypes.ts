@@ -20,6 +20,7 @@ import type {
   AgentSession,
   BackendReadyState,
   CommandInfo,
+  InstalledAiProvider,
   CommandShortcutMetadata,
   ComposeTaskRequest,
   ComposeTaskResult,
@@ -113,6 +114,7 @@ export type RuntimeHostBridge = {
   getLatestSession?(taskId: string): Promise<AgentSession | null>
   listTaskSessions?(request: ListTaskSessionsRequest): Promise<AgentSession[]>
   listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>
+  listInstalledProviders?(): Promise<InstalledAiProvider[]>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   readDocument?(request: { projectId: string; path: string }): Promise<import('@openforge-app/plugin-sdk').DocumentPreviewRead>

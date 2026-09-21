@@ -10,6 +10,9 @@ impl PluginHost {
         match method {
             "openforge.commands.invokeGlobal" => self.invoke_global_command_for_host(params).await,
             "openforge.commands.listCatalog" => self.list_command_catalog_for_host(params).await,
+            "openforge.commands.listInstalledProviders" => {
+                self.list_installed_providers_for_host().await
+            }
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),

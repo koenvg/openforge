@@ -31,22 +31,25 @@ describe('InjectionPointSlot', () => {
     listInjectionPointsAcrossPluginsMock.mockReturnValue([])
 
     const { container } = render(InjectionPointSlot, {
-      props: { location: 'createTaskPrompt', projectId: 'P-1', taskId: null, onInsert: () => {} },
+      props: { location: 'createTaskPrompt', projectId: 'P-1', taskId: null, provider: 'claude-code', onInsert: () => {} },
     })
 
     // No registrant → empty slot. Behavioural: assert no plugin component mounted.
     expect(container.querySelector('[data-injection-point]')).toBeNull()
   })
 
-  it('passes onInsert + location through to a registered component', async () => {
+  it('passes onInsert, location, provider, and prompt helpers through to a registered component', async () => {
     const pluginId = 'com.test.injectables'
     // The component registry key uses colon-separated namespacedId: pluginId:localId
     const namespacedId = `${pluginId}:picker`
 
     const onInsert = vi.fn()
+    const onRemoveNamedTokens = vi.fn()
+    const received = vi.fn()
 
     // Fake component that calls props.onInsert('X') on mount (Svelte 5 rune-style function component)
     const FakeInjectionComponent = ((_anchor: Node, props: Record<string, unknown>) => {
+      received(props)
       const insertFn = props.onInsert as (text: string) => void
       insertFn('X')
     }) as never
@@ -69,11 +72,25 @@ describe('InjectionPointSlot', () => {
     ])
 
     render(InjectionPointSlot, {
-      props: { location: 'createTaskPrompt', projectId: 'P-1', taskId: null, onInsert },
+      props: {
+        location: 'createTaskPrompt',
+        projectId: 'P-1',
+        taskId: null,
+        provider: 'grok',
+        promptText: 'Use /refactor now',
+        onInsert,
+        onRemoveNamedTokens,
+      },
     })
 
     await waitFor(() => {
       expect(onInsert).toHaveBeenCalledWith('X')
     })
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({
+      location: 'createTaskPrompt',
+      provider: 'grok',
+      promptText: 'Use /refactor now',
+      onRemoveNamedTokens,
+    }))
   })
 })

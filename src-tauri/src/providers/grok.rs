@@ -160,8 +160,8 @@ impl GrokProvider {
     ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
             builtin_grok_commands, enrich_command, resolve_installed_plugins_from_dir,
-            scan_plugin_commands, scan_skills_directory, trigger_for, GENERIC_SKILLS_SOURCE_DIR,
-            GROK_SKILLS_SOURCE_DIR,
+            scan_plugin_commands, scan_skills_directory, set_plugin_name, trigger_for,
+            GENERIC_SKILLS_SOURCE_DIR, GROK_SKILLS_SOURCE_DIR,
         };
         use std::collections::HashMap;
 
@@ -174,7 +174,8 @@ impl GrokProvider {
 
         let insert_skill = |map: &mut HashMap<String, crate::opencode_client::CommandInfo>,
                             skill: crate::opencode_client::SkillInfo,
-                            origin: &str| {
+                            origin: &str,
+                            plugin_name: Option<&str>| {
             let name = skill.name.clone();
             let mut cmd = crate::opencode_client::CommandInfo {
                 name: skill.name,
@@ -198,6 +199,9 @@ impl GrokProvider {
                     .map(serde_json::Value::from)
                     .unwrap_or(serde_json::Value::Null),
             );
+            if let Some(plugin_name) = plugin_name {
+                set_plugin_name(&mut cmd, plugin_name);
+            }
             map.insert(name, cmd);
         };
 
@@ -207,14 +211,14 @@ impl GrokProvider {
                 "user",
                 GROK_SKILLS_SOURCE_DIR,
             ) {
-                insert_skill(&mut commands_map, skill, "personal");
+                insert_skill(&mut commands_map, skill, "personal", None);
             }
             for skill in scan_skills_directory(
                 &home.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
                 "user",
                 GENERIC_SKILLS_SOURCE_DIR,
             ) {
-                insert_skill(&mut commands_map, skill, "personal");
+                insert_skill(&mut commands_map, skill, "personal", None);
             }
 
             let plugins = resolve_installed_plugins_from_dir(
@@ -226,7 +230,7 @@ impl GrokProvider {
                     "user",
                     GROK_SKILLS_SOURCE_DIR,
                 ) {
-                    insert_skill(&mut commands_map, skill, "plugin");
+                    insert_skill(&mut commands_map, skill, "plugin", Some(&plugin.name));
                 }
             }
             for mut cmd in scan_plugin_commands(&plugins) {
@@ -242,7 +246,7 @@ impl GrokProvider {
                 "project",
                 GROK_SKILLS_SOURCE_DIR,
             ) {
-                insert_skill(&mut commands_map, skill, "project");
+                insert_skill(&mut commands_map, skill, "project", None);
             }
 
             let plugins = resolve_installed_plugins_from_dir(
@@ -254,7 +258,7 @@ impl GrokProvider {
                     "project",
                     GROK_SKILLS_SOURCE_DIR,
                 ) {
-                    insert_skill(&mut commands_map, skill, "plugin");
+                    insert_skill(&mut commands_map, skill, "plugin", Some(&plugin.name));
                 }
             }
             for mut cmd in scan_plugin_commands(&plugins) {
@@ -425,6 +429,10 @@ mod tests {
             skill.extra.get("origin").and_then(|v| v.as_str()),
             Some("plugin")
         );
+        assert_eq!(
+            skill.extra.get("pluginName").and_then(|v| v.as_str()),
+            Some("my-plugin")
+        );
 
         let command = commands
             .iter()
@@ -434,6 +442,57 @@ mod tests {
             command.extra.get("origin").and_then(|v| v.as_str()),
             Some("plugin")
         );
+        assert_eq!(
+            command.extra.get("pluginName").and_then(|v| v.as_str()),
+            Some("my-plugin")
+        );
+    }
+
+    #[test]
+    fn list_commands_keeps_plugin_skills_from_different_plugins_distinct() {
+        let dir = tempfile::tempdir().unwrap();
+        for (plugin, skill_name) in [
+            ("frontend-design", "review-ui"),
+            ("mattpocock-skills", "tdd"),
+        ] {
+            let skill_dir = dir
+                .path()
+                .join(".grok")
+                .join("plugins")
+                .join(plugin)
+                .join("skills")
+                .join(skill_name);
+            std::fs::create_dir_all(&skill_dir).unwrap();
+            std::fs::write(
+                skill_dir.join("SKILL.md"),
+                format!("---\nname: {skill_name}\ndescription: {skill_name}\n---\nBody"),
+            )
+            .unwrap();
+        }
+
+        let provider = GrokProvider::new(PtyManager::new());
+        let commands = provider.list_commands(dir.path().to_str());
+        let review = commands
+            .iter()
+            .find(|cmd| cmd.name == "review-ui")
+            .expect("frontend-design skill present");
+        let tdd = commands
+            .iter()
+            .find(|cmd| cmd.name == "tdd")
+            .expect("mattpocock-skills skill present");
+
+        assert_eq!(
+            review
+                .extra
+                .get("pluginName")
+                .and_then(|value| value.as_str()),
+            Some("frontend-design")
+        );
+        assert_eq!(
+            tdd.extra.get("pluginName").and_then(|value| value.as_str()),
+            Some("mattpocock-skills")
+        );
+        assert_ne!(review.extra.get("pluginName"), tdd.extra.get("pluginName"));
     }
 
     #[test]

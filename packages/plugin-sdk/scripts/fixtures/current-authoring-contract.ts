@@ -6,8 +6,13 @@ import {
   OPENFORGE_PLUGIN_API_VERSION,
   THEME_TOKEN_NAMES,
   type AgentCommandMetadata,
+  type CommandInfo,
   type CommandRegistration,
   type OpenForgePackageMetadata,
+  type PluginInjectionPointProps,
+  pluginCatalogGroupKey,
+  removeNamedSkillTokens,
+  type TaskStartPrefixContext,
   type PluginSidebarNavigationProps,
   type PluginCommandInvocationContext,
   type ActiveTasks,
@@ -319,3 +324,20 @@ const packageMetadata = {
   requires: ['injectionPoints'],
 } satisfies OpenForgePackageMetadata
 void packageMetadata
+
+declare const injectionProps: PluginInjectionPointProps
+void injectionProps.provider
+void injectionProps.promptText
+injectionProps.onRemoveNamedTokens?.(['refactor'])
+void removeNamedSkillTokens(injectionProps.promptText ?? '', ['refactor'])
+
+declare const prefixContext: TaskStartPrefixContext
+void prefixContext.provider
+void registry.frontendApi.commands.listInstalledProviders()
+
+const pluginCatalogRows = [
+  { name: 'review-ui', description: null, source: 'skill', agent: null, origin: 'plugin', pluginName: 'frontend-design' },
+  { name: 'tdd', description: null, source: 'skill', agent: null, origin: 'plugin', pluginName: 'mattpocock-skills' },
+] satisfies CommandInfo[]
+void pluginCatalogGroupKey(pluginCatalogRows[0])
+void pluginCatalogGroupKey(pluginCatalogRows[1])

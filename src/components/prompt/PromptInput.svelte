@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import type { AutocompleteItem } from '../../lib/types'
+  import { removeNamedSkillTokens } from '@openforge-app/plugin-sdk'
   import PaletteListbox from '@openforge-app/plugin-sdk/ui/PaletteListbox.svelte'
+  import type { AutocompleteItem } from '../../lib/types'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
   import { findImageMarkerAtPosition, insertImageMarker } from './imageMarkerEditing'
@@ -26,6 +27,7 @@
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
     injectableInsertRequest?: { id: number, text: string } | null
+    injectableRemoveNamedTokensRequest?: { id: number, names: readonly string[] } | null
     autofocus?: boolean
     commandTrigger?: CommandTrigger
   }
@@ -47,6 +49,7 @@
     onImageMarkerClick,
     imageMarkerInsertRequest = null,
     injectableInsertRequest = null,
+    injectableRemoveNamedTokensRequest = null,
     autofocus = false,
     commandTrigger = 'slash',
   }: Props = $props()
@@ -60,6 +63,7 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   const imageMarkerInsertRequests = new InsertRequestCoordinator<{ id: number, marker: string }>()
   const injectableInsertRequests = new InsertRequestCoordinator<{ id: number, text: string }>()
+  const injectableRemoveNamedTokensRequests = new InsertRequestCoordinator<{ id: number, names: readonly string[] }>()
 
   function updateTextValue(nextValue: string) {
     textValue = nextValue
@@ -125,6 +129,20 @@
     if (!request) return
 
     insertText(request.text)
+  })
+
+  $effect(() => {
+    const request = injectableRemoveNamedTokensRequests.takeNewReadyRequest(
+      injectableRemoveNamedTokensRequest,
+      textareaEl !== null,
+    )
+    if (!request) return
+
+    updateTextValue(removeNamedSkillTokens(textValue, request.names))
+    setTimeout(() => {
+      textareaEl?.focus()
+      autoGrow()
+    }, 0)
   })
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────

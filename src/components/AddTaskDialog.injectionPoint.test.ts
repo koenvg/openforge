@@ -1,19 +1,20 @@
-import { render } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { TaskDetail } from '../lib/types'
+import { chooseSelectOption } from '../test-utils/select'
 
-// Capture the props passed to InjectionPointSlot by the dialog.
+// Keep the live props object. Svelte 5 updates the same record rather than remounting.
 const { injectionSlotProps } = vi.hoisted(() => ({
   injectionSlotProps: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
   default: vi.fn((_node: Element, props: Record<string, unknown>) => {
-    injectionSlotProps.push({ ...props })
+    injectionSlotProps.push(props)
     return {
       update(nextProps: Record<string, unknown>) {
-        injectionSlotProps.push({ ...nextProps })
+        Object.assign(props, nextProps)
       },
       destroy() {},
     }
@@ -97,5 +98,41 @@ describe('AddTaskDialog injection point', () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     const captured = injectionSlotProps.find((p) => p.location !== undefined)
     expect(captured?.location).toBe('backlogPrompt')
+  })
+
+  it('updates the create-task provider on the injection slot without reopening the dialog', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+    const slot = () => injectionSlotProps.find((props) => props.location === 'createTaskPrompt')
+
+    await waitFor(() => {
+      expect(slot()?.provider).toBe('claude-code')
+    })
+
+    await chooseSelectOption(screen.getByRole('button', { name: 'Provider' }), 'Grok')
+
+    await waitFor(() => {
+      expect(slot()?.provider).toBe('grok')
+    })
+    expect(slot()?.location).toBe('createTaskPrompt')
+    expect(screen.getByRole('dialog', { name: 'Create task' })).toBeTruthy()
+  })
+
+  it('exposes create-task prompt text and removes named tokens without scraping the rest', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+    const textarea = await screen.findByRole('textbox', { name: 'What should the agent do?' }) as HTMLTextAreaElement
+    await fireEvent.input(textarea, { target: { value: 'Please /refactor the API and keep this' } })
+    const slot = () => injectionSlotProps.find((props) => props.location === 'createTaskPrompt')
+
+    await waitFor(() => {
+      expect(slot()?.promptText).toBe('Please /refactor the API and keep this')
+    })
+
+    const onRemoveNamedTokens = slot()?.onRemoveNamedTokens as (names: readonly string[]) => void
+    onRemoveNamedTokens(['refactor'])
+
+    await waitFor(() => {
+      expect(textarea.value).not.toMatch(/(^|\s)\/refactor(\s|$)/)
+    })
+    expect(textarea.value).toContain('the API and keep this')
   })
 })

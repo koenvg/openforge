@@ -29,8 +29,10 @@
   const view = workflow.state
   let promptEditor = $state<{ insertText: (text: string) => void } | null>(null)
   let injectableInsertRequest = $state<{ id: number, text: string } | null>(null)
+  let injectableRemoveNamedTokensRequest = $state<{ id: number, names: readonly string[] } | null>(null)
   let nextInjectableInsertRequestId = 1
   const injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
+  const injectionProvider = $derived(mode === 'create' ? view.draft.aiProvider : (task?.agent ?? null))
 
   function workflowInput() {
     return { projectId: $activeProjectId, mode, task, projectPath, promptSeed, sourceTicketUrlSeed, titleSeed,
@@ -42,7 +44,10 @@
     untrack(() => {
       const previousRevision = view.promptRevision
       workflow.configure(input)
-      if (view.promptRevision !== previousRevision) injectableInsertRequest = null
+      if (view.promptRevision !== previousRevision) {
+        injectableInsertRequest = null
+        injectableRemoveNamedTokensRequest = null
+      }
     })
   })
 
@@ -121,6 +126,7 @@
                 onImageMarkerClick={(marker) => workflow.attachments.openPreview(marker)}
                 imageMarkerInsertRequest={workflow.attachments.state.insertRequest}
                 injectableInsertRequest={injectableInsertRequest}
+                injectableRemoveNamedTokensRequest={injectableRemoveNamedTokensRequest}
                 onSubmit={(prompt) => workflow.submit(mode === 'create' ? 'start' : 'backlog', prompt)}
                 onValueChange={(value) => workflow.setPrompt(value)}
               />
@@ -138,8 +144,14 @@
                 location={injectionLocation}
                 projectId={$activeProjectId}
                 taskId={mode === 'edit' && task ? task.id : null}
+                provider={injectionProvider}
+                promptText={view.promptDraft}
                 onInsert={(text) => {
                   injectableInsertRequest = { id: nextInjectableInsertRequestId, text }
+                  nextInjectableInsertRequestId += 1
+                }}
+                onRemoveNamedTokens={(names) => {
+                  injectableRemoveNamedTokensRequest = { id: nextInjectableInsertRequestId, names }
                   nextInjectableInsertRequestId += 1
                 }}
               />

@@ -765,6 +765,18 @@ export interface CommandInfo {
   sourcePath?: string | null;
   /** full SKILL.md body for a consumer's reading pane; null when there is no source file */
   content?: string | null;
+  /**
+   * Plugin that contributed this row when `origin` is `"plugin"`.
+   * Distinct from `origin`, which is only `"plugin"`. Do not parse `plugin:command`
+   * names as a substitute; Grok plugin skills are not namespaced that way.
+   */
+  pluginName?: string | null;
+}
+
+/** Group key for plugin catalog rows. Null for non-plugin origin, including a missing name. */
+export function pluginCatalogGroupKey(command: CommandInfo): string | null {
+  if (command.origin !== 'plugin') return null
+  return command.pluginName ?? null
 }
 
 /** Extended agent info from provider agent endpoints — used for @ autocomplete */

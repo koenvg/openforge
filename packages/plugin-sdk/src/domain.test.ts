@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel, parseCheckRuns, splitCheckRuns } from './domain'
+import { DO_NOT_REVIEW_LABEL, hasDoNotReviewLabel, parseCheckRuns, pluginCatalogGroupKey, splitCheckRuns, type CommandInfo } from './domain'
 
 describe('shared domain helpers', () => {
   it('parses and splits check runs for plugin PR views', () => {
@@ -44,5 +44,35 @@ describe('hasDoNotReviewLabel', () => {
 
   it('exposes the hard-coded label constant', () => {
     expect(DO_NOT_REVIEW_LABEL).toBe('DO NOT REVIEW')
+  })
+})
+
+describe('pluginCatalogGroupKey', () => {
+  const row = (overrides: Partial<CommandInfo>): CommandInfo => ({
+    name: 'skill',
+    description: null,
+    source: 'skill',
+    agent: null,
+    origin: 'plugin',
+    ...overrides,
+  })
+
+  it('keeps skills from different plugins as distinct plugin groups', () => {
+    const rows = [
+      row({ name: 'review-ui', pluginName: 'frontend-design' }),
+      row({ name: 'tdd', pluginName: 'mattpocock-skills' }),
+      row({ name: 'project-skill', origin: 'project', pluginName: null }),
+    ]
+
+    const pluginGroups = [...new Set(rows.map(pluginCatalogGroupKey).filter((key): key is string => key !== null))]
+
+    expect(pluginGroups).toEqual(['frontend-design', 'mattpocock-skills'])
+    expect(pluginGroups).not.toEqual(['plugin'])
+  })
+
+  it('does not parse plugin:command names as a substitute for pluginName', () => {
+    const command = row({ name: 'impeccable:polish', pluginName: null })
+
+    expect(pluginCatalogGroupKey(command)).toBeNull()
   })
 })

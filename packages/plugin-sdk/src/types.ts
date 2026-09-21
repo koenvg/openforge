@@ -4,6 +4,9 @@ import type { Component } from 'svelte'
 import type { BrowserSurfacesAPI } from './browserSurfaces.js'
 import type { PluginThemeDefinition } from './themes.js'
 import type { FrontendViewReplacementRegistry } from './viewReplacements.js'
+import type { InstalledAiProvider } from './aiProviders.js'
+
+export type { InstalledAiProvider, OpenForgeAiProviderId } from './aiProviders.js'
 import type {
   BoardStatus,
   AgentSession,
@@ -282,6 +285,11 @@ export interface CommandRegistry {
    * which returns plugin-registered commands.
    */
   listCatalog(request?: { projectId?: string | null }): Promise<CommandInfo[]>
+  /**
+   * OpenForge-supported agents this instance can start a task with.
+   * Not every CLI folder on disk.
+   */
+  listInstalledProviders(): Promise<InstalledAiProvider[]>
 }
 
 export type EventHandler<TPayload = unknown> = (payload: TPayload) => void
@@ -457,7 +465,23 @@ export interface PluginInjectionPointProps extends Record<string, unknown> {
   location: InjectionPointLocation
   projectId: string | null
   taskId: string | null
+  /**
+   * The AI provider that will run this prompt or session.
+   * Create-task updates this when the Provider dropdown changes, without remounting.
+   * Null when the host does not yet know the provider.
+   */
+  provider: string | null
   onInsert: (text: string) => void
+  /**
+   * Current host-owned prompt text. Present on `createTaskPrompt` and `backlogPrompt`.
+   * Absent on `agentSession`.
+   */
+  promptText?: string
+  /**
+   * Remove `/name` and `$name` skill tokens from the create-task or backlog prompt.
+   * Present on `createTaskPrompt` and `backlogPrompt`.
+   */
+  onRemoveNamedTokens?: (names: readonly string[]) => void
 }
 
 export interface PluginInjectionPointRegistration {
@@ -472,6 +496,8 @@ export interface TaskStartPrefixContext {
   /** The task being started, or null when the caller is authoring a new one. */
   taskId: string | null
   projectId: string | null
+  /** Provider that will start the task, or null when unknown. */
+  provider: string | null
 }
 
 export interface TaskStartPrefixProviderRegistration {

@@ -233,6 +233,46 @@ fn grok_is_authenticated_for_home(grok_home: &Path) -> bool {
         .unwrap_or(false)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InstalledAiProvider {
+    pub id: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+}
+
+pub fn installed_ai_providers_from_flags(
+    claude: bool,
+    opencode: bool,
+    pi: bool,
+    codex: bool,
+    grok: bool,
+) -> Vec<InstalledAiProvider> {
+    [
+        ("claude-code", "Claude Code", claude),
+        ("opencode", "OpenCode", opencode),
+        ("pi", "Pi Coding Agent", pi),
+        ("codex", "Codex", codex),
+        ("grok", "Grok", grok),
+    ]
+    .into_iter()
+    .filter(|(_, _, installed)| *installed)
+    .map(|(id, display_name, _)| InstalledAiProvider {
+        id: id.to_string(),
+        display_name: display_name.to_string(),
+    })
+    .collect()
+}
+
+pub async fn list_installed_ai_providers() -> Result<Vec<InstalledAiProvider>, String> {
+    Ok(installed_ai_providers_from_flags(
+        check_claude_installed().await?.installed,
+        check_opencode_installed().await?.installed,
+        check_pi_installed().await?.installed,
+        check_codex_installed().await?.installed,
+        check_grok_installed().await?.installed,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,6 +414,19 @@ mod tests {
         assert!(!status.installed);
         assert_eq!(status.path, None);
         assert_eq!(status.version, None);
+    }
+
+    #[test]
+    fn installed_ai_providers_from_flags_returns_only_startable_openforge_agents() {
+        let providers = installed_ai_providers_from_flags(true, false, false, false, true);
+        assert_eq!(
+            providers
+                .iter()
+                .map(|provider| provider.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["claude-code", "grok"]
+        );
+        assert!(!providers.iter().any(|provider| provider.id == "pi"));
     }
 
     #[test]

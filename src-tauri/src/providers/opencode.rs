@@ -115,7 +115,7 @@ impl OpenCodeProvider {
     ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
             enrich_command, resolve_active_plugins, scan_commands_directory, scan_plugin_agents,
-            scan_skills_directory, trigger_for,
+            scan_skills_directory, set_plugin_name, trigger_for,
         };
         use std::collections::HashMap;
 
@@ -195,21 +195,20 @@ impl OpenCodeProvider {
             .map(|home| resolve_active_plugins(&home))
             .unwrap_or_default();
         let mut commands: Vec<_> = commands_map.into_values().collect();
-        commands.extend(
-            scan_plugin_agents(&active_plugins)
-                .into_iter()
-                .map(|agent| {
-                    let mut cmd = crate::opencode_client::CommandInfo {
-                        name: format!("agent:{}", agent.name),
-                        description: Some(format!("Run with agent {}", agent.name)),
-                        source: Some("agent".to_string()),
-                        agent: Some(agent.name),
-                        extra: serde_json::Map::new(),
-                    };
-                    enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
-                    cmd
-                }),
-        );
+        for plugin in &active_plugins {
+            for agent in scan_plugin_agents(std::slice::from_ref(plugin)) {
+                let mut cmd = crate::opencode_client::CommandInfo {
+                    name: format!("agent:{}", agent.name),
+                    description: Some(format!("Run with agent {}", agent.name)),
+                    source: Some("agent".to_string()),
+                    agent: Some(agent.name),
+                    extra: serde_json::Map::new(),
+                };
+                enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
+                set_plugin_name(&mut cmd, &plugin.name);
+                commands.push(cmd);
+            }
+        }
         commands.sort_by(|left, right| left.name.cmp(&right.name));
         commands
     }

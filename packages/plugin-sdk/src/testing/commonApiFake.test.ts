@@ -45,4 +45,22 @@ describe('TestingCommonApiFake', () => {
     expect(frontendCommonApi.events).not.toBe(backendCommonApi.events)
     expect(frontendCommonApi.tasks).not.toBe(backendCommonApi.tasks)
   })
+
+  it('returns only the installed providers configured on the fake', async () => {
+    const fake = new TestingCommonApiFake(
+      new TestingRegistryServices({
+        pluginId: 'injectables',
+        projectId: 'P-1',
+        installedProviders: [
+          { id: 'claude-code', displayName: 'Claude Code' },
+          { id: 'grok', displayName: 'Grok' },
+        ],
+      }),
+    )
+
+    await expect(fake.createApi().commands.listInstalledProviders()).resolves.toEqual([
+      { id: 'claude-code', displayName: 'Claude Code' },
+      { id: 'grok', displayName: 'Grok' },
+    ])
+  })
 })

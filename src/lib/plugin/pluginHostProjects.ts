@@ -15,6 +15,7 @@ import {
   listOpenCodeCommands,
   setProjectConfig,
 } from '../ipc'
+import { listInstalledAiProviders } from '../installedAiProviders'
 import { activeProjectId } from '../stores'
 import type { PluginHostCommandEntries } from './pluginHostCommandRegistry'
 import type { RuntimeHostBridge } from './runtimeContributionTypes'
@@ -23,6 +24,7 @@ type ProjectHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listProjects'
   | 'getProject'
   | 'listCommandCatalog'
+  | 'listInstalledProviders'
   | 'readDir'
   | 'readFile'
   | 'readDocument'
@@ -84,6 +86,7 @@ export function createPluginProjectHostCapabilities(): ProjectHostCapabilities {
     listProjects: () => getProjects(),
     getProject,
     listCommandCatalog,
+    listInstalledProviders: listInstalledAiProviders,
     readDir: readProjectDir,
     readFile: readProjectFile,
     readDocument: (request) => fsReadDocument(request.projectId, request.path),
