@@ -35,10 +35,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  smoke:
+  visual-shards:
+    name: Visual shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04-arm
-    # The 180-case full regression run took 29 minutes; the catalog now has 218 cases.
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Capture assigned visual cases
+        run: pnpm storybook:visual:shard --shard-index ${{ matrix.shard }} --shard-count 4
+      - name: Stage isolated shard report
+        if: always()
+        run: |
+          mkdir -p /tmp/storybook-visual-shard
+          shopt -s nullglob
+          reports=(artifacts/storybook-visual-runs/shard-${{ matrix.shard }}-of-4-*)
+          if [ "${#reports[@]}" -eq 1 ]; then cp -R "${reports[0]}/." /tmp/storybook-visual-shard/; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: storybook-visual-shard-${{ matrix.shard }}
+          path: /tmp/storybook-visual-shard/
+          retention-days: 14
+          if-no-files-found: warn
+
+  visual-probes:
+    name: Visual regression probes
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -49,13 +82,76 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium for visual unit tests
         run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm storybook:visual:unit
-      - name: Canonical Linux capture and regression probes
-        run: pnpm storybook:visual:test
+      - name: Run visual runner unit tests
+        run: pnpm storybook:visual:unit
+      - name: Run canonical regression probes
+        if: always()
+        run: pnpm storybook:visual:probes
+      - name: Stage isolated probe report
+        if: always()
+        run: |
+          mkdir -p /tmp/storybook-visual-probes
+          shopt -s nullglob
+          reports=(artifacts/storybook-visual-runs/probes-*)
+          if [ "${#reports[@]}" -eq 1 ]; then cp -R "${reports[0]}/." /tmp/storybook-visual-probes/; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: storybook-visual-probes
+          path: /tmp/storybook-visual-probes/
+          retention-days: 14
+          if-no-files-found: warn
+
+  smoke:
+    needs: [visual-shards, visual-probes]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: storybook-visual-shard-1
+          path: /tmp/storybook-visual-input/shard-1
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: storybook-visual-shard-2
+          path: /tmp/storybook-visual-input/shard-2
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: storybook-visual-shard-3
+          path: /tmp/storybook-visual-input/shard-3
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: storybook-visual-shard-4
+          path: /tmp/storybook-visual-input/shard-4
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: storybook-visual-probes
+          path: /tmp/storybook-visual-input/probes
+      - name: Aggregate complete visual evidence
+        env:
+          VISUAL_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set +e
+          node scripts/storybook-visual/aggregate.mjs /tmp/storybook-visual-input /tmp/storybook-visual-aggregate
+          status=$?
+          cat /tmp/storybook-visual-aggregate/summary.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: storybook-visual-review
-          path: artifacts/storybook-visual
+          path: |
+            /tmp/storybook-visual-input/
+            /tmp/storybook-visual-aggregate/
           retention-days: 14
           if-no-files-found: warn

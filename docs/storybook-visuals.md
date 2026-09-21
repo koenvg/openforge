@@ -67,8 +67,7 @@ The visual unit command also exercises native media capture in local Chromium. I
 3. For an intentional change, run `update`, inspect the Git image diff, then run `check` again.
 4. Commit the selected PNGs together with the story or UI change. Generated comparison artifacts stay out of Git.
 
-CI runs the same Linux command on affected UI pull requests and main-branch pushes. Download `storybook-visual-review` from the workflow run, extract it, and open `index.html`. The artifact includes the deliberate regression probe report even on success and is retained for 14 days.
-
+CI runs four case shards and one regression-probe job in the same pinned ARM Linux environment. The `smoke` aggregate gate accepts only complete, compatible evidence from every job. Download `storybook-visual-review` and open `storybook-visual-aggregate/summary.md` first. Individual reports are under `storybook-visual-input/shard-N/index.html` and `storybook-visual-input/probes/index.html`; the separately uploaded `storybook-visual-shard-N` and `storybook-visual-probes` artifacts retain the same report content when aggregation cannot download another job's artifact. Reports are retained for 14 days. See [CI parallelization evidence](ci-parallelization.md) for the compatibility map, baseline measurements, and timing protocol.
 ## Timing evidence
 
 Each command writes `timings.json` beside `results.json`. Child probes write their own timing files in `self-test/<probe>/`. Phase-start and phase-completion logs show progress; the final summary lists at most five slowest captures.
