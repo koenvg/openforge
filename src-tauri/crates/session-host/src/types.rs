@@ -33,9 +33,21 @@ impl Default for HostLimits {
 }
 #[derive(Debug, Clone, Copy)]
 pub struct HostCapacity {
+    pub operation_window: Option<OperationWindow>,
     pub operations: usize,
     pub retained_request_bytes: usize,
     pub limits: HostLimits,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+#[serde(rename_all = "camelCase")]
+pub enum CapacityKind {
+    #[error("operation receipt window")]
+    OperationReceipts,
+    #[error("retained request bytes")]
+    RequestBytes,
+    #[error("live or retained terminal sessions")]
+    Sessions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -54,10 +66,14 @@ pub enum HostError {
     StaleOutput,
     #[error("operation identity reused with a different request")]
     OperationConflict,
+    #[error("operation retry window expired; request not executed")]
+    OperationExpired,
     #[error("operation outcome unknown; reconcile before issuing another operation")]
     OutcomeUnknown,
     #[error("host retention capacity exhausted; request not executed")]
     Capacity,
+    #[error("{0} capacity exhausted; request not executed")]
+    CapacityExceeded(CapacityKind),
     #[error("input sequence is out of order")]
     OutOfOrder,
     #[error("live executable replacement is unsupported by this host")]

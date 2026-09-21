@@ -78,6 +78,7 @@ impl Host {
             controller: controller.clone(),
             cursor: lock(&self.backend.journal).cursor,
             capacity: Capacity {
+                operation_window: capacity.operation_window,
                 operation_receipts: capacity.operations.min(capacity.limits.operations),
                 operation_limit: capacity.limits.operations,
                 cleanup_receipts: capacity
@@ -114,6 +115,24 @@ impl Host {
                 let connection = self.runtime.block_on(self.host.connect(&installation))?;
                 *self.sidecar.write().map_err(|_| Error::OutcomeUnknown)? = None;
                 Ok(Response::Inventory(self.inventory(&connection.controller)?))
+            }
+            Command::OpenOperationStream { controller } => {
+                let window = self
+                    .runtime
+                    .block_on(self.host.open_operation_stream(&controller))?;
+                Ok(Response::OperationWindow(window))
+            }
+            Command::AcknowledgeOperations {
+                controller,
+                stream,
+                through,
+            } => {
+                self.runtime.block_on(self.host.acknowledge_operations(
+                    &controller,
+                    stream,
+                    through,
+                ))?;
+                Ok(Response::Done)
             }
             Command::Inventory { controller } => {
                 Ok(Response::Inventory(self.inventory(&controller)?))

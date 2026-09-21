@@ -158,8 +158,8 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
             }
             if Instant::now() >= deadline {
                 eprintln!(
-                    "image preflight deadline exceeded (state={})",
-                    state.is_some()
+                    "image preflight deadline exceeded (state={}, stdout_bytes={}, eof={}, sent={})",
+                    state.is_some(), bytes.len(), eof, sent
                 );
                 return Err(refused());
             }

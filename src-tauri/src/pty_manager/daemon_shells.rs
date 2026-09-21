@@ -14,6 +14,9 @@ use std::sync::Arc;
 #[cfg(test)]
 #[path = "daemon_completion_tests.rs"]
 mod completion_tests;
+#[cfg(test)]
+#[path = "daemon_operation_retention_tests.rs"]
+mod operation_retention_tests;
 
 #[derive(Clone)]
 pub(crate) struct DaemonShells {
@@ -169,7 +172,7 @@ impl DaemonShells {
                 if selected_shell(selection, &session.session_key)
                     && super::pids::is_shell_session_key_for_task(&session.session_key, &task_id)
                 {
-                    client.terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
+                    client.terminate_ordered(&session.pty)?;
                 }
             }
             Ok(())
@@ -316,7 +319,7 @@ impl DaemonShells {
                     })
                 })
                 .collect();
-            Ok(serde_json::json!({ "controller": inventory.controller, "sessions": sessions, "daemonRoot": daemon_root }))
+            Ok(serde_json::json!({ "controller": inventory.controller, "sessions": sessions, "daemonRoot": daemon_root, "capacity": inventory.capacity }))
         })
         .await
     }
@@ -348,13 +351,9 @@ impl DaemonShells {
                     return Ok(session.pty.instance.value());
                 }
             }
-            // Recovery only reads inventory. An explicit spawn may start a new
-            // allocation after exit; its receipt is tied to the previous identity.
-            use sha2::Digest;
-            let hash = sha2::Sha256::digest(key.as_bytes());
-            let predecessor = previous.map_or(0, |session| session.pty.instance.value());
-            let operation = format!("spawn-{:x}-{predecessor}", hash);
-            let instance = client.spawn(&operation, &command)?.pty.instance.value();
+            // The reconciled live identity above prevents spawning a second terminal.
+            // Unknown transport outcomes remain blocked by the client's ordered stream.
+            let instance = client.spawn_ordered(&command)?.pty.instance.value();
             if let (Some(discovery), openforge_session_protocol::TerminalOwner::Agent { task_id }) =
                 (&discovery, &command.owner)
             {
@@ -441,8 +440,7 @@ impl DaemonShells {
     ) -> Result<(), String> {
         self.run(publisher, move |client, key| {
             let session = find(client, key)?.ok_or(Error::StalePty)?;
-            client.write(
-                &uuid::Uuid::new_v4().to_string(),
+            client.write_ordered(
                 &session.pty,
                 session.next_io_sequence.ok_or(Error::Capacity)?,
                 &data,
@@ -459,8 +457,7 @@ impl DaemonShells {
     ) -> Result<(), String> {
         self.read(publisher, move |client, key| {
             let session = find(client, key)?.ok_or(Error::StalePty)?;
-            client.resize(
-                &uuid::Uuid::new_v4().to_string(),
+            client.resize_ordered(
                 &session.pty,
                 session.next_io_sequence.ok_or(Error::Capacity)?,
                 columns,
@@ -473,7 +470,7 @@ impl DaemonShells {
     pub(crate) async fn terminate(&self, publisher: RuntimeEventPublisher) -> Result<(), String> {
         self.run(publisher, move |client, key| {
             if let Some(session) = find(client, key)? {
-                client.terminate(&format!("stop-{}", session.pty.instance), &session.pty)?;
+                client.terminate_ordered(&session.pty)?;
             }
             Ok(())
         })

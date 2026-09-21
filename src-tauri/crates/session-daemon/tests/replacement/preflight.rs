@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn supported_large_image_keeps_replacement_available() {
+    // The image contract accepts up to 128 MiB, including non-code file contents.
+    // Trailing zeroes leave the signed Mach-O code identity unchanged.
+    let source = tempfile::Builder::new()
+        .prefix("of-large-image-")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let image = source.path().join("large-daemon");
+    std::fs::copy(env!("CARGO_BIN_EXE_openforge-session-daemon"), &image).unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_len(120 * 1024 * 1024)
+        .unwrap();
+    let (_fixture, client) = Fixture::with_executable(&image);
+    assert!(
+        client.capabilities().unwrap().supports_replacement,
+        "a supported image within the size limit must pass the bounded startup preflight"
+    );
+}
+
+#[test]
 fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() {
     let (mut fixture, client) = Fixture::new();
     let command = ShellCommand {

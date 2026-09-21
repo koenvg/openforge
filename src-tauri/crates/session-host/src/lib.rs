@@ -6,6 +6,8 @@ mod backend;
 mod identity;
 mod io;
 pub use io::{ControllerFence, HostAttachment};
+mod operation_window;
+pub use operation_window::OperationWindow;
 mod state;
 mod types;
 pub use backend::{

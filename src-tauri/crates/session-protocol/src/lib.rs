@@ -25,6 +25,8 @@ pub enum Error {
     Version,
     #[error("session capacity exhausted; request not executed")]
     Capacity,
+    #[error("{0} capacity exhausted; request not executed")]
+    CapacityExceeded(openforge_session_host::CapacityKind),
     #[error("foreign installation")]
     ForeignInstallation,
     #[error("stale controller")]
@@ -41,6 +43,8 @@ pub enum Error {
     UnsupportedReplacement,
     #[error("operation identity reused with a different request")]
     OperationConflict,
+    #[error("operation retry window expired; request not executed")]
+    OperationExpired,
     #[error("input sequence is out of order")]
     OutOfOrder,
     #[error("operation outcome unknown; reconcile before another operation")]

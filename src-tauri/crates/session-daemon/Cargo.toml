@@ -33,7 +33,8 @@ openforge-session-protocol = { path = "../session-protocol" }
 openforge-session-client = { path = "../session-client" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_json = "1"
-sha2 = "0.10"
+# ARM SHA-256 acceleration keeps bounded image preflights viable for large debug images.
+sha2 = { version = "0.10", features = ["asm"] }
 subtle = "2"
 uuid = { version = "1", features = ["v4"] }
 serde = { version = "1", features = ["derive"] }
@@ -49,3 +50,8 @@ libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", rev = "de
 openforge-session-host = { path = "../session-host", features = ["test-contracts"] }
 tokio = { version = "1", features = ["macros"] }
 tempfile = "3"
+
+[profile.dev.package.sha2]
+# Preflight has production deadlines even in debug builds. Hashing up to 128 MiB
+# must not spend that budget executing unoptimized cryptographic rounds.
+opt-level = 3

@@ -175,6 +175,7 @@ impl DaemonTransport {
                 } else {
                     Client::launch(&shared.executable, &shared.root)?
                 };
+                let client = client.with_operation_retirement(&shared.executable)?;
                 let cursor = client.inventory()?.cursor;
                 let mut discovery = DaemonOutput::new(shared.discovery.clone());
                 discovery.resume(cursor);
