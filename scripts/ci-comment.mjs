@@ -8,6 +8,12 @@ const RESULT_PATHS = {
   rustTests: '/tmp/rust-results/tests-exit-code',
 }
 
+const FRONTEND_STATIC_CHECKS = [
+  ['plugin-build', 'Plugin Build'],
+  ['app-build', 'App Build'],
+  ['lint', 'Lint'],
+]
+
 function describeError(error) {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
 }
@@ -16,35 +22,39 @@ function isMissingFile(error) {
   return error && typeof error === 'object' && error.code === 'ENOENT'
 }
 
-function readExitCodeFile(readFileSync, core, path, label) {
+function readExitCodeFile(readFileSync, core, path, label, missingIsFailure = false) {
   try {
     return readFileSync(path, 'utf8').trim() !== '0'
   } catch (error) {
+    const outcome = missingIsFailure ? 'marking the check incomplete' : 'assuming that check did not fail'
     if (isMissingFile(error)) {
-      core.info(`${label} exit code file was not found at ${path}; assuming that check did not fail.`)
+      core.info(`${label} exit code file was not found at ${path}; ${outcome}.`)
     } else {
-      core.warning(
-        `Unable to read ${label} exit code file at ${path}; assuming that check did not fail. ${describeError(error)}`,
-      )
+      core.warning(`Unable to read ${label} exit code file at ${path}; ${outcome}. ${describeError(error)}`)
     }
-    return false
+    return missingIsFailure
   }
 }
 
 export function readCiResults({ readFileSync, core }) {
   return {
     frontend: {
+      staticFailures: FRONTEND_STATIC_CHECKS.filter(([check, label]) =>
+        readExitCodeFile(readFileSync, core, `/tmp/frontend-results/${check}-exit-code`, label, true),
+      ),
       typecheckFailed: readExitCodeFile(
         readFileSync,
         core,
         RESULT_PATHS.frontendTypecheck,
         'frontend typecheck',
+        true,
       ),
       testsFailed: readExitCodeFile(
         readFileSync,
         core,
         RESULT_PATHS.frontendTests,
         'frontend tests',
+        true,
       ),
     },
     rust: {
@@ -66,10 +76,21 @@ export function readCiResults({ readFileSync, core }) {
 }
 
 export function renderFrontendComment(
-  { typecheckFailed, testsFailed },
+  { typecheckFailed, testsFailed, staticFailures = [] },
   { readFileSync, core },
 ) {
   let body = '## ❌ Frontend CI Failures\n\n'
+
+  for (const [check, label] of staticFailures) {
+    body += `### ${label}\n\n`
+    try {
+      const log = readFileSync(`/tmp/frontend-logs/${check}.log`, 'utf8')
+      body += `\`\`\`\n${log.slice(-6000)}\n\`\`\`\n\n`
+    } catch (error) {
+      core.warning(`Unable to read ${label} log: ${describeError(error)}`)
+      body += '_Failed or incomplete, logs unavailable_\n\n'
+    }
+  }
 
   if (typecheckFailed) {
     try {
@@ -78,7 +99,7 @@ export function renderFrontendComment(
         .split('\n')
         .filter((line) => line.includes('error TS'))
         .join('\n')
-      body += `### Type Check\n\n\`\`\`\n${(errors || log).slice(0, 30000)}\n\`\`\`\n\n`
+      body += `### Type Check\n\n\`\`\`\n${(errors || log).slice(0, 12000)}\n\`\`\`\n\n`
     } catch (error) {
       core.warning(`Unable to read frontend typecheck log: ${describeError(error)}`)
       body += '### Type Check\n\n_Failed (logs unavailable)_\n\n'
@@ -87,10 +108,12 @@ export function renderFrontendComment(
 
   if (testsFailed) {
     try {
-      const log = readFileSync('/tmp/frontend-logs/tests.log', 'utf8')
+      let summary
+      try { summary = readFileSync('/tmp/frontend-logs/tests-summary.log', 'utf8') } catch { /* Serial artifacts predate shard summaries. */ }
+      const log = summary ?? readFileSync('/tmp/frontend-logs/tests.log', 'utf8')
       const lines = log.split('\n')
-      const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n')
-      body += `### Tests\n\n\`\`\`\n${tail.slice(0, 30000)}\n\`\`\`\n\n`
+      const excerpt = summary ?? lines.slice(Math.max(0, lines.length - 200)).join('\n')
+      body += `### Tests\n\n\`\`\`\n${excerpt.slice(0, 30000)}\n\`\`\`\n\n`
     } catch (error) {
       core.warning(`Unable to read frontend test log: ${describeError(error)}`)
       body += '### Tests\n\n_Failed (logs unavailable)_\n\n'
@@ -220,7 +243,7 @@ export async function postCiComments({
     prNumber,
     comments,
     marker: '<!-- ci-frontend-failures -->',
-    failed: results.frontend.typecheckFailed || results.frontend.testsFailed,
+    failed: results.frontend.staticFailures.length > 0 || results.frontend.typecheckFailed || results.frontend.testsFailed,
     body: renderFrontendComment(results.frontend, dependencies),
   })
 

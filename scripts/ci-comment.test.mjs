@@ -30,13 +30,16 @@ describe('CI artifact result reading', () => {
     const readFileSync = createFileReader({
       [RESULT_PATHS.frontendTypecheck]: '1\n',
       [RESULT_PATHS.frontendTests]: '0\n',
+      '/tmp/frontend-results/plugin-build-exit-code': '0',
+      '/tmp/frontend-results/app-build-exit-code': '0',
+      '/tmp/frontend-results/lint-exit-code': '0',
       [RESULT_PATHS.rustFormat]: '0\n',
       [RESULT_PATHS.rustClippy]: '101\n',
       [RESULT_PATHS.rustTests]: '0\n',
     })
 
     expect(readCiResults({ readFileSync, core: { info: vi.fn(), warning: vi.fn() } })).toEqual({
-      frontend: { typecheckFailed: true, testsFailed: false },
+      frontend: { staticFailures: [], typecheckFailed: true, testsFailed: false },
       rust: { formatFailed: false, clippyFailed: true, testsFailed: false },
     })
   })
@@ -62,6 +65,51 @@ describe('frontend CI comment rendering', () => {
     expect(body).toContain('### Tests')
     expect(body).toContain('FAIL src/example.test.ts > rejects invalid input')
   })
+})
+
+it('renders a bounded summary from every failed shard rather than only the last shard', () => {
+  const readFileSync = createFileReader({
+    '/tmp/frontend-logs/tests.log': 'last shard only',
+    '/tmp/frontend-logs/tests-summary.log': 'Shard 1/3 FAIL first\nShard 2/3 FAIL second\nShard 3/3 FAIL third',
+  })
+  const body = renderFrontendComment({ testsFailed: true }, { readFileSync, core: { warning: vi.fn() } })
+  for (const text of ['FAIL first', 'FAIL second', 'FAIL third']) expect(body).toContain(text)
+})
+
+it('treats absent frontend results as incomplete, not successful', () => {
+  const results = readCiResults({ readFileSync: createFileReader(), core: { info: vi.fn(), warning: vi.fn() } })
+  expect(results.frontend.typecheckFailed).toBe(true)
+  expect(results.frontend.testsFailed).toBe(true)
+})
+
+it('reports build and lint failures with their logs', async () => {
+  const github = createGitHub()
+  github.rest.issues.listComments = vi.fn().mockResolvedValue({ data: [] })
+  const readFileSync = createFileReader({
+    [RESULT_PATHS.frontendTypecheck]: '0',
+    [RESULT_PATHS.frontendTests]: '0',
+    '/tmp/frontend-results/plugin-build-exit-code': '1',
+    '/tmp/frontend-results/app-build-exit-code': '1',
+    '/tmp/frontend-results/lint-exit-code': '1',
+    '/tmp/frontend-logs/plugin-build.log': 'plugin build error',
+    '/tmp/frontend-logs/app-build.log': 'app build error',
+    '/tmp/frontend-logs/lint.log': 'lint violation',
+  })
+  await postCiComments({ github, context: { repo: { owner: 'test', repo: 'test' } }, prNumber: 1, readFileSync, core: { info: vi.fn(), warning: vi.fn() } })
+  const body = github.rest.issues.createComment.mock.calls[0]?.[0].body ?? ''
+  for (const error of ['plugin build error', 'app build error', 'lint violation']) expect(body).toContain(error)
+})
+
+it('keeps combined frontend failure comments within GitHub limits', () => {
+  const files = {
+    '/tmp/frontend-logs/typecheck.log': 'error TS2322: '.repeat(5000),
+    '/tmp/frontend-logs/tests-summary.log': 'shard failure\n'.repeat(5000),
+  }
+  const staticFailures = [['plugin-build', 'Plugin Build'], ['app-build', 'App Build'], ['lint', 'Lint']]
+  for (const [check] of staticFailures) files[`/tmp/frontend-logs/${check}.log`] = 'error\n'.repeat(5000)
+  const body = renderFrontendComment({ staticFailures, typecheckFailed: true, testsFailed: true }, { readFileSync: createFileReader(files), core: { warning: vi.fn() } })
+  expect(body.length).toBeLessThan(65000)
+  for (const label of ['Plugin Build', 'App Build', 'Lint', 'Type Check', 'Tests']) expect(body).toContain(`### ${label}`)
 })
 
 describe('Rust CI comment rendering', () => {
