@@ -10,6 +10,8 @@ on:
       - 'src-tauri/Cargo.*'
       - 'src-tauri/tests/whisper_native.rs'
       - 'scripts/*whisper*'
+      - 'scripts/electron-package/**'
+      - 'scripts/electron-package.test.mjs'
       - '.github/workflows/whisper-macos.yml'
   workflow_dispatch:
 
@@ -55,6 +57,8 @@ jobs:
           } 2>&1 | tee artifacts/whisper-macos/compiler.log
       - name: Test target-scoped CMake policy
         run: python3 scripts/test-whisper-cmake.py
+      - name: Test packaging orchestration
+        run: pnpm exec vitest run scripts/electron-package.test.mjs scripts/electron-packaged-smoke.test.mjs scripts/rust-sidecar-layout.test.mjs scripts/cargo-target-env.test.mjs
       - name: Package native app
         run: |
           set -o pipefail
