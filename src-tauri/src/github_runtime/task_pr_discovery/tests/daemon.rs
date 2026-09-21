@@ -2,6 +2,8 @@ use super::*;
 use crate::github_runtime::task_pr_discovery::daemon::DaemonOutput;
 use openforge_session_protocol::{Event, EventBatch, Session};
 
+const DAEMON_QUEUE_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(60);
+
 fn session(f: &Fixture, instance: u64) -> Session {
     serde_json::from_value(serde_json::json!({
         "pty":{"installation":"test", "lifetime":"daemon", "instance":instance},
@@ -222,9 +224,21 @@ async fn daemon_queue_overflow_never_waits_for_github_and_later_output_can_retry
         );
     }
     assert_eq!(*f.api.calls.lock().unwrap(), vec![42]);
+    let completion = f.discovery.completion_barrier().await;
     f.release_requests(500);
-    f.discovery.settled().await;
+    tokio::time::timeout(DAEMON_QUEUE_WATCHDOG, completion)
+        .await
+        .expect("saturated daemon discovery queue should complete")
+        .expect("discovery coordinator should remain available");
+
     assert_eq!(f.api.calls.lock().unwrap().len(), 256);
+    assert_eq!(
+        acquire_db(&f.db)
+            .get_pull_requests_for_task(&f.task_id)
+            .unwrap()
+            .len(),
+        256
+    );
     adapter.accept(
         std::slice::from_ref(&session),
         &batch(
@@ -236,8 +250,20 @@ async fn daemon_queue_overflow_never_waits_for_github_and_later_output_can_retry
             )],
         ),
     );
-    f.discovery.settled().await;
+    let completion = f.discovery.completion_barrier().await;
+    tokio::time::timeout(DAEMON_QUEUE_WATCHDOG, completion)
+        .await
+        .expect("later daemon discovery output should complete")
+        .expect("discovery coordinator should remain available");
+
     assert_eq!(f.api.calls.lock().unwrap().last(), Some(&1500));
+    assert_eq!(
+        acquire_db(&f.db)
+            .get_pull_requests_for_task(&f.task_id)
+            .unwrap()
+            .len(),
+        257
+    );
 }
 
 #[tokio::test]
