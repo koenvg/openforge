@@ -3,9 +3,17 @@ use openforge_session_protocol::{Credentials, Error};
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::Read;
 use std::os::fd::AsRawFd;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+const UNIX_SOCKET_PATH_CAPACITY: usize = 104;
+#[cfg(target_os = "linux")]
+const UNIX_SOCKET_PATH_CAPACITY: usize = 108;
+#[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+const UNIX_SOCKET_PATH_CAPACITY: usize = 104;
 
 pub struct RuntimeDirectory {
     path: PathBuf,
@@ -58,7 +66,9 @@ impl RuntimeDirectory {
         {
             return Err(Error::Unauthorized);
         }
-        Ok(Self { path, credentials })
+        let runtime = Self { path, credentials };
+        runtime.prepare_socket_directory(false)?;
+        Ok(runtime)
     }
 
     /// Opens a private runtime under an existing installation data directory.
@@ -136,7 +146,9 @@ impl RuntimeDirectory {
         {
             return Err(Error::Unauthorized);
         }
-        Ok(Self { path, credentials })
+        let runtime = Self { path, credentials };
+        runtime.prepare_socket_directory(create)?;
+        Ok(runtime)
     }
 
     pub fn credentials(&self) -> &Credentials {
@@ -146,7 +158,41 @@ impl RuntimeDirectory {
         &self.path
     }
     pub fn socket_path(&self) -> PathBuf {
-        self.path.join("control.sock")
+        let legacy = self.path.join("control.sock");
+        if legacy.as_os_str().as_bytes().len() < UNIX_SOCKET_PATH_CAPACITY {
+            legacy
+        } else {
+            self.short_socket_directory().join("control.sock")
+        }
+    }
+
+    fn prepare_socket_directory(&self, create: bool) -> Result<(), Error> {
+        let directory = self.short_socket_directory();
+        if self.socket_path().parent() != Some(directory.as_path()) {
+            return Ok(());
+        }
+        if create {
+            match DirBuilder::new().mode(0o700).create(&directory) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(io_error(error)),
+            }
+        } else {
+            match fs::symlink_metadata(&directory) {
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(io_error(error)),
+            }
+        }
+        check_private(&directory, true)
+    }
+
+    fn short_socket_directory(&self) -> PathBuf {
+        PathBuf::from("/tmp").join(format!(
+            "openforge-session-{}-{}",
+            uid(),
+            self.credentials.installation.as_str()
+        ))
     }
 
     /// Locks singleton ownership until the returned file is dropped.
