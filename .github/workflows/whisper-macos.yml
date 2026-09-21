@@ -67,6 +67,8 @@ jobs:
       - name: Test target-scoped CMake policy
         run: python3 scripts/test-whisper-cmake.py
       - name: Test packaging orchestration
+        env:
+          CARGO_BUILD_TARGET: ''
         run: pnpm exec vitest run scripts/electron-package.test.mjs scripts/electron-packaged-smoke.test.mjs scripts/rust-sidecar-layout.test.mjs scripts/cargo-target-env.test.mjs
       - name: Package native app
         run: |
@@ -89,7 +91,7 @@ jobs:
         working-directory: src-tauri
         run: |
           set -euo pipefail
-          cargo test --locked --release 2>&1 | tee ../artifacts/whisper-macos/backend-tests.log
+          cargo test --locked 2>&1 | tee ../artifacts/whisper-macos/backend-tests.log
           cargo check --locked 2>&1 | tee ../artifacts/whisper-macos/backend-check.log
           cargo clippy --locked 2>&1 | tee ../artifacts/whisper-macos/backend-clippy.log
       - name: Smoke test packaged app
