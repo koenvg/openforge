@@ -5,7 +5,12 @@ impl Checkpoint {
     pub(super) fn validate(&self) -> Result<(), HostError> {
         let invalid = || HostError::UnsupportedReplacement;
         let installation = self.installation.as_ref().ok_or_else(invalid)?;
-        if self.format != FORMAT || self.generation == 0 {
+        let expected_format = if self.operation_window.is_some() {
+            FORMAT
+        } else {
+            LEGACY_FORMAT
+        };
+        if self.format != expected_format || self.generation == 0 {
             return Err(invalid());
         }
         // Reserve one fence generation and one fresh controller connection.
@@ -18,9 +23,21 @@ impl Checkpoint {
             || limits.retained_request_bytes > MAX_RETAINED_REQUEST_BYTES
             || self.operations.len() > limits.operations + limits.cleanup_reserve
             || self.sessions.len() > limits.retained_sessions.min(MAX_SESSIONS)
-            || self.input_sequences.len() > self.operations.len()
+            || self.input_sequences.len()
+                > MAX_SESSIONS + limits.operations + limits.cleanup_reserve
+            || (self.operation_window.is_none()
+                && self.input_sequences.len() > self.operations.len())
         {
             return Err(HostError::Capacity);
+        }
+        if let Some(window) = self.operation_window {
+            if window.stream == 0
+                || window.stream > self.generation
+                || window.retired_through > window.admitted_through
+                || window.admitted_through - window.retired_through != self.operations.len() as u64
+            {
+                return Err(invalid());
+            }
         }
         let identity = |pty: &PtyIdentity| {
             if &pty.installation != installation || pty.lifetime != self.lifetime {
@@ -39,6 +56,15 @@ impl Checkpoint {
         for (operation, request, result) in &self.operations {
             if !ids.insert(operation) {
                 return Err(invalid());
+            }
+            if let Some(window) = self.operation_window {
+                let (stream, ordinal) = operation.position().ok_or_else(invalid)?;
+                if stream != window.stream
+                    || ordinal <= window.retired_through
+                    || ordinal > window.admitted_through
+                {
+                    return Err(invalid());
+                }
             }
             let bytes = match request {
                 Mutation::Spawn(request) => request.validate().map_err(|_| invalid())?,
@@ -83,7 +109,7 @@ impl Checkpoint {
                     .ok_or(HostError::Capacity)?;
             }
         }
-        if expected_sequences != sequence_counts
+        if (self.operation_window.is_none() && expected_sequences != sequence_counts)
             || retained_bytes != self.retained_bytes
             || ordinary_operations > limits.operations
             || ordinary_bytes > limits.retained_request_bytes
@@ -97,7 +123,15 @@ impl Checkpoint {
                 return Err(invalid());
             }
         }
-        if input_sequences != expected_sequences {
+        if self.operation_window.is_none() {
+            if input_sequences != expected_sequences {
+                return Err(invalid());
+            }
+        } else if expected_sequences
+            .iter()
+            .any(|(instance, sequence)| input_sequences.get(instance) != Some(sequence))
+            || input_sequences.values().any(|sequence| *sequence == 0)
+        {
             return Err(invalid());
         }
         let mut sessions = HashSet::new();

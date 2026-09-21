@@ -1,11 +1,13 @@
 //! Authenticated installation-scoped Session Daemon client.
 //! Blocking calls belong on the Sidecar's blocking pool, never its async executor.
 mod host;
+mod operation_window;
 mod operations;
 mod output;
 mod recovery;
 pub mod releases;
 mod replacement;
+mod retirement_upgrade;
 pub mod runtime;
 use openforge_session_protocol::*;
 use runtime::{check_peer, io_error, RuntimeDirectory};
@@ -13,6 +15,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::{net::UnixStream, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Clone)]
@@ -20,6 +23,7 @@ pub struct Client {
     socket: PathBuf,
     credentials: Credentials,
     controller: Controller,
+    operation_window: operation_window::SharedWindow,
 }
 
 impl Client {
@@ -140,6 +144,7 @@ impl Client {
             socket: runtime.socket_path(),
             credentials,
             controller: inventory.controller,
+            operation_window: Default::default(),
         })
     }
 
@@ -148,6 +153,11 @@ impl Client {
     }
     pub fn with_controller(&self, controller: Controller) -> Self {
         Self {
+            operation_window: if controller == self.controller {
+                Arc::clone(&self.operation_window)
+            } else {
+                Default::default()
+            },
             controller,
             ..self.clone()
         }
@@ -213,5 +223,10 @@ fn exchange(socket: &Path, credentials: &Credentials, command: Command) -> Resul
             },
         },
     )?;
-    read_frame::<_, Result<Response, Error>>(&mut stream)?
+    // A malformed reply is not a definitive server rejection. The request may already
+    // have executed; do not let callers acknowledge it based on inventory alone.
+    read_frame::<_, Result<Response, Error>>(&mut stream).map_err(|error| match error {
+        Error::Transport(_) => error,
+        _ => Error::OutcomeUnknown,
+    })?
 }

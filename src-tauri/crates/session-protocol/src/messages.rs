@@ -57,6 +57,14 @@ pub struct Request {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Command {
     Capabilities,
+    OpenOperationStream {
+        controller: Controller,
+    },
+    AcknowledgeOperations {
+        controller: Controller,
+        stream: u64,
+        through: u64,
+    },
     Replacement {
         controller: Controller,
         operation: OperationId,
@@ -108,6 +116,7 @@ pub enum Command {
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Response {
     Capabilities(crate::Capabilities),
+    OperationWindow(openforge_session_host::OperationWindow),
     Replacement(crate::ReplacementStatus),
     Inventory(Inventory),
     Spawned(Session),
@@ -157,6 +166,8 @@ impl Event {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capacity {
+    #[serde(default)]
+    pub operation_window: Option<openforge_session_host::OperationWindow>,
     pub operation_receipts: usize,
     pub operation_limit: usize,
     pub cleanup_receipts: usize,

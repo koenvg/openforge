@@ -103,10 +103,10 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     drop(first);
 
     let client = openforge_session_client::Client::connect(fixture.0.path()).unwrap();
+    client.enable_operation_retirement().unwrap();
     let session = client.inventory().unwrap().sessions.remove(0);
     client
-        .write(
-            "while-absent",
+        .write_ordered(
             &session.pty,
             session.next_io_sequence.unwrap(),
             format!("{}\n", print_command("ABSENT_MARKER")).as_bytes(),

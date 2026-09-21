@@ -5,7 +5,8 @@ use super::*;
 use std::io::{self, Write};
 
 pub const MAX_HOST_CHECKPOINT_BYTES: usize = 16 * 1024 * 1024;
-const FORMAT: u32 = 1;
+const LEGACY_FORMAT: u32 = 1;
+const FORMAT: u32 = 2;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -19,6 +20,8 @@ struct Checkpoint {
     operations: Vec<(OperationId, Mutation, Result<Receipt, Failure>)>,
     retained_bytes: usize,
     limits: HostLimits,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    operation_window: Option<OperationWindow>,
 }
 
 // Preserve retry outcomes, not their Display strings. Admission-only errors with
@@ -32,8 +35,10 @@ enum Failure {
     StalePty,
     StaleOutput,
     OperationConflict,
+    OperationExpired,
     OutcomeUnknown,
     Capacity,
+    CapacityExceeded(CapacityKind),
     OutOfOrder,
     UnsupportedReplacement,
     RecoveryUnavailable,
@@ -48,8 +53,10 @@ impl TryFrom<&HostError> for Failure {
             HostError::StalePty => Self::StalePty,
             HostError::StaleOutput => Self::StaleOutput,
             HostError::OperationConflict => Self::OperationConflict,
+            HostError::OperationExpired => Self::OperationExpired,
             HostError::OutcomeUnknown => Self::OutcomeUnknown,
             HostError::Capacity => Self::Capacity,
+            HostError::CapacityExceeded(kind) => Self::CapacityExceeded(*kind),
             HostError::OutOfOrder => Self::OutOfOrder,
             HostError::UnsupportedReplacement => Self::UnsupportedReplacement,
             HostError::RecoveryUnavailable => Self::RecoveryUnavailable,
@@ -68,8 +75,10 @@ impl From<Failure> for HostError {
             Failure::StalePty => Self::StalePty,
             Failure::StaleOutput => Self::StaleOutput,
             Failure::OperationConflict => Self::OperationConflict,
+            Failure::OperationExpired => Self::OperationExpired,
             Failure::OutcomeUnknown => Self::OutcomeUnknown,
             Failure::Capacity => Self::Capacity,
+            Failure::CapacityExceeded(kind) => Self::CapacityExceeded(kind),
             Failure::OutOfOrder => Self::OutOfOrder,
             Failure::UnsupportedReplacement => Self::UnsupportedReplacement,
             Failure::RecoveryUnavailable => Self::RecoveryUnavailable,
@@ -98,7 +107,11 @@ impl HostState {
             })
             .collect::<Result<Vec<_>, HostError>>()?;
         let checkpoint = Checkpoint {
-            format: FORMAT,
+            format: if self.operation_window.is_some() {
+                FORMAT
+            } else {
+                LEGACY_FORMAT
+            },
             installation: self.installation.clone(),
             lifetime: self.lifetime.clone(),
             generation: self.generation,
@@ -111,6 +124,7 @@ impl HostState {
             operations,
             retained_bytes: self.retained_bytes,
             limits: self.limits,
+            operation_window: self.operation_window,
         };
         checkpoint.validate()?;
         let mut output = BoundedBytes(Vec::new());
@@ -158,6 +172,7 @@ impl HostState {
                 .collect(),
             retained_bytes: checkpoint.retained_bytes,
             limits: checkpoint.limits,
+            operation_window: checkpoint.operation_window,
         })
     }
 }

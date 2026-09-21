@@ -25,6 +25,8 @@ mod managed_process;
 mod model_provider;
 #[path = "replacement/notifications.rs"]
 mod notifications;
+#[path = "replacement/operation_retention.rs"]
+mod operation_retention;
 #[path = "replacement/pi.rs"]
 mod pi;
 #[path = "replacement/preflight.rs"]
@@ -37,12 +39,14 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> (Self, Client) {
+        Self::with_executable(Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")))
+    }
+    fn with_executable(executable: &Path) -> (Self, Client) {
         let root = tempfile::Builder::new()
             .prefix("of-rx-")
             .tempdir_in("/tmp")
             .unwrap();
-        let mut command =
-            std::process::Command::new(env!("CARGO_BIN_EXE_openforge-session-daemon"));
+        let mut command = std::process::Command::new(executable);
         command
             .arg(root.path())
             .env_clear()

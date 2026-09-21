@@ -51,10 +51,7 @@ impl Restart {
             if openforge_session_host::scoped_agent_digest(&session.session_key).is_some()
                 && session.exit_code.is_none()
             {
-                client.terminate(
-                    &format!("restart-scoped-{}", session.pty.instance),
-                    &session.pty,
-                )?;
+                client.terminate_ordered(&session.pty)?;
             }
         }
         Ok(())
@@ -104,7 +101,7 @@ impl Restart {
         operation.persist(root)?;
         for session in inventory.sessions {
             if session.exit_code.is_none() {
-                client.terminate(&format!("quit-{}", session.pty.instance), &session.pty)?;
+                client.terminate_ordered(&session.pty)?;
             }
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);

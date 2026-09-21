@@ -1,5 +1,7 @@
 #[path = "checkpoint.rs"]
 mod checkpoint;
+#[path = "operation_retention.rs"]
+mod retention;
 pub use checkpoint::MAX_HOST_CHECKPOINT_BYTES;
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +36,7 @@ pub struct HostState {
     pub(super) input_sequences: HashMap<PtyInstanceId, u64>,
     operations: HashMap<OperationId, RecordedOperation>,
     retained_bytes: usize,
+    operation_window: Option<OperationWindow>,
     limits: HostLimits,
 }
 
@@ -53,6 +56,7 @@ impl HostState {
             input_sequences: HashMap::new(),
             operations: HashMap::new(),
             retained_bytes: 0,
+            operation_window: None,
             limits: HostLimits::default(),
         }
     }
@@ -76,6 +80,7 @@ impl HostState {
     }
     pub fn capacity(&self) -> HostCapacity {
         HostCapacity {
+            operation_window: self.operation_window,
             operations: self.operations.len(),
             retained_request_bytes: self.retained_bytes,
             limits: self.limits,
@@ -90,7 +95,7 @@ impl HostState {
                 .count()
                 >= self.limits.live_sessions
         {
-            return Err(HostError::Capacity);
+            return Err(self.capacity_error(CapacityKind::Sessions));
         }
         Ok(())
     }
@@ -205,6 +210,7 @@ impl HostState {
         operation: &OperationId,
         request: &Mutation,
     ) -> Result<Option<Receipt>, HostError> {
+        self.validate_operation(operation)?;
         let Some(record) = self.operations.get(operation) else {
             return Ok(None);
         };
@@ -220,16 +226,26 @@ impl HostState {
         request: Mutation,
         bytes: usize,
     ) -> Result<(), HostError> {
+        let position = self.validate_operation(&operation)?;
+        if let (Some(window), Some(ordinal)) = (self.operation_window, position) {
+            if window.admitted_through.checked_add(1) != Some(ordinal) {
+                return Err(HostError::OutOfOrder);
+            }
+        }
         // Ordinary traffic cannot consume the reserved allowance for scoped cleanup.
         let reserve = if matches!(request, Mutation::Terminate(_)) {
             self.limits.cleanup_reserve
         } else {
             0
         };
-        if self.operations.len() >= self.limits.operations + reserve
-            || self.retained_bytes + bytes > self.limits.retained_request_bytes + reserve * 512
-        {
-            return Err(HostError::Capacity);
+        if self.operations.len() >= self.limits.operations + reserve {
+            return Err(self.capacity_error(CapacityKind::OperationReceipts));
+        }
+        if self.retained_bytes + bytes > self.limits.retained_request_bytes + reserve * 512 {
+            return Err(self.capacity_error(CapacityKind::RequestBytes));
+        }
+        if let (Some(window), Some(ordinal)) = (&mut self.operation_window, position) {
+            window.admitted_through = ordinal;
         }
         self.retained_bytes += bytes;
         self.operations.insert(

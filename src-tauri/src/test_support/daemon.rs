@@ -40,13 +40,16 @@ impl Drop for DaemonFixture {
         let cleanup = (|| -> Result<(), String> {
             let client = openforge_session_client::Client::connect(self.root.path())
                 .map_err(|error| error.to_string())?;
+            client
+                .enable_operation_retirement()
+                .map_err(|error| error.to_string())?;
             for session in client
                 .inventory()
                 .map_err(|error| error.to_string())?
                 .sessions
             {
                 client
-                    .terminate(&format!("cleanup-{}", session.pty.instance), &session.pty)
+                    .terminate_ordered(&session.pty)
                     .map_err(|error| error.to_string())?;
             }
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

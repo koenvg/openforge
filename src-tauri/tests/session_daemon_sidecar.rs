@@ -239,12 +239,12 @@ impl Drop for Fixture {
             }
             let client = openforge_session_client::Client::connect(&self.daemon_root())
                 .map_err(|e| e.to_string())?;
+            client
+                .enable_operation_retirement()
+                .map_err(|e| e.to_string())?;
             for session in client.inventory().map_err(|e| e.to_string())?.sessions {
                 client
-                    .terminate(
-                        &format!("fixture-stop-{}", session.pty.instance),
-                        &session.pty,
-                    )
+                    .terminate_ordered(&session.pty)
                     .map_err(|e| e.to_string())?;
             }
             let deadline = Instant::now() + Duration::from_secs(5);
@@ -414,7 +414,8 @@ fn notification_during_backend_outage_updates_the_existing_agent_session() {
         let task_id = task["id"].as_str().unwrap();
         fixture.invoke("pty_spawn_shell", json!({"taskId":"T-proof", "terminalIndex":3, "cwd":fixture.root.path(), "cols":80, "rows":24}));
         let client = openforge_session_client::Client::connect(fixture.root.path()).unwrap();
-        let session = client.spawn("notification-agent", &ShellCommand {
+        client.enable_operation_retirement().unwrap();
+        let session = client.spawn_ordered(&ShellCommand {
             owner: TerminalOwner::Agent { task_id: task_id.into() },
             command: PreparedCommand {
                 program: "/bin/sh".into(),
