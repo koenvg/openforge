@@ -1,7 +1,7 @@
 ## 1. Baseline and compatibility
 
 - [ ] 1.1 Record serial CI wall time, queue/setup time, runner minutes, test selection, and visual identity counts for named successful runs; verify evidence includes revisions and runner classes.
-- [ ] 1.2 Inspect required-check identities and frontend comment/result consumers; verify a documented compatibility map preserves current status and artifact contracts, escalating any necessary branch-protection change for owner approval.
+- [x] 1.2 Inspect required-check identities and frontend comment/result consumers; verify a documented compatibility map preserves current status and artifact contracts, escalating any necessary branch-protection change for owner approval.
 
 ## 2. Visual execution partitioning
 
@@ -13,8 +13,8 @@
 
 ## 3. Workflow changes
 
-- [ ] 3.1 Split frontend static checks and an initial three-shard Vitest matrix while retaining all named projects and prerequisite setup; verify the shard union matches full-suite selection and the aggregate requires all checks.
-- [ ] 3.2 Preserve merged frontend result/log artifacts and review comments; verify comment tests expose failures from any shard and missing results cannot report success.
+- [x] 3.1 Split frontend static checks and an initial three-shard Vitest matrix while retaining all named projects and prerequisite setup; verify the shard union matches full-suite selection and the aggregate requires all checks.
+- [x] 3.2 Preserve merged frontend result/log artifacts and review comments; verify comment tests expose failures from any shard and missing results cannot report success.
 - [ ] 3.3 Add an initial four-shard canonical ARM visual matrix, a single probe job, and an aggregate gate; verify workflow contract tests preserve the pinned environment and a failed probe or shard fails the gate.
 - [ ] 3.4 Remove scheduling-only prerequisites from packaged smoke and live invariants; verify workflow tests preserve their setup, commands, artifacts, and failure gates while allowing independent scheduling.
 - [ ] 3.5 Update contributor and visual documentation with shard reproduction and report locations; verify documented commands reproduce a failed shard and the full local commands remain unchanged in meaning.

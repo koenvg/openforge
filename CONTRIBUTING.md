@@ -76,6 +76,8 @@ For missing page and component stories, see [the coverage guide](docs/storybook-
 
 The frontend and Plugin SDK suites include Chromium checks of core control styles. After installing dependencies, run `pnpm exec playwright install --with-deps chromium` once, and again after Playwright upgrades.
 
+For frontend CI shard reproduction, aggregate results, and timing comparisons, see [frontend CI sharding](docs/frontend-ci.md).
+
 ```bash
 # Frontend tests
 pnpm test

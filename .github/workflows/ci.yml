@@ -15,78 +15,44 @@ env:
   FLUTTER_CHANNEL: stable
 
 jobs:
-  frontend:
-    name: Frontend Tests
+  frontend-static:
+    name: Frontend Static Checks
     timeout-minutes: 25
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
-
       - name: Install dependencies
-        run: pnpm install
-
-      - name: Install Chromium for core control browser tests
-        run: pnpm exec playwright install --with-deps chromium
-
+        run: pnpm install --frozen-lockfile
       - name: Build built-in plugins
         id: plugin_build
         run: |
           set +e -o pipefail
           pnpm build:plugins 2>&1 | tee /tmp/plugin-build.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
       - name: Build root app
         id: app_build
         run: |
           set +e -o pipefail
           pnpm build 2>&1 | tee /tmp/app-build.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
       - name: Type check
         id: typecheck
         run: |
           set +e -o pipefail
           (pnpm exec tsc --noEmit && pnpm plugin-host:typecheck && pnpm --filter @openforge-app/plugin-github-sync typecheck) 2>&1 | tee /tmp/typecheck.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
       - name: Lint
         id: lint
         run: |
           set +e -o pipefail
           (pnpm mobile:contract:check && pnpm lint) 2>&1 | tee /tmp/lint.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
-      - name: Run tests
-        id: tests
-        run: |
-          set +e -o pipefail
-          pnpm test 2>&1 | tee /tmp/tests.log
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
-      - name: Upload failure logs
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: frontend-logs
-          path: |
-            /tmp/plugin-build.log
-            /tmp/app-build.log
-            /tmp/typecheck.log
-            /tmp/lint.log
-            /tmp/tests.log
-          retention-days: 1
-          if-no-files-found: ignore
-
-      - name: Save results
+      - name: Save results and logs
         if: always()
         run: |
           mkdir -p /tmp/ci-results
@@ -94,19 +60,114 @@ jobs:
           echo "${{ steps.app_build.outputs.exit_code }}" > /tmp/ci-results/app-build-exit-code
           echo "${{ steps.typecheck.outputs.exit_code }}" > /tmp/ci-results/typecheck-exit-code
           echo "${{ steps.lint.outputs.exit_code }}" > /tmp/ci-results/lint-exit-code
-          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
-
-      - name: Upload results
+          for check in plugin-build app-build typecheck lint; do
+            if [ -f "/tmp/$check.log" ]; then cp "/tmp/$check.log" /tmp/ci-results/; fi
+          done
+      - uses: actions/upload-artifact@v6
         if: always()
-        uses: actions/upload-artifact@v6
         with:
-          name: frontend-results
+          name: frontend-part-static
           path: /tmp/ci-results/
           retention-days: 1
-
       - name: Fail if checks failed
-        if: steps.plugin_build.outputs.exit_code != '0' || steps.app_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
+        if: always() && (steps.plugin_build.outputs.exit_code != '0' || steps.app_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0')
         run: exit 1
+
+  frontend-shards:
+    name: Frontend Shard ${{ matrix.shard }}/3
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium for core control browser tests
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build shard prerequisites
+        run: |
+          set -o pipefail
+          (pnpm build:plugins && pnpm build) 2>&1 | tee /tmp/tests.log
+      - name: Run tests
+        id: tests
+        run: |
+          set +e -o pipefail
+          pnpm test --shard=${{ matrix.shard }}/3 2>&1 | tee -a /tmp/tests.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Save results and logs
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
+          if [ -f /tmp/tests.log ]; then cp /tmp/tests.log /tmp/ci-results/; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: frontend-part-${{ matrix.shard }}
+          path: /tmp/ci-results/
+          retention-days: 1
+      - name: Fail if tests failed
+        if: always() && steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
+  frontend:
+    name: Frontend Tests
+    needs: [frontend-static, frontend-shards]
+    if: always()
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: frontend-part-static
+          path: /tmp/frontend-parts/static
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: frontend-part-1
+          path: /tmp/frontend-parts/1
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: frontend-part-2
+          path: /tmp/frontend-parts/2
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: frontend-part-3
+          path: /tmp/frontend-parts/3
+      - name: Aggregate frontend results
+        if: always()
+        env:
+          FRONTEND_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/frontend-ci.mjs /tmp/frontend-parts /tmp/frontend
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: frontend-results
+          path: /tmp/frontend/results/
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: frontend-logs
+          path: /tmp/frontend/logs/
+          retention-days: 1
+          if-no-files-found: error
 
   terminal-presentation:
     name: Terminal Presentation Conformance
