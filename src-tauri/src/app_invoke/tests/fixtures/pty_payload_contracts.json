@@ -1,6 +1,36 @@
 {
   "valid": [
     {
+      "name": "set_terminal_color_profile",
+      "command": "set_terminal_color_profile",
+      "payload": {
+        "profile": {
+          "version": 1,
+          "background": { "red": 255, "green": 255, "blue": 255 },
+          "foreground": { "red": 32, "green": 32, "blue": 32 },
+          "cursor": { "red": 32, "green": 32, "blue": 32 },
+          "ansiColors": [
+            { "red": 32, "green": 32, "blue": 32 },
+            { "red": 181, "green": 43, "blue": 58 },
+            { "red": 23, "green": 107, "blue": 74 },
+            { "red": 135, "green": 81, "blue": 11 },
+            { "red": 36, "green": 88, "blue": 166 },
+            { "red": 120, "green": 63, "blue": 150 },
+            { "red": 23, "green": 102, "blue": 109 },
+            { "red": 98, "green": 98, "blue": 98 },
+            { "red": 98, "green": 98, "blue": 98 },
+            { "red": 152, "green": 34, "blue": 48 },
+            { "red": 18, "green": 84, "blue": 58 },
+            { "red": 117, "green": 67, "blue": 9 },
+            { "red": 29, "green": 73, "blue": 140 },
+            { "red": 104, "green": 52, "blue": 131 },
+            { "red": 18, "green": 85, "blue": 91 },
+            { "red": 80, "green": 80, "blue": 80 }
+          ]
+        }
+      }
+    },
+    {
       "name": "spawn_shell_with_index",
       "command": "pty_spawn_shell",
       "payload": {
@@ -64,6 +94,51 @@
     }
   ],
   "invalid": [
+    {
+      "name": "snake_case_ansi_colors_is_rejected",
+      "command": "set_terminal_color_profile",
+      "payload": {
+        "profile": {
+          "version": 1,
+          "background": { "red": 255, "green": 255, "blue": 255 },
+          "foreground": { "red": 32, "green": 32, "blue": 32 },
+          "cursor": { "red": 32, "green": 32, "blue": 32 },
+          "ansi_colors": []
+        }
+      },
+      "errorContains": "ansi_colors"
+    },
+    {
+      "name": "out_of_range_terminal_colour_is_rejected",
+      "command": "set_terminal_color_profile",
+      "payload": {
+        "profile": {
+          "version": 1,
+          "background": { "red": 256, "green": 255, "blue": 255 },
+          "foreground": { "red": 32, "green": 32, "blue": 32 },
+          "cursor": { "red": 32, "green": 32, "blue": 32 },
+          "ansiColors": [
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 },
+            { "red": 0, "green": 0, "blue": 0 }
+          ]
+        }
+      },
+      "errorContains": "u8"
+    },
     {
       "name": "snake_case_terminal_index_is_rejected",
       "command": "pty_spawn_shell",

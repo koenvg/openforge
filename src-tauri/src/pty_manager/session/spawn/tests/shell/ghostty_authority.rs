@@ -7,6 +7,7 @@ use crate::terminal_model::{
     TerminalModelQueueSaturationGate, TerminalModelTestFault,
     TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES,
 };
+use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
 use portable_pty::CommandBuilder;
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,6 +71,102 @@ async fn ghostty_authority_tracks_live_shell_without_changing_replay_or_lifecycl
         .lock()
         .await
         .contains_key(&session_key));
+}
+
+#[tokio::test]
+async fn legacy_manager_initializes_and_updates_models_from_the_shared_profile() {
+    let harness = ShellTestHarness::new();
+    let initial = TerminalColorProfile {
+        foreground: TerminalRgbColor::new(17, 34, 51),
+        ..Default::default()
+    };
+    harness
+        .manager
+        .set_terminal_color_profile(initial)
+        .await
+        .expect("legacy profile should be accepted");
+    let task_id = "legacy-profile-shell";
+    let session_key = shell_session_key(task_id, Some(0));
+    let instance_id = harness
+        .spawn_long_running(task_id, Some(0))
+        .await
+        .expect("legacy shell should start");
+
+    let model = harness
+        .manager
+        .sessions
+        .lock()
+        .await
+        .get(&session_key)
+        .and_then(|session| session.terminal_model.as_ref().map(Arc::clone))
+        .expect("legacy shell should have an authority model");
+    assert_eq!(model.color_profile(), initial);
+
+    let mut updated = initial;
+    updated.background = TerminalRgbColor::new(68, 85, 102);
+    harness
+        .manager
+        .set_terminal_color_profile(updated)
+        .await
+        .expect("live legacy profile should update");
+    assert_eq!(model.color_profile(), updated);
+    assert_eq!(
+        harness
+            .manager
+            .sessions
+            .lock()
+            .await
+            .get(&session_key)
+            .map(|session| session.instance_id),
+        Some(instance_id)
+    );
+
+    harness.manager.kill_pty(&session_key).await.unwrap();
+}
+
+#[tokio::test]
+async fn committed_profile_updates_healthy_models_when_another_model_rejects_it() {
+    let harness = ShellTestHarness::new();
+    harness
+        .manager
+        .set_terminal_model_test_fault(TerminalModelTestFault::ColorProfileUpdateFailure);
+    let rejected_key = shell_session_key("profile-rejected-shell", Some(0));
+    let healthy_key = shell_session_key("profile-healthy-shell", Some(0));
+    harness
+        .spawn_long_running("profile-rejected-shell", Some(0))
+        .await
+        .expect("profile-rejecting shell should start");
+    harness
+        .spawn_long_running("profile-healthy-shell", Some(0))
+        .await
+        .expect("healthy shell should start");
+
+    let (rejected, healthy) = {
+        let sessions = harness.manager.sessions.lock().await;
+        let model = |key: &str| {
+            sessions
+                .get(key)
+                .and_then(|session| session.terminal_model.as_ref().map(Arc::clone))
+                .expect("live shell should have an authority model")
+        };
+        (model(&rejected_key), model(&healthy_key))
+    };
+    let profile = TerminalColorProfile {
+        foreground: TerminalRgbColor::new(17, 34, 51),
+        ..Default::default()
+    };
+
+    harness
+        .manager
+        .set_terminal_color_profile(profile)
+        .await
+        .expect("durably accepted profile should not be rolled back after model failure");
+
+    assert_eq!(harness.manager.terminal_color_profile(), profile);
+    assert_eq!(healthy.color_profile(), profile);
+    assert!(rejected.portable_snapshot().is_err());
+    harness.manager.kill_pty(&rejected_key).await.unwrap();
+    harness.manager.kill_pty(&healthy_key).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

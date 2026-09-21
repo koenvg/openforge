@@ -23,6 +23,18 @@ pub(super) struct PtySpawnShellPayload {
     pub(super) terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct TerminalColorProfilePayload {
+    pub(super) profile: openforge_session_host::TerminalColorProfile,
+}
+
+impl TerminalColorProfilePayload {
+    pub(super) fn decode(command: &str, payload: &serde_json::Value) -> AppResult<Self> {
+        decode_payload(command, payload)
+    }
+}
+
 impl PtySpawnShellPayload {
     pub(super) fn decode(command: &str, payload: &serde_json::Value) -> AppResult<Self> {
         decode_payload(command, payload)
@@ -146,6 +158,9 @@ mod tests {
 
     fn decode_case(command: &str, payload: &serde_json::Value) -> Result<(), (StatusCode, String)> {
         match command {
+            "set_terminal_color_profile" => {
+                TerminalColorProfilePayload::decode(command, payload).map(|_| ())
+            }
             "pty_spawn_shell" => PtySpawnShellPayload::decode(command, payload).map(|_| ()),
             "pty_write" => PtyWritePayload::decode(command, payload).map(|_| ()),
             "pty_resize" => PtyResizePayload::decode(command, payload).map(|_| ()),

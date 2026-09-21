@@ -1,3 +1,4 @@
+use log::warn;
 use std::path::Path;
 
 use super::PtyError;
@@ -109,6 +110,25 @@ impl TerminalSessionFailure {
 }
 
 impl TerminalSessions {
+    pub(super) async fn update_color_profile(
+        &self,
+        profile: openforge_session_host::TerminalColorProfile,
+    ) -> Result<(), String> {
+        let models = self
+            .sessions
+            .lock()
+            .await
+            .values()
+            .filter_map(|session| session.terminal_model.as_ref().map(std::sync::Arc::clone))
+            .collect::<Vec<_>>();
+        for model in models {
+            if let Err(error) = model.update_color_profile(profile) {
+                warn!("terminal model rejected committed colour profile: {error}");
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn new() -> Self {
         Self {
             pr_discovery: crate::github_runtime::task_pr_discovery::LocalDiscovery::default(),

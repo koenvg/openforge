@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OpenForgePackageMetadata, PluginThemeDefinition } from '@openforge-app/plugin-sdk'
+vi.mock('../ipc/terminal', () => ({ setTerminalColorProfile: vi.fn(async () => undefined) }))
 import {
   LIGHT_THEME,
   BUILTIN_LIGHT_THEME_ID,

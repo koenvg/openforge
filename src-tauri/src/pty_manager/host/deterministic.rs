@@ -67,6 +67,13 @@ pub(super) fn paused_host(
 }
 
 impl HostBackend for DeterministicBackend {
+    async fn set_terminal_color_profile(
+        &self,
+        _profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        Ok(())
+    }
+
     async fn inventory(&self) -> Result<Vec<BackendSession>, HostError> {
         Ok(self
             .sessions

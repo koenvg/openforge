@@ -61,6 +61,7 @@ struct Table {
     lifetime: DaemonLifetimeId,
     next_instance: u64,
     records: BTreeMap<u64, Record>,
+    color_profile: TerminalColorProfile,
 }
 #[derive(Clone)]
 pub(crate) struct Backend {
@@ -69,6 +70,32 @@ pub(crate) struct Backend {
     pub journal: SharedJournal,
 }
 impl Backend {
+    #[cfg(test)]
+    pub(crate) fn color_profiles(
+        &self,
+    ) -> Result<
+        (
+            TerminalColorProfile,
+            Vec<(PtyIdentity, TerminalColorProfile)>,
+        ),
+        HostError,
+    > {
+        let table = self.table()?;
+        Ok((
+            table.color_profile,
+            table
+                .records
+                .values()
+                .filter_map(|record| {
+                    record
+                        .process
+                        .as_ref()
+                        .map(|process| (record.metadata.pty.clone(), process.color_profile()))
+                })
+                .collect(),
+        ))
+    }
+
     pub fn new(
         installation: InstallationId,
         lifetime: DaemonLifetimeId,
@@ -80,6 +107,7 @@ impl Backend {
                 lifetime,
                 next_instance: (uuid::Uuid::new_v4().as_u128() as u64 & ((1 << 48) - 1)) | 1,
                 records: BTreeMap::new(),
+                color_profile: TerminalColorProfile::default(),
             })),
             agent_runtime,
             journal: Default::default(),
@@ -156,6 +184,22 @@ impl Backend {
     }
 }
 impl HostBackend for Backend {
+    async fn set_terminal_color_profile(
+        &self,
+        profile: TerminalColorProfile,
+    ) -> Result<(), HostError> {
+        let mut table = self.table()?;
+        table.color_profile = profile;
+        for record in table.records.values() {
+            if let Some(process) = &record.process {
+                if let Err(error) = process.update_color_profile(profile) {
+                    log::warn!("terminal model rejected committed colour profile: {error}");
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn inventory(&self) -> Result<Vec<BackendSession>, HostError> {
         Ok(self
             .table()?
@@ -203,8 +247,13 @@ impl HostBackend for Backend {
             .prepare(&mut prepared, pty.clone())
             .map_err(HostError::from)?;
         let cwd = request.command.cwd.canonicalize().ok();
-        let process = Process::spawn(&prepared, pty.clone(), Arc::clone(&self.journal))
-            .map_err(HostError::from)?;
+        let process = Process::spawn(
+            &prepared,
+            pty.clone(),
+            Arc::clone(&self.journal),
+            table.color_profile,
+        )
+        .map_err(HostError::from)?;
         let metadata = Session {
             pty,
             session_key: key,

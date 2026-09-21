@@ -4,10 +4,31 @@ import type { TerminalViewTheme } from './terminalView'
 export type ThemeMode = 'light' | 'dark'
 export type TerminalThemePalette = Readonly<Required<TerminalViewTheme>>
 
+export interface TerminalRgbColor {
+  readonly red: number
+  readonly green: number
+  readonly blue: number
+}
+
+export interface TerminalColorProfile {
+  readonly version: 1
+  readonly background: TerminalRgbColor
+  readonly foreground: TerminalRgbColor
+  readonly cursor: TerminalRgbColor
+  readonly ansiColors: readonly TerminalRgbColor[]
+}
+
 export interface TerminalThemeSnapshot {
   readonly appearance: ThemeMode
   readonly terminalTheme: TerminalThemePalette
+  readonly colorProfile: TerminalColorProfile
 }
+
+const ANSI_THEME_KEYS = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
+  'brightMagenta', 'brightCyan', 'brightWhite',
+] as const satisfies readonly (keyof TerminalThemePalette)[]
 
 const TERMINAL_THEME_FALLBACKS = {
   light: {
@@ -64,12 +85,60 @@ const TERMINAL_THEME_SNAPSHOTS: Readonly<Record<ThemeMode, TerminalThemeSnapshot
   light: Object.freeze({
     appearance: 'light',
     terminalTheme: Object.freeze({ ...TERMINAL_THEME_FALLBACKS.light }),
+    colorProfile: profile(TERMINAL_THEME_FALLBACKS.light),
   }),
   dark: Object.freeze({
     appearance: 'dark',
     terminalTheme: Object.freeze({ ...TERMINAL_THEME_FALLBACKS.dark }),
+    colorProfile: profile(TERMINAL_THEME_FALLBACKS.dark),
   }),
 })
+
+function profile(theme: TerminalThemePalette): TerminalColorProfile {
+  return Object.freeze({
+    version: 1,
+    background: rgb(theme.background),
+    foreground: rgb(theme.foreground),
+    cursor: rgb(theme.cursor),
+    ansiColors: Object.freeze(ANSI_THEME_KEYS.map(name => rgb(theme[name]))),
+  })
+}
+
+/**
+ * Makes the published RGB profile authoritative for every core colour xterm
+ * renders. Selection and cursor-accent colours remain renderer-only tokens.
+ */
+export function getTerminalViewTheme(snapshot: TerminalThemeSnapshot): TerminalThemePalette {
+  if (snapshot.colorProfile.ansiColors.length < ANSI_THEME_KEYS.length) {
+    throw new Error('terminal colour profile must define the 16 core ANSI colours')
+  }
+  return Object.freeze({
+    ...snapshot.terminalTheme,
+    background: hex(snapshot.colorProfile.background),
+    foreground: hex(snapshot.colorProfile.foreground),
+    cursor: hex(snapshot.colorProfile.cursor),
+    ...Object.fromEntries(ANSI_THEME_KEYS.map((key, index) => [
+      key,
+      hex(snapshot.colorProfile.ansiColors[index]),
+    ])),
+  }) as TerminalThemePalette
+}
+
+function rgb(value: string): TerminalRgbColor {
+  const match = /^#([0-9a-f]{6})$/i.exec(value)
+  if (!match) throw new Error(`terminal fallback colour must be six-digit hex: ${value}`)
+  const number = Number.parseInt(match[1], 16)
+  return Object.freeze({
+    red: number >> 16,
+    green: (number >> 8) & 0xFF,
+    blue: number & 0xFF,
+  })
+}
+
+function hex(color: TerminalRgbColor): string {
+  const channel = (value: number) => value.toString(16).padStart(2, '0').toUpperCase()
+  return `#${channel(color.red)}${channel(color.green)}${channel(color.blue)}`
+}
 
 export function getTerminalThemeSnapshot(appearance: ThemeMode): TerminalThemeSnapshot {
   return TERMINAL_THEME_SNAPSHOTS[appearance]

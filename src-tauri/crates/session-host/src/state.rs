@@ -14,6 +14,7 @@ pub(super) enum Mutation {
     Spawn(SpawnRequest),
     Terminate(PtyIdentity),
     Io(IoRequest),
+    SetTerminalColorProfile(TerminalColorProfile),
 }
 
 #[derive(Clone, Serialize, Deserialize)]

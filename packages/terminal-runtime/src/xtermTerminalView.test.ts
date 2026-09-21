@@ -177,7 +177,15 @@ describe('xterm TerminalView adapter', () => {
     view.onUserInput(onInput)
     const onXtermData = mocks.terminal.onData.mock.calls[0]?.[0] as (data: string) => void
 
-    onXtermData('\u001b[1;1R')
+    for (const reply of [
+      '\u001b[1;1R',
+      '\u001b[?1;2c',
+      '\u001bP1$r0m\u001b\\',
+      '\u001b]4;1;rgb:ffff/0000/0000\u001b\\',
+      '\u001b]10;rgb:ffff/ffff/ffff\u0007',
+      '\u001b]11;rgb:0000/0000/0000\u001b\\',
+      '\u001b]12;rgb:ffff/ffff/ffff\u001b\\',
+    ]) onXtermData(reply)
     onXtermData('typed input')
 
     expect(onInput).toHaveBeenCalledOnce()

@@ -14,8 +14,8 @@ pub use messages::*;
 mod replacement;
 pub use replacement::*;
 
-// v3 exposes the immutable spawn directory for verified task discovery after reconnect.
-pub const VERSION: u32 = 3;
+// v4 adds the installation-scoped terminal colour profile mutation.
+pub const VERSION: u32 = 4;
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]

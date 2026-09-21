@@ -5,6 +5,165 @@ use std::panic::AssertUnwindSafe;
 
 const PTY_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
+#[tokio::test]
+async fn publishes_a_validated_terminal_color_profile_to_the_manager() {
+    let (state, _temp_dir) = test_state("app_invoke_terminal_color_profile");
+    let profile = openforge_session_host::TerminalColorProfile {
+        foreground: openforge_session_host::TerminalRgbColor::new(1, 2, 3),
+        ..Default::default()
+    };
+
+    let result = invoke_ok(
+        &state,
+        "set_terminal_color_profile",
+        serde_json::json!({ "profile": profile }),
+    )
+    .await;
+
+    assert!(result.is_null());
+    assert_eq!(
+        state
+            .pty_manager
+            .as_ref()
+            .expect("PTY manager")
+            .terminal_color_profile(),
+        profile
+    );
+}
+
+#[tokio::test]
+async fn live_shell_answers_updated_theme_queries_and_recovers_with_stable_identity() {
+    use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
+
+    let (mut state, temp_dir) = test_state("app_invoke_live_terminal_theme_profile");
+    let manager = state.pty_manager.as_mut().expect("PTY manager");
+    manager.set_test_shell_program("/bin/cat");
+    manager.set_test_environment_variable("HOME", temp_dir.path().to_string_lossy());
+    manager.set_test_environment_variable("ZDOTDIR", temp_dir.path().to_string_lossy());
+    manager.set_test_environment_variable("ENV", "/dev/null");
+    manager.set_test_environment_variable("HISTFILE", "/dev/null");
+    let shell_session_key = "T-theme-profile-shell-0";
+
+    let profiles = [
+        ("light", [0x11, 0x22, 0x33, 0x44]),
+        ("dark", [0x55, 0x66, 0x77, 0x88]),
+        ("contributed", [0x99, 0xAA, 0xBB, 0xCC]),
+    ]
+    .map(|(name, channels)| {
+        let mut profile = TerminalColorProfile {
+            foreground: TerminalRgbColor::new(channels[0], 1, 2),
+            background: TerminalRgbColor::new(channels[1], 3, 4),
+            cursor: TerminalRgbColor::new(channels[2], 5, 6),
+            ..Default::default()
+        };
+        profile.ansi_colors[1] = TerminalRgbColor::new(channels[3], 7, 8);
+        (name, profile)
+    });
+
+    invoke_ok(
+        &state,
+        "set_terminal_color_profile",
+        json!({ "profile": profiles[0].1 }),
+    )
+    .await;
+    let instance_id = invoke_ok(
+        &state,
+        "pty_spawn_shell",
+        json!({
+            "taskId": "T-theme-profile",
+            "cwd": temp_dir.path(),
+            "cols": 80,
+            "rows": 24,
+            "terminalIndex": 0,
+        }),
+    )
+    .await;
+
+    with_pty_cleanup(
+        async {
+            for (name, profile) in profiles {
+                invoke_ok(
+                    &state,
+                    "set_terminal_color_profile",
+                    json!({ "profile": profile }),
+                )
+                .await;
+                let mut queries = String::from(
+                    "\u{1b}]110\u{7}\u{1b}]111\u{7}\u{1b}]112\u{7}\u{1b}]104\u{7}\u{1b}]10;?\u{7}\u{1b}]11;?\u{7}\u{1b}]12;?\u{7}",
+                );
+                for index in 0..16 {
+                    queries.push_str(&format!("\u{1b}]4;{index};?\u{7}"));
+                }
+                queries.push('\n');
+                invoke_ok(
+                    &state,
+                    "pty_write",
+                    json!({
+                        "shellSessionKey": shell_session_key,
+                        "data": queries,
+                    }),
+                )
+                .await;
+
+                let mut expected = vec![
+                    format!("rgb:{0:02x}{0:02x}/0101/0202", profile.foreground.red),
+                    format!("rgb:{0:02x}{0:02x}/0303/0404", profile.background.red),
+                    format!("rgb:{0:02x}{0:02x}/0505/0606", profile.cursor.red),
+                ];
+                expected.extend(profile.ansi_colors.iter().enumerate().map(|(index, color)| {
+                    format!(
+                        "4;{index};rgb:{red:02x}{red:02x}/{green:02x}{green:02x}/{blue:02x}{blue:02x}",
+                        red = color.red,
+                        green = color.green,
+                        blue = color.blue,
+                    )
+                }));
+                let portable_expected = [&expected[0], &expected[1], &expected[2], &expected[4]];
+                let recovery = tokio::time::timeout(Duration::from_secs(10), async {
+                    loop {
+                        let replay = invoke_ok(
+                            &state,
+                            "get_pty_buffer",
+                            json!({ "shellSessionKey": shell_session_key }),
+                        )
+                        .await;
+                        assert_eq!(replay["instanceId"], instance_id, "{name} changed PTY identity");
+                        let compatibility = replay["snapshot"]["compatibilityData"]
+                            .as_str()
+                            .and_then(|value| base64::engine::general_purpose::STANDARD.decode(value).ok())
+                            .unwrap_or_default();
+                        let portable = replay["snapshot"]["data"]
+                            .as_str()
+                            .and_then(|value| base64::engine::general_purpose::STANDARD.decode(value).ok())
+                            .unwrap_or_default();
+                        if expected.iter().all(|needle| {
+                            compatibility.windows(needle.len()).any(|part| part == needle.as_bytes())
+                        }) && portable_expected.iter().all(|needle| {
+                            portable.windows(needle.len()).any(|part| part == needle.as_bytes())
+                        }) {
+                            break replay;
+                        }
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                })
+                .await
+                .unwrap_or_else(|_| panic!("{name} profile replies did not reach live output and recovery"));
+                assert_eq!(recovery["isLive"], true);
+                assert_eq!(recovery["snapshot"]["instanceId"], instance_id);
+            }
+        },
+        async {
+            state
+                .pty_manager
+                .as_ref()
+                .expect("PTY manager")
+                .kill_shells_for_task("T-theme-profile")
+                .await
+        },
+    )
+    .await;
+}
+
 async fn with_pty_cleanup<E: std::fmt::Display>(
     behavior: impl std::future::Future<Output = ()>,
     cleanup: impl std::future::Future<Output = Result<(), E>>,

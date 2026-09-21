@@ -19,6 +19,7 @@ const hoistedTerminalMocks = vi.hoisted(() => ({
     cols: number
     rows: number
     options: Record<string, unknown>
+    constructorOptions: Record<string, unknown>
   }>,
 }))
 
@@ -48,7 +49,7 @@ export const xtermAddonMockState = {
 }
 
 vi.mock('@xterm/xterm', () => ({
-  Terminal: vi.fn(function Terminal() {
+  Terminal: vi.fn(function Terminal(options: Record<string, unknown> = {}) {
     const loadedAddons: Array<{ dispose?: () => void }> = []
     const terminal = {
       write: vi.fn((_data: string | Uint8Array, callback?: () => void) => callback?.()),
@@ -75,7 +76,8 @@ vi.mock('@xterm/xterm', () => ({
       attachCustomKeyEventHandler: vi.fn(),
       cols: 80,
       rows: 24,
-      options: {},
+      options: { ...options },
+      constructorOptions: options,
     }
     hoistedTerminalMocks.instances.push(terminal)
     return terminal

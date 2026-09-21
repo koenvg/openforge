@@ -6,6 +6,7 @@ use super::checkpoint::{RetainedChange, TerminalModelCheckpoint};
 use super::event_state::TerminalModelDiagnostic;
 use super::event_state::{PortableTerminalSnapshot, TerminalModelEventSink, TerminalModelState};
 use log::{info, warn};
+use openforge_session_host::TerminalColorProfile;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -95,6 +96,10 @@ enum TerminalModelCommand {
         cols: u16,
         rows: u16,
     },
+    UpdateColorProfile {
+        profile: TerminalColorProfile,
+        response: mpsc::SyncSender<Result<(), String>>,
+    },
     PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
     #[allow(dead_code, reason = "Requested by the daemon's shared-source build")]
     Checkpoint(mpsc::SyncSender<Result<TerminalModelCheckpoint, String>>),
@@ -102,6 +107,8 @@ enum TerminalModelCommand {
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     #[cfg(test)]
     PortableVt(mpsc::SyncSender<Result<Vec<u8>, String>>),
+    #[cfg(test)]
+    ColorProfile(mpsc::SyncSender<TerminalColorProfile>),
     Shutdown,
 }
 
@@ -376,6 +383,29 @@ impl TerminalModelSession {
         }
     }
 
+    pub(crate) fn update_color_profile(&self, profile: TerminalColorProfile) -> Result<(), String> {
+        if self.state.is_disabled() {
+            return Err("terminal model is disabled".to_string());
+        }
+        let (response_tx, response_rx) = mpsc::sync_channel(1);
+        let command = TerminalModelCommand::UpdateColorProfile {
+            profile,
+            response: response_tx,
+        };
+        if let Err(error) = send_command_with_timeout(&self.tx, command) {
+            self.state.disable_without_blocking_event_sink(
+                &self.session_key,
+                self.instance_id,
+                "update-color-profile",
+                format!("failed to queue colour profile update: {error}"),
+            );
+            return Err(error);
+        }
+        response_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .map_err(|error| format!("terminal colour profile update failed: {error}"))?
+    }
+
     pub(crate) fn portable_snapshot(&self) -> Result<PortableTerminalSnapshot, String> {
         request_portable_snapshot(&self.tx, &self.state)
     }
@@ -388,6 +418,16 @@ impl TerminalModelSession {
     #[cfg(test)]
     pub(crate) fn portable_vt(&self) -> Result<Vec<u8>, String> {
         self.request(TerminalModelCommand::PortableVt)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn color_profile(&self) -> TerminalColorProfile {
+        let (response_tx, response_rx) = mpsc::sync_channel(1);
+        send_command_with_timeout(&self.tx, TerminalModelCommand::ColorProfile(response_tx))
+            .expect("test profile request should enter the model queue");
+        response_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("test profile request should cross the model actor")
     }
 
     #[cfg(test)]
@@ -572,7 +612,8 @@ fn run_worker(
                     panic!("injected terminal model worker panic");
                 }
                 super::super::TerminalModelTestFault::None
-                | super::super::TerminalModelTestFault::CreateFailure => {}
+                | super::super::TerminalModelTestFault::CreateFailure
+                | super::super::TerminalModelTestFault::ColorProfileUpdateFailure => {}
             }
         }
         if state.is_disabled() {
@@ -606,6 +647,36 @@ fn run_worker(
                     );
                 }
                 result
+            }
+            TerminalModelCommand::UpdateColorProfile { profile, response } => {
+                #[cfg(test)]
+                let result = if matches!(
+                    &test_fault,
+                    super::super::TerminalModelTestFault::ColorProfileUpdateFailure
+                ) {
+                    Err("injected terminal colour profile update failure".to_string())
+                } else {
+                    model.update_color_profile(profile).map_err(model_error)
+                };
+                #[cfg(not(test))]
+                let result = model.update_color_profile(profile).map_err(model_error);
+
+                match result {
+                    Ok(()) => {
+                        TerminalModelCheckpoint::record_change(
+                            &mut retained_checkpoint,
+                            &model,
+                            || RetainedChange::ColorProfile { profile },
+                        );
+                        let _ = response.send(Ok(()));
+                    }
+                    Err(error) => {
+                        let _ = response.send(Err(error.clone()));
+                        state.disable(&session_key, instance_id, "update-color-profile", error);
+                        return;
+                    }
+                }
+                continue;
             }
             TerminalModelCommand::Checkpoint(response) => {
                 let result = TerminalModelCheckpoint::capture(
@@ -652,6 +723,11 @@ fn run_worker(
             TerminalModelCommand::PortableVt(response) => {
                 let result = model.format_portable_vt().map_err(model_error);
                 let _ = response.send(result);
+                continue;
+            }
+            #[cfg(test)]
+            TerminalModelCommand::ColorProfile(response) => {
+                let _ = response.send(model.color_profile());
                 continue;
             }
             TerminalModelCommand::Shutdown => return,

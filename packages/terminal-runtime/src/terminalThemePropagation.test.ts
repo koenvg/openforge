@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TerminalSessionCoordinator } from './terminalSessionCoordinator'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import type { TerminalThemeSnapshot } from './theme'
+
 function createCoordinator(): TerminalSessionCoordinator {
   return { setTheme: vi.fn() } as unknown as TerminalSessionCoordinator
 }
@@ -20,11 +21,31 @@ describe('terminal theme propagation', () => {
         brightBlack: '#555555', brightRed: '#ff5555', brightGreen: '#55ff55', brightYellow: '#ffff55',
         brightBlue: '#5555ff', brightMagenta: '#ff55ff', brightCyan: '#55ffff', brightWhite: '#ffffff',
       },
+      colorProfile: {
+        version: 1,
+        background: { red: 1, green: 2, blue: 3 },
+        foreground: { red: 254, green: 253, blue: 252 },
+        cursor: { red: 4, green: 5, blue: 6 },
+        ansiColors: Array.from({ length: 16 }, (_, index) => ({
+          red: index,
+          green: index + 16,
+          blue: index + 32,
+        })),
+      },
     }
 
     applyTerminalTheme([first, second], snapshot)
 
-    expect(first.setTheme).toHaveBeenCalledWith(snapshot.terminalTheme)
-    expect(second.setTheme).toHaveBeenCalledWith(snapshot.terminalTheme)
+    const applied = vi.mocked(first.setTheme).mock.calls[0][0]
+    expect(second.setTheme).toHaveBeenCalledWith(applied)
+    expect(applied).toMatchObject({
+      background: '#010203',
+      foreground: '#FEFDFC',
+      cursor: '#040506',
+      black: '#001020',
+      red: '#011121',
+      brightWhite: '#0F1F2F',
+      selectionBackground: '#112233',
+    })
   })
 })

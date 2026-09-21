@@ -1,10 +1,18 @@
-import type { TerminalImageProtocol, TerminalResizeAttachment } from '@openforge-app/terminal-runtime'
+import type {
+  TerminalColorProfile,
+  TerminalImageProtocol,
+  TerminalResizeAttachment,
+} from '@openforge-app/terminal-runtime'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { DesktopPtyBufferState } from '../desktopTerminalTransport'
 import type { RestartTerminalFence, RestartTerminalInventory } from '../../electron/restartWorkspace'
 
 export async function getRestartTerminalInventory(): Promise<RestartTerminalInventory> {
   return invoke('get_restart_terminal_inventory')
+}
+
+export async function setTerminalColorProfile(profile: TerminalColorProfile): Promise<void> {
+  return invoke('set_terminal_color_profile', { profile })
 }
 
 export async function spawnShellPty(

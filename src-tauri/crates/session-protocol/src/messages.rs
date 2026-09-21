@@ -1,6 +1,6 @@
 pub use openforge_session_host::{
     Controller, InstallationId, IoAction, OperationId, PreparedCommand, PtyIdentity, SpawnRequest,
-    TerminalOwner,
+    TerminalColorProfile, TerminalOwner,
 };
 use serde::{Deserialize, Serialize};
 pub type ShellCommand = SpawnRequest;
@@ -82,6 +82,11 @@ pub enum Command {
     },
     Inventory {
         controller: Controller,
+    },
+    SetTerminalColorProfile {
+        controller: Controller,
+        operation: OperationId,
+        profile: TerminalColorProfile,
     },
     ShutdownEmpty {
         controller: Controller,

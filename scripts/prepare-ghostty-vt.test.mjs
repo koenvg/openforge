@@ -1,8 +1,65 @@
 import { describe, expect, it, vi } from 'vitest'
-import { extractPackageArchive, fetchWithRetry, prepareRustDependencies, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  enqueueDependencies,
+  extractPackageArchive,
+  fetchWithRetry,
+  prepareRustDependencies,
+  remoteDependencies,
+  tarExtractionArgs,
+} from './prepare-ghostty-vt.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 describe('Ghostty dependency preparation', () => {
+  it('keeps the first source discovered for a dependency hash', () => {
+    const pending = new Map([
+      ['shared-hash', 'https://deps.files.ghostty.org/shared.tar.gz'],
+    ])
+    const processed = new Set(['processed-hash'])
+
+    enqueueDependencies(pending, new Map([
+      ['shared-hash', 'git+https://github.com/example/shared#revision'],
+      ['new-hash', 'https://deps.files.ghostty.org/new.tar.gz'],
+      ['processed-hash', 'https://deps.files.ghostty.org/processed.tar.gz'],
+    ]), processed)
+
+    expect([...pending]).toEqual([
+      ['shared-hash', 'https://deps.files.ghostty.org/shared.tar.gz'],
+      ['new-hash', 'https://deps.files.ghostty.org/new.tar.gz'],
+    ])
+  })
+
+  it('includes bundled package dependencies without scanning nested test projects', () => {
+    const packageRoot = mkdtempSync(join(tmpdir(), 'openforge-ghostty-manifests-'))
+    try {
+      writeFileSync(join(packageRoot, 'build.zig.zon'), `
+        .url = "https://deps.files.ghostty.org/runtime.tar.gz",
+        .hash = "runtime-hash",
+      `)
+      const specRoot = join(packageRoot, 'spec')
+      mkdirSync(specRoot)
+      writeFileSync(join(specRoot, 'build.zig.zon'), `
+        .url = "https://github.com/example/benchmark/archive/v1.tar.gz",
+        .hash = "benchmark-hash",
+      `)
+      const bundledPackageRoot = join(packageRoot, 'pkg', 'runtime-library')
+      mkdirSync(bundledPackageRoot, { recursive: true })
+      writeFileSync(join(bundledPackageRoot, 'build.zig.zon'), `
+        .url = "https://deps.files.ghostty.org/bundled-runtime.tar.gz",
+        .hash = "bundled-runtime-hash",
+      `)
+
+      expect([...remoteDependencies(packageRoot, { includeBundledPackages: true })]).toEqual([
+        ['runtime-hash', 'https://deps.files.ghostty.org/runtime.tar.gz'],
+        ['bundled-runtime-hash', 'https://deps.files.ghostty.org/bundled-runtime.tar.gz'],
+      ])
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true })
+    }
+  })
+
   it('allows cold-cache fetching even when the caller keeps builds offline', () => {
     vi.stubEnv('CARGO_NET_OFFLINE', 'true')
     try {
@@ -11,27 +68,31 @@ describe('Ghostty dependency preparation', () => {
         if (options.env.CARGO_NET_OFFLINE !== 'false') throw new Error('network still disabled')
       })
       expect(() => prepareRustDependencies({ runCommand })).not.toThrow()
-      expect(runCommand).toHaveBeenCalledTimes(4)
+      expect(runCommand).toHaveBeenCalledTimes(6)
       expect(process.env.CARGO_NET_OFFLINE).toBe('true')
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
-  it('never requests an online fetch when both lockfiles are cached', () => {
+  it('never requests an online fetch when all lockfiles are cached', () => {
     const runCommand = vi.fn()
     prepareRustDependencies({ runCommand })
-    expect(runCommand).toHaveBeenCalledTimes(2)
+    expect(runCommand).toHaveBeenCalledTimes(3)
     for (const [, args] of runCommand.mock.calls) expect(args).toContain('--offline')
   })
 
-  it('prefetches the daemon lockfile before CI switches Cargo offline', () => {
+  it('prefetches standalone lockfiles before CI switches Cargo offline', () => {
     const runCommand = vi.fn((_command, args) => {
       if (args.includes('--offline')) throw new Error('cold cache')
     })
     prepareRustDependencies({ runCommand })
     const layout = resolveRustSidecarLayout()
-    for (const manifest of [layout.manifestPath, layout.sessionCrates.daemon.manifestPath]) {
+    for (const manifest of [
+      layout.manifestPath,
+      layout.sessionCrates.daemon.manifestPath,
+      join(layout.backendCrateRootPath, 'ghostty-compat', 'Cargo.toml'),
+    ]) {
       expect(runCommand).toHaveBeenCalledWith('cargo', ['fetch', '--locked', '--manifest-path', manifest], expect.any(Object))
     }
   })

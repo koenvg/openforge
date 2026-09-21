@@ -2,27 +2,34 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import { createThemeRuntime } from './theme'
 import { DARK_THEME, LIGHT_THEME } from './themeContract'
+import {
+  resolveTerminalThemeSnapshot,
+  TerminalThemeResolutionError,
+} from './terminalThemePresentation'
 
 vi.mock('./ipc', () => ({ getConfig: vi.fn(), setConfig: vi.fn() }))
 
 const pluginId = 'acme.themes'
 const themeId = `${pluginId}:ink`
 
-function runtime() {
+function runtime(overrides: Partial<Parameters<typeof createThemeRuntime>[0]> = {}) {
   const root = document.createElement('main')
   document.body.append(root)
   const persistThemeId = vi.fn(async (_id: string) => undefined)
+  const publishTerminalColorProfile = vi.fn(async () => undefined)
   const host = createThemeRuntime({
     root,
     getStoredThemeId: async () => null,
     persistThemeId,
+    publishTerminalColorProfile,
+    ...overrides,
   })
   const registration = host.registry.registerContributedTheme({
     ...DARK_THEME,
     id: themeId,
     stylesheets: ['./dist/ink.css', 'dist/accents.css'],
   }, { pluginId, generation: 7 })
-  return { ...host, root, persistThemeId, registration }
+  return { ...host, root, persistThemeId, publishTerminalColorProfile, registration }
 }
 
 function links(): HTMLLinkElement[] {
@@ -40,6 +47,25 @@ afterEach(() => {
 })
 
 describe('selected theme stylesheets', () => {
+  it('activates contributed stylesheets before resolving and publishing terminal RGB', async () => {
+    let root!: HTMLElement
+    const publishTerminalColorProfile = vi.fn(async () => {
+      expect(root.dataset.theme).toBe(themeId)
+      expect(links().every(link => link.media === 'all')).toBe(true)
+    })
+    const fixture = runtime({ publishTerminalColorProfile })
+    root = fixture.root
+
+    const selection = fixture.registry.selectTheme(themeId)
+    for (const link of await candidates()) link.dispatchEvent(new Event('load'))
+    await selection
+
+    expect(publishTerminalColorProfile).toHaveBeenCalledOnce()
+    expect(publishTerminalColorProfile).toHaveBeenCalledWith(
+      get(fixture.terminalThemePresentation).colorProfile,
+    )
+  })
+
   it('resolves plugin assets and keeps candidates inactive until all files can commit with tokens and identity', async () => {
     const { registry, root, persistThemeId } = runtime()
     expect(links()).toEqual([])
@@ -158,6 +184,43 @@ describe('selected theme stylesheets', () => {
     await next
     expect(root.dataset.theme).toBe('other.theme:paper')
     expect(candidate.media).toBe('all')
+  })
+
+  it('republishes built-in light when an active contributed theme is removed', async () => {
+    const fixture = runtime()
+    const first = fixture.registry.selectTheme(themeId)
+    for (const link of await candidates()) link.dispatchEvent(new Event('load'))
+    await first
+    fixture.publishTerminalColorProfile.mockClear()
+
+    await fixture.registration.dispose()
+
+    expect(fixture.publishTerminalColorProfile).toHaveBeenCalledOnce()
+    expect(fixture.publishTerminalColorProfile).toHaveBeenCalledWith(
+      resolveTerminalThemeSnapshot(LIGHT_THEME).colorProfile,
+    )
+  })
+
+  it('uses the unavailable-theme fallback when authority colours cannot resolve', async () => {
+    const fixture = runtime({
+      resolveTerminalTheme: (theme) => {
+        if (theme.id === themeId) throw new TerminalThemeResolutionError('var(--missing)')
+        return resolveTerminalThemeSnapshot(theme)
+      },
+    })
+
+    const selection = fixture.registry.selectTheme(themeId)
+    for (const link of await candidates()) link.dispatchEvent(new Event('load'))
+    const selected = await selection
+
+    expect(selected.id).toBe(LIGHT_THEME.id)
+    expect(get(fixture.registry.selectedTheme).id).toBe(LIGHT_THEME.id)
+    expect(fixture.root.dataset.theme).toBe(LIGHT_THEME.id)
+    expect(links()).toEqual([])
+    expect(fixture.persistThemeId).toHaveBeenLastCalledWith(LIGHT_THEME.id)
+    expect(fixture.publishTerminalColorProfile).toHaveBeenCalledWith(
+      resolveTerminalThemeSnapshot(LIGHT_THEME).colorProfile,
+    )
   })
 
   it('fails a stalled stylesheet with the plugin owner instead of blocking selection forever', async () => {

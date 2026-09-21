@@ -43,10 +43,16 @@ pub struct Process {
 }
 
 impl Process {
+    #[cfg(test)]
+    pub(crate) fn color_profile(&self) -> TerminalColorProfile {
+        self.model.color_profile()
+    }
+
     pub fn spawn(
         command: &ShellCommand,
         pty: PtyIdentity,
         journal: SharedJournal,
+        color_profile: TerminalColorProfile,
     ) -> Result<Self, Error> {
         let pair = native_pty_system()
             .openpty(size(command.columns, command.rows))
@@ -65,7 +71,8 @@ impl Process {
         let writer = Arc::new(Mutex::new(InputWriter::new(
             pair.master.take_writer().map_err(host_error)?,
         )));
-        let mut options = TerminalModelOptions::new(command.columns, command.rows);
+        let mut options = TerminalModelOptions::new(command.columns, command.rows)
+            .with_color_profile(color_profile);
         options.max_scrollback_bytes = 256 * 1024;
         let (model, feeder) = TerminalModelSession::start_with_event_sink(
             command.owner.session_key(),
@@ -203,6 +210,12 @@ impl Process {
                 Ok(())
             }
         }
+    }
+
+    pub fn update_color_profile(&self, profile: TerminalColorProfile) -> Result<(), Error> {
+        self.model
+            .update_color_profile(profile)
+            .map_err(Error::Host)
     }
 
     pub fn recover(&self, cursor: u64) -> Result<Recovery, Error> {

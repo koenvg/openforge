@@ -31,6 +31,8 @@ pub(crate) struct BackendCheckpoint {
     next_instance: u64,
     records: Vec<SavedRecord>,
     journal: Journal,
+    #[serde(default)]
+    color_profile: TerminalColorProfile,
 }
 impl BackendCheckpoint {
     pub fn descriptors(&self) -> Vec<i32> {
@@ -100,6 +102,7 @@ impl BackendCheckpoint {
             return Err(Error::Capacity);
         }
         self.journal.validate()?;
+        self.color_profile.validate().map_err(Error::from)?;
         let mut instances = BTreeSet::new();
         let mut descriptors = BTreeSet::new();
         let mut bytes = 0usize;
@@ -218,6 +221,7 @@ impl Backend {
             next_instance: table.next_instance,
             records,
             journal: lock(&self.journal).checkpoint()?,
+            color_profile: table.color_profile,
         };
         saved.validate(&table.installation, &table.lifetime)?;
         Ok((saved, pauses.into_iter().map(|(_, pause)| pause).collect()))
@@ -256,6 +260,7 @@ impl Backend {
                 lifetime: saved.lifetime,
                 next_instance: saved.next_instance,
                 records,
+                color_profile: saved.color_profile,
             })),
             agent_runtime,
             journal,

@@ -2,7 +2,12 @@ import { createCapturedEventRecorder } from './capturedEventRecorder'
 import { getTerminalConformanceRenderer } from './rendererRegistry'
 import { getPresentationRecordings, terminalModelRecordingCorpus } from '../../src/terminalPresentationCorpus'
 import { preloadTerminalFonts } from '../../src/terminalOptions'
-import { getTerminalTheme, type ThemeMode } from '../../src/theme'
+import {
+  getTerminalTheme,
+  getTerminalThemeSnapshot,
+  getTerminalViewTheme,
+  type ThemeMode,
+} from '../../src/theme'
 import type {
   TerminalView,
   TerminalViewPresentationEvidence,
@@ -311,6 +316,48 @@ async function reconnect(id: string): Promise<PlayResult> {
   return { evidence, presentation: activeView.capturePresentation() }
 }
 
+async function runTerminalColourProfileProbe() {
+  await reset({ surface: 'agent', theme: 'light' })
+  const activeView = requireView()
+  const light = getTerminalThemeSnapshot('light')
+  const dark = getTerminalThemeSnapshot('dark')
+  const startupQueries = [
+    '\u001b]10;?\u0007',
+    '\u001b]11;?\u0007',
+    '\u001b]12;?\u0007',
+    ...Array.from({ length: 16 }, (_, index) => `\u001b]4;${index};?\u0007`),
+  ]
+
+  activeView.bootstrap(startupQueries.join(''), ptyInstanceId, 0)
+  const inputEventsAfterQueries = inputRecorder.snapshot()
+  activeView.setTheme(getTerminalViewTheme(dark))
+  const paletteLine = Array.from({ length: 16 }, (_, index) => (
+    `\u001b[${index < 8 ? 30 + index : 90 + index - 8}m${index.toString(16).toUpperCase()}`
+  )).join('') + '\u001b[0m'
+  outputSequence += 1
+  activeView.writeLive({ data: paletteLine, ptyInstanceId, sequence: outputSequence })
+  const liveEvidence = await activeView.drainPresentation()
+  const livePresentation = activeView.capturePresentation()
+  await activeView.replaceSnapshot({
+    data: paletteLine,
+    continuationData: new Uint8Array(),
+    ptyInstanceId,
+    sequence: 0,
+  })
+  const recoveryEvidence = await activeView.drainPresentation()
+
+  return {
+    queryCount: startupQueries.length,
+    lightProfile: light.colorProfile,
+    darkProfile: dark.colorProfile,
+    inputEventsAfterQueries,
+    liveEvidence,
+    recoveryEvidence,
+    livePresentation,
+    recoveryPresentation: activeView.capturePresentation(),
+  }
+}
+
 async function waitForInputCount(count: number): Promise<PlayResult> {
   const deadline = performance.now() + 3_000
   while (inputRecorder.snapshot().length < count) {
@@ -337,6 +384,7 @@ const api = {
   prepareConcurrentLifecycle,
   runConcurrentLifecycleCycle,
   reconnect,
+  runTerminalColourProfileProbe,
   focus: () => requireView().focus(),
   drain: () => requireView().drainPresentation(),
   capture: () => requireView().capturePresentation(),

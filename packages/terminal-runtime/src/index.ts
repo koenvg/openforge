@@ -87,6 +87,8 @@ export {
   themePresentation,
   type TerminalThemePalette,
   type TerminalThemeSnapshot,
+  type TerminalColorProfile,
+  type TerminalRgbColor,
   type ThemeMode,
 } from './theme'
 export {

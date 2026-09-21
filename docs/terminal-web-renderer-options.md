@@ -4,6 +4,8 @@ Research date: 2026-08-24
 
 > Historical renderer research. Current production authority is documented in [Terminal state and protocol-response paths](terminal-state-and-response-paths.md): Ghostty owns backend terminal state and replies while xterm remains the renderer.
 
+Current production theme updates also follow that authority boundary. The host resolves the active theme to one opaque sRGB profile, publishes it to Ghostty before Terminal Runtime observes the selection, and gives xterm the identical core colours. The same xterm view is recovered from Ghostty after a live update so program OSC overrides survive; xterm-generated query replies are discarded.
+
 ## Decision in one page
 
 OpenForge should not build a browser terminal renderer from scratch yet. There are now several credible web renderers built around native terminal engines, and official `libghostty-vt` has advanced far enough that it can supply the browser-side terminal model directly.

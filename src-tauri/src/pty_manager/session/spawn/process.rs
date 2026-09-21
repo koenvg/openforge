@@ -165,30 +165,8 @@ impl PtyManager {
                 PtyError::SpawnFailed(format!("Failed to start ordered PTY writer: {error}"))
             })?,
         );
-        let mut child = pair
-            .slave
-            .spawn_command(request.command)
-            .map_err(|error| PtyError::SpawnFailed(format!("Failed to spawn command: {error}")))?;
-        drop(pair.slave);
-
-        let pid = require_root_pid_or_cleanup(child.process_id(), &request.description, || {
-            let cleanup_result = child.kill();
-            let _ = child.try_wait();
-            cleanup_result
-        })?;
-        let managed_process = ManagedProcessIdentity::capture(pid).map_err(|error| {
-            let cleanup_error = force_kill_unverified_spawn(pid).err();
-            let _ = child.try_wait();
-            let cleanup_detail = cleanup_error
-                .map(|cleanup_error| format!("; emergency cleanup failed: {cleanup_error}"))
-                .unwrap_or_default();
-            PtyError::SpawnFailed(format!(
-                "Failed to capture managed process identity for {}: {error}{cleanup_detail}",
-                request.description
-            ))
-        })?;
-
-        let options = TerminalModelOptions::new(request.cols, request.rows);
+        let options = TerminalModelOptions::new(request.cols, request.rows)
+            .with_color_profile(self.terminal_color_profile());
         #[cfg(test)]
         let options = options.with_test_fault(self.take_terminal_model_test_fault());
         let failure_manager = self.clone();
@@ -237,6 +215,28 @@ impl PtyManager {
                 (None, None)
             }
         };
+        let mut child = pair
+            .slave
+            .spawn_command(request.command)
+            .map_err(|error| PtyError::SpawnFailed(format!("Failed to spawn command: {error}")))?;
+        drop(pair.slave);
+
+        let pid = require_root_pid_or_cleanup(child.process_id(), &request.description, || {
+            let cleanup_result = child.kill();
+            let _ = child.try_wait();
+            cleanup_result
+        })?;
+        let managed_process = ManagedProcessIdentity::capture(pid).map_err(|error| {
+            let cleanup_error = force_kill_unverified_spawn(pid).err();
+            let _ = child.try_wait();
+            let cleanup_detail = cleanup_error
+                .map(|cleanup_error| format!("; emergency cleanup failed: {cleanup_error}"))
+                .unwrap_or_default();
+            PtyError::SpawnFailed(format!(
+                "Failed to capture managed process identity for {}: {error}{cleanup_detail}",
+                request.description
+            ))
+        })?;
 
         Ok(SpawnedPty {
             reader,

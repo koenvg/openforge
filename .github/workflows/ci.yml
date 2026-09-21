@@ -185,6 +185,12 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

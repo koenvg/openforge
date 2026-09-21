@@ -15,6 +15,7 @@ mod managed_process;
 mod ordered_writer;
 mod pids;
 mod session;
+mod terminal_color_profile;
 mod terminal_model_bridge;
 
 #[cfg(test)]
@@ -131,6 +132,9 @@ pub struct PtyManager {
     terminal_sessions: TerminalSessions,
     pub(crate) daemon_shells: Option<daemon_shells::DaemonShells>,
     host_state: std::sync::Arc<tokio::sync::Mutex<host::HostState>>,
+    terminal_color_profile:
+        std::sync::Arc<std::sync::RwLock<openforge_session_host::TerminalColorProfile>>,
+    terminal_color_profile_path: std::sync::Arc<std::sync::Mutex<Option<PathBuf>>>,
     #[cfg(test)]
     sessions: PtySessions,
     pid_dir_override: Option<PathBuf>,
@@ -213,6 +217,41 @@ pub(crate) fn terminal_environment(
 }
 
 impl PtyManager {
+    pub(crate) fn terminal_color_profile(&self) -> openforge_session_host::TerminalColorProfile {
+        *self
+            .terminal_color_profile
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) async fn set_terminal_color_profile(
+        &self,
+        profile: openforge_session_host::TerminalColorProfile,
+    ) -> Result<(), String> {
+        profile.validate().map_err(|error| error.to_string())?;
+        let path = self
+            .terminal_color_profile_path
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(path) = path {
+            tokio::task::spawn_blocking(move || terminal_color_profile::store(&path, profile))
+                .await
+                .map_err(|error| error.to_string())??;
+        }
+        *self
+            .terminal_color_profile
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = profile;
+        self.terminal_sessions.update_color_profile(profile).await?;
+        if let Some(daemon) = &self.daemon_shells {
+            if let Err(error) = daemon.publish_color_profile(profile).await {
+                log::warn!("session daemon will retry committed colour profile: {error}");
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn configure_pr_discovery(
         &self,
         discovery: crate::github_runtime::task_pr_discovery::Discovery,
@@ -233,6 +272,15 @@ impl PtyManager {
     }
     pub fn new() -> Self {
         let terminal_sessions = TerminalSessions::new();
+        let profile_path = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
+            .map(PathBuf::from)
+            .map(|root| terminal_color_profile::path(&root));
+        let terminal_color_profile = std::sync::Arc::new(std::sync::RwLock::new(
+            profile_path
+                .as_deref()
+                .map(terminal_color_profile::load)
+                .unwrap_or_default(),
+        ));
         #[cfg(test)]
         let test_handles = terminal_sessions.test_handles();
         Self {
@@ -249,8 +297,12 @@ impl PtyManager {
             #[cfg(test)]
             pending_shell_spawns: test_handles.pending_shell_spawns,
             terminal_sessions,
-            daemon_shells: daemon_shells::DaemonShells::from_environment(),
+            daemon_shells: daemon_shells::DaemonShells::from_environment(std::sync::Arc::clone(
+                &terminal_color_profile,
+            )),
             host_state: std::sync::Arc::new(tokio::sync::Mutex::new(host::HostState::new())),
+            terminal_color_profile,
+            terminal_color_profile_path: std::sync::Arc::new(std::sync::Mutex::new(profile_path)),
             pid_dir_override: None,
             #[cfg(test)]
             terminal_model_test_fault: Arc::new(std::sync::Mutex::new(

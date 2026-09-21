@@ -22,7 +22,13 @@ fn abandoned_restore_does_not_consume_output_close_the_master_or_kill_the_servin
         instance: PtyInstanceId::new(1).unwrap(),
     };
     let journal = SharedJournal::default();
-    let mut process = Process::spawn(&command, pty, Arc::clone(&journal)).unwrap();
+    let mut process = Process::spawn(
+        &command,
+        pty,
+        Arc::clone(&journal),
+        TerminalColorProfile::default(),
+    )
+    .unwrap();
     wait_for_text(&process, b"READY");
     let pid = process.pid();
     let pause = process.pause().unwrap();

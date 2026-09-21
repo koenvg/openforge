@@ -6,6 +6,10 @@ use super::*;
 /// commands and preserve the existing terminal authority and process cleanup behavior.
 pub trait HostBackend: Send + Sync + Clone + 'static {
     fn inventory(&self) -> impl Future<Output = Result<Vec<BackendSession>, HostError>> + Send;
+    fn set_terminal_color_profile(
+        &self,
+        profile: TerminalColorProfile,
+    ) -> impl Future<Output = Result<(), HostError>> + Send;
     fn spawn_prepared(
         &self,
         request: &SpawnRequest,

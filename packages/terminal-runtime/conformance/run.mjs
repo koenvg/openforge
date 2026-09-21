@@ -8,6 +8,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import {
   assertPresentation,
+  assertTerminalColourProfileProbe,
   assertTerminalScreenshotCursorAtCell,
   assertTerminalScreenshotHasInk,
   comparePngBuffers,
@@ -150,6 +151,49 @@ async function runSemanticAndVisualMatrix(browser, report) {
       await harness.context.close()
     }
   }
+}
+
+async function runTerminalColourProfileConformance(browser, report) {
+  const harness = await openHarness(browser, { surface: 'agent', theme: 'light', dpr: 1 })
+  try {
+    const probe = await harness.page.evaluate(() => window.terminalConformance.runTerminalColourProfileProbe())
+    assertTerminalColourProfileProbe(probe)
+    recordCheck(report, 'renderer-terminal-colour-profile', {
+      queryCount: probe.queryCount,
+      liveEvidence: probe.liveEvidence,
+      recoveryEvidence: probe.recoveryEvidence,
+    })
+    if (harness.consoleErrors.length > 0) {
+      throw new Error(`browser console errors: ${harness.consoleErrors.join(' | ')}`)
+    }
+  } finally {
+    await harness.context.close()
+  }
+}
+
+function runNativeTerminalColourProfileConformance(report) {
+  const environment = { ...process.env }
+  for (const name of [
+    'OPENFORGE_AGENT_CONFIG',
+    'OPENFORGE_BACKEND_HOST',
+    'OPENFORGE_BACKEND_PORT',
+    'OPENFORGE_HTTP_PORT',
+    'OPENFORGE_PTY_INSTANCE_ID',
+    'OPENFORGE_TASK_ID',
+  ]) delete environment[name]
+  execFileSync(
+    'cargo',
+    [
+      'test',
+      '-p',
+      'openforge',
+      'app_invoke::tests::pty::live_shell_answers_updated_theme_queries_and_recovers_with_stable_identity',
+      '--',
+      '--exact',
+    ],
+    { cwd: join(repositoryRoot, 'src-tauri'), env: environment, stdio: 'inherit' },
+  )
+  recordCheck(report, 'native-terminal-colour-profile')
 }
 
 async function runConcurrentTerminalLifecycle(browser, report) {
@@ -427,12 +471,14 @@ const vite = await createServer({
 let browserServer
 let browser
 try {
+  runNativeTerminalColourProfileConformance(report)
   await vite.listen()
   browserServer = await chromium.launchServer({
     headless: true,
     args: ['--enable-precise-memory-info'],
   })
   browser = await chromium.connect(browserServer.wsEndpoint())
+  await runTerminalColourProfileConformance(browser, report)
   await runSemanticAndVisualMatrix(browser, report)
   await runConcurrentTerminalLifecycle(browser, report)
   await runInteractionAndRecovery(browser, report, browserServer.process()?.pid)

@@ -78,6 +78,7 @@ impl HostState {
                     IoAction::Write(data) => data.len() + 512,
                     IoAction::Resize { .. } => 512,
                 },
+                Mutation::SetTerminalColorProfile(_) => std::mem::size_of::<TerminalColorProfile>(),
             };
         }
         let retained_bytes =

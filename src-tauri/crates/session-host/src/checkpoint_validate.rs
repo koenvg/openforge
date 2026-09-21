@@ -93,10 +93,18 @@ impl Checkpoint {
                         _ => return Err(invalid()),
                     }
                 }
+                Mutation::SetTerminalColorProfile(profile) => {
+                    profile.validate().map_err(|_| invalid())?;
+                    std::mem::size_of::<TerminalColorProfile>()
+                }
             };
             match (request, result) {
                 (Mutation::Spawn(_), Ok(Receipt::Spawn(pty))) => identity(pty)?,
-                (Mutation::Terminate(_) | Mutation::Io(_), Ok(Receipt::Done)) | (_, Err(_)) => {}
+                (
+                    Mutation::Terminate(_) | Mutation::Io(_) | Mutation::SetTerminalColorProfile(_),
+                    Ok(Receipt::Done),
+                )
+                | (_, Err(_)) => {}
                 _ => return Err(invalid()),
             }
             retained_bytes = retained_bytes
