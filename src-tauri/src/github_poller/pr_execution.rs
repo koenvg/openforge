@@ -112,18 +112,20 @@ pub(super) async fn fetch_pr_comments_for_poll(
     pr: &PrRow,
     since: Option<&str>,
     fetch_comments: bool,
+    reviews: &Result<Vec<PrReview>, GitHubError>,
 ) -> Result<Vec<PrComment>, String> {
     if !fetch_comments {
         return Ok(Vec::new());
     }
 
     github_client
-        .get_pr_comments(
+        .get_pr_comments_with_collected_reviews(
             &pr.repo_owner,
             &pr.repo_name,
             pr.pr_number,
             github_token,
             since,
+            reviews,
         )
         .await
         .map_err(|e| sanitized_comment_fetch_error_message(&e))
@@ -143,12 +145,16 @@ pub(super) async fn poll_single_pr(
     fetch_comments: bool,
     verified_details: Option<crate::github_client::PullRequest>,
 ) -> PollSinglePrResult {
+    let reviews_result = github_client
+        .get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.pr_number, &github_token)
+        .await;
     let (comments, comment_error) = match fetch_pr_comments_for_poll(
         &github_client,
         &github_token,
         &pr,
         since.as_deref(),
         fetch_comments,
+        &reviews_result,
     )
     .await
     {
@@ -163,9 +169,9 @@ pub(super) async fn poll_single_pr(
         &github_token,
         &pr,
         graphql_snapshot.as_ref(),
-        old_mergeable,
-        old_mergeable_state,
+        (old_mergeable, old_mergeable_state),
         verified_details,
+        reviews_result,
     )
     .await;
     if rest_sources.pr_details_result.is_err()

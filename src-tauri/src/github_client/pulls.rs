@@ -90,6 +90,34 @@ fn review_body_comment(review: &PrReview) -> Option<PrComment> {
     })
 }
 
+fn append_review_body_comments(
+    all_comments: &mut Vec<PrComment>,
+    reviews: Result<&[PrReview], &GitHubError>,
+    pr_number: i64,
+    since: Option<&str>,
+) {
+    let reviews = reviews.unwrap_or_else(|error| {
+        warn!(
+            "[GitHub] Failed to fetch reviews for PR #{}: {}",
+            pr_number,
+            error.sanitized_log_message()
+        );
+        &[]
+    });
+
+    for review in reviews {
+        let Some(comment) = review_body_comment(review) else {
+            continue;
+        };
+        if !comment.created_at.is_empty()
+            && since.is_some_and(|timestamp| comment.created_at.as_str() < timestamp)
+        {
+            continue;
+        }
+        all_comments.push(comment);
+    }
+}
+
 impl GitHubClient {
     /// Fetch every open PR for a qualified head, including drafts and all authors.
     pub(crate) async fn open_prs_by_head(
@@ -200,6 +228,32 @@ impl GitHubClient {
         token: &str,
         since: Option<&str>,
     ) -> Result<Vec<PrComment>, GitHubError> {
+        self.collect_pr_comments(owner, repo, pr_number, token, since, None)
+            .await
+    }
+
+    pub(crate) async fn get_pr_comments_with_collected_reviews(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+        since: Option<&str>,
+        reviews: &Result<Vec<PrReview>, GitHubError>,
+    ) -> Result<Vec<PrComment>, GitHubError> {
+        self.collect_pr_comments(owner, repo, pr_number, token, since, Some(reviews))
+            .await
+    }
+
+    async fn collect_pr_comments(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+        since: Option<&str>,
+        collected_reviews: Option<&Result<Vec<PrReview>, GitHubError>>,
+    ) -> Result<Vec<PrComment>, GitHubError> {
         let mut review_comments_url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/comments?per_page=100",
             owner, repo, pr_number
@@ -234,38 +288,16 @@ impl GitHubClient {
             all_comments.push(comment.into_pr_comment());
         }
 
-        // Fetch review bodies (top-level summary comments from PR reviews).
-        // These are only accessible via /pulls/{number}/reviews and are NOT
-        // included in the review comments or issue comments endpoints.
-        let reviews = self
-            .get_pr_reviews(owner, repo, pr_number, token)
-            .await
-            .unwrap_or_else(|e| {
-                warn!(
-                    "[GitHub] Failed to fetch reviews for PR #{}: {}",
-                    pr_number,
-                    e.sanitized_log_message()
-                );
-                vec![]
-            });
-
-        for review in reviews {
-            let Some(comment) = review_body_comment(&review) else {
-                continue;
-            };
-            if !comment.created_at.is_empty() {
-                if let Some(ts) = since {
-                    if comment.created_at.as_str() < ts {
-                        continue;
-                    }
-                }
-            }
-            all_comments.push(comment);
+        // Review bodies are top-level summary comments exposed only by the reviews endpoint.
+        if let Some(reviews) = collected_reviews {
+            append_review_body_comments(&mut all_comments, reviews.as_deref(), pr_number, since);
+        } else {
+            let reviews = self.get_pr_reviews(owner, repo, pr_number, token).await;
+            append_review_body_comments(&mut all_comments, reviews.as_deref(), pr_number, since);
         }
 
         Ok(all_comments)
     }
-
     /// Return only complete, enriched search snapshots. Any search-page or detail
     /// failure returns an error so callers must not reconcile stale rows.
     /// GitHub limits Search to 1,000 matches; larger searches fail closed.
