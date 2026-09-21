@@ -22,6 +22,12 @@ export async function buildAndPackageElectronApp(options = {}) {
   const cargoArgs = cargoBuildTarget
     ? ['build', '--release', '--target', cargoBuildTarget]
     : ['build', '--release']
+  // whisper-rs-sys does not emit rerun-if-env-changed for its CMake overrides.
+  // Never ship cached host-specialized kernels after changing the CPU policy.
+  await runCommand('cargo', [
+    'clean', '--release', '-p', 'whisper-rs-sys',
+    ...(cargoBuildTarget ? ['--target', cargoBuildTarget] : []),
+  ], { cwd: rustSidecarLayout.backendCrateRootPath })
   await runCommand('cargo', cargoArgs, { cwd: rustSidecarLayout.backendCrateRootPath })
   await runCommand('cargo', [
     ...cargoArgs,

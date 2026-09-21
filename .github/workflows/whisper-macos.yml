@@ -1,0 +1,115 @@
+name: Whisper macOS compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.cargo/**'
+      - 'config/whisper-portable-cpu.cmake'
+      - 'src-tauri/Cargo.*'
+      - 'src-tauri/tests/whisper_native.rs'
+      - 'scripts/*whisper*'
+      - 'scripts/electron-package/**'
+      - 'scripts/electron-package.test.mjs'
+      - '.github/workflows/whisper-macos.yml'
+  pull_request:
+    paths:
+      - '.cargo/**'
+      - 'config/whisper-portable-cpu.cmake'
+      - 'src-tauri/Cargo.*'
+      - 'src-tauri/tests/whisper_native.rs'
+      - 'scripts/*whisper*'
+      - 'scripts/electron-package/**'
+      - 'scripts/electron-package.test.mjs'
+      - '.github/workflows/whisper-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-arm64:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_TARGET: aarch64-apple-darwin
+      CARGO_BUILD_JOBS: 2
+      npm_config_arch: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: ./.github/actions/prepare-ghostty
+      - run: pnpm install --frozen-lockfile
+      - name: Record native compiler feature evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/whisper-macos
+          test "$(uname -m)" = arm64
+          {
+            sw_vers
+            uname -a
+            sysctl -n machdep.cpu.brand_string
+            xcrun clang --version
+            cmake --version
+            for flags in '-mcpu=native' '-mcpu=native+dotprod+noi8mm+nosve+nosme' '-march=armv8-a'; do
+              echo "Compiler macros: $flags"
+              xcrun clang $flags -dM -E -x c /dev/null | grep -E '__ARM_(ARCH|FEATURE|NEON)'
+            done
+          } 2>&1 | tee artifacts/whisper-macos/compiler.log
+      - name: Test target-scoped CMake policy
+        run: python3 scripts/test-whisper-cmake.py
+      - name: Test packaging orchestration
+        env:
+          CARGO_BUILD_TARGET: ''
+        run: pnpm exec vitest run scripts/electron-package.test.mjs scripts/electron-packaged-smoke.test.mjs scripts/rust-sidecar-layout.test.mjs scripts/cargo-target-env.test.mjs
+      - name: Package native app
+        run: |
+          set -o pipefail
+          pnpm electron:package 2>&1 | tee artifacts/whisper-macos/package.log
+      - name: Verify compiled portable CPU configuration
+        run: |
+          set -euo pipefail
+          cache="$(find src-tauri/target/aarch64-apple-darwin/release/build -path '*whisper-rs-sys*/out/build/CMakeCache.txt')"
+          test -n "$cache"
+          python3 scripts/check-whisper-cpu-build.py "$(dirname "$cache")" | tee artifacts/whisper-macos/cpu-policy.log
+      - name: Transcribe pinned speech with CPU and Metal enabled
+        run: |
+          set -euo pipefail
+          bash scripts/prepare-whisper-test-fixtures.sh "$RUNNER_TEMP/whisper-fixtures"
+          export OPENFORGE_WHISPER_TEST_MODEL="$RUNNER_TEMP/whisper-fixtures/ggml-tiny.en-q5_1.bin"
+          export OPENFORGE_WHISPER_TEST_AUDIO="$RUNNER_TEMP/whisper-fixtures/jfk.wav"
+          cargo test --locked --release --manifest-path src-tauri/Cargo.toml --test whisper_native -- --ignored --nocapture --test-threads=1 2>&1 | tee artifacts/whisper-macos/voice.log
+      - name: Validate backend subsystem
+        working-directory: src-tauri
+        run: |
+          set -euo pipefail
+          cargo test --locked 2>&1 | tee ../artifacts/whisper-macos/backend-tests.log
+          cargo check --locked 2>&1 | tee ../artifacts/whisper-macos/backend-check.log
+          cargo clippy --locked 2>&1 | tee ../artifacts/whisper-macos/backend-clippy.log
+      - name: Smoke test packaged app
+        run: |
+          set -o pipefail
+          pnpm electron:smoke:packaged --skip-package 2>&1 | tee artifacts/whisper-macos/smoke.log
+      - name: Collect CMake probe evidence
+        if: always()
+        run: |
+          find src-tauri/target -type f \( -name CMakeConfigureLog.yaml -o -name CMakeCache.txt -o -name compile_commands.json \) -path '*whisper-rs-sys*' | while IFS= read -r file; do
+            destination="artifacts/whisper-macos/cmake/${file#src-tauri/target/}"
+            mkdir -p "$(dirname "$destination")"
+            cp "$file" "$destination"
+          done
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: whisper-macos-arm64
+          path: artifacts/whisper-macos/
+          if-no-files-found: error
+          retention-days: 14

@@ -266,6 +266,7 @@ describe('Electron macOS packaging helpers', () => {
       { command: 'pnpm', args: ['build:plugins'], cwd: '/repo' },
       { command: 'pnpm', args: ['build'], cwd: '/repo' },
       { command: 'pnpm', args: ['electron:build'], cwd: '/repo' },
+      { command: 'cargo', args: ['clean', '--release', '-p', 'whisper-rs-sys'], cwd: '/repo/src-tauri' },
       { command: 'cargo', args: ['build', '--release'], cwd: '/repo/src-tauri' },
       { command: 'cargo', args: ['build', '--release', '--manifest-path', '/repo/src-tauri/crates/session-daemon/Cargo.toml', '--target-dir', '/repo/src-tauri/target'], cwd: '/repo/src-tauri' },
       { command: 'packageElectronApp', args: [], cwd: '/repo' },
@@ -340,6 +341,10 @@ describe('Electron macOS packaging helpers', () => {
       },
     })
 
+    expect(commands.slice(3, 5)).toEqual([
+      { command: 'cargo', args: ['clean', '--release', '-p', 'whisper-rs-sys', '--target', 'aarch64-apple-darwin'], cwd: '/repo/crates/openforge-backend' },
+      { command: 'cargo', args: ['build', '--release', '--target', 'aarch64-apple-darwin'], cwd: '/repo/crates/openforge-backend' },
+    ])
     expect(commands).toContainEqual({
       command: 'cargo',
       args: ['build', '--release', '--target', 'aarch64-apple-darwin',
