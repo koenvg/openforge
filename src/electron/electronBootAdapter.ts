@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { NativeRestartRecovery } from './nativeRestartRecovery.js'
 import { RestartOperation } from './restartOperation.js'
+import { preflightProductionUpdateLaunch } from './productionUpdateLaunch.js'
 import type { RecoveryFailure } from './restartOperation.js'
 import { randomUUID } from 'node:crypto'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
@@ -456,6 +457,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         await recoverRestart(status?.failure ?? 'relaunch-delayed')
       })
     },
+
+    preflightUpdateLaunch: () => preflightProductionUpdateLaunch(app.getPath('userData')),
 
     resolveSidecarPath(): string | null {
       return resolveElectronSidecarPath(options.env, options.currentDir)

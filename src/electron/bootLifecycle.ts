@@ -51,6 +51,7 @@ export interface BootLifecycleAdapter {
   onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void
   exit(exitCode?: number): void
   waitForAppReady(): Promise<void>
+  preflightUpdateLaunch?(): Promise<void>
   resolveSidecarPath(): string | null
   createSidecarLaunchConfig(sidecarPath: string): SidecarLaunchConfig
   startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle>
@@ -150,6 +151,10 @@ export async function bootOpenForgeDesktop(
 
   try {
     await adapter.waitForAppReady()
+    // Reject an unsupported update before a domain Sidecar can open the database.
+    recoveryFailure = 'update-verification-unavailable'
+    await adapter.preflightUpdateLaunch?.()
+    recoveryFailure = 'activation-failed'
 
     const sidecarPath = adapter.resolveSidecarPath()
     if (!sidecarPath) {

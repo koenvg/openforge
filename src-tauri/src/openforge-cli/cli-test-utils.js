@@ -63,7 +63,13 @@ function normalizeNodeOptionsForCliBridgeTests(nodeOptions) {
 }
 
 export function buildCliBridgeTestEnv(env = {}) {
-  const merged = { ...process.env, ...env };
+  // Agent transport takes precedence over HTTP_PORT. Never inherit live credentials,
+  // discovery paths, or Task/PTY identity into fixture subprocesses.
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')));
+  const merged = { ...inherited, ...env };
+  // Port zero cannot name a listening fixture. Missing transport must not reach
+  // the default installed app even when the test command unexpectedly sends I/O.
+  merged.OPENFORGE_HTTP_PORT ??= '0';
   const normalizedNodeOptions = normalizeNodeOptionsForCliBridgeTests(merged.NODE_OPTIONS);
   if (normalizedNodeOptions) {
     merged.NODE_OPTIONS = normalizedNodeOptions;
