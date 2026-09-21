@@ -123,25 +123,21 @@ function prepareGhosttySource() {
   }
 }
 
-function zonFiles(root) {
-  const files = []
-  const visit = directory => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === '.git' || entry.name === 'zig-cache') continue
-      const path = join(directory, entry.name)
-      if (entry.isDirectory()) visit(path)
-      else if (entry.name === 'build.zig.zon') files.push(path)
-    }
-  }
-  visit(root)
-  return files
-}
-
-function remoteDependencies(root) {
+export function remoteDependencies(root, { includeBundledPackages = false } = {}) {
   const dependencies = new Map()
   const pattern = /\.url\s*=\s*"([^"]+)"\s*,\s*\.hash\s*=\s*"([^"]+)"/g
-  for (const file of zonFiles(root)) {
-    const source = readFileSync(file, 'utf8')
+  const manifests = [join(root, 'build.zig.zon')]
+  const bundledPackagesRoot = join(root, 'pkg')
+  if (includeBundledPackages && existsSync(bundledPackagesRoot)) {
+    manifests.push(...readdirSync(bundledPackagesRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => join(bundledPackagesRoot, entry.name, 'build.zig.zon'))
+      .sort())
+  }
+
+  for (const manifest of manifests) {
+    if (!existsSync(manifest)) continue
+    const source = readFileSync(manifest, 'utf8')
     for (const match of source.matchAll(pattern)) {
       const [, url, hash] = match
       if (!dependencies.has(hash)) dependencies.set(hash, url)
@@ -233,7 +229,7 @@ async function preparePackage(hash, url) {
 async function prepareZigPackages() {
   mkdirSync(systemDir, { recursive: true })
   mkdirSync(fetchCacheDir, { recursive: true })
-  const pending = new Map(remoteDependencies(sourceDir))
+  const pending = new Map(remoteDependencies(sourceDir, { includeBundledPackages: true }))
   const processed = new Set()
   while (pending.size > 0) {
     const [hash, url] = pending.entries().next().value

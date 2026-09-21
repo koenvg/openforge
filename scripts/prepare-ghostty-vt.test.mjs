@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   enqueueDependencies,
   extractPackageArchive,
   fetchWithRetry,
   prepareRustDependencies,
+  remoteDependencies,
   tarExtractionArgs,
 } from './prepare-ghostty-vt.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
@@ -26,6 +29,35 @@ describe('Ghostty dependency preparation', () => {
       ['shared-hash', 'https://deps.files.ghostty.org/shared.tar.gz'],
       ['new-hash', 'https://deps.files.ghostty.org/new.tar.gz'],
     ])
+  })
+
+  it('includes bundled package dependencies without scanning nested test projects', () => {
+    const packageRoot = mkdtempSync(join(tmpdir(), 'openforge-ghostty-manifests-'))
+    try {
+      writeFileSync(join(packageRoot, 'build.zig.zon'), `
+        .url = "https://deps.files.ghostty.org/runtime.tar.gz",
+        .hash = "runtime-hash",
+      `)
+      const specRoot = join(packageRoot, 'spec')
+      mkdirSync(specRoot)
+      writeFileSync(join(specRoot, 'build.zig.zon'), `
+        .url = "https://github.com/example/benchmark/archive/v1.tar.gz",
+        .hash = "benchmark-hash",
+      `)
+      const bundledPackageRoot = join(packageRoot, 'pkg', 'runtime-library')
+      mkdirSync(bundledPackageRoot, { recursive: true })
+      writeFileSync(join(bundledPackageRoot, 'build.zig.zon'), `
+        .url = "https://deps.files.ghostty.org/bundled-runtime.tar.gz",
+        .hash = "bundled-runtime-hash",
+      `)
+
+      expect([...remoteDependencies(packageRoot, { includeBundledPackages: true })]).toEqual([
+        ['runtime-hash', 'https://deps.files.ghostty.org/runtime.tar.gz'],
+        ['bundled-runtime-hash', 'https://deps.files.ghostty.org/bundled-runtime.tar.gz'],
+      ])
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true })
+    }
   })
 
   it('allows cold-cache fetching even when the caller keeps builds offline', () => {
