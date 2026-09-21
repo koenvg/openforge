@@ -1,2 +1,6 @@
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "link-arg=-lc++", "-C", "link-arg=-framework", "-C", "link-arg=Accelerate"]
+
+[env]
+# Scope the CMake hook to whisper.cpp, preserving unrelated native dependencies.
+"CMAKE_PROJECT_whisper.cpp_INCLUDE" = { value = "config/whisper-portable-cpu.cmake", relative = true }

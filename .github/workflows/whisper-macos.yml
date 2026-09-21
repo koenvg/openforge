@@ -3,6 +3,14 @@ name: Whisper macOS compatibility
 on:
   push:
     branches: [openforge/KVG-5152]
+  pull_request:
+    paths:
+      - '.cargo/**'
+      - 'config/whisper-portable-cpu.cmake'
+      - 'src-tauri/Cargo.*'
+      - 'src-tauri/tests/whisper_native.rs'
+      - 'scripts/*whisper*'
+      - '.github/workflows/whisper-macos.yml'
   workflow_dispatch:
 
 permissions:
@@ -45,10 +53,32 @@ jobs:
               xcrun clang $flags -dM -E -x c /dev/null | grep -E '__ARM_(ARCH|FEATURE|NEON)'
             done
           } 2>&1 | tee artifacts/whisper-macos/compiler.log
+      - name: Test target-scoped CMake policy
+        run: python3 scripts/test-whisper-cmake.py
       - name: Package native app
         run: |
           set -o pipefail
           pnpm electron:package 2>&1 | tee artifacts/whisper-macos/package.log
+      - name: Verify compiled portable CPU configuration
+        run: |
+          set -euo pipefail
+          cache="$(find src-tauri/target/aarch64-apple-darwin/release/build -path '*whisper-rs-sys*/out/build/CMakeCache.txt')"
+          test -n "$cache"
+          python3 scripts/check-whisper-cpu-build.py "$(dirname "$cache")" | tee artifacts/whisper-macos/cpu-policy.log
+      - name: Transcribe pinned speech with CPU and Metal enabled
+        run: |
+          set -euo pipefail
+          bash scripts/prepare-whisper-test-fixtures.sh "$RUNNER_TEMP/whisper-fixtures"
+          export OPENFORGE_WHISPER_TEST_MODEL="$RUNNER_TEMP/whisper-fixtures/ggml-tiny.en-q5_1.bin"
+          export OPENFORGE_WHISPER_TEST_AUDIO="$RUNNER_TEMP/whisper-fixtures/jfk.wav"
+          cargo test --locked --release --manifest-path src-tauri/Cargo.toml --test whisper_native -- --ignored --nocapture --test-threads=1 2>&1 | tee artifacts/whisper-macos/voice.log
+      - name: Validate backend subsystem
+        working-directory: src-tauri
+        run: |
+          set -euo pipefail
+          cargo test --locked --release 2>&1 | tee ../artifacts/whisper-macos/backend-tests.log
+          cargo check --locked 2>&1 | tee ../artifacts/whisper-macos/backend-check.log
+          cargo clippy --locked 2>&1 | tee ../artifacts/whisper-macos/backend-clippy.log
       - name: Smoke test packaged app
         run: |
           set -o pipefail
