@@ -495,10 +495,15 @@ export class TestingCommonApiFake {
   private scopedAgentSessionSequence = 0
   private scopedAgentTurnSequence = 0
   private scopedAgentSessionClock = 0
+  private scopedAgentSessionAuthenticationAvailable = true
   private readonly scopedAgentSessionAttachmentGenerations = new Map<string, number>()
   private eventListenerSequence = 0
 
   constructor(private readonly services: TestingRegistryServices) {}
+
+  setScopedAgentSessionAuthenticationAvailable(available: boolean): void {
+    this.scopedAgentSessionAuthenticationAvailable = available
+  }
 
   emitTaskChange(event: TaskChangeEvent): void {
     for (const handler of this.taskChangeHandlers.get(event.projectId) ?? []) {
@@ -675,6 +680,12 @@ export class TestingCommonApiFake {
           if (request.toolPolicy !== 'review-read-only') {
             throw new ScopedAgentSessionError('UNSUPPORTED_TOOL_POLICY', `Unsupported Session Tool Policy: ${request.toolPolicy}`)
           }
+          if (!this.scopedAgentSessionAuthenticationAvailable) {
+            throw new ScopedAgentSessionError(
+              'AUTHENTICATION_UNAVAILABLE',
+              'Provider authentication is unavailable; authenticate the normal provider first',
+            )
+          }
           const key = sessionScopeKey(request.scope)
           this.services.calls.scopedAgentSessionStarts.push({ ...request, scope: { ...request.scope } })
           const previousQueuePositions = this.scopedQueuePositions()
@@ -742,6 +753,12 @@ export class TestingCommonApiFake {
           this.services.calls.scopedAgentSessionInputs.push({ scope: { ...scope }, input })
           const session = this.requireScopedAgentSession(scope)
           if (['completed', 'failed', 'aborted', 'interrupted'].includes(session.status)) {
+            if (!this.scopedAgentSessionAuthenticationAvailable) {
+              throw new ScopedAgentSessionError(
+                'AUTHENTICATION_UNAVAILABLE',
+                'Provider authentication is unavailable; authenticate the normal provider first',
+              )
+            }
             const queued = this.scopedExecutionCount() >= SCOPED_EXECUTION_LIMIT
             if (queued && this.scopedQueuedSessions().length >= SCOPED_QUEUE_LIMIT) {
               throw new ScopedAgentSessionError('CAPACITY', 'Scoped Agent Session queue is full')

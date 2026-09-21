@@ -38,6 +38,22 @@ pub(crate) fn user_environment() -> HashMap<String, String> {
     }
 }
 
+/// Returns the exact environment inherited by a normal Agent Session.
+///
+/// Process-provided values remain available, while login-shell values take
+/// precedence to preserve the environment users see in their interactive shell.
+pub(crate) fn agent_environment() -> HashMap<String, String> {
+    merge_agent_environment(std::env::vars().collect(), user_environment())
+}
+
+fn merge_agent_environment(
+    mut process_environment: HashMap<String, String>,
+    user_environment: HashMap<String, String>,
+) -> HashMap<String, String> {
+    process_environment.extend(user_environment);
+    process_environment
+}
+
 pub(crate) fn user_tool_path() -> String {
     USER_ENVIRONMENT
         .get("PATH")
@@ -295,6 +311,36 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::time::Instant;
+
+    #[test]
+    fn agent_environment_preserves_process_only_credentials_and_prefers_the_user_environment() {
+        let environment = merge_agent_environment(
+            HashMap::from([
+                (
+                    "ANTHROPIC_API_KEY".to_string(),
+                    "process-secret".to_string(),
+                ),
+                ("PATH".to_string(), "/process/bin".to_string()),
+            ]),
+            HashMap::from([
+                ("PATH".to_string(), "/login/bin".to_string()),
+                ("SHELL_ONLY".to_string(), "present".to_string()),
+            ]),
+        );
+
+        assert_eq!(
+            environment.get("ANTHROPIC_API_KEY").map(String::as_str),
+            Some("process-secret")
+        );
+        assert_eq!(
+            environment.get("PATH").map(String::as_str),
+            Some("/login/bin")
+        );
+        assert_eq!(
+            environment.get("SHELL_ONLY").map(String::as_str),
+            Some("present")
+        );
+    }
 
     #[test]
     fn merge_user_tool_path_preserves_order_and_deduplicates_tool_bins() {

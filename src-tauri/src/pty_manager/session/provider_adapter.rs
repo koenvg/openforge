@@ -1,4 +1,7 @@
-use crate::user_environment::{find_tool_on_path, user_environment, user_tool_path};
+use crate::{
+    claude_launch_context::ClaudeLaunchContext,
+    user_environment::{find_tool_on_path, user_environment, user_tool_path},
+};
 use log::info;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,6 +21,9 @@ pub(super) trait AgentPtyProviderAdapter {
     fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String>;
     fn removed_env(&self) -> &'static [&'static str] {
         &[]
+    }
+    fn base_environment(&self) -> Option<&HashMap<String, String>> {
+        None
     }
     fn pid_file_name(&self, task_id: &str) -> String;
 }
@@ -102,8 +108,9 @@ pub(super) struct ScopedClaudeCodePtyAdapter {
     settings_path: PathBuf,
     sandbox_profile: String,
     credential_path: Option<PathBuf>,
-    provider_state_dir: PathBuf,
+    scoped_state_dir: PathBuf,
     scoped_session_id: String,
+    launch_context: ClaudeLaunchContext,
 }
 
 pub(super) struct ScopedClaudeCodePtyConfig {
@@ -113,8 +120,9 @@ pub(super) struct ScopedClaudeCodePtyConfig {
     pub settings_path: PathBuf,
     pub sandbox_profile: String,
     pub credential_path: Option<PathBuf>,
-    pub provider_state_dir: PathBuf,
+    pub scoped_state_dir: PathBuf,
     pub scoped_session_id: String,
+    pub launch_context: ClaudeLaunchContext,
 }
 
 impl ScopedClaudeCodePtyAdapter {
@@ -126,8 +134,9 @@ impl ScopedClaudeCodePtyAdapter {
             settings_path: config.settings_path,
             sandbox_profile: config.sandbox_profile,
             credential_path: config.credential_path,
-            provider_state_dir: config.provider_state_dir,
+            scoped_state_dir: config.scoped_state_dir,
             scoped_session_id: config.scoped_session_id,
+            launch_context: config.launch_context,
         }
     }
 }
@@ -146,6 +155,7 @@ impl AgentPtyProviderAdapter for ScopedClaudeCodePtyAdapter {
             self.resume,
             &self.settings_path,
             &self.sandbox_profile,
+            self.launch_context.executable(),
         )
     }
     fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
@@ -165,12 +175,12 @@ impl AgentPtyProviderAdapter for ScopedClaudeCodePtyAdapter {
             ("GIT_EXTERNAL_DIFF".to_string(), String::new()),
             ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
             (
-                "CLAUDE_CONFIG_DIR".to_string(),
-                self.provider_state_dir.to_string_lossy().into_owned(),
+                "OPENFORGE_SCOPED_STATE_DIR".to_string(),
+                self.scoped_state_dir.to_string_lossy().into_owned(),
             ),
             (
                 "TMPDIR".to_string(),
-                self.provider_state_dir
+                self.scoped_state_dir
                     .join("tmp")
                     .to_string_lossy()
                     .into_owned(),
@@ -192,6 +202,9 @@ impl AgentPtyProviderAdapter for ScopedClaudeCodePtyAdapter {
             "OPENFORGE_BACKEND_TOKEN",
             "OPENFORGE_TASK_ID",
         ]
+    }
+    fn base_environment(&self) -> Option<&HashMap<String, String>> {
+        Some(self.launch_context.environment())
     }
     fn pid_file_name(&self, session_key: &str) -> String {
         format!("{session_key}-claude.pid")
@@ -595,6 +608,50 @@ mod tests {
             Some(&"42".to_string())
         );
         assert!(!env.contains_key("OPENFORGE_HTTP_PORT"));
+    }
+
+    #[test]
+    fn scoped_claude_adapter_keeps_provider_configuration_and_openforge_state_separate() {
+        let adapter = ScopedClaudeCodePtyAdapter::new(ScopedClaudeCodePtyConfig {
+            prompt: "review this".to_string(),
+            provider_session_id: "provider-session".to_string(),
+            resume: false,
+            settings_path: PathBuf::from("/tmp/scoped-state/settings.json"),
+            sandbox_profile: "(version 1)".to_string(),
+            credential_path: Some(PathBuf::from("/tmp/openforge-agent.json")),
+            scoped_state_dir: PathBuf::from("/tmp/scoped-state"),
+            scoped_session_id: "scoped-session".to_string(),
+            launch_context: ClaudeLaunchContext::for_test(
+                "/usr/local/bin/claude",
+                HashMap::from([(
+                    "CLAUDE_CONFIG_DIR".to_string(),
+                    "/Users/test/custom-claude".to_string(),
+                )]),
+            ),
+        });
+
+        let environment = adapter.extra_env("scoped-key", 42);
+
+        assert_eq!(
+            environment.get("OPENFORGE_SCOPED_STATE_DIR"),
+            Some(&"/tmp/scoped-state".to_string())
+        );
+        assert_eq!(
+            environment.get("TMPDIR"),
+            Some(&"/tmp/scoped-state/tmp".to_string())
+        );
+        assert!(!environment.contains_key("CLAUDE_CONFIG_DIR"));
+        assert_eq!(
+            adapter
+                .base_environment()
+                .and_then(|environment| environment.get("CLAUDE_CONFIG_DIR"))
+                .map(String::as_str),
+            Some("/Users/test/custom-claude")
+        );
+        assert_eq!(
+            &adapter.command_args()[..3],
+            ["-p", "(version 1)", "/usr/local/bin/claude"]
+        );
     }
 
     #[test]

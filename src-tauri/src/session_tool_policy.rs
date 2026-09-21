@@ -20,7 +20,7 @@ const crypto = require('node:crypto');
   const sessionId = process.env.OPENFORGE_SCOPED_SESSION_ID;
   const instance = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
   const configPath = process.env.OPENFORGE_AGENT_CONFIG;
-  const stateDir = process.env.CLAUDE_CONFIG_DIR;
+  const stateDir = process.env.OPENFORGE_SCOPED_STATE_DIR;
   if (!sessionId || !Number.isSafeInteger(instance) || instance < 1 || !configPath || !stateDir) return;
   const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
   const turnPath = path.join(stateDir, '.openforge-turn-id');
@@ -91,7 +91,7 @@ pub(crate) enum ToolDecision {
 
 pub(crate) struct ReviewReadOnlyEnvironment {
     pub settings_path: PathBuf,
-    pub provider_state_dir: PathBuf,
+    pub scoped_state_dir: PathBuf,
 }
 
 impl ToolDecision {
@@ -273,7 +273,7 @@ pub(crate) fn generate_review_read_only_settings(
     let settings = json!({
         "permissions": {
             "allow": ["Read", "Grep", "Glob", "Bash"],
-            "deny": ["Write", "Edit", "MultiEdit", "NotebookEdit", "Task", "WebFetch", "WebSearch"]
+            "deny": ["Write", "Edit", "NotebookEdit", "Task", "WebFetch", "WebSearch"]
         },
         "hooks": {
             "UserPromptSubmit": [{
@@ -304,17 +304,15 @@ pub(crate) fn generate_review_read_only_settings(
         .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
     file.flush()
         .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
-    let provider_state_dir = directory.join("provider-state");
-    fs::create_dir_all(provider_state_dir.join("tmp")).map_err(|error| {
-        SessionToolPolicyError::Settings(format!("create provider state directory: {error}"))
+    let scoped_state_dir = directory.to_path_buf();
+    fs::create_dir_all(scoped_state_dir.join("tmp")).map_err(|error| {
+        SessionToolPolicyError::Settings(format!("create scoped runtime state: {error}"))
     })?;
-    fs::set_permissions(&provider_state_dir, fs::Permissions::from_mode(0o700)).map_err(
-        |error| {
-            SessionToolPolicyError::Settings(format!("secure provider state directory: {error}"))
-        },
-    )?;
+    fs::set_permissions(&scoped_state_dir, fs::Permissions::from_mode(0o700)).map_err(|error| {
+        SessionToolPolicyError::Settings(format!("secure scoped runtime state: {error}"))
+    })?;
     fs::set_permissions(
-        provider_state_dir.join("tmp"),
+        scoped_state_dir.join("tmp"),
         fs::Permissions::from_mode(0o700),
     )
     .map_err(|error| {
@@ -322,7 +320,7 @@ pub(crate) fn generate_review_read_only_settings(
     })?;
     Ok(ReviewReadOnlyEnvironment {
         settings_path: path,
-        provider_state_dir,
+        scoped_state_dir,
     })
 }
 
@@ -351,24 +349,100 @@ fn run_policy_hook(input: &mut dyn Read, output: &mut dyn Write) -> Result<(), S
 
 pub(crate) fn macos_sandbox_profile(
     workspace: &Path,
-    provider_state_dir: &Path,
+    scoped_state_dir: &Path,
+    provider_state_paths: &[PathBuf],
+    home: &Path,
 ) -> Result<String, SessionToolPolicyError> {
     let workspace = fs::canonicalize(workspace)
         .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
-    let provider_state_dir = fs::canonicalize(provider_state_dir)
+    let scoped_state_dir = fs::canonicalize(scoped_state_dir)
         .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
-    if provider_state_dir.starts_with(&workspace) || workspace.starts_with(&provider_state_dir) {
+    let home = fs::canonicalize(home)
+        .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
+    if scoped_state_dir.starts_with(&workspace) || workspace.starts_with(&scoped_state_dir) {
         return Err(SessionToolPolicyError::Settings(
-            "provider state and Scoped Workspace must be separate".to_string(),
+            "scoped runtime state and Scoped Workspace must be separate".to_string(),
         ));
     }
-    let escaped_state = provider_state_dir
-        .to_string_lossy()
+    let mut writable_paths = vec![scoped_state_dir.clone()];
+    for path in provider_state_paths {
+        let path = resolve_intended_path(path)?;
+        if path == home || home.starts_with(&path) || is_unsafe_shared_root(&path) {
+            return Err(SessionToolPolicyError::Settings(
+                "Claude state path is too broad for a scoped session".to_string(),
+            ));
+        }
+        if path.starts_with(&workspace) || workspace.starts_with(&path) {
+            return Err(SessionToolPolicyError::Settings(
+                "Claude state and Scoped Workspace must be separate".to_string(),
+            ));
+        }
+        if path.starts_with(&scoped_state_dir) || scoped_state_dir.starts_with(&path) {
+            return Err(SessionToolPolicyError::Settings(
+                "Claude state and scoped runtime state must be separate".to_string(),
+            ));
+        }
+        writable_paths.push(path);
+    }
+
+    let mut profile = String::from("(version 1)\n(allow default)\n(deny file-write*)\n");
+    for path in writable_paths {
+        let escaped = escape_sandbox_path(&path);
+        profile.push_str(&format!(
+            "(allow file-write* (literal \"{escaped}\") (subpath \"{escaped}\"))\n"
+        ));
+    }
+    profile.push_str("(allow file-write-data file-ioctl (subpath \"/dev\"))\n");
+    Ok(profile)
+}
+
+fn is_unsafe_shared_root(path: &Path) -> bool {
+    let configured_temp = resolve_intended_path(&std::env::temp_dir()).ok();
+    if configured_temp.as_deref() == Some(path) {
+        return true;
+    }
+    [
+        "/tmp",
+        "/private/tmp",
+        "/var/tmp",
+        "/private/var/tmp",
+        "/Users/Shared",
+    ]
+    .iter()
+    .filter_map(|candidate| resolve_intended_path(Path::new(candidate)).ok())
+    .any(|candidate| candidate == path)
+}
+
+fn resolve_intended_path(path: &Path) -> Result<PathBuf, SessionToolPolicyError> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(SessionToolPolicyError::Settings(
+            "Claude state path must be an absolute path without parent traversal".to_string(),
+        ));
+    }
+    let existing_ancestor = path
+        .ancestors()
+        .find(|ancestor| ancestor.exists())
+        .ok_or_else(|| {
+            SessionToolPolicyError::Settings(
+                "Claude state path has no existing ancestor".to_string(),
+            )
+        })?;
+    let resolved_ancestor = fs::canonicalize(existing_ancestor)
+        .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
+    let suffix = path
+        .strip_prefix(existing_ancestor)
+        .map_err(|error| SessionToolPolicyError::Settings(error.to_string()))?;
+    Ok(resolved_ancestor.join(suffix))
+}
+
+fn escape_sandbox_path(path: &Path) -> String {
+    path.to_string_lossy()
         .replace('\\', "\\\\")
-        .replace('"', "\\\"");
-    Ok(format!(
-        "(version 1)\n(allow default)\n(deny file-write*)\n(allow file-write* (subpath \"{escaped_state}\"))\n(allow file-write-data file-ioctl (subpath \"/dev\"))\n"
-    ))
+        .replace('"', "\\\"")
 }
 
 #[cfg(test)]
@@ -476,6 +550,10 @@ mod tests {
                 "{lifecycle}: {command}"
             );
             assert!(
+                command.contains("OPENFORGE_SCOPED_STATE_DIR"),
+                "{lifecycle}: {command}"
+            );
+            assert!(
                 command.contains("scoped-agent-lifecycle"),
                 "{lifecycle}: {command}"
             );
@@ -494,6 +572,14 @@ mod tests {
             .as_array()
             .expect("deny list")
             .contains(&json!("NotebookEdit")));
+        assert!(!settings["permissions"]["deny"]
+            .as_array()
+            .expect("deny list")
+            .contains(&json!("MultiEdit")));
+        assert_eq!(
+            settings["permissions"]["allow"],
+            json!(["Read", "Grep", "Glob", "Bash"])
+        );
     }
 
     #[test]
@@ -505,6 +591,258 @@ mod tests {
         assert_eq!(response["hookSpecificOutput"]["permissionDecision"], "deny");
     }
 
+    #[test]
+    fn sandbox_allows_default_claude_state_and_scoped_runtime_state_only() {
+        let root = tempfile::tempdir().expect("sandbox root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        fs::create_dir_all(home.join(".claude")).expect("Claude state");
+        fs::write(home.join(".claude.json"), "{}").expect("Claude global state");
+        fs::create_dir_all(&workspace).expect("workspace");
+        fs::create_dir_all(&scoped_state).expect("scoped state");
+        let provider_state = vec![home.join(".claude"), home.join(".claude.json")];
+
+        let profile = macos_sandbox_profile(&workspace, &scoped_state, &provider_state, &home)
+            .expect("sandbox profile");
+
+        assert!(profile.contains(&home.join(".claude").to_string_lossy().to_string()));
+        assert!(profile.contains(&home.join(".claude.json").to_string_lossy().to_string()));
+        assert!(profile.contains(&scoped_state.to_string_lossy().to_string()));
+        assert!(!profile.contains(&workspace.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn sandbox_allows_a_canonicalized_custom_claude_configuration_root() {
+        let root = tempfile::tempdir().expect("sandbox root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        let actual_config = root.path().join("provider-config");
+        let configured_link = home.join("custom-claude");
+        for directory in [&home, &workspace, &scoped_state, &actual_config] {
+            fs::create_dir_all(directory).expect("test directory");
+        }
+        std::os::unix::fs::symlink(&actual_config, &configured_link).expect("configuration link");
+
+        let profile = macos_sandbox_profile(
+            &workspace,
+            &scoped_state,
+            std::slice::from_ref(&configured_link),
+            &home,
+        )
+        .expect("sandbox profile");
+
+        assert!(profile.contains(&actual_config.to_string_lossy().to_string()));
+        assert!(!profile.contains(&configured_link.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn sandbox_rejects_broad_or_workspace_overlapping_claude_state() {
+        let root = tempfile::tempdir().expect("sandbox root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        for directory in [&home, &workspace, &scoped_state] {
+            fs::create_dir_all(directory).expect("test directory");
+        }
+
+        for provider_state in [
+            home.clone(),
+            workspace.join(".claude"),
+            PathBuf::from("/tmp"),
+            PathBuf::from("/private/tmp"),
+            PathBuf::from("/var/tmp"),
+            PathBuf::from("/Users/Shared"),
+            std::env::temp_dir(),
+        ] {
+            assert!(
+                macos_sandbox_profile(&workspace, &scoped_state, &[provider_state], &home,)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn sandbox_allows_a_dedicated_configuration_directory_below_a_shared_temp_root() {
+        let root = tempfile::tempdir().expect("sandbox root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        let provider_state = root.path().join("dedicated-claude-config");
+        for directory in [&home, &workspace, &scoped_state, &provider_state] {
+            fs::create_dir_all(directory).expect("test directory");
+        }
+
+        let profile = macos_sandbox_profile(
+            &workspace,
+            &scoped_state,
+            std::slice::from_ref(&provider_state),
+            &home,
+        )
+        .expect("dedicated provider state should be accepted");
+
+        assert!(profile.contains(&provider_state.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn sandbox_rejects_a_claude_state_symlink_into_the_workspace() {
+        let root = tempfile::tempdir().expect("sandbox root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        for directory in [&home, &workspace, &scoped_state] {
+            fs::create_dir_all(directory).expect("test directory");
+        }
+        let configured_link = home.join("custom-claude");
+        std::os::unix::fs::symlink(&workspace, &configured_link).expect("configuration link");
+
+        assert!(
+            macos_sandbox_profile(&workspace, &scoped_state, &[configured_link], &home,).is_err()
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn personal_extensions_and_user_approval_cannot_mutate_the_scoped_checkout() {
+        let root = tempfile::tempdir().expect("policy integration root");
+        let home = root.path().join("home");
+        let workspace = root.path().join("workspace");
+        let scoped_state = root.path().join("scoped-state");
+        let claude_state = home.join(".claude");
+        for directory in [
+            &workspace,
+            &scoped_state,
+            &claude_state.join("hooks"),
+            &claude_state.join("plugins"),
+            &claude_state.join("commands"),
+        ] {
+            fs::create_dir_all(directory).expect("integration directory");
+        }
+        fs::write(workspace.join("tracked.txt"), "original\n").expect("tracked file");
+        for (path, contents) in [
+            (
+                claude_state.join("settings.json"),
+                r#"{"permissions":{"allow":["Write","Edit","Bash"]},"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"touch personal-hook-ran"}]}]},"enabledPlugins":{"permissive":true}}"#,
+            ),
+            (
+                claude_state.join("hooks/permissive.sh"),
+                "#!/bin/sh\ntouch personal-hook-ran\n",
+            ),
+            (
+                claude_state.join("plugins/permissive.js"),
+                "require('node:fs').writeFileSync('personal-plugin-ran', '')\n",
+            ),
+            (
+                claude_state.join("commands/permissive.md"),
+                "Run: touch personal-command-ran\n",
+            ),
+            (
+                claude_state.join("mcp.json"),
+                r#"{"mcpServers":{"permissive":{"command":"touch","args":["personal-mcp-ran"]}}}"#,
+            ),
+        ] {
+            fs::write(path, contents).expect("personal extension fixture");
+        }
+        let environment = generate_review_read_only_settings(&scoped_state).expect("host settings");
+        let profile = macos_sandbox_profile(
+            &workspace,
+            &environment.scoped_state_dir,
+            std::slice::from_ref(&claude_state),
+            &home,
+        )
+        .expect("sandbox profile");
+        let args = crate::pty_manager::build_scoped_claude_args(
+            "review",
+            "conversation",
+            false,
+            &environment.settings_path,
+            &profile,
+            Path::new("/usr/local/bin/claude"),
+        );
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--setting-sources", ""]));
+        assert!(args.contains(&"--disable-slash-commands".to_string()));
+        assert!(args.contains(&"--strict-mcp-config".to_string()));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--mcp-config", r#"{"mcpServers":{}}"#]));
+        assert!(!args.iter().any(|argument| argument.contains("plugin-dir")));
+        assert!(matches!(
+            authorize_review_read_only(
+                "Edit",
+                &json!({"file_path": workspace.join("tracked.txt"), "approved": true}),
+            ),
+            ToolDecision::Deny(_)
+        ));
+        assert!(matches!(
+            authorize_review_read_only(
+                "Bash",
+                &json!({"command": "touch direct-shell-write", "approved": true}),
+            ),
+            ToolDecision::Deny(_)
+        ));
+
+        let git = |arguments: &[&str]| {
+            std::process::Command::new("git")
+                .args(arguments)
+                .current_dir(&workspace)
+                .output()
+                .expect("run Git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        assert!(git(&["add", "tracked.txt"]).status.success());
+        assert!(git(&[
+            "-c",
+            "user.name=OpenForge Test",
+            "-c",
+            "user.email=test@openforge.local",
+            "commit",
+            "-qm",
+            "fixture",
+        ])
+        .status
+        .success());
+        let tree_before = git(&["rev-parse", "HEAD^{tree}"]).stdout;
+
+        let direct_target = workspace.join("direct-write");
+        let direct = std::process::Command::new("/usr/bin/sandbox-exec")
+            .args(["-p", &profile, "/usr/bin/touch"])
+            .arg(&direct_target)
+            .status()
+            .expect("direct mutation attempt");
+        let shell_command = format!(
+            "printf changed > {}",
+            shell_words::quote(&workspace.join("tracked.txt").to_string_lossy())
+        );
+        let shell = std::process::Command::new("/usr/bin/sandbox-exec")
+            .args(["-p", &profile, "/bin/sh", "-c", &shell_command])
+            .status()
+            .expect("shell mutation attempt");
+
+        assert!(!direct.success());
+        assert!(!shell.success());
+        assert!(!direct_target.exists());
+        assert_eq!(
+            fs::read_to_string(workspace.join("tracked.txt")).unwrap(),
+            "original\n"
+        );
+        assert_eq!(git(&["rev-parse", "HEAD^{tree}"]).stdout, tree_before);
+        assert!(git(&["status", "--porcelain"]).stdout.is_empty());
+        for marker in [
+            "personal-hook-ran",
+            "personal-plugin-ran",
+            "personal-command-ran",
+            "personal-mcp-ran",
+        ] {
+            assert!(
+                !workspace.join(marker).exists(),
+                "personal extension ran: {marker}"
+            );
+        }
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn os_sandbox_allows_only_private_provider_state_writes() {
@@ -512,8 +850,16 @@ mod tests {
         let policy = tempfile::tempdir().expect("policy");
         let environment = generate_review_read_only_settings(policy.path()).expect("environment");
         let outside = tempfile::tempdir().expect("outside");
-        let profile = macos_sandbox_profile(workspace.path(), &environment.provider_state_dir)
-            .expect("profile");
+        let home = tempfile::tempdir().expect("home");
+        let claude_state = home.path().join(".claude");
+        fs::create_dir(&claude_state).expect("Claude state");
+        let profile = macos_sandbox_profile(
+            workspace.path(),
+            &environment.scoped_state_dir,
+            std::slice::from_ref(&claude_state),
+            home.path(),
+        )
+        .expect("profile");
         let workspace_target = workspace.path().join("direct-shell-write");
         let outside_target = outside.path().join("symlink-target");
         std::os::unix::fs::symlink(&outside_target, workspace.path().join("escape"))
@@ -534,15 +880,23 @@ mod tests {
                 "write unexpectedly succeeded: {target:?}"
             );
         }
-        let allowed = environment.provider_state_dir.join("session-state");
+        let allowed = environment.scoped_state_dir.join("session-state");
+        let provider_allowed = claude_state.join("conversation-state");
         assert!(std::process::Command::new("/usr/bin/sandbox-exec")
             .args(["-p", &profile, "/usr/bin/touch"])
             .arg(&allowed)
             .status()
             .expect("run sandbox")
             .success());
+        assert!(std::process::Command::new("/usr/bin/sandbox-exec")
+            .args(["-p", &profile, "/usr/bin/touch"])
+            .arg(&provider_allowed)
+            .status()
+            .expect("run sandbox")
+            .success());
         assert!(!workspace_target.exists());
         assert!(!outside_target.exists());
         assert!(allowed.exists());
+        assert!(provider_allowed.exists());
     }
 }
