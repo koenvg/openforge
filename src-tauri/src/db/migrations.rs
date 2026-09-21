@@ -121,8 +121,31 @@ CREATE INDEX IF NOT EXISTS idx_scoped_agent_sessions_owner_project
 "#;
 
 pub(super) fn ensure_scoped_agent_sessions_table(conn: &Connection) -> Result<()> {
-    conn.execute_batch(SCOPED_AGENT_SESSIONS_SQL)
+    conn.execute_batch(SCOPED_AGENT_SESSIONS_SQL)?;
+    conn.execute_batch(SCOPED_AGENT_SESSION_EVENTS_SQL)
 }
+
+pub(super) const SCOPED_AGENT_SESSION_EVENTS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS scoped_agent_session_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL REFERENCES scoped_agent_sessions(id) ON DELETE CASCADE,
+    owner_plugin_id TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    revision TEXT NOT NULL,
+    turn_id TEXT,
+    status TEXT NOT NULL CHECK(status IN (
+        'running', 'paused', 'completed', 'failed', 'aborted', 'interrupted'
+    )),
+    workspace_available INTEGER NOT NULL CHECK(workspace_available IN (0, 1)),
+    error_code TEXT,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_scoped_agent_session_events_scope_sequence
+    ON scoped_agent_session_events(owner_plugin_id, namespace, target_key, revision, sequence);
+"#;
 
 fn ensure_scoped_agent_turn_id_column(conn: &Connection) -> Result<()> {
     if !table_exists(conn, "scoped_agent_sessions")? {
@@ -2047,6 +2070,7 @@ INSERT OR IGNORE INTO config (key, value)
         ensure_scoped_agent_turn_id_column(tx)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
+    M::up(SCOPED_AGENT_SESSION_EVENTS_SQL),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -5314,6 +5338,7 @@ mod tests {
         let conn = conn.lock().expect("lock database");
 
         assert!(table_exists(&conn, "scoped_agent_sessions").expect("check table"));
+        assert!(table_exists(&conn, "scoped_agent_session_events").expect("check event table"));
         let columns = conn
             .prepare("SELECT name FROM pragma_table_info('scoped_agent_sessions') ORDER BY cid")
             .expect("prepare Scoped Agent Session columns")

@@ -356,6 +356,24 @@ describe('review workspace', () => {
     })
   })
 
+  it('offers Generate only when no direct terminal turn is active', async () => {
+    const { workspace, registry } = await setup()
+    await workspace.list.onSelectPr(pr)
+    await waitFor(() => expect(workspace.detail!.agentSession.projectId).toBe('project-1'))
+    await workspace.detail!.onActivateAgent()
+    await waitFor(() => expect(workspace.detail!.agentSession.status).toMatchObject({
+      status: 'running', turnId: null,
+    }))
+    expect(workspace.detail!.canGenerateWalkthrough).toBe(true)
+
+    const scope = { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' }
+    await registry.frontendApi.agentSessions.input(scope, 'Reviewer follow-up')
+    await waitFor(() => expect(workspace.detail!.canGenerateWalkthrough).toBe(false))
+
+    registry.pauseScopedAgentSession(scope)
+    await waitFor(() => expect(workspace.detail!.canGenerateWalkthrough).toBe(true))
+  })
+
   it('offers keep/remove after an in-app review, keeping the PR on keep', async () => {
     const { workspace, calls } = await setup()
     await workspace.list.onSelectPr(pr)

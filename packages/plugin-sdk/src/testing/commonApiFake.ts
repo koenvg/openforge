@@ -210,6 +210,10 @@ function assertScopedInput(input: string): void {
   }
 }
 
+function scopedTurnIdFromInput(input: string): string | null {
+  return /\n\n<!-- openforge-turn-id:([A-Za-z0-9._:-]{1,128}) -->\s*$/.exec(input)?.[1] ?? null
+}
+
 function testingExternalFileIdentity(file: TestingExternalTextFile): string {
   return file.identity ?? `${file.root}:${file.path}`
 }
@@ -754,7 +758,7 @@ export class TestingCommonApiFake {
           }
           if (session.status !== 'queued') {
             session.status = 'running'
-            session.turnId = this.nextScopedAgentTurnId()
+            session.turnId = scopedTurnIdFromInput(input) ?? this.nextScopedAgentTurnId()
           }
           session.acceptsInput = session.status !== 'queued'
           session.updatedAt = this.nextScopedAgentSessionTime()

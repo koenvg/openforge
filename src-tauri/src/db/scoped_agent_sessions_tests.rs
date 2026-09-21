@@ -198,6 +198,57 @@ fn interactive_turns_are_fenced_by_pty_and_turn_identity() {
 }
 
 #[test]
+fn turn_transition_history_preserves_states_that_are_replaced_before_observation() {
+    let (db, _temp_dir) = make_test_db("scoped_agent_turn_transition_history");
+    let project = db
+        .create_project("Repository", "/tmp/repository")
+        .expect("create Project");
+    db.create_scoped_agent_session(&new_session(
+        "sas-history",
+        "com.example.review",
+        "head-a",
+        &project.id,
+        "scoped-agent-v1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    ))
+    .expect("create session");
+    db.mark_scoped_agent_session_running("sas-history", "claude-session", 41)
+        .expect("mark running");
+
+    db.begin_scoped_agent_turn("sas-history", 41, "turn-a")
+        .expect("begin first turn");
+    db.pause_scoped_agent_turn("sas-history", 41, "turn-a")
+        .expect("pause first turn");
+    db.begin_scoped_agent_turn("sas-history", 41, "turn-b")
+        .expect("begin second turn");
+
+    let transitions = db
+        .scoped_agent_session_events_after(
+            "com.example.review",
+            "github-pr",
+            "owner/repo#42",
+            "head-a",
+            0,
+            100,
+        )
+        .expect("read turn transition history");
+    assert_eq!(transitions.len(), 3);
+    assert!(transitions
+        .windows(2)
+        .all(|pair| pair[0].sequence < pair[1].sequence));
+    assert_eq!(
+        transitions
+            .iter()
+            .map(|transition| (transition.turn_id.as_deref(), transition.status))
+            .collect::<Vec<_>>(),
+        vec![
+            (Some("turn-a"), ScopedAgentSessionStatus::Running),
+            (Some("turn-a"), ScopedAgentSessionStatus::Paused),
+            (Some("turn-b"), ScopedAgentSessionStatus::Running),
+        ],
+    );
+}
+
+#[test]
 fn scheduler_queues_the_fifth_session_and_promotes_fifo() {
     let (db, _temp_dir) = make_test_db("scoped_agent_session_scheduler");
     let project = db

@@ -39,6 +39,11 @@ The pull request header SHALL provide a Generate walkthrough action while the Ag
 - **THEN** the walkthrough prompt is sent into that same session
 - **AND** the reviewer sees the agent process the prompt in the terminal as it happens
 
+#### Scenario: A direct terminal turn is active
+- **WHEN** the reviewer has submitted a terminal prompt and that agent turn is still running
+- **THEN** Generate walkthrough is unavailable
+- **AND** the walkthrough coordinator does not submit another prompt from the observed busy state
+
 #### Scenario: Reviewer asks a follow-up
 - **WHEN** the reviewer types and submits a question in the TTY after a generation turn completes
 - **THEN** the question continues the same scoped conversation in the same checkout
@@ -75,3 +80,12 @@ The plugin SHALL track each Generate invocation independently from the longer-li
 - **WHEN** the provider process exits unsuccessfully during an active walkthrough attempt
 - **THEN** the attempt reaches `failed`
 - **AND** its accepted partial steps do not become a ready walkthrough
+
+#### Scenario: Reviewer starts another turn before generation is observed
+- **WHEN** the generated turn completes and the reviewer submits another terminal prompt before the plugin's next observation
+- **THEN** the generated turn's exact completion is still delivered in order
+- **AND** the later turn cannot keep the walkthrough generating or complete it on the wrong turn
+
+#### Scenario: Provider exits before accepting Generate
+- **WHEN** the provider exits after Generate sends input but before it reports a new turn identity
+- **THEN** the attempt reaches `failed` instead of remaining `generating`

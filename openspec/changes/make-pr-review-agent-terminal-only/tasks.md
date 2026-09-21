@@ -3,7 +3,7 @@
 - [x] 1.1 Add failing Rust service and database tests for an empty-input scoped launch followed by `UserPromptSubmit`, `Stop`, and `SessionEnd`; verify one PTY stays alive while matching turn ids move through running, paused, and terminal session outcomes.
 - [x] 1.2 Implement scoped turn identity and lifecycle persistence without changing Session Scope or Task-owned session behavior; verify tests reject stale PTY instances, unknown scoped credentials, duplicate hook delivery, and a Stop event for another turn.
 - [x] 1.3 Add host-owned scoped Claude lifecycle hooks alongside the final read-only `PreToolUse` hook; verify generated settings retain the deny policy, exclude user and Project settings, and report prompt, stop, and session-end events through authenticated host routes.
-- [x] 1.4 Publish scoped-session invalidations for accepted turn transitions and expose the updated opaque `turnId`, status, and `acceptsInput` through existing typed boundaries; verify Rust, IPC, Plugin SDK fake, frontend host, backend host, and packaged-runtime contract tests agree.
+- [x] 1.4 Persist and replay accepted turn transitions in order for backend observers, publish frontend invalidations, and expose the updated opaque `turnId`, status, and `acceptsInput` through existing typed boundaries; verify Rust, IPC, Plugin SDK fake, frontend host, backend host, and packaged-runtime contract tests agree.
 
 ## 2. Agent-tab session activation
 
@@ -34,7 +34,7 @@
 ## 6. Affected-system validation
 
 - [x] 6.1 Run `pnpm --filter @openforge-app/plugin-github-sync test`, `pnpm --filter @openforge-app/plugin-github-sync typecheck`, and `pnpm --filter @openforge-app/plugin-github-sync build`; verify the plugin UI, controller, generation, storage, and production bundle pass.
-- [ ] 6.2 Run the focused renderer terminal and plugin-host suites, then `pnpm packages:test`, `pnpm packages:build`, `pnpm packages:contract:check`, `pnpm electron:contract:check`, `pnpm test`, `pnpm exec tsc --noEmit`, and `pnpm lint`; verify the Terminal Runtime, Plugin SDK, Electron boundary, and desktop renderer are clean.
-  - Validation note: the focused renderer and Terminal Runtime suites, builds, contracts, typecheck, and lint pass. Both aggregate test commands reach the unrelated `AnchoredMenu.browser.test.ts` split-button case and time out after 30 seconds; the remaining 7,145 root tests pass.
+- [x] 6.2 Run the focused renderer terminal and plugin-host suites, then `pnpm packages:test`, `pnpm packages:build`, `pnpm packages:contract:check`, `pnpm electron:contract:check`, `pnpm test`, `pnpm exec tsc --noEmit`, and `pnpm lint`; verify the Terminal Runtime, Plugin SDK, Electron boundary, and desktop renderer are clean.
+  - Validation note: the focused suites, package tests and builds, contracts, typecheck, and lint pass. The root suite passed 7,226 tests with four unrelated fixture-process timeouts under concurrent load; those 32 fixture tests passed when rerun in isolation.
 - [x] 6.3 From the Backend Crate root returned by `node scripts/rust-sidecar-layout.mjs backend-crate-root`, run `cargo test` and `cargo clippy`; verify scoped lifecycle authorization, database transitions, PTY identity fencing, policy hooks, and Task-session isolation pass.
 - [x] 6.4 Run `openspec validate make-pr-review-agent-terminal-only --strict` and record all checks, skipped platform-only coverage, and remaining gaps in the implementation handoff.

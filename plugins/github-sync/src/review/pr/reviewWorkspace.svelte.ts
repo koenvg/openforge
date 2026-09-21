@@ -176,6 +176,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onActivateAgent: agentSession.activate,
     canGenerateWalkthrough: agentSession.projectId !== null
       && agentSession.status?.acceptsInput === true
+      && !(agentSession.status.status === 'running' && agentSession.status.turnId !== null)
       && !agentSession.actionPending
       && walkthrough.walkthrough?.state !== 'generating',
     isGeneratingWalkthrough: walkthrough.isStarting || walkthrough.walkthrough?.state === 'generating',

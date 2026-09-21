@@ -363,6 +363,32 @@ describe('CommonAPIFake scoped Agent Sessions', () => {
     expect(retried.turnId).not.toBe(started.turnId)
   })
 
+  it('uses only a strict end-of-prompt marker as the programmatic turn id', async () => {
+    const api = createMockOpenForgeApi()
+    const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }
+    await api.agentSessions.start({
+      scope,
+      projectId: 'P-1',
+      checkoutRevision: 'head-a',
+      initialInput: '',
+      toolPolicy: 'review-read-only',
+    })
+
+    const marked = await api.agentSessions.input(
+      scope,
+      'Generate\n\n<!-- openforge-turn-id:attempt-42 -->',
+    )
+    expect(marked.turnId).toBe('attempt-42')
+    api.__testing.registry.pauseScopedAgentSession(scope)
+
+    const ordinary = await api.agentSessions.input(
+      scope,
+      'Mention <!-- openforge-turn-id:not-a-receipt --> inside the prompt',
+    )
+    expect(ordinary.turnId).toEqual(expect.any(String))
+    expect(ordinary.turnId).not.toBe('not-a-receipt')
+  })
+
   it('allows continuation after a failed turn', async () => {
     const api = createMockOpenForgeApi()
     const scope = { namespace: 'github', targetKey: 'gh:acme/web#42', revision: 'head-a' }

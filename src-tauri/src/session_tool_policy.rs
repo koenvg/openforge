@@ -14,7 +14,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 (async () => {
-  for await (const _ of process.stdin) {}
+  let rawInput = '';
+  for await (const chunk of process.stdin) rawInput += chunk;
   const eventType = process.argv[1];
   const sessionId = process.env.OPENFORGE_SCOPED_SESSION_ID;
   const instance = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
@@ -25,7 +26,14 @@ const crypto = require('node:crypto');
   const turnPath = path.join(stateDir, '.openforge-turn-id');
   let turnId = null;
   if (eventType === 'user-prompt-submit') {
-    turnId = crypto.randomUUID();
+    let prompt = '';
+    try {
+      const hookInput = JSON.parse(rawInput);
+      if (typeof hookInput.prompt === 'string') prompt = hookInput.prompt;
+      else if (typeof hookInput.tool_input?.prompt === 'string') prompt = hookInput.tool_input.prompt;
+    } catch {}
+    const marker = /\n\n<!-- openforge-turn-id:([A-Za-z0-9._:-]{1,128}) -->\s*$/.exec(prompt);
+    turnId = marker?.[1] || crypto.randomUUID();
     await fs.writeFile(turnPath, turnId, { mode: 0o600 });
   } else {
     try { turnId = (await fs.readFile(turnPath, 'utf8')).trim() || null; } catch {}
@@ -471,6 +479,16 @@ mod tests {
                 command.contains("scoped-agent-lifecycle"),
                 "{lifecycle}: {command}"
             );
+            if lifecycle == "UserPromptSubmit" {
+                assert!(
+                    command.contains("openforge-turn-id"),
+                    "{lifecycle}: {command}"
+                );
+                assert!(
+                    command.contains("crypto.randomUUID"),
+                    "{lifecycle}: {command}"
+                );
+            }
         }
         assert!(settings["permissions"]["deny"]
             .as_array()

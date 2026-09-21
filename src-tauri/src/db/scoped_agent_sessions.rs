@@ -95,6 +95,20 @@ pub(crate) struct ScopedAgentSessionRow {
     pub last_used_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ScopedAgentSessionEventRow {
+    pub sequence: u64,
+    pub session_id: String,
+    pub turn_id: Option<String>,
+    pub status: ScopedAgentSessionStatus,
+    pub workspace_available: bool,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct NewScopedAgentSession<'a> {
     pub id: &'a str,
@@ -177,6 +191,45 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionRow> 
         updated_at: row.get(19)?,
         last_used_at: row.get(20)?,
     })
+}
+
+fn event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScopedAgentSessionEventRow> {
+    let sequence = u64::try_from(row.get::<_, i64>(0)?).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Integer,
+            Box::new(error),
+        )
+    })?;
+    Ok(ScopedAgentSessionEventRow {
+        sequence,
+        session_id: row.get(1)?,
+        turn_id: row.get(2)?,
+        status: ScopedAgentSessionStatus::parse(&row.get::<_, String>(3)?)?,
+        workspace_available: row.get(4)?,
+        error_code: row.get(5)?,
+        error_message: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}
+
+fn record_scoped_agent_session_event(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<(), ScopedAgentSessionStoreError> {
+    conn.execute(
+        "INSERT INTO scoped_agent_session_events (
+            session_id, owner_plugin_id, namespace, target_key, revision, turn_id,
+            status, workspace_available, error_code, error_message, created_at, updated_at
+         )
+         SELECT id, owner_plugin_id, namespace, target_key, revision, turn_id,
+                status, CASE WHEN resolved_commit IS NULL THEN 0 ELSE 1 END,
+                error_code, error_message, created_at, updated_at
+           FROM scoped_agent_sessions WHERE id = ?1",
+        [session_id],
+    )?;
+    Ok(())
 }
 
 fn create_on_connection(
@@ -389,6 +442,73 @@ impl super::Database {
             .optional()?)
     }
 
+    pub(crate) fn latest_scoped_agent_session_event_sequence(
+        &self,
+        owner_plugin_id: &str,
+        namespace: &str,
+        target_key: &str,
+        revision: &str,
+    ) -> Result<u64, ScopedAgentSessionStoreError> {
+        let conn = self.lock_conn()?;
+        let sequence: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(sequence), 0) FROM scoped_agent_session_events
+             WHERE owner_plugin_id = ?1 AND namespace = ?2 AND target_key = ?3 AND revision = ?4",
+            params![owner_plugin_id, namespace, target_key, revision],
+            |row| row.get(0),
+        )?;
+        u64::try_from(sequence).map_err(|error| {
+            ScopedAgentSessionStoreError::Database(rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Integer,
+                Box::new(error),
+            ))
+        })
+    }
+
+    pub(crate) fn scoped_agent_session_events_after(
+        &self,
+        owner_plugin_id: &str,
+        namespace: &str,
+        target_key: &str,
+        revision: &str,
+        after_sequence: u64,
+        limit: usize,
+    ) -> Result<Vec<ScopedAgentSessionEventRow>, ScopedAgentSessionStoreError> {
+        let after_sequence = i64::try_from(after_sequence).map_err(|error| {
+            ScopedAgentSessionStoreError::Database(rusqlite::Error::ToSqlConversionFailure(
+                Box::new(error),
+            ))
+        })?;
+        let limit = i64::try_from(limit).map_err(|error| {
+            ScopedAgentSessionStoreError::Database(rusqlite::Error::ToSqlConversionFailure(
+                Box::new(error),
+            ))
+        })?;
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(
+            "SELECT sequence, session_id, turn_id, status, workspace_available,
+                    error_code, error_message, created_at, updated_at
+               FROM scoped_agent_session_events
+              WHERE owner_plugin_id = ?1 AND namespace = ?2 AND target_key = ?3
+                AND revision = ?4 AND sequence > ?5
+              ORDER BY sequence LIMIT ?6",
+        )?;
+        let rows = statement
+            .query_map(
+                params![
+                    owner_plugin_id,
+                    namespace,
+                    target_key,
+                    revision,
+                    after_sequence,
+                    limit,
+                ],
+                event_from_row,
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     pub(crate) fn scoped_agent_sessions_for_logical_scope(
         &self,
         namespace: &str,
@@ -583,6 +703,7 @@ impl super::Database {
                     updated_at = ?4, last_used_at = ?4 WHERE id = ?1",
             params![id, target_status, turn_id, now],
         )?;
+        record_scoped_agent_session_event(&tx, id)?;
         tx.commit()?;
         Ok(ScopedTurnTransition::Applied)
     }
@@ -734,6 +855,7 @@ impl super::Database {
             ],
         )?;
         let promoted = if changed > 0 {
+            record_scoped_agent_session_event(&tx, id)?;
             promote_next_on_connection(&tx, execution_limit)?
         } else {
             None
@@ -760,6 +882,7 @@ impl super::Database {
             params![id, error_code, error_message, now],
         )?;
         let promoted = if changed > 0 {
+            record_scoped_agent_session_event(&tx, id)?;
             promote_next_on_connection(&tx, execution_limit)?
         } else {
             None
@@ -812,6 +935,7 @@ impl super::Database {
                   WHERE id = ?1",
                 params![id, now],
             )?;
+            record_scoped_agent_session_event(&tx, id)?;
         }
 
         let promoted = if released_slot {
