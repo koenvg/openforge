@@ -1,9 +1,33 @@
 import { describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
-import { extractPackageArchive, fetchWithRetry, prepareRustDependencies, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import {
+  enqueueDependencies,
+  extractPackageArchive,
+  fetchWithRetry,
+  prepareRustDependencies,
+  tarExtractionArgs,
+} from './prepare-ghostty-vt.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 describe('Ghostty dependency preparation', () => {
+  it('keeps the first source discovered for a dependency hash', () => {
+    const pending = new Map([
+      ['shared-hash', 'https://deps.files.ghostty.org/shared.tar.gz'],
+    ])
+    const processed = new Set(['processed-hash'])
+
+    enqueueDependencies(pending, new Map([
+      ['shared-hash', 'git+https://github.com/example/shared#revision'],
+      ['new-hash', 'https://deps.files.ghostty.org/new.tar.gz'],
+      ['processed-hash', 'https://deps.files.ghostty.org/processed.tar.gz'],
+    ]), processed)
+
+    expect([...pending]).toEqual([
+      ['shared-hash', 'https://deps.files.ghostty.org/shared.tar.gz'],
+      ['new-hash', 'https://deps.files.ghostty.org/new.tar.gz'],
+    ])
+  })
+
   it('allows cold-cache fetching even when the caller keeps builds offline', () => {
     vi.stubEnv('CARGO_NET_OFFLINE', 'true')
     try {

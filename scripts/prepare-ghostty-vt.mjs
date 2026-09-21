@@ -150,6 +150,12 @@ function remoteDependencies(root) {
   return dependencies
 }
 
+export function enqueueDependencies(pending, dependencies, processed) {
+  for (const [hash, url] of dependencies) {
+    if (!processed.has(hash) && !pending.has(hash)) pending.set(hash, url)
+  }
+}
+
 function downloadableUrl(url) {
   if (!url.startsWith('git+https://github.com/')) return url
   const repository = new URL(url.slice('git+'.length))
@@ -237,9 +243,7 @@ async function prepareZigPackages() {
     processed.add(hash)
     const packageDir = join(systemDir, hash)
     if (existsSync(packageDir)) {
-      for (const [nestedHash, nestedUrl] of remoteDependencies(packageDir)) {
-        if (!processed.has(nestedHash)) pending.set(nestedHash, nestedUrl)
-      }
+      enqueueDependencies(pending, remoteDependencies(packageDir), processed)
     }
   }
   return processed.size
