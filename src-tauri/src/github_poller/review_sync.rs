@@ -180,6 +180,7 @@ pub(super) async fn sync_authored_task_prs(
     db: &Mutex<Database>,
     github_token: &str,
     events: &GitHubEventTarget,
+    requests: &mut super::refresh_requests::RefreshRequests,
 ) -> Result<(usize, AuthoredPrSnapshot), SyncOpenPrsError> {
     let username = match read_or_fetch_github_username(github_client, db, github_token).await? {
         Some(username) => username,
@@ -208,6 +209,7 @@ pub(super) async fn sync_authored_task_prs(
         .map_err(SyncOpenPrsError::Clock)?;
 
     let mut synced = 0;
+    let mut newly_linked = Vec::new();
     let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
     {
         let db_lock = acquire_db(db);
@@ -244,6 +246,12 @@ pub(super) async fn sync_authored_task_prs(
                     })?;
                 synced += 1;
                 if outcome == crate::db::AutomaticAssociation::Created {
+                    if let Some(row) = db_lock
+                        .get_pull_request_by_id(pr.id)
+                        .map_err(|e| SyncOpenPrsError::Db(e.to_string()))?
+                    {
+                        newly_linked.push(row);
+                    }
                     events.emit(
                         "task-pull-request-updated",
                         serde_json::json!({
@@ -253,6 +261,24 @@ pub(super) async fn sync_authored_task_prs(
                 }
             }
         }
+    }
+
+    // The caller already owns the shared request permit. Keep recovery tickets
+    // through the rest of its cycle so normal polling reuses this attempt.
+    if !newly_linked.is_empty() && github_client.get_last_rate_limit_reset().is_none() {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            super::persistence::poll_prs_for_project(
+                github_client,
+                db,
+                events,
+                github_token,
+                Some(&username),
+                newly_linked,
+                requests,
+            ),
+        )
+        .await;
     }
 
     if should_reconcile_stale {

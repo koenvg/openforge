@@ -6,7 +6,9 @@ use crate::db;
 use std::sync::{Arc, Mutex};
 
 pub use execution::{enqueue_task_pull_request, merge_task_pull_request};
+#[cfg(test)]
 pub use linking::link_pull_request;
+pub use linking::link_pull_request_and_hydrate;
 
 pub fn get_pull_requests(db: &Arc<Mutex<db::Database>>) -> Result<Vec<db::PrRow>, String> {
     let db_lock = crate::db::acquire_db(db);

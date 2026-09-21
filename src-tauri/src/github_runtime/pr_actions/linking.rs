@@ -65,11 +65,46 @@ fn synthetic_pr_id(link: &GitHubPrLink) -> i64 {
     -(positive as i64)
 }
 
+pub fn link_pull_request_and_hydrate(
+    db: &Arc<Mutex<db::Database>>,
+    client: &crate::github_client::GitHubClient,
+    events: crate::app_events::RuntimeEventPublisher,
+    task_id: &str,
+    pr_url: &str,
+) -> Result<db::PrRow, String> {
+    let (pr, associated) = link_with_outcome(db, task_id, pr_url)?;
+    if associated {
+        events.publish(
+            "task-pull-request-updated",
+            &serde_json::json!({
+                "task_id":task_id,"pr_id":pr.id,"action":"linked"
+            }),
+        );
+        crate::github_poller::hydrate_linked_pr(
+            db.clone(),
+            client.clone(),
+            events,
+            pr.clone(),
+            None,
+        );
+    }
+    Ok(pr)
+}
+
+#[cfg(test)]
 pub fn link_pull_request(
     db: &Arc<Mutex<db::Database>>,
     task_id: &str,
     pr_url: &str,
 ) -> Result<db::PrRow, String> {
+    link_with_outcome(db, task_id, pr_url).map(|(pr, _)| pr)
+}
+
+fn link_with_outcome(
+    db: &Arc<Mutex<db::Database>>,
+    task_id: &str,
+    pr_url: &str,
+) -> Result<(db::PrRow, bool), String> {
     let link = parse_github_pr_url(pr_url)?;
     let now = current_unix_timestamp()?;
 
@@ -85,6 +120,16 @@ pub fn link_pull_request(
     let existing_pr = db_lock
         .get_pull_request_by_repository_number(&link.owner, &link.repo, link.number)
         .map_err(|e| format!("Failed to read existing pull requests: {e}"))?;
+
+    if let Some(pr) = &existing_pr {
+        if pr.ticket_id == task_id {
+            return Ok((pr.clone(), false));
+        }
+    }
+    // Preserve an observable association revision even for same-second reassignments.
+    let now = existing_pr
+        .as_ref()
+        .map_or(now, |pr| now.max(pr.updated_at.saturating_add(1)));
 
     let row_id = existing_pr
         .as_ref()
@@ -125,6 +170,7 @@ pub fn link_pull_request(
         .get_pull_request_by_id(row_id)
         .map_err(|e| format!("Failed to read linked pull request: {e}"))?
         .ok_or_else(|| "Failed to read linked pull request after insert".to_string())
+        .map(|pr| (pr, true))
 }
 
 #[cfg(test)]

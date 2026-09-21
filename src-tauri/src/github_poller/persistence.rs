@@ -156,6 +156,12 @@ pub(super) fn apply_terminal_pr_state(
 ) -> rusqlite::Result<bool> {
     match &result.terminal_state {
         Some(PullRequestTerminalState::Closed) => {
+            if db
+                .get_pull_request_by_id(result.pr_id)?
+                .is_some_and(|pr| pr.state == "merged")
+            {
+                return Ok(false);
+            }
             db.update_pr_closed(result.pr_id)?;
             Ok(true)
         }
@@ -210,12 +216,17 @@ pub(super) async fn poll_prs_for_project(
     github_token: &str,
     configured_github_username: Option<&str>,
     open_prs: Vec<PrRow>,
-    changed_pr_numbers: &[i64],
+    requests: &mut super::refresh_requests::RefreshRequests,
 ) -> (usize, usize, usize, usize, usize) {
+    let open_prs: Vec<_> = open_prs
+        .into_iter()
+        .filter(|pr| requests.claim(github_client, pr))
+        .collect();
     if open_prs.is_empty() {
         return PollPersistenceCounts::default().into_tuple();
     }
 
+    let snapshots: HashMap<_, _> = open_prs.iter().map(|pr| (pr.id, pr.clone())).collect();
     let metadata = match load_pr_metadata(db, &open_prs) {
         Ok(metadata) => metadata,
         Err(error) => {
@@ -228,8 +239,9 @@ pub(super) async fn poll_prs_for_project(
         github_token,
         configured_github_username,
         open_prs,
-        changed_pr_numbers,
+        &[],
         metadata,
+        requests,
     )
     .await;
     let now = match current_unix_timestamp() {
@@ -241,7 +253,40 @@ pub(super) async fn poll_prs_for_project(
     };
 
     let db_lock = acquire_db(db);
+    let results = results
+        .into_iter()
+        .filter(|result| {
+            snapshots.get(&result.pr_id).is_some_and(|snapshot| {
+                db_lock
+                    .get_pull_request_by_id(result.pr_id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|current| same_pr_snapshot(snapshot, &current))
+            })
+        })
+        .collect();
     persist_poll_results(events, &db_lock, results, now, configured_github_username).into_tuple()
+}
+
+/// Guard all writes, including comments and terminal state, under the same DB
+/// lock as persistence. A remote response cannot revive or retarget an old link.
+pub(super) fn same_pr_snapshot(before: &PrRow, current: &PrRow) -> bool {
+    before.id == current.id
+        && before.ticket_id == current.ticket_id
+        && before.repo_owner.eq_ignore_ascii_case(&current.repo_owner)
+        && before.repo_name.eq_ignore_ascii_case(&current.repo_name)
+        && before.pr_number == current.pr_number
+        && before.head_sha == current.head_sha
+        && before.state == current.state
+        && before.created_at == current.created_at
+        && before.updated_at == current.updated_at
+        && before.readiness_updated_at == current.readiness_updated_at
+        && before.ci_status == current.ci_status
+        && before.ci_check_runs == current.ci_check_runs
+        && before.review_status == current.review_status
+        && before.reviewers == current.reviewers
+        && before.merge_readiness_status == current.merge_readiness_status
+        && before.merge_readiness_action == current.merge_readiness_action
 }
 
 fn load_pr_metadata(
@@ -292,10 +337,12 @@ async fn poll_project_prs(
     open_prs: Vec<PrRow>,
     changed_pr_numbers: &[i64],
     metadata: PrMetadataSnapshot,
+    requests: &mut super::refresh_requests::RefreshRequests,
 ) -> Vec<PollSinglePrResult> {
     let changed_pr_numbers: HashSet<i64> = changed_pr_numbers.iter().copied().collect();
     let futures = open_prs.into_iter().map(|pr| {
-        let client = github_client.clone();
+        let verified_details = requests.take_seed(pr.id);
+        let client = github_client.for_pr_refresh();
         let token = github_token.to_string();
         // Always full-refetch comments (no `since` delta). A comment going
         // outdated does not bump its updated_at, so a delta fetch would never
@@ -322,6 +369,7 @@ async fn poll_project_prs(
             old_mergeable,
             old_mergeable_state,
             fetch_comments,
+            verified_details,
         )
     });
 
@@ -373,7 +421,14 @@ fn persist_poll_result(
             result.pr_id, error
         );
         counts.errors += 1;
-        return counts;
+        if result.details.is_none()
+            && result.check_runs.is_none()
+            && result.combined_status.is_none()
+            && result.reviews.is_none()
+            && result.comments.is_empty()
+        {
+            return counts;
+        }
     }
 
     let project_id = match project_id_for_task(db, &result.ticket_id) {
@@ -403,6 +458,17 @@ fn persist_poll_result(
 
     counts.new_comments += comments.new_comment_count;
     counts.errors += comments.error_count;
+    // CI rows are head-scoped. Retain old data on same-head failures, but never
+    // relabel it as evidence for a newly observed revision.
+    if let Ok(Some(before)) = db.get_pull_request_by_id(result.pr_id) {
+        if before.head_sha != result.head_sha && ci_persistence_payload(result).is_none() {
+            counts.errors += log_pr_update_error(
+                result.pr_id,
+                "invalidate previous-head CI",
+                db.update_pr_ci_status(result.pr_id, &result.head_sha, "pending", "[]"),
+            );
+        }
+    }
     counts.absorb(persist_ci_and_publish_change(
         events,
         db,
@@ -422,6 +488,12 @@ fn persist_poll_result(
     counts.absorb(persist_terminal_change(db, result));
 
     emit_task_invalidation(events, result, project_id.as_deref());
+    events.emit(
+        "task-pull-request-updated",
+        serde_json::json!({
+            "task_id":result.ticket_id,"pr_id":result.pr_id,"action":"updated"
+        }),
+    );
     counts.errors += record_last_polled(db, result.pr_id, now);
     counts
 }
@@ -613,6 +685,32 @@ pub(super) fn persist_review_status(
 
 fn persist_pr_snapshot(db: &Database, result: &PollSinglePrResult) -> usize {
     let mut errors = 0;
+    if let Some(details) = &result.details {
+        if let Ok(Some(pr)) = db.get_pull_request_by_id(result.pr_id) {
+            errors += log_pr_update_error(
+                result.pr_id,
+                "update PR metadata",
+                db.insert_pull_request_with_number(
+                    pr.id,
+                    pr.pr_number,
+                    &pr.ticket_id,
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    &details.title,
+                    &details.html_url,
+                    &details.state,
+                    pr.created_at,
+                    pr.updated_at,
+                    details.draft.unwrap_or(pr.draft),
+                ),
+            );
+            errors += log_pr_update_error(
+                result.pr_id,
+                "update PR head",
+                db.update_pr_head_sha(pr.id, &result.head_sha),
+            );
+        }
+    }
     if let Some(github_node_id) = result.github_node_id.as_deref() {
         errors += log_pr_update_error(
             result.pr_id,
@@ -621,18 +719,20 @@ fn persist_pr_snapshot(db: &Database, result: &PollSinglePrResult) -> usize {
         );
     }
 
-    let allowed_merge_methods =
-        serde_json::to_string(&result.allowed_merge_methods).unwrap_or_else(|_| "[]".to_string());
-    errors += log_pr_update_error(
-        result.pr_id,
-        "update merge method policy",
-        db.update_pr_merge_method_policy(
+    if result.merge_methods_policy_known {
+        let allowed_merge_methods = serde_json::to_string(&result.allowed_merge_methods)
+            .unwrap_or_else(|_| "[]".to_string());
+        errors += log_pr_update_error(
             result.pr_id,
-            result.merge_methods_policy_known,
-            &allowed_merge_methods,
-            result.default_merge_method.map(|method| method.as_str()),
-        ),
-    );
+            "update merge method policy",
+            db.update_pr_merge_method_policy(
+                result.pr_id,
+                result.merge_methods_policy_known,
+                &allowed_merge_methods,
+                result.default_merge_method.map(|method| method.as_str()),
+            ),
+        );
+    }
     errors += log_pr_update_error(
         result.pr_id,
         "update is_queued",

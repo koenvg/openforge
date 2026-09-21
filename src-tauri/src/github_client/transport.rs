@@ -27,6 +27,17 @@ impl GitHubClient {
     }
 
     pub(super) async fn send_github(&self, req: RequestBuilder) -> Result<Response, GitHubError> {
+        if self.respect_rate_limit {
+            if let Some(reset) = self.get_last_rate_limit_reset() {
+                let now = crate::unix_timestamp::seconds(std::time::SystemTime::now());
+                if now.map_or(true, |now| reset > now) {
+                    return Err(GitHubError::ApiError {
+                        status: 429,
+                        message: "GitHub requests deferred by the shared rate limit".into(),
+                    });
+                }
+            }
+        }
         let request = req
             .build()
             .map_err(|error| GitHubError::NetworkError(error.to_string()))?;

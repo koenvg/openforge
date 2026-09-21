@@ -26,6 +26,7 @@ pub(super) fn sanitized_comment_fetch_error_message(error: &GitHubError) -> Stri
 }
 
 pub(super) struct PollSinglePrResult {
+    pub(super) details: Option<crate::github_client::PullRequest>,
     pub(super) pr_id: i64,
     pub(super) ticket_id: String,
     pub(super) pr_title: String,
@@ -65,6 +66,7 @@ pub(super) fn comment_fetch_error_result(
     error: String,
 ) -> PollSinglePrResult {
     PollSinglePrResult {
+        details: None,
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
@@ -80,7 +82,7 @@ pub(super) fn comment_fetch_error_result(
         requested_reviewers: None,
         mergeable: old_mergeable,
         mergeable_state: old_mergeable_state,
-        is_queued: false,
+        is_queued: pr.is_queued,
         required_check_names: vec![],
         required_approving_count: None,
         merge_methods_policy_known: false,
@@ -139,8 +141,9 @@ pub(super) async fn poll_single_pr(
     old_mergeable: Option<bool>,
     old_mergeable_state: Option<String>,
     fetch_comments: bool,
+    verified_details: Option<crate::github_client::PullRequest>,
 ) -> PollSinglePrResult {
-    let comments = match fetch_pr_comments_for_poll(
+    let (comments, comment_error) = match fetch_pr_comments_for_poll(
         &github_client,
         &github_token,
         &pr,
@@ -149,17 +152,8 @@ pub(super) async fn poll_single_pr(
     )
     .await
     {
-        Ok(comments) => comments,
-        Err(error) => {
-            return comment_fetch_error_result(
-                pr,
-                old_ci_status,
-                old_review_status,
-                old_mergeable,
-                old_mergeable_state,
-                error,
-            );
-        }
+        Ok(comments) => (comments, None),
+        Err(error) => (Vec::new(), Some(error)),
     };
 
     let graphql_snapshot =
@@ -171,8 +165,28 @@ pub(super) async fn poll_single_pr(
         graphql_snapshot.as_ref(),
         old_mergeable,
         old_mergeable_state,
+        verified_details,
     )
     .await;
+    if rest_sources.pr_details_result.is_err()
+        && graphql_snapshot.is_none()
+        && rest_sources.check_runs.is_none()
+        && rest_sources.combined_status.is_none()
+        && rest_sources.reviews.is_none()
+    {
+        let mut result = comment_fetch_error_result(
+            pr,
+            old_ci_status,
+            old_review_status,
+            old_mergeable,
+            rest_sources.mergeable_state.clone(),
+            comment_error.unwrap_or_else(|| "PR details unavailable".into()),
+        );
+        result.comments = comments;
+        result.readiness_facts.status = Some("readiness_unknown".into());
+        result.readiness_facts.action = Some("wait_for_github".into());
+        return result;
+    }
     let graphql_inputs = select_snapshot_readiness_inputs(&pr, graphql_snapshot.as_ref());
     let result_head_sha = poll_result_pr_head_sha(&pr, graphql_snapshot.as_ref(), &rest_sources);
     let ci_validation_sha =
@@ -267,20 +281,47 @@ pub(super) async fn poll_single_pr(
         configured_github_username.as_deref(),
     );
     readiness_facts = enforce_merge_method_policy(readiness_facts, &branch_policy_inputs);
+    let incomplete_sources = comment_error.is_some()
+        || check_runs.is_none()
+        || combined_status.is_none()
+        || rest_sources.reviews.is_none()
+        || rest_sources.requested_reviewers.is_none();
+    if incomplete_sources
+        && matches!(
+            readiness_facts.status.as_deref(),
+            Some("ready_to_merge" | "ready_to_enqueue")
+        )
+    {
+        readiness_facts.status = Some("readiness_unknown".into());
+        readiness_facts.action = Some("wait_for_github".into());
+        readiness_facts.blockers_json = Some(serde_json::json!([{
+            "code":"details_unavailable","message":"Required GitHub details are not available yet."
+        }]).to_string());
+    }
     let terminal_state = rest_sources
         .pr_details_result
         .as_ref()
         .ok()
         .and_then(|details| details.terminal_state());
 
+    let github_node_id = graphql_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.github_node_id.clone())
+        .or_else(|| {
+            rest_sources
+                .pr_details_result
+                .as_ref()
+                .ok()
+                .and_then(|details| details.extra["node_id"].as_str().map(str::to_owned))
+        })
+        .or(pr.github_node_id);
+
     PollSinglePrResult {
+        details: rest_sources.pr_details_result.ok(),
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
-        github_node_id: graphql_snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.github_node_id.clone())
-            .or(pr.github_node_id),
+        github_node_id,
         head_sha: result_head_sha,
         ci_validation_sha,
         old_ci_status,
@@ -300,6 +341,7 @@ pub(super) async fn poll_single_pr(
         default_merge_method: branch_policy_inputs.default_merge_method,
         readiness_facts,
         terminal_state,
-        error: None,
+        error: comment_error
+            .or_else(|| incomplete_sources.then(|| "Required PR details unavailable".into())),
     }
 }

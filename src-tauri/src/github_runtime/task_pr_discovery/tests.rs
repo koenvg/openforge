@@ -16,6 +16,29 @@ pub(crate) mod support;
 use support::Fixture;
 
 #[tokio::test]
+async fn hidden_discovered_pr_hydrates_from_persisted_events_without_polling() {
+    let f = Fixture::new(false, Some("test-token")).await;
+    let mut events = f.bus.sender().subscribe();
+    f.output(42);
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.event_name == "task-pull-request-updated"
+                && event.payload["action"] == "updated"
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("discovery must hydrate a hidden task without polling");
+    let prs = crate::github_runtime::get_pull_requests_for_task(&f.db, &f.task_id).unwrap();
+    assert_eq!(prs.len(), 1);
+    assert_eq!(prs[0].head_sha, "abc");
+    assert_eq!(prs[0].ci_status.as_deref(), Some("none"));
+    assert!(prs[0].readiness_updated_at.is_some());
+}
+#[tokio::test]
 async fn first_pr_from_hidden_local_output_is_persisted_and_notified_without_polling() {
     let f = Fixture::new(false, Some("test-token")).await;
     assert!(acquire_db(&f.db)
@@ -152,7 +175,12 @@ async fn normal_completion_preserves_verification_and_rediscovery_does_not_notif
         .unwrap()
         .output("https://github.com/acme/widgets/pull/42\n");
     f.discovery.settled().await;
-    assert!(events.try_recv().is_err());
+    while let Ok(event) = events.try_recv() {
+        assert_ne!(
+            event.payload["action"], "linked",
+            "rediscovery must not emit another link"
+        );
+    }
     assert_eq!(
         acquire_db(&f.db)
             .get_pull_requests_for_task(&f.task_id)

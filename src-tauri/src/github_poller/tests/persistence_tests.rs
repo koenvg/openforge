@@ -15,6 +15,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
     };
 
     PollSinglePrResult {
+        details: None,
         pr_id,
         ticket_id: "T-100".to_string(),
         pr_title: "Review body test".to_string(),
@@ -73,6 +74,7 @@ fn make_review_comment_poll_result(
     outdated: bool,
 ) -> PollSinglePrResult {
     PollSinglePrResult {
+        details: None,
         pr_id,
         ticket_id: "T-100".to_string(),
         pr_title: "Outdated test".to_string(),

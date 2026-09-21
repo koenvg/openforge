@@ -5,6 +5,7 @@ use std::sync::{
     Arc,
 };
 
+mod hydration;
 async fn reply_test_github_client(
     status: StatusCode,
     request_count: Arc<AtomicUsize>,

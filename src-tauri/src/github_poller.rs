@@ -26,11 +26,14 @@
 //! - Logs errors and continues (doesn't crash the polling loop)
 
 mod common;
+mod hydration;
 mod persistence;
 mod poll_events;
 mod poll_execution;
+pub(crate) use hydration::hydrate_linked_pr;
 mod pr_execution;
 mod pr_readiness;
+mod refresh_requests;
 mod review_sync;
 mod scheduling;
 mod scope_execution;

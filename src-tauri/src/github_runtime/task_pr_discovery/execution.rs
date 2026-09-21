@@ -196,7 +196,7 @@ impl Execution {
         };
         let now = self.clock.now();
         let this = self.clone();
-        let _ = tokio::task::spawn_blocking(move || -> Option<()> {
+        let hydration = tokio::task::spawn_blocking(move || -> Option<(crate::db::PrRow, crate::github_client::PullRequest)> {
             let current = signal.origin.current.read().ok()?;
             if !*current { return None; }
             let completion = signal.origin.completion.lock().ok()?;
@@ -221,7 +221,18 @@ impl Execution {
                 if recent.len() == 128 { recent.pop_front(); }
                 recent.push_back(Success { task_id: signal.origin.task_id.clone(), identity: initial, git, at: now });
             }
-            Some(())
+            if outcome == AutomaticAssociation::Created {
+                Some((db.get_pull_request_by_id(id).ok()??, *pr))
+            } else { None }
         }).await;
+        if let Ok(Some((row, details))) = hydration {
+            crate::github_poller::hydrate_linked_pr(
+                self.db.clone(),
+                self.github.clone(),
+                self.events.clone(),
+                row,
+                Some(details),
+            );
+        }
     }
 }

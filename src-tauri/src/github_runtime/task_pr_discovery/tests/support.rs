@@ -162,6 +162,26 @@ impl Fixture {
         let router = Router::new()
             .route("/repos/acme/widgets/pulls/:number", get(response))
             .route("/repos/:owner/:repo/pulls", get(branch_response))
+            .route(
+                "/repos/acme/widgets/pulls/:number/comments",
+                get(|| async { Json(serde_json::json!([])) }),
+            )
+            .route(
+                "/repos/acme/widgets/issues/:number/comments",
+                get(|| async { Json(serde_json::json!([])) }),
+            )
+            .route(
+                "/repos/acme/widgets/pulls/:number/reviews",
+                get(|| async { Json(serde_json::json!([])) }),
+            )
+            .route(
+                "/repos/acme/widgets/commits/abc/check-runs",
+                get(|| async { Json(serde_json::json!({"total_count":0,"check_runs":[]})) }),
+            )
+            .route(
+                "/repos/acme/widgets/commits/abc/status",
+                get(|| async { Json(serde_json::json!({"state":"success","statuses":[]})) }),
+            )
             .with_state(api.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
