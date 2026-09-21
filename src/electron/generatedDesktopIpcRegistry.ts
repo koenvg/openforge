@@ -97,6 +97,8 @@ export const desktopCommandContracts = [
   {"functionName":"getReviewPrs","moduleName":"github","ipcCommand":"get_review_prs","payloadKeys":[],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"markReviewPrViewed","moduleName":"github","ipcCommand":"mark_review_pr_viewed","payloadKeys":["prId","headSha"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"markReviewPrUnviewed","moduleName":"github","ipcCommand":"mark_review_pr_unviewed","payloadKeys":["prId"],"owner":"rust-sidecar","domain":"github-review"},
+  {"functionName":"markReviewPrReviewed","moduleName":"github","ipcCommand":"mark_review_pr_reviewed","payloadKeys":["prId","headSha"],"owner":"rust-sidecar","domain":"github-review"},
+  {"functionName":"markReviewPrNeedsReview","moduleName":"github","ipcCommand":"mark_review_pr_needs_review","payloadKeys":["prId"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"getPrFileDiffs","moduleName":"github","ipcCommand":"get_pr_file_diffs","payloadKeys":["owner","repo","prNumber"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getFileContent","moduleName":"github","ipcCommand":"get_file_content","payloadKeys":["owner","repo","sha"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getFileContentBase64","moduleName":"github","ipcCommand":"get_file_content_base64","payloadKeys":["owner","repo","sha"],"owner":"rust-sidecar","domain":"files-review"},

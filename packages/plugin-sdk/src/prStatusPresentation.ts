@@ -1,4 +1,4 @@
-import { getMergeReadiness, isClosedUnmergedPullRequest, parseJsonListColumn, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PrReviewer, type PrReviewerKind, type PrReviewerState, type PullRequestMergeMethod } from './domain.js'
+import { getMergeReadiness, isClosedUnmergedPullRequest, parseJsonListColumn, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PrReviewer, type PrReviewerKind, type PrReviewerState, type PullRequestMergeMethod, type ReviewPullRequest } from './domain.js'
 
 export type PrChipSurface = 'compact' | 'detail'
 
@@ -6,6 +6,27 @@ export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral
 export type PrChipType = 'draft' | 'ci' | 'review' | 'merge'
 export type PrChipIcon = 'check' | 'cross' | 'clock' | null
 export type PrStatusBadgeStatus = 'pending' | 'failed' | 'success' | 'in-progress' | 'in-review' | 'expired'
+
+export type ReviewRequestProgressKind = 'review-needed' | 'reviewed' | 'updated-since-review'
+
+export interface ReviewRequestProgress {
+  kind: ReviewRequestProgressKind
+  label: 'Review needed' | 'Reviewed' | 'Updated since review'
+  status: PrStatusBadgeStatus
+}
+
+export function getReviewRequestProgress(
+  pr: Pick<ReviewPullRequest, 'state' | 'merged_at' | 'head_sha' | 'reviewed_head_sha'>,
+): ReviewRequestProgress | null {
+  if (pr.state !== 'open' || pr.merged_at !== null) return null
+  if (pr.reviewed_head_sha === null) {
+    return { kind: 'review-needed', label: 'Review needed', status: 'in-review' }
+  }
+  if (pr.reviewed_head_sha === pr.head_sha) {
+    return { kind: 'reviewed', label: 'Reviewed', status: 'success' }
+  }
+  return { kind: 'updated-since-review', label: 'Updated since review', status: 'pending' }
+}
 
 const PULL_REQUEST_MERGE_ACTION_LABELS: Record<PullRequestMergeMethod, string> = {
   merge: 'Create a merge commit',

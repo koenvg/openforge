@@ -41,6 +41,27 @@ pub fn mark_review_pr_unviewed(db: &Arc<Mutex<db::Database>>, pr_id: i64) -> Res
         .map_err(|e| format!("Failed to mark review PR unviewed: {e}"))
 }
 
+pub fn mark_review_pr_reviewed(
+    db: &Arc<Mutex<db::Database>>,
+    pr_id: i64,
+    head_sha: &str,
+) -> Result<(), String> {
+    let db_lock = crate::db::acquire_db(db);
+    db_lock
+        .mark_review_pr_reviewed(pr_id, head_sha)
+        .map_err(|e| format!("Failed to mark review PR reviewed: {e}"))
+}
+
+pub fn mark_review_pr_needs_review(
+    db: &Arc<Mutex<db::Database>>,
+    pr_id: i64,
+) -> Result<(), String> {
+    let db_lock = crate::db::acquire_db(db);
+    db_lock
+        .mark_review_pr_needs_review(pr_id)
+        .map_err(|e| format!("Failed to mark review PR as needing review: {e}"))
+}
+
 /// Remove a review PR from the sticky list (manual "Remove from list" action).
 pub fn dismiss_review_pr(db: &Arc<Mutex<db::Database>>, pr_id: i64) -> Result<(), String> {
     let db_lock = crate::db::acquire_db(db);

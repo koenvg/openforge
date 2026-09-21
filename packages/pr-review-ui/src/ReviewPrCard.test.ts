@@ -29,6 +29,7 @@ const basePr: ReviewPullRequest = {
   updated_at: Date.now(),
   viewed_at: null,
   viewed_head_sha: null,
+  reviewed_head_sha: null,
   labels: [],
 }
 
@@ -120,6 +121,60 @@ describe('ReviewPrCard', () => {
 
     expect(screen.getByText('CI Passed').closest('[data-status-badge]')).toBeTruthy()
     expect(screen.getByText('Ready to Merge').closest('[data-status-badge]')).toBeTruthy()
+  })
+
+  it('shows review needed before CI and marks the current head reviewed without opening the card', async () => {
+    const onClick = vi.fn()
+    const onMarkReviewed = vi.fn()
+    render(ReviewPrCard, {
+      props: {
+        pr: { ...basePr, ci_status: 'success' },
+        selected: false,
+        onClick,
+        onMarkReviewed,
+      },
+    })
+
+    const reviewStatus = screen.getByText('Review needed')
+    const ciStatus = screen.getByText('CI Passed')
+    expect(reviewStatus.closest('[data-status-badge]')).toBeTruthy()
+    expect(reviewStatus.compareDocumentPosition(ciStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }))
+    expect(onMarkReviewed).toHaveBeenCalledTimes(1)
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it('shows reviewed and lets the user mark it as needing review without opening the card', async () => {
+    const onClick = vi.fn()
+    const onMarkNeedsReview = vi.fn()
+    render(ReviewPrCard, {
+      props: {
+        pr: { ...basePr, reviewed_head_sha: basePr.head_sha },
+        selected: false,
+        onClick,
+        onMarkNeedsReview,
+      },
+    })
+
+    expect(screen.getByText('Reviewed').closest('[data-status-badge]')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Mark as needs review' }))
+    expect(onMarkNeedsReview).toHaveBeenCalledTimes(1)
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it('shows updated since review and offers the current-head review action', () => {
+    render(ReviewPrCard, {
+      props: {
+        pr: { ...basePr, reviewed_head_sha: 'previous-head' },
+        selected: false,
+        onClick: () => {},
+        onMarkReviewed: () => {},
+      },
+    })
+
+    expect(screen.getByText('Updated since review').closest('[data-status-badge]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Mark reviewed' })).toBeTruthy()
   })
 
   it('shows only the finished state after a review request merges', () => {

@@ -168,6 +168,19 @@ pub(super) async fn handle_app_github_review_command(
             publish_review_pr_count_changed(state);
             serde_json::Value::Null
         }
+        "mark_review_pr_reviewed" => {
+            let pr_id = payload_i64(&request.payload, "prId")?;
+            let head_sha = payload_string(&request.payload, "headSha")?;
+            crate::github_runtime::mark_review_pr_reviewed(&state.db, pr_id, &head_sha)
+                .map_err(runtime_error)?;
+            serde_json::Value::Null
+        }
+        "mark_review_pr_needs_review" => {
+            let pr_id = payload_i64(&request.payload, "prId")?;
+            crate::github_runtime::mark_review_pr_needs_review(&state.db, pr_id)
+                .map_err(runtime_error)?;
+            serde_json::Value::Null
+        }
         "dismiss_review_pr" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
             crate::github_runtime::dismiss_review_pr(&state.db, pr_id).map_err(runtime_error)?;

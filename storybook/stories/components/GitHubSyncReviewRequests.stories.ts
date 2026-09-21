@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/svelte-vite'
-import { expect, within } from 'storybook/test'
+import { expect, userEvent, within } from 'storybook/test'
 import WorkspaceComponentFrame from '../../shared/frames/WorkspaceComponentFrame.svelte'
 import GitHubSyncReviewRequestsFrame from '../../shared/frames/GitHubSyncReviewRequestsFrame.svelte'
 import {
   activeReviewRequest,
   closedReviewRequest,
   mergedReviewRequest,
+  reviewedReviewRequest,
+  updatedSinceReviewRequest,
 } from '../../shared/fixtures/githubSyncReviewFixtures'
 
 const meta = {
@@ -20,9 +22,19 @@ type Story = StoryObj<typeof meta>
 export const ActiveAndFinished: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByLabelText('2 active review requests')).toHaveTextContent('2')
+    await expect(canvas.getByLabelText('2 review requests needing review')).toHaveTextContent('2')
     await expect(canvas.getAllByLabelText('Unread review request')).toHaveLength(1)
     await expect(canvas.getByText(activeReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByText(updatedSinceReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByText('Review needed')).toBeVisible()
+    await expect(canvas.getByText('Updated since review')).toBeVisible()
+
+    const reviewedToggle = canvas.getByRole('button', { name: 'Reviewed (1)' })
+    await expect(reviewedToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(canvas.queryByText(reviewedReviewRequest.title)).not.toBeInTheDocument()
+    await userEvent.click(reviewedToggle)
+    await expect(canvas.getByText(reviewedReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByText('Reviewed')).toBeVisible()
 
     const finishedToggle = canvas.getByRole('button', { name: 'Finished (2)' })
     await expect(finishedToggle).toHaveAttribute('aria-expanded', 'true')
@@ -34,6 +46,7 @@ export const ActiveAndFinished: Story = {
     await expect(closedTitle.closest('.vim-focus')).toBeNull()
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
     await expect(canvas.getByText(activeReviewRequest.title)).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Reviewed (1)' })).toHaveAttribute('aria-expanded', 'true')
     await expect(canvas.getByRole('button', { name: 'Finished (2)' })).toHaveAttribute('aria-expanded', 'true')
   },
 }

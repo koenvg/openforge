@@ -113,6 +113,8 @@ export const desktopIpcFunctionDomains = {
   getReviewPrs: 'github-review',
   markReviewPrViewed: 'github-review',
   markReviewPrUnviewed: 'github-review',
+  markReviewPrReviewed: 'github-review',
+  markReviewPrNeedsReview: 'github-review',
   getPrFileDiffs: 'files-review',
   getFileContent: 'files-review',
   getFileContentBase64: 'files-review',

@@ -715,6 +715,21 @@ async fn handles_db_backed_commands_and_events() {
     // refresh the sidebar/rail badges immediately.
     let viewed_event = events.recv().await.expect("review pr count changed event");
     assert_eq!(viewed_event.event_name, "review-pr-count-changed");
+    invoke_ok(
+        &state,
+        "mark_review_pr_reviewed",
+        json!({ "prId": 20, "headSha": "reviewed-sha" }),
+    )
+    .await;
+    let reviewed = invoke_ok(&state, "get_review_prs", serde_json::Value::Null).await;
+    assert_eq!(reviewed[0]["reviewed_head_sha"], "reviewed-sha");
+    assert!(reviewed[0]["viewed_at"].is_number());
+    assert_eq!(reviewed[0]["viewed_head_sha"], "sha-1");
+    invoke_ok(&state, "mark_review_pr_needs_review", json!({ "prId": 20 })).await;
+    let needs_review = invoke_ok(&state, "get_review_prs", serde_json::Value::Null).await;
+    assert!(needs_review[0]["reviewed_head_sha"].is_null());
+    assert!(needs_review[0]["viewed_at"].is_number());
+    assert_eq!(needs_review[0]["viewed_head_sha"], "sha-1");
     invoke_ok(&state, "mark_review_pr_unviewed", json!({ "prId": 20 })).await;
     // Marking a PR unviewed resets it to unread, again changing the unopened count, so
     // the renderer is notified to refresh the sidebar/rail badges.

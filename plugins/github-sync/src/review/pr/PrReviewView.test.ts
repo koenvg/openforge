@@ -116,6 +116,7 @@ const basePr: ReviewPullRequest = {
   updated_at: 1_700_000_000,
   viewed_at: null,
   viewed_head_sha: null,
+  reviewed_head_sha: null,
   labels: [],
 }
 
@@ -175,6 +176,8 @@ function registerPrReviewBackends(
   getWalkthrough: () => WalkthroughRecordV1 | null | Promise<WalkthroughRecordV1 | null> = () => null,
 ) {
   let getOverviewComments: () => PrOverviewComment[] | Promise<PrOverviewComment[]> = () => []
+  const markReviewed = vi.fn(async () => undefined)
+  const markNeedsReview = vi.fn(async () => undefined)
   registry.frontendApi.projects.list = vi.fn(async () => [{
     id: 'project-1', name: 'Project 1', path: '/project-1', created_at: 1, updated_at: 1,
   }])
@@ -194,6 +197,8 @@ function registerPrReviewBackends(
   backend.registerMethod('fetchAuthoredPrs', { handler: async () => [] })
   backend.registerMethod('markReviewPrViewed', { handler: async () => undefined })
   backend.registerMethod('markReviewPrUnviewed', { handler: async () => undefined })
+  backend.registerMethod('markReviewPrReviewed', { handler: markReviewed })
+  backend.registerMethod('markReviewPrNeedsReview', { handler: markNeedsReview })
   backend.registerMethod('getPrFileDiffs', { handler: async (payload) => getDiffs(payload as { prNumber: number }) })
   backend.registerMethod('getReviewComments', {
     handler: async () => typeof reviewCommentResults === 'function'
@@ -211,6 +216,8 @@ function registerPrReviewBackends(
   backend.registerMethod('submitPrReview', { handler: submitReview })
   return {
     resolveProjects,
+    markReviewed,
+    markNeedsReview,
     setOverviewCommentsHandler(handler: typeof getOverviewComments) {
       getOverviewComments = handler
     },
@@ -330,6 +337,82 @@ describe('PrReviewView mark as unread', () => {
   })
 })
 
+describe('PrReviewView review progress', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('starts Reviewed collapsed, expands it, and reports independent group counts', async () => {
+    const reviewedPr: ReviewPullRequest = {
+      ...secondPr,
+      title: 'Already reviewed change',
+      reviewed_head_sha: secondPr.head_sha,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr, reviewedPr])
+
+    renderPrReviewView(registry)
+
+    expect(await screen.findByText(basePr.title)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Needs your review (1)' })).toBeTruthy()
+    expect(screen.queryByText(reviewedPr.title)).toBeNull()
+
+    const reviewedToggle = screen.getByRole('button', { name: 'Reviewed (1)' })
+    expect(reviewedToggle.getAttribute('aria-expanded')).toBe('false')
+    await fireEvent.click(reviewedToggle)
+
+    expect(await screen.findByText(reviewedPr.title)).toBeTruthy()
+    expect(screen.getByText('Reviewed')).toBeTruthy()
+  })
+
+  it('marks and undoes review progress without changing unread state', async () => {
+    const unreadPr: ReviewPullRequest = {
+      ...basePr,
+      viewed_at: null,
+      viewed_head_sha: null,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const { markReviewed, markNeedsReview } = registerPrReviewBackends(registry, () => [baseDiff], [unreadPr])
+
+    renderPrReviewView(registry)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Mark reviewed' }))
+    await waitFor(() => expect(get(reviewPrs)[0]).toMatchObject({
+      reviewed_head_sha: unreadPr.head_sha,
+      viewed_at: null,
+      viewed_head_sha: null,
+    }))
+    expect(markReviewed).toHaveBeenCalledWith({ prId: unreadPr.id, headSha: unreadPr.head_sha })
+    expect(screen.getByRole('button', { name: 'Reviewed (1)' }).getAttribute('aria-expanded')).toBe('false')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reviewed (1)' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Mark as needs review' }))
+    await waitFor(() => expect(get(reviewPrs)[0]).toMatchObject({
+      reviewed_head_sha: null,
+      viewed_at: null,
+      viewed_head_sha: null,
+    }))
+    expect(markNeedsReview).toHaveBeenCalledWith({ prId: unreadPr.id })
+    expect(await screen.findByText(unreadPr.title)).toBeTruthy()
+  })
+
+  it('restores review progress and explains a local persistence failure', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const { markReviewed } = registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    markReviewed.mockRejectedValueOnce(new Error('database unavailable'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    renderPrReviewView(registry)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Mark reviewed' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not save review status')
+    await waitFor(() => expect(get(reviewPrs)[0]?.reviewed_head_sha).toBeNull())
+    expect(await screen.findByText(basePr.title)).toBeTruthy()
+  })
+})
+
 describe('PrReviewView finished review requests', () => {
   beforeEach(() => {
     resetStores()
@@ -352,7 +435,7 @@ describe('PrReviewView finished review requests', () => {
     const mergedTitle = screen.getByText(mergedPr.title)
     expect(mergedTitle).toBeTruthy()
     expect(mergedTitle.closest('.vim-focus')).toBeNull()
-    expect(screen.getByLabelText('1 active review request').textContent).toBe('1')
+    expect(screen.getByLabelText('1 review request needing review').textContent).toBe('1')
     expect(screen.queryByRole('button', { name: /Generate walkthrough/i })).toBeNull()
 
     const finishedToggle = screen.getByRole('button', { name: 'Finished (1)' })

@@ -4,12 +4,14 @@
     activeReviewRequest,
     closedReviewRequest,
     mergedReviewRequest,
-    viewedReviewRequest,
+    reviewedReviewRequest,
+    updatedSinceReviewRequest,
   } from '../fixtures/githubSyncReviewFixtures'
 
-  const activeRequests = [activeReviewRequest, viewedReviewRequest]
+  const needsReviewRequests = [activeReviewRequest, updatedSinceReviewRequest]
+  const reviewedRequests = [reviewedReviewRequest]
   const finishedRequests = [mergedReviewRequest, closedReviewRequest]
-  const allReviewRequests = [...activeRequests, ...finishedRequests]
+  const allReviewRequests = [...needsReviewRequests, ...reviewedRequests, ...finishedRequests]
   const repository = 'openforge/openforge'
   const noOp = () => {}
 </script>
@@ -28,14 +30,17 @@
   isLoadingAuthored={false}
   error={null}
   authoredError={null}
+  reviewStatusError={null}
   githubTokenConfigured={true}
   reviewRequests={{
-    activeCount: activeRequests.length,
+    needsReviewCount: needsReviewRequests.length,
+    reviewedCount: reviewedRequests.length,
     filtered: allReviewRequests,
     finishedCount: finishedRequests.length,
-    groupedActive: new Map([[repository, activeRequests]]),
+    groupedNeedsReview: new Map([[repository, needsReviewRequests]]),
+    groupedReviewed: new Map([[repository, reviewedRequests]]),
     groupedFinished: new Map([[repository, finishedRequests]]),
-    keyboardNavigable: activeRequests,
+    keyboardNavigable: needsReviewRequests,
   }}
   filteredAuthoredPrs={[]}
   allReviewPrs={allReviewRequests}
@@ -55,6 +60,8 @@
   onOpenRepositoryFilters={noOp}
   onSelectPr={noOp}
   onMarkUnread={noOp}
+  onMarkReviewed={noOp}
+  onMarkNeedsReview={noOp}
   onRemove={noOp}
   onOpenAuthoredPr={noOp}
   pluralize={(count, singular, plural = `${singular}s`) => count === 1 ? singular : plural}

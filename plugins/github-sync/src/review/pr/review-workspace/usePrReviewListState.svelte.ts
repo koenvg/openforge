@@ -2,7 +2,6 @@ import { onDestroy, onMount } from 'svelte'
 import { fromStore } from 'svelte/store'
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import {
-  isClosedOrMergedPullRequest,
   type AuthoredPullRequest,
   type ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
@@ -19,6 +18,8 @@ import { walkthroughReadyFirst } from '../../../lib/reviewListSort'
 import { composeRequestForAuthoredPr } from '../authoredPrTaskCompose'
 import type { GithubSyncPrReviewClient } from '../githubSyncClient'
 import type { WalkthroughRecordV1 } from '../../../lib/walkthroughRecord'
+import { deriveReviewRequestCollections } from './reviewRequestListModel'
+import type { ReviewProgressMutations } from './reviewProgressMutations'
 
 type ReviewScope = 'repo' | 'global'
 
@@ -34,6 +35,7 @@ type Options = {
   getProjectName: () => string
   getProjectId: () => string | null
   walkthroughs: WalkthroughListState
+  reviewProgress: ReviewProgressMutations
   onSelectPr: (pr: ReviewPullRequest) => void
   onBackToList: () => void
 }
@@ -46,6 +48,7 @@ export function usePrReviewListState(options: Options) {
   let isLoadingAuthored = $state(false)
   let error = $state<string | null>(null)
   let authoredError = $state<string | null>(null)
+  let reviewStatusError = $state<string | null>(null)
   let githubTokenConfigured = $state<boolean | null>(null)
   let excludedRepos = $state<Set<string>>(new Set())
   let showFilterDropdown = $state(false)
@@ -98,15 +101,8 @@ export function usePrReviewListState(options: Options) {
   let sortedReviewPrs = $derived(
     sortDoNotReviewLast(walkthroughReadyFirst(filteredReviewPrs, readyReviewPrIds)),
   )
-  let activeReviewPrs = $derived(
-    sortedReviewPrs.filter(pr => !isClosedOrMergedPullRequest(pr.state)),
-  )
-  let finishedReviewPrs = $derived(
-    sortedReviewPrs.filter(pr => isClosedOrMergedPullRequest(pr.state)),
-  )
+  let reviewRequestCollections = $derived(deriveReviewRequestCollections(sortedReviewPrs))
   let sortedAuthoredPrs = $derived(filteredAuthoredPrs)
-  let groupedPrs = $derived(groupByRepo(activeReviewPrs))
-  let groupedFinishedPrs = $derived(groupByRepo(finishedReviewPrs))
   let groupedAuthoredPrs = $derived(groupAuthoredByRepo(sortedAuthoredPrs))
   let hiddenReviewRepos = $derived(showFilters ? getHiddenRepos(pullRequests.current) : [])
   let hiddenAuthoredRepos = $derived(showFilters ? getHiddenRepos(authoredPullRequests.current) : [])
@@ -117,26 +113,15 @@ export function usePrReviewListState(options: Options) {
     return [...repos].filter(repo => !excludedRepos.has(repo)).sort()
   })
   const vimList = useVimNavigation({
-    getItemCount: () => selectedPr.current ? 0 : activeReviewPrs.length,
+    getItemCount: () => selectedPr.current ? 0 : reviewRequestCollections.keyboardNavigable.length,
     onSelect: (index) => {
-      const pr = activeReviewPrs[index]
+      const pr = reviewRequestCollections.keyboardNavigable[index]
       if (pr) options.onSelectPr(pr)
     },
     onBack: () => {
       if (selectedPr.current) options.onBackToList()
     },
   })
-
-  function groupByRepo(prs: ReviewPullRequest[]): Map<string, ReviewPullRequest[]> {
-    const grouped = new Map<string, ReviewPullRequest[]>()
-    for (const pr of prs) {
-      const key = `${pr.repo_owner}/${pr.repo_name}`
-      const existing = grouped.get(key) ?? []
-      existing.push(pr)
-      grouped.set(key, existing)
-    }
-    return grouped
-  }
 
   function groupAuthoredByRepo(prs: AuthoredPullRequest[]): Map<string, AuthoredPullRequest[]> {
     const grouped = new Map<string, AuthoredPullRequest[]>()
@@ -295,6 +280,26 @@ export function usePrReviewListState(options: Options) {
     }
   }
 
+  async function updateReviewProgress(
+    pr: ReviewPullRequest,
+    reviewedHeadSha: string | null,
+  ): Promise<void> {
+    reviewStatusError = null
+    const result = await options.reviewProgress.update(pr, reviewedHeadSha)
+    if (!result.persisted && !result.superseded) {
+      reviewStatusError = 'Could not save review status. Your previous status has been restored.'
+      console.error('Failed to update pull request review status:', result.error)
+    }
+  }
+
+  function markReviewed(pr: ReviewPullRequest): Promise<void> {
+    return updateReviewProgress(pr, pr.head_sha)
+  }
+
+  function markNeedsReview(pr: ReviewPullRequest): Promise<void> {
+    return updateReviewProgress(pr, null)
+  }
+
   function startTaskFromAuthoredPr(pr: AuthoredPullRequest): void {
     const projectId = options.getProjectId()
     if (!projectId) return
@@ -372,15 +377,18 @@ export function usePrReviewListState(options: Options) {
     get isLoadingAuthored() { return isLoadingAuthored },
     get error() { return error },
     get authoredError() { return authoredError },
+    get reviewStatusError() { return reviewStatusError },
     get githubTokenConfigured() { return githubTokenConfigured },
     get reviewRequests() {
       return {
-        activeCount: activeReviewPrs.length,
+        needsReviewCount: reviewRequestCollections.counts.needsReview,
+        reviewedCount: reviewRequestCollections.counts.reviewed,
         filtered: filteredReviewPrs,
-        finishedCount: finishedReviewPrs.length,
-        groupedActive: groupedPrs,
-        groupedFinished: groupedFinishedPrs,
-        keyboardNavigable: activeReviewPrs,
+        finishedCount: reviewRequestCollections.counts.finished,
+        groupedNeedsReview: reviewRequestCollections.groupedNeedsReview,
+        groupedReviewed: reviewRequestCollections.groupedReviewed,
+        groupedFinished: reviewRequestCollections.groupedFinished,
+        keyboardNavigable: reviewRequestCollections.keyboardNavigable,
       }
     },
     get filteredAuthoredPrs() { return filteredAuthoredPrs },
@@ -394,6 +402,8 @@ export function usePrReviewListState(options: Options) {
     removeExcludedRepo,
     refreshPrs,
     refreshAuthoredPrs,
+    markReviewed,
+    markNeedsReview,
     startTaskFromAuthoredPr,
     handleFilterKeydown,
     handleKeydown,

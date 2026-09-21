@@ -179,6 +179,7 @@ impl Database {
         migrations::ensure_is_queued_columns(&conn)?;
         migrations::ensure_labels_columns(&conn)?;
         migrations::ensure_review_pr_status_signal_columns(&conn)?;
+        migrations::ensure_review_pr_reviewed_head_sha_column(&conn)?;
         migrations::ensure_pull_request_readiness_columns(&conn)?;
         migrations::ensure_task_dependency_table(&conn)?;
         migrations::ensure_task_label_tables(&conn)?;

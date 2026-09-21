@@ -6,6 +6,8 @@ import {
   activeReviewRequest,
   closedReviewRequest,
   mergedReviewRequest,
+  reviewedReviewRequest,
+  updatedSinceReviewRequest,
   viewedReviewRequest,
 } from '../../shared/fixtures/githubSyncReviewFixtures'
 
@@ -18,6 +20,8 @@ const meta = {
     selected: false,
     onClick: fn(),
     onMarkUnread: fn(),
+    onMarkReviewed: fn(),
+    onMarkNeedsReview: fn(),
     onRemove: fn(),
   },
 } satisfies Meta<typeof ReviewPrCard>
@@ -30,9 +34,28 @@ export const Active: Story = {
     const canvas = within(canvasElement)
     await expect(canvas.getByLabelText('Unread review request')).toBeVisible()
     await expect(canvas.getByText('CI Passed')).toBeVisible()
+    await expect(canvas.getByText('Review needed')).toBeVisible()
     await expect(canvas.queryByText('Merged')).not.toBeInTheDocument()
     await userEvent.click(canvas.getByRole('button', { name: /Keep review requests easy to scan/ }))
     await expect(args.onClick).toHaveBeenCalledTimes(1)
+  },
+}
+
+export const UpdatedSinceReview: Story = {
+  args: { pr: updatedSinceReviewRequest },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('Updated since review')).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Mark reviewed' })).toBeVisible()
+  },
+}
+
+export const Reviewed: Story = {
+  args: { pr: reviewedReviewRequest },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('Reviewed')).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Mark as needs review' })).toBeVisible()
   },
 }
 

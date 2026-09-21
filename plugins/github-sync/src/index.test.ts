@@ -347,6 +347,8 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('startAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('abortAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('markReviewPrUnviewed', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('markReviewPrReviewed', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('markReviewPrNeedsReview', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('dismissReviewPr', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('listTaskPullRequests', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('refreshTaskGithubStatus', expect.objectContaining({ handler: expect.any(Function) }))
@@ -374,7 +376,7 @@ describe('github-sync plugin', () => {
       'deleteReviewSession',
       'askAgentQuestions',
     ]))
-    expect(subscriptions.add).toHaveBeenCalledTimes(38)
+    expect(subscriptions.add).toHaveBeenCalledTimes(40)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {

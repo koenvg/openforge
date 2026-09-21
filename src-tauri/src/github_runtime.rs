@@ -14,7 +14,8 @@ pub use comments::{
 };
 pub use polling::{
     dismiss_review_pr, fetch_authored_prs, fetch_review_prs, get_authored_prs, get_review_prs,
-    mark_review_pr_unviewed, mark_review_pr_viewed,
+    mark_review_pr_needs_review, mark_review_pr_reviewed, mark_review_pr_unviewed,
+    mark_review_pr_viewed,
 };
 #[cfg(test)]
 pub use pr_actions::link_pull_request;

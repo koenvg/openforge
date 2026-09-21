@@ -974,6 +974,7 @@ export interface ReviewPullRequest {
   updated_at: number;
   viewed_at: number | null;
   viewed_head_sha: string | null;
+  reviewed_head_sha: string | null;
   /** GitHub labels on the PR. Empty when the PR has no labels. */
   labels: PrLabel[];
 }

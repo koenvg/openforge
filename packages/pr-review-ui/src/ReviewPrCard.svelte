@@ -4,10 +4,11 @@
   import { hasDoNotReviewLabel } from '@openforge-app/plugin-sdk/domain'
   import { GitPullRequest, Mail, Tags, X } from '@lucide/svelte'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import IconButton from '@openforge-app/plugin-sdk/ui/IconButton.svelte'
   import Card from './ui/Card.svelte'
   import { timeAgoFromSeconds } from './timeAgo'
-  import { getPrStatusBadgeStatus, getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import { getPrStatusBadgeStatus, getPrStatusChips, getReviewRequestProgress } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import StatusBadge from '@openforge-app/plugin-sdk/ui/StatusBadge.svelte'
   import { labelMarkerStyle } from './labelColors'
 
@@ -16,13 +17,15 @@
     selected?: boolean
     onClick: () => void
     onMarkUnread?: () => void
+    onMarkReviewed?: () => void
+    onMarkNeedsReview?: () => void
     /** Remove this PR from the review list. Optional; the button only renders when wired. */
     onRemove?: () => void
     /** Optional content rendered inside the card, below the labels (e.g. walkthrough controls). */
     footer?: Snippet
   }
 
-  let { pr, selected = false, onClick, onMarkUnread, onRemove, footer }: Props = $props()
+  let { pr, selected = false, onClick, onMarkUnread, onMarkReviewed, onMarkNeedsReview, onRemove, footer }: Props = $props()
 
   const MAX_VISIBLE_LABELS = 4
   let visibleLabels = $derived((pr.labels ?? []).slice(0, MAX_VISIBLE_LABELS))
@@ -30,12 +33,16 @@
   // Gray out PRs marked "DO NOT REVIEW"; the label itself is shown in the label row below.
   let doNotReview = $derived(hasDoNotReviewLabel(pr))
   let statusChips = $derived(getPrStatusChips(pr, 'compact'))
+  let reviewProgress = $derived(getReviewRequestProgress(pr))
   let terminalChip = $derived(
     statusChips.find(candidate => candidate.variant === 'merged' || candidate.variant === 'closed') ?? null,
   )
   let isUnread = $derived(!pr.viewed_at && !terminalChip)
   let showMarkUnread = $derived(Boolean(!terminalChip && pr.viewed_at && onMarkUnread))
   let titleWeight = $derived(isUnread ? 'font-semibold' : 'font-medium')
+  let hasReviewAction = $derived(Boolean(
+    reviewProgress?.kind === 'reviewed' ? onMarkNeedsReview : reviewProgress && onMarkReviewed,
+  ))
   let headerActionPadding = $derived(
     onRemove && showMarkUnread ? 'pr-16' : onRemove || showMarkUnread ? 'pr-7' : '',
   )
@@ -67,7 +74,7 @@
   </IconButton>
 {/if}
 <Card
-  class="flex flex-col gap-3 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''}"
+  class="flex flex-col gap-3 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''} {hasReviewAction ? 'pb-14' : ''}"
   {selected}
   onclick={onClick}
 >
@@ -108,6 +115,9 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+      {#if reviewProgress}
+        <StatusBadge status={reviewProgress.status}>{reviewProgress.label}</StatusBadge>
+      {/if}
       {#each statusChips as chip}
         {@const status = getPrStatusBadgeStatus(chip)}
         {#if chip.type !== 'draft' && chip.variant !== 'merged' && chip.variant !== 'closed' && status}
@@ -148,4 +158,23 @@
     </div>
   {/if}
 </Card>
+{#if reviewProgress?.kind === 'reviewed' && onMarkNeedsReview}
+  <div class="absolute bottom-3 left-4 z-10">
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      onclick={(event) => { event.stopPropagation(); onMarkNeedsReview?.() }}
+    >Mark as needs review</Button>
+  </div>
+{:else if reviewProgress && onMarkReviewed}
+  <div class="absolute bottom-3 left-4 z-10">
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      onclick={(event) => { event.stopPropagation(); onMarkReviewed?.() }}
+    >Mark reviewed</Button>
+  </div>
+{/if}
 </div>

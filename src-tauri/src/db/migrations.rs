@@ -337,7 +337,8 @@ CREATE TABLE IF NOT EXISTS review_prs (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     viewed_at INTEGER,
-    viewed_head_sha TEXT
+    viewed_head_sha TEXT,
+    reviewed_head_sha TEXT
 );
 
 CREATE TABLE IF NOT EXISTS self_review_comments (
@@ -2071,6 +2072,11 @@ INSERT OR IGNORE INTO config (key, value)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     }),
     M::up(SCOPED_AGENT_SESSION_EVENTS_SQL),
+    M::up_with_hook("", |tx| {
+        ensure_review_pr_reviewed_head_sha_column(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    })
+    .down("ALTER TABLE review_prs DROP COLUMN reviewed_head_sha"),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2851,6 +2857,26 @@ pub(super) fn ensure_review_pr_status_signal_columns(conn: &Connection) -> Resul
     Ok(())
 }
 
+pub(super) fn ensure_review_pr_reviewed_head_sha_column(conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "review_prs")? {
+        return Ok(());
+    }
+
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = 'reviewed_head_sha'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute(
+            "ALTER TABLE review_prs ADD COLUMN reviewed_head_sha TEXT",
+            [],
+        )?;
+    }
+
+    Ok(())
+}
+
 pub(super) fn ensure_browser_session_purge_intents_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -2892,6 +2918,7 @@ mod tests {
         ScopedWorkspaces,
         ScopedAgentSessions,
         PullRequestRepositoryNumberIndex,
+        ReviewPrReviewedHeadSha,
     }
 
     impl MigrationBoundary {
@@ -2918,6 +2945,7 @@ mod tests {
                 Self::ScopedWorkspaces => 67,
                 Self::ScopedAgentSessions => 68,
                 Self::PullRequestRepositoryNumberIndex => 69,
+                Self::ReviewPrReviewedHeadSha => 72,
             }
         }
     }
@@ -2983,6 +3011,98 @@ mod tests {
             )
             .expect("check review PR status signal column")
         })
+    }
+
+    fn review_pr_has_reviewed_head_sha(conn: &Connection) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('review_prs') WHERE name = 'reviewed_head_sha'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("check review PR reviewed head column")
+    }
+
+    #[test]
+    fn fresh_database_has_review_pr_reviewed_head_sha() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        assert!(review_pr_has_reviewed_head_sha(&conn));
+    }
+
+    #[test]
+    fn upgrade_adds_review_pr_reviewed_head_sha_without_marking_existing_rows() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            db.upsert_review_pr(&crate::db::review::ReviewPrUpsert {
+                id: 123,
+                number: 456,
+                title: "Existing review request".to_string(),
+                body: None,
+                state: "open".to_string(),
+                draft: false,
+                html_url: "https://github.com/owner/repo/pull/456".to_string(),
+                user_login: "octocat".to_string(),
+                user_avatar_url: None,
+                repo_owner: "owner".to_string(),
+                repo_name: "repo".to_string(),
+                head_ref: "feature".to_string(),
+                base_ref: "main".to_string(),
+                head_sha: "abc123".to_string(),
+                additions: 1,
+                deletions: 0,
+                changed_files: 1,
+                ci_status: None,
+                mergeable: None,
+                mergeable_state: None,
+                merged_at: None,
+                labels: vec![],
+                created_at: 1,
+                updated_at: 1,
+            })
+            .expect("seed review request");
+            drop(db);
+
+            let conn = Connection::open(&path).expect("open pre-upgrade database");
+            conn.execute("ALTER TABLE review_prs DROP COLUMN reviewed_head_sha", [])
+                .expect("remove post-upgrade column from fixture");
+            assert!(!review_pr_has_reviewed_head_sha(&conn));
+            set_user_version_before(&conn, MigrationBoundary::ReviewPrReviewedHeadSha);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock upgraded database");
+
+        assert!(review_pr_has_reviewed_head_sha(&conn));
+        let reviewed_head_sha: Option<String> = conn
+            .query_row(
+                "SELECT reviewed_head_sha FROM review_prs WHERE id = 123",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read upgraded review request");
+        assert_eq!(reviewed_head_sha, None);
+    }
+
+    #[test]
+    fn review_pr_reviewed_head_sha_migration_rolls_back() {
+        let mut conn = Connection::open_in_memory().expect("open database");
+        get_migrations()
+            .to_latest(&mut conn)
+            .expect("apply migrations");
+
+        get_migrations()
+            .to_version(
+                &mut conn,
+                MigrationBoundary::ReviewPrReviewedHeadSha.user_version_before() as usize,
+            )
+            .expect("rollback reviewed head migration");
+
+        assert!(!review_pr_has_reviewed_head_sha(&conn));
     }
 
     fn authored_pr_has_merged_timestamp(conn: &Connection) -> bool {

@@ -36,6 +36,7 @@ export function createReviewPullRequest(
     updated_at: FIXED_UPDATED_AT,
     viewed_at: null,
     viewed_head_sha: null,
+    reviewed_head_sha: null,
     ...overrides,
     labels: [...(overrides.labels ?? DEFAULT_LABELS)],
   }
@@ -55,6 +56,36 @@ export const viewedReviewRequest = createReviewPullRequest({
   viewed_at: FIXED_UPDATED_AT,
   viewed_head_sha: 'def456',
   labels: [{ name: 'keyboard', color: '0e8a16' }],
+})
+
+export const updatedSinceReviewRequest = createReviewPullRequest({
+  id: 44,
+  number: 44,
+  title: 'Re-check the refreshed navigation changes',
+  head_ref: 'openforge/review-navigation-update',
+  head_sha: 'new-head-456',
+  reviewed_head_sha: 'old-head-123',
+  additions: 58,
+  deletions: 12,
+  changed_files: 6,
+  viewed_at: FIXED_UPDATED_AT,
+  viewed_head_sha: 'old-head-123',
+  labels: [{ name: 'follow-up', color: 'fbca04' }],
+})
+
+export const reviewedReviewRequest = createReviewPullRequest({
+  id: 45,
+  number: 45,
+  title: 'Polish the review completion controls',
+  head_ref: 'openforge/review-completion',
+  head_sha: 'reviewed-head-789',
+  reviewed_head_sha: 'reviewed-head-789',
+  additions: 22,
+  deletions: 7,
+  changed_files: 3,
+  viewed_at: FIXED_UPDATED_AT,
+  viewed_head_sha: 'reviewed-head-789',
+  labels: [{ name: 'reviewed', color: '0e8a16' }],
 })
 
 export const mergedReviewRequest = createReviewPullRequest({

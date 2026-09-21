@@ -65,6 +65,8 @@ export interface GithubSyncPrReviewClient {
   refreshAuthoredPullRequests(): Promise<AuthoredPullRequest[]>
   markReviewPullRequestViewed(request: { prId: number; headSha: string }): Promise<void>
   markReviewPullRequestUnviewed(request: { prId: number }): Promise<void>
+  markReviewPullRequestReviewed(request: { prId: number; headSha: string }): Promise<void>
+  markReviewPullRequestNeedsReview(request: { prId: number }): Promise<void>
   /** Remove a PR from the review list (manual "Remove from list" action). */
   removeReviewPullRequest(request: { prId: number }): Promise<void>
   listPullRequestFileDiffs(request: PullRequestRepositoryRequest): Promise<PrFileDiff[]>
@@ -144,6 +146,8 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     refreshAuthoredPullRequests: () => invokeBackendList<AuthoredPullRequest>(api, 'fetchAuthoredPrs'),
     markReviewPullRequestViewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrViewed', { prId, headSha }),
     markReviewPullRequestUnviewed: ({ prId }) => invokeBackend<void>(api, 'markReviewPrUnviewed', { prId }),
+    markReviewPullRequestReviewed: ({ prId, headSha }) => invokeBackend<void>(api, 'markReviewPrReviewed', { prId, headSha }),
+    markReviewPullRequestNeedsReview: ({ prId }) => invokeBackend<void>(api, 'markReviewPrNeedsReview', { prId }),
     removeReviewPullRequest: ({ prId }) => invokeBackend<void>(api, 'dismissReviewPr', { prId }),
     listPullRequestFileDiffs: ({ owner, repo, prNumber }) => invokeBackend<PrFileDiff[]>(api, 'getPrFileDiffs', { owner, repo, prNumber }),
     getFileContent: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContent', { owner, repo, sha }),

@@ -30,6 +30,7 @@ const pullRequest: ReviewPullRequest = {
   updated_at: 1_725_003_600,
   viewed_at: null,
   viewed_head_sha: null,
+  reviewed_head_sha: null,
   labels: [],
 }
 
