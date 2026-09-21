@@ -153,7 +153,7 @@ export interface HealthResponseLike {
   text?(): Promise<string>
 }
 
-export type HealthFetch = (url: string, init: { headers: Record<string, string> }) => Promise<HealthResponseLike>
+export type HealthFetch = (url: string, init: { headers: Record<string, string>; signal?: AbortSignal }) => Promise<HealthResponseLike>
 export type Sleep = (ms: number) => Promise<void>
 
 export interface WaitForSidecarHealthOptions {
@@ -582,6 +582,15 @@ function markDegraded(snapshot: SidecarReadinessSnapshot, area: SidecarDegradedA
   snapshot.degraded.push({ area, message, since: new Date().toISOString() })
 }
 
+async function withReadinessDeadline<T>(pending: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([pending, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    })])
+  } finally { clearTimeout(timer) }
+}
+
 export async function startSidecarReadiness(
   config: SidecarLaunchConfig,
   deps: StartSidecarReadinessDeps,
@@ -601,14 +610,15 @@ export async function startSidecarReadiness(
   let snapshot: SidecarReadinessSnapshot | null = null
 
   try {
-    const readiness = await waitForSidecarReadiness({
+    const readinessAbort = new AbortController()
+    const readiness = await withReadinessDeadline(waitForSidecarReadiness({
       readinessUrl: config.readinessUrl,
       token: config.token,
-      fetch: deps.fetch,
+      fetch: (url, init) => deps.fetch(url, { ...init, signal: readinessAbort.signal }),
       sleep: deps.sleep,
       timeoutMs: deps.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS,
       intervalMs: deps.healthIntervalMs ?? DEFAULT_HEALTH_INTERVAL_MS,
-    })
+    }), deps.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS, 'sidecar readiness timed out').finally(() => readinessAbort.abort())
     snapshot = createInitialSnapshot(config, child, readiness)
 
     eventStream = deps.createEventStream(config)
@@ -619,7 +629,7 @@ export async function startSidecarReadiness(
     eventRunSettled = eventRun.catch(error => {
       if (snapshot) markDegraded(snapshot, 'events', error instanceof Error ? error.message : String(error))
     })
-    await eventStream.ready()
+    await withReadinessDeadline(eventStream.ready(), deps.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS, 'event readiness timed out')
     snapshot.events = {
       ...snapshot.events,
       ...eventStream.snapshot?.(),
@@ -636,11 +646,11 @@ export async function startSidecarReadiness(
         : 'OpenForge backend readiness did not complete.',
       remediation: eventStream
         ? 'Restart OpenForge so the renderer can receive sidecar lifecycle events.'
-        : 'Stop stale OpenForge sidecar processes and launch again.',
+        : 'Use restart recovery to retry attachment. A readiness timeout does not authorize session termination.',
       decision: 'quit',
     }))
     eventStream?.stop()
-    await eventRunSettled
+    await waitForEventStreamTeardown(eventRunSettled, deps.sleep)
     await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
     throw error
   }

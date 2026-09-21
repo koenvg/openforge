@@ -30,3 +30,24 @@ export function installRestartMenu(restart: (rendererId: number) => Promise<void
   submenu.insert(submenu.items.findIndex(entry => entry.role === 'quit'), item)
   Menu.setApplicationMenu(menu)
 }
+
+/** Available before any workspace window exists, including failed Sidecar boot. */
+export function installRestartRecoveryMenu(recover: () => Promise<void>): void {
+  const menu = Menu.getApplicationMenu() ?? Menu.buildFromTemplate([
+    { role: process.platform === 'darwin' ? 'appMenu' : 'fileMenu' },
+  ])
+  const submenu = menu.items.find(item => item.submenu?.items.some(entry => entry.role === 'quit'))?.submenu
+  if (!submenu || submenu.items.some(item => item.id === 'openforge-restart-recovery')) return
+  const item = new MenuItem({
+    id: 'openforge-restart-recovery', label: 'Recover Incomplete Restart…',
+    click: async () => {
+      if (!item.enabled) return
+      item.enabled = false
+      try { await recover() }
+      catch (error) { dialog.showErrorBox('Recovery unavailable', String(error)) }
+      finally { item.enabled = true }
+    },
+  })
+  submenu.insert(submenu.items.findIndex(entry => entry.role === 'quit'), item)
+  Menu.setApplicationMenu(menu)
+}

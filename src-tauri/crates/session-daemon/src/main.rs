@@ -14,6 +14,7 @@ mod output;
 mod process;
 mod process_native;
 mod quiescence;
+mod recovery_cli;
 mod replacement;
 mod server;
 

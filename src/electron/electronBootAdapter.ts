@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process'
+import { NativeRestartRecovery } from './nativeRestartRecovery.js'
+import { RestartOperation } from './restartOperation.js'
+import type { RecoveryFailure } from './restartOperation.js'
 import { randomUUID } from 'node:crypto'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { createControlledRestartHost } from './controlledRestartHost.js'
-import { installRestartMenu } from './restartMenu.js'
+import { installRestartMenu, installRestartRecoveryMenu } from './restartMenu.js'
 import { RestartGeometryLeases } from './restartGeometryLeases.js'
 import type { RestartAttachmentIdentity } from './restartGeometryLeases.js'
 import type { RestartTerminalFence, RestartTerminalInventory } from './restartWorkspace.js'
@@ -114,12 +117,32 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   const appRenderers = new Set<number>()
   const restartGeometryLeases = new RestartGeometryLeases()
   let restartWorkspace: Promise<RestartWorkspaceIpc> | null = null
+  const operationPrefix = '--openforge-restart-operation='
+  let launchOperation = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null
+  let authorizedRelaunch = false
+  let quitApproved = false
+  let checkingQuit = false
+  let recovery: NativeRestartRecovery | null = null
+  function relaunch(operationId: string | null): void {
+    if (checkingQuit) throw new Error('Quit is already checking session ownership')
+    app.relaunch({ args: [...process.argv.slice(1).filter(arg => !arg.startsWith(operationPrefix)), ...(operationId ? [`${operationPrefix}${operationId}`] : [])] })
+    authorizedRelaunch = true
+    app.quit()
+  }
+  function nativeRecovery(): NativeRestartRecovery {
+    recovery ??= new NativeRestartRecovery({
+      root: app.getPath('userData'), env: options.env, currentDir: options.currentDir,
+      relaunch: operationId => { checkingQuit = false; relaunch(operationId) },
+      quit: () => { quitApproved = true; app.quit() },
+    })
+    return recovery
+  }
+  const recoverRestart = (failure: RecoveryFailure) => nativeRecovery().recover(failure)
   function controlledWorkspace(): Promise<RestartWorkspaceIpc | null> {
     // Older isolated fixtures deliberately exercise the legacy test adapter.
     if (options.env.OPENFORGE_E2E === '1' && !options.env.OPENFORGE_SESSION_DAEMON_ROOT) return Promise.resolve(null)
     if (restartWorkspace) return restartWorkspace
-    const operationPrefix = '--openforge-restart-operation='
-    const operationId = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null
+    const operationId = launchOperation
     restartWorkspace = createControlledRestartHost({
       root: app.getPath('userData'), operationId,
       inventory: async () => {
@@ -132,10 +155,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         detach: operationId => restartBackendCommand('detach_app_restart', { operationId }),
         commit: operationId => restartBackendCommand('commit_app_restart', { operationId }),
       },
-      replace: async nextOperation => {
-        app.relaunch({ args: [...process.argv.slice(1).filter(arg => !arg.startsWith(operationPrefix)), `${operationPrefix}${nextOperation}`] })
-        app.quit()
-      },
+      replace: async nextOperation => relaunch(nextOperation),
     }).catch(error => { restartWorkspace = null; throw error })
     return restartWorkspace
   }
@@ -260,8 +280,19 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       if (!appRenderers.has(rendererId)) throw new Error('Restart requires an OpenForge workspace')
       const host = await controlledWorkspace()
       if (!host) throw new Error('Session-preserving Restart is unavailable in this launch')
-      await host.handle(rendererId, 'restart_app', {})
+      try {
+        await host.handle(rendererId, 'restart_app', {})
+      } catch (error) {
+        if (!await recoverRestart('relaunch-delayed')) throw error
+      }
     })
+    const restorationTimer = setTimeout(() => {
+      void RestartOperation.open(app.getPath('userData')).then(async operation => {
+        const record = await operation?.status()
+        if (record?.phase === 'reconnecting') await recoverRestart('interface-restoration-incomplete')
+      }).catch(error => developerLogSink.error('[restart] Recovery unavailable', error))
+    }, 30_000)
+    restorationTimer.unref()
     return windows[0]
   }
 
@@ -395,6 +426,17 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
       app.on('before-quit', event => {
+        if (!authorizedRelaunch && !quitApproved) {
+          event.preventDefault()
+          if (checkingQuit) return
+          checkingQuit = true
+          void nativeRecovery().quit().then(handled => {
+            if (!handled) { quitApproved = true; app.quit() }
+          }).catch(error => {
+            dialog.showErrorBox('Quit not completed', String(error))
+          }).finally(() => { checkingQuit = false })
+          return
+        }
         void frontendHostRequestRelay.shutdown()
         taskBrowserSurfaceManager.destroyAll()
         handler(event)
@@ -405,8 +447,14 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       app.exit(exitCode)
     },
 
-    waitForAppReady(): Promise<void> {
-      return app.whenReady()
+    async waitForAppReady(): Promise<void> {
+      await app.whenReady()
+      const pending = await (await RestartOperation.open(app.getPath('userData')))?.status()
+      if (pending && ['detached', 'reconnecting'].includes(pending.phase)) launchOperation ??= pending.operationId
+      installRestartRecoveryMenu(async () => {
+        const status = await (await RestartOperation.open(app.getPath('userData')))?.status()
+        await recoverRestart(status?.failure ?? 'relaunch-delayed')
+      })
     },
 
     resolveSidecarPath(): string | null {
@@ -419,7 +467,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         port: resolveSidecarPort(options.env),
         processEnv: {
           ...options.env,
-          OPENFORGE_RESTART_OPERATION: process.argv.find(arg => arg.startsWith('--openforge-restart-operation='))?.split('=')[1],
+          OPENFORGE_RESTART_OPERATION: launchOperation ?? undefined,
         },
       })
     },
@@ -495,6 +543,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     createMainWindow,
+    recoverRestart: failure => nativeRecovery().recoverBoot(failure),
 
     quit(): void {
       app.quit()

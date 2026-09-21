@@ -66,21 +66,40 @@ impl RuntimeDirectory {
     /// # Errors
     /// Refuses symlinks, foreign ownership, writable installation roots and unsafe files.
     pub fn open(root: &Path) -> Result<Self, Error> {
+        Self::open_with_creation(root, true)
+    }
+
+    /// Opens existing authentication without manufacturing replacement credentials.
+    /// # Errors
+    /// Refuses missing or unsafe runtime metadata. Reauthentication must use the
+    /// installation's existing credentials, never infer ownership from a PID.
+    pub fn open_existing(root: &Path) -> Result<Self, Error> {
+        Self::open_with_creation(root, false)
+    }
+
+    fn open_with_creation(root: &Path, create: bool) -> Result<Self, Error> {
         let metadata = fs::symlink_metadata(root).map_err(io_error)?;
         if !metadata.is_dir() || metadata.uid() != uid() || metadata.mode() & 0o022 != 0 {
             return Err(Error::Unauthorized);
         }
         let path = fs::canonicalize(root).map_err(io_error)?.join("session-v1");
-        match DirBuilder::new().mode(0o700).create(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(io_error(error)),
+        if create {
+            match DirBuilder::new().mode(0o700).create(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(io_error(error)),
+            }
         }
         check_private(&path, true)?;
-        let setup = private_file(&path.join("setup.lock"))?;
-        setup.lock().map_err(io_error)?;
+        let _setup = if create {
+            let setup = private_file(&path.join("setup.lock"))?;
+            setup.lock().map_err(io_error)?;
+            Some(setup)
+        } else {
+            None
+        };
         let credential_path = path.join("credentials.json");
-        if !credential_path.try_exists().map_err(io_error)? {
+        if create && !credential_path.try_exists().map_err(io_error)? {
             let credentials = Credentials {
                 installation: openforge_session_host::InstallationId::parse(
                     uuid::Uuid::new_v4().to_string(),
@@ -137,6 +156,52 @@ impl RuntimeDirectory {
         let file = private_file(&self.path.join("daemon.lock"))?;
         file.try_lock().map_err(|_| Error::AlreadyRunning)?;
         Ok(file)
+    }
+    /// Serializes launch attempts while a spawned image has not become ready.
+    /// # Errors
+    /// Refuses unsafe metadata or another in-progress launch.
+    pub fn claim_launch(&self) -> Result<File, Error> {
+        let file = private_file(&self.path.join("launch.lock"))?;
+        file.try_lock().map_err(|_| Error::AlreadyRunning)?;
+        Ok(file)
+    }
+
+    /// Releases inherited launch authority after the caller holds daemon ownership.
+    /// # Errors
+    /// Rejects descriptors that do not identify this runtime's private launch lock.
+    /// # Safety
+    /// Call only during single-threaded daemon startup. Any descriptor named by
+    /// OPENFORGE_DAEMON_LAUNCH_FD must be inherited and have no Rust owner.
+    pub unsafe fn release_launch_guard(&self) -> Result<(), Error> {
+        use std::os::fd::{BorrowedFd, FromRawFd};
+        let Some(value) = std::env::var_os("OPENFORGE_DAEMON_LAUNCH_FD") else {
+            return Ok(());
+        };
+        let fd: i32 = value
+            .to_str()
+            .and_then(|value| value.parse().ok())
+            .filter(|fd| *fd >= 3)
+            .ok_or(Error::Unauthorized)?;
+        // SAFETY: fcntl inspects an integer descriptor without dereferencing memory.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } == -1 {
+            return Err(Error::Unauthorized);
+        }
+        let duplicate = {
+            // SAFETY: the dedicated inherited descriptor was checked and stays open for this borrow.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+            File::from(borrowed.try_clone_to_owned().map_err(io_error)?)
+        };
+        let metadata = duplicate.metadata().map_err(io_error)?;
+        let path = self.path.join("launch.lock");
+        check_private(&path, false)?;
+        let expected = fs::symlink_metadata(path).map_err(io_error)?;
+        if metadata.dev() != expected.dev() || metadata.ino() != expected.ino() {
+            return Err(Error::Unauthorized);
+        }
+        // SAFETY: the launcher passed this dedicated descriptor; no Rust owner exists in this image.
+        drop(unsafe { File::from_raw_fd(fd) });
+        std::env::remove_var("OPENFORGE_DAEMON_LAUNCH_FD");
+        Ok(())
     }
 
     /// # Errors

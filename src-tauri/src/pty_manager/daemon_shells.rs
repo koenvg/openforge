@@ -297,6 +297,7 @@ impl DaemonShells {
         publisher: RuntimeEventPublisher,
     ) -> Result<serde_json::Value, String> {
         let selection = Arc::clone(&self.selection);
+        let daemon_root = self.transport.root();
         self.read(publisher, move |client, key| {
             let inventory = client.inventory()?;
             let sessions: Vec<_> = latest_sessions(inventory.sessions)
@@ -315,7 +316,7 @@ impl DaemonShells {
                     })
                 })
                 .collect();
-            Ok(serde_json::json!({ "controller": inventory.controller, "sessions": sessions }))
+            Ok(serde_json::json!({ "controller": inventory.controller, "sessions": sessions, "daemonRoot": daemon_root }))
         })
         .await
     }

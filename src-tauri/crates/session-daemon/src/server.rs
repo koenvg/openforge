@@ -10,6 +10,9 @@ pub fn run() -> Result<(), Error> {
     let root = std::env::args_os().nth(1).ok_or(Error::InvalidRequest)?;
     let runtime = RuntimeDirectory::open(std::path::Path::new(&root))?;
     let ownership = runtime.claim()?;
+    // SAFETY: startup is single-threaded; the launch descriptor is inherited,
+    // not owned by a Rust File in this image, and validated against launch.lock.
+    unsafe { runtime.release_launch_guard()? };
     let socket = runtime.socket_path();
     if socket.try_exists().map_err(io_error)? {
         runtime.check_socket()?;

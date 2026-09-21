@@ -55,11 +55,15 @@ impl Operation {
     }
 
     pub fn preserves_sessions(&self) -> bool {
-        self.intent != Intent::Quit && matches!(self.phase, Phase::Detached | Phase::Reconnecting)
+        self.intent != Intent::Quit
+            && matches!(
+                self.phase,
+                Phase::Prepared | Phase::Detached | Phase::Reconnecting
+            )
     }
 
     pub fn persist(&self, root: &Path) -> Result<(), Error> {
-        let runtime = RuntimeDirectory::open(root)?;
+        let runtime = RuntimeDirectory::open_existing(root)?;
         let temporary = runtime
             .path()
             .join(format!("restart-{}.tmp", uuid::Uuid::new_v4()));
@@ -85,7 +89,7 @@ impl Operation {
     }
 
     pub fn reconnect(root: &Path, client: &Client) -> Result<Option<Self>, Error> {
-        let runtime = RuntimeDirectory::open(root)?;
+        let runtime = RuntimeDirectory::open_existing(root)?;
         let file = match std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
@@ -131,13 +135,15 @@ impl Operation {
         if operation.intent == Intent::Quit {
             return Err(Error::Host("previous Quit cleanup is incomplete".into()));
         }
-        if operation.phase == Phase::Prepared {
+        let requested = std::env::var("OPENFORGE_RESTART_OPERATION").ok();
+        if operation.phase == Phase::Prepared && requested.is_none() {
             operation.phase = Phase::Cancelled;
             operation.persist(root)?;
             return Ok(None);
         }
-        if std::env::var("OPENFORGE_RESTART_OPERATION").ok().as_deref()
-            != Some(&operation.operation_id)
+        if requested
+            .as_deref()
+            .is_some_and(|id| id != operation.operation_id)
             || client.controller().generation.value() <= operation.controller.generation.value()
         {
             return Err(Error::OperationConflict);

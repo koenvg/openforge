@@ -29,6 +29,7 @@ export interface RestartTerminalInventory {
   controller: RestartTerminalController
   sessions: Array<{ key: string; instanceId: number; isLive: boolean }>
   hasLegacySessions?: boolean
+  daemonRoot?: string
 }
 
 export interface RestartTerminalFence {

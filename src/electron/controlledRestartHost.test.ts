@@ -171,6 +171,26 @@ it('does not commit restoration after another controller takes ownership', async
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+it('preserves authorization when detach acknowledgement is lost and allows replacement attachment', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'openforge-detach-ack-'))
+  try {
+    const controller = { installation: 'installation', lifetime: 'daemon', generation: 1 }
+    const cancel = vi.fn(async () => {})
+    const backend = { prepare: async () => {}, cancel, detach: async () => { throw new Error('ack lost') }, commit: async () => {} }
+    const host = await createControlledRestartHost({ root, operationId: null, backend, inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }), replace: async () => {} })
+    let operationId = ''
+    host.register(10, 'stable', id => { operationId = id })
+    const failure = expect(host.handle(10, 'restart_app', {})).rejects.toThrow('ack lost')
+    await vi.waitFor(() => expect(operationId).not.toBe(''))
+    await host.handle(10, 'capture_restart_workspace', { operationId, snapshot: { navigation: { projectId: null, taskId: null, view: 'board' }, tasks: [] } })
+    await failure
+    expect(cancel).not.toHaveBeenCalled()
+    expect(await host.shutdownIntent()).toBe('restart')
+    const next = await createControlledRestartHost({ root, operationId, backend, inventory: async () => ({ controller: { ...controller, generation: 2 }, sessions: [], hasLegacySessions: false }), replace: async () => {} })
+    expect(await next.launchWindowIds()).toEqual(['stable'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 it('fences the backend before capturing windows and authorizes detach before relaunch', async () => {
   const root = await mkdtemp(join(tmpdir(), 'openforge-controlled-restart-'))
   try {

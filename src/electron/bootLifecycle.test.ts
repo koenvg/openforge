@@ -154,6 +154,18 @@ function expectBefore(operations: string[], first: string, second: string): void
   expect(operations.indexOf(first), `${first} should happen before ${second}`).toBeLessThan(operations.indexOf(second))
 }
 
+it('offers native recovery after failed Sidecar boot without creating a renderer or reporting success', async () => {
+  const adapter = new FakeBootLifecycleAdapter()
+  adapter.startSidecarFailure = new Error('failed boot')
+  const recoverRestart = vi.fn(async () => true)
+  Object.assign(adapter, { recoverRestart })
+  const result = await bootOpenForgeDesktop(adapter, bootOptions())
+  expect(result).toMatchObject({ recovery: true, sidecar: null, mainWindow: null })
+  expect(recoverRestart).toHaveBeenCalledWith('activation-failed')
+  expect(adapter.operations).not.toContain('create-main-window')
+  expect(adapter.quit).not.toHaveBeenCalled()
+})
+
 describe('Electron Boot Lifecycle Module seam', () => {
   it('keeps the Rust sidecar shutdown budgets ordered to avoid false quit-time cleanup failures', () => {
     expect(SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS).toBe(250)
