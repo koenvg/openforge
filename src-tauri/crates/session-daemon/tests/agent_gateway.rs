@@ -279,7 +279,10 @@ fn notification_is_accepted_during_outage_and_duplicate_keeps_its_position() {
     for attempt in 0..2 {
         let mut stream = loop {
             match listener.accept() {
-                Ok((stream, _)) => break stream,
+                Ok((stream, _)) => {
+                    stream.set_nonblocking(false).unwrap();
+                    break stream;
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                     assert!(
                         std::time::Instant::now() < deadline,
