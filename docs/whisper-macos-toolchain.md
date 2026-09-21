@@ -14,7 +14,7 @@ Vendored ggml defaults to `GGML_NATIVE=ON`. Its ARM CMake code tries to extract 
 
 Despite `+noi8mm`, ggml's subsequent preprocessor check reported `ARM feature MATMUL_INT8 enabled`. The source guards `vmmlaq_s32` with `__ARM_FEATURE_MATMUL_INT8`, so it selected code that the compiler's target-feature check rejected. The empty-program negative-feature probe does not verify that the feature macro disappears or that guarded intrinsic code compiles.
 
-The original artifact does not contain CMake's detailed try-run log, so it does not establish whether the positive i8mm probe failed at compilation or execution. The dedicated workflow retains `CMakeConfigureLog.yaml` to distinguish these cases in a fresh reproduction. AppleClang 21 on the local development machine does remove the macro for `+noi8mm`; that newer compiler is not a substitute for the macOS 15 runner check.
+A fresh [macOS 15 reproduction](https://github.com/koenvg/openforge/actions/runs/35574085597) at commit `2bffadee4` failed at the same intrinsic. Its `CMakeConfigureLog.yaml` shows that `-mcpu=native+i8mm` compiled and linked successfully, then failed to run with `Illegal instruction`. The negative-feature probe compiled successfully. The captured compiler macros still define `__ARM_FEATURE_MATMUL_INT8` under `+noi8mm`, but not under `-march=armv8-a`. This establishes both the unsupported runner instruction and the compiler macro/target-feature mismatch. AppleClang 21 on the local development machine removes the macro for `+noi8mm`, so local compilation alone would miss the macOS 15 failure.
 
 Enabling i8mm would hide the error but require instructions unavailable on the M1 baseline. A distributable binary must not derive its required instruction set from the packaging machine.
 

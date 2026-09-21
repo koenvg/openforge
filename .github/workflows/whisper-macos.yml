@@ -2,7 +2,16 @@ name: Whisper macOS compatibility
 
 on:
   push:
-    branches: [openforge/KVG-5152]
+    branches: [main]
+    paths:
+      - '.cargo/**'
+      - 'config/whisper-portable-cpu.cmake'
+      - 'src-tauri/Cargo.*'
+      - 'src-tauri/tests/whisper_native.rs'
+      - 'scripts/*whisper*'
+      - 'scripts/electron-package/**'
+      - 'scripts/electron-package.test.mjs'
+      - '.github/workflows/whisper-macos.yml'
   pull_request:
     paths:
       - '.cargo/**'
