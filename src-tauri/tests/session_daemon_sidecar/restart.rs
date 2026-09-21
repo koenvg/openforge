@@ -2,6 +2,62 @@ use super::*;
 
 #[test]
 #[ignore = "requires built Session Daemon; run the session-daemon contract command"]
+fn preparation_fences_mutations_but_allows_reads_and_cancel_restores_writes() {
+    let mut fixture = Fixture::new();
+    fixture.use_installation_daemon();
+    fixture.start("preparation-fence");
+    let instance = fixture.invoke("pty_spawn_shell", json!({
+        "taskId": "T-proof", "terminalIndex": 3, "cwd": fixture.root.path(), "cols": 80, "rows": 24,
+    }));
+    let operation = uuid::Uuid::new_v4().to_string();
+    fixture.invoke(
+        "prepare_app_restart",
+        json!({
+            "operationId": operation, "intent": "update",
+        }),
+    );
+    let persisted: Value = serde_json::from_slice(
+        &fs::read(fixture.daemon_root().join("session-v1/restart.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(persisted["operationId"], operation);
+    assert_eq!(persisted["phase"], "prepared");
+    assert_eq!(persisted["intent"], "update");
+    let response = fixture
+        .http
+        .post(format!("http://127.0.0.1:{}/app/invoke", fixture.port))
+        .bearer_auth(&fixture.token)
+        .json(&json!({ "command": "pty_write", "payload": {
+            "shellSessionKey": fixture.shell_key, "data": "printf 'BLOCKED\\n'\n",
+        }}))
+        .send()
+        .unwrap();
+    assert!(!response.status().is_success());
+    assert!(response.text().unwrap().contains("restart preparing"));
+    let snapshot = fixture.invoke(
+        "get_pty_buffer",
+        json!({
+            "shellSessionKey": fixture.shell_key,
+        }),
+    );
+    assert_eq!(snapshot["instanceId"], instance);
+    assert_eq!(snapshot["isLive"], true);
+    fixture.invoke("cancel_app_restart", json!({ "operationId": operation }));
+    fixture.invoke("cancel_app_restart", json!({ "operationId": operation }));
+    let persisted: Value = serde_json::from_slice(
+        &fs::read(fixture.daemon_root().join("session-v1/restart.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(persisted["phase"], "cancelled");
+    fixture.write("printf 'CANCEL_RESTORED\\n'\n");
+    assert!(fixture
+        .output("CANCEL_RESTORED")
+        .contains("CANCEL_RESTORED"));
+    stop_sidecar(&mut fixture);
+}
+
+#[test]
+#[ignore = "requires built Session Daemon; run the session-daemon contract command"]
 fn cold_installation_creates_private_daemon_root() {
     use std::os::unix::fs::PermissionsExt;
     let mut fixture = Fixture::new();
