@@ -9,6 +9,7 @@
   import { resolvedAgentThreadSubmissions } from './reviewThreadSubmission'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
+  import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Tabs from '@openforge-app/plugin-sdk/ui/Tabs.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
@@ -31,6 +32,10 @@
     files: PrFileDiff[]
     isLoading: boolean
     error: string | null
+    reviewUpdateAvailable?: boolean
+    isRefreshingReview?: boolean
+    reviewRefreshError?: string | null
+    pendingCommentsToReview?: ReviewSubmissionComment[]
     reviewComments: ReviewComment[]
     pendingManualComments: ReviewSubmissionComment[]
     overviewComments: PrOverviewComment[]
@@ -39,6 +44,7 @@
     includeNonApplicationFiles: boolean
     onToggleNonApplicationFiles: (include: boolean) => void
     onBackToList: () => void
+    onRefreshReview?: () => Promise<void>
     onRemove: () => void
     onOpenPrOnGitHub: () => void
     onActiveTabChange: (tab: PrDetailTab) => void
@@ -94,6 +100,10 @@
     files,
     isLoading,
     error,
+    reviewUpdateAvailable = false,
+    isRefreshingReview = false,
+    reviewRefreshError = null,
+    pendingCommentsToReview = [],
     reviewComments,
     pendingManualComments,
     overviewComments,
@@ -102,6 +112,7 @@
     includeNonApplicationFiles,
     onToggleNonApplicationFiles,
     onBackToList,
+    onRefreshReview,
     onOpenPrOnGitHub,
     onActiveTabChange,
     onOverviewCommentsChange,
@@ -232,6 +243,34 @@
     {/if}
   </div>
 
+  {#if reviewUpdateAvailable && onRefreshReview}
+    <div class="shrink-0 border-b border-base-300 px-4 py-2.5">
+      <Alert variant="warning" role="status" aria-live="polite">
+        <div class="flex items-center gap-3">
+          <div class="flex-1">
+            <div class="font-medium">New commits are available for this pull request.</div>
+            <div class="text-xs opacity-80">Refresh before submitting so your review uses the latest changes.</div>
+            {#if reviewRefreshError}
+              <div class="mt-1 text-xs" role="alert">Refresh failed: {reviewRefreshError}</div>
+            {/if}
+          </div>
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={isRefreshingReview}
+            onclick={() => { void onRefreshReview() }}
+          >{isRefreshingReview ? 'Refreshing…' : 'Refresh latest changes'}</Button>
+        </div>
+      </Alert>
+    </div>
+  {:else if pendingCommentsToReview.length > 0}
+    <div class="shrink-0 border-b border-base-300 px-4 py-2.5">
+      <Alert variant="info" role="status" aria-live="polite">
+        Latest changes loaded. Recheck your pending comments before submitting.
+      </Alert>
+    </div>
+  {/if}
+
   <Tabs
     label="Pull request detail sections"
     tabs={detailTabs}
@@ -261,6 +300,7 @@
           {resolveRepositoryImage}
           existingComments={reviewComments}
           pendingComments={pendingManualComments}
+          {pendingCommentsToReview}
           onPendingCommentsChange={onPendingCommentsChange}
           {onOpenUrl}
           reviewThreads={reviewThreads}
@@ -342,6 +382,7 @@
                   prNumber={pr.number}
                   commitId={pr.head_sha}
                   pendingComments={pendingManualComments}
+                  {pendingCommentsToReview}
                   resolvedAgentComments={resolvedAgentSubmissions.map(submission => submission.comment)}
                   pendingReplyCount={pendingReplies.length}
                   onPendingCommentsChange={onPendingCommentsChange}

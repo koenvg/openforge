@@ -57,6 +57,21 @@ describe('ReviewSubmitPanel', () => {
     expect(screen.getByText('1 comment will be submitted')).toBeTruthy()
   })
 
+  it('keeps every pending comment visible for review after loading newer changes', () => {
+    const comments: ReviewSubmissionComment[] = [
+      { path: 'src/login.ts', line: 10, side: 'RIGHT', body: 'Keep the null check' },
+      { path: 'removed.ts', line: 20, side: 'LEFT', body: 'This line may no longer exist' },
+    ]
+
+    renderPanel({ pendingComments: comments, pendingCommentsToReview: comments })
+
+    expect(screen.getByText('Review your 2 pending comments against the latest changes before submitting.')).toBeTruthy()
+    expect(screen.getByText('src/login.ts:10')).toBeTruthy()
+    expect(screen.getByText('Keep the null check')).toBeTruthy()
+    expect(screen.getByText('removed.ts:20')).toBeTruthy()
+    expect(screen.getByText('This line may no longer exist')).toBeTruthy()
+  })
+
   it('labels the review summary textarea and describes the keyboard shortcut', () => {
     renderPanel()
 
