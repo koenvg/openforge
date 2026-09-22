@@ -2,7 +2,10 @@ use crate::authored_pr_sync::{
     enrich_and_persist_authored_prs, AuthoredPrEnrichmentPolicy, AuthoredPrStalePolicy,
 };
 use crate::review_pr_sync::enrich_and_persist_review_prs;
-use crate::{db, github_client::GitHubClient};
+use crate::{
+    db,
+    github_client::{CompletePrSearchSnapshot, GitHubClient},
+};
 use futures::future::join_all;
 use log::error;
 use std::collections::HashMap;
@@ -89,12 +92,12 @@ pub async fn fetch_review_prs(
         .map_err(|error| format!("Failed to get config: {error}"))?
         .ok_or_else(|| "github_token not configured".to_string())?;
 
-    let (prs, all_search_ids) = github_client
+    let snapshot = github_client
         .search_review_requested_prs(&username, &token)
         .await
         .map_err(|e| format!("Failed to search review PRs: {e}"))?;
 
-    enrich_and_persist_review_prs(github_client, db, &token, prs, &all_search_ids).await
+    enrich_and_persist_review_prs(github_client, db, &token, snapshot).await
 }
 
 fn should_fallback_to_search(
@@ -246,6 +249,40 @@ async fn fetch_event_signal_prs(
     results
 }
 
+/// A search may reconcile missing PRs; event signals only refresh known PRs.
+enum AuthoredPrRefresh {
+    CompleteSearch(CompletePrSearchSnapshot),
+    EventSignals(Vec<SearchPrResult>),
+}
+
+async fn persist_authored_refresh(
+    github_client: &GitHubClient,
+    db: &Mutex<db::Database>,
+    token: &str,
+    refresh: AuthoredPrRefresh,
+) -> Result<
+    crate::authored_pr_sync::AuthoredPrSyncOutcome,
+    crate::authored_pr_sync::AuthoredPrSyncError,
+> {
+    let (prs, search_ids) = match refresh {
+        AuthoredPrRefresh::CompleteSearch(snapshot) => (snapshot.prs, Some(snapshot.ids)),
+        AuthoredPrRefresh::EventSignals(prs) => (prs, None),
+    };
+    let stale_policy = match search_ids.as_deref() {
+        Some(ids) => AuthoredPrStalePolicy::DeleteMissing(ids),
+        None => AuthoredPrStalePolicy::Preserve,
+    };
+    enrich_and_persist_authored_prs(
+        github_client,
+        db,
+        token,
+        prs,
+        AuthoredPrEnrichmentPolicy::BestEffort,
+        stale_policy,
+    )
+    .await
+}
+
 pub async fn fetch_authored_prs(
     db: &Arc<Mutex<db::Database>>,
     github_client: &GitHubClient,
@@ -305,34 +342,21 @@ pub async fn fetch_authored_prs(
         now,
     );
 
-    let (prs, all_search_ids, can_delete_stale) = if should_run_search {
-        let (search_prs, search_ids) =
+    let refresh = if should_run_search {
+        AuthoredPrRefresh::CompleteSearch(
             github_client
                 .search_authored_prs(&username, &token)
                 .await
-                .map_err(|e| format!("Failed to search authored PRs: {e}"))?;
-        (search_prs, search_ids, true)
+                .map_err(|e| format!("Failed to search authored PRs: {e}"))?,
+        )
     } else {
-        let event_signal_prs =
-            fetch_event_signal_prs(github_client, &token, &event_refs, &existing_id_by_ref).await;
-        (event_signal_prs, Vec::new(), false)
+        AuthoredPrRefresh::EventSignals(
+            fetch_event_signal_prs(github_client, &token, &event_refs, &existing_id_by_ref).await,
+        )
     };
-
-    let stale_policy = if can_delete_stale && (!all_search_ids.is_empty() || prs.is_empty()) {
-        AuthoredPrStalePolicy::DeleteMissing(&all_search_ids)
-    } else {
-        AuthoredPrStalePolicy::Preserve
-    };
-    let outcome = enrich_and_persist_authored_prs(
-        github_client,
-        db,
-        &token,
-        prs,
-        AuthoredPrEnrichmentPolicy::BestEffort,
-        stale_policy,
-    )
-    .await
-    .map_err(|error| error.to_string())?;
+    let outcome = persist_authored_refresh(github_client, db, &token, refresh)
+        .await
+        .map_err(|error| error.to_string())?;
 
     if outcome.stale_reconciled {
         let db_lock = crate::db::acquire_db(db);
@@ -397,5 +421,63 @@ mod tests {
     #[test]
     fn falls_back_to_authored_search_when_reconciliation_is_stale() {
         assert!(should_fallback_to_search(4, 2, 0, Some(100), 401));
+    }
+
+    #[tokio::test]
+    async fn complete_empty_search_removes_stale_rows_but_event_only_update_preserves_them() {
+        for complete_search in [false, true] {
+            let (db, _dir) = crate::db::test_helpers::make_test_db("refresh_source_staleness");
+            db.upsert_authored_pr(
+                42,
+                7,
+                "Old PR",
+                None,
+                "open",
+                false,
+                "https://github.com/acme/widgets/pull/7",
+                "alice",
+                None,
+                "acme",
+                "widgets",
+                "feature",
+                "main",
+                "sha",
+                0,
+                0,
+                0,
+                None,
+                None,
+                None,
+                false,
+                None,
+                &[],
+                0,
+                0,
+            )
+            .unwrap();
+            let db = std::sync::Mutex::new(db);
+            let client = crate::github_client::GitHubClient::new();
+            let refresh = if complete_search {
+                super::AuthoredPrRefresh::CompleteSearch(
+                    crate::github_client::CompletePrSearchSnapshot {
+                        prs: vec![],
+                        ids: vec![],
+                    },
+                )
+            } else {
+                super::AuthoredPrRefresh::EventSignals(vec![])
+            };
+            let outcome = super::persist_authored_refresh(&client, &db, "token", refresh)
+                .await
+                .expect("persist refresh");
+            assert_eq!(outcome.stale_reconciled, complete_search);
+            assert_eq!(
+                crate::db::acquire_db(&db)
+                    .get_all_authored_prs()
+                    .unwrap()
+                    .len(),
+                usize::from(!complete_search)
+            );
+        }
     }
 }

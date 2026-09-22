@@ -25,6 +25,7 @@ struct Api {
     external_stage: AtomicUsize,
     fail_search: AtomicBool,
     fail_details: AtomicBool,
+    empty_authored_search: AtomicBool,
     fail_review_list: AtomicBool,
     task_id: String,
 }
@@ -66,6 +67,9 @@ async fn respond(
                     Json(json!({"message":"unavailable"})),
                 )
                     .into_response();
+            }
+            if api.empty_authored_search.load(Ordering::SeqCst) {
+                return Json(json!({"total_count":0,"items":[]})).into_response();
             }
             json!({"total_count":1,"items":[{
                 "id":42,"number":7,"title":format!("Recover {}", api.task_id),"body":null,
@@ -197,6 +201,23 @@ async fn recovery_success_is_independent_of_global_list_failure() {
     assert_eq!(f.links().len(), 1);
 }
 
+#[tokio::test]
+async fn complete_empty_authored_search_succeeds_even_when_review_list_fails() {
+    let f = Fixture::new().await;
+    f.api.empty_authored_search.store(true, Ordering::SeqCst);
+    f.api.fail_review_list.store(true, Ordering::SeqCst);
+    let execution = crate::github_poller::poll_execution::poll_github_scope(
+        f.db.clone(),
+        &f.client,
+        &GitHubEventTarget::sidecar(None),
+        &PollScope::GlobalReviewListsAndTaskLinks,
+    )
+    .await;
+    assert_eq!(execution.result.outcome, PollOutcome::Failed);
+    assert!(execution.task_links_succeeded);
+    assert!(f.links().is_empty());
+    assert_eq!(f.api.authored_searches.load(Ordering::SeqCst), 1);
+}
 #[tokio::test]
 async fn recovery_reuses_authored_snapshot_and_notifies_only_new_links() {
     let f = Fixture::new().await;

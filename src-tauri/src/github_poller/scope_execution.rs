@@ -2,7 +2,7 @@ use super::common::{GitHubEventTarget, PollOutcome, PollResult};
 use super::persistence::poll_prs_for_project;
 use super::review_sync::{
     count_poll_phase_error, poll_authored_prs, poll_authored_prs_from_snapshot, poll_review_prs,
-    sync_authored_task_prs, AuthoredPrSnapshot,
+    sync_authored_task_prs,
 };
 use super::scheduling::{
     current_unix_timestamp, get_scheduled_prs_for_project, scheduled_pr_in_scope, select_projects,
@@ -10,7 +10,7 @@ use super::scheduling::{
 };
 use super::sync_logging::{format_sync_phase_log, format_sync_scope_log, poll_scope_log_name};
 use crate::db::{acquire_db, Database, PrRow, ProjectRow};
-use crate::github_client::GitHubClient;
+use crate::github_client::{CompletePrSearchSnapshot, GitHubClient};
 use log::{debug, error, info, warn};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -225,7 +225,7 @@ impl<'a> ScopePoll<'a> {
         self.finish(project_count, planned_pr_count)
     }
 
-    async fn refresh_task_links(&mut self) -> Option<AuthoredPrSnapshot> {
+    async fn refresh_task_links(&mut self) -> Option<CompletePrSearchSnapshot> {
         if !self.scope.refreshes_task_links() {
             return None;
         }
@@ -256,7 +256,7 @@ impl<'a> ScopePoll<'a> {
                         Some(&detail),
                     )
                 );
-                Some(snapshot)
+                snapshot
             }
             Err(error) => {
                 error!(
@@ -352,7 +352,7 @@ impl<'a> ScopePoll<'a> {
         }
     }
 
-    async fn refresh_global_lists(&mut self, authored_snapshot: Option<AuthoredPrSnapshot>) {
+    async fn refresh_global_lists(&mut self, authored_snapshot: Option<CompletePrSearchSnapshot>) {
         if !self.scope.polls_global_lists() {
             return;
         }
