@@ -54,7 +54,7 @@
     <Tabs.List class="of-tabs-list" aria-label={label}>
       {#each tabs as tab (tab.value)}
         <Tabs.Trigger
-          class="of-tabs-trigger"
+          class={tab.trailing ? 'of-tabs-trigger of-tabs-trigger-with-trailing' : 'of-tabs-trigger'}
           value={tab.value}
           disabled={tab.disabled}
           aria-label={tab.ariaLabel ?? (tab.icon ? tab.label : undefined)}
@@ -125,10 +125,6 @@
   }
 
   .of-tabs :global(.of-tabs-trigger) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--of-space2);
     min-height: var(--of-control-height);
     padding: 0 var(--of-space3);
     border: var(--of-border-width) solid transparent;
@@ -143,6 +139,13 @@
       background-color var(--of-duration-fast) var(--of-ease-standard),
       border-color var(--of-duration-fast) var(--of-ease-standard),
       color var(--of-duration-fast) var(--of-ease-standard);
+  }
+
+  .of-tabs :global(.of-tabs-trigger-with-trailing) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--of-space2);
   }
 
   .of-tabs :global(.of-tabs-icon) {
