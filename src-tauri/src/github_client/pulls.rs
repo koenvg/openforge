@@ -7,6 +7,14 @@ use super::error::GitHubError;
 use super::types::*;
 use super::GitHubClient;
 
+/// A successful GitHub search with every page and PR detail fetched. An empty
+/// snapshot is authoritative; failures never produce a snapshot.
+#[derive(Debug)]
+pub struct CompletePrSearchSnapshot {
+    pub(crate) prs: Vec<SearchPrResult>,
+    pub(crate) ids: Vec<i64>,
+}
+
 fn normalize_base64_content(content: &str) -> String {
     content.replace('\n', "")
 }
@@ -305,7 +313,7 @@ impl GitHubClient {
         &self,
         url: &str,
         token: &str,
-    ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
+    ) -> Result<CompletePrSearchSnapshot, GitHubError> {
         // Cache each raw page independently. A 304 on page one says nothing about
         // later pages or PR details, which must still be refreshed.
         let mut items = Vec::new();
@@ -436,7 +444,10 @@ impl GitHubClient {
             });
         }
 
-        Ok((results, all_search_ids))
+        Ok(CompletePrSearchSnapshot {
+            prs: results,
+            ids: all_search_ids,
+        })
     }
 
     /// Fetch all non-draft review requests, up to GitHub's 1,000-match search cap.
@@ -446,11 +457,11 @@ impl GitHubClient {
         &self,
         username: &str,
         token: &str,
-    ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
+    ) -> Result<CompletePrSearchSnapshot, GitHubError> {
         let url = review_requested_pr_search_url(username);
-        let (prs, safe_search_ids) = self.search_prs_with_details(&url, token).await?;
-
-        Ok(exclude_draft_search_pr_results(prs, safe_search_ids))
+        let snapshot = self.search_prs_with_details(&url, token).await?;
+        let (prs, ids) = exclude_draft_search_pr_results(snapshot.prs, snapshot.ids);
+        Ok(CompletePrSearchSnapshot { prs, ids })
     }
 
     /// Fetch all open authored PRs, up to GitHub's 1,000-match search cap.
@@ -460,7 +471,7 @@ impl GitHubClient {
         &self,
         username: &str,
         token: &str,
-    ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
+    ) -> Result<CompletePrSearchSnapshot, GitHubError> {
         let url = format!(
             "https://api.github.com/search/issues?q=author:{}+type:pr+state:open&per_page=100",
             username

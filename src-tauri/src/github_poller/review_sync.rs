@@ -4,7 +4,7 @@ use crate::authored_pr_sync::{
     AuthoredPrSyncError,
 };
 use crate::db::{acquire_db, Database, PrRow};
-use crate::github_client::{GitHubClient, PullRequestTerminalState};
+use crate::github_client::{CompletePrSearchSnapshot, GitHubClient, PullRequestTerminalState};
 use crate::review_pr_sync::enrich_and_persist_review_prs;
 use log::{error, warn};
 use std::collections::HashSet;
@@ -63,7 +63,6 @@ pub(super) enum SyncOpenPrsError {
     GitHub(crate::github_client::GitHubError),
     Db(String),
     Clock(crate::unix_timestamp::UnixTimestampError),
-    IncompleteSearch,
 }
 
 impl SyncOpenPrsError {
@@ -85,7 +84,6 @@ impl SyncOpenPrsError {
             }
             Self::Db(_) => "database error".to_string(),
             Self::Clock(_) => "clock error".to_string(),
-            Self::IncompleteSearch => "incomplete authored PR details".to_string(),
         };
 
         format!("phase {phase}: {summary}")
@@ -98,7 +96,6 @@ impl fmt::Display for SyncOpenPrsError {
             Self::Db(message) => f.write_str(message),
             Self::GitHub(error) => write!(f, "{}", error),
             Self::Clock(error) => write!(f, "clock error: {}", error),
-            Self::IncompleteSearch => f.write_str("incomplete authored PR details"),
         }
     }
 }
@@ -169,34 +166,22 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     Ok(updated)
 }
 
-#[derive(Default)]
-pub(super) struct AuthoredPrSnapshot {
-    prs: Vec<crate::github_client::SearchPrResult>,
-    all_search_ids: Vec<i64>,
-}
-
 pub(super) async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     github_token: &str,
     events: &GitHubEventTarget,
     requests: &mut super::refresh_requests::RefreshRequests,
-) -> Result<(usize, AuthoredPrSnapshot), SyncOpenPrsError> {
+) -> Result<(usize, Option<CompletePrSearchSnapshot>), SyncOpenPrsError> {
     let username = match read_or_fetch_github_username(github_client, db, github_token).await? {
         Some(username) => username,
-        None => return Ok((0, AuthoredPrSnapshot::default())),
+        None => return Ok((0, None)),
     };
 
-    let (github_prs, all_search_ids) = github_client
+    let snapshot = github_client
         .search_authored_prs(&username, github_token)
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
-
-    // A successful search can still contain failed detail lookups. Do not mark
-    // recovery successful when the complete search identifies missing results.
-    if !all_search_ids.is_empty() && github_prs.len() != all_search_ids.len() {
-        return Err(SyncOpenPrsError::IncompleteSearch);
-    }
 
     let task_ids = {
         let db_lock = acquire_db(db);
@@ -210,10 +195,9 @@ pub(super) async fn sync_authored_task_prs(
 
     let mut synced = 0;
     let mut newly_linked = Vec::new();
-    let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
     {
         let db_lock = acquire_db(db);
-        for pr in &github_prs {
+        for pr in &snapshot.prs {
             if let Some(task_id) =
                 find_authoritative_task_id(&pr.title, &pr.head_ref, pr.body.as_deref(), &task_ids)
             {
@@ -281,17 +265,9 @@ pub(super) async fn sync_authored_task_prs(
         .await;
     }
 
-    if should_reconcile_stale {
-        reconcile_stale_authored_task_prs(github_client, db, github_token, &all_search_ids).await?;
-    }
+    reconcile_stale_authored_task_prs(github_client, db, github_token, &snapshot.ids).await?;
 
-    Ok((
-        synced,
-        AuthoredPrSnapshot {
-            prs: github_prs,
-            all_search_ids,
-        },
-    ))
+    Ok((synced, Some(snapshot)))
 }
 
 pub(super) async fn read_or_fetch_github_username(
@@ -421,18 +397,16 @@ pub(super) async fn poll_review_prs(
         return Ok(());
     };
 
-    let (prs, all_search_ids) = github_client
+    let snapshot = github_client
         .search_review_requested_prs(&username, github_token)
         .await
         .map_err(PollPhaseError::GitHub)?;
-
-    let count =
-        enrich_and_persist_review_prs(github_client, db, github_token, prs, &all_search_ids)
-            .await
-            .map_err(PollPhaseError::Db)?
-            .iter()
-            .filter(|pr| pr.viewed_at.is_none())
-            .count();
+    let count = enrich_and_persist_review_prs(github_client, db, github_token, snapshot)
+        .await
+        .map_err(PollPhaseError::Db)?
+        .iter()
+        .filter(|pr| pr.viewed_at.is_none())
+        .count();
     events.emit("review-pr-count-changed", serde_json::json!(count));
 
     Ok(())
@@ -453,21 +427,11 @@ pub(super) async fn poll_authored_prs(
     let Some(username) = configured_github_username(db)? else {
         return Ok(());
     };
-    let (prs, all_search_ids) = github_client
+    let snapshot = github_client
         .search_authored_prs(&username, github_token)
         .await
         .map_err(PollPhaseError::GitHub)?;
-    poll_authored_prs_from_snapshot(
-        github_client,
-        db,
-        events,
-        github_token,
-        AuthoredPrSnapshot {
-            prs,
-            all_search_ids,
-        },
-    )
-    .await
+    poll_authored_prs_from_snapshot(github_client, db, events, github_token, snapshot).await
 }
 
 pub(super) async fn poll_authored_prs_from_snapshot(
@@ -475,25 +439,16 @@ pub(super) async fn poll_authored_prs_from_snapshot(
     db: &Mutex<Database>,
     events: &GitHubEventTarget,
     github_token: &str,
-    snapshot: AuthoredPrSnapshot,
+    snapshot: CompletePrSearchSnapshot,
 ) -> Result<(), PollPhaseError> {
-    let AuthoredPrSnapshot {
-        prs,
-        all_search_ids,
-    } = snapshot;
-    let stale_policy = if !all_search_ids.is_empty() || prs.is_empty() {
-        AuthoredPrStalePolicy::DeleteMissing(&all_search_ids)
-    } else {
-        AuthoredPrStalePolicy::Preserve
-    };
-
+    let CompletePrSearchSnapshot { prs, ids } = snapshot;
     enrich_and_persist_authored_prs(
         github_client,
         db,
         github_token,
         prs,
         AuthoredPrEnrichmentPolicy::RequireComplete,
-        stale_policy,
+        AuthoredPrStalePolicy::DeleteMissing(&ids),
     )
     .await?;
 

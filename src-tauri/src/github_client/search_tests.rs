@@ -65,7 +65,7 @@ async fn authored_and_review_searches_return_more_than_100_prs() {
     .await;
 
     for review in [false, true] {
-        let (prs, ids) = if review {
+        let super::CompletePrSearchSnapshot { prs, ids } = if review {
             client.search_review_requested_prs("alice", "token").await
         } else {
             client.search_authored_prs("alice", "token").await
@@ -115,7 +115,8 @@ async fn partial_detail_failure_is_an_error_and_retried_after_search_304() {
         );
     let client = client_for(router).await;
     assert!(client.search_authored_prs("alice", "token").await.is_err());
-    let (prs, ids) = client.search_authored_prs("alice", "token").await.unwrap();
+    let super::CompletePrSearchSnapshot { prs, ids } =
+        client.search_authored_prs("alice", "token").await.unwrap();
     assert_eq!(prs.len(), 2);
     assert_eq!(ids, vec![1, 2]);
 }
@@ -191,10 +192,16 @@ async fn first_page_304_does_not_hide_changed_later_pages_or_details() {
             ([("etag", "detail-v1")], Json(body)).into_response()
         }));
     let client = client_for(router).await;
-    let (first, first_ids) = client.search_authored_prs("alice", "token").await.unwrap();
+    let super::CompletePrSearchSnapshot {
+        prs: first,
+        ids: first_ids,
+    } = client.search_authored_prs("alice", "token").await.unwrap();
     assert_eq!(first.len(), 101);
     assert_eq!(first_ids.last(), Some(&101));
-    let (next, next_ids) = client.search_authored_prs("alice", "token").await.unwrap();
+    let super::CompletePrSearchSnapshot {
+        prs: next,
+        ids: next_ids,
+    } = client.search_authored_prs("alice", "token").await.unwrap();
     assert_eq!(next.len(), 101);
     assert_eq!(next_ids.last(), Some(&102));
     assert!(!next_ids.contains(&101));
@@ -222,12 +229,12 @@ async fn complete_empty_search_stays_successful_on_304() {
     ))
     .await;
     for _ in 0..2 {
-        let (prs, ids) = client
+        let snapshot = client
             .search_review_requested_prs("alice", "token")
             .await
             .unwrap();
-        assert!(prs.is_empty());
-        assert!(ids.is_empty());
+        assert!(snapshot.prs.is_empty());
+        assert!(snapshot.ids.is_empty());
     }
 }
 

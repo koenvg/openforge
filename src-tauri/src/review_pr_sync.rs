@@ -1,5 +1,7 @@
 use crate::db::{acquire_db, Database, ReviewPrRow, ReviewPrUpsert};
-use crate::github_client::{CiSignal, GitHubClient, GitHubError, SearchPrResult};
+use crate::github_client::{
+    CiSignal, CompletePrSearchSnapshot, GitHubClient, GitHubError, SearchPrResult,
+};
 use futures::future::join_all;
 use log::warn;
 use std::sync::Mutex;
@@ -109,11 +111,9 @@ pub(crate) async fn enrich_and_persist_review_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     github_token: &str,
-    prs: Vec<SearchPrResult>,
-    all_search_ids: &[i64],
+    snapshot: CompletePrSearchSnapshot,
 ) -> Result<Vec<ReviewPrRow>, String> {
-    let search_is_empty = prs.is_empty();
-    let should_reconcile = !all_search_ids.is_empty() || search_is_empty;
+    let CompletePrSearchSnapshot { prs, ids } = snapshot;
     let rows = join_all(
         prs.into_iter()
             .map(|pr| review_pr_upsert(github_client, github_token, pr)),
@@ -127,15 +127,11 @@ pub(crate) async fn enrich_and_persist_review_prs(
                 .map_err(|error| format!("Failed to upsert review PR: {error}"))?;
         }
 
-        if should_reconcile {
-            db.mark_review_prs_not_requested(all_search_ids)
-                .map_err(|error| format!("Failed to update review PR request state: {error}"))?;
-        }
+        db.mark_review_prs_not_requested(&ids)
+            .map_err(|error| format!("Failed to update review PR request state: {error}"))?;
     }
 
-    if should_reconcile {
-        reconcile_kept_review_prs(github_client, db, github_token).await?;
-    }
+    reconcile_kept_review_prs(github_client, db, github_token).await?;
 
     acquire_db(db)
         .get_all_review_prs()
@@ -157,6 +153,11 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
+
+    fn complete_snapshot(prs: Vec<SearchPrResult>) -> CompletePrSearchSnapshot {
+        let ids = prs.iter().map(|pr| pr.id).collect();
+        CompletePrSearchSnapshot { prs, ids }
+    }
 
     fn search_pr(head_sha: &str) -> SearchPrResult {
         SearchPrResult {
@@ -331,25 +332,27 @@ mod tests {
             &client,
             &db,
             "token",
-            vec![search_pr("sha-green")],
-            &[42],
+            complete_snapshot(vec![search_pr("sha-green")]),
         )
         .await
         .expect("persist passing CI");
         assert_eq!(rows[0].ci_status.as_deref(), Some("success"));
 
-        let rows =
-            enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-red")], &[42])
-                .await
-                .expect("persist failing CI on the new head");
+        let rows = enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            complete_snapshot(vec![search_pr("sha-red")]),
+        )
+        .await
+        .expect("persist failing CI on the new head");
         assert_eq!(rows[0].ci_status.as_deref(), Some("failure"));
 
         let rows = enrich_and_persist_review_prs(
             &client,
             &db,
             "token",
-            vec![search_pr("sha-error")],
-            &[42],
+            complete_snapshot(vec![search_pr("sha-error")]),
         )
         .await
         .expect("keep the row after a failed CI fetch");
@@ -360,8 +363,7 @@ mod tests {
             &client,
             &db,
             "token",
-            vec![search_pr("sha-status-error")],
-            &[42],
+            complete_snapshot(vec![search_pr("sha-status-error")]),
         )
         .await
         .expect("keep the row after a failed commit-status fetch");
@@ -400,10 +402,15 @@ mod tests {
         let (db, _temp_dir) = crate::db::test_helpers::make_test_db("review_pr_merge_reconcile");
         let db = Mutex::new(db);
 
-        enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-green")], &[42])
-            .await
-            .expect("seed requested PR");
-        let rows = enrich_and_persist_review_prs(&client, &db, "token", vec![], &[])
+        enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            complete_snapshot(vec![search_pr("sha-green")]),
+        )
+        .await
+        .expect("seed requested PR");
+        let rows = enrich_and_persist_review_prs(&client, &db, "token", complete_snapshot(vec![]))
             .await
             .expect("reconcile kept PR");
 
@@ -434,10 +441,15 @@ mod tests {
         let (db, _temp_dir) = crate::db::test_helpers::make_test_db("review_pr_failed_reconcile");
         let db = Mutex::new(db);
 
-        enrich_and_persist_review_prs(&client, &db, "token", vec![search_pr("sha-green")], &[42])
-            .await
-            .expect("seed requested PR");
-        let rows = enrich_and_persist_review_prs(&client, &db, "token", vec![], &[])
+        enrich_and_persist_review_prs(
+            &client,
+            &db,
+            "token",
+            complete_snapshot(vec![search_pr("sha-green")]),
+        )
+        .await
+        .expect("seed requested PR");
+        let rows = enrich_and_persist_review_prs(&client, &db, "token", complete_snapshot(vec![]))
             .await
             .expect("keep PR after failed terminal fetch");
 
@@ -512,8 +524,7 @@ mod tests {
                 &client,
                 &db,
                 "token",
-                vec![search_pr("sha-green")],
-                &[42],
+                complete_snapshot(vec![search_pr("sha-green")]),
             )
             .await
             .expect("sync unchanged review PR");
