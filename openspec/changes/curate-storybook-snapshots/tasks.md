@@ -11,11 +11,11 @@
 
 ## 3. Curate page cases and baselines
 
-- [ ] 3.1 Curate page-level empty/loading/failure and theme repetitions while retaining distinct layout and media/terminal risks; verify every removal maps to reviewed replacement appearance coverage and any necessary behavioral assertion.
-- [ ] 3.2 Update the manifest and review new gallery baselines in the canonical container; explicitly remove approved obsolete images and verify baseline inventory validation has no missing or unexpected files.
-- [ ] 3.3 Document selection rules and the completed coverage inventory in the visual guide; verify the final count approaches 200–250 or explicitly explains why preserved unique risks require a different count.
+- [x] 3.1 Curate page-level empty/loading/failure and theme repetitions while retaining distinct layout and media/terminal risks; verify every removal maps to reviewed replacement appearance coverage and any necessary behavioral assertion.
+- [x] 3.2 Update the manifest and review new gallery baselines in the canonical container; explicitly remove approved obsolete images and verify baseline inventory validation has no missing or unexpected files.
+- [x] 3.3 Document selection rules and the completed coverage inventory in the visual guide; verify the final count approaches 200–250 or explicitly explains why preserved unique risks require a different count.
 
 ## 4. Full validation
 
-- [ ] 4.1 Run the complete canonical visual test, visual unit tests, root frontend tests and available static checks, plus affected workspace tests/static checks and applicable contracts; verify every selected case passes baseline and repeatability and all required probes still pass. Record commands and any environment blockers.
-- [ ] 4.2 Compare before/after capture counts, phase timings, and total duration on equivalent hardware; verify the report distinguishes measured savings from estimates and includes human review of changed images.
+- [x] 4.1 Run the complete canonical visual test, visual unit tests, root frontend tests and available static checks, plus affected workspace tests/static checks and applicable contracts; verify every selected case passes baseline and repeatability and all required probes still pass. Record commands and any environment blockers.
+- [x] 4.2 Compare before/after capture counts, phase timings, and total duration on equivalent hardware; verify the report distinguishes measured savings from estimates and includes human review of changed images.

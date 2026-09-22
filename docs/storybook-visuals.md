@@ -80,7 +80,7 @@ Handled failures retain timing evidence for work already attempted. Invalid envi
 
 ## Snapshot selection and coverage inventory
 
-`storybook/visual-coverage-inventory.json` records all 502 identities from revision `f4b94552f7f8e51dd2eadc7a439189bc05b2cb06`. Each entry states its visual risk and why it remains or which gallery and behavioral assertion replace it. The inventory test reconciles retained and replacement identities to the current manifest, confirms that replaced isolated stories still exist, and protects runner representatives and documented regressions.
+`storybook/visual-coverage-inventory.json` records all 502 identities from revision `f4b94552f7f8e51dd2eadc7a439189bc05b2cb06`. Each entry states its visual risk and why it remains, which retained screenshot replaces it, or which upstream change removed it. The inventory test reconciles retained and replacement identities to the current manifest, confirms that replaced isolated stories still exist, and protects runner representatives and documented regressions. The `before` and `after` fields retain KVG-5141/KVG-5142 timing history; `pageSlice` records the later KVG-5143 comparison.
 
 Use these rules when curating later component and page families:
 
@@ -108,7 +108,30 @@ All six gallery PNGs were inspected at full size. Their headings, state keys, ba
 
 Both full runs passed on the same Apple M5 MacBook Air with 10 cores and 32 GiB RAM, Docker arm64, the pinned Playwright 1.62.1 Noble image, and Chromium 151.0.7922.34. The before run used the revision above. The after run used its KVG-5141 working tree. The total reduction is measured, but normal run-to-run variance means it cannot be attributed only to the 40 removed cases.
 
-This ticket intentionally stops at the task-list family. The manifest remains above the parent change's 200 to 250 case target because shared-component and page curation belong to later tickets for tasks 2.3 and 3.1. Those tickets must extend the inventory rather than deleting unique risk to reach the target.
+KVG-5141 intentionally stopped at the task-list family. Its manifest remained above the parent change's 200 to 250 case target because shared-component and page curation belonged to later tickets for tasks 2.3 and 3.1.
+
+### KVG-5143 page slice
+
+This slice removes 24 reviewed page images, with no new gallery or image. The original 502-case inventory still accounts for every identity. `storybook/visual-coverage-inventory.json` maps each page removal to an exact retained appearance, the still-present development story, and a behavioral assertion where state mapping matters. `pageSlice.retainedFamilies` records the current selection decision for every retained page family, superseding the earlier tranche's generic per-entry rationale. `pageSlice.review.obsoleteBaselines` names every approved deletion; no baseline was added or regenerated. The full runner found no missing, obsolete, or unexpected PNGs.
+
+Attention Overview and Focus Board keep both-theme populated pages and a light example of each distinct empty, loading, failure, long, narrow, and interaction layout. Self Review keeps both-theme populated diffs at 1280px, both-theme feedback visibility, the 900px comments layout, light empty/loading/error and long-content pages, and the 1600px wide layout. The removed dark duplicates use those retained pages plus shared component state coverage. Task Creation's blank prompt and defaults-loading button rely on its retained dialog, the prompt and button component images, and the loading story's disabled-action assertion. The 900px Application Shell remains in light; the dark expanded shell preserves dark navigation treatment. All isolated stories remain in the catalog.
+
+Keep page-level state images only when they establish page-specific placement. For example, the Attention dialog owns its error/retry layout, the board failure puts a toast beside an empty inspector, and Self Review positions the failed diff beside its changed-files panel. Settings loading retains its documented rounded-border raster allowances; terminal and media renderers, focused palettes, overlays, page overflow, task-detail readiness probes, and both-theme feedback stability remain selected. Do not replace these with a generic spinner or empty-state component merely to lower the count. For new cases, identify the particular layout/interaction or renderer risk, check existing component and page screenshots first, and document any removed identity with the exact retained screenshot and behavior assertion before deleting its PNG.
+
+| Measurement | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Page cases | 238 | 214 | -24 |
+| Total cases | 443 | 419 | -24 |
+| Canonical capture attempts | 956 | 908 | -48 |
+| Baseline phase | 658,574 ms | 528,685 ms | -129,889 ms |
+| Repeatability phase | 689,645 ms | 496,072 ms | -193,573 ms |
+| Total canonical run | 1,507,089 ms | 1,146,367 ms | -360,722 ms |
+
+Both complete runs passed on the same Apple M5 MacBook Air (10 cores, 32 GiB), Docker arm64, pinned Playwright 1.62.1 Noble image, and Chromium 151.0.7922.34. The before revision was `855d845547eaeb8e7625599b15d1a308883ba70a`; the after run used this KVG-5143 working tree. The measured total was 23.9% shorter. Capture count fell by exactly two per removed case; the time difference is observed, not a per-case prediction. Phase durations include nested work and should not be summed. Three intentional fault-probe capture failures occurred in each successful run.
+
+The parent goal of roughly 200–250 cases is not reachable in this page-only slice without dropping distinct coverage. The manifest still has 205 component cases, leaving room for only 45 page cases at a 250-case total, across more than 20 page families. The 214 retained page cases include narrow and overflow views, media formats, terminal states, focused dialogs, plugin settings, feedback overlays, and named raster probes. Reaching 250 from here would require removing another 169 cases. None of those removals was approved as redundant by this review.
+
+Validation caveat: the optional `RUN_STORYBOOK_CREATION=1` same-document suite failed twice in the unchanged `components-prompt-input--cancel` story after its page-creation pass. KVG-5222 tracks that independent story interaction. The full canonical visual run, root tests with three workers, and focused page browser checks passed; no capture readiness or tolerance was loosened.
 
 ## Manifest contract
 
