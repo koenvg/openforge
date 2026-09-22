@@ -17,7 +17,9 @@ use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedP
 use super::super::super::ordered_writer::OrderedPtyWriter;
 use super::super::super::pids::pid_file_name_for_session_key;
 use super::super::super::terminal_model_bridge::TerminalModelEventBridge;
-use super::super::super::{terminal_environment, PtyError, PtyManager, TerminalImageProtocol};
+use super::super::super::{
+    configure_terminal_environment, PtyError, PtyManager, TerminalImageProtocol,
+};
 use super::super::invalid_workspace_cwd;
 use super::super::lifecycle::{PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 use super::super::provider_adapter::AgentPtyProviderAdapter;
@@ -130,18 +132,26 @@ impl PtyManager {
         cwd: &Path,
         terminal_image_protocol: Option<TerminalImageProtocol>,
         base_environment: Option<&HashMap<String, String>>,
+        removed_environment: &[&str],
+        extra_environment: HashMap<String, String>,
     ) {
+        let mut environment: std::collections::BTreeMap<String, String> = base_environment
+            .cloned()
+            .unwrap_or_else(agent_environment)
+            .into_iter()
+            .collect();
+        #[cfg(test)]
+        environment.extend(self.test_environment.clone());
+        environment.insert("PWD".into(), cwd.to_string_lossy().into_owned());
+        for key in removed_environment {
+            environment.remove(*key);
+        }
+        environment.extend(extra_environment);
+        configure_terminal_environment(&mut environment, terminal_image_protocol);
+
         command.env_clear();
         command.cwd(cwd);
-        for (key, value) in base_environment.cloned().unwrap_or_else(agent_environment) {
-            command.env(key, value);
-        }
-        #[cfg(test)]
-        for (key, value) in &self.test_environment {
-            command.env(key, value);
-        }
-        command.env("PWD", cwd.to_string_lossy().to_string());
-        for (key, value) in terminal_environment(terminal_image_protocol) {
+        for (key, value) in environment {
             command.env(key, value);
         }
     }
@@ -278,13 +288,9 @@ impl PtyManager {
             request.cwd,
             request.terminal_image_protocol,
             adapter.base_environment(),
+            adapter.removed_env(),
+            adapter.extra_env(request.task_id, instance_id),
         );
-        for key in adapter.removed_env() {
-            command.env_remove(key);
-        }
-        for (key, value) in adapter.extra_env(request.task_id, instance_id) {
-            command.env(key, value);
-        }
 
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
@@ -321,7 +327,14 @@ impl PtyManager {
             mut command,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
-        self.configure_pty_command(&mut command, cwd, terminal_image_protocol, None);
+        self.configure_pty_command(
+            &mut command,
+            cwd,
+            terminal_image_protocol,
+            None,
+            &[],
+            HashMap::new(),
+        );
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
             session_key: session_key.to_string(),
