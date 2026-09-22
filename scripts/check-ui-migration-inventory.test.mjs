@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, dirname } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
   UI_MIGRATION_ALLOWLIST,
@@ -72,7 +72,8 @@ describe('legacy presentation inventory', () => {
     try {
       mkdirSync(resolve(root, 'storybook/fixtures'), { recursive: true })
       writeFileSync(resolve(root, 'storybook/fixtures/View.svelte'), '<div class="text-error" />')
-      const result = spawnSync(process.execPath, ['scripts/check-ui-migration-inventory.mjs', '--root', root, '--legacy-inventory'], { encoding: 'utf8' })
+      const result = spawnSync(process.execPath, ['scripts/check-ui-migration-inventory.mjs', '--root', root, '--legacy-inventory'], { encoding: 'utf8', timeout: 4_000 })
+      expect(result.error).toBeUndefined()
       expect(result.status, result.stderr).toBe(0)
       expect(JSON.parse(result.stdout).records).toEqual([expect.objectContaining({
         path: 'storybook/fixtures/View.svelte', token: 'text-error', replacement: 'text-of-danger',
@@ -135,6 +136,32 @@ describe('legacy presentation inventory', () => {
     })]))
   })
 })
+
+// Exercise the real CLI against a small migrated tree; each subprocess has its own deadline.
+async function withMigratedFixture(test) {
+  const root = mkdtempSync(resolve(tmpdir(), 'ui-inventory-'))
+  const seed = (path, contents) => {
+    mkdirSync(dirname(resolve(root, path)), { recursive: true })
+    writeFileSync(resolve(root, path), contents)
+  }
+  const run = () => new Promise((resolveRun, rejectRun) => {
+    execFile(process.execPath, [resolve('scripts/check-ui-migration-inventory.mjs'), '--root', root],
+      { encoding: 'utf8', timeout: 4_000 },
+      (error, stdout, stderr) => {
+        if (error?.killed) rejectRun(error)
+        else resolveRun({ status: error ? error.code : 0, stdout, stderr })
+      })
+  })
+  try {
+    for (const path of ['src/components', 'packages/pr-review-ui/src', 'packages/terminal-runtime/src',
+      'packages/plugin-sdk/src', 'plugins/file-viewer/src', 'plugins/task-browser/src',
+      'plugins/task-schedules/src', 'plugins/github-sync/src', 'plugins/terminal/src']) seed(`${path}/Seed.svelte`, '<div />')
+    seed('scripts/ui-migration-allowlist.json', '{}')
+    await test({ root, seed, run })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
 
 describe('completed UI migration inventory', () => {
   it('detects named sizes and CSS length units and percentages', () => {
@@ -199,45 +226,51 @@ describe('completed UI migration inventory', () => {
     expect(findUiMigrationInventoryViolations([{ path: 'fixture.ts', contents: '// import("bits-ui")\nconst name = "bits-ui"' }])).toEqual([])
   })
 
-  it('discovers new migrated files and fails the command for each seeded rule', () => {
-    const root = mkdtempSync(resolve(tmpdir(), 'ui-inventory-'))
-    const seed = (path, contents) => {
-      mkdirSync(dirname(resolve(root, path)), { recursive: true })
-      writeFileSync(resolve(root, path), contents)
-    }
-    const run = () => spawnSync(process.execPath, [resolve('scripts/check-ui-migration-inventory.mjs'), '--root', root], { encoding: 'utf8' })
-    try {
-      for (const path of ['src/components', 'packages/pr-review-ui/src', 'packages/terminal-runtime/src',
-        'packages/plugin-sdk/src', 'plugins/file-viewer/src', 'plugins/task-browser/src',
-        'plugins/task-schedules/src', 'plugins/github-sync/src', 'plugins/terminal/src']) seed(`${path}/Seed.svelte`, '<div />')
-      seed('scripts/ui-migration-allowlist.json', '{}')
-      expect(run().status).toBe(0)
-      for (const [path, contents, diagnostic] of [
+  it('discovers new migrated files and reports every seeded rule through the command', async () => {
+    await withMigratedFixture(async ({ seed, run }) => {
+      expect((await run()).status).toBe(0)
+      const cases = [
         ['src/components/New.svelte', '<button class="btn">Save</button>', 'btn'],
         ['plugins/github-sync/src/New.svelte', '<button style:height="32px">Save</button>', 'height: 32px'],
         ['plugins/terminal/src/new.ts', 'export * from "bits-ui"', 'bits-ui'],
         ['plugins/terminal/src/new.d.cts', 'import Bits = require("bits-ui"); export = Bits;', 'bits-ui'],
         ['src/components/shared/ui/Modal.svelte', '<div />', 'obsolete implementation'],
-      ]) {
-        seed(path, contents)
-        const result = run()
-        expect(result.status, result.stderr).toBe(1)
-        expect(result.stderr).toContain(diagnostic)
-        rmSync(resolve(root, path))
+      ]
+      for (const [path, contents] of cases) seed(path, contents)
+      const result = await run()
+      expect(result.status, result.stderr).toBe(1)
+      for (const [path, , diagnostic] of cases) {
+        expect(result.stderr.split('\n').some(line => line.includes(`${path}:`) && line.includes(diagnostic))).toBe(true)
       }
+    })
+  })
+
+  it('accepts a justified exception and rejects it after its source is deleted', async () => {
+    await withMigratedFixture(async ({ root, seed, run }) => {
       seed('src/components/Pane.svelte', '<aside class="w-16" />')
       seed('scripts/ui-migration-allowlist.json', JSON.stringify({
         'src/components/Pane.svelte': [{ tag: 'aside', context: 'class="w-16"', tokens: ['w-16'], count: 1, reason: 'Pane width.' }],
       }))
-      expect(run().status).toBe(0)
+      expect((await run()).status).toBe(0)
       rmSync(resolve(root, 'src/components/Pane.svelte'))
-      expect(run().stderr).toContain('Exception source is missing')
-      expect(run().status).toBe(1)
+      const result = await run()
+      expect(result.status, result.stderr).toBe(1)
+      expect(result.stderr).toContain('Exception source is missing')
+    })
+  })
+
+  it('does not transfer exceptions to a renamed source', async () => {
+    await withMigratedFixture(async ({ seed, run }) => {
       seed('src/components/RenamedPane.svelte', '<aside class="w-16" />')
-      expect(run().status).toBe(1)
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
+      seed('scripts/ui-migration-allowlist.json', JSON.stringify({
+        'src/components/Pane.svelte': [{ tag: 'aside', context: 'class="w-16"', tokens: ['w-16'], count: 1, reason: 'Pane width.' }],
+      }))
+      const result = await run()
+      expect(result.status, result.stderr).toBe(1)
+      expect(result.stderr).toContain('src/components/RenamedPane.svelte:')
+      expect(result.stderr).toContain('w-16')
+      expect(result.stderr).toContain('Exception source is missing')
+    })
   })
 
   it('checks variant utilities, referenced classes, inline styles and scoped CSS geometry', () => {
