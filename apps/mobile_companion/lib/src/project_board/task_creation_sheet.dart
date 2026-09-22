@@ -26,6 +26,9 @@ class TaskCreationSheet extends StatefulWidget {
 class _TaskCreationSheetState extends State<TaskCreationSheet> {
   final _promptController = TextEditingController();
   TaskPromptCatalog? _promptCatalog;
+  final _promptKey = GlobalKey();
+  double? _keyboardInset;
+  double? _availableHeight;
   Future<TaskPromptCatalog>? _promptCatalogLoad;
   List<TaskPromptSuggestion> _suggestions = const <TaskPromptSuggestion>[];
   bool _submitting = false;
@@ -68,12 +71,36 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                   .toList(growable: false)
             : const <TaskPromptSuggestion>[];
       });
+      _revealPrompt();
     } on Object {
       _promptCatalogLoad = null;
       if (!mounted || _promptController.text != requestedText) return;
       setState(() {
         _suggestions = const <TaskPromptSuggestion>[];
       });
+    }
+  }
+
+  void _revealPrompt() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _suggestions.isEmpty) return;
+      final promptContext = _promptKey.currentContext;
+      if (promptContext != null) {
+        Scrollable.ensureVisible(
+          promptContext,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    if (_keyboardInset != inset) {
+      _keyboardInset = inset;
+      if (_suggestions.isNotEmpty) _revealPrompt();
     }
   }
 
@@ -124,158 +151,195 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          QuietPaperSpacing.gutter,
-          QuietPaperSpacing.gutter,
-          QuietPaperSpacing.gutter,
-          QuietPaperSpacing.section + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Text('Create Task', style: theme.textTheme.headlineSmall),
-                const SizedBox(height: QuietPaperSpacing.related),
-                Text('Project', style: theme.textTheme.labelLarge),
-                const SizedBox(height: QuietPaperSpacing.compact),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerLow,
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                    borderRadius: BorderRadius.circular(
-                      QuietPaperShapes.controlRadius,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(QuietPaperSpacing.related),
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          Icons.layers_outlined,
-                          color: theme.colorScheme.primary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewportHeight =
+            MediaQuery.sizeOf(context).height -
+            MediaQuery.viewInsetsOf(context).bottom;
+        final availableHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight.clamp(0.0, viewportHeight).toDouble()
+            : viewportHeight;
+        if (_availableHeight != availableHeight) {
+          _availableHeight = availableHeight;
+          if (_suggestions.isNotEmpty) _revealPrompt();
+        }
+        final suggestionHeight = (availableHeight * 0.48)
+            .clamp(96.0, 240.0)
+            .toDouble();
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              QuietPaperSpacing.gutter,
+              QuietPaperSpacing.gutter,
+              QuietPaperSpacing.gutter,
+              QuietPaperSpacing.section +
+                  MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Text('Create Task', style: theme.textTheme.headlineSmall),
+                    const SizedBox(height: QuietPaperSpacing.related),
+                    Text('Project', style: theme.textTheme.labelLarge),
+                    const SizedBox(height: QuietPaperSpacing.compact),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
                         ),
-                        const SizedBox(width: QuietPaperSpacing.compact),
-                        Expanded(
-                          child: Text(
-                            widget.projectName,
-                            style: theme.textTheme.titleSmall,
+                        borderRadius: BorderRadius.circular(
+                          QuietPaperShapes.controlRadius,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(
+                          QuietPaperSpacing.related,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Icon(
+                              Icons.layers_outlined,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: QuietPaperSpacing.compact),
+                            Expanded(
+                              child: Text(
+                                widget.projectName,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: QuietPaperSpacing.related),
+                    Text(
+                      'Creates a Task in Backlog using desktop-saved Project defaults.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: QuietPaperSpacing.section),
+                    if (_suggestions.isNotEmpty) ...<Widget>[
+                      Material(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
                           ),
+                          borderRadius: BorderRadius.circular(
+                            QuietPaperShapes.controlRadius,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: suggestionHeight,
+                          ),
+                          child: ListView.builder(
+                            primary: false,
+                            shrinkWrap: true,
+                            itemCount: _suggestions.length,
+                            itemBuilder: (context, index) {
+                              final suggestion = _suggestions[index];
+                              final description = suggestion.description
+                                  ?.trim();
+                              final source = suggestion.source?.trim();
+                              return ListTile(
+                                leading: Icon(
+                                  suggestion.kind ==
+                                          TaskPromptSuggestionKind.skill
+                                      ? Icons.bolt_outlined
+                                      : Icons.terminal_outlined,
+                                  semanticLabel:
+                                      suggestion.kind ==
+                                          TaskPromptSuggestionKind.skill
+                                      ? 'Skill'
+                                      : 'Command',
+                                ),
+                                title: Text(suggestion.name),
+                                subtitle:
+                                    description == null || description.isEmpty
+                                    ? null
+                                    : Text(
+                                        description,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                trailing:
+                                    suggestion.kind ==
+                                            TaskPromptSuggestionKind.command &&
+                                        source != null &&
+                                        source.isNotEmpty
+                                    ? Text(
+                                        source,
+                                        style: theme.textTheme.labelSmall,
+                                      )
+                                    : null,
+                                onTap: () => _selectSuggestion(suggestion),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      if (MediaQuery.textScalerOf(context).scale(1) <= 1.5)
+                        const SizedBox(height: QuietPaperSpacing.compact),
+                    ],
+                    TextField(
+                      key: _promptKey,
+                      controller: _promptController,
+                      autofocus: true,
+                      enabled: !_submitting,
+                      minLines: _suggestions.isNotEmpty ? 1 : 5,
+                      maxLines: 10,
+                      maxLength: 64000,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        labelText: 'What needs to be done?',
+                        alignLabelWithHint: true,
+                        hintText: 'Describe what should be done…',
+                        border: const OutlineInputBorder(),
+                        errorText: _error,
+                      ),
+                      onChanged: _handlePromptChanged,
+                    ),
+                    const SizedBox(height: 16),
+                    OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: QuietPaperSpacing.related,
+                      overflowSpacing: QuietPaperSpacing.compact,
+                      children: <Widget>[
+                        TextButton(
+                          onPressed: _submitting
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: _canSubmit ? _submit : null,
+                          child: _submitting
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Create Task'),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: QuietPaperSpacing.related),
-                Text(
-                  'Creates a Task in Backlog using desktop-saved Project defaults.',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: QuietPaperSpacing.section),
-                TextField(
-                  controller: _promptController,
-                  autofocus: true,
-                  enabled: !_submitting,
-                  minLines: 5,
-                  maxLines: 10,
-                  maxLength: 64000,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    labelText: 'What needs to be done?',
-                    alignLabelWithHint: true,
-                    hintText: 'Describe what should be done…',
-                    border: const OutlineInputBorder(),
-                    errorText: _error,
-                  ),
-                  onChanged: _handlePromptChanged,
-                ),
-                if (_suggestions.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: QuietPaperSpacing.compact),
-                  Material(
-                    color: theme.colorScheme.surfaceContainerLow,
-                    shape: RoundedRectangleBorder(
-                      side: BorderSide(color: theme.colorScheme.outlineVariant),
-                      borderRadius: BorderRadius.circular(
-                        QuietPaperShapes.controlRadius,
-                      ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 240),
-                      child: ListView.builder(
-                        primary: false,
-                        shrinkWrap: true,
-                        itemCount: _suggestions.length,
-                        itemBuilder: (context, index) {
-                          final suggestion = _suggestions[index];
-                          final description = suggestion.description?.trim();
-                          final source = suggestion.source?.trim();
-                          return ListTile(
-                            leading: Icon(
-                              suggestion.kind == TaskPromptSuggestionKind.skill
-                                  ? Icons.bolt_outlined
-                                  : Icons.terminal_outlined,
-                              semanticLabel:
-                                  suggestion.kind ==
-                                      TaskPromptSuggestionKind.skill
-                                  ? 'Skill'
-                                  : 'Command',
-                            ),
-                            title: Text(suggestion.name),
-                            subtitle: description == null || description.isEmpty
-                                ? null
-                                : Text(description),
-                            trailing:
-                                suggestion.kind ==
-                                        TaskPromptSuggestionKind.command &&
-                                    source != null &&
-                                    source.isNotEmpty
-                                ? Text(
-                                    source,
-                                    style: theme.textTheme.labelSmall,
-                                  )
-                                : null,
-                            onTap: () => _selectSuggestion(suggestion),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                OverflowBar(
-                  alignment: MainAxisAlignment.end,
-                  spacing: QuietPaperSpacing.related,
-                  overflowSpacing: QuietPaperSpacing.compact,
-                  children: <Widget>[
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      onPressed: _canSubmit ? _submit : null,
-                      child: _submitting
-                          ? const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Create Task'),
-                    ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
