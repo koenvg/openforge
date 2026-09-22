@@ -100,7 +100,7 @@
 <div class="flex flex-col gap-4">
   <div class="flex flex-col gap-1">
     <h4 class="text-sm font-semibold m-0">Jira</h4>
-    <p class="text-xs text-base-content/60 m-0">
+    <p class="text-xs text-of-text/60 m-0">
       Lets a pull request review compare the changes against the ticket they came from.
     </p>
   </div>
@@ -127,13 +127,13 @@
     bind:value={tokenDraft}
   />
   {#if tokenConfigured}
-    <div class="flex items-center gap-2 text-xs text-base-content/50">
+    <div class="flex items-center gap-2 text-xs text-of-text/50">
       <span>A token is stored in your keychain.</span>
       <Button
         type="button"
         variant="ghost"
         size="xs"
-        class="text-error"
+        class="text-of-danger"
         disabled={isSaving}
         onclick={() => void save({ clearToken: true })}
       >Clear token</Button>
@@ -172,7 +172,7 @@
       Test connection
     </Button>
     {#if status}
-      <span class="text-xs {status.kind === 'ok' ? 'text-success' : 'text-error'}">{status.message}</span>
+      <span class="text-xs {status.kind === 'ok' ? 'text-of-success' : 'text-of-danger'}">{status.message}</span>
     {/if}
   </div>
 </div>

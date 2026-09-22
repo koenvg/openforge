@@ -84,14 +84,14 @@
 
 <div class="flex flex-col gap-5 px-6 py-5 overflow-y-auto">
   {#if !jiraConfigured}
-    <div class="text-sm text-base-content/70">
+    <div class="text-sm text-of-text/70">
       Jira is not connected. Add your site URL, email, and API token in Settings → GitHub Sync →
       Jira, then regenerate this walkthrough to compare the changes against their ticket.
     </div>
   {:else if !snapshot}
     <Panel variant="subtle">
       <div class="flex items-center justify-between gap-3 text-xs">
-        <span class="text-base-content/70">
+        <span class="text-of-text/70">
           This walkthrough was generated before Jira was connected, so no ticket was looked up.
         </span>
         <Button type="button" variant="secondary" size="xs" onclick={onRegenerate}>Regenerate</Button>
@@ -110,19 +110,19 @@
             title="Open in Jira"
           >{ticket.issue_key}</Button>
           {#if ticket.issue_type}
-            <span class="text-[0.7rem] uppercase tracking-wider text-base-content/50">{ticket.issue_type}</span>
+            <span class="text-[0.7rem] uppercase tracking-wider text-of-text/50">{ticket.issue_type}</span>
           {/if}
           {#if ticket.status}
             <Badge>{ticket.status}</Badge>
           {/if}
         </div>
-        <h4 class="text-sm font-semibold text-base-content m-0">{ticket.summary}</h4>
+        <h4 class="text-sm font-semibold text-of-text m-0">{ticket.summary}</h4>
       </div>
     {/if}
 
     {#if snapshot.error}
       <Panel variant="subtle">
-        <div class="flex items-center justify-between gap-3 text-xs text-error">
+        <div class="flex items-center justify-between gap-3 text-xs text-of-danger">
           <span>{snapshot.error}</span>
           <Button type="button" variant="danger" size="xs" onclick={onRegenerate}>Retry</Button>
         </div>
@@ -135,28 +135,28 @@
           <Badge variant={VERDICT_VARIANTS[coverage.verdict]}>
             {VERDICT_LABELS[coverage.verdict]}
           </Badge>
-          <span class="text-[0.7rem] uppercase tracking-wider text-base-content/50">
+          <span class="text-[0.7rem] uppercase tracking-wider text-of-text/50">
             {coverage.criteria.length} criteria
           </span>
         </div>
         {#if coverage.summary}
-          <p class="text-sm leading-relaxed text-base-content/90 m-0">{coverage.summary}</p>
+          <p class="text-sm leading-relaxed text-of-text/90 m-0">{coverage.summary}</p>
         {/if}
       </div>
 
       <ul class="flex flex-col gap-3 list-none p-0 m-0">
         {#each coverage.criteria as criterion (criterion.id)}
-          <li class="flex flex-col gap-1.5 px-3 py-2 bg-base-100 border border-base-300 rounded-[var(--of-radius-container)]">
+          <li class="flex flex-col gap-1.5 px-3 py-2 bg-of-surface border border-of-border rounded-[var(--of-radius-container)]">
             <div class="flex items-start gap-2">
               <Badge variant={STATUS_VARIANTS[criterion.status]} class="mt-0.5 shrink-0">
                 {STATUS_LABELS[criterion.status]}
               </Badge>
-              <span class="text-sm text-base-content leading-snug flex-1">{criterion.text}</span>
+              <span class="text-sm text-of-text leading-snug flex-1">{criterion.text}</span>
               <Button
                 type="button"
                 variant="ghost"
                 size="xs"
-                class="gap-1 shrink-0 {includedFindingIds.has(criterion.id) ? 'text-success' : 'text-base-content/50'}"
+                class="gap-1 shrink-0 {includedFindingIds.has(criterion.id) ? 'text-of-success' : 'text-of-text/50'}"
                 onclick={() => onToggleFinding(criterionFinding(criterion))}
                 title={includedFindingIds.has(criterion.id) ? 'Remove from review' : 'Add to review'}
                 aria-pressed={includedFindingIds.has(criterion.id)}
@@ -169,7 +169,7 @@
               </Button>
             </div>
             {#if criterion.notes}
-              <p class="text-xs text-base-content/70 m-0 pl-1">{criterion.notes}</p>
+              <p class="text-xs text-of-text/70 m-0 pl-1">{criterion.notes}</p>
             {/if}
             {#if criterion.evidence.length > 0}
               <div class="flex flex-wrap gap-1.5 pl-1">
@@ -186,19 +186,19 @@
 
       {#if coverage.out_of_scope.length > 0}
         <div class="flex flex-col gap-2">
-          <h5 class="text-xs font-semibold uppercase tracking-wider text-base-content/50 m-0">
+          <h5 class="text-xs font-semibold uppercase tracking-wider text-of-text/50 m-0">
             Not in the ticket
           </h5>
           <ul class="flex flex-col gap-2 list-none p-0 m-0">
             {#each coverage.out_of_scope as change, index}
-              <li class="flex flex-col gap-1 px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-[var(--of-radius-container)]">
+              <li class="flex flex-col gap-1 px-3 py-2 bg-of-surface border border-of-border border-l-4 border-l-of-info rounded-[var(--of-radius-container)]">
                 <div class="flex items-start gap-2">
-                  <span class="text-sm text-base-content leading-snug flex-1">{change.description}</span>
+                  <span class="text-sm text-of-text leading-snug flex-1">{change.description}</span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="xs"
-                    class="gap-1 shrink-0 {includedFindingIds.has(`oos-${index}`) ? 'text-success' : 'text-base-content/50'}"
+                    class="gap-1 shrink-0 {includedFindingIds.has(`oos-${index}`) ? 'text-of-success' : 'text-of-text/50'}"
                     onclick={() => onToggleFinding(outOfScopeFinding(change, index))}
                     title={includedFindingIds.has(`oos-${index}`) ? 'Remove from review' : 'Add to review'}
                     aria-pressed={includedFindingIds.has(`oos-${index}`)}
@@ -225,14 +225,14 @@
     {:else if ticket}
       <Panel variant="subtle">
         <div class="flex items-center justify-between gap-3 text-xs">
-          <span class="text-base-content/70">
+          <span class="text-of-text/70">
             The agent did not return a usable coverage assessment for this ticket.
           </span>
           <Button type="button" variant="secondary" size="xs" onclick={onRegenerate}>Regenerate</Button>
         </div>
       </Panel>
     {:else if !snapshot.error}
-      <div class="text-sm text-base-content/70">
+      <div class="text-sm text-of-text/70">
         No Jira ticket could be found for this pull request. Set one below to compare the changes
         against it.
       </div>
@@ -240,7 +240,7 @@
 
     {#if ticket?.acceptance_criteria}
       <div class="flex flex-col gap-1.5">
-        <h5 class="text-xs font-semibold uppercase tracking-wider text-base-content/50 m-0">
+        <h5 class="text-xs font-semibold uppercase tracking-wider text-of-text/50 m-0">
           Acceptance criteria (from the ticket)
         </h5>
         <Panel>
@@ -253,16 +253,16 @@
 
     {#if ticket?.description}
       <details class="text-sm">
-        <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wider text-base-content/50">
+        <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wider text-of-text/50">
           Ticket description
         </summary>
-        <div class="mt-2 text-base-content/90">
+        <div class="mt-2 text-of-text/90">
           <MarkdownContent content={ticket.description} {onOpenUrl} />
         </div>
       </details>
     {/if}
 
-    <div class="flex items-end gap-2 pt-2 border-t border-base-300">
+    <div class="flex items-end gap-2 pt-2 border-t border-of-border">
       <div class="max-w-xs flex-1">
         <TextField
           label="Jira ticket key"

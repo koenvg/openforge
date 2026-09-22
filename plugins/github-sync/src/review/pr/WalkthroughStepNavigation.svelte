@@ -19,13 +19,13 @@
   }
 
   function stepPillClass(isCurrent: boolean, isVisited: boolean): string {
-    if (isCurrent) return 'bg-primary text-primary-content'
-    if (isVisited) return 'bg-base-content/20 text-base-content/70 hover:bg-base-content/30'
-    return 'bg-base-300/60 text-base-content/50 hover:bg-base-300'
+    if (isCurrent) return 'bg-of-accent text-of-on-accent'
+    if (isVisited) return 'bg-of-text/20 text-of-text/70 hover:bg-of-text/30'
+    return 'bg-of-border/60 text-of-text/50 hover:bg-of-border'
   }
 </script>
 
-<div class="flex items-center gap-3 px-4 py-2 border-b border-base-300 bg-base-200/40 shrink-0">
+<div class="flex items-center gap-3 px-4 py-2 border-b border-of-border bg-of-surface-subtle/40 shrink-0">
   <Button
     variant="outline"
     size="sm"

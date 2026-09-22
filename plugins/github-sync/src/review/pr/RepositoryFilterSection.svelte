@@ -33,7 +33,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
+    class="gap-1 {excludedRepos.size > 0 ? 'text-of-warning' : 'text-of-text/50'}"
     title="Filter repositories"
     aria-label="Filter repositories"
     aria-haspopup="dialog"
@@ -54,7 +54,7 @@
       role="dialog"
       aria-label="Excluded repositories filter"
     >
-      <div class="mb-2 text-xs font-semibold text-base-content/50">Excluded Repositories</div>
+      <div class="mb-2 text-xs font-semibold text-of-text/50">Excluded Repositories</div>
 
       <form class="mb-3 flex items-end gap-1.5" onsubmit={(event) => { event.preventDefault(); onAddExcludedRepo(newRepoInput) }}>
         <div class="min-w-0 flex-1">
@@ -71,12 +71,12 @@
       {#if excludedRepos.size > 0}
         <div class="mb-3 flex max-h-[160px] flex-col gap-1 overflow-y-auto">
           {#each [...excludedRepos].sort() as repo}
-            <div class="flex items-center justify-between bg-base-200 px-2 py-1 text-sm">
-              <span class="truncate text-base-content">{repo}</span>
+            <div class="flex items-center justify-between bg-of-surface-subtle px-2 py-1 text-sm">
+              <span class="truncate text-of-text">{repo}</span>
               <IconButton
                 variant="ghost"
                 size="xs"
-                class="text-base-content/40 hover:text-error"
+                class="text-of-text/40 hover:text-of-danger"
                 label={`Remove ${repo} from excluded repositories`}
                 title="Remove from exclusion list"
                 onclick={() => onRemoveExcludedRepo(repo)}
@@ -85,18 +85,18 @@
           {/each}
         </div>
       {:else}
-        <div class="mb-3 px-1 text-xs text-base-content/40">No repositories excluded</div>
+        <div class="mb-3 px-1 text-xs text-of-text/40">No repositories excluded</div>
       {/if}
 
       {#if suggestedRepos.length > 0}
-        <div class="border-t border-base-300 pt-2">
-          <div class="mb-1.5 text-xs text-base-content/40">Quick add from open PRs</div>
+        <div class="border-t border-of-border pt-2">
+          <div class="mb-1.5 text-xs text-of-text/40">Quick add from open PRs</div>
           <div class="flex flex-wrap gap-1">
             {#each suggestedRepos as repo}
               <Button
                 variant="ghost"
                 size="xs"
-                class="text-base-content/60"
+                class="text-of-text/60"
                 aria-label={`Exclude ${repo} from pull request lists`}
                 onclick={() => onAddExcludedRepo(repo)}
               >+ {repo}</Button>
