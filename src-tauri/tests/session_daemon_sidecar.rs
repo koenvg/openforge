@@ -198,7 +198,10 @@ impl Fixture {
         serde_json::from_str::<Value>(&body).unwrap()["value"].clone()
     }
     fn output(&self, marker: &str) -> String {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        self.output_within(marker, Duration::from_secs(10))
+    }
+    fn output_within(&self, marker: &str, timeout: Duration) -> String {
+        let deadline = Instant::now() + timeout;
         loop {
             let buffer = self.invoke(
                 "get_pty_buffer",

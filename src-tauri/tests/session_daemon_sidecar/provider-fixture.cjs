@@ -2,7 +2,7 @@
 // Deterministic provider process. Live CLI demonstrations are separate.
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+const { execFile, spawn, spawnSync } = require('node:child_process');
 // Claude command discovery is a separate one-shot query, not an agent session.
 if (process.argv.includes('--print') || process.argv.includes('--help') || process.argv.includes('--version')) {
   process.stdout.write('{}\n');
@@ -46,8 +46,22 @@ process.stdin.on('data', data => {
     }
     if (line === 'approve') fs.writeFileSync(path.join(root, 'approved'), 'yes');
     if (line === 'cli') {
-      const result = spawnSync(path.join(process.env.HOME, '.openforge/bin/openforge'), ['project', 'list'], { env: process.env, encoding: 'utf8' });
-      process.stdout.write('PROVIDER-CLI ' + JSON.stringify({ status: result.status, found: result.stdout.includes('Provider preservation proof') }) + '\r\n');
+      process.stdout.write('PROVIDER-CLI-START\r\n');
+      const started = Date.now();
+      // The CLI gateway has a 35s request timeout; allow startup/teardown overhead,
+      // but never block the provider's input or lifecycle notification loop.
+      execFile(path.join(process.env.HOME, '.openforge/bin/openforge'), ['project', 'list'],
+        { env: process.env, encoding: 'utf8', timeout: 40_000 }, (error, stdout, stderr) => {
+          if (error) {
+            process.stdout.write('PROVIDER-CLI-DETAIL ' + JSON.stringify({
+              elapsedMs: Date.now() - started, error: error.message, stderr,
+            }) + '\r\n');
+          }
+          const status = error ? (typeof error.code === 'number' ? error.code : null) : 0;
+          const found = (stdout ?? '').includes('Provider preservation proof');
+          process.stdout.write('PROVIDER-CLI ' + JSON.stringify({ status, found }) + '\r\n');
+          process.stdout.write('PROVIDER-CLI-ELAPSED ' + (Date.now() - started) + '\r\n');
+        });
     }
   }
 });
