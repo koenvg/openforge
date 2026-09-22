@@ -25,7 +25,7 @@ jobs:
         include:
           - arch: arm64
             machine: arm64
-            runner: macos-14
+            runner: macos-15
             target: aarch64-apple-darwin
           - arch: x64
             machine: x86_64

@@ -22,7 +22,7 @@ Baselines live under `baselines/<os>-<arch>/<renderer>`. Review changed PNG file
 
 ## CI
 
-The `terminal-presentation` CI job installs Chromium on a pinned macOS 14 ARM64 runner, runs `pnpm terminal:presentation`, and uploads the report and screenshots. Its `darwin-arm64/xterm` baselines are authoritative, so bounded pixel differences fail the build alongside semantic, interaction, compositor-drain, and blank-terminal checks.
+The `terminal-presentation` CI job installs Chromium on a pinned macOS 15 ARM64 runner, runs `pnpm terminal:presentation`, and uploads the report and screenshots. Its `darwin-arm64/xterm` baselines are authoritative, so bounded pixel differences fail the build alongside semantic, interaction, compositor-drain, and blank-terminal checks.
 
 ## What it checks
 

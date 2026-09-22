@@ -14,9 +14,9 @@
 
 ## 3. Supported macOS baseline
 
-- [ ] 3.1 Update every ARM runner in CI, packaged-session runtime, release, and private mobile release from `macos-14` to `macos-15`, retaining `macos-15-intel` and existing native architecture checks; verify the runner-label contract tests pass.
-- [ ] 3.2 Update workflow assertions and operator documentation that describe the old image or the resolved Whisper compatibility failure; verify `rg 'macos-14|macOS 14' .github docs scripts packages` reports no active workflow, test, or current guidance reference.
-- [ ] 3.3 Run the focused workflow, packaging-orchestration, Whisper policy, and native architecture contract suites; verify all pass without changing release targets, package contents, or lifecycle stress counts.
+- [x] 3.1 Update every ARM runner in CI, packaged-session runtime, release, and private mobile release from `macos-14` to `macos-15`, retaining `macos-15-intel` and existing native architecture checks; verify the runner-label contract tests pass.
+- [x] 3.2 Update workflow assertions and operator documentation that describe the old image or the resolved Whisper compatibility failure; verify `rg 'macos-14|macOS 14' .github docs scripts packages` reports no active workflow, test, or current guidance reference.
+- [x] 3.3 Run the focused workflow, packaging-orchestration, Whisper policy, and native architecture contract suites; verify all pass without changing release targets, package contents, or lifecycle stress counts.
 
 ## 4. Optional native workflow allocation
 

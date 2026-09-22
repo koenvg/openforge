@@ -172,7 +172,7 @@ jobs:
   terminal-presentation:
     name: Terminal Presentation Conformance
     timeout-minutes: 10
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
 
@@ -346,7 +346,7 @@ jobs:
             runner: ubuntu-latest
             command: build-android
           - name: iOS
-            runner: macos-14
+            runner: macos-15
             command: build-ios
     runs-on: ${{ matrix.runner }}
     steps:
@@ -372,7 +372,7 @@ jobs:
       matrix:
         include:
           - name: macOS
-            runner: macos-14
+            runner: macos-15
           - name: Linux
             runner: ubuntu-latest
           - name: Windows
@@ -399,7 +399,7 @@ jobs:
   rust:
     name: Rust Tests
     timeout-minutes: 30
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
 
@@ -479,7 +479,7 @@ jobs:
   packaged-electron-smoke:
     name: Packaged Electron Smoke
     timeout-minutes: 20
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       CARGO_BUILD_TARGET: aarch64-apple-darwin
       npm_config_arch: arm64
@@ -563,7 +563,7 @@ jobs:
   live-electron-terminal-invariants:
     name: Live Electron Terminal Invariants
     timeout-minutes: 30
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
 

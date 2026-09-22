@@ -75,7 +75,7 @@ Failure artifacts are copied before cleanup. A cleanup failure changes the final
 
 The terminal race scenarios are portable to supported Electron development hosts. The idle scenario's Sidecar peak-footprint assertion uses macOS `vmmap`; complete peak-footprint evidence therefore requires macOS. CPU, event-rate, liveness, RSS, and `/debug/process-memory` evidence remain useful elsewhere, but do not substitute for the macOS peak check.
 
-Pull-request CI runs `first-attachment` and `detach-during-recovery` in one boot through the `Live Electron Terminal Invariants` job in `.github/workflows/ci.yml`. The job uses the existing `macos-14`, Rust, Zig/Ghostty, Bun, Node, and pnpm setup after frontend and Rust checks pass. It uploads the complete invariant artifact root on success or failure with seven-day retention.
+Pull-request CI runs `first-attachment` and `detach-during-recovery` in one boot through the `Live Electron Terminal Invariants` job in `.github/workflows/ci.yml`. The job uses the `macos-15` ARM runner with Rust, Zig/Ghostty, Bun, Node, and pnpm. It uploads the complete invariant artifact root on success or failure with seven-day retention.
 
 The complete `idle-resources` gate remains available for local macOS validation but is not scheduled or manually dispatched through GitHub Actions. Operators can run `pnpm e2e:invariants -- --scenario idle-resources` when peak-footprint evidence is needed.
 
