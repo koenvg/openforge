@@ -1,6 +1,6 @@
 import type { RestartTerminalController } from './restartWorkspace.js'
 
-const components = ['app', 'sidecar', 'daemon', 'cli'] as const
+const components = ['app', 'sidecar', 'daemon', 'cli', 'helper'] as const
 export type UpdateImages = Record<typeof components[number], string>
 
 /** Content identities, not display versions. These identify the verified staged bytes. */

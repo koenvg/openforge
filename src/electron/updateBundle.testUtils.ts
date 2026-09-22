@@ -16,6 +16,7 @@ export async function updateBundleFixture() {
     'Contents/MacOS/Open Forge': 'electron',
     'Contents/MacOS/openforge-sidecar': 'sidecar',
     'Contents/MacOS/openforge-session-daemon': 'daemon',
+    'Contents/MacOS/openforge-update-helper': 'helper',
     'Contents/Resources/openforge-cli/cli.js': 'cli',
     'Contents/Resources/app/dist-electron/main.js': 'main',
   })) {

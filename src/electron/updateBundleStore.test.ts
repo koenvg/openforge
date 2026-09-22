@@ -54,3 +54,15 @@ it('rejects substituted executable identities in an otherwise unchanged staging 
   const staged = await store.stage(source)
   await expect(store.verify({ ...staged, images: { ...staged.images, daemon: '0'.repeat(64) } })).rejects.toThrow('identities')
 })
+
+it('refuses a complete-app target without its updater helper', async () => {
+  const { source, store } = await fixture()
+  await rm(join(source, 'Contents/MacOS/openforge-update-helper'), { force: true })
+  await expect(store.stage(source)).rejects.toThrow('openforge-update-helper')
+})
+
+it('refuses a target without the Electron executable even when its JavaScript entrypoint exists', async () => {
+  const { source, store } = await fixture()
+  await rm(join(source, 'Contents/MacOS/Open Forge'))
+  await expect(store.stage(source)).rejects.toThrow('Open Forge')
+})

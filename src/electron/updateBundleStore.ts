@@ -43,6 +43,18 @@ export class UpdateBundleStore {
     }
   }
 
+  /** Reopens a persisted authorization without trusting a caller-provided manifest. */
+  async reopen(bundlePath: string, manifestSha256: string): Promise<StagedUpdateBundle> {
+    const root = join(await realpath(dirname(this.root)), basename(this.root))
+    if (dirname(bundlePath) !== root || !/^bundle-[a-f0-9-]+\.app$/.test(basename(bundlePath))) {
+      throw new Error('Update bundle does not belong to this staging directory')
+    }
+    await this.checkRoot(root)
+    const manifest = await measureUpdateBundle(bundlePath)
+    if (updateManifestId(manifest) !== manifestSha256) throw new Error('Staged update bundle changed')
+    return Object.freeze({ bundlePath, manifestSha256, manifest, images: Object.freeze(updateBundleImages(manifest)) })
+  }
+
   async verify(staged: StagedUpdateBundle): Promise<void> {
     const root = join(await realpath(dirname(this.root)), basename(this.root))
     if (dirname(staged.bundlePath) !== root || !/^bundle-[a-f0-9-]+\.app$/.test(basename(staged.bundlePath))) {

@@ -39,6 +39,14 @@ Local authorization uses a native confirmation dialog with Cancel as the default
 
 These modules are not yet connected to a production installer or helper. Reading an authorization authenticates the record only; the consumer must reverify artifact bytes, enforce current-operation ownership, and serialize replacement. Partial or corrupt authorization files fail closed rather than granting authority.
 
+The KVG-5206 internal native transaction library now consumes these authenticated records and rechecks complete bundle bytes. It is not packaged or connected to the coordinator/source installer. See [the implementation checkpoint and activation gates](update-helper-transaction.md).
+
+## Runtime probe deadlines
+
+On macOS, image probes allow up to 20 seconds for loader startup. A readiness marker or the first output starts the two-second execution deadline. State probes retain their five-second limit. Descriptor isolation, cleared environments, contract and byte-identity checks, and process-group teardown are unchanged.
+
+The client's five-second initial readiness wait is unchanged. If a cold daemon is still starting, the client reports a timeout and allows attachment retry without killing or launching another owner. A longer probe allowance does not authorize replacement or enable production updates.
+
 ## Remaining prerequisites
 
 - Back up the private signing key securely and configure protected release signing infrastructure.

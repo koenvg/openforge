@@ -32,6 +32,7 @@ export function updateBundleImages(manifest: UpdateBundleManifest): UpdateImages
     if (!entry?.sha256 || (executable && !(entry.mode & 0o111))) throw new Error(`Update bundle is missing a usable ${path}`)
     return entry.sha256
   }
+  component('Contents/MacOS/Open Forge', true)
   component('Contents/Resources/app/dist-electron/main.js')
   component('Contents/Resources/openforge-cli/cli.js')
   const cliEntries = manifest.entries.filter(entry => entry.path.startsWith('Contents/Resources/openforge-cli/'))
@@ -40,6 +41,7 @@ export function updateBundleImages(manifest: UpdateBundleManifest): UpdateImages
     sidecar: component('Contents/MacOS/openforge-sidecar', true),
     daemon: component('Contents/MacOS/openforge-session-daemon', true),
     cli: updateManifestId({ format: 1, entries: cliEntries }),
+    helper: component('Contents/MacOS/openforge-update-helper', true),
   }
 }
 

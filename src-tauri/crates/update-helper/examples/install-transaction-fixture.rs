@@ -1,0 +1,49 @@
+//! Test-only process boundary. Not packaged or used by the production installer.
+use openforge_update_helper::InstallTransaction;
+use serde::Deserialize;
+use std::{io::Read, path::PathBuf};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Request {
+    root: PathBuf,
+    destination: PathBuf,
+    authorization: PathBuf,
+    staging: PathBuf,
+    installation: String,
+    operation: String,
+    action: String,
+}
+
+fn run() -> Result<(), String> {
+    let mut input = Vec::new();
+    std::io::stdin()
+        .take(16 * 1024 + 1)
+        .read_to_end(&mut input)
+        .map_err(|e| e.to_string())?;
+    if input.len() > 16 * 1024 {
+        return Err("request exceeds limit".into());
+    }
+    let request: Request = serde_json::from_slice(&input).map_err(|_| "invalid fixture request")?;
+    let mut transaction =
+        InstallTransaction::open(&request.root, &request.installation, &request.destination)?;
+    match request.action.as_str() {
+        "prepare" => {
+            transaction.prepare(&request.authorization, &request.staging, &request.operation)?
+        }
+        "replace" => transaction.replace(&request.operation)?,
+        "recover" => {
+            transaction.recover(&request.operation)?;
+        }
+        _ => return Err("unsupported fixture action".into()),
+    }
+    println!("ok");
+    Ok(())
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}

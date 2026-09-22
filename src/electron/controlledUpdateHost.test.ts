@@ -5,7 +5,7 @@ import { afterEach, expect, it } from 'vitest'
 import { createControlledRestartHost } from './controlledRestartHost'
 import type { RestartWorkspaceIpc } from './restartWorkspaceIpc'
 
-const images = { app: 'a'.repeat(64), sidecar: 'b'.repeat(64), daemon: 'c'.repeat(64), cli: 'd'.repeat(64) }
+const images = { app: 'a'.repeat(64), sidecar: 'b'.repeat(64), daemon: 'c'.repeat(64), cli: 'd'.repeat(64), helper: 'e'.repeat(64) }
 const controller = { installation: 'installation', lifetime: 'daemon', generation: 1 }
 
 async function capture(host: RestartWorkspaceIpc) {
@@ -155,7 +155,7 @@ it('rechecks executable identities after a lost commit acknowledgement and anoth
   expect(state.commits).toBe(1)
 })
 
-it.each(['app', 'sidecar', 'cli'] as const)('refuses completion while the %s executable is still old', async component => {
+it.each(['app', 'sidecar', 'cli', 'helper'] as const)('refuses completion while the %s executable is still old', async component => {
   const { options, operationId, state } = await preparedUpdate()
   const readiness = options.update.readiness
   options.update.readiness = async target => ({ ...await readiness(target), images: { ...images, [component]: '0'.repeat(64) } })
