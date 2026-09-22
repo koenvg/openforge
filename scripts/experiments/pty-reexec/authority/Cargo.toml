@@ -15,6 +15,7 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 libc = "0.2"
 
+openforge-session-host = { path = "../../../../src-tauri/crates/session-host" }
 [[bin]]
 name = "live-authority-a"
 path = "src/live_a.rs"

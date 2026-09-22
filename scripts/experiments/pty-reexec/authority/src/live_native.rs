@@ -13,6 +13,55 @@ pub(super) struct Pty {
     pub status: libc::c_int,
 }
 
+// The teardown boundary stays in this experiment; tests inject syscall failures here.
+trait TeardownOps {
+    fn waitpid(
+        &mut self,
+        pid: libc::pid_t,
+        status: &mut libc::c_int,
+        flags: libc::c_int,
+    ) -> io::Result<libc::pid_t>;
+    fn kill(&mut self, pid: libc::pid_t) -> io::Result<()>;
+    fn close(&mut self, fd: libc::c_int) -> io::Result<()>;
+}
+
+struct Syscalls;
+
+impl TeardownOps for Syscalls {
+    fn waitpid(
+        &mut self,
+        pid: libc::pid_t,
+        status: &mut libc::c_int,
+        flags: libc::c_int,
+    ) -> io::Result<libc::pid_t> {
+        // SAFETY: waitpid checks direct child parenthood and writes to valid status storage.
+        let result = unsafe { libc::waitpid(pid, status, flags) };
+        if result < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(result)
+        }
+    }
+
+    fn kill(&mut self, pid: libc::pid_t) -> io::Result<()> {
+        // SAFETY: the preceding non-reaping waitpid verified our direct child.
+        if unsafe { libc::kill(pid, libc::SIGTERM) } < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn close(&mut self, fd: libc::c_int) -> io::Result<()> {
+        // SAFETY: normal teardown closes our sole PTY master, never during handoff.
+        if unsafe { libc::close(fd) } < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl Pty {
     pub fn spawn(fixture: &str) -> Result<Self> {
         let executable = CString::new(fixture)?;
@@ -139,40 +188,69 @@ impl Pty {
     }
 
     pub fn reap(&mut self) -> Result<()> {
+        self.reap_with(&mut Syscalls)?;
+        Ok(())
+    }
+
+    fn reap_with(&mut self, ops: &mut impl TeardownOps) -> io::Result<()> {
         if self.reaped {
             return Ok(());
         }
-        // SAFETY: waitpid validates kernel parenthood; no saved PID is signaled here.
-        let result = unsafe { libc::waitpid(self.pid, &mut self.status, libc::WNOHANG) };
-        if result < 0 {
-            return Err(io::Error::last_os_error().into());
+        let result = ops.waitpid(self.pid, &mut self.status, libc::WNOHANG)?;
+        if result != 0 && result != self.pid {
+            return Err(io::Error::other(format!(
+                "waitpid returned unexpected child {result}"
+            )));
         }
         self.reaped = result == self.pid;
         Ok(())
     }
 
     pub fn stop(&mut self) -> Result<()> {
-        self.reap()?;
-        if !self.reaped {
-            // SAFETY: successful non-reaping waitpid pins our direct child's PID.
-            unsafe {
-                libc::kill(self.pid, libc::SIGTERM);
+        self.stop_with(&mut Syscalls)
+    }
+
+    fn stop_with(&mut self, ops: &mut impl TeardownOps) -> Result<()> {
+        let mut errors = Vec::new();
+        let probed = match self.reap_with(ops) {
+            Ok(()) => true,
+            Err(error) => {
+                errors.push(format!("waitpid probe: {error}"));
+                false
+            }
+        };
+        if probed && !self.reaped {
+            if let Err(error) = ops.kill(self.pid) {
+                errors.push(format!("kill: {error}"));
             }
         }
-        // SAFETY: normal teardown closes our sole master, never during handoff.
-        unsafe {
-            libc::close(self.fd);
+        if let Err(error) = ops.close(self.fd) {
+            errors.push(format!("close: {error}"));
         }
-        if !self.reaped {
-            // SAFETY: same unreaped direct child; fixture has default signal handling.
-            while unsafe { libc::waitpid(self.pid, &mut self.status, 0) } < 0 {
-                if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-                    break;
+        if probed && !self.reaped {
+            loop {
+                match ops.waitpid(self.pid, &mut self.status, 0) {
+                    Ok(result) if result == self.pid => {
+                        self.reaped = true;
+                        break;
+                    }
+                    Ok(result) => {
+                        errors.push(format!("waitpid returned unexpected child {result}"));
+                        break;
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => {
+                        errors.push(format!("waitpid: {error}"));
+                        break;
+                    }
                 }
             }
         }
-        self.reaped = true;
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; ").into())
+        }
     }
 }
 
@@ -211,4 +289,145 @@ pub(super) fn allowlist(master: libc::c_int, checkpoint: libc::c_int) -> Result<
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+
+    struct Faults {
+        waits: VecDeque<io::Result<libc::pid_t>>,
+        kill: io::Result<()>,
+        close: io::Result<()>,
+        calls: Vec<&'static str>,
+    }
+
+    impl Faults {
+        fn new(waits: Vec<io::Result<libc::pid_t>>) -> Self {
+            Self {
+                waits: waits.into(),
+                kill: Ok(()),
+                close: Ok(()),
+                calls: Vec::new(),
+            }
+        }
+    }
+
+    impl TeardownOps for Faults {
+        fn waitpid(
+            &mut self,
+            _: libc::pid_t,
+            _: &mut libc::c_int,
+            flags: libc::c_int,
+        ) -> io::Result<libc::pid_t> {
+            self.calls.push(if flags == libc::WNOHANG {
+                "probe"
+            } else {
+                "wait"
+            });
+            self.waits.pop_front().expect("unexpected waitpid")
+        }
+
+        fn kill(&mut self, _: libc::pid_t) -> io::Result<()> {
+            self.calls.push("kill");
+            std::mem::replace(&mut self.kill, Ok(()))
+        }
+
+        fn close(&mut self, _: libc::c_int) -> io::Result<()> {
+            self.calls.push("close");
+            std::mem::replace(&mut self.close, Ok(()))
+        }
+    }
+
+    fn pty() -> Pty {
+        Pty {
+            pid: 42,
+            fd: 7,
+            reaped: false,
+            status: 0,
+        }
+    }
+
+    #[test]
+    fn kill_failure_is_reported_after_close_and_reap() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![Ok(0), Ok(42)]);
+        faults.kill = Err(io::Error::from_raw_os_error(libc::EPERM));
+        let error = pty.stop_with(&mut faults).unwrap_err();
+        assert!(error.to_string().contains("kill"), "{error}");
+        assert_eq!(faults.calls, ["probe", "kill", "close", "wait"]);
+        assert!(pty.reaped);
+    }
+
+    #[test]
+    fn close_failure_is_reported_after_reap() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![Ok(0), Ok(42)]);
+        faults.close = Err(io::Error::from_raw_os_error(libc::EBADF));
+        let error = pty.stop_with(&mut faults).unwrap_err();
+        assert!(error.to_string().contains("close"), "{error}");
+        assert_eq!(faults.calls, ["probe", "kill", "close", "wait"]);
+        assert!(pty.reaped);
+    }
+
+    #[test]
+    fn non_interrupted_wait_failure_does_not_claim_reaping() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![
+            Ok(0),
+            Err(io::Error::from_raw_os_error(libc::EINTR)),
+            Err(io::Error::from_raw_os_error(libc::ECHILD)),
+        ]);
+        let error = pty.stop_with(&mut faults).unwrap_err();
+        assert!(error.to_string().contains("waitpid"), "{error}");
+        assert_eq!(faults.calls, ["probe", "kill", "close", "wait", "wait"]);
+        assert!(!pty.reaped);
+    }
+
+    #[test]
+    fn interrupted_wait_retries_until_child_is_reaped() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![
+            Ok(0),
+            Err(io::Error::from_raw_os_error(libc::EINTR)),
+            Ok(42),
+        ]);
+        pty.stop_with(&mut faults).unwrap();
+        assert_eq!(faults.calls, ["probe", "kill", "close", "wait", "wait"]);
+        assert!(pty.reaped);
+    }
+
+    #[test]
+    fn failed_initial_probe_closes_master_without_signaling_unverified_pid() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![Err(io::Error::from_raw_os_error(libc::ECHILD))]);
+        let error = pty.stop_with(&mut faults).unwrap_err();
+        assert!(error.to_string().contains("waitpid"), "{error}");
+        assert_eq!(faults.calls, ["probe", "close"]);
+        assert!(!pty.reaped);
+    }
+
+    #[test]
+    fn multiple_teardown_failures_are_all_reported() {
+        let mut pty = pty();
+        let mut faults = Faults::new(vec![Ok(0), Err(io::Error::from_raw_os_error(libc::ECHILD))]);
+        faults.kill = Err(io::Error::from_raw_os_error(libc::EPERM));
+        faults.close = Err(io::Error::from_raw_os_error(libc::EBADF));
+        let error = pty.stop_with(&mut faults).unwrap_err().to_string();
+        for step in ["kill:", "close:", "waitpid:"] {
+            assert!(error.contains(step), "missing {step}: {error}");
+        }
+        assert!(!pty.reaped);
+    }
+
+    #[test]
+    fn already_reaped_child_only_closes_master() {
+        let mut pty = pty();
+        pty.reaped = true;
+        let mut faults = Faults::new(vec![]);
+        pty.stop_with(&mut faults).unwrap();
+        assert_eq!(faults.calls, ["close"]);
+        assert!(pty.reaped);
+    }
 }
