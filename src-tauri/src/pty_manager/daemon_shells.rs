@@ -257,9 +257,7 @@ impl DaemonShells {
         let mut env: std::collections::BTreeMap<String, String> = std::env::vars().collect();
         env.extend(crate::user_environment::user_environment());
         env.insert("PWD".into(), cwd.to_string_lossy().into_owned());
-        for (key, value) in super::terminal_environment(protocol) {
-            env.insert(key.into(), value.into());
-        }
+        super::configure_terminal_environment(&mut env, protocol);
         let (task_id, index) = self
             .key()
             .rsplit_once("-shell-")

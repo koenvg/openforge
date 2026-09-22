@@ -217,6 +217,18 @@ pub(crate) fn terminal_environment(
     environment
 }
 
+pub(crate) fn configure_terminal_environment(
+    environment: &mut std::collections::BTreeMap<String, String>,
+    image_protocol: Option<TerminalImageProtocol>,
+) {
+    environment.remove("NO_COLOR");
+    environment.extend(
+        terminal_environment(image_protocol)
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into())),
+    );
+}
+
 impl PtyManager {
     pub(crate) fn terminal_color_profile(&self) -> openforge_session_host::TerminalColorProfile {
         *self

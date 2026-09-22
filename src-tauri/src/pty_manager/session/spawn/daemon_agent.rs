@@ -2,8 +2,8 @@
 use super::super::provider_adapter::AgentPtyProviderAdapter;
 use super::process::resolve_pty_cwd;
 use crate::pty_manager::{
-    daemon_shells::DaemonShells, terminal_environment, PtyError, PtyManager, PtySpawnContext,
-    TerminalImageProtocol,
+    configure_terminal_environment, daemon_shells::DaemonShells, PtyError, PtyManager,
+    PtySpawnContext, TerminalImageProtocol,
 };
 use openforge_session_protocol::{PreparedCommand, ShellCommand, TerminalOwner};
 
@@ -50,16 +50,12 @@ impl PtyManager {
         #[cfg(test)]
         env.extend(self.test_environment.clone());
         env.insert("PWD".into(), cwd.to_string_lossy().into_owned());
-        env.extend(
-            terminal_environment(image_protocol)
-                .into_iter()
-                .map(|(key, value)| (key.into(), value.into())),
-        );
         for key in adapter.removed_env() {
             env.remove(*key);
         }
         // The daemon replaces the placeholder with its allocated instance before exec.
         env.extend(adapter.extra_env(context.task_id, 0));
+        configure_terminal_environment(&mut env, image_protocol);
         bridge
             .spawn(
                 ShellCommand {

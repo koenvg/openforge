@@ -59,3 +59,23 @@ fn terminal_environment_advertises_iterm_only_when_requested() {
         ]
     );
 }
+
+#[test]
+fn terminal_environment_removes_no_color() {
+    let mut environment = std::collections::BTreeMap::from([
+        ("NO_COLOR".to_string(), "1".to_string()),
+        ("OPENFORGE_TEST".to_string(), "preserved".to_string()),
+    ]);
+
+    configure_terminal_environment(&mut environment, None);
+
+    assert!(!environment.contains_key("NO_COLOR"));
+    assert_eq!(
+        environment.get("OPENFORGE_TEST").map(String::as_str),
+        Some("preserved")
+    );
+    assert_eq!(
+        environment.get("COLORTERM").map(String::as_str),
+        Some("truecolor")
+    );
+}

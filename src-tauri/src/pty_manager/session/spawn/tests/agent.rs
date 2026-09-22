@@ -94,10 +94,13 @@ impl AgentPtyProviderAdapter for SanitizedEnvironmentAdapter {
     }
 
     fn extra_env(&self, _task_id: &str, _instance_id: u64) -> HashMap<String, String> {
-        HashMap::from([(
-            "OPENFORGE_AGENT_CONFIG".to_string(),
-            "scoped-config".to_string(),
-        )])
+        HashMap::from([
+            ("NO_COLOR".to_string(), "adapter-opt-out".to_string()),
+            (
+                "OPENFORGE_AGENT_CONFIG".to_string(),
+                "scoped-config".to_string(),
+            ),
+        ])
     }
 
     fn removed_env(&self) -> &'static [&'static str] {
@@ -241,6 +244,7 @@ async fn scoped_agent_child_receives_only_its_issued_identity() {
         "OPENFORGE_AGENT_TOKEN",
         "OPENFORGE_BACKEND_TOKEN",
         "OPENFORGE_TASK_ID",
+        "NO_COLOR",
     ] {
         manager.set_test_environment_variable(key, "inherited-secret");
     }
@@ -281,6 +285,7 @@ async fn scoped_agent_child_receives_only_its_issued_identity() {
     assert!(!output.contains("OPENFORGE_BACKEND_TOKEN="));
     assert!(!output.contains("OPENFORGE_TASK_ID="));
     assert!(!output.contains("CLAUDE_TASK_ID="));
+    assert!(!output.contains("NO_COLOR="));
     manager.kill_pty(session_key).await.expect("cleanup probe");
 }
 
