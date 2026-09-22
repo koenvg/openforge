@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '13 2 * * *'
 
 permissions:
   contents: read
@@ -15,8 +17,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    name: Native Impact
+    runs-on: ubuntu-latest
+    outputs:
+      packagedRuntime: ${{ steps.classify.outputs.packagedRuntime }}
+      fullRun: ${{ steps.classify.outputs.fullRun }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        uses: ./.github/actions/native-impact
+        with:
+          artifact-name: packaged-session-runtime-impact
+
   packaged-runtime:
     name: Packaged Session Runtime (${{ matrix.arch }})
+    needs: impact
+    if: always() && !cancelled() && (needs.impact.outputs.fullRun == 'true' || needs.impact.result == 'failure' || needs.impact.outputs.packagedRuntime == 'true')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     strategy:

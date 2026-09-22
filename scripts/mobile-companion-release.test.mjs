@@ -90,11 +90,20 @@ describe('Mobile Companion build commands', () => {
   })
 
   it('checks out full history before CI derives debug build versions', async () => {
-    const workflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
-    const mobileBuildJob = workflow.slice(workflow.indexOf('  mobile-builds:'), workflow.indexOf('  rust:'))
+    const [ci, nativeCompatibility] = await Promise.all([
+      readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
+      readFile(join(repoRoot, '.github/workflows/native-compatibility.yml'), 'utf8'),
+    ])
+    const androidJob = ci.slice(ci.indexOf('  mobile-android:'), ci.indexOf('  ghostty-compatibility:'))
+    const iosJob = nativeCompatibility.slice(
+      nativeCompatibility.indexOf('  mobile-ios:'),
+      nativeCompatibility.indexOf('  ghostty-macos:'),
+    )
 
-    expect(mobileBuildJob).toContain('fetch-depth: 0')
-    expect(mobileBuildJob).toContain('./scripts/mobile-companion ${{ matrix.command }}')
+    expect(androidJob).toContain('fetch-depth: 0')
+    expect(androidJob).toContain('./scripts/mobile-companion build-android')
+    expect(iosJob).toContain('fetch-depth: 0')
+    expect(iosJob).toContain('./scripts/mobile-companion build-ios')
   })
   it('builds signed Android APK and app bundle artifacts for direct and internal distribution', async () => {
     const { directory, flutter } = await fakeFlutterDirectory()

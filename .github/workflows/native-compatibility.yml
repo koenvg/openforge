@@ -1,0 +1,85 @@
+name: Native Compatibility
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '29 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.44.9"
+  FLUTTER_CHANNEL: stable
+
+jobs:
+  impact:
+    name: Native Impact
+    runs-on: ubuntu-latest
+    outputs:
+      mobileIos: ${{ steps.classify.outputs.mobileIos }}
+      ghosttyMac: ${{ steps.classify.outputs.ghosttyMac }}
+      fullRun: ${{ steps.classify.outputs.fullRun }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        uses: ./.github/actions/native-impact
+        with:
+          artifact-name: native-compatibility-impact
+
+  mobile-ios:
+    name: Mobile Companion iOS Build
+    timeout-minutes: 25
+    needs: impact
+    if: always() && !cancelled() && (needs.impact.outputs.fullRun == 'true' || needs.impact.result == 'failure' || needs.impact.outputs.mobileIos == 'true')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Build companion
+        run: ./scripts/mobile-companion build-ios
+
+  ghostty-macos:
+    name: Ghostty Compatibility (macOS)
+    timeout-minutes: 30
+    needs: impact
+    if: always() && !cancelled() && (needs.impact.outputs.fullRun == 'true' || needs.impact.result == 'failure' || needs.impact.outputs.ghosttyMac == 'true')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
+
+      - name: Build and run the compatibility gate offline
+        working-directory: src-tauri
+        shell: bash
+        run: 'cargo test --manifest-path ghostty-compat/Cargo.toml --locked --offline terminal_model::'

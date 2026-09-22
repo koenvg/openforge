@@ -1,0 +1,79 @@
+name: Classify native impact
+description: Collect changed paths and publish fail-closed optional native job decisions
+
+inputs:
+  artifact-name:
+    description: Name for the uploaded native impact evidence
+    required: false
+    default: native-impact
+
+outputs:
+  packagedRuntime:
+    description: Whether packaged session runtime checks are affected
+    value: ${{ steps.classify.outputs.packagedRuntime }}
+  mobileIos:
+    description: Whether the Mobile Companion iOS build is affected
+    value: ${{ steps.classify.outputs.mobileIos }}
+  ghosttyMac:
+    description: Whether macOS Ghostty compatibility is affected
+    value: ${{ steps.classify.outputs.ghosttyMac }}
+  whisperMac:
+    description: Whether macOS Whisper compatibility is affected
+    value: ${{ steps.classify.outputs.whisperMac }}
+  fullRun:
+    description: Whether this event requests every native check
+    value: ${{ steps.classify.outputs.fullRun }}
+  uncertain:
+    description: Whether incomplete evidence forced native checks to run
+    value: ${{ steps.classify.outputs.uncertain }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare native impact evidence
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/native-impact"
+        printf '%s\n' '{"eventName":"unknown","request":{"uncertainty":"classifier-failed"},"changedPaths":[],"decision":{"fullRun":false,"uncertain":true,"packagedRuntime":true,"mobileIos":true,"ghosttyMac":true,"whisperMac":true,"reasons":{"packagedRuntime":["uncertain:classifier-failed"],"mobileIos":["uncertain:classifier-failed"],"ghosttyMac":["uncertain:classifier-failed"],"whisperMac":["uncertain:classifier-failed"]}},"collectionError":"classifier execution failed"}' > "$RUNNER_TEMP/native-impact/native-impact.json"
+
+    - name: Classify native impact
+      id: classify
+      shell: bash
+      run: |
+        node scripts/native-impact.mjs collect \
+          --event-name "$GITHUB_EVENT_NAME" \
+          --event-path "$GITHUB_EVENT_PATH" \
+          --repository "$GITHUB_WORKSPACE" \
+          --output "$RUNNER_TEMP/native-impact/native-impact.json"
+
+    - name: Upload native impact evidence
+      id: evidence
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/native-impact/native-impact.json
+        if-no-files-found: error
+        retention-days: 14
+
+    - name: Record native impact status
+      if: always()
+      shell: bash
+      env:
+        CLASSIFY_OUTCOME: ${{ steps.classify.outcome }}
+        EVIDENCE_OUTCOME: ${{ steps.evidence.outcome }}
+      run: |
+        if [[ "$CLASSIFY_OUTCOME" != "success" ]]; then
+          {
+            echo '## Native impact'
+            echo
+            echo 'Classification failed. Optional native jobs will run fail-closed.'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [[ "$EVIDENCE_OUTCOME" != "success" ]]; then
+          {
+            echo
+            echo 'Evidence publication failed. Optional native jobs will run fail-closed.'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
