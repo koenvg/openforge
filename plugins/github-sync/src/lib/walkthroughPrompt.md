@@ -4,12 +4,6 @@ Your job is to split the PR into an ordered sequence of small, concept-sized ste
 
 {{JIRA_TICKET}}
 {{PR_DESCRIPTION}}
-## Changed Files
-
-Each line is one JSON object from the host's validation snapshot:
-
-{{CHANGED_FILES}}
-
 ## Existing Review Comments
 
 These comments are already on the PR (from human reviewers or an earlier AI pass). Do not repeat a point one of them already makes. Where a comment is relevant to a change, build on it or defer to it instead of restating it. You may still add new remarks that do not overlap.
@@ -20,11 +14,23 @@ You are running inside a **checkout of this PR's head commit**.
 
 Pull request base ref: `{{BASE_REF}}`
 
-Patch bodies are intentionally omitted from these instructions. Inspect the complete change from this workspace with `git diff` against the available local or remote base ref. You may open and search any file and use `git log`/`git blame`/`git show` to understand history and intent. Use that context to explain *why*, not just *what*. Use the Changed Files manifest above for filenames and `hunk_indexes` submitted to OpenForge.
+Resolve the available remote-tracking or local ref for that branch. Set the shell variable `BASE_REF` to that exact ref, then verify it before inspecting the change:
+
+- Verify the resolved ref: `git rev-parse --verify "$BASE_REF^{commit}"`
+- Changed-file summary: `git diff --stat "$BASE_REF"...HEAD`
+- Rename-aware file list: `git diff --name-status --find-renames "$BASE_REF"...HEAD`
+- Full diff: `git diff --find-renames "$BASE_REF"...HEAD`
+- Pull request commits: `git log --oneline "$BASE_REF"..HEAD`
+
+Patch bodies are intentionally omitted from these instructions. Use the commands above, open and search files, and use `git show` or `git blame` when history helps explain intent. Do not review only `HEAD^`, the latest commit, or uncommitted changes. The pull request may contain several commits, so the three-dot diff is the review source.
 
 {{WALKTHROUGH_GUIDANCE}}
 
 ## Submit walkthrough steps
+
+Use these host-owned coordinates only when submitting steps. Use Git, not this list, to understand the change. Each line is one JSON object:
+
+{{SUBMISSION_COORDINATES}}
 
 The generation attempt id is `{{ATTEMPT_ID}}`. Submit each complete step as soon as it is ready with this command:
 
@@ -34,7 +40,7 @@ The generation attempt id is `{{ATTEMPT_ID}}`. Submit each complete step as soon
 
 Replace the example step with the real step, but keep `attemptId` exactly as shown. Use a stable step id. If the command rejects a step, correct the reported field and retry with the same step id. Reusing an accepted step id replaces that step without changing its position.
 
-Each step needs a non-empty id, title, summary, and file list. Filenames must exactly match the Changed Files list. `hunk_indexes` must contain unique 0-based indexes shown for that file, or be `null` to select the whole file. Every hunk should appear in exactly one accepted step.
+Each step needs a non-empty id, title, summary, and file list. Filenames must exactly match the submission coordinates. `hunk_indexes` must contain unique 0-based indexes shown for that file, or be `null` to select the whole file. Every hunk should appear in exactly one accepted step.
 
 The run is successful only when at least one walkthrough step command is accepted for this attempt. Do not rely on your final response to submit the walkthrough.
 
