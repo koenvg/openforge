@@ -18,13 +18,20 @@ async fn deterministic_adapter_satisfies_ordered_io_contract() {
         &deterministic::host(installation()),
         &installation(),
         Path::new("/tmp"),
+        false,
     )
     .await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn existing_adapter_satisfies_ordered_io_contract() {
     let fixture = ExistingFixture::new();
-    ordered_io_contract(&fixture.host(), &installation(), fixture.directory.path()).await;
+    ordered_io_contract(
+        &fixture.host(),
+        &installation(),
+        fixture.directory.path(),
+        false,
+    )
+    .await;
 }
 #[tokio::test]
 async fn deterministic_adapter_satisfies_spawn_retry_contract() {
@@ -32,13 +39,20 @@ async fn deterministic_adapter_satisfies_spawn_retry_contract() {
         &deterministic::host(installation()),
         &installation(),
         Path::new("/tmp"),
+        false,
     )
     .await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn existing_adapter_satisfies_spawn_retry_contract() {
     let fixture = ExistingFixture::new();
-    spawn_retry_contract(&fixture.host(), &installation(), fixture.directory.path()).await;
+    spawn_retry_contract(
+        &fixture.host(),
+        &installation(),
+        fixture.directory.path(),
+        false,
+    )
+    .await;
 }
 
 pub(super) struct ExistingFixture {
