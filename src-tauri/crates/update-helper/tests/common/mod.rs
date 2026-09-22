@@ -90,7 +90,8 @@ impl Fixture {
             fs::Permissions::from_mode(0o600),
         )
         .unwrap();
-        let payload = json!({"version":1,"installationId":"installation-one","operationId":"operation-one","installedBundlePath":destination,"source":"local-build","manifestSha256":hash,"bundlePath":target}).to_string();
+        let payload = json!({"version":1,"installationId":"installation-one","operationId":"operation-one","installedBundlePath":destination,"source":"local-build","manifestSha256":hash,"bundlePath":target,
+            "launch":{"electronUserData":root,"appData":root,"daemonRoot":root}}).to_string();
         let tag = hmac::sign(
             &hmac::Key::new(hmac::HMAC_SHA256, &key),
             &[

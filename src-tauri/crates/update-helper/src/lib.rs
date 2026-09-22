@@ -2,7 +2,11 @@
 mod authorization;
 mod bundle;
 mod files;
+mod handoff;
+mod handoff_input;
+mod host_exit;
 mod journal;
+pub use handoff::run_helper;
 pub use journal::Phase;
 
 use std::{
@@ -78,7 +82,10 @@ impl InstallTransaction {
         operation: &str,
     ) -> Result<(), String> {
         authorization::identity(operation)?;
-        if self.record()?.is_some_and(|r| r.phase != Phase::RolledBack) {
+        if self
+            .record()?
+            .is_some_and(|r| !matches!(r.phase, Phase::RolledBack | Phase::Committed))
+        {
             return Err("an update operation is already pending".into());
         }
         files::check_private_directory(authorization_root)?;
@@ -222,12 +229,37 @@ impl InstallTransaction {
         journal::write(&self.root, &record)
     }
 
+    /// Record the authenticated host's completion after runtime and workspace readiness.
+    /// Retained bundles stay pinned; commit never authorizes database rollback or cleanup.
+    /// # Errors
+    /// Refuses pre-launch/stale operations or changed authorization and installed bytes.
+    pub fn commit(&mut self, operation: &str) -> Result<(), String> {
+        let mut record = self.require(operation)?;
+        if !matches!(record.phase, Phase::LaunchStarted | Phase::Committed) {
+            return Err("update has not launched".into());
+        }
+        let authority = authorization::read(
+            &record.authorization,
+            operation,
+            &self.installation,
+            &self.destination,
+            &record.staging,
+        )?;
+        if authority.manifest_sha256 != record.target_hash
+            || bundle::measure(&self.destination)? != record.target_hash
+        {
+            return Err("authorized installed bundle changed".into());
+        }
+        record.phase = Phase::Committed;
+        journal::write(&self.root, &record)
+    }
+
     /// Restore only before any target domain process could have migrated the database.
     /// # Errors
     /// Refuses stale operations, corrupt recovery artifacts and post-launch rollback.
     pub fn recover(&mut self, operation: &str) -> Result<Phase, String> {
         let mut record = self.require(operation)?;
-        if record.phase == Phase::LaunchStarted {
+        if matches!(record.phase, Phase::LaunchStarted | Phase::Committed) {
             return Err(
                 "target launch may have migrated data; retain the new app for recovery".into(),
             );

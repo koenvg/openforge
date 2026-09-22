@@ -23,6 +23,7 @@ it('requires explicit local-build approval and binds it to the exact installatio
   const record = await approved.authorizeLocal(staged, 'operation-one')
   expect(record.source).toBe('local-build')
   expect(record.manifestSha256).toBe(staged.manifestSha256)
+  await expect(approved.helperProof('operation-one', 'a'.repeat(64), 'prepare', join(root, 'recovery'), '0'.repeat(64))).rejects.toThrow('target')
   await expect(denied.read('operation-one')).resolves.toEqual(record)
   await expect(denied.read('operation-two')).resolves.toBeNull()
   const foreign = new UpdateAuthorizationStore({ ...options, installationId: 'installation-two', confirmLocalBuild: async () => 'cancel' as const })
@@ -77,4 +78,13 @@ it('authenticates saved authorizations and rejects replay under another operatio
   envelope.payload = envelope.payload.replace(staged.manifestSha256, '0'.repeat(64))
   await writeFile(path, JSON.stringify(envelope))
   await expect(authorization.read('operation-one')).rejects.toThrow('authentication')
+})
+
+it('does not issue a helper handoff proof without an existing authorization', async () => {
+  const { root, store } = await updateBundleFixture()
+  const authorization = new UpdateAuthorizationStore({
+    root: join(root, 'authorization'), installationId: 'installation-one', bundles: store,
+    installedBundlePath: join(root, 'Installed.app'),
+  })
+  await expect(authorization.helperProof('operation-one', 'a'.repeat(64), 'prepare', join(root, 'recovery'), '0'.repeat(64))).rejects.toThrow('authorization')
 })

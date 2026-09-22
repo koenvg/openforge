@@ -203,6 +203,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'))
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-update-helper'))
 
     await packageElectronApp({ repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'] })
 
@@ -276,6 +277,7 @@ describe('Electron macOS packaging helpers', () => {
       { command: 'cargo', args: ['clean', '--release', '-p', 'whisper-rs-sys'], cwd: '/repo/src-tauri' },
       { command: 'cargo', args: ['build', '--release'], cwd: '/repo/src-tauri' },
       { command: 'cargo', args: ['build', '--release', '--manifest-path', '/repo/src-tauri/crates/session-daemon/Cargo.toml', '--target-dir', '/repo/src-tauri/target'], cwd: '/repo/src-tauri' },
+      { command: 'cargo', args: ['build', '--release', '--manifest-path', '/repo/src-tauri/crates/update-helper/Cargo.toml', '--target-dir', '/repo/src-tauri/target'], cwd: '/repo/src-tauri' },
       { command: 'packageElectronApp', args: [], cwd: '/repo' },
     ])
   })
@@ -290,6 +292,14 @@ describe('Electron macOS packaging helpers', () => {
       appExecutablePath: '/app/Open Forge', sidecarPath: '/app/sidecar', daemonPath: '/app/daemon',
       readExecutableArchitectures: async path => path.endsWith('/daemon') ? [] : ['arm64', 'x86_64'],
     })).rejects.toThrow(/Session Daemon architecture/)
+  })
+
+  it('rejects a helper that cannot execute on the package architecture', async () => {
+    await expect(assertPackageArchitectureCompatibility({
+      cargoBuildTarget: 'aarch64-apple-darwin', appExecutablePath: '/app/Open Forge', sidecarPath: '/app/sidecar',
+      daemonPath: '/app/daemon', helperPath: '/app/helper',
+      readExecutableArchitectures: async path => path.endsWith('/helper') ? [] : ['arm64'],
+    })).rejects.toThrow('Updater helper architecture')
   })
 
   it.each(['aarch64-apple-darwin', 'x86_64-apple-darwin'])('rejects a mismatched daemon in a %s package', async cargoBuildTarget => {
@@ -434,6 +444,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'))
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-update-helper'))
 
     await packageElectronApp({
       repoRoot: root,
@@ -479,6 +490,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'crates/openforge-backend/target/release'), { recursive: true })
     await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-backend'), '#!/bin/sh\necho sidecar\n')
     await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-session-daemon'))
+    await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-update-helper'))
     await mkdir(join(root, 'crates/openforge-backend/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/runtime-assets.json'), `${JSON.stringify({
       runtimeFiles: ['cli.js', 'configured-command.js'],
@@ -523,6 +535,8 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await expect(packageElectronApp({ repoRoot: root })).rejects.toThrow('Session Daemon binary')
     await writeExecutable(join(root, 'src-tauri/target/release/openforge-session-daemon'), '#!/bin/sh\necho daemon\n')
+    await expect(packageElectronApp({ repoRoot: root })).rejects.toThrow('Updater helper binary')
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge-update-helper'), '#!/bin/sh\necho updater-helper\n')
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     const runtimeAssetManifest = JSON.parse(
       await readFile(new URL('../src-tauri/src/openforge-cli/runtime-assets.json', import.meta.url), 'utf8'),
@@ -564,6 +578,9 @@ describe('Electron macOS packaging helpers', () => {
     const daemonPath = join(output, 'Contents/MacOS/openforge-session-daemon')
     await expect(readFile(daemonPath, 'utf8')).resolves.toContain('echo daemon')
     expect((await stat(daemonPath)).mode & 0o111).toBe(0o111)
+    const helperPath = join(output, 'Contents/MacOS/openforge-update-helper')
+    await expect(readFile(helperPath, 'utf8')).resolves.toContain('echo updater-helper')
+    expect((await stat(helperPath)).mode & 0o111).toBe(0o111)
     const runtimeDir = join(output, 'Contents/MacOS/session-runtime')
     const releaseManifest = JSON.parse(await readFile(join(runtimeDir, 'manifest.json'), 'utf8'))
     expect(releaseManifest.files.some(file => file.path === 'openforge-session-daemon')).toBe(true)

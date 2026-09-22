@@ -44,6 +44,8 @@ it('keeps an update in recovery until every target image is running, then restor
   let runningImages = { ...images, daemon: 'e'.repeat(64) }
   let replacementRequested = false
   const update = {
+    cancel: async () => {},
+    commit: async () => {},
     preflight: async (identity: { operationId: string; installationId: string }) => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
     replace: async () => { replacementRequested = true },
     readiness: async (target: { operationId: string }) => ({ operationId: target.operationId, images: runningImages, controller: { ...controller, generation }, reconciled: true }),
@@ -80,6 +82,8 @@ it('preserves preflight refusal and allows a later retry without preparing or re
     backend: { prepare: async () => { prepared = true }, cancel: async () => {}, detach: async () => {}, commit: async () => {} },
     replace: async () => { throw new Error('not an update helper') },
     update: {
+      cancel: async () => {},
+      commit: async () => {},
       preflight: async identity => {
         if (refused) throw new Error('Publisher signature rejected')
         return { ...identity, manifestSha256: 'f'.repeat(64), images }
@@ -107,6 +111,8 @@ async function preparedUpdate() {
   const root = await fixtureRoot()
   const state = { generation: 1, failCommit: false, commits: 0 }
   const update = {
+    cancel: async () => {},
+    commit: async () => {},
     preflight: async (identity: { operationId: string; installationId: string }) => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
     replace: async () => {},
     readiness: async (target: { operationId: string }) => ({ operationId: target.operationId, images, controller: { ...controller, generation: state.generation }, reconciled: true }),
@@ -183,4 +189,39 @@ it.each(['operation', 'installation', 'lifetime', 'generation', 'reconciliation'
   await expect(host.handle(20, 'complete_restart_workspace', { operationId })).rejects.toThrow('readiness or reconciliation')
   expect(state.commits).toBe(0)
   expect(await host.shutdownIntent()).toBe('update')
+})
+
+it.each([false, true])('releases the prepared helper on preparation failure, including a lost cancellation reply: %s', async cancelFails => {
+  const root = await fixtureRoot()
+  let helperOwned = false
+  const host = await createControlledRestartHost({
+    root, operationId: null, intent: 'update',
+    inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
+    replace: async () => { throw new Error('plain restart is forbidden') },
+    backend: { prepare: async () => { throw new Error('drain refused') }, cancel: async () => { if (cancelFails) throw new Error('cancel outcome unknown') }, detach: async () => {}, commit: async () => {} },
+    update: {
+      preflight: async identity => { helperOwned = true; return { ...identity, manifestSha256: 'f'.repeat(64), images } },
+      cancel: async () => { helperOwned = false },
+      commit: async () => {},
+      replace: async () => { throw new Error('must not replace') },
+      readiness: async target => ({ operationId: target.operationId, controller, images, reconciled: true }),
+    },
+  })
+  host.register(10, 'window', () => { throw new Error('must not capture') })
+  await expect(host.handle(10, 'restart_app', {})).rejects.toThrow(cancelFails ? 'cancel outcome unknown' : 'drain refused')
+  expect(helperOwned).toBe(false)
+  if (!cancelFails) expect(await host.shutdownIntent()).toBe('quit')
+})
+
+it('keeps the update recoverable until durable helper commit acknowledges after restoration', async () => {
+  const { options, operationId } = await preparedUpdate()
+  let helperReady = false
+  options.update.commit = async () => { if (!helperReady) throw new Error('helper commit failed') }
+  const host = await createControlledRestartHost({ ...options, operationId })
+  host.register(20, 'window', () => {})
+  await expect(host.handle(20, 'complete_restart_workspace', { operationId })).rejects.toThrow('helper commit failed')
+  expect(await host.shutdownIntent()).toBe('update')
+  helperReady = true
+  await host.handle(20, 'get_restart_workspace', {})
+  expect(await host.shutdownIntent()).toBe('quit')
 })

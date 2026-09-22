@@ -1,11 +1,17 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { constants } from 'node:fs'
 import { lstat, mkdir, open } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { StagedUpdateBundle, UpdateBundleStore } from './updateBundleStore.js'
 import { updateManifestBytes } from './updateBundleManifest.js'
 import { verifyPublishedAppUpdate } from './updatePublisherTrust.js'
 import { confirmNativeLocalBuild } from './localBuildApproval.js'
+
+export interface UpdateLaunchContext {
+  electronUserData: string
+  appData: string
+  daemonRoot: string
+}
 
 export interface UpdateAuthorization {
   version: 1
@@ -15,6 +21,7 @@ export interface UpdateAuthorization {
   source: 'local-build' | 'published'
   manifestSha256: string
   bundlePath: string
+  launch?: Readonly<UpdateLaunchContext>
 }
 
 interface Options {
@@ -22,6 +29,7 @@ interface Options {
   installationId: string
   installedBundlePath: string
   bundles: UpdateBundleStore
+  launch?: UpdateLaunchContext
   /** Trusted main-process UI capability, never supplied by an IPC request. */
   confirmLocalBuild?(request: Readonly<UpdateAuthorization>): Promise<'approve' | 'cancel'>
 }
@@ -45,6 +53,7 @@ export class UpdateAuthorizationStore {
       version: 1, installationId: this.options.installationId, operationId,
       installedBundlePath: this.options.installedBundlePath,
       source: 'published', manifestSha256: staged.manifestSha256, bundlePath: staged.bundlePath,
+      ...(this.options.launch ? { launch: parseLaunchContext(this.options.launch) } : {}),
     }))
   }
 
@@ -55,6 +64,7 @@ export class UpdateAuthorizationStore {
       version: 1, installationId: this.options.installationId, operationId,
       installedBundlePath: this.options.installedBundlePath,
       source: 'local-build', manifestSha256: staged.manifestSha256, bundlePath: staged.bundlePath,
+      ...(this.options.launch ? { launch: parseLaunchContext(this.options.launch) } : {}),
     })
     const previous = await this.read(operationId)
     if (previous) {
@@ -93,7 +103,25 @@ export class UpdateAuthorizationStore {
       || typeof record.bundlePath !== 'string' || !/^[a-f0-9]{64}$/.test(record.manifestSha256)) {
       throw new Error('Invalid update authorization identity')
     }
+    if (record.launch) record.launch = parseLaunchContext(record.launch)
     return Object.freeze(record)
+  }
+
+  /** Main-process capability. A fresh helper challenge binds each proof to one live pipe. */
+  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit', recoveryRoot: string, manifestSha256: string): Promise<{ payload: string; mac: string }> {
+    if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit'].includes(action)
+      || !isAbsolute(recoveryRoot) || resolve(recoveryRoot) !== recoveryRoot) throw new Error('Invalid helper handoff request')
+    const authorization = await this.read(operationId)
+    if (!authorization) throw new Error('Helper handoff requires update authorization')
+    if (authorization.manifestSha256 !== manifestSha256) throw new Error('Helper handoff target does not match authorization')
+    const key = await readPrivateFile(join(this.options.root, 'authorization.key'), 32)
+    if (key.length !== 32) throw new Error('Invalid update authorization key')
+    const payload = JSON.stringify(action === 'prepare' || action === 'commit' ? {
+      version: 1, challenge, action, manifestSha256, root: recoveryRoot, destination: authorization.installedBundlePath,
+      authorization: this.options.root, staging: dirname(authorization.bundlePath),
+      installation: authorization.installationId, operation: operationId,
+    } : { version: 1, challenge, action, operation: operationId })
+    return { payload, mac: createHmac('sha256', key).update('openforge-update-handoff-v1\0').update(payload).digest('hex') }
   }
 
   private async persist(record: UpdateAuthorization): Promise<UpdateAuthorization> {
@@ -125,6 +153,12 @@ export class UpdateAuthorizationStore {
       throw new Error('Unsafe update authorization directory')
     }
   }
+}
+
+function parseLaunchContext(value: UpdateLaunchContext): Readonly<UpdateLaunchContext> {
+  const paths = [value.electronUserData, value.appData, value.daemonRoot]
+  if (paths.some(path => typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path)) throw new Error('Invalid authorized update launch context')
+  return Object.freeze({ electronUserData: value.electronUserData, appData: value.appData, daemonRoot: value.daemonRoot })
 }
 
 function validateIdentity(value: string): void {

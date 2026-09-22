@@ -13,6 +13,7 @@ pub enum Phase {
     Replacing,
     Installed,
     LaunchStarted,
+    Committed,
     RolledBack,
 }
 

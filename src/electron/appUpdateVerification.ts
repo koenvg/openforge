@@ -19,8 +19,12 @@ export interface UpdateTarget {
  */
 export interface AppUpdateDriver {
   preflight(identity: { installationId: string; operationId: string }): Promise<UpdateTarget>
+  /** Release prepared helper/runtime ownership before detach. */
+  cancel(target: UpdateTarget): Promise<void>
   /** Authorize the verified helper, not app.relaunch or a direct bundle copy. */
   replace(target: UpdateTarget): Promise<void>
+  /** Persist native commit only after authenticated readiness and workspace restoration. */
+  commit(target: UpdateTarget): Promise<void>
   /** Authenticate the ready replacement and measure its running executable identities. */
   readiness(target: UpdateTarget): Promise<{
     operationId: string

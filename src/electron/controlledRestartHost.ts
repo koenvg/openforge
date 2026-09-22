@@ -46,6 +46,14 @@ export async function createControlledRestartHost(options: {
     }
   }
   const pending = await operation.status()
+  async function commitUpdate(operationId: string): Promise<void> {
+    const record = await operation.status()
+    if (record?.operationId !== operationId) throw new Error('Stale update completion')
+    if (record?.intent === 'update') {
+      if (!record.updateTarget) throw new Error('Update target is missing')
+      await requireUpdateDriver(options.update).commit(parseUpdateTarget(record.updateTarget))
+    }
+  }
   if (!options.operationId && pending?.phase === 'prepared'
     && initial.controller.generation > pending.controller.generation) {
     await options.backend?.cancel(pending.operationId)
@@ -57,6 +65,7 @@ export async function createControlledRestartHost(options: {
     if (acknowledged) {
       await validateCompletion()
       await options.backend?.commit(options.operationId)
+      await commitUpdate(options.operationId)
       await operation.commit(options.operationId)
     }
   }
@@ -91,14 +100,23 @@ export async function createControlledRestartHost(options: {
         const target = intent === 'update'
           ? parseUpdateTarget(await requireUpdateDriver(options.update).preflight({ installationId, operationId }))
           : undefined
-        await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot, target)
+        try {
+          await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot, target)
+        } catch (error) {
+          if (target) await requireUpdateDriver(options.update).cancel(target)
+          throw error
+        }
         await options.backend?.prepare(operationId, intent)
       },
       cancel: async operationId => {
         // A failed relaunch must never turn an authorized replacement into Quit.
         const record = await operation.status()
         if (record?.operationId === operationId && record.phase === 'prepared') {
-          await options.backend?.cancel(operationId)
+          try {
+            await options.backend?.cancel(operationId)
+          } finally {
+            if (record.intent === 'update' && record.updateTarget) await requireUpdateDriver(options.update).cancel(record.updateTarget)
+          }
           await operation.cancel(operationId)
         }
       },
@@ -106,6 +124,7 @@ export async function createControlledRestartHost(options: {
       complete: async operationId => {
         await validateCompletion()
         await options.backend?.commit(operationId)
+        await commitUpdate(operationId)
         await operation.commit(operationId)
       },
       shutdownIntent: () => operation.shutdownIntent(),

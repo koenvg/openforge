@@ -13,6 +13,37 @@ pub(crate) struct Authorization {
     pub source: String,
     pub manifest_sha256: String,
     pub bundle_path: PathBuf,
+    pub launch: Option<LaunchContext>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct LaunchContext {
+    pub electron_user_data: PathBuf,
+    pub app_data: PathBuf,
+    pub daemon_root: PathBuf,
+}
+
+impl LaunchContext {
+    pub fn validate(&self, destination: &Path, staged: &Path) -> Result<(), String> {
+        use std::os::unix::fs::MetadataExt;
+        for path in [&self.electron_user_data, &self.app_data, &self.daemon_root] {
+            if !path.is_absolute() {
+                return Err("invalid update launch directory".into());
+            }
+            let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+            // SAFETY: geteuid has no arguments or pointer preconditions.
+            let uid = unsafe { libc::geteuid() };
+            if !metadata.is_dir() || metadata.uid() != uid || metadata.mode() & 0o7022 != 0 {
+                return Err("unsafe update launch directory".into());
+            }
+            let canonical = path.canonicalize().map_err(|e| e.to_string())?;
+            if canonical.starts_with(destination) || canonical.starts_with(staged) {
+                return Err("update launch data must be outside replaceable bundles".into());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Deserialize)]

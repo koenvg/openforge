@@ -1,23 +1,28 @@
 // @vitest-environment node
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { cp, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { build } from 'vite'
 import { UpdateAuthorizationStore } from './updateAuthorization.js'
 import { cleanupUpdateBundles, updateBundleFixture } from './updateBundle.testUtils.js'
 
-// Explicit opt-in builds the native fixture, not an installed helper or application.
+import { commitNativeUpdate, prepareNativeUpdateHandoff } from './nativeUpdateHelper.js'
+// Opt-in builds private native executables. It never invokes an installed helper or desktop app.
 const enabled = process.env.RUN_UPDATE_HELPER_CONTRACT === '1'
 const cleanEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
 let executable: string
+let nativeExecutable: string
 
 describe.skipIf(!enabled)('Electron authorization to native install/recovery contract', () => {
   beforeAll(() => {
     const manifest = execFileSync(process.execPath, ['scripts/rust-sidecar-layout.mjs', 'update-helper-manifest-path'], { encoding: 'utf8', env: cleanEnvironment }).trim()
-    const build = execFileSync('cargo', ['build', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
+    const build = execFileSync('cargo', ['build', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
     const outputs = build.split('\n').filter(Boolean).map(line => JSON.parse(line))
     executable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'install-transaction-fixture' && row.executable)?.executable
     if (!executable) throw new Error('Native updater fixture was not built')
+    nativeExecutable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'openforge-update-helper' && row.target.kind.includes('bin') && row.executable)?.executable
+    if (!nativeExecutable) throw new Error('Native updater was not built')
   }, 120_000)
 
   afterEach(cleanupUpdateBundles)
@@ -62,4 +67,75 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
     expect(invoke('replace').status).not.toBe(0)
   }, 30_000)
+
+  it('prepares and cancels through the real authenticated helper without replacing the app', async () => {
+    const { root, source, store } = await updateBundleFixture()
+    const destination = join(root, 'Installed.app')
+    await cp(source, destination, { recursive: true })
+    await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    const staged = await store.stage(source)
+    const authorization = new UpdateAuthorizationStore({
+      root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
+      launch: { electronUserData: root, appData: root, daemonRoot: root },
+      bundles: store, confirmLocalBuild: async () => 'approve',
+    })
+    await authorization.authorizeLocal(staged, 'contract-operation')
+    const handoff = await prepareNativeUpdateHandoff({
+      authorization, bundles: store, recoveryRoot: join(root, 'transaction'),
+      target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images },
+    })
+    await handoff.cancel()
+    expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+    await expect(handoff.arm()).rejects.toThrow('already decided')
+  }, 20_000)
+
+  it('replaces and launches the authorized target only after the real owning host exits', async () => {
+    const { root, source, store } = await updateBundleFixture()
+    const destination = join(root, 'Installed.app')
+    await cp(source, destination, { recursive: true })
+    await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    await writeFile(join(source, 'Contents/MacOS/openforge-sidecar'), 'new-sidecar')
+    const marker = join(root, 'launched')
+    const quoted = `'${marker.replaceAll("'", "'\\''")}'`
+    await writeFile(join(source, 'Contents/MacOS/Open Forge'), `#!/bin/sh\nprintf '%s\\n' "$1" "$OPENFORGE_ELECTRON_USER_DATA_DIR" "$OPENFORGE_APP_DATA_DIR" "$OPENFORGE_SESSION_DAEMON_ROOT" > ${quoted}\n`)
+    const staged = await store.stage(source)
+    const authorizationRoot = join(root, 'authorization')
+    const authorization = new UpdateAuthorizationStore({
+      root: authorizationRoot, installationId: 'contract-installation', installedBundlePath: destination,
+      launch: { electronUserData: root, appData: root, daemonRoot: root },
+      bundles: store, confirmLocalBuild: async () => 'approve',
+    })
+    await authorization.authorizeLocal(staged, 'contract-operation')
+    const hostScript = join(root, 'host.mjs')
+    await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
+      ssr: 'src/electron/fixtures/updateHelperHost.ts', outDir: root, emptyOutDir: false,
+      rollupOptions: { external: ['electron'], output: { entryFileNames: 'host.mjs' } },
+    } })
+    const config = join(root, 'host.json')
+    await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: authorizationRoot,
+      destination, recovery: join(root, 'transaction'), target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images } }))
+    const host = spawn(process.execPath, [hostScript, config], { env: { ...cleanEnvironment, HOME: root, TMPDIR: root }, stdio: ['pipe', 'pipe', 'pipe'] })
+    let output = ''
+    let errors = ''
+    host.stdout.on('data', chunk => { output += chunk.toString() })
+    host.stderr.on('data', chunk => { errors += chunk.toString() })
+    const exited = new Promise<void>(resolve => host.once('exit', () => resolve()))
+    try {
+      await vi.waitFor(() => {
+        expect(errors).toBe('')
+        expect(output).toContain('armed\n')
+      }, { timeout: 10_000, interval: 20 })
+      expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+      host.stdin.end('exit\n')
+      await exited
+      await vi.waitFor(async () => {
+        expect(await readFile(marker, 'utf8')).toBe(`--openforge-restart-operation=contract-operation\n${root}\n${root}\n${root}\n`)
+      }, { timeout: 5_000, interval: 20 })
+      expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('new-sidecar')
+      await commitNativeUpdate({ authorization, target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }, recoveryRoot: join(root, 'transaction') })
+    } finally {
+      host.kill('SIGKILL')
+      await exited
+    }
+  }, 25_000)
 })

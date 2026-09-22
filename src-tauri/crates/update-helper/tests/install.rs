@@ -202,3 +202,33 @@ fn a_dangling_recovery_record_is_not_treated_as_an_absent_operation() {
         .unwrap_err()
         .contains("unsafe recovery"));
 }
+
+#[test]
+fn commit_requires_launch_and_keeps_the_post_launch_rollback_fence() {
+    let fixture = common::Fixture::new();
+    let mut transaction =
+        InstallTransaction::open(&fixture.state, "installation-one", &fixture.destination).unwrap();
+    transaction
+        .prepare(&fixture.authorization, &fixture.staging, "operation-one")
+        .unwrap();
+    assert!(transaction.commit("operation-one").is_err());
+    transaction.replace("operation-one").unwrap();
+    assert!(transaction.commit("operation-one").is_err());
+    transaction.begin_launch("operation-one").unwrap();
+    transaction.commit("operation-one").unwrap();
+    drop(transaction);
+    let mut reopened =
+        InstallTransaction::open(&fixture.state, "installation-one", &fixture.destination).unwrap();
+    reopened.commit("operation-one").unwrap();
+    assert!(reopened
+        .recover("operation-one")
+        .unwrap_err()
+        .contains("migrated"));
+    assert!(reopened.commit("another-operation").is_err());
+    fs::write(
+        fixture.destination.join("Contents/MacOS/openforge-sidecar"),
+        "changed after launch",
+    )
+    .unwrap();
+    assert!(reopened.commit("operation-one").is_err());
+}
