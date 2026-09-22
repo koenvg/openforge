@@ -1,7 +1,12 @@
 import { cleanup, render, waitFor } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
-import type { PrFileDiff, ReviewComment, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type {
+  PrFileDiff,
+  ReviewComment,
+  ReviewPullRequest,
+  ReviewSubmissionComment,
+} from '@openforge-app/plugin-sdk/domain'
 import type { ReviewWorkspace } from './reviewWorkspace.svelte'
 import { WALKTHROUGH_INVALIDATED_EVENT } from '../../lib/walkthroughEvents'
 import type { WalkthroughRecordV1 } from '../../lib/walkthroughRecord'
@@ -414,6 +419,104 @@ describe('review workspace', () => {
       head_sha: 'new-head',
       reviewed_head_sha: 'head',
     })
+  })
+
+  it('refreshes a newer selected revision in place without losing pending comments', async () => {
+    const { workspace, responses } = await setup()
+    await workspace.list.onSelectPr(pr)
+    const pendingComment: ReviewSubmissionComment = {
+      path: 'login.ts', line: 2, side: 'RIGHT', body: 'Keep this draft',
+    }
+    workspace.detail!.onPendingCommentsChange([pendingComment])
+    const updatedFile = { ...file, sha: 'updated-file', patch: '@@ -1 +1 @@\n+latest' }
+    responses.set('fetchReviewPrs', [{ ...pr, head_sha: 'new-head' }])
+    responses.set('getPrFileDiffs', [updatedFile])
+
+    await workspace.list.onRefreshPrs()
+
+    expect(workspace.detail!.reviewUpdateAvailable).toBe(true)
+    await workspace.detail!.onRefreshReview()
+
+    expect(workspace.detail!.pr.head_sha).toBe('new-head')
+    expect(workspace.detail!.files).toEqual([updatedFile])
+    expect(workspace.detail!.pendingManualComments).toEqual([pendingComment])
+    expect(workspace.detail!.pendingCommentsToReview).toEqual([pendingComment])
+    expect(workspace.detail!.reviewUpdateAvailable).toBe(false)
+
+    const freshComment: ReviewSubmissionComment = {
+      path: 'login.ts', line: 3, side: 'RIGHT', body: 'Written after refresh',
+    }
+    workspace.detail!.onPendingCommentsChange([])
+    workspace.detail!.onPendingCommentsChange([freshComment])
+    expect(workspace.detail!.pendingCommentsToReview).toEqual([])
+  })
+
+  it('settles an initial detail load that is superseded by a manual refresh', async () => {
+    const { workspace, responses } = await setup()
+    let finishInitialLoad!: (files: PrFileDiff[]) => void
+    let diffReads = 0
+    const refreshedFile = { ...file, sha: 'refreshed-file' }
+    responses.set('getPrFileDiffs', () => {
+      if (diffReads++ === 0) {
+        return new Promise<PrFileDiff[]>(resolve => { finishInitialLoad = resolve })
+      }
+      return [refreshedFile]
+    })
+    const opening = workspace.list.onSelectPr(pr)
+    await waitFor(() => expect(finishInitialLoad).toBeTypeOf('function'))
+    responses.set('fetchReviewPrs', [{ ...pr, head_sha: 'new-head' }])
+    await workspace.list.onRefreshPrs()
+
+    await workspace.detail!.onRefreshReview()
+
+    expect(workspace.detail!.isLoading).toBe(false)
+    expect(workspace.detail!.error).toBeNull()
+    expect(workspace.detail!.files).toEqual([refreshedFile])
+    finishInitialLoad([file])
+    await opening
+    expect(workspace.detail!.files).toEqual([refreshedFile])
+  })
+
+  it('retries when another commit lands while the latest details are loading', async () => {
+    const { workspace, responses } = await setup()
+    await workspace.list.onSelectPr(pr)
+    const firstRefreshFile = { ...file, sha: 'first-refresh-file' }
+    const latestFile = { ...file, sha: 'latest-file' }
+    let pullRequestReads = 0
+    responses.set('fetchReviewPrs', () => {
+      pullRequestReads += 1
+      return [{
+        ...pr,
+        head_sha: pullRequestReads < 3 ? 'new-head' : 'newest-head',
+      }]
+    })
+    let diffReads = 0
+    responses.set('getPrFileDiffs', () => diffReads++ === 0 ? [firstRefreshFile] : [latestFile])
+    await workspace.list.onRefreshPrs()
+
+    await workspace.detail!.onRefreshReview()
+
+    expect(workspace.detail!.pr.head_sha).toBe('newest-head')
+    expect(workspace.detail!.files).toEqual([latestFile])
+    expect(workspace.detail!.reviewUpdateAvailable).toBe(false)
+  })
+
+  it('offers a refresh immediately when GitHub rejects a review submitted against an older revision', async () => {
+    const { workspace, responses, calls } = await setup()
+    await workspace.list.onSelectPr(pr)
+    const commentReadsBeforeSubmit = calls.get('getReviewComments')!.length
+    responses.set('submitPrReview', () => {
+      throw new Error('GitHub API error (422): This pull request has been updated since you started reviewing. Please review the latest changes and resubmit.')
+    })
+
+    await expect(workspace.detail!.onSubmitReview({
+      repoOwner: 'acme', repoName: 'app', prNumber: 42, commitId: 'head',
+      event: 'APPROVE', body: 'LGTM',
+      comments: [{ path: 'login.ts', line: 2, side: 'RIGHT', body: 'Keep this draft' }],
+    })).rejects.toThrow('This pull request has been updated')
+
+    expect(workspace.detail!.reviewUpdateAvailable).toBe(true)
+    expect(calls.get('getReviewComments')).toHaveLength(commentReadsBeforeSubmit)
   })
 
   it('records the submitted review against its initiating PR after navigation changes', async () => {

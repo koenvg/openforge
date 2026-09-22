@@ -25,6 +25,7 @@
     prNumber: number
     commitId: string
     pendingComments?: ReviewSubmissionComment[]
+    pendingCommentsToReview?: ReviewSubmissionComment[]
     resolvedAgentComments?: ReviewSubmissionComment[]
     /** Replies queued for the pending review; counted here, posted by onSubmitReview. */
     pendingReplyCount?: number
@@ -43,6 +44,7 @@
     prNumber,
     commitId,
     pendingComments = [],
+    pendingCommentsToReview = [],
     resolvedAgentComments = [],
     pendingReplyCount = 0,
     includedFindings = [],
@@ -133,6 +135,34 @@
   </div>
 
   <div class="flex flex-col gap-3 px-6 py-4">
+    {#if pendingCommentsToReview.length > 0}
+      <div class="flex flex-col gap-2 rounded-[var(--of-radius-container)] border border-of-warning/30 bg-of-warning/10 p-3" role="status">
+        <div class="flex items-center gap-2 text-[0.8rem] font-medium text-of-text">
+          <TriangleAlert size={16} strokeWidth={1.8} class="shrink-0 text-of-warning" aria-hidden="true" />
+          <span>Review your {pendingCommentsToReview.length} pending comment{pendingCommentsToReview.length === 1 ? '' : 's'} against the latest changes before submitting.</span>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          {#each pendingCommentsToReview as comment, index (`${comment.path}:${comment.line}:${comment.side}:${index}`)}
+            <div class="flex items-start gap-2 rounded-[var(--of-radius-control)] border border-of-border bg-of-surface px-2.5 py-2">
+              <div class="flex-1">
+                <div class="break-all font-mono text-[0.72rem] text-of-text-muted">{comment.path}:{comment.line}</div>
+                <div class="mt-0.5 whitespace-pre-wrap text-[0.8rem] leading-snug text-of-text">{comment.body}</div>
+              </div>
+              <IconButton
+                label={`Remove pending comment on ${comment.path}:${comment.line}`}
+                size="xs"
+                class="shrink-0"
+                type="button"
+                onclick={() => onPendingCommentsChange(pendingComments.filter(candidate => candidate !== comment))}
+                title="Remove pending comment"
+              >
+                <X size={12} aria-hidden="true" />
+              </IconButton>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
     {#if includedFindings.length > 0}
       <div class="flex flex-col gap-1.5">
         {#each includedFindings as finding (finding.id)}

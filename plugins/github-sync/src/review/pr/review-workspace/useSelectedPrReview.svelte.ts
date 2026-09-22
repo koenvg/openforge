@@ -70,12 +70,32 @@ export function useSelectedPrReview(
   let error = $state<string | null>(null)
   let replyPostingError = $state<string | null>(null)
   let isPostingReplies = $state(false)
+  let staleReviewDetected = $state(false)
+  let isRefreshingReview = $state(false)
+  let reviewRefreshError = $state<string | null>(null)
+  let commentsRequiringReview = $state.raw<ReviewSubmissionComment[]>([])
   // The PR a "You reviewed this PR" prompt is currently offered for, or null when
   // no prompt is showing. Set right after a successful in-app review submission.
   let postReviewPr = $state<ReviewPullRequest | null>(null)
   let postReviewTrackingError = $state<string | null>(null)
   let loadSequence = 0
   let viewInvokedSubscription: { dispose(): void | Promise<void> } | null = null
+  let latestSelectedPr = $derived(
+    selectedPr.current
+      ? pullRequests.current.find(candidate => candidate.id === selectedPr.current?.id) ?? null
+      : null,
+  )
+  let reviewUpdateAvailable = $derived(
+    staleReviewDetected
+      || Boolean(
+        selectedPr.current
+        && latestSelectedPr
+        && latestSelectedPr.head_sha !== selectedPr.current.head_sha,
+      ),
+  )
+  let pendingCommentsToReview = $derived(
+    commentsRequiringReview.filter(comment => manualComments.current.includes(comment)),
+  )
 
   function isCurrentLoad(sequence: number, pr: ReviewPullRequest): boolean {
     return sequence === loadSequence && selectedPr.current?.id === pr.id
@@ -90,6 +110,10 @@ export function useSelectedPrReview(
     replies.current = []
     overviewComments.current = []
     reviewThreadFollowUps.clear()
+    staleReviewDetected = false
+    isRefreshingReview = false
+    reviewRefreshError = null
+    commentsRequiringReview = []
   }
 
   async function select(pr: ReviewPullRequest): Promise<void> {
@@ -348,6 +372,10 @@ export function useSelectedPrReview(
         commitId: request.commitId,
       })
     } catch (cause) {
+      if (isPullRequestUpdatedError(cause)) {
+        staleReviewDetected = true
+        throw cause
+      }
       if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) {
         const trackingError = await markSubmittedCommitReviewed(submittedPr, request.commitId)
         await postPendingReplies(request)
@@ -359,6 +387,93 @@ export function useSelectedPrReview(
     const trackingError = await markSubmittedCommitReviewed(submittedPr, request.commitId)
     await postPendingReplies(request)
     promptRemovalAfterReview(submittedPr, trackingError)
+  }
+
+  function isPullRequestUpdatedError(cause: unknown): boolean {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    return message.includes('This pull request has been updated since you started reviewing')
+  }
+
+  async function refreshReview(): Promise<void> {
+    const currentPr = selectedPr.current
+    if (!currentPr || isRefreshingReview) return
+
+    const supersedesInitialLoad = isLoading
+    const knownHeadAtStart = pullRequests.current.find(candidate => candidate.id === currentPr.id)?.head_sha
+    const sequence = ++loadSequence
+    isRefreshingReview = true
+    reviewRefreshError = null
+    try {
+      let refreshedPullRequests: ReviewPullRequest[] = []
+      let latestPr: ReviewPullRequest | null = null
+      let diffs: PrFileDiff[] = []
+      let comments: ReviewComment[] = []
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const snapshotPullRequests = await githubSync.refreshReviewPullRequests()
+        if (!isCurrentLoad(sequence, currentPr)) return
+        const snapshotPr = snapshotPullRequests.find(candidate => candidate.id === currentPr.id)
+        if (!snapshotPr) throw new Error('The pull request is no longer available in your review list.')
+
+        const [loadedDiffs, loadedComments] = await Promise.all([
+          githubSync.listPullRequestFileDiffs({
+            owner: snapshotPr.repo_owner,
+            repo: snapshotPr.repo_name,
+            prNumber: snapshotPr.number,
+          }),
+          githubSync.listReviewComments({
+            owner: snapshotPr.repo_owner,
+            repo: snapshotPr.repo_name,
+            prNumber: snapshotPr.number,
+          }),
+        ])
+        diffs = loadedDiffs
+        comments = loadedComments
+        if (!isCurrentLoad(sequence, currentPr)) return
+
+        refreshedPullRequests = await githubSync.refreshReviewPullRequests()
+        if (!isCurrentLoad(sequence, currentPr)) return
+        const verifiedPr = refreshedPullRequests.find(candidate => candidate.id === currentPr.id)
+        if (!verifiedPr) throw new Error('The pull request is no longer available in your review list.')
+        if (verifiedPr.head_sha === snapshotPr.head_sha) {
+          latestPr = verifiedPr
+          break
+        }
+      }
+      if (!latestPr) {
+        pullRequests.current = refreshedPullRequests
+        throw new Error('New commits arrived while refreshing. Refresh the latest changes again.')
+      }
+
+      const knownHeadNow = pullRequests.current.find(candidate => candidate.id === currentPr.id)?.head_sha
+      if (knownHeadNow !== knownHeadAtStart && knownHeadNow !== latestPr.head_sha) {
+        throw new Error('New commits arrived while refreshing. Refresh the latest changes again.')
+      }
+
+      const now = Math.floor(Date.now() / 1000)
+      const viewedPr = { ...latestPr, viewed_at: now, viewed_head_sha: latestPr.head_sha }
+      pullRequests.current = refreshedPullRequests.map(candidate => candidate.id === latestPr.id ? viewedPr : candidate)
+      selectedPr.current = viewedPr
+      fileDiffs.current = diffs
+      reviewCommentsStore.current = comments
+      error = null
+      staleReviewDetected = false
+      commentsRequiringReview = [...manualComments.current]
+      void walkthroughState.refreshStatus(viewedPr)
+      void reviewThreadFollowUps.load(viewedPr).catch(cause => {
+        console.error('Failed to refresh review threads:', cause)
+      })
+      githubSync.markReviewPullRequestViewed({ prId: viewedPr.id, headSha: viewedPr.head_sha })
+        .catch(cause => console.error('Failed to mark viewed:', cause))
+    } catch (cause) {
+      if (!isCurrentLoad(sequence, currentPr)) return
+      console.error('Failed to refresh pull request details:', cause)
+      reviewRefreshError = cause instanceof Error ? cause.message : 'Failed to refresh the pull request.'
+    } finally {
+      if (sequence === loadSequence) {
+        isRefreshingReview = false
+        if (supersedesInitialLoad) isLoading = false
+      }
+    }
   }
 
   async function markSubmittedCommitReviewed(pr: ReviewPullRequest, commitId: string): Promise<string | null> {
@@ -570,6 +685,10 @@ export function useSelectedPrReview(
     get error() { return error },
     get replyPostingError() { return replyPostingError },
     get isPostingReplies() { return isPostingReplies },
+    get reviewUpdateAvailable() { return reviewUpdateAvailable },
+    get isRefreshingReview() { return isRefreshingReview },
+    get reviewRefreshError() { return reviewRefreshError },
+    get pendingCommentsToReview() { return pendingCommentsToReview },
     get postReviewPr() { return postReviewPr },
     get postReviewTrackingError() { return postReviewTrackingError },
     retryReplies,
@@ -587,6 +706,7 @@ export function useSelectedPrReview(
     handleKeydown,
     loadOverviewComments,
     submitReview,
+    refreshReview,
     replyToExistingComment,
     addReplyToReview,
     removePendingReply,

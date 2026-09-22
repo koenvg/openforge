@@ -1174,6 +1174,36 @@ describe('PrReviewView submit review', () => {
       expect(screen.getByText('Failed to submit review. Please try again.')).toBeTruthy()
     })
   })
+
+  it('offers an in-place refresh for newer commits and keeps drafts visible afterward', async () => {
+    const pullRequests = [basePr]
+    let diffs = [baseDiff]
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => diffs, pullRequests)
+    await openFilesTab(registry)
+    const pendingComment: ReviewSubmissionComment = {
+      path: baseDiff.filename,
+      line: 2,
+      side: 'RIGHT',
+      body: 'Keep this draft after refreshing',
+    }
+    pendingManualComments.set([pendingComment])
+    const summary = requireElement(screen.getByRole('textbox', { name: 'Review summary comment' }), HTMLTextAreaElement)
+    await fireEvent.input(summary, { target: { value: 'Keep this summary too' } })
+    pullRequests[0] = { ...basePr, head_sha: 'new-head-sha' }
+    diffs = [{ ...baseDiff, sha: 'new-file-sha' }]
+
+    await registry.frontendApi.events.emitGlobal('openforge.review-pr-count-changed', {})
+
+    expect(await screen.findByText('New commits are available for this pull request.')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Refresh latest changes' }))
+
+    await waitFor(() => expect(get(selectedReviewPr)?.head_sha).toBe('new-head-sha'))
+    expect(get(pendingManualComments)).toEqual([pendingComment])
+    expect(screen.getByText('Review your 1 pending comment against the latest changes before submitting.')).toBeTruthy()
+    expect(screen.getByText('Keep this draft after refreshing')).toBeTruthy()
+    expect(requireElement(screen.getByRole('textbox', { name: 'Review summary comment' }), HTMLTextAreaElement).value).toBe('Keep this summary too')
+  })
 })
 
 function renderPrReviewView(registry: TestingOpenForgeRegistryFake) {

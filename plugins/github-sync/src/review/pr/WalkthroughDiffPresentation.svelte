@@ -17,6 +17,7 @@
     resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
+    pendingCommentsToReview?: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onOpenUrl: (url: string) => void | Promise<void>
     reviewThreads: ReviewThread[]
@@ -56,6 +57,7 @@
     resolveRepositoryImage,
     existingComments,
     pendingComments,
+    pendingCommentsToReview = [],
     onPendingCommentsChange,
     onOpenUrl,
     reviewThreads,
@@ -123,6 +125,7 @@
             prNumber={pr.number}
             commitId={pr.head_sha}
             {pendingComments}
+            {pendingCommentsToReview}
             resolvedAgentComments={resolvedAgentSubmissions.map(submission => submission.comment)}
             pendingReplyCount={pendingReplies.length}
             includedFindings={includedCoverageFindings}

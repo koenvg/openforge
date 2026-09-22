@@ -24,6 +24,7 @@
     resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
     existingComments: ReviewComment[]
     pendingComments: ReviewSubmissionComment[]
+    pendingCommentsToReview?: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onOpenUrl: (url: string) => void | Promise<void>
     reviewThreads?: ReviewThread[]
@@ -277,6 +278,7 @@
         resolveRepositoryImage={props.resolveRepositoryImage}
         existingComments={props.existingComments}
         pendingComments={props.pendingComments}
+        pendingCommentsToReview={props.pendingCommentsToReview}
         onPendingCommentsChange={props.onPendingCommentsChange}
         onOpenUrl={props.onOpenUrl}
         reviewThreads={stepReviewThreads}
