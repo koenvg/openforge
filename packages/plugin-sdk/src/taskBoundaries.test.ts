@@ -25,7 +25,6 @@ const summary: TaskSummary = {
   updatedAt: 2,
   promptPreview: 'Bounded preview',
   labels: [],
-  sourceTicketUrl: null,
 }
 
 const detail: TaskDetail = {
@@ -70,7 +69,6 @@ function task(
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    source_ticket_url: null,
     depends_on: [],
     project_id: 'P-1',
     created_at: 1,

@@ -65,7 +65,6 @@ export const makeTask = (
   permissionMode: null,
   worktreeSource: null,
   worktreeBranch: null,
-  sourceTicketUrl: null,
   dependsOn: [],
   projectId: 'proj-1',
   createdAt: 1000,

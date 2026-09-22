@@ -21,7 +21,6 @@ describe('OpenForge task list commands', () => {
         labels: [],
         createdAt: 1,
         updatedAt: 2,
-        sourceTicketUrl: null,
       }],
       nextCursor: 'next-page',
     };

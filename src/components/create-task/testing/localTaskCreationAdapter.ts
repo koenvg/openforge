@@ -25,7 +25,6 @@ export class LocalTaskCreationAdapter implements TaskCreationAdapter {
       status, title: options?.title ?? prompt, titleSource: null, titleGeneratedAt: null,
       agent: null, permissionMode: permissionMode ?? null,
       worktreeSource: options?.worktreeSource ?? null, worktreeBranch: options?.worktreeBranch ?? null,
-      sourceTicketUrl: options?.sourceTicketUrl ?? null,
       dependsOn: [], labels: [], createdAt: 1000, updatedAt: 1000,
     }
     this.tasks.push(task)

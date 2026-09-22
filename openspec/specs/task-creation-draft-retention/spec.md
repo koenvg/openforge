@@ -25,7 +25,7 @@ While the Create Task prompt contains non-whitespace content, activating the are
 
 ### Requirement: Dismissal retains the prompt draft
 
-Dismissing Create Task without saving SHALL retain the prompt text and every pasted image referenced by that text. Retention SHALL apply to every dismissal path, including Escape, the header close control, and the footer close control. Retention SHALL NOT apply to the properties of the draft, which are the title, source ticket, AI provider, permission mode, worktree choice, and branch selection.
+Dismissing Create Task without saving SHALL retain the prompt text and every pasted image referenced by that text. Retention SHALL apply to every dismissal path, including Escape, the header close control, and the footer close control. Retention SHALL NOT apply to the properties of the draft, which are the title, AI provider, permission mode, worktree choice, and branch selection.
 
 #### Scenario: Escape dismisses a typed prompt
 - **WHEN** the user presses Escape in Create Task with a typed prompt
@@ -59,7 +59,7 @@ Opening Create Task for a project with a retained draft and no supplied prompt s
 
 #### Scenario: Properties are not restored
 - **WHEN** the user reopens Create Task for a project that has a retained draft
-- **THEN** the title, source ticket, AI provider, permission mode, worktree choice, and branch selection come from project defaults
+- **THEN** the title, AI provider, permission mode, worktree choice, and branch selection come from project defaults
 
 ### Requirement: Retained drafts are scoped per project and to the session
 

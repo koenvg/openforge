@@ -1059,7 +1059,6 @@ describe('PrReviewView start task from authored PR', () => {
       projectId: 'project-1',
       initialPrompt: 'Continue work on PR #900: Authored PR',
       title: 'Authored PR',
-      sourceTicketUrl: 'https://github.com/acme/repo/pull/900',
       worktreeSource: 'existingBranch',
       worktreeBranch: 'feature',
     }])

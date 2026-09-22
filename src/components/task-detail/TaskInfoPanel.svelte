@@ -2,12 +2,11 @@
   import type { TaskDetail, TaskLabel, TaskReference } from '../../lib/types'
   import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks as allTasks } from '../../lib/stores'
   import { updateTaskDetail } from '../../lib/tasksState'
-  import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
+  import { addTaskLabel, removeTaskLabel } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from './CopyButton.svelte'
-  import SourceTicketLink from './SourceTicketLink.svelte'
   import TaskInitialPrompt from './TaskInitialPrompt.svelte'
   import TaskGitStatus from './TaskGitStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
@@ -88,10 +87,6 @@
     replaceTaskLabelsInStore(labels)
   }
 
-  async function handleSaveSourceTicket(nextUrl: string | null) {
-    await updateTaskSourceTicketUrl(task.id, nextUrl)
-    updateTaskDetail(task.id, (detail) => ({ ...detail, sourceTicketUrl: nextUrl }))
-  }
 
 </script>
 
@@ -101,9 +96,6 @@
      and sit at the bottom. -->
 <div data-testid="task-info-panel" data-scroll-owner="false" data-density={density} class="flex min-h-max flex-col {panelClass}">
   <TaskInitialPrompt {task} {onEditPrompt} />
-
-  <SourceTicketLink url={task.sourceTicketUrl} onSave={handleSaveSourceTicket} />
-
   <PluginSlot
     slotType="taskUISections"
     taskId={task.id}

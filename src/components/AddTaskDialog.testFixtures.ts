@@ -29,7 +29,6 @@ export const DEFAULT_WORKTREE_OPTIONS = {
   worktreeSource: 'newBranchFromMain',
   worktreeBranch: null,
   title: null,
-  sourceTicketUrl: null,
   taskDisplayTitleUpdatesEnabled: false,
   aiProvider: 'claude-code',
 } satisfies CreationOptions

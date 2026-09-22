@@ -32,11 +32,6 @@ export interface Task {
   permission_mode: string | null;
   worktree_source: WorktreeSource | null;
   worktree_branch: string | null;
-  /**
-   * Optional link to the source ticket this task originated from (e.g. a GitHub
-   * issue URL or Jira browse link). `null` when no ticket was provided.
-   */
-  source_ticket_url: string | null;
   depends_on: string[];
   project_id: string | null;
   created_at: number;
@@ -62,7 +57,6 @@ export interface TaskSummary extends TaskReference {
   updatedAt: number
   promptPreview: string
   labels: TaskLabel[]
-  sourceTicketUrl: string | null
 }
 
 export interface TaskDetail extends TaskSummary {

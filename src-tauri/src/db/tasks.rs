@@ -35,9 +35,6 @@ pub struct TaskRow {
     /// Timestamp of the first automatic title generation attempt that wrote a title.
     /// Once set, generation will not run again for this task.
     pub title_generated_at: Option<i64>,
-    /// Optional link to the source ticket that this task originated from (e.g. a
-    /// GitHub issue URL or Jira browse link). `None` when no ticket was provided.
-    pub source_ticket_url: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
 }
@@ -64,7 +61,6 @@ pub struct TaskSummary {
     pub updated_at: i64,
     pub prompt_preview: String,
     pub labels: Vec<TaskLabelRow>,
-    pub source_ticket_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -79,7 +75,6 @@ pub struct TaskDetail {
     pub updated_at: i64,
     pub prompt_preview: String,
     pub labels: Vec<TaskLabelRow>,
-    pub source_ticket_url: Option<String>,
     pub prompt: String,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
@@ -207,7 +202,6 @@ impl From<&TaskRow> for TaskSummary {
             updated_at: task.updated_at,
             prompt_preview: prompt_preview(&task.initial_prompt),
             labels: task.labels.clone(),
-            source_ticket_url: task.source_ticket_url.clone(),
         }
     }
 }
@@ -224,7 +218,6 @@ impl From<&TaskRow> for TaskDetail {
             updated_at: task.updated_at,
             prompt_preview: prompt_preview(&task.initial_prompt),
             labels: task.labels.clone(),
-            source_ticket_url: task.source_ticket_url.clone(),
             prompt: task.initial_prompt.clone(),
             agent: task.agent.clone(),
             permission_mode: task.permission_mode.clone(),
@@ -250,7 +243,6 @@ pub struct CompactTaskRow {
     pub title: String,
     pub title_source: Option<String>,
     pub title_generated_at: Option<i64>,
-    pub source_ticket_url: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
 }
@@ -352,21 +344,6 @@ impl super::Database {
         Ok(())
     }
 
-    /// Update a task's optional source-ticket link. Editable at any status so a
-    /// link can be added, changed, or cleared after the task was created. A blank
-    /// or `None` value clears it back to `NULL` so the UI shows nothing.
-    pub fn update_task_source_ticket_url(&self, id: &str, url: Option<&str>) -> Result<()> {
-        let conn = self.lock_conn()?;
-        let now = super::current_unix_timestamp()?;
-        // Normalize a blank link to NULL, matching creation (see create_task_with_options).
-        let stored_url: Option<&str> = url.map(str::trim).filter(|value| !value.is_empty());
-        conn.execute(
-            "UPDATE tasks SET source_ticket_url = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![stored_url, now, id],
-        )?;
-        Ok(())
-    }
-
     /// Set an automatically generated task display title exactly once. Generated
     /// titles never overwrite a manual title and a task with a prior generation
     /// timestamp is skipped even if the title was later cleared.
@@ -425,7 +402,6 @@ mod tests {
             title: Some("Projection contract".to_string()),
             title_source: Some("manual".to_string()),
             title_generated_at: None,
-            source_ticket_url: Some("https://example.com/tickets/42".to_string()),
             depends_on: vec!["P-1-41".to_string()],
             labels: vec![label.clone()],
         };
@@ -456,7 +432,6 @@ mod tests {
                 "updatedAt": 20,
                 "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
                 "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
-                "sourceTicketUrl": "https://example.com/tickets/42",
             })
         );
         assert_eq!(summary.prompt_preview.chars().count(), 120);
@@ -478,7 +453,6 @@ mod tests {
                 "updatedAt": 20,
                 "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
                 "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
-                "sourceTicketUrl": "https://example.com/tickets/42",
                 "prompt": task.initial_prompt,
                 "agent": "pi",
                 "permissionMode": "workspace-write",
@@ -507,7 +481,6 @@ mod tests {
             title: None,
             title_source: None,
             title_generated_at: None,
-            source_ticket_url: None,
             depends_on: Vec::new(),
             labels: Vec::new(),
         };
@@ -689,48 +662,6 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_source_ticket_url_sets_changes_and_clears() {
-        let (db, _temp_dir) = make_test_db("update_task_source_ticket_url");
-
-        // Starts with no source ticket (the case this feature targets: it was
-        // never set at creation).
-        let task = db
-            .create_task("Original", "doing", None, None, None)
-            .expect("create failed");
-        assert_eq!(task.source_ticket_url, None);
-
-        // Add a link after the fact.
-        let url = "https://github.com/koenvg/openforge/issues/1294";
-        db.update_task_source_ticket_url(&task.id, Some(url))
-            .expect("set source ticket failed");
-        let set = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(set.source_ticket_url.as_deref(), Some(url));
-
-        // Change it to a different link.
-        let other = "PROJ-42";
-        db.update_task_source_ticket_url(&task.id, Some(other))
-            .expect("change source ticket failed");
-        let changed = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(changed.source_ticket_url.as_deref(), Some(other));
-
-        // Clearing with a blank value reverts to NULL.
-        db.update_task_source_ticket_url(&task.id, Some("   "))
-            .expect("clear source ticket failed");
-        let cleared = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(cleared.source_ticket_url, None);
-
-        // Clearing with None also reverts to NULL.
-        db.update_task_source_ticket_url(&task.id, Some(url))
-            .expect("re-set source ticket failed");
-        db.update_task_source_ticket_url(&task.id, None)
-            .expect("clear via none failed");
-        let cleared_none = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(cleared_none.source_ticket_url, None);
-
-        drop(db);
-    }
-
-    #[test]
     fn test_update_task_title_sets_title_regardless_of_status() {
         let (db, _temp_dir) = make_test_db("update_task_title_any_status");
 
@@ -815,7 +746,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: Some("Manual title"),
-                source_ticket_url: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })

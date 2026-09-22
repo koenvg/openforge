@@ -109,13 +109,6 @@
         <p class="prop-hint">The agent names this task and keeps it updated as work progresses.</p>
       {/if}
     </div>
-    <TextField
-      label="Source ticket"
-      aria-label="Source ticket link"
-      inputmode="url"
-      placeholder="GitHub issue, Linear, or Jira URL"
-      bind:value={draft.sourceTicketUrl}
-    />
   </div>
 
   <hr class="prop-divider" aria-hidden="true" />

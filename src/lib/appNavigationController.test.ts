@@ -41,7 +41,6 @@ function detail(id: string, projectId = project1.id): TaskDetail {
     createdAt: 1,
     updatedAt: 2,
     labels: [],
-    sourceTicketUrl: null,
     agent: null,
     permissionMode: null,
     worktreeSource: null,

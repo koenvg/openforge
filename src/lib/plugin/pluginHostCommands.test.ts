@@ -83,7 +83,6 @@ describe('plugin host commands', () => {
       updatedAt: 2,
       promptPreview: 'Authoring prompt',
       labels: [],
-      sourceTicketUrl: null,
       prompt: 'Authoring prompt',
       agent: null,
       permissionMode: null,
@@ -149,7 +148,6 @@ describe('plugin host commands', () => {
       worktreeSource: null,
       worktreeBranch: null,
       title: null,
-      sourceTicketUrl: null,
       taskDisplayTitleUpdatesEnabled: undefined,
       aiProvider: null,
     })

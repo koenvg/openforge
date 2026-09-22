@@ -88,16 +88,14 @@ describe('Create Task sheet', () => {
     expect(await screen.findByRole('button', { name: 'Mode' })).toBeTruthy()
   })
 
-  it('lays out the title and source ticket fields without progressive disclosure', async () => {
+  it('lays out title controls without progressive disclosure', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
     await findPromptTextbox()
 
-    expect(screen.queryByText('Title and source ticket')).toBeNull()
     expect(screen.queryByText('Advanced settings')).toBeNull()
     expect(screen.getByLabelText('Custom title')).toBeTruthy()
     expect(screen.getByLabelText('AI-generated title')).toBeTruthy()
     expect(screen.getByLabelText('Task title')).toBeTruthy()
-    expect(screen.getByLabelText('Source ticket link')).toBeTruthy()
   })
 
   it('defaults the title to custom and hides the manual field when AI-generated is chosen', async () => {

@@ -15,7 +15,6 @@ vi.mock('../../lib/ipc', () => ({
   addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug' }),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
   removeTaskDependency: vi.fn().mockResolvedValue(undefined),
-  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
   getTaskGitStatus: vi.fn().mockResolvedValue({
     has_remote: false,
     remote_ahead: 0,

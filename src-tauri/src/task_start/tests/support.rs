@@ -152,7 +152,6 @@ pub(super) fn task_with_provider_options(
         title: None,
         title_source: None,
         title_generated_at: None,
-        source_ticket_url: None,
         depends_on: Vec::new(),
         labels: Vec::new(),
     }

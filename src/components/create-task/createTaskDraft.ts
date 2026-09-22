@@ -7,7 +7,6 @@ export interface CreateTaskDraft {
   useWorktree: boolean
   aiProvider: string | null
   title: string
-  sourceTicketUrl: string
   taskDisplayTitleUpdatesEnabled: boolean
 }
 
@@ -24,7 +23,6 @@ export function createTaskDraft(): CreateTaskDraft {
     useWorktree: true,
     aiProvider: null,
     title: '',
-    sourceTicketUrl: '',
     taskDisplayTitleUpdatesEnabled: false,
   }
 }

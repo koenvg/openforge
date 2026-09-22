@@ -29,7 +29,6 @@ describe('App compose dialog', { timeout: 15_000 }, () => {
     void requestTaskCompose({
       projectId: 'P-1',
       initialPrompt: 'Implement GitHub issue #412',
-      sourceTicketUrl: 'https://github.com/me/app/issues/412',
       title: 'Login redirect',
     })
 
@@ -40,7 +39,6 @@ describe('App compose dialog', { timeout: 15_000 }, () => {
       )
       expect(props.mode).toBe('create')
       expect(props.promptSeed).toBe('Implement GitHub issue #412')
-      expect(props.sourceTicketUrlSeed).toBe('https://github.com/me/app/issues/412')
       expect(props.titleSeed).toBe('Login redirect')
       expect(props.worktreeSourceSeed).toBeNull()
       expect(props.worktreeBranchSeed).toBeNull()

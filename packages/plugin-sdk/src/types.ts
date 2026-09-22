@@ -746,7 +746,6 @@ export interface ComposeTaskRequest {
   projectId: string
   /** Seeds the dialog's prompt field; the user edits it before saving. */
   initialPrompt: string
-  sourceTicketUrl?: string | null
   title?: string | null
   /** Seeds the dialog's worktree source instead of the project default. */
   worktreeSource?: WorktreeSource | null
@@ -991,8 +990,7 @@ export interface TaskOperationsAPI {
    * Opens the host's create-task dialog pre-filled, letting the user edit the
    * prompt — including anything contributed at that injection point —
    * before the task exists. Optional `worktreeSource` / `worktreeBranch` seed
-   * the environment controls the same way `title` and `sourceTicketUrl` seed
-   * their fields.
+   * the environment controls in the same way `title` seeds its field.
    * Resolves null if they dismiss it.
    */
   compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>

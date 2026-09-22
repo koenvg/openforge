@@ -11,7 +11,6 @@ export const desktopIpcFunctionDomains = {
   createTask: 'tasks-projects',
   updateTaskInitialPrompt: 'tasks-projects',
   updateTaskTitle: 'tasks-projects',
-  updateTaskSourceTicketUrl: 'tasks-projects',
   removeTaskDependency: 'tasks-projects',
   updateTaskStatus: 'tasks-projects',
   deleteTask: 'tasks-projects',

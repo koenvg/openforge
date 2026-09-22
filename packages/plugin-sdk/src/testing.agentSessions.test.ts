@@ -17,7 +17,6 @@ function task(id: string, title: string | null = id): Task {
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    source_ticket_url: null,
     depends_on: [],
     project_id: 'P-1',
     created_at: 10,

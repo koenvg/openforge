@@ -24,7 +24,6 @@ export function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     permissionMode: null,
     worktreeSource: null,
     worktreeBranch: null,
-    sourceTicketUrl: null,
     titleSource: null,
     titleGeneratedAt: null,
     createdAt: FIXED_CREATED_AT,

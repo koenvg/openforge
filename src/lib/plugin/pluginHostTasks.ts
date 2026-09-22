@@ -76,7 +76,6 @@ function legacyTask(detail: TaskDetail): Task {
     permission_mode: detail.permissionMode,
     worktree_source: detail.worktreeSource,
     worktree_branch: detail.worktreeBranch,
-    source_ticket_url: detail.sourceTicketUrl,
     depends_on: detail.dependsOn,
     project_id: detail.projectId,
     created_at: detail.createdAt,

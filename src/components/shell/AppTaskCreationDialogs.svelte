@@ -33,7 +33,6 @@
       {projectPath}
       {projectName}
       promptSeed={request.request.initialPrompt}
-      sourceTicketUrlSeed={request.request.sourceTicketUrl ?? null}
       titleSeed={request.request.title ?? null}
       worktreeSourceSeed={request.request.worktreeSource ?? null}
       worktreeBranchSeed={request.request.worktreeBranch ?? null}

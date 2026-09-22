@@ -182,9 +182,8 @@
 {/snippet}
 
 {#if isEmpty}
-  <!-- Nothing linked means no list to collapse, so the card shrinks to the row the
-       source ticket uses: icon, section heading, add affordance. The host reads
-       data-card-layout="row" to give both rows the same padding in the task inspector. -->
+  <!-- Nothing linked means no list to collapse, so the card shrinks to one row.
+       The host reads data-card-layout="row" to apply matching task-inspector padding. -->
   <section
     data-task-info-card="pull-requests"
     data-card-sizing="natural"

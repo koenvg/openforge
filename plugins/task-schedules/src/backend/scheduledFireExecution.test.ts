@@ -368,7 +368,6 @@ function makeScheduleTask(id: string, status: 'backlog' | 'doing' | 'done'): Tas
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    source_ticket_url: null,
     depends_on: [],
     project_id: projectId,
     created_at: 0,

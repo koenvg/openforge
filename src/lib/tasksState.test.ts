@@ -24,7 +24,6 @@ function task(id: string, projectId = 'P-1'): TaskDetail {
     createdAt: 1,
     updatedAt: 1,
     labels: [],
-    sourceTicketUrl: null,
     agent: null,
     permissionMode: null,
     worktreeSource: null,

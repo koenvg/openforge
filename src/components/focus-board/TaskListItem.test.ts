@@ -25,7 +25,6 @@ const baseTask: TaskDetail = {
   permissionMode: null,
   worktreeSource: null,
   worktreeBranch: null,
-  sourceTicketUrl: null,
   dependsOn: [],
   labels: [],
   createdAt: 1000,

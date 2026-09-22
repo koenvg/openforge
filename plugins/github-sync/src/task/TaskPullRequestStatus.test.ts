@@ -89,7 +89,6 @@ const task: TaskDetail = {
   updatedAt: 2000,
   promptPreview: 'Test task',
   labels: [],
-  sourceTicketUrl: null,
   prompt: 'Test task',
   agent: null,
   permissionMode: null,
@@ -625,8 +624,8 @@ describe('GitHub Sync Task pull request section', () => {
     })
   })
 
-  // The empty state mirrors the source ticket row in the same task panel: one titled row
-  // with an add affordance, no list controls and no placeholder box.
+  // The empty state is one titled row with an add affordance, no list controls
+  // and no placeholder box.
   describe('empty state', () => {
     const emptyInvoke = () => vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return []

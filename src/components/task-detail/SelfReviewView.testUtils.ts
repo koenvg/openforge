@@ -80,7 +80,6 @@ export const baseTask: Task = {
 	permission_mode: null,
 	worktree_source: null,
 	worktree_branch: null,
-	source_ticket_url: null,
 	depends_on: [],
 	created_at: Date.now(),
 	updated_at: Date.now(),

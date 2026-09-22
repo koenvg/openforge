@@ -106,19 +106,6 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             publish_task_changed(state, &id, project_id.as_deref());
             Ok(serde_json::Value::Null)
         }
-        "update_task_source_ticket_url" => {
-            let id = payload_string(&request.payload, "id")?;
-            let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_task_source_ticket_url(&id, source_ticket_url.as_deref())
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task source ticket url: {e}"),
-                    )
-                })?;
-            Ok(serde_json::Value::Null)
-        }
         "remove_task_dependency" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let dependency_task_id = payload_string(&request.payload, "dependencyTaskId")?;
@@ -289,7 +276,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
     let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
     let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
     let title = payload_optional_string(&request.payload, "title")?;
-    let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
     // A missing Task-level hierarchy override means the runtime inherits the project/global value.
     let task_display_title_updates_enabled = request
         .payload
@@ -311,7 +297,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
                 worktree_source: worktree_source.as_deref(),
                 worktree_branch: worktree_branch.as_deref(),
                 title: title.as_deref(),
-                source_ticket_url: source_ticket_url.as_deref(),
                 task_display_title_updates_enabled,
                 ai_provider: ai_provider.as_deref(),
             },

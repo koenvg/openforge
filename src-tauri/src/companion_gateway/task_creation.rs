@@ -114,7 +114,6 @@ impl CompanionTaskCreationService for DatabaseCompanionTaskCreator {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                source_ticket_url: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: Some(&provider),
             })

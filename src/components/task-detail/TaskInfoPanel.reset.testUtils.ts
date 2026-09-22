@@ -3,7 +3,6 @@ import {
   addTaskLabel,
   getProjectTaskLabels,
   removeTaskLabel,
-  updateTaskSourceTicketUrl,
   writeClipboardText,
 } from '../../lib/ipc'
 import { clearComponentRegistry } from '../../lib/plugin/componentRegistry'
@@ -24,7 +23,6 @@ function resetTaskInfoPanelTestState(): void {
   vi.mocked(getProjectTaskLabels).mockResolvedValue([])
   vi.mocked(addTaskLabel).mockResolvedValue(bugLabel)
   vi.mocked(removeTaskLabel).mockResolvedValue(undefined)
-  vi.mocked(updateTaskSourceTicketUrl).mockResolvedValue(undefined)
   vi.mocked(writeClipboardText).mockResolvedValue(undefined)
   localStorage.clear()
   clearCollapsedSections()

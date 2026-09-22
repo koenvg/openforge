@@ -14,7 +14,6 @@ function detail(id: string): TaskDetail {
     updatedAt: 1,
     promptPreview: id,
     labels: [],
-    sourceTicketUrl: null,
     prompt: `full prompt ${id}`,
     agent: null,
     permissionMode: null,

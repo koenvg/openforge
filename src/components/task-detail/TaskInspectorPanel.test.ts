@@ -39,7 +39,6 @@ vi.mock('../../lib/ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
   updateTaskTitle: vi.fn().mockResolvedValue(undefined),
-  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
@@ -59,7 +58,6 @@ const baseTask: TaskDetail = {
   permissionMode: null,
   worktreeSource: null,
   worktreeBranch: null,
-  sourceTicketUrl: null,
   dependsOn: [],
   labels: [],
   createdAt: 1700000000,

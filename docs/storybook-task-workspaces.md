@@ -8,7 +8,7 @@ KVG-4696 owns the host Focus Board, Attention Overview, Task Detail, and Self Re
 - `Pages/Attention Overview` mounts `AttentionOverviewDialog` directly. It supplies its own production modal. Stories exercise task and review navigation, lane switching, collapse, review visibility, deferred loading, and retry.
 - `Pages/Task Detail` and `Pages/Self Review` retain their foundation scenarios. Task Detail also has a narrow layout.
 - `Components/Board` covers task states, selection, dependencies, merging, label filters, text filters, and empty lanes.
-- `Components/Task Workspace` covers the inspector, toolbar, source ticket link, change summary, and host agent panel.
+- `Components/Task Workspace` covers the inspector, toolbar, change summary, and host agent panel.
 - `Components/Self Review` covers changed files, diff states, feedback, and repository file previews. The panel frame constructs the production workspace controller and disposes it on unmount. It does not reproduce production markup.
 
 ## Ownership

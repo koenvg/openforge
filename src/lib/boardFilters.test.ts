@@ -31,7 +31,6 @@ function task(id: string, status: TaskDetail['status'] = 'doing'): TaskDetail {
     permissionMode: null,
     worktreeSource: null,
     worktreeBranch: null,
-    sourceTicketUrl: null,
     dependsOn: [],
     projectId: 'P-1',
     createdAt: 0,

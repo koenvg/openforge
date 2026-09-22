@@ -6,7 +6,6 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
   addTaskLabel: vi.fn().mockResolvedValue(null),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
-  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
   getPullRequests: vi.fn().mockResolvedValue([]),
   forceGithubSync: vi.fn().mockResolvedValue({}),
   deleteTask: vi.fn().mockResolvedValue(undefined),

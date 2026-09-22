@@ -528,10 +528,6 @@
     {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-2\"","tokens":["min-w-0"],"count":1,"reason":"Allow review actions to wrap within the workspace."},
     {"tag":"div","context":"class=\"flex min-w-0 flex-wrap items-center gap-2.5\"","tokens":["min-w-0"],"count":1,"reason":"Keep feedback actions inside narrow hosts by wrapping the action row."}
   ],
-  "src/components/task-detail/SourceTicketLink.svelte": [
-    {"tag":"span","context":"class=\"w-3 shrink-0\"","tokens":["w-3"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
-    {"tag":"div","context":"class=\"flex-1 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
-  ],
   "src/components/task-detail/TaskDetailToolbar.svelte": [
     {"tag":"style","context":".toolbar-title-editor","tokens":["width: 18rem"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"style","context":".toolbar-title","tokens":["max-width: 18rem"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},

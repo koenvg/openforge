@@ -54,7 +54,6 @@ const makeTask = (id: string, status: BoardStatus): TaskDetail => ({
   permissionMode: 'default',
   worktreeSource: null,
   worktreeBranch: null,
-  sourceTicketUrl: null,
   dependsOn: [],
   labels: [],
 })

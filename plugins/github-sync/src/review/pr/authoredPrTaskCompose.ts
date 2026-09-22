@@ -9,7 +9,6 @@ export function composeRequestForAuthoredPr(
     projectId,
     initialPrompt: `Continue work on PR #${pr.number}: ${pr.title}`,
     title: pr.title,
-    sourceTicketUrl: pr.html_url,
     worktreeSource: 'existingBranch',
     worktreeBranch: pr.head_ref,
   }

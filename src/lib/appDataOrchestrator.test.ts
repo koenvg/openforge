@@ -61,7 +61,6 @@ const detail: TaskDetail = {
   createdAt: 1,
   updatedAt: 2,
   labels: [],
-  sourceTicketUrl: null,
   agent: null,
   permissionMode: null,
   worktreeSource: null,

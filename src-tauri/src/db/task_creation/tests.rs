@@ -103,7 +103,6 @@ fn test_create_task_with_metadata_normalizes_and_deduplicates_label_names() {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                source_ticket_url: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             },
@@ -172,7 +171,6 @@ fn test_create_task_with_metadata_rolls_back_every_write_when_label_assignment_f
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                source_ticket_url: None,
                 task_display_title_updates_enabled: Some(false),
                 ai_provider: Some("opencode"),
             },
@@ -272,7 +270,6 @@ fn test_create_task_with_options_persists_manual_title() {
             worktree_source: None,
             worktree_branch: None,
             title: Some("  Custom title  "),
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -307,7 +304,6 @@ fn test_task_id_prefix_prefers_project_override() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -379,7 +375,6 @@ fn test_create_task_snapshots_task_config_when_provided() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            source_ticket_url: None,
             task_display_title_updates_enabled: Some(false),
             ai_provider: Some("opencode"),
         })
@@ -417,7 +412,6 @@ fn test_create_task_with_options_blank_title_falls_back_to_null() {
             worktree_source: None,
             worktree_branch: None,
             title: Some("   "),
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -426,83 +420,6 @@ fn test_create_task_with_options_blank_title_falls_back_to_null() {
     assert_eq!(task.title, None);
     let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
     assert_eq!(retrieved.title, None);
-
-    drop(db);
-}
-
-#[test]
-fn test_create_task_with_options_persists_source_ticket_url() {
-    let (db, _temp_dir) = make_test_db("create_task_options_source_ticket");
-
-    let url = "https://github.com/koenvg/openforge/issues/1294";
-    let task = db
-        .create_task_with_options(super::NewTaskOptions {
-            initial_prompt: "Do the work",
-            status: "backlog",
-            project_id: None,
-            prompt: None,
-            permission_mode: None,
-            worktree_source: None,
-            worktree_branch: None,
-            title: None,
-            source_ticket_url: Some(url),
-            task_display_title_updates_enabled: None,
-            ai_provider: None,
-        })
-        .expect("create failed");
-
-    assert_eq!(task.source_ticket_url.as_deref(), Some(url));
-
-    // Round-trips through the single-row read path.
-    let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-    assert_eq!(retrieved.source_ticket_url.as_deref(), Some(url));
-
-    // And through the bulk read path.
-    let all = db.get_all_tasks().expect("get_all failed");
-    let found = all.iter().find(|t| t.id == task.id).expect("task missing");
-    assert_eq!(found.source_ticket_url.as_deref(), Some(url));
-
-    drop(db);
-}
-
-#[test]
-fn test_create_task_with_options_blank_source_ticket_url_falls_back_to_null() {
-    let (db, _temp_dir) = make_test_db("create_task_options_blank_source_ticket");
-
-    let task = db
-        .create_task_with_options(super::NewTaskOptions {
-            initial_prompt: "Do the work",
-            status: "backlog",
-            project_id: None,
-            prompt: None,
-            permission_mode: None,
-            worktree_source: None,
-            worktree_branch: None,
-            title: None,
-            source_ticket_url: Some("   "),
-            task_display_title_updates_enabled: None,
-            ai_provider: None,
-        })
-        .expect("create failed");
-
-    assert_eq!(task.source_ticket_url, None);
-    let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-    assert_eq!(retrieved.source_ticket_url, None);
-
-    drop(db);
-}
-
-#[test]
-fn test_create_task_defaults_source_ticket_url_to_none() {
-    let (db, _temp_dir) = make_test_db("create_task_source_ticket_default_none");
-
-    let task = db
-        .create_task("Original", "backlog", None, None, None)
-        .expect("create failed");
-
-    assert_eq!(task.source_ticket_url, None);
-    let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-    assert_eq!(retrieved.source_ticket_url, None);
 
     drop(db);
 }
@@ -818,7 +735,6 @@ fn concurrent_active_task_creation_enforces_the_project_limit_atomically() {
                         worktree_source: None,
                         worktree_branch: None,
                         title: None,
-                        source_ticket_url: None,
                         task_display_title_updates_enabled: None,
                         ai_provider: None,
                     },

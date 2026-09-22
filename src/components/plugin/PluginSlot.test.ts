@@ -61,7 +61,6 @@ function taskDetail(): TaskDetail {
     updatedAt: 2,
     promptPreview: 'Cached authoring prompt',
     labels: [],
-    sourceTicketUrl: null,
     prompt: 'Cached authoring prompt',
     agent: 'pi',
     permissionMode: null,

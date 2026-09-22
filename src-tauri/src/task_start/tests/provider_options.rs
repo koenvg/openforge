@@ -29,7 +29,6 @@ fn start_context_resolves_saved_provider_override() {
                 worktree_source: Some("disabled"),
                 worktree_branch: None,
                 title: None,
-                source_ticket_url: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })
@@ -83,7 +82,6 @@ async fn pi_start_preserves_disable_model_invocation_skill_command_with_generate
             worktree_source: Some("disabled"),
             worktree_branch: None,
             title: None,
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: Some("pi"),
         })

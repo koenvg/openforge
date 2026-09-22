@@ -58,8 +58,6 @@ export interface CreateTaskOptions {
   worktreeBranch?: string | null
   /** Explicit display title; null/empty falls back to the prompt-derived title. */
   title?: string | null
-  /** Optional link to the source ticket (e.g. GitHub issue / Jira URL); null/empty stores nothing. */
-  sourceTicketUrl?: string | null
   /** Task-level title-auto-update override; omit to inherit the project/global default. */
   taskDisplayTitleUpdatesEnabled?: boolean
   /** Task-level AI provider override; null/omit to inherit the project/global default. */
@@ -73,11 +71,10 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     worktreeSource = null,
     worktreeBranch = null,
     title = null,
-    sourceTicketUrl = null,
     taskDisplayTitleUpdatesEnabled,
     aiProvider = null,
   } = options
-  const task = await invoke<RawTaskDetail>('create_task', { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, taskDisplayTitleUpdatesEnabled, aiProvider })
+  const task = await invoke<RawTaskDetail>('create_task', { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, taskDisplayTitleUpdatesEnabled, aiProvider })
   return normalizeTaskDetail(task)
 }
 
@@ -89,9 +86,6 @@ export async function updateTaskTitle(id: string, title: string): Promise<void> 
   return invoke("update_task_title", { id, title });
 }
 
-export async function updateTaskSourceTicketUrl(id: string, sourceTicketUrl: string | null): Promise<void> {
-  return invoke("update_task_source_ticket_url", { id, sourceTicketUrl });
-}
 
 export async function removeTaskDependency(taskId: string, dependencyTaskId: string): Promise<void> {
   return invoke('remove_task_dependency', { taskId, dependencyTaskId })

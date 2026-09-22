@@ -19,7 +19,6 @@ function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     permissionMode: null,
     worktreeSource: null,
     worktreeBranch: null,
-    sourceTicketUrl: null,
     dependsOn: [],
     projectId: 'project-1',
     createdAt: 1000,

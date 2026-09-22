@@ -22,7 +22,7 @@
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
-  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, worktreeSourceSeed = null, worktreeBranchSeed = null, onClose, onTaskSaved, onTaskCreated }: Props = $props()
+  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', titleSeed = null, worktreeSourceSeed = null, worktreeBranchSeed = null, onClose, onTaskSaved, onTaskCreated }: Props = $props()
   const dialogTitle = $derived(mode === 'create' ? 'Create task' : 'Edit task')
 
   const workflow = createTaskCreationWorkflow(productionTaskCreationAdapter)
@@ -35,7 +35,7 @@
   const injectionProvider = $derived(mode === 'create' ? view.draft.aiProvider : (task?.agent ?? null))
 
   function workflowInput() {
-    return { projectId: $activeProjectId, mode, task, projectPath, promptSeed, sourceTicketUrlSeed, titleSeed,
+    return { projectId: $activeProjectId, mode, task, projectPath, promptSeed, titleSeed,
       worktreeSourceSeed, worktreeBranchSeed, onClose, onTaskSaved, onTaskCreated }
   }
   untrack(() => workflow.configure(workflowInput()))

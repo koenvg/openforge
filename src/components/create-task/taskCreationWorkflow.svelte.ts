@@ -13,7 +13,6 @@ export interface TaskCreationContext {
   task?: TaskDetail | null
   projectPath?: string | null
   promptSeed?: string
-  sourceTicketUrlSeed?: string | null
   titleSeed?: string | null
   worktreeSourceSeed?: WorktreeSource | null
   worktreeBranchSeed?: string | null
@@ -47,7 +46,6 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   })
   let lastPromptSource: string | null = null
   let lastTitleSeed: string | null | undefined = null
-  let lastSourceTicketSeed: string | null | undefined = null
   let lastWorktreeSourceSeed: WorktreeSource | null | undefined = null
   let lastWorktreeBranchSeed: string | null | undefined = null
   let branchLoadRun = 0
@@ -69,7 +67,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
       state.promptRevision++
     }
     syncRetentionTarget()
-    if (context.titleSeed === lastTitleSeed && context.sourceTicketUrlSeed === lastSourceTicketSeed
+    if (context.titleSeed === lastTitleSeed
       && context.worktreeSourceSeed === lastWorktreeSourceSeed && context.worktreeBranchSeed === lastWorktreeBranchSeed) return
     applySeedsToDraft()
     applyWorktreeSeed(state.branchList.status === 'ready' ? dedupeBranchesForSelector(state.branchList.branches) : [])
@@ -111,9 +109,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
 
   function applySeedsToDraft() {
     state.draft.title = context.titleSeed ?? ''
-    state.draft.sourceTicketUrl = context.sourceTicketUrlSeed ?? ''
     lastTitleSeed = context.titleSeed
-    lastSourceTicketSeed = context.sourceTicketUrlSeed
     lastWorktreeSourceSeed = context.worktreeSourceSeed
     lastWorktreeBranchSeed = context.worktreeBranchSeed
   }
@@ -256,7 +252,6 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
           {
             ...getWorktreeOptions(state.draft),
             title: state.draft.title.trim() || null,
-            sourceTicketUrl: state.draft.sourceTicketUrl.trim() || null,
             taskDisplayTitleUpdatesEnabled: state.draft.taskDisplayTitleUpdatesEnabled,
             aiProvider: state.draft.aiProvider,
           }

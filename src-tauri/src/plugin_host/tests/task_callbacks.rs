@@ -318,7 +318,6 @@ async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
                 &json!({
                     "projectId": "P-1",
                     "initialPrompt": "Review issue 42",
-                    "sourceTicketUrl": "https://example.com/issues/42"
                 }),
             )
             .await

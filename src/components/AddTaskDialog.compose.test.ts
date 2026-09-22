@@ -131,24 +131,6 @@ describe('AddTaskDialog seeding', () => {
     expect(promptTextarea()?.value).toBe('')
   })
 
-  it('passes the seeded source ticket url through to createTask', async () => {
-    render(AddTaskDialog, {
-      props: {
-        mode: 'create',
-        promptSeed: SEED,
-        sourceTicketUrlSeed: 'https://github.com/me/app/issues/412',
-        onTaskCreated: vi.fn(),
-      },
-    })
-
-    await waitFor(() => expect(promptTextarea()?.value).toBe(SEED))
-    await clickAddToBacklog()
-
-    await waitFor(() => expect(createTask).toHaveBeenCalled())
-    expect(vi.mocked(createTask).mock.calls[0][4]).toMatchObject({
-      sourceTicketUrl: 'https://github.com/me/app/issues/412',
-    })
-  })
 
   it('passes the seeded title through to createTask', async () => {
     render(AddTaskDialog, {

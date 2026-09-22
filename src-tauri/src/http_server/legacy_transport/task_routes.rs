@@ -150,7 +150,6 @@ pub async fn create_task_handler(
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                source_ticket_url: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             },

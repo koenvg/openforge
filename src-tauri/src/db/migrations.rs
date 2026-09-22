@@ -2182,6 +2182,23 @@ INSERT OR IGNORE INTO config (key, value)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     })
     .down(""),
+    // Source tickets are no longer part of the Task model. Keep the historical add
+    // migration above for stable user_version ordering, then remove the stored data.
+    M::up_with_hook("", |tx| {
+        let has_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'source_ticket_url'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if has_column {
+            tx.execute("ALTER TABLE tasks DROP COLUMN source_ticket_url", [])
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    })
+    .down("ALTER TABLE tasks ADD COLUMN source_ticket_url TEXT"),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2272,7 +2289,6 @@ pub(super) fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         ("worktree_branch", false),
         ("title", false),
         ("title_source", false),
-        ("source_ticket_url", false),
     ] {
         let exists: bool = conn.query_row(
             &format!(
@@ -3336,6 +3352,26 @@ mod tests {
             LATEST_USER_VERSION,
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
+        );
+    }
+
+    #[test]
+    fn test_fresh_schema_omits_source_ticket_url() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create fresh database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        let has_column: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'source_ticket_url'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("inspect tasks columns");
+
+        assert!(
+            !has_column,
+            "fresh task schema should not contain source_ticket_url"
         );
     }
 

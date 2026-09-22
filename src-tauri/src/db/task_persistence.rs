@@ -9,14 +9,14 @@ use super::{
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
 
-pub(super) const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
+pub(super) const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch";
 
 macro_rules! task_row_query {
     ($suffix:literal) => {
         concat!(
             "SELECT id, initial_prompt, status, project_id, created_at, updated_at, ",
             "prompt, agent, permission_mode, title, title_source, title_generated_at, ",
-            "worktree_source, worktree_branch, source_ticket_url FROM tasks ",
+            "worktree_source, worktree_branch FROM tasks ",
             $suffix
         )
     };
@@ -27,7 +27,7 @@ macro_rules! compact_task_row_query {
         concat!(
             "SELECT id, status, project_id, created_at, updated_at, agent, permission_mode, ",
             "worktree_source, worktree_branch, ",
-            "title, prompt_preview, title_source, title_generated_at, source_ticket_url FROM tasks ",
+            "title, prompt_preview, title_source, title_generated_at FROM tasks ",
             $suffix
         )
     };
@@ -99,7 +99,6 @@ pub(super) fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
         title_generated_at: row.get(11)?,
         worktree_source: row.get(12)?,
         worktree_branch: row.get(13)?,
-        source_ticket_url: row.get(14)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -122,7 +121,6 @@ fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
         worktree_branch: row.get(8)?,
         title_source: row.get(11)?,
         title_generated_at: row.get(12)?,
-        source_ticket_url: row.get(13)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })

@@ -65,7 +65,6 @@ pub struct NewTaskOptions<'a> {
     pub worktree_source: Option<&'a str>,
     pub worktree_branch: Option<&'a str>,
     pub title: Option<&'a str>,
-    pub source_ticket_url: Option<&'a str>,
     /// When `Some`, snapshot `task_display_title_metadata_updates_enabled` into
     /// `task_config` at creation. `None` leaves it unset.
     pub task_display_title_updates_enabled: Option<bool>,
@@ -142,7 +141,6 @@ struct NormalizedTaskOptions<'a> {
     worktree_source: Option<String>,
     worktree_branch: Option<String>,
     title: Option<String>,
-    source_ticket_url: Option<String>,
     task_display_title_updates_enabled: Option<bool>,
     ai_provider: Option<&'a str>,
 }
@@ -160,7 +158,6 @@ fn normalize_task_options<'a>(
         worktree_source,
         worktree_branch,
         title,
-        source_ticket_url,
         task_display_title_updates_enabled,
         ai_provider,
     } = opts;
@@ -178,10 +175,6 @@ fn normalize_task_options<'a>(
         worktree_source,
         worktree_branch,
         title: title
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string),
-        source_ticket_url: source_ticket_url
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string),
@@ -269,8 +262,8 @@ fn insert_task_row(
     let prompt_preview = super::tasks::prompt_preview(opts.initial_prompt);
 
     conn.execute(
-        "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url, prompt_preview)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, prompt_preview)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         rusqlite::params![
             &task_id,
             opts.initial_prompt,
@@ -287,7 +280,6 @@ fn insert_task_row(
             title_source.as_deref(),
             None::<i64>,
             execution_started_at,
-            opts.source_ticket_url.as_deref(),
             prompt_preview,
         ],
     )?;
@@ -307,7 +299,6 @@ fn insert_task_row(
         title: opts.title.clone(),
         title_source,
         title_generated_at: None,
-        source_ticket_url: opts.source_ticket_url.clone(),
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -462,7 +453,6 @@ impl super::Database {
             worktree_source: worktree.source,
             worktree_branch: worktree.branch,
             title: None,
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })

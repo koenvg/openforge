@@ -729,7 +729,6 @@ fn refresh_task_display_title_once_skips_manual_title() {
             worktree_source: None,
             worktree_branch: None,
             title: Some("Manual title"),
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })

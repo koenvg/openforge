@@ -17,7 +17,6 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
     permission_mode: null,
     worktree_source: null,
     worktree_branch: null,
-    source_ticket_url: null,
     depends_on: [],
     project_id: null,
     created_at: 1000,

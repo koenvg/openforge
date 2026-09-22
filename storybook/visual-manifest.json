@@ -3815,50 +3815,6 @@
   },
   {
     "catalog": "components",
-    "story": "components-task-workspace-source-ticket--empty",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 640,
-      "height": 280
-    },
-    "ready": "text=Add ticket link",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-workspace-source-ticket--linked",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 640,
-      "height": 280
-    },
-    "ready": "text=openforge/openforge#42",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-workspace-source-ticket--long-content",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 640,
-      "height": 280
-    },
-    "ready": "text=issues.example.com",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
-    "story": "components-task-workspace-source-ticket--editing",
-    "theme": "openforge-light",
-    "viewport": {
-      "width": 640,
-      "height": 280
-    },
-    "ready": "input",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "components",
     "story": "components-task-workspace-changes--clean",
     "theme": "openforge-light",
     "viewport": {

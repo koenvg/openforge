@@ -65,7 +65,6 @@ import {
   startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
-  updateTaskSourceTicketUrl,
   writePty,
 } from "./ipc";
 
@@ -428,7 +427,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: null,
 			worktreeBranch: null,
 			title: null,
-			sourceTicketUrl: null,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});
@@ -466,7 +464,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: "existingBranch",
 			worktreeBranch: "feature/open-pr",
 			title: null,
-			sourceTicketUrl: null,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});
@@ -503,7 +500,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: "disabled",
 			worktreeBranch: null,
 			title: null,
-			sourceTicketUrl: null,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});
@@ -533,23 +529,6 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenCalledWith("update_task", {
 			id: "T-42",
 			initialPrompt: "Updated prompt",
-		});
-	});
-	it("sends camelCase sourceTicketUrl when updating a task's source ticket link", async () => {
-		await updateTaskSourceTicketUrl("T-42", "https://github.com/koenvg/openforge/issues/1294");
-
-		expect(invokeMock).toHaveBeenCalledWith("update_task_source_ticket_url", {
-			id: "T-42",
-			sourceTicketUrl: "https://github.com/koenvg/openforge/issues/1294",
-		});
-	});
-
-	it("sends a null sourceTicketUrl when clearing a task's source ticket link", async () => {
-		await updateTaskSourceTicketUrl("T-42", null);
-
-		expect(invokeMock).toHaveBeenCalledWith("update_task_source_ticket_url", {
-			id: "T-42",
-			sourceTicketUrl: null,
 		});
 	});
 

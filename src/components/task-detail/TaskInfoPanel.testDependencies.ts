@@ -2,7 +2,6 @@ import {
   addTaskLabel,
   getProjectTaskLabels,
   removeTaskLabel,
-  updateTaskSourceTicketUrl,
   writeClipboardText,
 } from '../../lib/ipc'
 import {
@@ -25,7 +24,6 @@ function getTaskInfoPanelTestDependencies() {
     removeTaskLabel,
     tasks,
     ticketPrs,
-    updateTaskSourceTicketUrl,
     writeClipboardText,
   }
 }

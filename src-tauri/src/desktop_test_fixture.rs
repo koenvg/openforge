@@ -209,7 +209,6 @@ pub(crate) fn run_fixture(
             worktree_source: Some("disabled"),
             worktree_branch: None,
             title: Some(TASK_TITLE),
-            source_ticket_url: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })

@@ -10,7 +10,6 @@ export const CustomTitle: CreationStory = {
     await taskReady(context)
     await userEvent.click(queries(context).getByRole('radio', { name: 'Custom title' }))
     await userEvent.type(queries(context).getByRole('textbox', { name: 'Task title' }), 'Keyboard navigation audit')
-    await userEvent.type(queries(context).getByRole('textbox', { name: 'Source ticket link' }), 'https://github.com/example/catalog/issues/42')
     await expect(queries(context).getByRole('textbox', { name: 'Task title' })).toHaveValue('Keyboard navigation audit')
     creationReady(context)
   },

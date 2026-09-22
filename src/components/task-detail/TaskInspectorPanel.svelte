@@ -47,7 +47,7 @@
 {#if task === null}
   <aside data-testid="task-inspector-panel" class="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto border-l border-of-border bg-of-surface p-6" aria-label="Task inspector">
     <p class="text-sm font-medium text-of-text/60">Select a task to see details</p>
-    <p class="max-w-52 text-center text-xs text-of-text/45">Ticket, pull requests, prompt, and labels stay visible here.</p>
+    <p class="max-w-52 text-center text-xs text-of-text/45">Pull requests, prompt, and labels stay visible here.</p>
   </aside>
 {:else}
   <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-of-border bg-of-surface" aria-label="Task inspector for {task.id}">
@@ -127,8 +127,8 @@
     box-shadow: none;
   }
 
-  /* Single-row cards (the source ticket chip, the empty pull request row) share the
-     header rows' height and padding so their icons and labels line up down the panel. */
+  /* Single-row cards share the header rows' height and padding so their icons and labels
+     line up down the panel. */
   .task-inspector :global([data-card-layout="row"]) {
     min-height: 3.5rem;
     justify-content: center;

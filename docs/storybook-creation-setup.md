@@ -9,7 +9,7 @@ Page stories mount the production dialogs in `BoardPage`, which uses the shared 
 - Task Creation covers an empty prompt, inherited provider and worktree defaults, project-directory execution, a repository without commits, loading/default failures, missing-branch validation, pending and failed saves, backlog/start completion, cancellation, prompt edits, and long/narrow content.
 - Project Setup covers local folder selection, cloning, new repositories, remembered parent folders, required-name validation, pending and failed creation, completion, picker cancellation, dismissal, and long/narrow content.
 - Branch divergence covers local/remote commits, stale comparisons, capped long lists, narrow layout, and all three decisions.
-- Component stories exercise custom titles, source ticket links, provider/permission controls, existing branches, disabled worktrees, image pasting and preview, oversized-image validation, prompt editing, command completion, file mentions, and keyboard cancellation.
+- Component stories exercise custom titles, provider/permission controls, existing branches, disabled worktrees, image pasting and preview, oversized-image validation, prompt editing, command completion, file mentions, and keyboard cancellation.
 
 The local desktop adapter supplies declared responses and failures. Pending states use its deferred-command support. The shared environment resets stores and both browser storage areas on remount. Reopening a dialog also recreates the page host, resetting its layout. Story hosts ignore completion callbacks after destruction. Image stories dispatch a local paste event with an in-memory file; they do not request clipboard permission. Voice recording is not exercised here.
 

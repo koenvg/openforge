@@ -118,7 +118,7 @@ impl Tasks<'_> {
         }
 
         let sql = format!(
-            "SELECT tasks.id, tasks.status, tasks.project_id, tasks.created_at, tasks.updated_at, tasks.title, tasks.source_ticket_url, tasks.prompt_preview FROM tasks WHERE {} ORDER BY tasks.updated_at DESC, tasks.id DESC LIMIT ?",
+            "SELECT tasks.id, tasks.status, tasks.project_id, tasks.created_at, tasks.updated_at, tasks.title, tasks.prompt_preview FROM tasks WHERE {} ORDER BY tasks.updated_at DESC, tasks.id DESC LIMIT ?",
             conditions.join(" AND ")
         );
         parameters.push(Value::Integer((COMPLETED_TASK_PAGE_SIZE + 1) as i64));
@@ -283,7 +283,7 @@ fn escaped_like_pattern(search: &str) -> String {
 fn task_summary_from_row(row: &rusqlite::Row<'_>) -> Result<TaskSummary> {
     let id: String = row.get(0)?;
     let explicit_title: Option<String> = row.get(5)?;
-    let prompt_preview: String = row.get(7)?;
+    let prompt_preview: String = row.get(6)?;
     Ok(TaskSummary {
         title: resolved_projection_title(&id, explicit_title.as_deref(), &prompt_preview),
         id,
@@ -291,7 +291,6 @@ fn task_summary_from_row(row: &rusqlite::Row<'_>) -> Result<TaskSummary> {
         project_id: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
-        source_ticket_url: row.get(6)?,
         prompt_preview,
         depends_on: Vec::new(),
         labels: Vec::new(),

@@ -33,12 +33,11 @@ const pr: AuthoredPullRequest = {
 }
 
 describe('composeRequestForAuthoredPr', () => {
-  it('seeds compose onto the pull request branch and URL', () => {
+  it('seeds compose onto the pull request branch', () => {
     expect(composeRequestForAuthoredPr('project-1', pr)).toEqual({
       projectId: 'project-1',
       initialPrompt: 'Continue work on PR #42: Fix authentication middleware',
       title: 'Fix authentication middleware',
-      sourceTicketUrl: 'https://github.com/acme/repo/pull/42',
       worktreeSource: 'existingBranch',
       worktreeBranch: 'fix/auth',
     })

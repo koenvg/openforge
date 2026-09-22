@@ -405,13 +405,13 @@
     "baseRevision": "b5083aa6c8d80f7bf8a4e64ec28dbd1d876d1a97",
     "upstreamRemovalRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
     "counts": {
-      "total": 443,
+      "total": 439,
       "catalogs": {
         "pages": 238,
-        "components": 205
+        "components": 201
       },
       "themes": {
-        "openforge-light": 274,
+        "openforge-light": 270,
         "openforge-dark": 169
       },
       "viewports": {
@@ -460,7 +460,7 @@
         "900x640": 1,
         "320x640": 2,
         "1920x1080": 2,
-        "640x280": 16,
+        "640x280": 12,
         "420x800": 7,
         "1600x820": 2,
         "1600x900": 4,
@@ -486,7 +486,7 @@
       "components/components-github-sync-walkthrough-button--generating--openforge-dark--480x320",
       "components/components-github-sync-walkthrough-button--ready--openforge-light--480x320"
     ],
-    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, and KVG-5142 removes 12 redundant theme captures while retaining each exact state or layout in the opposite theme. The integrated manifest now has 443 cases."
+    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, KVG-5142 removes 12 redundant theme captures, and KVG-4595 removes four source-ticket captures with the resulting inspector layout retained. The integrated manifest now has 439 cases."
   },
   "review": {
     "changedImages": [
@@ -2902,27 +2902,39 @@
     },
     {
       "identity": "components/components-task-workspace-source-ticket--empty--openforge-light--640x280",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-source-ticket--empty in openforge-light at 640x280.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Empty source-ticket task-info row and add affordance.",
+      "rationale": "The source-ticket feature was removed. The backlog inspector now captures the resulting task-info layout without that row.",
+      "appearanceCoverage": "components/components-task-workspace-inspector--backlog--openforge-light--420x800",
+      "storySource": "storybook/stories/components/TaskInspector.stories.ts",
+      "originalStoryExport": "Backlog"
     },
     {
       "identity": "components/components-task-workspace-source-ticket--linked--openforge-light--640x280",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-source-ticket--linked in openforge-light at 640x280.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Linked source-ticket task-info row.",
+      "rationale": "The source-ticket feature was removed. The backlog inspector now captures the task-info layout that replaced the linked row.",
+      "appearanceCoverage": "components/components-task-workspace-inspector--backlog--openforge-light--420x800",
+      "storySource": "storybook/stories/components/TaskInspector.stories.ts",
+      "originalStoryExport": "Backlog"
     },
     {
       "identity": "components/components-task-workspace-source-ticket--long-content--openforge-light--640x280",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-source-ticket--long-content in openforge-light at 640x280.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Long source-ticket content inside the task inspector.",
+      "rationale": "The source-ticket feature was removed. The backlog inspector now captures the remaining task-info layout without ticket content.",
+      "appearanceCoverage": "components/components-task-workspace-inspector--backlog--openforge-light--420x800",
+      "storySource": "storybook/stories/components/TaskInspector.stories.ts",
+      "originalStoryExport": "Backlog"
     },
     {
       "identity": "components/components-task-workspace-source-ticket--editing--openforge-light--640x280",
-      "disposition": "retained",
-      "risk": "Canonical components appearance for components-task-workspace-source-ticket--editing in openforge-light at 640x280.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Source-ticket editing state inside the task inspector.",
+      "rationale": "The source-ticket feature was removed. The backlog inspector now captures the task-info layout without ticket editing controls.",
+      "appearanceCoverage": "components/components-task-workspace-inspector--backlog--openforge-light--420x800",
+      "storySource": "storybook/stories/components/TaskInspector.stories.ts",
+      "originalStoryExport": "Backlog"
     },
     {
       "identity": "components/components-task-workspace-changes--clean--openforge-light--640x480",

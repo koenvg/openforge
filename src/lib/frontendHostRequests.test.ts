@@ -161,7 +161,6 @@ describe('frontend host renderer requests', () => {
         permission_mode: null,
         worktree_source: null,
         worktree_branch: null,
-        source_ticket_url: 'https://example.com/issues/42',
         depends_on: [],
         project_id: 'P-1',
         created_at: 1,
@@ -186,14 +185,12 @@ describe('frontend host renderer requests', () => {
       request: {
         projectId: 'P-1',
         initialPrompt: 'Review issue 42',
-        sourceTicketUrl: 'https://example.com/issues/42',
       },
     })
 
     expect(compose).toHaveBeenCalledWith({
       projectId: 'P-1',
       initialPrompt: 'Review issue 42',
-      sourceTicketUrl: 'https://example.com/issues/42',
     })
     expect(acknowledge).toHaveBeenCalledWith({
       correlationId: 'compose-1',

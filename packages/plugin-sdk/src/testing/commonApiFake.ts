@@ -303,7 +303,6 @@ function taskSummary(task: Task, labels: TaskLabel[] = []): TaskSummary {
     updatedAt: task.updated_at,
     promptPreview: testingTaskPromptPreview(task),
     labels: [...labels],
-    sourceTicketUrl: task.source_ticket_url,
   }
 }
 
@@ -913,7 +912,6 @@ export class TestingCommonApiFake {
             permission_mode: null,
             worktree_source: null,
             worktree_branch: null,
-            source_ticket_url: null,
             depends_on: request.dependsOn ?? [],
             project_id: request.projectId,
             created_at: 0,

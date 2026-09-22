@@ -12,29 +12,11 @@ import {
 const {
   activeSessions,
   ticketPrs,
-  updateTaskSourceTicketUrl,
   writeClipboardText,
 } = getTaskInfoPanelTestDependencies()
 
 describe('TaskInfoPanel details', () => {
   beforeEach(resetTaskInfoPanelTestState)
-
-  it('lets a source ticket link be added after creation and persists it through the typed IPC wrapper', async () => {
-    renderTaskInfoPanel()
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Add source ticket link' }))
-    await fireEvent.input(screen.getByLabelText('Source ticket link'), {
-      target: { value: 'https://github.com/koenvg/openforge/issues/1294' },
-    })
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(updateTaskSourceTicketUrl).toHaveBeenCalledWith(
-        'T-42',
-        'https://github.com/koenvg/openforge/issues/1294',
-      )
-    })
-  })
 
   it('shows a copyable resume command when the active session can be resumed', () => {
     activeSessions.set(new Map([

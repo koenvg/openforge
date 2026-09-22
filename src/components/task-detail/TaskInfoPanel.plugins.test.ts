@@ -14,19 +14,17 @@ const { mergingTaskIds } = getTaskInfoPanelTestDependencies()
 describe('TaskInfoPanel plugin sections', () => {
   beforeEach(resetTaskInfoPanelTestState)
 
-  it('hosts task UI sections after the prompt and the source ticket, and before Details', async () => {
+  it('hosts task UI sections after the prompt and before Details', async () => {
     registerTaskUiSectionPlugin()
 
     renderTaskInfoPanel()
 
     const section = await screen.findByTestId('plugin-slot-view')
     const prompt = requireElement(document.querySelector('[data-task-info-card="initial-prompt"]'), HTMLElement)
-    const sourceTicket = requireElement(screen.getByLabelText('Source ticket'), HTMLElement)
     const details = requireElement(document.querySelector('[data-task-info-card="details"]'), HTMLElement)
-    // Chronological order: the prompt that started the task, the ticket it came from,
-    // then whatever the plugins link to it. Details is reference material and goes last.
-    expect(Boolean(prompt.compareDocumentPosition(sourceTicket) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-    expect(Boolean(sourceTicket.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    // Chronological order: the prompt that started the task, then whatever the plugins link to it.
+    // Details is reference material and goes last.
+    expect(Boolean(prompt.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     expect(Boolean(section.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 
