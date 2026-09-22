@@ -254,22 +254,38 @@ mod tests {
 
     #[test]
     fn inherited_child_keeps_the_original_signal_exit_representation() {
-        let mut child = std::process::Command::new("/bin/sh")
-            .args(["-c", "kill -TERM $$"])
-            .spawn()
-            .unwrap();
+        struct TestChild {
+            process: std::process::Child,
+            reaped: bool,
+        }
+        impl Drop for TestChild {
+            fn drop(&mut self) {
+                if !self.reaped {
+                    let _ = self.process.kill();
+                }
+                // The inherited handle may already have consumed the exit status.
+                let _ = self.process.wait();
+            }
+        }
+
+        let mut child = TestChild {
+            process: std::process::Command::new("/bin/sh")
+                .args(["-c", "kill -TERM $$"])
+                .spawn()
+                .unwrap(),
+            reaped: false,
+        };
         let mut retained = ChildHandle::Inherited {
-            pid: child.id() as i32,
+            pid: child.process.id() as i32,
             exit: None,
         };
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         let code = loop {
             if let Some(code) = retained.try_wait().unwrap() {
+                child.reaped = true;
                 break code;
             }
             if std::time::Instant::now() >= deadline {
-                child.kill().unwrap();
-                child.wait().unwrap();
                 panic!("test-owned child failed to exit");
             }
             std::thread::sleep(std::time::Duration::from_millis(2));
