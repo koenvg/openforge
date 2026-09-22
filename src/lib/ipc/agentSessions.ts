@@ -84,7 +84,6 @@ export function startScopedAgentSession(
     projectId: request.projectId,
     checkoutRevision: request.checkoutRevision,
     initialInput: request.initialInput,
-    toolPolicy: request.toolPolicy,
   })
 }
 

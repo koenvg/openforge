@@ -37,6 +37,18 @@ mod tests {
     use crate::agent_lifecycle::AgentLifecycleEventKind;
 
     #[test]
+    fn shell_hook_transport_supports_task_and_scoped_owners() {
+        for contract in [
+            "OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID",
+            "/hooks/scoped-agent-lifecycle",
+            "providerSessionId",
+            "ptyInstanceId",
+        ] {
+            assert!(SOURCE.contains(contract), "missing {contract}");
+        }
+    }
+
+    #[test]
     fn shell_command_appends_the_legacy_url_as_a_quoted_trailing_argument() {
         let command = shell_command(
             "grok",

@@ -246,7 +246,6 @@ export function createPrReviewAgentSessionController(
         projectId: currentProjectId,
         checkoutRevision: currentPr.head_sha,
         initialInput: '',
-        toolPolicy: 'review-read-only',
       })
     })()
     pendingStartByScope.set(key, startPromise)

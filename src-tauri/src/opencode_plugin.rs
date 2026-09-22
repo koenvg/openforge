@@ -63,9 +63,11 @@ mod tests {
     fn opencode_plugin_reports_lifecycle_events_to_openforge_hook() {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("event: async"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_TASK_ID"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_SCOPED_SESSION_ID"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_PTY_INSTANCE_ID"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_HTTP_PORT"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("/hooks/agent-lifecycle"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("/hooks/scoped-agent-lifecycle"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("provider: \"opencode\""));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.created"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.status"));

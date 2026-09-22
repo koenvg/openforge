@@ -73,7 +73,6 @@ describe('Agent Sessions public SDK contract', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-sha',
       initialInput: 'Review this pull request',
-      toolPolicy: 'review-read-only',
     } satisfies StartScopedAgentSessionRequest
     const state = {
       id: 'sas-1',

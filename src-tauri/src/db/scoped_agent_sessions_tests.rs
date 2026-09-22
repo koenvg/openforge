@@ -17,7 +17,6 @@ fn new_session<'a>(
         project_id,
         checkout_revision: revision,
         provider: "claude-code",
-        tool_policy: "review-read-only",
         terminal_key,
         status: ScopedAgentSessionStatus::Starting,
         queue_sequence: None,
@@ -82,8 +81,20 @@ fn runtime_transitions_ignore_stale_pty_instances() {
         "scoped-agent-v1-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     ))
     .expect("create session");
-    db.mark_scoped_agent_session_running("sas-runtime", "claude-session-1", 41)
+    db.mark_scoped_agent_session_running("sas-runtime", Some("claude-session-1"), 41)
         .expect("mark running");
+
+    assert!(db
+        .set_scoped_agent_provider_session_id("sas-runtime", "claude-code", 41, "claude-session-1",)
+        .expect("accept matching provider identity"));
+    assert!(!db
+        .set_scoped_agent_provider_session_id(
+            "sas-runtime",
+            "claude-code",
+            41,
+            "claude-sub-session",
+        )
+        .expect("reject conflicting provider identity"));
 
     assert!(
         !db.finish_scoped_agent_session(
@@ -136,7 +147,7 @@ fn interactive_turns_are_fenced_by_pty_and_turn_identity() {
         "scoped-agent-v1-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     ))
     .expect("create session");
-    db.mark_scoped_agent_session_running("sas-turns", "claude-session", 41)
+    db.mark_scoped_agent_session_running("sas-turns", Some("claude-session"), 41)
         .expect("mark running");
 
     assert_eq!(
@@ -211,7 +222,7 @@ fn turn_transition_history_preserves_states_that_are_replaced_before_observation
         "scoped-agent-v1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     ))
     .expect("create session");
-    db.mark_scoped_agent_session_running("sas-history", "claude-session", 41)
+    db.mark_scoped_agent_session_running("sas-history", Some("claude-session"), 41)
         .expect("mark running");
 
     db.begin_scoped_agent_turn("sas-history", 41, "turn-a")
@@ -268,7 +279,6 @@ fn scheduler_queues_the_fifth_session_and_promotes_fifo() {
                 project_id: &project.id,
                 checkout_revision: "head-a",
                 provider: "claude-code",
-                tool_policy: "review-read-only",
                 terminal_key: &terminal_key,
                 status: ScopedAgentSessionStatus::Starting,
                 queue_sequence: None,
@@ -320,7 +330,6 @@ fn promotion_never_exceeds_the_execution_limit_when_another_start_claimed_the_sl
                 project_id: &project.id,
                 checkout_revision: "head-a",
                 provider: "claude-code",
-                tool_policy: "review-read-only",
                 terminal_key: &terminal_key,
                 status: ScopedAgentSessionStatus::Starting,
                 queue_sequence: None,

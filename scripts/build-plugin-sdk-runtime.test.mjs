@@ -51,9 +51,9 @@ describe('plugin SDK runtime artifact', () => {
           apiVersion: runtime.OPENFORGE_PLUGIN_API_VERSION,
           validNumber: runtime.parseStrictFiniteNumber('12.5'),
           invalidNumber: runtime.parseStrictFiniteNumber('12.5px'),
-          scopedAuthenticationError: new runtime.ScopedAgentSessionError(
-            'AUTHENTICATION_UNAVAILABLE',
-            'authenticate the normal provider first',
+          scopedCapacityError: new runtime.ScopedAgentSessionError(
+            'CAPACITY',
+            'Scoped Agent Session queue is full',
           ).code,
         }))
       `, generatedPath])
@@ -63,7 +63,7 @@ describe('plugin SDK runtime artifact', () => {
         apiVersion: sdk.OPENFORGE_PLUGIN_API_VERSION,
         validNumber: 12.5,
         invalidNumber: null,
-        scopedAuthenticationError: 'AUTHENTICATION_UNAVAILABLE',
+        scopedCapacityError: 'CAPACITY',
       })
     } finally {
       await rm(outDir, { recursive: true, force: true })

@@ -899,13 +899,11 @@ export type ScopedAgentSessionErrorCode =
   | 'INVALID_SCOPE'
   | 'DUPLICATE_SCOPE'
   | 'CAPACITY'
-  | 'UNSUPPORTED_TOOL_POLICY'
   | 'INPUT_TOO_LARGE'
   | 'PROJECT_NOT_FOUND'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'NOT_READY'
-  | 'AUTHENTICATION_UNAVAILABLE'
   | 'HOST_UNAVAILABLE'
   | 'INTERNAL'
 
@@ -924,7 +922,6 @@ export interface StartScopedAgentSessionRequest {
   projectId: string
   checkoutRevision: string
   initialInput: string
-  toolPolicy: string
 }
 
 export interface ScopedAgentSessionState {

@@ -28,7 +28,7 @@ function boundedJsonSnapshot(value) {
 }
 
 function lifecyclePayload(kind, rawEventType, rawStatusType = null, hookInput = null) {
-  const taskId = process.env.OPENFORGE_TASK_ID;
+  const taskId = process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID;
   const ptyInstanceId = Number(process.env.OPENFORGE_PTY_INSTANCE_ID);
   const port = process.env.OPENFORGE_HTTP_PORT;
 
@@ -117,7 +117,7 @@ function activeTurnStateKeyPart(value) {
 async function activeTurnStatePath() {
   const os = await import("node:os");
   const path = await import("node:path");
-  const taskId = activeTurnStateKeyPart(process.env.OPENFORGE_TASK_ID);
+  const taskId = activeTurnStateKeyPart(process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID);
   const ptyInstanceId = activeTurnStateKeyPart(process.env.OPENFORGE_PTY_INSTANCE_ID);
   return path.join(os.tmpdir(), `openforge-codex-turn-${taskId}-${ptyInstanceId}.json`);
 }
@@ -455,7 +455,7 @@ async function processCodexLifecycleEventUnlocked(kind, rawEventType, rawStatusT
 }
 
 async function processCodexLifecycleEvent(kind, rawEventType, rawStatusType, hookInput) {
-  if (!process.env.OPENFORGE_TASK_ID || !Number.isFinite(Number(process.env.OPENFORGE_PTY_INSTANCE_ID))) {
+  if (!(process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID) || !Number.isFinite(Number(process.env.OPENFORGE_PTY_INSTANCE_ID))) {
     return true;
   }
 

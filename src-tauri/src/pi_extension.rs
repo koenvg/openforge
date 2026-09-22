@@ -28,6 +28,12 @@ mod tests {
     use std::path::Path;
     use std::process::Command;
 
+    #[test]
+    fn pi_extension_transport_supports_task_and_scoped_owners() {
+        assert!(PI_EXTENSION_SOURCE.contains("OPENFORGE_SCOPED_SESSION_ID"));
+        assert!(PI_EXTENSION_SOURCE.contains("/hooks/scoped-agent-lifecycle"));
+    }
+
     const PI_EXTENSION_TEST_HARNESS: &str = r#"
 const piHandlers = new Map();
 const busHandlers = new Map();

@@ -31,9 +31,10 @@ async function openForgeNotificationConfig(payload) {
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
     if (bytesRead > 4096) throw new Error("notification configuration invalid");
     const config = JSON.parse(buffer.toString("utf8", 0, bytesRead));
+    const scoped = Boolean(process.env.OPENFORGE_SCOPED_SESSION_ID);
     if (config.version !== 1 || !Number.isInteger(config.port) || config.port < 1 || config.port > 65535
       || typeof config.token !== "string" || !/^[a-zA-Z0-9_-]{1,256}$/.test(config.token)
-      || config.owner?.Agent?.task_id !== payload.task_id || config.pty?.instance !== payload.pty_instance_id) throw new Error("notification configuration invalid");
+      || (!scoped && (config.owner?.Agent?.task_id !== payload.task_id || config.pty?.instance !== payload.pty_instance_id))) throw new Error("notification configuration invalid");
     return config;
   } finally { await file.close(); }
 }
@@ -43,12 +44,23 @@ async function deliverOpenForgeNotification(payload, legacyUrl, legacyBody, noti
   try { config = await openForgeNotificationConfig(payload); }
   catch { throw new Error("notification acceptance failed: private configuration unavailable"); }
   const { randomUUID } = await import("node:crypto");
+  const scoped = Boolean(config && process.env.OPENFORGE_SCOPED_SESSION_ID);
   // The bound belongs to the envelope, so it is taken after the route is known. A raw provider
   // body is bounded by whatever read it, and rejecting one here would drop its lifecycle event.
   const raw = !config && legacyBody !== undefined;
-  const body = raw ? legacyBody : JSON.stringify(config ? { id: notificationId || randomUUID(), payload } : payload);
+  const scopedBody = scoped ? {
+    kind: payload.kind,
+    rawEventType: payload.raw_event_type,
+    provider: payload.provider,
+    providerSessionId: payload.provider_session_id ?? null,
+    ptyInstanceId: payload.pty_instance_id,
+    turnId: payload.turn_id ?? null,
+  } : null;
+  const body = raw ? legacyBody : JSON.stringify(scopedBody ?? (config ? { id: notificationId || randomUUID(), payload } : payload));
   if (!raw && Buffer.byteLength(body) > 16384) throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
-  const url = config ? `http://127.0.0.1:${config.port}/notifications/agent-lifecycle` : legacyUrl;
+  const url = scoped
+    ? `http://127.0.0.1:${config.port}/hooks/scoped-agent-lifecycle`
+    : config ? `http://127.0.0.1:${config.port}/notifications/agent-lifecycle` : legacyUrl;
   // Legacy listeners have no durable deduplication contract. Never replay their requests.
   const attempts = config ? 4 : 1;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -61,6 +73,7 @@ async function deliverOpenForgeNotification(payload, legacyUrl, legacyBody, noti
         body, signal: controller.signal,
       });
       if (!config && response.ok) { await response.body?.cancel(); return; }
+      if (scoped && response.status === 204) { await response.body?.cancel(); return; }
       if (config && response.status === 202) {
         const reader = response.body.getReader();
         let size = 0;

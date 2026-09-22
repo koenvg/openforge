@@ -621,7 +621,7 @@ The host orders results by `createdAt`, then OpenForge Agent Session ID. Request
 
 ### Scoped Agent Sessions
 
-Plugins can run a read-only Agent Session for an opaque subject without creating a Task. The lifecycle surface is available to frontend and backend plugins; only frontend plugins can mount the host-rendered terminal.
+Plugins can run an Agent Session for an opaque subject without creating a Task. The host uses the Project's configured provider with its normal local settings, skills, plugins, hooks, MCP servers, authentication, and permission behavior. The lifecycle surface is available to frontend and backend plugins; only frontend plugins can mount the host-rendered terminal.
 
 ```ts
 const scope = { namespace: 'review', targetKey: 'gh:acme/web#1421', revision: headSha }
@@ -630,7 +630,6 @@ await openforge.agentSessions.start({
   projectId,
   checkoutRevision: headSha,
   initialInput: 'Review this revision and report findings.',
-  toolPolicy: 'review-read-only',
 })
 
 const changes = openforge.agentSessions.onDidChange(scope, async () => {
@@ -651,9 +650,11 @@ The host allows one unreleased session per exact scope and four live scoped sess
 
 Scoped workspaces are retained under a host-wide limit of 32 workspaces and 20 GiB of logical data. OpenForge evicts the least-recently-used inactive workspace when needed and refuses a new checkout if protected workspaces leave no room.
 
+The Scoped Workspace is an ownership and lifecycle boundary, not a security sandbox. The provider may modify it and may access other local files, processes, and network resources allowed by its normal configuration and the current OS user. OpenForge separately gives the process a short-lived credential limited to its owning plugin, Project, session, and exact Session Scope.
+
 Lifecycle failures throw `ScopedAgentSessionError` with one of these stable codes:
 
-- `INVALID_SCOPE`, `UNSUPPORTED_TOOL_POLICY`, or `INPUT_TOO_LARGE` for invalid requests.
+- `INVALID_SCOPE` or `INPUT_TOO_LARGE` for invalid requests.
 - `DUPLICATE_SCOPE` or `CAPACITY` when admission is refused.
 - `PROJECT_NOT_FOUND`, `NOT_FOUND`, or `NOT_READY` when the requested host state is unavailable.
 - `FORBIDDEN` when another plugin owns the logical scope.

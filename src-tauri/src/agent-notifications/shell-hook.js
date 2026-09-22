@@ -17,14 +17,16 @@ function openForgeLegacyHookUrl(base, provider, taskId) {
 }
 
 async function reportOpenForgeShellHook(provider, kind, rawEventType, input, legacyBase) {
-  const taskId = process.env.OPENFORGE_TASK_ID;
+  const taskId = process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID;
   if (!taskId) return;
   const claudeCode = provider === "claude-code";
   const payload = {
     provider, kind, task_id: taskId,
     pty_instance_id: Number(process.env.OPENFORGE_PTY_INSTANCE_ID),
     raw_event_type: rawEventType,
-    provider_session_id: input?.session_id || process.env[openForgeSessionIdEnvName(provider)] || null,
+    // Claude and Grok can report a narrower hook/sub-session id on stdin.
+    // The provider-owned environment variable is the stable resume identity.
+    provider_session_id: process.env[openForgeSessionIdEnvName(provider)] || input?.session_id || null,
   };
   if (typeof input?.transcript_path === "string") payload.transcript_path = input.transcript_path;
   if (claudeCode && input?.background_tasks != null) payload.background_tasks = input.background_tasks;

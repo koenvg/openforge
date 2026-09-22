@@ -45,7 +45,6 @@ pub(super) async fn authorize(
                     && session.namespace == principal.namespace
                     && session.target_key == principal.target_key
                     && session.revision == principal.revision
-                    && session.tool_policy == principal.tool_policy
                     && matches!(
                         session.status,
                         crate::db::ScopedAgentSessionStatus::Starting
@@ -219,7 +218,6 @@ mod tests {
                 project_id: &project.id,
                 checkout_revision: "head-a",
                 provider: "claude-code",
-                tool_policy: "review-read-only",
                 terminal_key: "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 status: crate::db::ScopedAgentSessionStatus::Starting,
                 queue_sequence: None,
@@ -238,7 +236,6 @@ mod tests {
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),
-                tool_policy: "review-read-only".into(),
             })
             .unwrap();
         let token = credential.token().to_string();
@@ -260,14 +257,29 @@ mod tests {
                 ))
                 .unwrap()
         };
-        let startup_prompt =
-            router
-                .clone()
-                .oneshot(lifecycle("user-prompt-submit", 7, Some("turn-1")));
+        let startup_prompt = router.clone().oneshot(
+            Request::builder()
+                .uri("/hooks/scoped-agent-lifecycle")
+                .method("POST")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "kind": "became_busy",
+                        "rawEventType": "provider-start",
+                        "provider": "claude-code",
+                        "providerSessionId": "conversation-1",
+                        "ptyInstanceId": 7,
+                        "turnId": null,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        );
         let persist_running = async {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             crate::db::acquire_db(&state.db)
-                .mark_scoped_agent_session_running("sas-1", "conversation-1", 7)
+                .mark_scoped_agent_session_running("sas-1", Some("conversation-1"), 7)
                 .unwrap();
         };
         let (startup_response, ()) = tokio::join!(startup_prompt, persist_running);
@@ -276,6 +288,12 @@ mod tests {
             StatusCode::NO_CONTENT,
             "the first prompt hook must survive the launch-to-persistence race",
         );
+        let first_turn_id = crate::db::acquire_db(&state.db)
+            .scoped_agent_session_by_id("sas-1")
+            .unwrap()
+            .unwrap()
+            .turn_id
+            .expect("normalized startup hook creates a stable turn identity");
         assert_eq!(
             router
                 .clone()
@@ -297,7 +315,7 @@ mod tests {
         assert_eq!(
             router
                 .clone()
-                .oneshot(lifecycle("stop", 7, Some("turn-1")))
+                .oneshot(lifecycle("stop", 7, Some(&first_turn_id)))
                 .await
                 .unwrap()
                 .status(),
@@ -308,7 +326,94 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(paused.status, crate::db::ScopedAgentSessionStatus::Paused);
-        assert_eq!(paused.turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(paused.turn_id.as_deref(), Some(first_turn_id.as_str()));
+
+        let normalized_lifecycle = |kind: &str, provider_session_id: Option<&str>| {
+            Request::builder()
+                .uri("/hooks/scoped-agent-lifecycle")
+                .method("POST")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "kind": kind,
+                        "rawEventType": "provider-event",
+                        "provider": "claude-code",
+                        "providerSessionId": provider_session_id,
+                        "ptyInstanceId": 7,
+                        "turnId": null,
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(normalized_lifecycle("became_busy", Some("conversation-2")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT,
+        );
+        let still_paused = crate::db::acquire_db(&state.db)
+            .scoped_agent_session_by_id("sas-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            still_paused.status,
+            crate::db::ScopedAgentSessionStatus::Paused
+        );
+        assert_eq!(
+            still_paused.provider_session_id.as_deref(),
+            Some("conversation-1")
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(normalized_lifecycle("became_busy", Some("conversation-1")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT,
+        );
+        let resumed = crate::db::acquire_db(&state.db)
+            .scoped_agent_session_by_id("sas-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(resumed.status, crate::db::ScopedAgentSessionStatus::Running);
+        assert_ne!(resumed.turn_id.as_deref(), Some(first_turn_id.as_str()));
+        assert_eq!(
+            resumed.provider_session_id.as_deref(),
+            Some("conversation-1")
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(normalized_lifecycle("unknown", Some("conversation-spoof")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST,
+        );
+        assert_eq!(
+            crate::db::acquire_db(&state.db)
+                .scoped_agent_session_by_id("sas-1")
+                .unwrap()
+                .unwrap()
+                .provider_session_id
+                .as_deref(),
+            Some("conversation-1"),
+        );
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(normalized_lifecycle("ended", Some("conversation-1")))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT,
+        );
         assert_eq!(
             router
                 .clone()
@@ -452,7 +557,6 @@ mod tests {
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),
-                tool_policy: "review-read-only".into(),
             },
             crate::agent_generation_identity::ScopedAgentPrincipal {
                 session_id: "sas-1".into(),
@@ -461,7 +565,6 @@ mod tests {
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),
-                tool_policy: "review-read-only".into(),
             },
             crate::agent_generation_identity::ScopedAgentPrincipal {
                 session_id: "sas-1".into(),
@@ -470,7 +573,6 @@ mod tests {
                 namespace: "github-pr".into(),
                 target_key: "other/repo#1".into(),
                 revision: "head-a".into(),
-                tool_policy: "review-read-only".into(),
             },
         ] {
             let invalid = identities.issue_scoped(invalid_principal).unwrap();
@@ -505,7 +607,6 @@ mod tests {
                 namespace: "github-pr".into(),
                 target_key: "owner/repo#42".into(),
                 revision: "head-a".into(),
-                tool_policy: "review-read-only".into(),
             })
             .unwrap();
         let wrong_plugin_request = Request::builder()

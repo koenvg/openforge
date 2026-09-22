@@ -113,7 +113,6 @@ describe('pull request review Agent Session controller', () => {
       projectId: 'P-1',
       checkoutRevision: 'head-a',
       initialInput: '',
-      toolPolicy: 'review-read-only',
     }])
     expect(controller.status).toMatchObject({ status: 'running' })
   })
@@ -411,7 +410,6 @@ describe('pull request review Agent Session controller', () => {
         projectId: 'P-1',
         checkoutRevision: 'head',
         initialInput: 'Occupy a slot',
-        toolPolicy: 'review-read-only',
       })
     }
     const controller = createPrReviewAgentSessionController(

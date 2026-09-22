@@ -834,7 +834,7 @@ describe('plugin-host backend host APIs', () => {
           context.subscriptions.add(openforge.backend.registerMethod('scopedSession', {
             async handler() {
               const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
-              const started = await openforge.agentSessions.start({ scope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this', toolPolicy: 'review-read-only' })
+              const started = await openforge.agentSessions.start({ scope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this' })
               const status = await openforge.agentSessions.status(scope)
               const input = await openforge.agentSessions.input(scope, 'Continue')
               const aborted = await openforge.agentSessions.abort(scope)

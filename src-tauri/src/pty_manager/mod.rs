@@ -62,7 +62,7 @@ struct ResizeStartGate {
 #[cfg(test)]
 use commands::resolve_shell_path;
 #[cfg(test)]
-pub(crate) use commands::{build_claude_args, build_scoped_claude_args, get_shell_path};
+pub(crate) use commands::{build_claude_args, get_shell_path};
 #[cfg(test)]
 use events::{
     finalize_pty_exit, find_utf8_boundary, pty_output_channel, read_pty_output_loop,
@@ -77,6 +77,7 @@ use pids::{is_shell_session_key_for_task, shell_pid_file_name, write_managed_pro
 pub(crate) use pids::{
     scoped_agent_session_key, shell_session_key, SessionScope, SessionScopeError,
 };
+pub(crate) use session::ProviderPtyAdapter;
 use session::TerminalSessions;
 #[cfg(test)]
 use session::{AgentSpawnGenerations, LifecycleLockRegistry, PtyOutputBuffers, PtySessions};

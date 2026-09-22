@@ -39,7 +39,6 @@ async function fixture() {
     projectId: 'P-1',
     checkoutRevision: scope.revision,
     initialInput: '',
-    toolPolicy: 'review-read-only',
   })
   return { registry, snapshot, coordinator }
 }
@@ -75,7 +74,7 @@ describe('WalkthroughGenerationCoordinator', () => {
     expect(attemptId).toBe('attempt-1')
     expect(registry.calls.scopedAgentSessionStarts).toMatchObject([{
       scope, projectId: 'P-1', checkoutRevision: 'head-a',
-      initialInput: '', toolPolicy: 'review-read-only',
+      initialInput: '',
     }])
     expect(registry.calls.scopedAgentSessionInputs).toEqual([{
       scope, input: 'Generate and submit steps\n\n<!-- openforge-turn-id:attempt-1 -->',

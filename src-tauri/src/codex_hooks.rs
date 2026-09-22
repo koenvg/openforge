@@ -222,8 +222,10 @@ mod tests {
     fn codex_hook_bundle_contains_the_lifecycle_contract() {
         for contract in [
             "OPENFORGE_TASK_ID",
+            "OPENFORGE_SCOPED_SESSION_ID",
             "OPENFORGE_PTY_INSTANCE_ID",
             "/hooks/agent-lifecycle",
+            "/hooks/scoped-agent-lifecycle",
             "provider: \"codex\"",
             "raw_event_type",
             "activity_snapshot",
@@ -232,7 +234,7 @@ mod tests {
         ] {
             assert!(CODEX_HOOK_SOURCE.contains(contract), "missing {contract}");
         }
-        assert!(!CODEX_HOOK_SOURCE.contains("provider_session_id"));
+        assert!(!include_str!("codex-hooks/openforge-hook.js").contains("provider_session_id"));
     }
 
     #[test]

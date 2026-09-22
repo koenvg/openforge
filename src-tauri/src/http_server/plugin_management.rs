@@ -207,12 +207,6 @@ async fn invoke_plugin_command_handler(
         &state.frontend_host_requests,
     );
     if let Some(Extension(principal)) = principal {
-        if principal.tool_policy != crate::session_tool_policy::REVIEW_READ_ONLY {
-            return Err((
-                StatusCode::FORBIDDEN,
-                "scoped agent policy forbids Plugin Commands".to_string(),
-            ));
-        }
         if request.task_id.is_some() || request.project_id.is_some() {
             return Err((
                 StatusCode::BAD_REQUEST,

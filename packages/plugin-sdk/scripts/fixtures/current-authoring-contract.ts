@@ -133,7 +133,7 @@ const agentSessionSummary = {
 const agentSessions = null as unknown as AgentSessionsAPI
 const agentSessionPage: Promise<AgentSessionSummaryPage> = agentSessions.list(listAgentSessionsRequest)
 const scopedAgentSessionScope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
-void agentSessions.start({ scope: scopedAgentSessionScope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this change', toolPolicy: 'review-read-only' })
+void agentSessions.start({ scope: scopedAgentSessionScope, projectId: 'P-1', checkoutRevision: 'main', initialInput: 'Review this change' })
 void agentSessions.status(scopedAgentSessionScope)
 void agentSessions.input(scopedAgentSessionScope, 'Continue')
 void agentSessions.abort(scopedAgentSessionScope)

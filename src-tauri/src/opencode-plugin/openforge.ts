@@ -99,7 +99,7 @@ function shouldSuppressPostIdleActivity(kind, providerSessionId) {
 }
 
 async function postOpenForgeEvent(event) {
-  const taskId = process.env.OPENFORGE_TASK_ID
+  const taskId = process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID
   const ptyInstanceId = Number(process.env.OPENFORGE_PTY_INSTANCE_ID ?? "0")
   const port = process.env.OPENFORGE_HTTP_PORT
   if (!taskId || !ptyInstanceId || (!port && !process.env.OPENFORGE_AGENT_CONFIG) || !event?.type) return

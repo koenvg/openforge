@@ -232,7 +232,7 @@ async function reportPiLifecycle(
   eventType: OpenForgePiLifecycleEventType,
   metadata: OpenForgePiLifecycleMetadata = {},
 ) {
-  const taskId = process.env.OPENFORGE_TASK_ID;
+  const taskId = process.env.OPENFORGE_TASK_ID || process.env.OPENFORGE_SCOPED_SESSION_ID;
   const ptyInstanceId = process.env.OPENFORGE_PTY_INSTANCE_ID;
   if (!taskId || !ptyInstanceId) return;
 

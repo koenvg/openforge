@@ -12,7 +12,7 @@ export const desktopCommandContracts = [
   {"functionName":"listOpenCodeAgents","moduleName":"agentSessions","ipcCommand":"list_opencode_agents","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"listOpenCodeModels","moduleName":"agentSessions","ipcCommand":"list_opencode_models","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"finalizeAgentSession","moduleName":"agentSessions","ipcCommand":"finalize_agent_session","payloadKeys":["taskId","success","ptyInstanceId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
-  {"functionName":"startScopedAgentSession","moduleName":"agentSessions","ipcCommand":"start_scoped_agent_session","payloadKeys":["pluginId","scope","projectId","checkoutRevision","initialInput","toolPolicy"],"owner":"rust-sidecar","domain":"agent-session-pty"},
+  {"functionName":"startScopedAgentSession","moduleName":"agentSessions","ipcCommand":"start_scoped_agent_session","payloadKeys":["pluginId","scope","projectId","checkoutRevision","initialInput"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getScopedAgentSessionStatus","moduleName":"agentSessions","ipcCommand":"get_scoped_agent_session_status","payloadKeys":["pluginId","scope"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"inputScopedAgentSession","moduleName":"agentSessions","ipcCommand":"input_scoped_agent_session","payloadKeys":["pluginId","scope","input"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"abortScopedAgentSession","moduleName":"agentSessions","ipcCommand":"abort_scoped_agent_session","payloadKeys":["pluginId","scope"],"owner":"rust-sidecar","domain":"agent-session-pty"},
