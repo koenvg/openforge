@@ -58,6 +58,8 @@
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
     agentSession: AgentSessionProps
     onActivateAgent: () => Promise<unknown>
+    agentIsRunning: boolean
+    agentHasUnreadOutput: boolean
     canGenerateWalkthrough: boolean
     isGeneratingWalkthrough: boolean
     onGenerateWalkthrough: () => Promise<unknown>
@@ -125,6 +127,8 @@
     onToggleFileReviewed,
     agentSession,
     onActivateAgent,
+    agentIsRunning,
+    agentHasUnreadOutput,
     canGenerateWalkthrough,
     isGeneratingWalkthrough,
     onGenerateWalkthrough,
@@ -181,6 +185,11 @@
     { value: 'agent', label: 'Agent' },
     ...(walkthroughReady ? [{ value: 'walkthrough', label: 'Walkthrough' }] : []),
   ])
+  let agentTabAriaLabel = $derived([
+    'Agent',
+    ...(agentIsRunning ? ['running'] : []),
+    ...(agentHasUnreadOutput ? ['unread output'] : []),
+  ].join(', '))
 
   function changeActiveTab(value: string): void {
     if (value === 'overview' || value === 'files' || value === 'agent' || value === 'walkthrough') {
@@ -271,9 +280,26 @@
     </div>
   {/if}
 
+  {#snippet agentActivitySignals()}
+    <span class="agent-activity-signals" aria-hidden="true">
+      <span
+        class:visible={agentIsRunning}
+        class="agent-running-signal"
+        data-agent-running={agentIsRunning ? '' : undefined}
+      ></span>
+      <span
+        class:visible={agentHasUnreadOutput}
+        class="agent-unread-signal"
+        data-agent-unread={agentHasUnreadOutput ? '' : undefined}
+      ></span>
+    </span>
+  {/snippet}
+
   <Tabs
     label="Pull request detail sections"
-    tabs={detailTabs}
+    tabs={detailTabs.map(tab => tab.value === 'agent'
+      ? { ...tab, ariaLabel: agentTabAriaLabel, trailing: agentActivitySignals }
+      : tab)}
     value={activeTab}
     onValueChange={changeActiveTab}
     fill
@@ -397,3 +423,51 @@
     {/snippet}
   </Tabs>
 </div>
+
+<style>
+  .agent-activity-signals {
+    display: inline-grid;
+    width: calc(var(--of-space2) * 2 + var(--of-space1));
+    grid-template-columns: repeat(2, var(--of-space2));
+    align-items: center;
+    gap: var(--of-space1);
+  }
+
+  .agent-running-signal,
+  .agent-unread-signal {
+    display: block;
+    visibility: hidden;
+  }
+
+  .agent-running-signal.visible,
+  .agent-unread-signal.visible {
+    visibility: visible;
+  }
+
+  .agent-running-signal {
+    width: var(--of-space2);
+    height: var(--of-space2);
+    border: var(--of-border-width) solid var(--of-accent);
+    border-right-color: transparent;
+    border-radius: var(--of-radius-round);
+    animation: agent-running-spin 0.8s linear infinite;
+  }
+
+  .agent-unread-signal {
+    width: calc(var(--of-space2) * 0.75);
+    height: calc(var(--of-space2) * 0.75);
+    margin-inline: auto;
+    border-radius: var(--of-radius-round);
+    background: var(--of-info);
+  }
+
+  @keyframes agent-running-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .agent-running-signal {
+      animation: none;
+    }
+  }
+</style>

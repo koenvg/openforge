@@ -11,6 +11,7 @@ import { useSelectedPrReview } from './review-workspace/useSelectedPrReview.svel
 import { useWalkthroughPolling } from './review-workspace/useWalkthroughPolling.svelte'
 import { createWalkthroughReview } from './review-workspace/walkthroughReview.svelte'
 import { createPrReviewAgentSessionController } from './review-workspace/usePrReviewAgentSession.svelte'
+import { createPrReviewAgentAttentionController } from './review-workspace/usePrReviewAgentAttention.svelte'
 import { createReviewThreadFollowUpController } from './review-workspace/useReviewThreadFollowUps.svelte'
 import { createReviewProgressMutations } from './review-workspace/reviewProgressMutations'
 export type { WalkthroughReview } from './review-workspace/walkthroughReview.svelte'
@@ -37,7 +38,21 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
   const reviewPrs = fromStore(stores.reviewPrs)
   const authoredPrs = fromStore(stores.authoredPrs)
   const walkthroughs = useWalkthroughPolling(api, githubSync)
-  const agentSession = createPrReviewAgentSessionController(api)
+  const agentAttention = createPrReviewAgentAttentionController(api.storage.global)
+  const agentSession = createPrReviewAgentSessionController(api, undefined, {
+    onScopeReleased: agentAttention.deleteReceipt,
+  })
+  const syncDocumentVisibility = () => {
+    agentAttention.setDocumentVisible(document.visibilityState === 'visible')
+  }
+  const syncWindowFocus = () => {
+    agentAttention.setWindowFocused(document.hasFocus())
+  }
+  syncDocumentVisibility()
+  syncWindowFocus()
+  document.addEventListener('visibilitychange', syncDocumentVisibility)
+  window.addEventListener('focus', syncWindowFocus)
+  window.addEventListener('blur', syncWindowFocus)
   const followUps = createReviewThreadFollowUpController(api, agentSession)
   const reviewProgress = createReviewProgressMutations(githubSync, {
     getPullRequests: () => reviewPrs.current,
@@ -63,7 +78,12 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
 
   $effect(() => { stores.activeProjectId.set(getContext().projectId) })
   $effect(() => { void agentSession.observe(selectedPr.current) })
+  $effect(() => { void agentAttention.observe(agentSession.scope, agentSession.status) })
+  $effect(() => { agentAttention.setAgentTabActive(selection.activeTab === 'agent') })
   onDestroy(() => {
+    document.removeEventListener('visibilitychange', syncDocumentVisibility)
+    window.removeEventListener('focus', syncWindowFocus)
+    window.removeEventListener('blur', syncWindowFocus)
     followUps.dispose()
     agentSession.dispose()
   })
@@ -188,6 +208,8 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
     onPendingCommentsChange: setPendingComments,
     onToggleFileReviewed: reviewedFiles.toggle,
     walkthroughReady: walkthrough.available,
+    agentIsRunning: agentAttention.isRunning,
+    agentHasUnreadOutput: agentAttention.hasUnreadOutput,
     onActivateAgent: agentSession.activate,
     canGenerateWalkthrough: agentSession.projectId !== null
       && agentSession.status?.acceptsInput === true
@@ -205,6 +227,7 @@ export function createReviewWorkspace(api: FrontendOpenForgeAPI, getContext: () 
       error: agentSession.error,
       availabilityError: agentSession.availabilityError,
       mountTerminal: api.agentSessions.mountTerminal,
+      onTerminalReadyChange: agentAttention.setTerminalReady,
     },
     reviewThreads,
     reviewFollowUpUnavailableReason: followUps.unavailableReason,

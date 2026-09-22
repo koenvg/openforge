@@ -527,7 +527,7 @@ describe('PrReviewView tab shortcuts', () => {
     const title = await screen.findByText('Fix authentication middleware')
     await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
     expect((await screen.findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent?.trim())).toEqual([
       'Overview',
       'Files changed 1',
       'Agent',
@@ -1217,6 +1217,45 @@ function renderPrReviewView(registry: TestingOpenForgeRegistryFake) {
   })
 }
 
+describe('PrReviewView agent activity signals', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('shows idle, running, unread, and combined Agent states without changing the selected tab', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+    renderPrReviewView(registry)
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    const overview = await screen.findByRole('tab', { name: 'Overview' })
+    const scope = { namespace: 'github', targetKey: 'gh:acme/repo#42', revision: 'head-sha' }
+
+    await registry.frontendApi.agentSessions.start({
+      scope, projectId: 'project-1', checkoutRevision: 'head-sha', initialInput: '',
+    })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Agent' })).toBeTruthy())
+    expect(overview.getAttribute('aria-selected')).toBe('true')
+
+    await registry.frontendApi.agentSessions.input(scope, 'Review this pull request')
+    const running = await screen.findByRole('tab', { name: 'Agent, running' })
+    expect(running.querySelector('[data-agent-running]')).toBeTruthy()
+    expect(overview.getAttribute('aria-selected')).toBe('true')
+
+    registry.completeScopedAgentSession(scope)
+    const unread = await screen.findByRole('tab', { name: 'Agent, unread output' })
+    expect(unread.querySelector('[data-agent-unread]')).toBeTruthy()
+    expect(overview.getAttribute('aria-selected')).toBe('true')
+
+    await registry.frontendApi.agentSessions.input(scope, 'Check the retry path')
+    const combined = await screen.findByRole('tab', { name: 'Agent, running, unread output' })
+    expect(combined.querySelector('[data-agent-running]')).toBeTruthy()
+    expect(combined.querySelector('[data-agent-unread]')).toBeTruthy()
+    expect(overview.getAttribute('aria-selected')).toBe('true')
+  })
+})
+
 describe('PrReviewView repository filter scope', () => {
   beforeEach(() => {
     resetStores()
@@ -1517,7 +1556,7 @@ describe('PrReviewView walkthrough generation', () => {
 
     // The tab appears once the open PR's status resolves to ready.
     expect(await screen.findByRole('tab', { name: 'Walkthrough' })).toBeTruthy()
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent?.trim())).toEqual([
       'Overview',
       'Files changed 1',
       'Agent',

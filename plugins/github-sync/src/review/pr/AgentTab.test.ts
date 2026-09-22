@@ -27,6 +27,7 @@ function props(overrides: Record<string, unknown> = {}) {
     error: null,
     availabilityError: null,
     mountTerminal: vi.fn(async () => ({ dispose: vi.fn() })),
+    onTerminalReadyChange: vi.fn(),
     ...overrides,
   }
 }
@@ -46,6 +47,7 @@ describe('AgentTab', () => {
     expect(screen.queryByText('Review agent')).toBeNull()
     expect(screen.queryByText(/Stop generation|Stop review agent|Generate again|Send/i)).toBeNull()
     await waitFor(() => expect(componentProps.mountTerminal).toHaveBeenCalledWith(scope, expect.any(HTMLElement)))
+    await waitFor(() => expect(componentProps.onTerminalReadyChange).toHaveBeenLastCalledWith(true))
   })
 
   it('keeps passive startup and unavailable states inside the terminal frame', async () => {
@@ -72,12 +74,17 @@ describe('AgentTab', () => {
     const replacementScope = { ...scope, revision: 'head-b' }
     await view.rerender({ ...baseProps, scope: replacementScope })
     await waitFor(() => {
+      expect(baseProps.onTerminalReadyChange).toHaveBeenCalledWith(false)
       expect(firstDispose).toHaveBeenCalledOnce()
       expect(mountTerminal).toHaveBeenLastCalledWith(replacementScope, expect.any(HTMLElement))
+      expect(baseProps.onTerminalReadyChange).toHaveBeenLastCalledWith(true)
     })
 
     view.unmount()
-    await waitFor(() => expect(secondDispose).toHaveBeenCalledOnce())
+    await waitFor(() => {
+      expect(baseProps.onTerminalReadyChange).toHaveBeenLastCalledWith(false)
+      expect(secondDispose).toHaveBeenCalledOnce()
+    })
   })
 
   it('disposes a delayed stale mount without detaching its replacement', async () => {
@@ -101,5 +108,19 @@ describe('AgentTab', () => {
     expect(currentDispose).not.toHaveBeenCalled()
     view.unmount()
     await waitFor(() => expect(currentDispose).toHaveBeenCalledOnce())
+  })
+
+  it('reports not ready when attachment fails or the current status detaches', async () => {
+    const failed = props({ mountTerminal: vi.fn(async () => { throw new Error('mount failed') }) })
+    const failedView = render(AgentTab, { props: failed })
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('mount failed'))
+    expect(failed.onTerminalReadyChange).toHaveBeenLastCalledWith(false)
+    failedView.unmount()
+
+    const attached = props()
+    const attachedView = render(AgentTab, { props: attached })
+    await waitFor(() => expect(attached.onTerminalReadyChange).toHaveBeenLastCalledWith(true))
+    await attachedView.rerender({ ...attached, status: null })
+    await waitFor(() => expect(attached.onTerminalReadyChange).toHaveBeenLastCalledWith(false))
   })
 })

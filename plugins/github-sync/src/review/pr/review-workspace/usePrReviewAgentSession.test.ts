@@ -209,6 +209,33 @@ describe('pull request review Agent Session controller', () => {
     await expect(registry.frontendApi.agentSessions.status(controller.scope!)).resolves.toBeNull()
   })
 
+  it('cleans attention receipts on explicit removal but not ordinary disposal', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync',
+      projectId: 'P-1',
+    })
+    const onScopeReleased = vi.fn(async () => undefined)
+    const controller = createPrReviewAgentSessionController(
+      registry.frontendApi,
+      async () => 'P-1',
+      { onScopeReleased },
+    )
+
+    await controller.observe(pullRequest)
+    await controller.activate()
+    controller.dispose()
+    expect(onScopeReleased).not.toHaveBeenCalled()
+
+    const removal = createPrReviewAgentSessionController(
+      registry.frontendApi,
+      async () => 'P-1',
+      { onScopeReleased },
+    )
+    await removal.observe(pullRequest)
+    await removal.releaseForPullRequest(pullRequest)
+    expect(onScopeReleased).toHaveBeenCalledWith(removal.scope)
+  })
+
   it('releases the known session when an offscreen pull request is removed at a newer head', async () => {
     const registry = createOpenForgeRegistryFake({
       pluginId: 'com.openforge.github-sync',
@@ -264,6 +291,27 @@ describe('pull request review Agent Session controller', () => {
     expect(registry.calls.scopedAgentSessionReleases).toContainEqual(oldScope)
     expect(registry.calls.scopedAgentSessionStarts.map(call => call.scope.revision)).toEqual(['head-a', 'head-b'])
     expect(controller.scope?.revision).toBe('head-b')
+  })
+
+  it('cleans the old head attention receipt during rotation', async () => {
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'com.openforge.github-sync',
+      projectId: 'P-1',
+    })
+    const onScopeReleased = vi.fn(async () => undefined)
+    const controller = createPrReviewAgentSessionController(
+      registry.frontendApi,
+      async () => 'P-1',
+      { onScopeReleased },
+    )
+    await controller.observe(pullRequest)
+    await controller.activate()
+
+    await controller.observe({ ...pullRequest, head_sha: 'head-b' })
+
+    expect(onScopeReleased).toHaveBeenCalledWith({
+      namespace: 'github', targetKey: 'gh:acme/web#1421', revision: 'head-a',
+    })
   })
 
   it('waits for a pending start before releasing a removed pull request', async () => {

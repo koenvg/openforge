@@ -7,6 +7,8 @@
     label: string
     disabled?: boolean
     icon?: Snippet
+    trailing?: Snippet
+    ariaLabel?: string
     title?: string
   }>
 
@@ -55,14 +57,14 @@
           class="of-tabs-trigger"
           value={tab.value}
           disabled={tab.disabled}
-          aria-label={tab.icon ? tab.label : undefined}
+          aria-label={tab.ariaLabel ?? (tab.icon ? tab.label : undefined)}
           title={tab.title}
         >
           {#if tab.icon}
             <span class="of-tabs-icon" aria-hidden="true">{@render tab.icon()}</span>
           {:else}
             {tab.label}
-          {/if}
+          {/if}{#if tab.trailing}<span class="of-tabs-trailing">{@render tab.trailing()}</span>{/if}
         </Tabs.Trigger>
       {/each}
     </Tabs.List>
@@ -123,6 +125,10 @@
   }
 
   .of-tabs :global(.of-tabs-trigger) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--of-space2);
     min-height: var(--of-control-height);
     padding: 0 var(--of-space3);
     border: var(--of-border-width) solid transparent;
@@ -140,6 +146,12 @@
   }
 
   .of-tabs :global(.of-tabs-icon) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .of-tabs :global(.of-tabs-trailing) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
