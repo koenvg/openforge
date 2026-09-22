@@ -228,7 +228,7 @@ describe('startAgentWalkthrough backend handler', () => {
     )
     expect(agentSessions.input).toHaveBeenCalledWith(
       { namespace: 'github', targetKey: 'gh:octo/frontend#7', revision: 'sha123' },
-      expect.stringMatching(/inspect the complete change.*workspace/i),
+      expect.stringContaining('git diff --find-renames "$BASE_REF"...HEAD'),
     )
     expect(invokeGlobal).not.toHaveBeenCalledWith('openforge.agentGenerateInRepo', expect.anything())
   })

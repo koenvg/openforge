@@ -8,7 +8,7 @@ import defaultWalkthroughGuidance from './walkthroughGuidance.md?raw'
 
 /**
  * Built-in walkthrough + AI-review prompt template. Not user-editable: it carries
- * the `{{…}}` placeholders that feed the agent the diff and CLI submission
+ * the `{{…}}` placeholders that feed the agent PR context and CLI submission
  * contract. What users configure are the two guidance
  * slots below, which the template embeds.
  */
@@ -140,8 +140,8 @@ function formatExistingComments(comments: ReviewComment[]): string {
 }
 
 /**
- * Fills the prompt template with this PR's title, description, and changed-file
- * manifest, plus the two configurable guidance blocks (resolved by the caller
+ * Fills the prompt template with this PR's title, description, and submission
+ * coordinates, plus the two configurable guidance blocks (resolved by the caller
  * from the `pr_review_guidance` / `pr_walkthrough_guidance` settings). Only the
  * `{{…}}` placeholders are substituted; function replacements are used so `$`
  * sequences in titles and bodies are literal.
@@ -153,10 +153,10 @@ export function compileWalkthroughPrompt(
   const trimmedBody = input.body?.trim() ?? ''
   const prDescription = trimmedBody.length > 0 ? `## PR Description\n${trimmedBody}\n\n` : ''
 
-  const changedFiles =
+  const submissionCoordinates =
     input.files.length === 0
       ? '(no files in this PR)'
-      : input.files.map(fileSection).join('\n\n')
+      : input.files.map(formatSubmissionCoordinate).join('\n')
 
   const existingComments = formatExistingComments(input.existingComments ?? [])
   const ticketSection = input.ticket ? formatTicketSection(input.ticket) : ''
@@ -200,7 +200,7 @@ export function compileWalkthroughPrompt(
     .replace('{{PR_TITLE}}', () => input.title)
     .replace(/\{\{JIRA_TICKET\}\}\n?/, () => ticketSection)
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
-    .replace('{{CHANGED_FILES}}', () => changedFiles)
+    .replace('{{SUBMISSION_COORDINATES}}', () => submissionCoordinates)
     .replace('{{BASE_REF}}', () => input.baseRef)
     .replace('{{EXISTING_COMMENTS}}', () => existingComments)
     .replace('{{ATTEMPT_ID}}', () => attemptId)
@@ -213,13 +213,9 @@ export function compileWalkthroughPrompt(
     .replace(/\{\{REVIEW_GUIDANCE\}\}\n?/, () => reviewGuidance)
 }
 
-function fileSection(file: PrFileDiff): string {
+function formatSubmissionCoordinate(file: PrFileDiff): string {
   return JSON.stringify({
     filename: file.filename,
-    previous_filename: file.previous_filename,
-    status: file.status,
-    additions: file.additions,
-    deletions: file.deletions,
     hunk_indexes: parseHunks(file.patch).map(hunk => hunk.index),
   })
 }

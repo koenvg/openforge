@@ -108,7 +108,7 @@ describe('compileWalkthroughPrompt', () => {
     expect(out).not.toContain('Description')
   })
 
-  it('lists each file with status, filename, and per-hunk indexes', () => {
+  it('lists only authoritative submission coordinates beside the walkthrough contract', () => {
     const out = compileWalkthroughPrompt({
       title: 't',
       body: null,
@@ -127,14 +127,21 @@ describe('compileWalkthroughPrompt', () => {
         }),
       ],
     })
+
+    const submissionHeading = out.indexOf('## Submit walkthrough steps')
+    const coordinates = JSON.stringify({ filename: 'src/foo.ts', hunk_indexes: [0, 1] })
+
+    expect(submissionHeading).toBeGreaterThan(-1)
+    expect(out.indexOf(coordinates)).toBeGreaterThan(submissionHeading)
     expect(out).toContain('"filename":"src/foo.ts"')
-    expect(out).toContain('"status":"modified"')
-    expect(out).toContain('"additions":5')
-    expect(out).toContain('"deletions":2')
     expect(out).toContain('"hunk_indexes":[0,1]')
+    expect(out).not.toContain('"previous_filename"')
+    expect(out).not.toContain('"status":"modified"')
+    expect(out).not.toContain('"additions":5')
+    expect(out).not.toContain('"deletions":2')
   })
 
-  it('keeps changed-file coordinates without embedding patch bodies', () => {
+  it('keeps submission coordinates without embedding patch bodies', () => {
     const out = compileWalkthroughPrompt({
       title: 't',
       body: null,
@@ -155,10 +162,10 @@ describe('compileWalkthroughPrompt', () => {
     })
 
     expect(out).toContain('"filename":"src/foo.ts"')
-    expect(out).toContain('"status":"modified"')
-    expect(out).toContain('"additions":5')
-    expect(out).toContain('"deletions":2')
     expect(out).toContain('"hunk_indexes":[0,1]')
+    expect(out).not.toContain('"status":"modified"')
+    expect(out).not.toContain('"additions":5')
+    expect(out).not.toContain('"deletions":2')
     expect(out).not.toContain('walkthrough-patch-sentinel')
     expect(out).not.toContain('```diff')
   })
@@ -183,49 +190,37 @@ describe('compileWalkthroughPrompt', () => {
 
     expect(out).toContain(JSON.stringify({
       filename,
-      previous_filename: previousFilename,
-      status: 'renamed',
-      additions: 1,
-      deletions: 1,
       hunk_indexes: [0],
     }))
+    expect(out).not.toContain(JSON.stringify(previousFilename))
     expect(out).not.toContain(filename)
   })
 
-  it('directs the agent to inspect the workspace against the pull request base ref', () => {
-    const out = compileWalkthroughPrompt({
-      title: 't',
-      body: null,
-      baseRef: 'main',
-      files: [],
-    })
+  it.each(['main', 'release/2026.09'])(
+    'directs the agent to inspect the complete change against the %s target branch',
+    (baseRef) => {
+      const out = compileWalkthroughPrompt({
+        title: 't',
+        body: null,
+        baseRef,
+        files: [],
+      })
 
-    expect(out).toContain('Pull request base ref: `main`')
-    expect(out).toMatch(/inspect the complete change.*workspace/i)
-    expect(out).toContain('git diff')
-  })
+      const assignment = out.indexOf('Set the shell variable `BASE_REF`')
+      const verification = out.indexOf('git rev-parse --verify "$BASE_REF^{commit}"')
+      const firstDiff = out.indexOf('git diff --stat "$BASE_REF"...HEAD')
 
-  it('marks added/removed/renamed files distinctly', () => {
-    const out = compileWalkthroughPrompt({
-      title: 't',
-      body: null,
-      files: [
-        makeFile({ filename: 'new.ts', status: 'added', patch: '@@ -0,0 +1,1 @@\n+x' }),
-        makeFile({ filename: 'old.ts', status: 'removed', patch: '@@ -1,1 +0,0 @@\n-x' }),
-        makeFile({
-          filename: 'renamed.ts',
-          previous_filename: 'oldname.ts',
-          status: 'renamed',
-          patch: null,
-        }),
-      ],
-    })
-    expect(out).toContain('added')
-    expect(out).toContain('removed')
-    expect(out).toContain('renamed')
-    expect(out).toContain('"filename":"renamed.ts"')
-    expect(out).toContain('"previous_filename":"oldname.ts"')
-  })
+      expect(out).toContain(`Pull request base ref: \`${baseRef}\``)
+      expect(assignment).toBeGreaterThan(-1)
+      expect(verification).toBeGreaterThan(assignment)
+      expect(firstDiff).toBeGreaterThan(verification)
+      expect(out).toContain('git diff --name-status --find-renames "$BASE_REF"...HEAD')
+      expect(out).toContain('git diff --find-renames "$BASE_REF"...HEAD')
+      expect(out).toContain('git log --oneline "$BASE_REF"..HEAD')
+      expect(out).toMatch(/do not review only.*latest commit/i)
+      expect(out).not.toContain('## Changed Files')
+    },
+  )
 
   it('shows the complete step shape inside the CLI command input', () => {
     const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
@@ -377,7 +372,7 @@ describe('compileWalkthroughPrompt', () => {
       // one. A missing placeholder must be a no-op, not an error or a stray section.
       const out = compileWalkthroughPrompt(
         { title: 'My PR', body: null, files: [], ticket },
-        'Title: {{PR_TITLE}}\nFiles: {{CHANGED_FILES}}\n',
+        'Title: {{PR_TITLE}}\nFiles: {{SUBMISSION_COORDINATES}}\n',
       )
 
       expect(out).toBe('Title: My PR\nFiles: (no files in this PR)\n')
