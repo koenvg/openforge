@@ -15,7 +15,7 @@ async function ownedPath(path, directory, privateMode = false) {
   }
 }
 
-async function waitForDaemonExit(runtime) {
+export async function waitForOwnedDaemonExit(runtime) {
   // Inspect this installation's ownership descriptor, never process-name matches.
   const deadline = Date.now() + 5000
   while (true) {
@@ -44,7 +44,7 @@ export async function createDaemonOwnershipRegistry({ mode, runRoot } = {}) {
   const resources = ['daemon.lock', 'daemon.log', 'control.sock', 'credentials.json', 'releases', 'images']
     .map(name => join(runtime, name))
   return {
-    async cleanup({ exchange = exchangeDaemon, waitForExit = waitForDaemonExit } = {}) {
+    async cleanup({ exchange = exchangeDaemon, waitForExit = waitForOwnedDaemonExit } = {}) {
       await ownedPath(root, true, true)
       await ownedPath(marker, false, true)
       if (await readFile(marker, 'utf8') !== identity) throw new Error('Fixture ownership changed; refusing daemon cleanup')
