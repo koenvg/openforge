@@ -1,6 +1,11 @@
 use openforge_session_client::Client;
 use openforge_session_host::{contracts, InstallationId};
 
+const REPLACEMENT_FIXTURES: bool = cfg!(all(
+    target_os = "macos",
+    target_arch = "aarch64",
+    feature = "replacement-fixtures"
+));
 struct Fixture {
     root: tempfile::TempDir,
     client: Client,
@@ -48,6 +53,7 @@ async fn daemon_satisfies_shared_spawn_retry_contract() {
         &fixture.client,
         &fixture.installation(),
         fixture.root.path(),
+        REPLACEMENT_FIXTURES,
     )
     .await;
     let inventory = Client::connect(fixture.root.path())
@@ -77,6 +83,7 @@ async fn daemon_satisfies_shared_ordered_io_contract() {
         &fixture.client,
         &fixture.installation(),
         fixture.root.path(),
+        REPLACEMENT_FIXTURES,
     )
     .await;
 }

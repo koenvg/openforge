@@ -19,10 +19,15 @@ pub fn shell(cwd: &Path) -> SpawnRequest {
     }
 }
 
-pub async fn spawn_retry_contract(host: &impl PtyHost, installation: &InstallationId, cwd: &Path) {
+pub async fn spawn_retry_contract(
+    host: &impl PtyHost,
+    installation: &InstallationId,
+    cwd: &Path,
+    supports_replacement: bool,
+) {
     let connected = host.connect(installation).await.unwrap();
     assert!(connected.inventory.is_empty());
-    assert!(!connected.supports_replacement);
+    assert_eq!(connected.supports_replacement, supports_replacement);
     let request = shell(cwd);
     let first = host
         .spawn(&connected.controller, operation("spawn-1"), request.clone())
@@ -59,8 +64,14 @@ pub async fn spawn_retry_contract(host: &impl PtyHost, installation: &Installati
         first
     );
 }
-pub async fn ordered_io_contract(host: &impl PtyHost, installation: &InstallationId, cwd: &Path) {
+pub async fn ordered_io_contract(
+    host: &impl PtyHost,
+    installation: &InstallationId,
+    cwd: &Path,
+    supports_replacement: bool,
+) {
     let first = host.connect(installation).await.unwrap();
+    assert_eq!(first.supports_replacement, supports_replacement);
     let pty = host
         .spawn(&first.controller, operation("spawn-io"), shell(cwd))
         .await
@@ -164,18 +175,20 @@ pub async fn ordered_io_contract(host: &impl PtyHost, installation: &Installatio
         .await,
         Err(HostError::StaleOutput)
     ));
-    for phase in [
-        ReplacementPhase::Prepare {
-            executable: "/nonexistent/session-daemon".into(),
-        },
-        ReplacementPhase::Commit,
-        ReplacementPhase::Abort,
-    ] {
-        assert_eq!(
-            host.replacement(&connected.controller, operation("replace-1"), phase)
-                .await,
-            Err(HostError::UnsupportedReplacement)
-        );
+    if !supports_replacement {
+        for phase in [
+            ReplacementPhase::Prepare {
+                executable: "/nonexistent/session-daemon".into(),
+            },
+            ReplacementPhase::Commit,
+            ReplacementPhase::Abort,
+        ] {
+            assert_eq!(
+                host.replacement(&connected.controller, operation("replace-1"), phase)
+                    .await,
+                Err(HostError::UnsupportedReplacement)
+            );
+        }
     }
     assert_eq!(
         host.reconcile(&connected.controller).await.unwrap()[0].state,

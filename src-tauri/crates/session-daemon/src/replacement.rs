@@ -24,6 +24,17 @@ use std::{
 const IMAGE_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_BIN_NAME"));
 const STATE_FORMAT: u32 = 1;
 const MAX_JOBS: usize = 32;
+// Preparation probes both the current image and the new copy. Account for
+// their separately bounded loader startup; each responsive helper retains
+// its own unchanged execution deadline.
+#[cfg(target_os = "macos")]
+fn preparation_timeout() -> Duration {
+    Duration::from_secs(10) + probe::MAX_STARTUP_WAIT * 2
+}
+#[cfg(not(target_os = "macos"))]
+fn preparation_timeout() -> Duration {
+    Duration::from_secs(10)
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Job {
@@ -162,7 +173,7 @@ impl Manager {
             return;
         };
         if !pending.worker.is_finished() {
-            if pending.started.elapsed() > Duration::from_secs(10)
+            if pending.started.elapsed() > preparation_timeout()
                 && self.jobs[pending.index].state == ReplacementState::Preparing
             {
                 self.jobs[pending.index].state = ReplacementState::Failed {

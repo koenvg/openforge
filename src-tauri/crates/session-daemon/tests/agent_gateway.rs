@@ -4,6 +4,15 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::Duration;
 
+const DAEMON_STARTUP_WAIT: Duration = if cfg!(all(
+    target_os = "macos",
+    target_arch = "aarch64",
+    feature = "replacement-fixtures"
+)) {
+    Duration::from_secs(25) // 5s readiness plus the bounded 20s loader startup
+} else {
+    Duration::from_secs(5)
+};
 struct Fixture(tempfile::TempDir);
 impl Fixture {
     fn new() -> Self {
@@ -15,9 +24,10 @@ impl Fixture {
         )
     }
     fn connect(&self) -> Client {
-        Client::launch(
+        Client::launch_with_timeout(
             std::path::Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
             self.0.path(),
+            DAEMON_STARTUP_WAIT,
         )
         .unwrap()
     }

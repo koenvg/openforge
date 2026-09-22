@@ -14,6 +14,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+// A replacement preparation may wait for two cold executable startups.
+// These are fixture waits, not the helper's execution deadline.
+const STARTUP_WAIT: Duration = Duration::from_secs(30); // 10s startup + 20s loader startup
+const STATUS_WAIT: Duration = Duration::from_secs(55); // 15s status + two 20s startups
 #[path = "replacement/http.rs"]
 mod http;
 #[path = "replacement/input.rs"]
@@ -69,7 +73,7 @@ impl Fixture {
             daemon,
             tracked: Vec::new(),
         };
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + STARTUP_WAIT;
         loop {
             if let Ok(client) = Client::connect(fixture.root.path()) {
                 return (fixture, client);
@@ -98,7 +102,7 @@ impl Fixture {
         read_frame::<_, Result<Value, Error>>(&mut stream)?
     }
     fn status(&self, operation: &str, wanted: &str) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + STATUS_WAIT;
         let mut last = String::new();
         loop {
             let response = self.rpc(json!({"kind":"replacementStatus","operation":operation}));
