@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { UpdateSidecarExit } from './updateSidecarExit.js'
 import { NativeRestartRecovery } from './nativeRestartRecovery.js'
 import { RestartOperation } from './restartOperation.js'
 import { preflightProductionUpdateLaunch } from './productionUpdateLaunch.js'
@@ -111,6 +112,8 @@ function shouldDrainTaskBrowserSessionPurges(envelope: SidecarEventEnvelopeLike)
 /** Real Electron Adapter for the Boot Lifecycle Module seam. */
 export function createElectronBootAdapter(options: ElectronBootAdapterOptions): BootLifecycleAdapter {
   let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
+  let updateSidecarExit: UpdateSidecarExit | null = null
+  let ownedSidecar: SidecarReadinessHandle | null = null
   const rendererTrustAdapter = new ElectronRendererTrustAdapter()
   const rendererEventSubscriptions = new RendererEventSubscriptions()
   let backendInvokeContext: BootBackendInvokeContext | null = null
@@ -155,6 +158,14 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         cancel: operationId => restartBackendCommand('cancel_app_restart', { operationId }),
         detach: operationId => restartBackendCommand('detach_app_restart', { operationId }),
         commit: operationId => restartBackendCommand('commit_app_restart', { operationId }),
+        stopForUpdate: async () => {
+          const sidecar = ownedSidecar
+          const exit = updateSidecarExit
+          if (!sidecar || !exit) throw new Error('Owned Sidecar is unavailable for update shutdown')
+          await exit.stop(sidecar)
+          if (ownedSidecar !== sidecar) throw new Error('Update Sidecar ownership changed during shutdown')
+          backendInvokeContext = null
+        },
       },
       replace: async nextOperation => relaunch(nextOperation),
     }).catch(error => { restartWorkspace = null; throw error })
@@ -483,6 +494,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
         onSpawned: (child) => {
           sidecarLaunchProcess = child
+          updateSidecarExit = new UpdateSidecarExit(child)
         },
         logSidecarOutput: true,
         logger: developerLogSink,
@@ -523,6 +535,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         },
       })
       const readiness = await sidecar.ready()
+      ownedSidecar = sidecar
       developerLogSink.info(`[electron] Rust sidecar is ready at ${readiness.identity.readinessUrl}`)
       sidecarLaunchProcess = sidecar.process
       return sidecar

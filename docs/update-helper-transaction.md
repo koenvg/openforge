@@ -13,6 +13,7 @@ KVG-5206 is unfinished. Production updates and source installation remain disabl
 - The authenticated grant carries Electron user data, application data and daemon roots. The helper validates those directories and passes only those explicit OpenForge settings to the replacement. It does not inherit arbitrary `OPENFORGE_*` values or silently launch against default developer data. Grants without launch context cannot use the executable handoff.
 - An authenticated, atomically written journal records preparation, replacement, launch fencing and commit. Replacement retains the old bundle and flushes files and directory changes. Pre-launch recovery verifies old bytes before restoring them. After launch, rollback is refused because target domain processes may have migrated data.
 - Native commit rechecks authorization and installed bytes, is retryable after a lost acknowledgement, and allows a later operation without deleting retained bundles. The coordinator calls the update driver's commit only after runtime readiness and workspace restoration. It also cancels prepared helper ownership when preparation fails.
+- The coordinator now requires a Sidecar-exit verifier before update preparation. After authenticated detach it waits for the exact spawned Sidecar's exit before calling the replacement driver. The Electron adapter records exit from spawn time and bounds shutdown using the existing shutdown budget. Signal acknowledgement, `killed`, and shutdown reports do not count as exit proof.
 
 The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle. Current replacement requires a complete daemon-aware old bundle; the pre-daemon first-adoption path is not implemented.
 
@@ -24,14 +25,16 @@ The opt-in Electron/native contract uses actual compiled helper bytes, real Elec
 
 Latest checks:
 
-- Root tests: 876 files passed, 7,467 tests passed, 3 expected failures, 46 skipped across 12 files. The opt-in native contract passed separately, 3 tests.
+- Root tests after the owned-Sidecar exit integration: 876 files passed, 7,470 tests passed, 3 expected failures, 46 skipped across 12 files. The earlier opt-in native contract passed separately, 3 tests.
 - Helper default and all-feature suites: 18 tests each. All-target/all-feature check, build and strict Clippy passed, along with formatting.
 - TypeScript, plugin-host typecheck, lint, Electron and Companion contracts passed.
+- `pnpm electron:package` passed, including plugin builds, renderer/Electron builds, release Sidecar/daemon/helper compilation, architecture checks and app assembly. The bundle was built, not installed or launched.
+- Workspace package builds/tests, plugin SDK published-package conformance, package metadata checks and plugin-host typecheck passed. Terminal-runtime tests include one skip.
 - Sidecar tests: 2,369 passed and 49 ignored. Sidecar check, build and Clippy passed.
 - Daemon default tests and all-target/all-feature check, build and strict Clippy passed. Earlier all-feature daemon evidence remains applicable; ignored tests are not acceptance evidence.
 - The earlier standalone host/client blockers were fixed with owner approval. Their default/all-feature tests, check/build, strict Clippy and formatting passed. KVG-5209 and KVG-5210 were deleted at the owner's request.
 
-Logs for this increment are under `/tmp/KVG-5206-next-*.log`, with red/green checkpoints under `/tmp/KVG-5206-*.log`.
+Logs for the helper checkpoint are under `/tmp/KVG-5206-next-*.log`; the owned-exit increment uses `/tmp/KVG-5206-exit-*.log`. The first root test run exceeded its two-minute tool deadline; the rerun passed in 146 seconds. Isolated Node child tests establish exit ordering, not real Sidecar/daemon continuity.
 
 Run the native contract and checks through the layout resolver:
 
@@ -49,7 +52,7 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 
 ## Remaining KVG-5206 work
 
-- Connect the real update driver, coordinator and source installer. The host must verify its owned Sidecar has exited after authenticated detach before arming the helper. Observing Electron exit alone does not prove domain shutdown. Production launch and source-install guards remain unchanged; driver callbacks and a working helper do not supply this missing integration.
+- Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
 - Preflight and activate the compatible daemon image, retain runtime and CLI assets, and authenticate running executable identities and reconciliation before commit. Preserve agent/tool/shell PIDs and PTYs through the supported transition.
 - Add separate native first-adoption interruption approval. Do not reinterpret local-build approval as interruption consent or claim seamless adoption from a pre-daemon build.
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.

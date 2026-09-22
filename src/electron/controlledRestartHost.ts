@@ -11,6 +11,8 @@ export interface RestartBackend {
   cancel(operationId: string): Promise<void>
   detach(operationId: string): Promise<void>
   commit(operationId: string): Promise<void>
+  /** Resolve only after the owned Sidecar's exit, after authenticated detach. */
+  stopForUpdate?(operationId: string): Promise<void>
 }
 
 export async function createControlledRestartHost(options: {
@@ -89,6 +91,9 @@ export async function createControlledRestartHost(options: {
       const record = await operation.status()
       if (record?.intent === 'update') {
         if (!record.updateTarget) throw new Error('Update target is missing')
+        if (!options.backend?.stopForUpdate) throw new Error('Update requires owned Sidecar exit verification')
+        await options.backend.stopForUpdate(operationId)
+        assertCurrent()
         await requireUpdateDriver(options.update).replace(record.updateTarget)
       } else {
         await options.replace(operationId)
@@ -97,6 +102,7 @@ export async function createControlledRestartHost(options: {
     {
       prepare: async operationId => {
         const intent = options.intent ?? 'restart'
+        if (intent === 'update' && !options.backend?.stopForUpdate) throw new Error('Update requires owned Sidecar exit verification')
         const target = intent === 'update'
           ? parseUpdateTarget(await requireUpdateDriver(options.update).preflight({ installationId, operationId }))
           : undefined

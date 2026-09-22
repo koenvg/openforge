@@ -1,3 +1,7 @@
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { UpdateSidecarExit } from './updateSidecarExit'
+import { asChildProcessLike, createSidecarLaunchConfig } from './sidecar'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,6 +56,7 @@ it('keeps an update in recovery until every target image is running, then restor
   }
   const options = {
     root, update,
+    backend: { prepare: async () => {}, cancel: async () => {}, detach: async () => {}, commit: async () => {}, stopForUpdate: async () => {} },
     inventory: async () => ({ controller: { ...controller, generation }, sessions: [], hasLegacySessions: false }),
     replace: async () => { throw new Error('An update must not use plain restart replacement') },
   }
@@ -79,7 +84,7 @@ it('preserves preflight refusal and allows a later retry without preparing or re
   const host = await createControlledRestartHost({
     root, operationId: null, intent: 'update',
     inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
-    backend: { prepare: async () => { prepared = true }, cancel: async () => {}, detach: async () => {}, commit: async () => {} },
+    backend: { prepare: async () => { prepared = true }, cancel: async () => {}, detach: async () => {}, commit: async () => {}, stopForUpdate: async () => {} },
     replace: async () => { throw new Error('not an update helper') },
     update: {
       cancel: async () => {},
@@ -122,6 +127,7 @@ async function preparedUpdate() {
     inventory: async () => ({ controller: { ...controller, generation: state.generation }, sessions: [], hasLegacySessions: false }),
     backend: {
       prepare: async () => {}, cancel: async () => {}, detach: async () => {},
+      stopForUpdate: async () => {},
       commit: async () => {
         if (state.failCommit) throw new Error('Commit acknowledgement lost')
         state.commits++
@@ -198,7 +204,7 @@ it.each([false, true])('releases the prepared helper on preparation failure, inc
     root, operationId: null, intent: 'update',
     inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
     replace: async () => { throw new Error('plain restart is forbidden') },
-    backend: { prepare: async () => { throw new Error('drain refused') }, cancel: async () => { if (cancelFails) throw new Error('cancel outcome unknown') }, detach: async () => {}, commit: async () => {} },
+    backend: { prepare: async () => { throw new Error('drain refused') }, cancel: async () => { if (cancelFails) throw new Error('cancel outcome unknown') }, detach: async () => {}, commit: async () => {}, stopForUpdate: async () => {} },
     update: {
       preflight: async identity => { helperOwned = true; return { ...identity, manifestSha256: 'f'.repeat(64), images } },
       cancel: async () => { helperOwned = false },
@@ -224,4 +230,80 @@ it('keeps the update recoverable until durable helper commit acknowledges after 
   helperReady = true
   await host.handle(20, 'get_restart_workspace', {})
   expect(await host.shutdownIntent()).toBe('quit')
+})
+
+it('does not replace the app when owned Sidecar exit cannot be verified after detach', async () => {
+  const root = await fixtureRoot()
+  let detached = false
+  let replaced = false
+  const host = await createControlledRestartHost({
+    root, operationId: null, intent: 'update',
+    inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
+    replace: async () => { throw new Error('plain restart is forbidden') },
+    backend: {
+      prepare: async () => {}, cancel: async () => {}, commit: async () => {},
+      detach: async () => { detached = true },
+      stopForUpdate: async () => {
+        expect(detached).toBe(true)
+        throw new Error('Owned Sidecar exit was not observed')
+      },
+    },
+    update: {
+      preflight: async identity => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+      cancel: async () => {}, commit: async () => {},
+      replace: async () => { replaced = true },
+      readiness: async target => ({ operationId: target.operationId, controller, images, reconciled: true }),
+    },
+  })
+  await expect(capture(host)).rejects.toThrow('Owned Sidecar exit was not observed')
+  expect(replaced).toBe(false)
+  expect(await host.shutdownIntent()).toBe('update')
+})
+
+it.each(['exit', 'signal-only'] as const)('arms replacement only after the owned child exits: %s', async outcome => {
+  const root = await fixtureRoot()
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: {}, stdio: 'ignore' })
+  const childExited = once(child, 'exit')
+  const owned = asChildProcessLike(child)
+  const exit = new UpdateSidecarExit(owned)
+  let replaced = false
+  let detached = false
+  try {
+    const host = await createControlledRestartHost({
+      root, operationId: null, intent: 'update',
+      inventory: async () => ({ controller, sessions: [], hasLegacySessions: false }),
+      replace: async () => { throw new Error('plain restart is forbidden') },
+      backend: {
+        prepare: async () => {}, cancel: async () => {}, commit: async () => {},
+        detach: async () => { detached = true },
+        stopForUpdate: async () => exit.stop({
+          process: owned, config: createSidecarLaunchConfig({ processEnv: {} }),
+          stop: async () => {
+            expect(detached).toBe(true)
+            if (outcome === 'exit') child.kill('SIGTERM')
+            return { status: 'already-signaled', signal: null, timedOut: false, error: null }
+          },
+        }, 200),
+      },
+      update: {
+        preflight: async identity => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+        cancel: async () => {}, commit: async () => {},
+        replace: async () => { replaced = true },
+        readiness: async target => ({ operationId: target.operationId, controller, images, reconciled: true }),
+      },
+    })
+    if (outcome === 'exit') {
+      await capture(host)
+      expect(replaced).toBe(true)
+    } else {
+      await expect(capture(host)).rejects.toThrow('Owned Sidecar exit was not observed')
+      expect(child.exitCode).toBeNull()
+      expect(child.signalCode).toBeNull()
+      expect(replaced).toBe(false)
+    }
+    expect(await host.shutdownIntent()).toBe('update')
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    await childExited
+  }
 })
