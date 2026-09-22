@@ -583,6 +583,105 @@ describe('renderer Task Browser Surface host adapter', () => {
     await replacement.dispose()
   })
 
+  it('detaches a retired attachment before a pending bounds update settles', async () => {
+    const raf = installAnimationFrameHarness()
+    installObserverHarness()
+    let releaseBoundsUpdate: (() => void) | null = null
+    const boundsUpdateGate = new Promise<void>(resolve => { releaseBoundsUpdate = resolve })
+    const invocations: Array<{ command: string; payload: unknown }> = []
+    let attachmentUpdates = 0
+    window.openforge = {
+      version: 1,
+      async invoke(command, payload) {
+        invocations.push({ command, payload })
+        if (command === 'task_browser_surface_get_or_create') {
+          return { ok: true, value: { surfaceId: 'surface-retired', generation: 1, state: blankState } }
+        }
+        if (command === 'task_browser_surface_attach') {
+          attachmentUpdates += 1
+          if (attachmentUpdates === 2) await boundsUpdateGate
+        }
+        return { ok: true, value: undefined }
+      },
+      onEvent: () => () => undefined,
+    }
+
+    let rect = domRect(10, 20, 300, 200)
+    const element = document.createElement('div')
+    document.body.append(element)
+    vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => rect)
+    const controller = await createHostBrowserSurfaces('browser').getOrCreate({ taskId: 'T-1', id: 'retired' })
+    const attachment = await controller.attach(element)
+
+    rect = domRect(40, 50, 300, 200)
+    await raf.flush()
+    expect(attachmentUpdates).toBe(2)
+
+    const disposal = attachment.dispose()
+    for (let count = 0; count < 4; count += 1) await Promise.resolve()
+    const detachStartedBeforeBoundsUpdateSettled = invocations
+      .some(call => call.command === 'task_browser_surface_detach')
+
+    ;(releaseBoundsUpdate as (() => void) | null)?.()
+    await disposal
+    await raf.flush()
+
+    expect(detachStartedBeforeBoundsUpdateSettled).toBe(true)
+    expect(invocations.filter(call => call.command === 'task_browser_surface_attach')).toHaveLength(2)
+    expect(invocations.filter(call => call.command === 'task_browser_surface_detach')).toHaveLength(1)
+  })
+
+  it('waits for queued bounds work before reporting a detach failure', async () => {
+    const raf = installAnimationFrameHarness()
+    installObserverHarness()
+    let releaseBoundsUpdate: (() => void) | null = null
+    const boundsUpdateGate = new Promise<void>(resolve => { releaseBoundsUpdate = resolve })
+    let attachmentUpdates = 0
+    window.openforge = {
+      version: 1,
+      async invoke(command) {
+        if (command === 'task_browser_surface_get_or_create') {
+          return { ok: true, value: { surfaceId: 'surface-detach-failure', generation: 1, state: blankState } }
+        }
+        if (command === 'task_browser_surface_attach') {
+          attachmentUpdates += 1
+          if (attachmentUpdates === 2) await boundsUpdateGate
+        }
+        if (command === 'task_browser_surface_detach') {
+          return { ok: false, error: { code: 'HOST_UNAVAILABLE' as const, message: 'detach failed' } }
+        }
+        return { ok: true, value: undefined }
+      },
+      onEvent: () => () => undefined,
+    }
+
+    let rect = domRect(10, 20, 300, 200)
+    const element = document.createElement('div')
+    document.body.append(element)
+    vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => rect)
+    const controller = await createHostBrowserSurfaces('browser').getOrCreate({ taskId: 'T-1', id: 'detach-failure' })
+    const attachment = await controller.attach(element)
+
+    rect = domRect(40, 50, 300, 200)
+    await raf.flush()
+    let disposalSettled = false
+    const disposal = Promise.resolve(attachment.dispose()).then(
+      () => {
+        disposalSettled = true
+        return null
+      },
+      (error: unknown) => {
+        disposalSettled = true
+        return error
+      },
+    )
+    for (let count = 0; count < 4; count += 1) await Promise.resolve()
+    expect(disposalSettled).toBe(false)
+
+    ;(releaseBoundsUpdate as (() => void) | null)?.()
+    await expect(disposal).resolves.toMatchObject({ code: 'HOST_UNAVAILABLE', message: 'detach failed' })
+  })
+
   it('destroy stops attachment tracking created by any controller for the live surface', async () => {
     const raf = installAnimationFrameHarness()
     installObserverHarness()

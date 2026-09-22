@@ -353,10 +353,13 @@ class TaskBrowserAttachmentLifecycle {
         mutationObserver?.disconnect()
         window.removeEventListener('resize', schedule)
         window.removeEventListener('scroll', schedule, true)
+        const detachOutcome = host.detach({ surfaceId, attachmentId, attachmentGeneration }).then(
+          () => ({ error: null }),
+          error => ({ error }),
+        )
         await updateQueue
-        try {
-          await host.detach({ surfaceId, attachmentId, attachmentGeneration })
-        } catch (error) {
+        const { error } = await detachOutcome
+        if (error !== null) {
           if (!(error instanceof BrowserSurfaceError) || error.code !== 'SURFACE_DESTROYED') throw error
         }
       },

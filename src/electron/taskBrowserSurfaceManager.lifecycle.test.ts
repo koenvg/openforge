@@ -10,6 +10,57 @@ import {
 } from './taskBrowserSurfaceManager.testUtils'
 
 describe('Task Browser Surface Manager lifecycle', () => {
+  it.each(['before', 'after'] as const)(
+    'retains the same live browser when unrelated plugin teardown completes %s presentation retirement',
+    async completionOrder => {
+      const { manager, factory } = createManager()
+      const browser = await manager.getOrCreate({
+        windowId: 10,
+        pluginId: 'browser',
+        taskId: 'T-remount',
+        id: 'main',
+        initialUrl: 'https://stateful.example/form',
+      })
+      const unrelated = await manager.getOrCreate({
+        windowId: 10,
+        pluginId: 'notes',
+        taskId: 'T-remount',
+        id: 'settings-contribution',
+      })
+      const nativeBrowser = factory.surfaces[0]
+      const unrelatedNative = factory.surfaces[1]
+      manager.attach(browser.surfaceId, 'first-presentation', 1, { x: 10, y: 20, width: 300, height: 200 })
+
+      if (completionOrder === 'before') manager.destroyPlugin('notes')
+      manager.detach(browser.surfaceId, 'first-presentation', 1)
+      if (completionOrder === 'after') manager.destroyPlugin('notes')
+
+      const retained = await manager.getOrCreate({
+        windowId: 10,
+        pluginId: 'browser',
+        taskId: 'T-remount',
+        id: 'main',
+      })
+      manager.attach(retained.surfaceId, 'replacement-presentation', 2, {
+        x: 15,
+        y: 25,
+        width: 300,
+        height: 200,
+      })
+
+      expect(retained.surfaceId).toBe(browser.surfaceId)
+      expect(retained.generation).toBe(browser.generation)
+      expect(factory.surfaces).toHaveLength(2)
+      expect(nativeBrowser.destroyed).toBe(false)
+      expect(nativeBrowser.attachedWindowId).toBe(10)
+      expect(nativeBrowser.loadCalls).toEqual(['https://stateful.example/form'])
+      expect(nativeBrowser.controlCalls).not.toContain('reload')
+      expect(factory.clearedPartitions).toEqual([])
+      expect(unrelatedNative.destroyed).toBe(true)
+      await expect(manager.getState(unrelated.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    },
+  )
+
   it('preserves Plugin Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
     const { manager, factory, permissions, artifacts } = createManager()
     const savedUrl = 'https://example.com/restored'
