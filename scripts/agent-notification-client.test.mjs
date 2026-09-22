@@ -132,6 +132,26 @@ describe("provider lifecycle transport", () => {
     expect(received).toHaveLength(64);
   });
 
+  it("rejects diagnostic fields and encoded envelopes that exceed the byte contract", async () => {
+    const { send, received } = await fixture([]);
+    const payload = { provider: "codex", kind: "became_busy", task_id: "T-1", pty_instance_id: 42 };
+
+    await expect(send({
+      ...payload,
+      activity_snapshot: "🙂".repeat(2049),
+    }, "unused")).rejects.toThrow("exceeds 16384 bytes");
+    await expect(send({
+      ...payload,
+      transcript_path: "é".repeat(2049),
+    }, "unused")).rejects.toThrow("exceeds 16384 bytes");
+    await expect(send({
+      ...payload,
+      activity_snapshot: "\0".repeat(3000),
+    }, "unused")).rejects.toThrow("exceeds 16384 bytes");
+
+    expect(received).toEqual([]);
+  });
+
   for (const [provider, sessionId] of [["grok", "grok-session-9"], ["claude-code", "claude-session-9"]]) {
     it(`${provider} shell hook falls back to the legacy listener without private configuration`, async () => {
       const { send, received } = await fixture([200], provider, { agentConfig: false });

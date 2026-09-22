@@ -2,6 +2,42 @@
 // No request-response command or permission decision may use this client.
 let openForgeNotificationTail = Promise.resolve();
 let openForgePendingNotifications = 0;
+const OPENFORGE_NOTIFICATION_LIMITS = Object.freeze({
+  envelopeBytes: 16 * 1024,
+  transcriptPathBytes: 4 * 1024,
+  activitySnapshotBytes: 8 * 1024,
+});
+const OPENFORGE_NOTIFICATION_ID_PLACEHOLDER = "00000000-0000-4000-8000-000000000000";
+
+function openForgeCanonicalNotificationPayload(payload) {
+  return {
+    ...payload,
+    provider_session_id: payload?.provider_session_id ?? null,
+    raw_event_type: payload?.raw_event_type ?? null,
+    raw_status_type: payload?.raw_status_type ?? null,
+    transcript_path: payload?.transcript_path ?? null,
+    activity_snapshot: payload?.activity_snapshot ?? null,
+    background_tasks: payload?.background_tasks ?? null,
+  };
+}
+
+function openForgeNotificationEnvelopeBytes(payload, notificationId = OPENFORGE_NOTIFICATION_ID_PLACEHOLDER) {
+  const canonicalPayload = openForgeCanonicalNotificationPayload(payload);
+  return Buffer.byteLength(JSON.stringify({ id: notificationId, payload: canonicalPayload }), "utf8");
+}
+
+function openForgeNotificationPayloadFits(payload, notificationId = OPENFORGE_NOTIFICATION_ID_PLACEHOLDER) {
+  if (
+    typeof payload?.transcript_path === "string"
+      && Buffer.byteLength(payload.transcript_path, "utf8") > OPENFORGE_NOTIFICATION_LIMITS.transcriptPathBytes
+  ) return false;
+  if (
+    typeof payload?.activity_snapshot === "string"
+      && Buffer.byteLength(payload.activity_snapshot, "utf8") > OPENFORGE_NOTIFICATION_LIMITS.activitySnapshotBytes
+  ) return false;
+  return openForgeNotificationEnvelopeBytes(payload, notificationId)
+    <= OPENFORGE_NOTIFICATION_LIMITS.envelopeBytes;
+}
 
 function sendOpenForgeNotification(payload, legacyUrl, legacyBody, notificationId) {
   // Serialize callbacks from a long-lived provider. Retries reuse the same envelope.
@@ -56,8 +92,12 @@ async function deliverOpenForgeNotification(payload, legacyUrl, legacyBody, noti
     ptyInstanceId: payload.pty_instance_id,
     turnId: payload.turn_id ?? null,
   } : null;
-  const body = raw ? legacyBody : JSON.stringify(scopedBody ?? (config ? { id: notificationId || randomUUID(), payload } : payload));
-  if (!raw && Buffer.byteLength(body) > 16384) throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
+  const id = notificationId || randomUUID();
+  if (config && !scoped && !openForgeNotificationPayloadFits(payload, id)) {
+    throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
+  }
+  const body = raw ? legacyBody : JSON.stringify(scopedBody ?? (config ? { id, payload } : payload));
+  if (!raw && Buffer.byteLength(body) > OPENFORGE_NOTIFICATION_LIMITS.envelopeBytes) throw new Error("notification acceptance failed: payload exceeds 16384 bytes");
   const url = scoped
     ? `http://127.0.0.1:${config.port}/hooks/scoped-agent-lifecycle`
     : config ? `http://127.0.0.1:${config.port}/notifications/agent-lifecycle` : legacyUrl;

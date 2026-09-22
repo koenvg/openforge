@@ -14,7 +14,69 @@ const TURN_STATE_LOCK_POLL_INTERVAL_MS = 10;
 const TURN_STATE_LOCK_STALE_MS = 30_000;
 const TURN_DELIVERY_LOCK_TIMEOUT_MS = 100;
 const MAX_PENDING_NOTIFICATIONS = 64;
-const MAX_ACTIVITY_SNAPSHOT_CHARS = 8000;
+
+function utf8Tail(value, maxBytes) {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  const codePoints = Array.from(value);
+  let low = 0;
+  let high = codePoints.length;
+  let result = "";
+  while (low <= high) {
+    const length = Math.floor((low + high) / 2);
+    const candidate = codePoints.slice(codePoints.length - length).join("");
+    if (Buffer.byteLength(candidate, "utf8") <= maxBytes) {
+      result = candidate;
+      low = length + 1;
+    } else {
+      high = length - 1;
+    }
+  }
+  return result;
+}
+
+function fitActivitySnapshotToEnvelope(payload, notificationId) {
+  const activitySnapshot = payload.activity_snapshot;
+  if (typeof activitySnapshot !== "string") {
+    return openForgeNotificationPayloadFits(payload, notificationId) ? payload : null;
+  }
+
+  const codePoints = Array.from(activitySnapshot);
+  let low = 0;
+  let high = codePoints.length;
+  let result = null;
+  while (low <= high) {
+    const length = Math.floor((low + high) / 2);
+    const candidate = { ...payload };
+    if (length === 0) delete candidate.activity_snapshot;
+    else candidate.activity_snapshot = codePoints.slice(codePoints.length - length).join("");
+    if (openForgeNotificationPayloadFits(candidate, notificationId)) {
+      result = candidate;
+      low = length + 1;
+    } else {
+      high = length - 1;
+    }
+  }
+  return result;
+}
+
+function fitLifecyclePayload(payload, notificationId = OPENFORGE_NOTIFICATION_ID_PLACEHOLDER) {
+  const fitted = { ...payload };
+  if (
+    typeof fitted.transcript_path === "string"
+      && Buffer.byteLength(fitted.transcript_path, "utf8") > OPENFORGE_NOTIFICATION_LIMITS.transcriptPathBytes
+  ) delete fitted.transcript_path;
+  if (typeof fitted.activity_snapshot === "string") {
+    fitted.activity_snapshot = utf8Tail(
+      fitted.activity_snapshot,
+      OPENFORGE_NOTIFICATION_LIMITS.activitySnapshotBytes,
+    );
+  }
+  if (openForgeNotificationPayloadFits(fitted, notificationId)) return fitted;
+  const withTranscript = fitActivitySnapshotToEnvelope(fitted, notificationId);
+  if (withTranscript) return withTranscript;
+  delete fitted.transcript_path;
+  return fitActivitySnapshotToEnvelope(fitted, notificationId) ?? fitted;
+}
 
 function boundedJsonSnapshot(value) {
   if (!value || typeof value !== "object") return null;
@@ -22,9 +84,7 @@ function boundedJsonSnapshot(value) {
   delete snapshot.transcript_path;
   const json = JSON.stringify(snapshot);
   if (!json || json === "{}") return null;
-  return json.length > MAX_ACTIVITY_SNAPSHOT_CHARS
-    ? json.slice(json.length - MAX_ACTIVITY_SNAPSHOT_CHARS)
-    : json;
+  return utf8Tail(json, OPENFORGE_NOTIFICATION_LIMITS.activitySnapshotBytes);
 }
 
 function lifecyclePayload(kind, rawEventType, rawStatusType = null, hookInput = null) {
@@ -63,7 +123,7 @@ function lifecyclePayload(kind, rawEventType, rawStatusType = null, hookInput = 
     payload.activity_snapshot = activitySnapshot;
   }
 
-  return payload;
+  return fitLifecyclePayload(payload);
 }
 
 async function postLifecycleEvent(kind, rawEventType, rawStatusType = null, hookInput = null) {
@@ -307,13 +367,29 @@ async function enqueueLifecycleNotification(state, kind, rawEventType, rawStatus
   return { ...state, pendingNotifications };
 }
 
+function repairPendingLifecycleNotification(pending) {
+  if (openForgeNotificationPayloadFits(pending.payload, pending.id)) return null;
+  const payload = fitLifecyclePayload(pending.payload, pending.id);
+  return openForgeNotificationPayloadFits(payload, pending.id)
+    ? { ...pending, payload }
+    : null;
+}
+
 async function drainLifecycleNotifications() {
   try {
     await withCodexTurnDeliveryLock(async () => {
       for (;;) {
         const pending = await withCodexTurnStateLock(async () => {
           const state = await readCodexTurnState();
-          return state?.pendingNotifications[0] ?? null;
+          const first = state?.pendingNotifications[0] ?? null;
+          if (!state || !first) return null;
+          const repaired = repairPendingLifecycleNotification(first);
+          if (!repaired) return first;
+          await writeCodexTurnState({
+            ...state,
+            pendingNotifications: [repaired, ...state.pendingNotifications.slice(1)],
+          });
+          return repaired;
         });
         if (!pending) return;
 
