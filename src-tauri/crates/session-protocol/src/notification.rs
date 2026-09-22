@@ -104,3 +104,60 @@ pub struct NotificationReceipt {
     pub journal_id: String,
     pub position: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn envelope_with_activity(activity_snapshot: String) -> NotificationEnvelope {
+        serde_json::from_value(serde_json::json!({
+            "id": "11111111-1111-4111-8111-111111111111",
+            "payload": {
+                "provider": "codex",
+                "task_id": "T-1",
+                "pty_instance_id": 42,
+                "kind": "became_busy",
+                "raw_event_type": "PostToolUse",
+                "activity_snapshot": activity_snapshot,
+            },
+        }))
+        .expect("notification fixture must deserialize")
+    }
+
+    #[test]
+    fn activity_snapshot_limit_counts_utf8_bytes() {
+        assert_eq!(
+            envelope_with_activity("🙂".repeat(2048)).validate(),
+            Ok(())
+        );
+        assert_eq!(
+            envelope_with_activity("🙂".repeat(2049)).validate(),
+            Err(Error::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn envelope_limit_counts_json_escaping() {
+        let empty_size = serde_json::to_vec(&envelope_with_activity(String::new()))
+            .expect("notification fixture must serialize")
+            .len();
+        let maximum_nulls = (MAX_NOTIFICATION_BYTES - empty_size) / 6;
+        let accepted = envelope_with_activity("\0".repeat(maximum_nulls));
+        let rejected = envelope_with_activity("\0".repeat(maximum_nulls + 1));
+
+        assert!(
+            serde_json::to_vec(&accepted)
+                .expect("accepted notification must serialize")
+                .len()
+                <= MAX_NOTIFICATION_BYTES
+        );
+        assert!(
+            serde_json::to_vec(&rejected)
+                .expect("rejected notification must serialize")
+                .len()
+                > MAX_NOTIFICATION_BYTES
+        );
+        assert_eq!(accepted.validate(), Ok(()));
+        assert_eq!(rejected.validate(), Err(Error::InvalidRequest));
+    }
+}

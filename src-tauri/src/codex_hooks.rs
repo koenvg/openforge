@@ -261,6 +261,44 @@ mod tests {
     }
 
     #[test]
+    fn codex_hook_payload_satisfies_daemon_envelope_limit() {
+        let source = CODEX_HOOK_SOURCE.replace("main();", "");
+        let script = format!(
+            r#"{source}
+process.env.OPENFORGE_TASK_ID = "KVG-2314";
+process.env.OPENFORGE_PTY_INSTANCE_ID = "42";
+process.env.OPENFORGE_AGENT_CONFIG = "/tmp/openforge-agent.json";
+const payload = lifecyclePayload("became_busy", "PostToolUse", null, {{
+  turn_id: "turn-escaped",
+  detail: '\\"'.repeat(3500),
+}});
+process.stdout.write(JSON.stringify({{
+  id: OPENFORGE_NOTIFICATION_ID_PLACEHOLDER,
+  payload,
+}}));"#
+        );
+        let script_file = tempfile::Builder::new()
+            .prefix("openforge-codex-hook-envelope-")
+            .suffix(".mjs")
+            .tempfile()
+            .expect("create Codex hook envelope script");
+        std::fs::write(script_file.path(), script).expect("write Codex hook envelope script");
+        let output = std::process::Command::new("node")
+            .arg(script_file.path())
+            .output()
+            .expect("run Codex hook envelope script");
+
+        assert!(
+            output.status.success(),
+            "node failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let envelope: openforge_session_protocol::NotificationEnvelope =
+            serde_json::from_slice(&output.stdout).expect("parse Codex hook envelope");
+        assert_eq!(envelope.validate(), Ok(()));
+    }
+
+    #[test]
     fn codex_hooks_profile_uses_codex_home_profile_file() {
         let home = std::path::Path::new("/Users/tester");
         let codex_home = codex_home_from(None, Some(home)).expect("Codex home should resolve");

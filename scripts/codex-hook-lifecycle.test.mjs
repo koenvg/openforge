@@ -34,10 +34,12 @@ const testDeliveries = [];
 sendOpenForgeNotification = async (payload, _url, _body, notificationId) => {
   if (testDelay) await testDelay;
   if (testFailures > 0) { testFailures -= 1; throw new Error("rejected"); }
+  if (!openForgeNotificationPayloadFits(payload, notificationId)) throw new Error("rejected");
   testDeliveries.push({ payload, notificationId });
 };
 return {
   deliveries: testDeliveries,
+  envelopeBytes: openForgeNotificationEnvelopeBytes,
   failNext(count = 1) { testFailures = count; },
   delayUntil(promise) { testDelay = promise; },
   clearDelay() { testDelay = null; },
@@ -242,6 +244,90 @@ describe("Codex parent and background-agent lifecycle", () => {
       notificationId: pendingId,
       payload: { kind: "ended", raw_event_type: "TranscriptTurnEnd" },
     });
+    expect((await api.readState()).pendingNotifications).toEqual([]);
+  });
+
+  it("keeps multibyte activity snapshots within the notification byte limit", async () => {
+    const api = await fixture("multibyte-snapshot");
+    await api.event("became_busy", "UserPromptSubmit", null, {
+      ...parent("turn-multibyte"),
+      message: "🙂".repeat(3000),
+    });
+
+    const [{ payload }] = api.deliveries;
+    expect(Buffer.byteLength(payload.activity_snapshot, "utf8")).toBeLessThanOrEqual(8192);
+    expect(payload.activity_snapshot).not.toContain("�");
+  });
+
+  it("keeps escaped activity snapshots within the serialized envelope limit", async () => {
+    const api = await fixture("escaped-snapshot");
+    await api.event("became_busy", "UserPromptSubmit", null, {
+      ...parent("turn-escaped"),
+      detail: '\\"'.repeat(3500),
+    });
+
+    const [{ payload, notificationId }] = api.deliveries;
+    expect(api.envelopeBytes(payload, notificationId)).toBeLessThanOrEqual(16384);
+    expect(payload.activity_snapshot).not.toContain("�");
+  });
+
+  it("normalizes diagnostics before direct session-start delivery", async () => {
+    const api = await fixture("direct-session-start");
+    await api.event("started", "SessionStart", null, {
+      turn_id: "turn-direct",
+      transcript_path: "é".repeat(3000),
+      message: "🙂".repeat(3000),
+    });
+
+    const [{ payload, notificationId }] = api.deliveries;
+    expect(payload.transcript_path).toBeUndefined();
+    expect(Buffer.byteLength(payload.activity_snapshot, "utf8")).toBeLessThanOrEqual(8192);
+    expect(api.envelopeBytes(payload, notificationId)).toBeLessThanOrEqual(16384);
+  });
+
+  it("repairs an oversized pending activity before delivering its completion", async () => {
+    const api = await fixture("legacy-oversized-outbox");
+    await api.event("became_busy", "UserPromptSubmit", null, parent("turn-legacy"));
+    const state = await api.readState();
+    const basePayload = api.deliveries[0].payload;
+    const activityId = "11111111-1111-4111-8111-111111111111";
+    const completionId = "22222222-2222-4222-8222-222222222222";
+    state.pendingNotifications = [
+      {
+        id: activityId,
+        payload: {
+          ...basePayload,
+          kind: "became_busy",
+          raw_event_type: "PostToolUse",
+          activity_snapshot: "🙂".repeat(3000),
+        },
+      },
+      {
+        id: completionId,
+        payload: {
+          ...basePayload,
+          kind: "ended",
+          raw_event_type: "TranscriptTurnEnd",
+          raw_status_type: "task_complete",
+        },
+      },
+    ];
+    await writeFile(await api.statePath(), JSON.stringify(state), "utf8");
+
+    api.failNext();
+    expect(await api.event("ended", "Stop", null, parent("turn-legacy"))).toBe(false);
+    const repaired = (await api.readState()).pendingNotifications[0];
+    expect(repaired.id).toBe(activityId);
+    expect(Buffer.byteLength(repaired.payload.activity_snapshot, "utf8"))
+      .toBeLessThanOrEqual(8192);
+
+    expect(await api.event("ended", "Stop", null, parent("turn-legacy"))).toBe(true);
+    expect(api.deliveries.slice(1).map(({ notificationId }) => notificationId)).toEqual([
+      activityId,
+      completionId,
+    ]);
+    expect(Buffer.byteLength(api.deliveries[1].payload.activity_snapshot, "utf8"))
+      .toBeLessThanOrEqual(8192);
     expect((await api.readState()).pendingNotifications).toEqual([]);
   });
 
