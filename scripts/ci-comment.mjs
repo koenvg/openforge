@@ -22,17 +22,17 @@ function isMissingFile(error) {
   return error && typeof error === 'object' && error.code === 'ENOENT'
 }
 
-function readExitCodeFile(readFileSync, core, path, label, missingIsFailure = false) {
+function readExitCodeFile(readFileSync, core, path, label, unavailableResult = null) {
   try {
     return readFileSync(path, 'utf8').trim() !== '0'
   } catch (error) {
-    const outcome = missingIsFailure ? 'marking the check incomplete' : 'assuming that check did not fail'
+    const outcome = 'marking the check incomplete'
     if (isMissingFile(error)) {
       core.info(`${label} exit code file was not found at ${path}; ${outcome}.`)
     } else {
       core.warning(`Unable to read ${label} exit code file at ${path}; ${outcome}. ${describeError(error)}`)
     }
-    return missingIsFailure
+    return unavailableResult
   }
 }
 
@@ -123,14 +123,15 @@ export function renderFrontendComment(
   return body
 }
 
-function renderRustLogSection(heading, logPath, warningLabel, { readFileSync, core }) {
+function renderRustLogSection(heading, logPath, warningLabel, incomplete, { readFileSync, core }) {
   let section = `${heading}\n\n`
+  if (incomplete) section += '_Incomplete (result artifact unavailable)_\n\n'
   try {
     const log = readFileSync(logPath, 'utf8')
     section += `\`\`\`\n${log.slice(-30000)}\n\`\`\`\n\n`
   } catch (error) {
     core.warning(`Unable to read ${warningLabel} log: ${describeError(error)}`)
-    section += '_Failed (logs unavailable)_\n\n'
+    section += incomplete ? '_Logs unavailable_\n\n' : '_Failed (logs unavailable)_\n\n'
   }
   return section
 }
@@ -139,28 +140,32 @@ export function renderRustComment(
   { formatFailed, clippyFailed, testsFailed },
   dependencies,
 ) {
-  let body = '## ❌ Rust CI Failures\n\n'
+  const hasFailure = [formatFailed, clippyFailed, testsFailed].includes(true)
+  let body = hasFailure ? '## ❌ Rust CI Failures\n\n' : '## ⚠️ Rust CI Incomplete\n\n'
 
-  if (formatFailed) {
+  if (formatFailed !== false) {
     body += renderRustLogSection(
       '### Formatting',
       '/tmp/rust-logs/rust-format.log',
       'Rust formatting',
+      formatFailed === null,
       dependencies,
     )
   }
 
-  if (clippyFailed) {
+  if (clippyFailed !== false) {
     body += renderRustLogSection(
       '### Clippy',
       '/tmp/rust-logs/rust-clippy.log',
       'Rust Clippy',
+      clippyFailed === null,
       dependencies,
     )
   }
 
-  if (testsFailed) {
+  if (testsFailed !== false) {
     body += '### Tests\n\n'
+    if (testsFailed === null) body += '_Incomplete (result artifact unavailable)_\n\n'
     try {
       const log = dependencies.readFileSync('/tmp/rust-logs/rust-tests.log', 'utf8')
       const lines = log.split('\n')
@@ -176,7 +181,7 @@ export function renderRustComment(
       body += `\`\`\`\n${errors.slice(0, 30000)}\n\`\`\`\n`
     } catch (error) {
       dependencies.core.warning(`Unable to read rust test log: ${describeError(error)}`)
-      body += '_Failed (logs unavailable)_\n'
+      body += testsFailed === null ? '_Logs unavailable_\n' : '_Failed (logs unavailable)_\n'
     }
   }
 
@@ -253,7 +258,7 @@ export async function postCiComments({
     prNumber,
     comments,
     marker: '<!-- ci-rust-failures -->',
-    failed: results.rust.formatFailed || results.rust.clippyFailed || results.rust.testsFailed,
+    failed: Object.values(results.rust).some((result) => result !== false),
     body: renderRustComment(results.rust, dependencies),
     maxLength: 65000,
   })
