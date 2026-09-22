@@ -31,6 +31,17 @@ impl Client {
     /// # Errors
     /// Refuses unsafe discovery, incompatible daemons and failed startup.
     pub fn launch(executable: &Path, root: &Path) -> Result<Self, Error> {
+        Self::launch_with_timeout(executable, root, Duration::from_secs(5))
+    }
+
+    /// Connects to the installation's daemon, allowing a bounded startup wait.
+    /// # Errors
+    /// Refuses unsafe discovery, incompatible daemons and failed startup.
+    pub fn launch_with_timeout(
+        executable: &Path,
+        root: &Path,
+        startup_timeout: Duration,
+    ) -> Result<Self, Error> {
         let runtime = match std::fs::symlink_metadata(root.join("session-v1")) {
             Ok(_) => RuntimeDirectory::open_existing(root)?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -94,7 +105,7 @@ impl Client {
             });
         }
         let mut child = command.spawn().map_err(io_error)?;
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + startup_timeout;
         loop {
             if let Ok(client) = Self::connect(root) {
                 std::thread::spawn(move || {

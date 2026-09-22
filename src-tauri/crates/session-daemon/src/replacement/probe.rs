@@ -11,6 +11,14 @@ use std::{
 };
 
 const CODEC: &str = "ghostty-de9fd9b0-worker-v1";
+const READY_MARKER: &[u8] = b"image-preflight-ready\n";
+// Cold copied images can wait behind macOS XProtect before entering main.
+// Only this startup phase gets a separate budget; responsive probes retain
+// their two-second execution deadline.
+#[cfg(target_os = "macos")]
+pub(super) const MAX_STARTUP_WAIT: Duration = Duration::from_secs(20);
+#[cfg(not(target_os = "macos"))]
+const MAX_STARTUP_WAIT: Duration = Duration::from_secs(2);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Contract {
@@ -23,6 +31,13 @@ pub(super) struct Contract {
     state_digest: Option<String>,
 }
 pub(super) fn describe(state: Option<&[u8]>) -> Result<(), Error> {
+    if state.is_none() {
+        // stderr stays empty for state probes. The image marker separates
+        // loader startup from the unchanged bounded contract computation.
+        std::io::stderr()
+            .write_all(READY_MARKER)
+            .map_err(|_| refused())?;
+    }
     let contract = Contract {
         protocol: VERSION,
         state_format: STATE_FORMAT,
@@ -54,7 +69,11 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
             Stdio::null()
         })
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(if state.is_some() {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        });
     // SAFETY: only async-signal-safe libc calls run after fork. CLOEXEC preserves
     // Command's error pipe while lending no protected/session/checkpoint descriptors.
     unsafe {
@@ -88,15 +107,21 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
         let mut stdout = child.stdout.take().ok_or_else(refused)?;
         nonblocking(stdout.as_raw_fd())?;
         let mut stdin = child.stdin.take();
+        let mut stderr = child.stderr.take();
+        if let Some(stderr) = &stderr {
+            nonblocking(stderr.as_raw_fd())?;
+        }
         if let Some(stdin) = &stdin {
             nonblocking(stdin.as_raw_fd())?;
         }
         let input = state.unwrap_or_default();
         let expected_digest = state.map(|bytes| format!("{:x}", Sha256::digest(bytes)));
-        let deadline = Instant::now() + Duration::from_secs(if state.is_some() { 5 } else { 2 });
+        let startup_deadline = Instant::now() + MAX_STARTUP_WAIT;
+        let mut deadline = state.map(|_| Instant::now() + Duration::from_secs(5));
         let mut sent = 0;
         let mut bytes = Vec::new();
         let mut eof = false;
+        let mut stderr_bytes = Vec::new();
         loop {
             if let Some(pipe) = &mut stdin {
                 match pipe.write(&input[sent..]) {
@@ -112,6 +137,34 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
                     stdin.take();
                 }
             }
+            let mut stderr_eof = false;
+            if let Some(pipe) = &mut stderr {
+                let mut buffer = [0; 64];
+                loop {
+                    match pipe.read(&mut buffer) {
+                        Ok(0) => {
+                            stderr_eof = true;
+                            break;
+                        }
+                        Ok(count) => {
+                            if stderr_bytes.len() + count > 256 {
+                                return Err(Error::Capacity);
+                            }
+                            stderr_bytes.extend_from_slice(&buffer[..count]);
+                            if stderr_bytes.starts_with(READY_MARKER) {
+                                deadline
+                                    .get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+                            }
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                        Err(_) => return Err(refused()),
+                    }
+                }
+            }
+            if stderr_eof {
+                stderr.take();
+            }
             let mut buffer = [0; 512];
             loop {
                 match stdout.read(&mut buffer) {
@@ -123,6 +176,9 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
                         if bytes.len() + count > 4096 {
                             return Err(Error::Capacity);
                         }
+                        // Older compatible images do not emit the readiness marker.
+                        // Their first output starts the same bounded response window.
+                        deadline.get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
                         bytes.extend_from_slice(&buffer[..count]);
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -156,10 +212,10 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
                     return Ok(contract);
                 }
             }
-            if Instant::now() >= deadline {
+            if Instant::now() >= deadline.unwrap_or(startup_deadline) {
                 eprintln!(
-                    "image preflight deadline exceeded (state={}, stdout_bytes={}, eof={}, sent={})",
-                    state.is_some(), bytes.len(), eof, sent
+                    "image preflight deadline exceeded (state={}, ready={}, stdout_bytes={}, eof={}, sent={})",
+                    state.is_some(), deadline.is_some(), bytes.len(), eof, sent
                 );
                 return Err(refused());
             }
