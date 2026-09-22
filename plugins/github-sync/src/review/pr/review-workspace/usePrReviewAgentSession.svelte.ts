@@ -12,6 +12,7 @@ type ProjectResolver = (pr: ReviewPullRequest) => Promise<string | null>
 
 interface PrReviewAgentSessionControllerOptions {
   availabilityTimeoutMs?: number
+  onScopeReleased?: (scope: SessionScope) => Promise<void> | void
 }
 
 const ACTIVE_STATUSES = new Set(['queued', 'starting', 'running', 'paused'])
@@ -105,19 +106,22 @@ export function createPrReviewAgentSessionController(
         // A failed start creates no session to release; confirm that through status below.
       }
       const oldStatus = await api.agentSessions.status(oldScope)
-      if (oldStatus === null) return
-      if (ACTIVE_STATUSES.has(oldStatus.status)) {
+      if (oldStatus !== null && ACTIVE_STATUSES.has(oldStatus.status)) {
         try {
           await api.agentSessions.abort(oldScope)
         } catch (cause) {
           if (errorCode(cause) !== 'NOT_FOUND' && errorCode(cause) !== 'NOT_READY') throw cause
-          if (errorCode(cause) === 'NOT_FOUND') return
+          if (errorCode(cause) === 'NOT_FOUND') {
+            await options.onScopeReleased?.(oldScope)
+            return
+          }
         }
       }
-      await api.agentSessions.release(oldScope)
+      if (oldStatus !== null) await api.agentSessions.release(oldScope)
     } catch (cause) {
       if (errorCode(cause) !== 'NOT_FOUND') throw cause
     }
+    await options.onScopeReleased?.(oldScope)
   }
 
   async function ensureScopeReady(nextScope: SessionScope): Promise<void> {

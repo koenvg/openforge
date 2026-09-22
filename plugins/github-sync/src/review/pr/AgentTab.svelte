@@ -11,6 +11,7 @@
     error: string | null
     availabilityError: string | null
     mountTerminal: (scope: SessionScope, element: HTMLElement) => Promise<Disposable>
+    onTerminalReadyChange?: (ready: boolean) => void
   }
 
   let {
@@ -22,6 +23,7 @@
     error,
     availabilityError,
     mountTerminal,
+    onTerminalReadyChange = () => undefined,
   }: Props = $props()
 
   let terminalElement = $state<HTMLElement>()
@@ -44,6 +46,7 @@
 
   function requestTerminalMount(next: typeof requested): void {
     if (sameTarget(requested, next)) return
+    onTerminalReadyChange(false)
     requested = next
     reconciliation = reconciliation.then(async () => {
       const target = requested
@@ -70,9 +73,11 @@
         }
         attached = { ...target, disposable }
         terminalError = null
+        onTerminalReadyChange(true)
       } catch (cause) {
         if (!destroyed && sameTarget(requested, target)) {
           requested = null
+          onTerminalReadyChange(false)
           terminalError = cause instanceof Error && cause.message.trim().length > 0
             ? cause.message
             : 'Failed to mount the review agent terminal.'
@@ -91,6 +96,7 @@
   onDestroy(() => {
     destroyed = true
     requested = null
+    onTerminalReadyChange(false)
     reconciliation = reconciliation.then(async () => {
       const current = attached
       attached = null

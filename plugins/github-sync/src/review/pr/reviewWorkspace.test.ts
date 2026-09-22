@@ -380,6 +380,30 @@ describe('review workspace', () => {
     await waitFor(() => expect(workspace.detail!.canGenerateWalkthrough).toBe(true))
   })
 
+  it('acknowledges unread agent output only when the active terminal is visible and focused', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const { workspace, registry } = await setup()
+    await workspace.list.onSelectPr(pr)
+    await workspace.detail!.onActivateAgent()
+    const scope = { namespace: 'github', targetKey: 'gh:acme/app#42', revision: 'head' }
+    await registry.frontendApi.agentSessions.input(scope, 'Review this change')
+    registry.completeScopedAgentSession(scope)
+    await waitFor(() => expect(workspace.detail!.agentHasUnreadOutput).toBe(true))
+
+    workspace.detail!.onActiveTabChange('agent')
+    workspace.detail!.agentSession.onTerminalReadyChange?.(true)
+    expect(workspace.detail!.agentHasUnreadOutput).toBe(true)
+
+    visibility.mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(workspace.detail!.agentHasUnreadOutput).toBe(true)
+
+    focus.mockReturnValue(true)
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => expect(workspace.detail!.agentHasUnreadOutput).toBe(false))
+  })
+
   it('offers keep/remove after an in-app review, keeping the PR on keep', async () => {
     const { workspace, calls } = await setup()
     await workspace.list.onSelectPr(pr)

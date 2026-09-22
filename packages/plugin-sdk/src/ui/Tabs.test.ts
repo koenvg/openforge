@@ -38,6 +38,31 @@ describe('plugin-sdk Tabs', () => {
     expect(onValueChange).toHaveBeenCalledWith('activity')
   })
 
+  it('renders trailing tab content with an explicit accessible name without changing selection', async () => {
+    const onValueChange = vi.fn()
+    render(TabsTestWrapper, { props: { withActivitySignal: true, onValueChange } })
+    await tick()
+
+    const activity = screen.getByRole('tab', { name: 'Activity, unread output' })
+    expect(activity.textContent).toContain('Activity')
+    expect(screen.getByTestId('activity-signal')).toBeTruthy()
+
+    await fireEvent.click(activity)
+
+    expect(activity.getAttribute('aria-selected')).toBe('true')
+    expect(onValueChange).toHaveBeenCalledWith('activity')
+  })
+
+  it('keeps legacy text and icon-only tab rendering', async () => {
+    render(TabsTestWrapper)
+    await tick()
+
+    expect(screen.getByRole('tab', { name: 'Overview' }).textContent?.trim()).toBe('Overview')
+    const settings = screen.getByRole('tab', { name: 'Settings' })
+    expect(settings.textContent).toContain('Settings icon')
+    expect(screen.getByTestId('settings-icon').getAttribute('aria-hidden')).toBeNull()
+  })
+
   it('uses arrow-key navigation and skips disabled tabs', async () => {
     const onValueChange = vi.fn()
     render(TabsTestWrapper, { props: { onValueChange } })
