@@ -74,7 +74,6 @@ describe('xterm presentation evidence and capture', () => {
   })
 
   it('drains after queued writes parse, render, and cross the paint boundary', async () => {
-    const writeParsedCallbacks: Array<() => void> = []
     const renderCallbacks: Array<(range: { start: number; end: number }) => void> = []
     const animationFrames: FrameRequestCallback[] = []
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
@@ -82,10 +81,6 @@ describe('xterm presentation evidence and capture', () => {
       return animationFrames.length
     }))
     const terminal = createTerminal({
-      onWriteParsed: vi.fn((callback: () => void) => {
-        writeParsedCallbacks.push(callback)
-        return { dispose: vi.fn() }
-      }),
       onRender: vi.fn((callback: (range: { start: number; end: number }) => void) => {
         renderCallbacks.push(callback)
         return { dispose: vi.fn() }
@@ -98,9 +93,9 @@ describe('xterm presentation evidence and capture', () => {
       refresh: () => terminal.refresh(0, terminal.rows - 1),
     })
 
-    presentation.recordWrite()
+    const generation = presentation.recordWrite()
     const drained = presentation.drain()
-    writeParsedCallbacks[0]?.()
+    presentation.completeWrite(generation)
     renderCallbacks[0]?.({ start: 1, end: 3 })
     animationFrames.shift()?.(1)
     animationFrames.shift()?.(2)
@@ -116,6 +111,50 @@ describe('xterm presentation evidence and capture', () => {
     expect(terminal.refresh).toHaveBeenCalled()
   })
 
+  it('does not certify a later live write from an earlier parsed batch and render', async () => {
+    const parsedListeners: Array<() => void> = []
+    const renderListeners: Array<(range: { start: number; end: number }) => void> = []
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    const terminal = createTerminal({
+      onWriteParsed: vi.fn((listener: () => void) => {
+        parsedListeners.push(listener)
+        return { dispose: vi.fn() }
+      }),
+      onRender: vi.fn((listener: (range: { start: number; end: number }) => void) => {
+        renderListeners.push(listener)
+        return { dispose: vi.fn() }
+      }),
+    })
+    const presentation = createXtermPresentationController({
+      terminal,
+      rendererName: () => 'xterm-default',
+      canPresent: () => true,
+      refresh: vi.fn(),
+    })
+    const first = presentation.recordWrite()
+    const second = presentation.recordWrite()
+    const drained = presentation.drain()
+    let settled = false
+    void drained.then(() => { settled = true })
+    presentation.completeWrite(first)
+    parsedListeners[0]?.() // xterm 6 fires this between queued write batches.
+    renderListeners[0]?.({ start: 0, end: 1 })
+    frames.shift()?.(1)
+    frames.shift()?.(2)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    presentation.completeWrite(second)
+    parsedListeners[0]?.()
+    renderListeners[0]?.({ start: 0, end: 1 })
+    frames.shift()?.(3)
+    frames.shift()?.(4)
+    await expect(drained).resolves.toMatchObject({ writeGeneration: 2, parsedGeneration: 2 })
+    presentation.dispose()
+  })
   it('correlates parse, render, and presentation proof with the traced live write', async () => {
     let timestamp = 1
     const performanceTrace = createTerminalPerformanceTrace({ now: () => timestamp++ })
@@ -128,7 +167,6 @@ describe('xterm presentation evidence and capture', () => {
     performanceTrace.mark('firstOutput', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
     performanceTrace.mark('modelPublication', { terminalKey: 'T-1-shell-0', ptyInstanceId: 7 })
 
-    const writeParsedCallbacks: Array<() => void> = []
     const renderCallbacks: Array<(range: { start: number; end: number }) => void> = []
     const animationFrames: FrameRequestCallback[] = []
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
@@ -136,10 +174,6 @@ describe('xterm presentation evidence and capture', () => {
       return animationFrames.length
     }))
     const terminal = createTerminal({
-      onWriteParsed: vi.fn((callback: () => void) => {
-        writeParsedCallbacks.push(callback)
-        return { dispose: vi.fn() }
-      }),
       onRender: vi.fn((callback: (range: { start: number; end: number }) => void) => {
         renderCallbacks.push(callback)
         return { dispose: vi.fn() }
@@ -154,9 +188,9 @@ describe('xterm presentation evidence and capture', () => {
       refresh: () => terminal.refresh(0, terminal.rows - 1),
     })
 
-    presentation.recordWrite(7)
+    const generation = presentation.recordWrite(7)
     const drained = presentation.drain()
-    writeParsedCallbacks[0]?.()
+    presentation.completeWrite(generation)
     renderCallbacks[0]?.({ start: 0, end: 1 })
     animationFrames.shift()?.(1)
     animationFrames.shift()?.(2)
@@ -169,11 +203,9 @@ describe('xterm presentation evidence and capture', () => {
     })
   })
 
-  it('rejects pending drains on detach or disposal and releases event listeners', async () => {
-    const writeParsedDisposable = { dispose: vi.fn() }
+  it('rejects pending drains on detach or disposal and releases the render listener', async () => {
     const renderDisposable = { dispose: vi.fn() }
     const terminal = createTerminal({
-      onWriteParsed: vi.fn(() => writeParsedDisposable),
       onRender: vi.fn(() => renderDisposable),
     })
     const presentation = createXtermPresentationController({
@@ -191,7 +223,6 @@ describe('xterm presentation evidence and capture', () => {
     presentation.dispose()
     await expect(disposed).rejects.toThrow('disposed before presentation drained')
     await expect(presentation.drain()).rejects.toThrow('Cannot drain a disposed TerminalView')
-    expect(writeParsedDisposable.dispose).toHaveBeenCalledOnce()
     expect(renderDisposable.dispose).toHaveBeenCalledOnce()
   })
 })

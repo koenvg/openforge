@@ -1,3 +1,5 @@
+import { Terminal } from '@xterm/xterm'
+import { createXtermPresentationController } from '../../src/xtermPresentation'
 import { createCapturedEventRecorder } from './capturedEventRecorder'
 import { getTerminalConformanceRenderer } from './rendererRegistry'
 import { getPresentationRecordings, terminalModelRecordingCorpus } from '../../src/terminalPresentationCorpus'
@@ -372,6 +374,69 @@ async function waitForInputCount(count: number): Promise<PlayResult> {
   }
 }
 
+async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCompleted: number; firstRenderCompleted: number; settledAtCompletion: number; evidence: TerminalViewPresentationEvidence; screen: string }> {
+  const element = document.createElement('div')
+  element.style.cssText = 'width: 640px; height: 360px; position: absolute; left: -10000px'
+  document.body.appendChild(element)
+  const terminal = new Terminal({ cols: 80, rows: 24 })
+  let presentation: ReturnType<typeof createXtermPresentationController> | undefined
+  const originalNow = Object.getOwnPropertyDescriptor(performance, 'now')
+  const restoreClock = () => {
+    if (originalNow) Object.defineProperty(performance, 'now', originalNow)
+    else Reflect.deleteProperty(performance, 'now')
+  }
+  try {
+    terminal.open(element)
+    let completed = 0
+    let batches = 0
+    let firstBatchCompleted = -1
+    let firstRenderCompleted = -1
+    const parsed = terminal.onWriteParsed(() => {
+      batches++
+      if (batches === 1) restoreClock()
+      if (firstBatchCompleted === -1) firstBatchCompleted = completed
+    })
+    const rendered = terminal.onRender(() => {
+      if (batches > 0 && firstRenderCompleted === -1) firstRenderCompleted = completed
+    })
+    presentation = createXtermPresentationController({
+      terminal, rendererName: () => 'xterm-default', canPresent: () => true,
+      refresh: () => terminal.refresh(0, terminal.rows - 1),
+    })
+    // Force xterm's public write queue to yield after the first parsed chunk.
+    // Restore the real clock at the first onWriteParsed notification.
+    const realNow = performance.now.bind(performance)
+    let ticks = 0
+    Object.defineProperty(performance, 'now', {
+      configurable: true, value: () => realNow() + (Math.min(++ticks, 10) * 20),
+    })
+    const count = 12
+    for (let index = 0; index < count; index++) {
+      const generation = presentation.recordWrite()
+      const text = index === count - 1 ? '\u001b[1;1HTARGET' : '\u001b[1;1H.'
+      terminal.write(text, () => {
+        completed++
+        presentation?.completeWrite(generation)
+      })
+    }
+    let settledAtCompletion = -1
+    const drained = presentation.drain().then(result => {
+      settledAtCompletion = completed
+      return result
+    })
+    const evidence = await drained
+    const screen = terminal.buffer.active.getLine(0)?.translateToString(true) ?? ''
+    parsed.dispose()
+    rendered.dispose()
+    return { batches, firstBatchCompleted, firstRenderCompleted, settledAtCompletion, evidence, screen }
+  } finally {
+    restoreClock()
+    presentation?.dispose()
+    terminal.dispose()
+    element.remove()
+  }
+}
+
 const api = {
   renderer: renderer.id,
   corpus: terminalModelRecordingCorpus,
@@ -385,6 +450,7 @@ const api = {
   runConcurrentLifecycleCycle,
   reconnect,
   runTerminalColourProfileProbe,
+  runLiveWriteBatchProbe,
   focus: () => requireView().focus(),
   drain: () => requireView().drainPresentation(),
   capture: () => requireView().capturePresentation(),

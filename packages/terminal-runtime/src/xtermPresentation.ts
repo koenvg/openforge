@@ -24,6 +24,7 @@ export interface XtermPresentationOptions {
 
 export interface XtermPresentationController {
   recordWrite(ptyInstanceId?: number | null): number
+  completeWrite(generation: number): void
   drain(): Promise<TerminalViewPresentationEvidence>
   detach(): void
   capture(): TerminalViewPresentationSnapshot
@@ -98,13 +99,8 @@ export function createXtermPresentationController(
     })
   }
 
-  const writeParsedDisposable = terminal.onWriteParsed(() => {
-    parsedGeneration = writeGeneration
-    if (terminalKey) {
-      performanceTrace?.mark('xtermParse', { terminalKey, writeGeneration: parsedGeneration })
-    }
-    requestRefresh()
-  })
+  // onWriteParsed can fire while later writes are still queued. Only the
+  // callback for a particular write certifies that generation as parsed.
   const renderDisposable = terminal.onRender(range => {
     renderFrame += 1
     if (terminalKey) {
@@ -122,6 +118,19 @@ export function createXtermPresentationController(
         performanceTrace?.recordWrite({ terminalKey, ptyInstanceId, writeGeneration })
       }
       return writeGeneration
+    },
+    completeWrite(generation) {
+      if (disposed || generation <= parsedGeneration) return
+      parsedGeneration = generation
+      if (terminalKey) {
+        performanceTrace?.mark('xtermParse', { terminalKey, writeGeneration: parsedGeneration })
+      }
+      for (const pending of pendingDrains) {
+        if (generation >= pending.targetWriteGeneration) {
+          pending.minimumRenderFrame = Math.max(pending.minimumRenderFrame, renderFrame + 1)
+        }
+      }
+      requestRefresh()
     },
     drain() {
       if (disposed) return Promise.reject(new Error('Cannot drain a disposed TerminalView'))
@@ -181,7 +190,6 @@ export function createXtermPresentationController(
       if (disposed) return
       disposed = true
       rejectDrains(new Error('TerminalView was disposed before presentation drained'))
-      writeParsedDisposable.dispose()
       renderDisposable.dispose()
     },
   }

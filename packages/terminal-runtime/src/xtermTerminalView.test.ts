@@ -156,8 +156,8 @@ describe('xterm TerminalView adapter', () => {
     expect(view.fit()).toEqual({ cols: 80, rows: 24 })
     expect(view.geometry).toEqual({ cols: 80, rows: 24 })
     expect(view.getSelectionText()).toBe('selected text')
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot')
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]))
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot', expect.any(Function))
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]), expect.any(Function))
     expect(mocks.terminal.onData).toHaveBeenCalledOnce()
     expect(onInput).toHaveBeenCalledWith('typed input')
     expect(mocks.terminal.attachCustomKeyEventHandler).toHaveBeenCalledOnce()
@@ -498,6 +498,10 @@ describe('xterm TerminalView adapter', () => {
   })
 
   it('drains only after xterm parses queued writes and presents a renderer frame', async () => {
+    const writeCallbacks: Array<() => void> = []
+    mocks.terminal.write.mockImplementation((_data, callback) => {
+      if (callback) writeCallbacks.push(callback)
+    })
     const container = document.createElement('div')
     const view = createXtermTerminalView({
       terminalKey: 'T-1-shell-0',
@@ -515,6 +519,7 @@ describe('xterm TerminalView adapter', () => {
     await Promise.resolve()
     expect(settled).toBe(false)
 
+    writeCallbacks[0]?.()
     mocks.writeParsedCallbacks[0]?.()
     await Promise.resolve()
     expect(settled).toBe(false)
@@ -539,6 +544,37 @@ describe('xterm TerminalView adapter', () => {
       renderer: 'xterm-webgl',
     })
   })
+  it('waits for the target live batch even after an earlier batch has painted', async () => {
+    const callbacks: Array<() => void> = []
+    mocks.terminal.write.mockImplementation((_data, callback) => {
+      if (callback) callbacks.push(callback)
+    })
+    const view = createXtermTerminalView({
+      terminalKey: 'live-batches', themeMode: 'dark', openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    view.mount(document.createElement('div'))
+    view.writeLive({ data: 'early', ptyInstanceId: 1, sequence: 1 })
+    view.writeLive({ data: 'TARGET', ptyInstanceId: 1, sequence: 2 })
+    const drained = view.drainPresentation()
+    let settled = false
+    void drained.then(() => { settled = true })
+    callbacks[0]?.()
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(1)
+    mocks.animationFrameCallbacks.shift()?.(2)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    callbacks[1]?.()
+    mocks.writeParsedCallbacks[0]?.()
+    mocks.renderCallbacks[0]?.({ start: 0, end: 23 })
+    mocks.animationFrameCallbacks.shift()?.(3)
+    mocks.animationFrameCallbacks.shift()?.(4)
+    await expect(drained).resolves.toMatchObject({ writeGeneration: 2, parsedGeneration: 2, renderFrame: 2 })
+    view.dispose()
+  })
+
 
   it('rejects an in-flight presentation drain when the view detaches', async () => {
     const container = document.createElement('div')
