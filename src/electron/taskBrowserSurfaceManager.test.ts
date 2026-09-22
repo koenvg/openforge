@@ -183,6 +183,35 @@ describe('Task Browser Surface Manager', () => {
     await expect(manager.getState(created.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
+  it('keeps retired presentations detached under stale updates and window-bound replays', async () => {
+    const { manager, factory } = createManager()
+    const created = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-retired',
+      id: 'main',
+    })
+    const native = factory.surfaces[0]
+
+    manager.attach(created.surfaceId, 'retired', 1, { x: 10, y: 20, width: 300, height: 200 })
+    manager.detach(created.surfaceId, 'retired', 1)
+    const boundsBeforeStaleUpdate = native.bounds.length
+
+    manager.attach(created.surfaceId, 'retired', 1, { x: 40, y: 50, width: 300, height: 200 })
+    manager.updateWindowBounds(10, { x: 0, y: 0, width: 640, height: 480 })
+
+    expect(native.attachedWindowId).toBeNull()
+    expect(native.bounds).toHaveLength(boundsBeforeStaleUpdate)
+
+    manager.attach(created.surfaceId, 'replacement', 2, { x: 60, y: 70, width: 320, height: 220 })
+    const replacementBounds = native.bounds.at(-1)
+    manager.attach(created.surfaceId, 'retired', 1, { x: 0, y: 0, width: 10, height: 10 })
+    manager.detach(created.surfaceId, 'retired', 1)
+
+    expect(native.attachedWindowId).toBe(10)
+    expect(native.bounds.at(-1)).toEqual(replacementBounds)
+  })
+
   it('converts renderer CSS pixel attachment bounds with the current renderer zoom factor', async () => {
     const zoomFactors = new Map<number, number>([[10, 1.25]])
     const { manager, factory } = createManager({ rendererZoomFactor: windowId => zoomFactors.get(windowId) ?? 1 })
