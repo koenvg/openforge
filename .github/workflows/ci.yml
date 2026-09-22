@@ -334,21 +334,11 @@ jobs:
       - name: Check Flutter companion
         run: ./scripts/mobile-companion check
 
-  mobile-builds:
-    name: Mobile Companion ${{ matrix.name }} Build
+  mobile-android:
+    name: Mobile Companion Android Build
     timeout-minutes: 25
     needs: mobile-checks
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Android
-            runner: ubuntu-latest
-            command: build-android
-          - name: iOS
-            runner: macos-15
-            command: build-ios
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -362,7 +352,7 @@ jobs:
           cache: true
 
       - name: Build companion
-        run: ./scripts/mobile-companion ${{ matrix.command }}
+        run: ./scripts/mobile-companion build-android
 
   ghostty-compatibility:
     name: Ghostty Compatibility (${{ matrix.name }})
@@ -371,8 +361,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS
-            runner: macos-15
           - name: Linux
             runner: ubuntu-latest
           - name: Windows

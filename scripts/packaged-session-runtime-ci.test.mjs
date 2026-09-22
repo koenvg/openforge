@@ -13,7 +13,8 @@ it('requires real arm64 and Intel runners rather than accepting translated execu
   expect(workflow).toContain('uname -m')
   expect(workflow).toContain('process.arch')
   expect(workflow).toContain('test "$translated" != "1"')
-  expect(workflow).not.toContain('needs:')
+  expect(workflow).toContain('needs: impact')
+  expect(workflow).toContain("needs.impact.result == 'failure'")
 })
 
 it('launches the actual packaged runtime and retains logs even when checks fail', () => {

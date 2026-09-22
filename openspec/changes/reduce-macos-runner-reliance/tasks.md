@@ -1,16 +1,16 @@
 ## 1. Baseline and status contracts
 
-- [ ] 1.1 Record the current branch rules or ruleset contexts, workflow and job display names, and the eight routine macOS jobs in implementation validation notes; verify every context that could move has an explicit preserved or proposed replacement name before editing workflows.
-- [ ] 1.2 Capture at least three fresh successful pre-change pull-request runs with per-job created, started, and completed timestamps, runner labels, macOS job count, cumulative macOS runtime, and workflow wall time; verify the baseline distinguishes queue delay from execution time.
-- [ ] 1.3 Add failing workflow contract tests that reject `macos-14`, protect native architecture assertions, and require the existing Rust, packaged-smoke, and live-invariant jobs on every pull request; verify the new tests fail against the current workflows for the intended reasons.
+- [x] 1.1 Record the current branch rules or ruleset contexts, workflow and job display names, and the eight routine macOS jobs in implementation validation notes; verify every context that could move has an explicit preserved or proposed replacement name before editing workflows.
+- [x] 1.2 Capture at least three fresh successful pre-change pull-request runs with per-job created, started, and completed timestamps, runner labels, macOS job count, cumulative macOS runtime, and workflow wall time; verify the baseline distinguishes queue delay from execution time.
+- [x] 1.3 Add failing workflow contract tests that reject `macos-14`, protect native architecture assertions, and require the existing Rust, packaged-smoke, and live-invariant jobs on every pull request; verify the new tests fail against the current workflows for the intended reasons.
 
 ## 2. Native impact classification
 
-- [ ] 2.1 Add failing unit tests for packaged-runtime, iOS, macOS Ghostty, and Whisper path families, including family-specific inputs, safe unrelated paths, shared native inputs, classifier and workflow changes, missing revisions, malformed input, and full-run events; verify every unimplemented case fails.
-- [ ] 2.2 Implement the repository-owned native impact module and CLI with deterministic booleans and matched reasons; verify the focused classifier suite passes and its output is stable regardless of input order.
-- [ ] 2.3 Add failing tests for trusted pull-request and push revision selection, NUL-safe changed-path collection, all-zero or unavailable base revisions, and Git diff failure; verify uncertain collection selects every possibly affected family.
-- [ ] 2.4 Add a reusable local composite action or equivalent checked-in workflow helper that collects changed paths, invokes the classifier, publishes family outputs, writes the job summary, and uploads JSON evidence; verify focused tests prove classifier failure cannot become an unaffected result.
-- [ ] 2.5 Add workflow contract tests for the `always() && (full run || classifier failed || affected)` gate and verify a failed impact job schedules native work while an unaffected successful decision skips before macOS allocation.
+- [x] 2.1 Add failing unit tests for packaged-runtime, iOS, macOS Ghostty, and Whisper path families, including family-specific inputs, safe unrelated paths, shared native inputs, classifier and workflow changes, missing revisions, malformed input, and full-run events; verify every unimplemented case fails.
+- [x] 2.2 Implement the repository-owned native impact module and CLI with deterministic booleans and matched reasons; verify the focused classifier suite passes and its output is stable regardless of input order.
+- [x] 2.3 Add failing tests for trusted pull-request and push revision selection, NUL-safe changed-path collection, all-zero or unavailable base revisions, and Git diff failure; verify uncertain collection selects every possibly affected family.
+- [x] 2.4 Add a reusable local composite action or equivalent checked-in workflow helper that collects changed paths, invokes the classifier, publishes family outputs, writes the job summary, and uploads JSON evidence; verify focused tests prove classifier failure cannot become an unaffected result.
+- [x] 2.5 Add workflow contract tests for the `always() && (full run || classifier failed || affected)` gate and verify a failed impact job schedules native work while an unaffected successful decision skips before macOS allocation.
 
 ## 3. Supported macOS baseline
 
@@ -20,13 +20,13 @@
 
 ## 4. Optional native workflow allocation
 
-- [ ] 4.1 Add failing workflow tests for separate Android and iOS jobs, separate cross-platform and macOS Ghostty jobs, preserved display names, cheap impact jobs, skipped-status evidence, manual full runs, and staggered daily schedules; verify the tests fail before workflow restructuring.
-- [ ] 4.2 Split the Android build from the iOS simulator build and keep Android in general CI; verify the Android job remains unconditional and the iOS job retains its Flutter version, command, and `Mobile Companion iOS Build` display name.
-- [ ] 4.3 Split macOS Ghostty compatibility from the Linux and Windows matrix, move the iOS and macOS Ghostty jobs into a focused native compatibility workflow, and gate them through impact outputs; verify unaffected decisions skip both jobs before allocation and affected decisions preserve their original commands and artifacts.
-- [ ] 4.4 Add impact classification and a fail-closed job-level condition to the packaged-session workflow without changing its ARM and Intel matrix, architecture checks, twenty lifecycle attempts, packaged smoke, or retained artifacts; verify scheduled, manual, affected, unaffected, and classifier-failure contracts.
-- [ ] 4.5 Replace the Whisper workflow's pull-request path filter with classify-then-gate execution, preserving its compiler, packaging, speech, backend, and packaged-smoke evidence; verify unrelated pull requests get an explicit skipped result and uncertain classification runs the macOS job.
-- [ ] 4.6 Add staggered daily schedules and retain manual dispatch for native compatibility, packaged-session, and Whisper workflows; verify full-run events bypass change selection and the schedules do not request their macOS matrices at the same time.
-- [ ] 4.7 Run all native allocation and existing CI workflow contract tests together; verify display names, artifact names, concurrency cancellation, result consumers, and required frontend and Rust reporting remain compatible.
+- [x] 4.1 Add failing workflow tests for separate Android and iOS jobs, separate cross-platform and macOS Ghostty jobs, preserved display names, cheap impact jobs, skipped-status evidence, manual full runs, and staggered daily schedules; verify the tests fail before workflow restructuring.
+- [x] 4.2 Split the Android build from the iOS simulator build and keep Android in general CI; verify the Android job remains unconditional and the iOS job retains its Flutter version, command, and `Mobile Companion iOS Build` display name.
+- [x] 4.3 Split macOS Ghostty compatibility from the Linux and Windows matrix, move the iOS and macOS Ghostty jobs into a focused native compatibility workflow, and gate them through impact outputs; verify unaffected decisions skip both jobs before allocation and affected decisions preserve their original commands and artifacts.
+- [x] 4.4 Add impact classification and a fail-closed job-level condition to the packaged-session workflow without changing its ARM and Intel matrix, architecture checks, twenty lifecycle attempts, packaged smoke, or retained artifacts; verify scheduled, manual, affected, unaffected, and classifier-failure contracts.
+- [x] 4.5 Replace the Whisper workflow's pull-request path filter with classify-then-gate execution, preserving its compiler, packaging, speech, backend, and packaged-smoke evidence; verify unrelated pull requests get an explicit skipped result and uncertain classification runs the macOS job.
+- [x] 4.6 Add staggered daily schedules and retain manual dispatch for native compatibility, packaged-session, and Whisper workflows; verify full-run events bypass change selection and the schedules do not request their macOS matrices at the same time.
+- [x] 4.7 Run all native allocation and existing CI workflow contract tests together; verify display names, artifact names, concurrency cancellation, result consumers, and required frontend and Rust reporting remain compatible.
 
 ## 5. Linux terminal and Markdown visuals
 

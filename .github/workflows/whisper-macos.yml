@@ -3,32 +3,40 @@ name: Whisper macOS compatibility
 on:
   push:
     branches: [main]
-    paths:
-      - '.cargo/**'
-      - 'config/whisper-portable-cpu.cmake'
-      - 'src-tauri/Cargo.*'
-      - 'src-tauri/tests/whisper_native.rs'
-      - 'scripts/*whisper*'
-      - 'scripts/electron-package/**'
-      - 'scripts/electron-package.test.mjs'
-      - '.github/workflows/whisper-macos.yml'
   pull_request:
-    paths:
-      - '.cargo/**'
-      - 'config/whisper-portable-cpu.cmake'
-      - 'src-tauri/Cargo.*'
-      - 'src-tauri/tests/whisper_native.rs'
-      - 'scripts/*whisper*'
-      - 'scripts/electron-package/**'
-      - 'scripts/electron-package.test.mjs'
-      - '.github/workflows/whisper-macos.yml'
+    branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '47 4 * * *'
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  impact:
+    name: Native Impact
+    runs-on: ubuntu-latest
+    outputs:
+      whisperMac: ${{ steps.classify.outputs.whisperMac }}
+      fullRun: ${{ steps.classify.outputs.fullRun }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        uses: ./.github/actions/native-impact
+        with:
+          artifact-name: whisper-macos-impact
+
   native-arm64:
+    name: native-arm64
+    needs: impact
+    if: always() && !cancelled() && (needs.impact.outputs.fullRun == 'true' || needs.impact.result == 'failure' || needs.impact.outputs.whisperMac == 'true')
     runs-on: macos-15
     timeout-minutes: 45
     env:
