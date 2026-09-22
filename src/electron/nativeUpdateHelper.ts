@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parseUpdateTarget, type UpdateTarget } from './appUpdateVerification.js'
 import type { UpdateAuthorizationStore } from './updateAuthorization.js'
 import type { UpdateBundleStore } from './updateBundleStore.js'
+import type { RestartTerminalController } from './restartWorkspace.js'
 import { preflightAuthorizedInstall } from './updateInstallPreflight.js'
 import { UpdateHelperProcess } from './updateHelperProcess.js'
 import { measureUpdateBundle, updateBundleImages } from './updateBundleManifest.js'
@@ -22,8 +23,10 @@ export async function prepareNativeUpdateHandoff(options: {
   bundles: UpdateBundleStore
   target: UpdateTarget
   recoveryRoot: string
+  controller?: RestartTerminalController
 }): Promise<NativeUpdateHandoff> {
   const target = parseUpdateTarget(options.target)
+  const controller = options.controller ? Object.freeze({ ...options.controller }) : undefined
   const { authorization, staged } = await preflightAuthorizedInstall({ ...options, target })
   const root = options.recoveryRoot
   if (!isAbsolute(root) || resolve(root) !== root) throw new Error('Helper recovery root must be absolute and normalized')
@@ -46,7 +49,7 @@ export async function prepareNativeUpdateHandoff(options: {
     const hello = await helper.receive(10_000)
     if (hello.version !== 1 || typeof hello.challenge !== 'string' || !/^[a-f0-9]{64}$/.test(hello.challenge)) throw new Error('Invalid helper challenge')
     const challenge = hello.challenge
-    const proof = (action: 'prepare' | 'install' | 'cancel') => options.authorization.helperProof(target.operationId, challenge, action, root, target.manifestSha256)
+    const proof = (action: 'prepare' | 'install' | 'cancel') => options.authorization.helperProof(target.operationId, challenge, action, root, target.manifestSha256, controller)
     await helper.send(await proof('prepare'))
     expectStatus(await helper.receive(), 'prepared', target.operationId)
     const child = helper
@@ -80,7 +83,7 @@ export async function prepareNativeUpdateHandoff(options: {
 
 /** Called by the trusted coordinator only after runtime reconciliation and every window restores. */
 export async function commitNativeUpdate(options: {
-  authorization: UpdateAuthorizationStore; target: UpdateTarget; recoveryRoot: string
+  authorization: UpdateAuthorizationStore; target: UpdateTarget; recoveryRoot: string; controller?: RestartTerminalController
 }): Promise<void> {
   const target = parseUpdateTarget(options.target)
   const grant = await options.authorization.read(target.operationId)
@@ -97,7 +100,7 @@ export async function commitNativeUpdate(options: {
     helper = new UpdateHelperProcess(executable)
     const hello = await helper.receive(10_000)
     if (hello.version !== 1 || typeof hello.challenge !== 'string') throw new Error('Invalid helper challenge')
-    await helper.send(await options.authorization.helperProof(target.operationId, hello.challenge, 'commit', root, target.manifestSha256))
+    await helper.send(await options.authorization.helperProof(target.operationId, hello.challenge, 'commit', root, target.manifestSha256, options.controller))
     expectStatus(await helper.receive(), 'committed', target.operationId)
   } finally {
     await helper?.stop()

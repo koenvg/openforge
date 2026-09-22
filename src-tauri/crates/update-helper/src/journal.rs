@@ -29,6 +29,7 @@ pub(crate) struct Record {
     pub target_hash: String,
     pub previous_hash: String,
     pub phase: Phase,
+    pub runtime: Option<crate::runtime_update::RuntimePlan>,
 }
 
 #[derive(Serialize, Deserialize)]

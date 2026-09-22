@@ -35,6 +35,7 @@ struct Prepare {
     operation: String,
     #[serde(rename = "manifestSha256")]
     manifest_sha256: String,
+    controller: Option<openforge_session_protocol::Controller>,
 }
 
 #[derive(Deserialize)]
@@ -131,10 +132,40 @@ fn run() -> Result<(), String> {
     let mut transaction =
         InstallTransaction::open(&request.root, &request.installation, &request.destination)?;
     if request.action == "commit" {
-        transaction.commit(&request.operation)?;
+        transaction.commit_with_controller(&request.operation, request.controller)?;
         return emit(&json!({"status":"committed","operation":request.operation}));
     }
+    let cold_runtime = if request.controller.is_none() {
+        Some(crate::runtime_update::ColdRuntime::reserve(
+            &launch.daemon_root,
+        )?)
+    } else {
+        None
+    };
     transaction.prepare(&request.authorization, &request.staging, &request.operation)?;
+    let mut runtime = if let Some(controller) = request.controller {
+        match crate::runtime_update::RuntimeUpdate::stage(&authority, controller) {
+            Ok(runtime) => Some(runtime),
+            Err(error) => {
+                transaction.recover(&request.operation)?;
+                return Err(error);
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(runtime) = &mut runtime {
+        let prepared = (|| {
+            transaction.record_runtime(&request.operation, runtime.plan.clone())?;
+            runtime.prepare(&request.operation)?;
+            transaction.record_runtime(&request.operation, runtime.plan.clone())
+        })();
+        if let Err(error) = prepared {
+            runtime.cancel(&request.operation)?;
+            transaction.recover(&request.operation)?;
+            return Err(error);
+        }
+    }
     let decision: Result<String, String> = (|| {
         emit(&json!({"status":"prepared","operation":request.operation}))?;
         *input.get_mut() = crate::handoff_input::HandoffInput::new();
@@ -159,11 +190,17 @@ fn run() -> Result<(), String> {
         }
     })();
     if decision.as_deref() != Ok("install") {
+        if let Some(runtime) = &runtime {
+            runtime.cancel(&request.operation)?;
+        }
         transaction.recover(&request.operation)?;
         decision?;
         return emit(&json!({"status":"cancelled","operation":request.operation}));
     }
     if let Err(error) = transaction.replace(&request.operation) {
+        if let Some(runtime) = &runtime {
+            runtime.cancel(&request.operation)?;
+        }
         transaction.recover(&request.operation)?;
         return Err(error);
     }
@@ -171,6 +208,15 @@ fn run() -> Result<(), String> {
         transaction.recover(&request.operation)?;
         return Err(error);
     }
+    if let Some(runtime) = &runtime {
+        if let Err(error) = runtime.activate(&request.operation) {
+            transaction.recover(&request.operation)?;
+            return Err(error);
+        }
+    }
+    // The old host has exited. Release cold-start admission before the target
+    // can launch its daemon; target readiness must still verify the running image.
+    drop(cold_runtime);
     transaction.begin_launch(&request.operation)?;
     // Only the authorized app entry point, never caller-provided shell commands or argv.
     let mut command =

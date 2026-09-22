@@ -6,6 +6,7 @@ mod handoff;
 mod handoff_input;
 mod host_exit;
 mod journal;
+mod runtime_update;
 pub use handoff::run_helper;
 pub use journal::Phase;
 
@@ -139,8 +140,22 @@ impl InstallTransaction {
                 target_hash: authority.manifest_sha256,
                 previous_hash,
                 phase: Phase::Prepared,
+                runtime: None,
             },
         )
+    }
+
+    fn record_runtime(
+        &mut self,
+        operation: &str,
+        runtime: crate::runtime_update::RuntimePlan,
+    ) -> Result<(), String> {
+        let mut record = self.require(operation)?;
+        if record.phase != Phase::Prepared {
+            return Err("runtime preflight requires a prepared app transaction".into());
+        }
+        record.runtime = Some(runtime);
+        journal::write(&self.root, &record)
     }
 
     /// # Errors
@@ -234,6 +249,18 @@ impl InstallTransaction {
     /// # Errors
     /// Refuses pre-launch/stale operations or changed authorization and installed bytes.
     pub fn commit(&mut self, operation: &str) -> Result<(), String> {
+        self.commit_with_controller(operation, None)
+    }
+
+    /// Commit a live-runtime update only after the replacement Sidecar has reconciled.
+    /// # Errors
+    /// Refuses missing/stale controllers, a different daemon lifetime or PID, and
+    /// activation receipts that do not identify the authorized prepared runtime.
+    pub fn commit_with_controller(
+        &mut self,
+        operation: &str,
+        controller: Option<openforge_session_protocol::Controller>,
+    ) -> Result<(), String> {
         let mut record = self.require(operation)?;
         if !matches!(record.phase, Phase::LaunchStarted | Phase::Committed) {
             return Err("update has not launched".into());
@@ -249,6 +276,16 @@ impl InstallTransaction {
             || bundle::measure(&self.destination)? != record.target_hash
         {
             return Err("authorized installed bundle changed".into());
+        }
+        if record.phase == Phase::LaunchStarted {
+            if let Some(runtime) = &record.runtime {
+                let root = &authority
+                    .launch
+                    .as_ref()
+                    .ok_or("missing runtime root")?
+                    .daemon_root;
+                runtime.verify_ready(root, operation, controller)?;
+            }
         }
         record.phase = Phase::Committed;
         journal::write(&self.root, &record)

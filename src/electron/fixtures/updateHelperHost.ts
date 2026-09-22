@@ -15,7 +15,7 @@ const input = createInterface({ input: process.stdin })
 input.on('line', command => {
   if (command === 'exit') process.exit(0)
 })
-const handoff = await prepareNativeUpdateHandoff({ authorization, bundles, target: config.target, recoveryRoot: config.recovery })
+const handoff = await prepareNativeUpdateHandoff({ authorization, bundles, target: config.target, recoveryRoot: config.recovery, controller: config.controller })
 await handoff.arm()
 process.stdout.write('armed\n')
 // Own all fixture lifetime: losing the test controller exits this temporary host too.

@@ -8,6 +8,7 @@ import { verifyPublishedAppUpdate } from './updatePublisherTrust.js'
 import { confirmNativeLocalBuild } from './localBuildApproval.js'
 import { confirmNativeFirstAdoption } from './firstAdoptionApproval.js'
 
+import type { RestartTerminalController } from './restartWorkspace.js'
 export interface UpdateLaunchContext {
   electronUserData: string
   appData: string
@@ -121,7 +122,7 @@ export class UpdateAuthorizationStore {
   }
 
   /** Main-process capability. A fresh helper challenge binds each proof to one live pipe. */
-  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit', recoveryRoot: string, manifestSha256: string): Promise<{ payload: string; mac: string }> {
+  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController): Promise<{ payload: string; mac: string }> {
     if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit'].includes(action)
       || !isAbsolute(recoveryRoot) || resolve(recoveryRoot) !== recoveryRoot) throw new Error('Invalid helper handoff request')
     const authorization = await this.read(operationId)
@@ -133,6 +134,7 @@ export class UpdateAuthorizationStore {
       version: 1, challenge, action, manifestSha256, root: recoveryRoot, destination: authorization.installedBundlePath,
       authorization: this.options.root, staging: dirname(authorization.bundlePath),
       installation: authorization.installationId, operation: operationId,
+      ...(controller ? { controller: { installation: controller.installation, lifetime: controller.lifetime, generation: controller.generation } } : {}),
     } : { version: 1, challenge, action, operation: operationId })
     return { payload, mac: createHmac('sha256', key).update('openforge-update-handoff-v1\0').update(payload).digest('hex') }
   }

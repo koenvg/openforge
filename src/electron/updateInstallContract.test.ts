@@ -13,6 +13,9 @@ const enabled = process.env.RUN_UPDATE_HELPER_CONTRACT === '1'
 const cleanEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
 let executable: string
 let nativeExecutable: string
+let daemonExecutable: string
+let targetDaemonExecutable: string
+const pendingHelpers = new Set<() => Promise<void>>()
 
 describe.skipIf(!enabled)('Electron authorization to native install/recovery contract', () => {
   beforeAll(() => {
@@ -23,9 +26,18 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     if (!executable) throw new Error('Native updater fixture was not built')
     nativeExecutable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'openforge-update-helper' && row.target.kind.includes('bin') && row.executable)?.executable
     if (!nativeExecutable) throw new Error('Native updater was not built')
+    const daemonManifest = execFileSync(process.execPath, ['scripts/rust-sidecar-layout.mjs', 'session-daemon-manifest-path'], { encoding: 'utf8', env: cleanEnvironment }).trim()
+    const daemonBuild = execFileSync('cargo', ['build', '--manifest-path', daemonManifest, '--features', 'replacement-fixtures', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
+    daemonExecutable = daemonBuild.split('\n').filter(Boolean).map(line => JSON.parse(line)).find(row => row.reason === 'compiler-artifact' && row.target.name === 'openforge-session-daemon' && row.executable)?.executable
+    targetDaemonExecutable = daemonBuild.split('\n').filter(Boolean).map(line => JSON.parse(line)).find(row => row.reason === 'compiler-artifact' && row.target.name === 'openforge-session-daemon-fixture-v2' && row.executable)?.executable
+    if (!targetDaemonExecutable) throw new Error('Distinct daemon fixture was not built')
+    if (!daemonExecutable) throw new Error('Native daemon fixture was not built')
   }, 120_000)
 
-  afterEach(cleanupUpdateBundles)
+  afterEach(async () => {
+    for (const settle of pendingHelpers) await settle()
+    await cleanupUpdateBundles()
+  }, 65_000)
 
   it.each(['current', 'daemon-aware-no-helper', 'legacy-approved', 'legacy-unapproved', 'legacy-changed'] as const)('authenticates complete replacement and pre-launch recovery: %s', async sourceKind => {
     const { root, source, store } = await updateBundleFixture()
@@ -158,4 +170,146 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       await exited
     }
   }, 25_000)
+
+  it('refuses a cold-install handoff when the authorized runtime root has a live owner', async () => {
+    const { root, source, store } = await updateBundleFixture()
+    const destination = join(root, 'Installed.app')
+    await cp(source, destination, { recursive: true })
+    await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    const staged = await store.stage(source)
+    const authorization = new UpdateAuthorizationStore({
+      root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
+      launch: { electronUserData: root, appData: root, daemonRoot: root }, bundles: store, confirmLocalBuild: async () => 'approve',
+    })
+    await authorization.authorizeLocal(staged, 'contract-operation')
+    const daemon = spawn(daemonExecutable, [root], { env: {}, stdio: 'ignore' })
+    const exited = new Promise<void>(resolve => daemon.once('exit', () => resolve()))
+    const observe = (controller?: unknown) => spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
+      root, destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
+      installation: 'contract-installation', operation: 'contract-operation', action: 'runtime-inventory', controller,
+    }) })
+    try {
+      let controller: unknown
+      await vi.waitFor(() => {
+        const ready = observe()
+        expect(ready.status).toBe(0)
+        controller = JSON.parse(ready.stdout).controller
+      }, { timeout: 10_000, interval: 20 })
+      let handoff: Awaited<ReturnType<typeof prepareNativeUpdateHandoff>> | undefined
+      let refusal: unknown
+      try {
+        handoff = await prepareNativeUpdateHandoff({
+          authorization, bundles: store, recoveryRoot: join(root, 'transaction'),
+          target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images },
+        })
+      } catch (error) { refusal = error }
+      finally { await handoff?.cancel() }
+      expect(refusal).toBeInstanceOf(Error)
+      expect(observe(controller).status).toBe(0)
+    } finally {
+      daemon.kill('SIGTERM')
+      await exited
+    }
+  }, 30_000)
+
+  it.each(['cancel', 'install', 'wrong-daemon', 'missing-cli'])('preflights a live daemon without fencing Sidecar: %s', async mode => {
+    const { root, source, store } = await updateBundleFixture()
+    const destination = join(root, 'Installed.app')
+    await cp(source, destination, { recursive: true })
+    await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    await cp(targetDaemonExecutable, join(source, 'Contents/MacOS/openforge-session-daemon'))
+    const marker = join(root, 'target-started')
+    await writeFile(join(source, 'Contents/MacOS/Open Forge'), `#!/bin/sh\nprintf updated > ${JSON.stringify(marker)}\n`, { mode: 0o755 })
+    execFileSync(process.execPath, ['--input-type=module', '-e', `
+      import { packageRuntimeRelease } from './scripts/electron-package/runtime-release.mjs';
+      const [daemonPath, cliAssetsPath, outputPath] = process.argv.slice(1);
+      await packageRuntimeRelease({ daemonPath, cliAssetsPath, outputPath, architecture: process.arch === 'arm64' ? 'arm64' : 'x86_64' });
+    `, mode === 'wrong-daemon' ? daemonExecutable : targetDaemonExecutable, mode === 'missing-cli' ? '' : join(source, 'Contents/Resources/openforge-cli'), join(source, 'Contents/MacOS/session-runtime')], { env: cleanEnvironment })
+    const staged = await store.stage(source)
+    const authorization = new UpdateAuthorizationStore({
+      root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
+      launch: { electronUserData: root, appData: root, daemonRoot: root }, bundles: store, confirmLocalBuild: async () => 'approve',
+    })
+    await authorization.authorizeLocal(staged, 'contract-operation')
+    const daemon = spawn(daemonExecutable, [root], { env: {}, stdio: 'ignore' })
+    const exited = new Promise<void>(resolve => daemon.once('exit', () => resolve()))
+    const observe = (controller?: unknown) => spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
+      root, destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
+      installation: 'contract-installation', operation: 'contract-operation', action: 'runtime-inventory', controller,
+    }) })
+    try {
+      let controller: { installation: string; lifetime: string; generation: number } | undefined
+      await vi.waitFor(() => {
+        const ready = observe()
+        expect(ready.status).toBe(0)
+        controller = JSON.parse(ready.stdout).controller
+      }, { timeout: 10_000, interval: 20 })
+      const target = { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }
+      if (mode === 'wrong-daemon' || mode === 'missing-cli') {
+        await expect(prepareNativeUpdateHandoff({ authorization, bundles: store, recoveryRoot: join(root, 'transaction'), controller, target })).rejects.toThrow('did not acknowledge prepared')
+        expect(observe(controller).status).toBe(0)
+        expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+        return
+      }
+      if (mode === 'cancel') {
+        const handoff = await prepareNativeUpdateHandoff({ authorization, bundles: store, recoveryRoot: join(root, 'transaction'), controller, target })
+        try { expect(observe(controller).status).toBe(0) }
+        finally { await handoff.cancel() }
+        expect(observe(controller).status).toBe(0)
+      } else {
+        const before = JSON.parse(observe(controller).stdout)
+        const hostScript = join(root, 'host.mjs')
+        await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
+          ssr: 'src/electron/fixtures/updateHelperHost.ts', outDir: root, emptyOutDir: false,
+          rollupOptions: { external: ['electron'], output: { entryFileNames: 'host.mjs' } },
+        } })
+        const config = join(root, 'host.json')
+        await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: join(root, 'authorization'), destination, recovery: join(root, 'transaction'), target, controller }), { mode: 0o600 })
+        const settleHelper = async () => {
+          // Bundle remeasurement is an install transaction, not a daemon probe.
+          // Observe released kernel ownership before deleting this fixture root.
+          await vi.waitFor(() => {
+            const idle = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
+              root: join(root, 'transaction'), destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
+              installation: target.installationId, operation: target.operationId, action: 'idle',
+            }) })
+            expect(idle.status).toBe(0)
+          }, { timeout: 60_000, interval: 50 })
+          pendingHelpers.delete(settleHelper)
+        }
+        pendingHelpers.add(settleHelper)
+        const host = spawn(process.execPath, [hostScript, config], { env: { ...cleanEnvironment, HOME: root, TMPDIR: root }, stdio: ['pipe', 'pipe', 'pipe'] })
+        const hostExit = new Promise<void>(resolve => host.once('exit', () => resolve()))
+        let output = ''
+        host.stdout.on('data', chunk => { output += String(chunk) })
+        host.stderr.resume()
+        try {
+          await vi.waitFor(() => expect(output).toContain('armed'), { timeout: 15_000, interval: 20 })
+          expect(observe(controller).status).toBe(0)
+          await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+          host.stdin.end('exit\n')
+          await hostExit
+          try {
+            await settleHelper()
+            await vi.waitFor(async () => expect(await readFile(marker, 'utf8')).toBe('updated'), { timeout: 10_000, interval: 20 })
+          } catch (error) {
+            const record = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+            throw new Error(`Target launch failed; native phase=${record.phase}`, { cause: error })
+          }
+          const after = JSON.parse(observe().stdout)
+          expect(after.controller.lifetime).toBe(before.controller.lifetime)
+          expect(after.capabilities.pid).toBe(before.capabilities.pid)
+          expect(after.capabilities.imageVersion).not.toBe(before.capabilities.imageVersion)
+          const commit = { authorization, target, recoveryRoot: join(root, 'transaction') }
+          await expect(commitNativeUpdate(commit)).rejects.toThrow('did not acknowledge committed')
+          await expect(commitNativeUpdate({ ...commit, controller: before.controller })).rejects.toThrow('did not acknowledge committed')
+          await commitNativeUpdate({ ...commit, controller: after.controller })
+          await commitNativeUpdate({ ...commit, controller: after.controller })
+        } finally { host.kill('SIGKILL'); await hostExit; await settleHelper() }
+      }
+    } finally {
+      daemon.kill('SIGTERM')
+      await exited
+    }
+  }, 150_000)
 })

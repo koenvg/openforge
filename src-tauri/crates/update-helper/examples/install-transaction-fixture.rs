@@ -13,6 +13,7 @@ struct Request {
     installation: String,
     operation: String,
     action: String,
+    controller: Option<openforge_session_protocol::Controller>,
 }
 
 fn run() -> Result<(), String> {
@@ -25,9 +26,25 @@ fn run() -> Result<(), String> {
         return Err("request exceeds limit".into());
     }
     let request: Request = serde_json::from_slice(&input).map_err(|_| "invalid fixture request")?;
+    if request.action == "runtime-inventory" {
+        let (inventory, capabilities) = if let Some(controller) = request.controller {
+            openforge_session_client::MaintenanceClient::attach(&request.root, controller)
+                .and_then(|client| Ok((client.inventory()?, client.capabilities()?)))
+        } else {
+            openforge_session_client::Client::connect(&request.root)
+                .and_then(|client| Ok((client.inventory()?, client.capabilities()?)))
+        }
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::json!({ "controller": inventory.controller, "sessions": inventory.sessions, "capabilities": capabilities })
+        );
+        return Ok(());
+    }
     let mut transaction =
         InstallTransaction::open(&request.root, &request.installation, &request.destination)?;
     match request.action.as_str() {
+        "idle" => {}
         "prepare" => {
             transaction.prepare(&request.authorization, &request.staging, &request.operation)?
         }

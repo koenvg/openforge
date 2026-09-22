@@ -14,6 +14,9 @@ KVG-5206 is unfinished. Production updates and source installation remain disabl
 - An authenticated, atomically written journal records preparation, replacement, launch fencing and commit. Replacement retains the old bundle and flushes files and directory changes. Pre-launch recovery verifies old bytes before restoring them. After launch, rollback is refused because target domain processes may have migrated data.
 - Native commit rechecks authorization and installed bytes, is retryable after a lost acknowledgement, and allows a later operation without deleting retained bundles. The coordinator calls the update driver's commit only after runtime readiness and workspace restoration. It also cancels prepared helper ownership when preparation fails.
 - The coordinator now requires a Sidecar-exit verifier before update preparation. After authenticated detach it waits for the exact spawned Sidecar's exit before calling the replacement driver. The Electron adapter records exit from spawn time and bounds shutdown using the existing shutdown budget. Signal acknowledgement, `killed`, and shutdown reports do not count as exit proof.
+- `MaintenanceClient` borrows the current Sidecar controller for preflight without `Connect`, daemon launch or session mutation methods. Its read-only replacement observation also works after that controller becomes stale, without fencing the replacement Sidecar.
+- A live-runtime handoff authenticates the source controller. The helper copies the target runtime into installation-owned immutable storage, verifies that its daemon and complete CLI payload match the authorized app, and keeps durable release pins. It records the source controller, daemon PID, source image, release digest and preparation intent before asking the daemon to prepare. A cold handoff instead holds launch and lifetime locks and refuses an existing owner.
+- After host exit and bundle replacement, the helper activates the prepared daemon before launching the target app. Native commit requires a fresh Sidecar controller for the preserved lifetime, the original daemon PID, and an activated operation receipt whose actual image matches the prepared image. Unknown receipts are not evidence of successful cancellation. Target-app startup authentication remains unfinished.
 
 The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle.
 
@@ -25,9 +28,19 @@ A daemon-aware source may lack the helper introduced by its target; that alone d
 
 The native suite covers tampering, operation replay, conflicting roots and owners, corrupt journals, rollback, post-launch refusal, commit, lost pipes and killed owners. Process tests reject unauthenticated and stale-challenge requests before acquiring installation ownership.
 
-The opt-in Electron/native contract uses actual compiled helper bytes, real Electron authorization and an owned temporary host process. It verifies cancellation, waits for host exit, installs the target, launches a short-lived fixture app with the authorized data roots, and commits through another helper process. Other application components remain fixtures. This is not evidence of Electron/Sidecar/daemon/PID/PTY continuity or KVG-4730 packaged acceptance.
+The opt-in Electron/native contract uses actual compiled helper and daemon bytes, real Electron authorization and an owned temporary host process. It covers cancellation, cold-install refusal over a live owner, incompatible daemon/CLI payloads, host exit, replacement, distinct-image daemon activation and fresh-controller commit. The daemon retains its PID and lifetime. Electron and Sidecar are still stand-ins, and this contract does not create PTYs. A separate Rust test activates a distinct image through `MaintenanceClient` while preserving a real `/bin/cat` PID, PTY and input/output. Neither test establishes packaged Electron/Sidecar/daemon continuity or KVG-4730 acceptance.
 
-Latest checks:
+Latest runtime-integration checks:
+
+- Opt-in native contract: 12 passed. An initial fixture wait expired while the journal still reported `replacing`. The test now observes release of native transaction ownership before checking target startup or deleting its root. State probes remain bounded at five seconds; transaction completion has a separate deadline.
+- Client default/all-feature suites: 18 passed each. Helper suites: 18 passed each. Both crates passed all-target/all-feature check, build, strict Clippy and formatting.
+- Daemon default suite: 93 passed, 2 ignored. All-target/all-feature check, build, strict Clippy and formatting passed. Two focused updater tests passed, including live PTY continuity and read-only replacement observation.
+- Daemon all-feature runs failed in `tests/agent_gateway.rs:22` during `Client::launch`, with `daemon startup timed out; retry attachment without launching a host`. A separate retry also failed. Related parallel-startup work already exists as KVG-5188; no duplicate task or unrelated timeout change was made.
+- TypeScript, plugin-host typecheck, lint and Electron/Companion contracts passed.
+- The first full root attempt exceeded its 300-second tool limit with browser-test timeouts. The next completed in 377.85 seconds with 876 files and 7,475 tests passed, one failure, 3 expected failures and 55 skips. The failure is the unchanged five-second limit in `scripts/check-ui-migration-inventory.test.mjs:202`. Its isolated rerun passed all 27 tests in 2.24 seconds. This is not a green full-task run.
+- Logs use `/tmp/KVG-5206-runtime-*.log`. Unrelated worktrees were running Vite and Vitest during these attempts; none of those processes were stopped. Broader package, Sidecar and packaged acceptance evidence below predates this increment.
+
+Earlier successful checkpoints:
 
 - Last full root run: 877 files passed, 7,476 tests passed, 3 expected failures, 49 skipped across 12 files. The opt-in native contract subsequently passed 7 tests, including the added daemon-aware source without an old helper.
 - Helper default and all-feature suites: 18 tests each. All-target/all-feature check, build and strict Clippy passed, along with formatting.
@@ -59,7 +72,7 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 ## Remaining KVG-5206 work
 
 - Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
-- Preflight and activate the compatible daemon image, retain runtime and CLI assets, and authenticate running executable identities and reconciliation before commit. Preserve agent/tool/shell PIDs and PTYs through the supported transition.
+- Connect the implemented daemon preflight, activation, immutable runtime/CLI retention and fresh-controller commit to the real update driver. Authenticate target-app startup before any Sidecar or database access, then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
 - Wire the separate native first-adoption consent into verified legacy shutdown and the source installer. Consent and authorized legacy transaction support exist, but no end-to-end first-adoption flow or seamless migration claim is made.
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
 - Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.
