@@ -64,7 +64,7 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
 - Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.
 - Finish affected-system validation, including applicable package-local builds/conformance and isolated packaged smoke/live checks, then publish completed implementation evidence. No complete-feature validation or acceptance claim is made here.
-- Terminal-runtime browser conformance launches isolated Playwright Chromium. It has not been run because the Arc-only browser preference needs an explicit exception. The SDK published-package conformance command already launched Chromium before that was noticed; do not repeat browser conformance without approval.
+- The owner approved isolated Playwright Chromium for required conformance tests. Terminal-runtime conformance passed 35 semantic checks, 13 visual baselines and the native terminal colour-profile test. Report: `artifacts/terminal-presentation/report.json`. This clears the browser-conformance approval blocker, not packaged updater continuity or production enablement.
 
 ## Activation gates
 
