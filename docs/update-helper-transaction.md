@@ -47,7 +47,7 @@ Strip inherited `OPENFORGE_*` settings before invoking validation. The contract 
 ## Activation gates
 
 1. Finish the implementation and focused evidence above, including authenticated helper launch and compatible live daemon activation.
-2. Clear inherited validation failures tracked by KVG-5209 and KVG-5210, then complete affected-system validation. These are test cleanup tasks, not additional acceptance projects.
+2. Complete affected-system validation. The standalone host/client validation failures were fixed within KVG-5206 with owner approval, and KVG-5209/KVG-5210 were deleted at the owner's request. Host and client default/all-feature tests, all-target checks/builds, strict Clippy and formatting now pass. The signed fixtures use protocol 4 and retain explicit refusal of correctly signed protocol-3 releases; production compatibility and publisher trust are unchanged. Broader validation and packaged evidence remain outstanding.
 3. KVG-4730 must supply comprehensive isolated packaged acceptance and release evidence. Keep its repeated-update, failure and platform checks there. The current OpenSpec implementation target is macOS arm64; its task prompt still mentions x64, which needs owner reconciliation before acceptance claims.
 4. KVG-1789 must satisfy macOS signing/notarization prerequisites. Publisher signing must also run in owner-approved protected infrastructure, with the pinned key and secure backup in place.
 5. Only after those gates pass may a reviewed change enable production updates. No gate is cleared by this checkpoint.

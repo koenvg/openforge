@@ -221,17 +221,23 @@ fn published_staging_rejects_a_manifest_signed_by_an_untrusted_publisher() {
 fn published_staging_accepts_an_independently_signed_manifest_without_enabling_replacement() {
     use openforge_session_client::releases::PublisherTrust;
 
-    // Node's crypto.sign generated these Ed25519 vectors with test seed [7; 32].
+    // Node's crypto.sign generated these protocol-4 Ed25519 vectors with test seed [7; 32].
+    // The signed JSON uses recursively sorted object keys, matching serde_json::Value.
     // These keys are fixtures, never installed publisher configuration.
+    assert_eq!(
+        openforge_session_protocol::VERSION,
+        4,
+        "regenerate the independent signed vectors after a protocol change"
+    );
     let public_key = hex_bytes("ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c");
     let (signature, expected_id) = match std::env::consts::ARCH {
         "aarch64" => (
-            "868ba7030830688532c93180c990275a5403cc4bf1d7b7f59b57d642dba1cbd1c139efecfbe63e5a4daf7c0264e7302a3e544dba7c5a8de214bc138716b17f06",
-            "8e11fe11a2d2ccb8b2737cfa2fe3d9935f12f73c6ffe1152969623845b72480b",
+            "0c0efbc0f3dae2db163109fded4a372cff3ae55c822b14772a4f2122115caed66b80e8352ea8bd80aacf033b68e4943354fc09c911cde1bc2ed30eb3ae83e104",
+            "3cf6431b18b6c370700dc1c5b0468db784bdf5fbae83f505736fc95bf7575bc1",
         ),
         "x86_64" => (
-            "796230561f47e2e0b8dd76456ae9323f37ae765ea73dd39eb2d6fa50ef8348307d1e17b17e2e6e2e6cbc97e5e71675470106149e6ad9ded30dfc18faef9ad00d",
-            "0b5e2063102271ab9dc2824286a9bd1c88bbe286774f20005e0b29b0dd0126cd",
+            "de399f7364b1a1e4502cac5172bded18efc5fde021d45132d209b221937798117242d3ab2923027c4fe40b55373e9787e3502daa85f815b6305c29438b8acf0f",
+            "0b68364a5fdaaf2368405993f87854c329be55346c64c23a6fcaed7e1e7c3496",
         ),
         _ => return,
     };
@@ -248,6 +254,43 @@ fn published_staging_accepts_an_independently_signed_manifest_without_enabling_r
     drop(source);
     assert_eq!(fs::read(release.executable()).unwrap(), b"daemon");
     assert!(store.preflight(&runtime, &release, Some(&release)).is_err());
+}
+
+#[test]
+fn published_staging_rejects_a_correctly_signed_protocol_three_release() {
+    use openforge_session_client::releases::PublisherTrust;
+    use openforge_session_protocol::Error;
+
+    // Preserve the independently generated protocol-3 vectors as compatibility refusals.
+    // A valid publisher signature must not make an obsolete protocol compatible.
+    let signature = match std::env::consts::ARCH {
+        "aarch64" => "868ba7030830688532c93180c990275a5403cc4bf1d7b7f59b57d642dba1cbd1c139efecfbe63e5a4daf7c0264e7302a3e544dba7c5a8de214bc138716b17f06",
+        "x86_64" => "796230561f47e2e0b8dd76456ae9323f37ae765ea73dd39eb2d6fa50ef8348307d1e17b17e2e6e2e6cbc97e5e71675470106149e6ad9ded30dfc18faef9ad00d",
+        _ => return,
+    };
+    let source = bundle();
+    let path = source.path().join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest["protocol"] = 3.into();
+    fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let runtime = RuntimeDirectory::open(root.path()).unwrap();
+    let store = ReleaseStore::open(&runtime).unwrap();
+    let trust = PublisherTrust::new(vec![hex_bytes(
+        "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+    )
+    .try_into()
+    .unwrap()])
+    .unwrap();
+    assert!(matches!(
+        store.stage(source.path()),
+        Err(Error::UnsupportedReplacement)
+    ));
+    assert!(matches!(
+        store.stage_published(source.path(), &trust, &hex_bytes(signature)),
+        Err(Error::UnsupportedReplacement)
+    ));
 }
 
 fn hex_bytes(value: &str) -> Vec<u8> {
