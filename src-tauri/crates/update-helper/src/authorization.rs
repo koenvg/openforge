@@ -14,6 +14,26 @@ pub(crate) struct Authorization {
     pub manifest_sha256: String,
     pub bundle_path: PathBuf,
     pub launch: Option<LaunchContext>,
+    pub first_adoption: Option<FirstAdoption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct FirstAdoption {
+    pub installed_manifest_sha256: String,
+}
+
+impl Authorization {
+    pub fn installed_digest(&self, path: &Path) -> Result<String, String> {
+        let Some(approval) = &self.first_adoption else {
+            return crate::bundle::measure_daemon_source(path);
+        };
+        let digest = crate::bundle::measure_previous(path)?;
+        if digest != approval.installed_manifest_sha256 {
+            return Err("first-adoption installed bundle changed".into());
+        }
+        Ok(digest)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -112,6 +132,10 @@ pub(crate) fn read(
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || b == b'-')
         })
         || decode_mac(&record.manifest_sha256).is_err()
+        || record
+            .first_adoption
+            .as_ref()
+            .is_some_and(|approval| decode_mac(&approval.installed_manifest_sha256).is_err())
     {
         return Err("invalid update authorization identity".into());
     }

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { cp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { UpdateAuthorizationStore } from './updateAuthorization.js'
@@ -40,8 +40,9 @@ it('never converts failed publisher verification into a local approval prompt', 
     root: join(root, 'authorization'), installationId: 'installation-one', bundles: store,
     installedBundlePath: join(root, 'Installed.app'),
     confirmLocalBuild: async () => { prompts++; return 'approve' },
+    confirmFirstAdoption: async () => { prompts++; return 'approve' },
   })
-  await expect(authorization.authorizePublished(staged, 'operation-one', Buffer.alloc(64))).rejects.toThrow('publisher')
+  await expect(authorization.authorizePublished(staged, 'operation-one', Buffer.alloc(64), { firstAdoption: true })).rejects.toThrow('publisher')
   expect(prompts).toBe(0)
   await expect(authorization.read('operation-one')).resolves.toBeNull()
 })
@@ -87,4 +88,45 @@ it('does not issue a helper handoff proof without an existing authorization', as
     installedBundlePath: join(root, 'Installed.app'),
   })
   await expect(authorization.helperProof('operation-one', 'a'.repeat(64), 'prepare', join(root, 'recovery'), '0'.repeat(64))).rejects.toThrow('authorization')
+})
+
+it('requires a second approval for first-adoption interruption even after local-build approval', async () => {
+  const { root, source, store } = await updateBundleFixture()
+  const installedBundlePath = join(root, 'Installed.app')
+  await cp(source, installedBundlePath, { recursive: true })
+  await rm(join(installedBundlePath, 'Contents/MacOS/openforge-update-helper'))
+  const staged = await store.stage(source)
+  let buildApprovals = 0
+  let interruptionPrompts = 0
+  const authorization = new UpdateAuthorizationStore({
+    root: join(root, 'authorization'), installationId: 'installation-one', bundles: store, installedBundlePath,
+    confirmLocalBuild: async () => { buildApprovals++; return 'approve' },
+    confirmFirstAdoption: async request => {
+      interruptionPrompts++
+      expect(request.operationId).toBe('operation-one')
+      expect(request.installedBundlePath).toBe(installedBundlePath)
+      return 'cancel'
+    },
+  })
+  await expect(authorization.authorizeLocal(staged, 'operation-one', { firstAdoption: true })).rejects.toThrow('interruption was not approved')
+  expect(buildApprovals).toBe(1)
+  expect(interruptionPrompts).toBe(1)
+  await expect(authorization.read('operation-one')).resolves.toBeNull()
+})
+
+it('does not authorize interruption if the installed source changes while the second dialog is open', async () => {
+  const { root, source, store } = await updateBundleFixture()
+  const installedBundlePath = join(root, 'Installed.app')
+  await cp(source, installedBundlePath, { recursive: true })
+  const staged = await store.stage(source)
+  const authorization = new UpdateAuthorizationStore({
+    root: join(root, 'authorization'), installationId: 'installation-one', bundles: store, installedBundlePath,
+    confirmLocalBuild: async () => 'approve',
+    confirmFirstAdoption: async () => {
+      await writeFile(join(installedBundlePath, 'Contents/MacOS/openforge-sidecar'), 'changed-during-consent')
+      return 'approve'
+    },
+  })
+  await expect(authorization.authorizeLocal(staged, 'operation-one', { firstAdoption: true })).rejects.toThrow('Installed bundle changed')
+  await expect(authorization.read('operation-one')).resolves.toBeNull()
 })

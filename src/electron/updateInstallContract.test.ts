@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { cp, readFile, writeFile } from 'node:fs/promises'
+import { cp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { build } from 'vite'
@@ -27,10 +27,14 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
 
   afterEach(cleanupUpdateBundles)
 
-  it('accepts real Electron authorization, replaces the complete bundle and recovers in a fresh process', async () => {
+  it.each(['current', 'daemon-aware-no-helper', 'legacy-approved', 'legacy-unapproved', 'legacy-changed'] as const)('authenticates complete replacement and pre-launch recovery: %s', async sourceKind => {
     const { root, source, store } = await updateBundleFixture()
     const destination = join(root, 'Installed.app')
     await cp(source, destination, { recursive: true })
+    if (sourceKind !== 'current') {
+      await rm(join(destination, 'Contents/MacOS/openforge-update-helper'))
+      if (sourceKind.startsWith('legacy')) await rm(join(destination, 'Contents/MacOS/openforge-session-daemon'))
+    }
     // Include real native executable bytes in the authorized target, not a display version.
     await cp(executable, join(source, 'Contents/MacOS/openforge-update-helper'))
     await writeFile(join(source, 'Contents/MacOS/openforge-sidecar'), 'target-sidecar')
@@ -39,8 +43,10 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     const authorization = new UpdateAuthorizationStore({
       root: authorizationRoot, installationId: 'contract-installation', installedBundlePath: destination,
       bundles: store, confirmLocalBuild: async () => 'approve',
+      confirmFirstAdoption: async () => 'approve',
     })
-    await authorization.authorizeLocal(staged, 'contract-operation')
+    await authorization.authorizeLocal(staged, 'contract-operation', ['legacy-approved', 'legacy-changed'].includes(sourceKind) ? { firstAdoption: true } : {})
+    if (sourceKind === 'legacy-changed') await writeFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'changed-after-consent')
     const helper = join(root, 'private-helper')
     await cp(executable, helper)
     let firstProbe = true
@@ -54,6 +60,17 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       })
     }
     const prepared = invoke('prepare')
+    if (sourceKind === 'legacy-unapproved') {
+      expect(prepared.status).not.toBe(0)
+      expect(prepared.stderr).toContain('missing usable')
+      expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+      return
+    }
+    if (sourceKind === 'legacy-changed') {
+      expect(prepared.status).not.toBe(0)
+      expect(prepared.stderr).toContain('first-adoption installed bundle changed')
+      return
+    }
     expect(prepared.stderr).toBe('')
     expect(prepared.status).toBe(0)
     const replaced = invoke('replace')
@@ -65,6 +82,9 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     expect(recovered.stderr).toBe('')
     expect(recovered.status).toBe(0)
     expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+    if (sourceKind !== 'current') {
+      await expect(readFile(join(destination, 'Contents/MacOS/openforge-update-helper'))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
     expect(invoke('replace').status).not.toBe(0)
   }, 30_000)
 

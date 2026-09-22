@@ -3,9 +3,10 @@ import { constants } from 'node:fs'
 import { lstat, mkdir, open } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { StagedUpdateBundle, UpdateBundleStore } from './updateBundleStore.js'
-import { updateManifestBytes } from './updateBundleManifest.js'
+import { measureUpdateBundle, updateManifestBytes, updateManifestId } from './updateBundleManifest.js'
 import { verifyPublishedAppUpdate } from './updatePublisherTrust.js'
 import { confirmNativeLocalBuild } from './localBuildApproval.js'
+import { confirmNativeFirstAdoption } from './firstAdoptionApproval.js'
 
 export interface UpdateLaunchContext {
   electronUserData: string
@@ -22,6 +23,7 @@ export interface UpdateAuthorization {
   manifestSha256: string
   bundlePath: string
   launch?: Readonly<UpdateLaunchContext>
+  firstAdoption?: Readonly<{ installedManifestSha256: string }>
 }
 
 interface Options {
@@ -32,6 +34,7 @@ interface Options {
   launch?: UpdateLaunchContext
   /** Trusted main-process UI capability, never supplied by an IPC request. */
   confirmLocalBuild?(request: Readonly<UpdateAuthorization>): Promise<'approve' | 'cancel'>
+  confirmFirstAdoption?(request: Readonly<UpdateAuthorization>): Promise<'approve' | 'cancel'>
 }
 
 const context = 'openforge-update-authorization-v1\0'
@@ -45,19 +48,23 @@ export class UpdateAuthorizationStore {
     }
   }
 
-  async authorizePublished(staged: StagedUpdateBundle, operationId: string, signature: Buffer): Promise<UpdateAuthorization> {
+  async authorizePublished(staged: StagedUpdateBundle, operationId: string, signature: Buffer, options: { firstAdoption?: true } = {}): Promise<UpdateAuthorization> {
     validateIdentity(operationId)
     await this.options.bundles.verify(staged)
     verifyPublishedAppUpdate(updateManifestBytes(staged.manifest), signature)
-    return this.persist(Object.freeze({
+    const record: UpdateAuthorization = Object.freeze({
       version: 1, installationId: this.options.installationId, operationId,
       installedBundlePath: this.options.installedBundlePath,
       source: 'published', manifestSha256: staged.manifestSha256, bundlePath: staged.bundlePath,
       ...(this.options.launch ? { launch: parseLaunchContext(this.options.launch) } : {}),
-    }))
+      ...await firstAdoptionContext(this.options.installedBundlePath, options.firstAdoption),
+    })
+    await this.confirmAdoption(record)
+    await this.options.bundles.verify(staged)
+    return this.persist(record)
   }
 
-  async authorizeLocal(staged: StagedUpdateBundle, operationId: string): Promise<UpdateAuthorization> {
+  async authorizeLocal(staged: StagedUpdateBundle, operationId: string, options: { firstAdoption?: true } = {}): Promise<UpdateAuthorization> {
     validateIdentity(operationId)
     await this.options.bundles.verify(staged)
     const record: UpdateAuthorization = Object.freeze({
@@ -65,6 +72,7 @@ export class UpdateAuthorizationStore {
       installedBundlePath: this.options.installedBundlePath,
       source: 'local-build', manifestSha256: staged.manifestSha256, bundlePath: staged.bundlePath,
       ...(this.options.launch ? { launch: parseLaunchContext(this.options.launch) } : {}),
+      ...await firstAdoptionContext(this.options.installedBundlePath, options.firstAdoption),
     })
     const previous = await this.read(operationId)
     if (previous) {
@@ -73,6 +81,7 @@ export class UpdateAuthorizationStore {
     }
     const confirm = this.options.confirmLocalBuild ?? confirmNativeLocalBuild
     if (await confirm(record) !== 'approve') throw new Error('Local build was not approved')
+    await this.confirmAdoption(record)
     // User interaction may take arbitrarily long. Approval never excuses changed bytes.
     await this.options.bundles.verify(staged)
     return this.persist(record)
@@ -104,6 +113,10 @@ export class UpdateAuthorizationStore {
       throw new Error('Invalid update authorization identity')
     }
     if (record.launch) record.launch = parseLaunchContext(record.launch)
+    if (record.firstAdoption !== undefined) {
+      if (!record.firstAdoption || !/^[a-f0-9]{64}$/.test(record.firstAdoption.installedManifestSha256)) throw new Error('Invalid first-adoption authorization')
+      record.firstAdoption = Object.freeze({ installedManifestSha256: record.firstAdoption.installedManifestSha256 })
+    }
     return Object.freeze(record)
   }
 
@@ -122,6 +135,14 @@ export class UpdateAuthorizationStore {
       installation: authorization.installationId, operation: operationId,
     } : { version: 1, challenge, action, operation: operationId })
     return { payload, mac: createHmac('sha256', key).update('openforge-update-handoff-v1\0').update(payload).digest('hex') }
+  }
+
+  private async confirmAdoption(record: UpdateAuthorization): Promise<void> {
+    if (!record.firstAdoption) return
+    const confirm = this.options.confirmFirstAdoption ?? confirmNativeFirstAdoption
+    if (await confirm(record) !== 'approve') throw new Error('First-adoption interruption was not approved')
+    const installed = updateManifestId(await measureUpdateBundle(this.options.installedBundlePath))
+    if (installed !== record.firstAdoption.installedManifestSha256) throw new Error('Installed bundle changed during interruption approval')
   }
 
   private async persist(record: UpdateAuthorization): Promise<UpdateAuthorization> {
@@ -153,6 +174,12 @@ export class UpdateAuthorizationStore {
       throw new Error('Unsafe update authorization directory')
     }
   }
+}
+
+async function firstAdoptionContext(installedBundlePath: string, required: true | undefined): Promise<Pick<UpdateAuthorization, 'firstAdoption'>> {
+  if (!required) return {}
+  const installedManifestSha256 = updateManifestId(await measureUpdateBundle(installedBundlePath))
+  return { firstAdoption: Object.freeze({ installedManifestSha256 }) }
 }
 
 function parseLaunchContext(value: UpdateLaunchContext): Readonly<UpdateLaunchContext> {

@@ -25,6 +25,47 @@ struct Manifest {
 }
 
 pub(crate) fn measure(root: &Path) -> Result<String, String> {
+    measure_components(
+        root,
+        &[
+            ("Contents/MacOS/Open Forge", true),
+            ("Contents/MacOS/openforge-sidecar", true),
+            ("Contents/MacOS/openforge-session-daemon", true),
+            ("Contents/MacOS/openforge-update-helper", true),
+            ("Contents/Resources/app/dist-electron/main.js", false),
+            ("Contents/Resources/openforge-cli/cli.js", false),
+        ],
+    )
+}
+
+/// The first daemon-aware release can lack the updater introduced by its target.
+pub(crate) fn measure_daemon_source(root: &Path) -> Result<String, String> {
+    measure_components(
+        root,
+        &[
+            ("Contents/MacOS/Open Forge", true),
+            ("Contents/MacOS/openforge-sidecar", true),
+            ("Contents/MacOS/openforge-session-daemon", true),
+            ("Contents/Resources/app/dist-electron/main.js", false),
+            ("Contents/Resources/openforge-cli/cli.js", false),
+        ],
+    )
+}
+
+/// Retained source bytes may predate the daemon/helper. The authenticated grant
+/// or journal must bind the resulting digest before replacement or recovery.
+pub(crate) fn measure_previous(root: &Path) -> Result<String, String> {
+    measure_components(
+        root,
+        &[
+            ("Contents/MacOS/Open Forge", true),
+            ("Contents/MacOS/openforge-sidecar", true),
+            ("Contents/Resources/app/dist-electron/main.js", false),
+        ],
+    )
+}
+
+fn measure_components(root: &Path, required: &[(&str, bool)]) -> Result<String, String> {
     if !fs::symlink_metadata(root)
         .map_err(|e| e.to_string())?
         .is_dir()
@@ -110,14 +151,7 @@ pub(crate) fn measure(root: &Path) -> Result<String, String> {
         }
         entries.push(entry);
     }
-    for (path, executable) in [
-        ("Contents/MacOS/Open Forge", true),
-        ("Contents/MacOS/openforge-sidecar", true),
-        ("Contents/MacOS/openforge-session-daemon", true),
-        ("Contents/MacOS/openforge-update-helper", true),
-        ("Contents/Resources/app/dist-electron/main.js", false),
-        ("Contents/Resources/openforge-cli/cli.js", false),
-    ] {
+    for &(path, executable) in required {
         if !entries
             .iter()
             .any(|e| e.path == path && e.kind == "file" && (!executable || e.mode & 0o111 != 0))

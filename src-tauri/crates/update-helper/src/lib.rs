@@ -112,7 +112,7 @@ impl InstallTransaction {
         if bundle::measure(&authority.bundle_path)? != authority.manifest_sha256 {
             return Err("authorized bundle changed".into());
         }
-        let previous_hash = bundle::measure(&self.destination)?;
+        let previous_hash = authority.installed_digest(&self.destination)?;
         use std::os::unix::fs::MetadataExt;
         let device = std::fs::metadata(&self.root)
             .map_err(|e| e.to_string())?
@@ -163,7 +163,7 @@ impl InstallTransaction {
         {
             return Err("authorized bundle changed".into());
         }
-        if bundle::measure(&self.destination)? != record.previous_hash {
+        if authority.installed_digest(&self.destination)? != record.previous_hash {
             return Err("installed bundle changed".into());
         }
         let backup = self.root.join(format!("previous-{operation}.app"));
@@ -269,7 +269,7 @@ impl InstallTransaction {
         }
         let backup = self.root.join(format!("previous-{operation}.app"));
         if backup.try_exists().map_err(|e| e.to_string())? {
-            if bundle::measure(&backup)? != record.previous_hash {
+            if bundle::measure_previous(&backup)? != record.previous_hash {
                 return Err("recovery bundle changed".into());
             }
             if self.destination.try_exists().map_err(|e| e.to_string())? {
@@ -296,7 +296,7 @@ impl InstallTransaction {
                     .ok_or("missing installation parent")?,
             )?;
         }
-        if bundle::measure(&self.destination)? != record.previous_hash {
+        if bundle::measure_previous(&self.destination)? != record.previous_hash {
             return Err("original installation cannot be recovered".into());
         }
         record.phase = Phase::RolledBack;

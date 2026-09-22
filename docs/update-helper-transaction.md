@@ -15,7 +15,11 @@ KVG-5206 is unfinished. Production updates and source installation remain disabl
 - Native commit rechecks authorization and installed bytes, is retryable after a lost acknowledgement, and allows a later operation without deleting retained bundles. The coordinator calls the update driver's commit only after runtime readiness and workspace restoration. It also cancels prepared helper ownership when preparation fails.
 - The coordinator now requires a Sidecar-exit verifier before update preparation. After authenticated detach it waits for the exact spawned Sidecar's exit before calling the replacement driver. The Electron adapter records exit from spawn time and bounds shutdown using the existing shutdown budget. Signal acknowledgement, `killed`, and shutdown reports do not count as exit proof.
 
-The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle. Current replacement requires a complete daemon-aware old bundle; the pre-daemon first-adoption path is not implemented.
+The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle.
+
+First-adoption authorization now requires a separate native interruption confirmation after build trust succeeds. The authenticated grant binds both installed and target bundle hashes to the installation and operation. The helper accepts a pre-daemon source only with this explicit grant and unchanged installed bytes. Pre-launch rollback can restore that legacy source. This does not yet wire legacy process shutdown or the source-installer UI into an end-to-end first-adoption flow.
+
+A daemon-aware source may lack the helper introduced by its target; that alone does not require interruption approval. The helper still requires a daemon-aware source's daemon and CLI, and every target must contain the complete app including its helper.
 
 ## Evidence and limits
 
@@ -25,7 +29,7 @@ The opt-in Electron/native contract uses actual compiled helper bytes, real Elec
 
 Latest checks:
 
-- Root tests after the owned-Sidecar exit integration: 876 files passed, 7,470 tests passed, 3 expected failures, 46 skipped across 12 files. The earlier opt-in native contract passed separately, 3 tests.
+- Last full root run: 877 files passed, 7,476 tests passed, 3 expected failures, 49 skipped across 12 files. The opt-in native contract subsequently passed 7 tests, including the added daemon-aware source without an old helper.
 - Helper default and all-feature suites: 18 tests each. All-target/all-feature check, build and strict Clippy passed, along with formatting.
 - TypeScript, plugin-host typecheck, lint, Electron and Companion contracts passed.
 - `pnpm electron:package` passed, including plugin builds, renderer/Electron builds, release Sidecar/daemon/helper compilation, architecture checks and app assembly. The bundle was built, not installed or launched.
@@ -35,6 +39,8 @@ Latest checks:
 - The earlier standalone host/client blockers were fixed with owner approval. Their default/all-feature tests, check/build, strict Clippy and formatting passed. KVG-5209 and KVG-5210 were deleted at the owner's request.
 
 Logs for the helper checkpoint are under `/tmp/KVG-5206-next-*.log`; the owned-exit increment uses `/tmp/KVG-5206-exit-*.log`. The first root test run exceeded its two-minute tool deadline; the rerun passed in 146 seconds. Isolated Node child tests establish exit ordering, not real Sidecar/daemon continuity.
+
+First-adoption red/green and validation logs use `/tmp/KVG-5206-adoption-*.log`. Native contract cases cover approved legacy replacement/recovery, missing interruption consent and changed installed bytes. Authorization tests cover separate cancellation, source mutation during consent and refusing failed publisher trust without any approval prompt. Native dialog response tests use the external Electron dialog boundary; no real legacy processes were interrupted. The first Rust check wrapper mis-split arguments and was discarded; explicit commands then passed both default/all-feature suites and all-target/all-feature static checks.
 
 Run the native contract and checks through the layout resolver:
 
@@ -54,10 +60,11 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 
 - Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
 - Preflight and activate the compatible daemon image, retain runtime and CLI assets, and authenticate running executable identities and reconciliation before commit. Preserve agent/tool/shell PIDs and PTYs through the supported transition.
-- Add separate native first-adoption interruption approval. Do not reinterpret local-build approval as interruption consent or claim seamless adoption from a pre-daemon build.
+- Wire the separate native first-adoption consent into verified legacy shutdown and the source installer. Consent and authorized legacy transaction support exist, but no end-to-end first-adoption flow or seamless migration claim is made.
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
 - Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.
 - Finish affected-system validation, including applicable package-local builds/conformance and isolated packaged smoke/live checks, then publish completed implementation evidence. No complete-feature validation or acceptance claim is made here.
+- Terminal-runtime browser conformance launches isolated Playwright Chromium. It has not been run because the Arc-only browser preference needs an explicit exception. The SDK published-package conformance command already launched Chromium before that was noticed; do not repeat browser conformance without approval.
 
 ## Activation gates
 
