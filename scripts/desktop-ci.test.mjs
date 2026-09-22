@@ -19,7 +19,7 @@ describe('independent desktop CI', () => {
       expect(desktop).not.toContain('actions/download-artifact')
       expect(desktop).not.toContain('continue-on-error:')
       for (const setup of [
-        'runs-on: macos-14',
+        'runs-on: macos-15',
         'uses: actions/checkout@v6',
         'node scripts/rust-sidecar-layout.mjs backend-crate-root',
         'uses: dtolnay/rust-toolchain@stable',

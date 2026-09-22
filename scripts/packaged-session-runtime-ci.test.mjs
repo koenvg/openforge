@@ -6,7 +6,7 @@ const workflowUrl = new URL('../.github/workflows/packaged-session-runtime.yml',
 it('requires real arm64 and Intel runners rather than accepting translated execution', () => {
   const workflow = readFileSync(workflowUrl, 'utf8')
   expect(workflow).toContain('runner: macos-15-intel')
-  expect(workflow).toContain('runner: macos-14\n')
+  expect(workflow).toContain('runner: macos-15\n')
   expect(workflow).toContain('target: x86_64-apple-darwin')
   expect(workflow).toContain('target: aarch64-apple-darwin')
   expect(workflow).toContain('sysctl.proc_translated')

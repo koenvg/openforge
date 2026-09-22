@@ -38,7 +38,7 @@ For debug artifacts, omit `--release` from the clean command. Builds must run in
 
 The separate `Whisper macOS compatibility` workflow uses `macos-15` without a Rust cache. It records compiler macros, packages the native app, checks actual CPU compilation commands and preprocessor macros, transcribes pinned speech with GPU disabled and enabled, runs backend tests/check/clippy, and runs the packaged Electron smoke test. It uploads logs and CMake evidence as `whisper-macos-arm64`.
 
-The existing Packaged Session Runtime workflow stays on `macos-14` for arm64 and `macos-15-intel` for Intel. This repair does not change daemon staging.
+The Packaged Session Runtime workflow uses `macos-15` for arm64 and retains `macos-15-intel` for Intel. The portable CPU policy makes the arm64 runner compatible without changing daemon staging.
 
 Run the fast target-policy checks locally:
 

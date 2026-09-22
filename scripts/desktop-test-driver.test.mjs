@@ -142,14 +142,16 @@ describe('desktop app driver', () => {
   })
 
 
-  it('types terminal commands through the focused terminal landmark', async () => {
+  it('focuses the visible terminal before typing a command', async () => {
     const harness = createPage()
     const driver = createDesktopAppDriver(harness.page)
 
     await driver.typeTerminalCommand(harness.terminal, 'printf TEST_READY')
 
     expect(harness.shellTab.click).toHaveBeenCalledOnce()
-    expect(harness.terminal.click).not.toHaveBeenCalled()
+    expect(harness.terminal.click).toHaveBeenCalledOnce()
+    expect(harness.shellTab.click.mock.invocationCallOrder[0])
+      .toBeLessThan(harness.terminal.click.mock.invocationCallOrder[0])
     expect(harness.page.keyboard.insertText).toHaveBeenCalledWith('printf TEST_READY')
     expect(harness.page.keyboard.press).toHaveBeenCalledWith('Enter')
   })

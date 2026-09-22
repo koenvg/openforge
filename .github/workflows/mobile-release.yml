@@ -84,7 +84,7 @@ jobs:
   ios:
     needs: version
     name: iOS TestFlight artifact
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 35
     environment: ios-testflight
     env:
