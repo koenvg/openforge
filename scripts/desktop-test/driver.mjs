@@ -66,7 +66,9 @@ export function createDesktopAppDriver(page, options = {}) {
   }
 
   async function focusTerminal() {
+    const region = page.getByRole('region', { name: 'Terminal region for Shell 1' })
     await page.getByRole('tab', { name: /^Shell 1\b/i }).click()
+    await region.click()
     await page.waitForFunction(
       label => [...document.querySelectorAll('[role="region"]')]
         .find(element => element.getAttribute('aria-label') === label)
