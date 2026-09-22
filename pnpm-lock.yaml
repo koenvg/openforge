@@ -247,6 +247,9 @@ importers:
       storybook:
         specifier: 10.5.10
         version: 10.5.10(prettier@3.9.6)(react@19.2.8)
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

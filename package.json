@@ -118,6 +118,7 @@
     "pngjs": "^7.0.0",
     "semver": "catalog:",
     "storybook": "10.5.10",
+    "tslib": "^2.8.1",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
