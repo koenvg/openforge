@@ -376,15 +376,10 @@ async function waitForInputCount(count: number): Promise<PlayResult> {
 
 async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCompleted: number; firstRenderCompleted: number; settledAtCompletion: number; evidence: TerminalViewPresentationEvidence; screen: string }> {
   const element = document.createElement('div')
-  element.style.cssText = 'width: 640px; height: 360px; position: absolute; left: -10000px'
+  element.style.cssText = 'width: 640px; height: 360px; position: absolute; left: 0; top: 0'
   document.body.appendChild(element)
   const terminal = new Terminal({ cols: 80, rows: 24 })
   let presentation: ReturnType<typeof createXtermPresentationController> | undefined
-  const originalNow = Object.getOwnPropertyDescriptor(performance, 'now')
-  const restoreClock = () => {
-    if (originalNow) Object.defineProperty(performance, 'now', originalNow)
-    else Reflect.deleteProperty(performance, 'now')
-  }
   try {
     terminal.open(element)
     let completed = 0
@@ -393,7 +388,6 @@ async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCo
     let firstRenderCompleted = -1
     const parsed = terminal.onWriteParsed(() => {
       batches++
-      if (batches === 1) restoreClock()
       if (firstBatchCompleted === -1) firstBatchCompleted = completed
     })
     const rendered = terminal.onRender(() => {
@@ -403,17 +397,18 @@ async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCo
       terminal, rendererName: () => 'xterm-default', canPresent: () => true,
       refresh: () => terminal.refresh(0, terminal.rows - 1),
     })
-    // Force xterm's public write queue to yield after the first parsed chunk.
-    // Restore the real clock at the first onWriteParsed notification.
-    const realNow = performance.now.bind(performance)
-    let ticks = 0
-    Object.defineProperty(performance, 'now', {
-      configurable: true, value: () => realNow() + (Math.min(++ticks, 10) * 20),
+    // A bounded public parser handler consumes xterm's parse time budget,
+    // yielding after the first write while the target live write is queued.
+    const slowParse = terminal.parser.registerOscHandler(9, () => {
+      const deadline = performance.now() + 20
+      while (performance.now() < deadline) {}
+      return true
     })
     const count = 12
     for (let index = 0; index < count; index++) {
       const generation = presentation.recordWrite()
-      const text = index === count - 1 ? '\u001b[1;1HTARGET' : '\u001b[1;1H.'
+      const text = index === count - 1 ? '\u001b[1;1HTARGET'
+        : index === 0 ? '\u001b[1;1HEARLY\u001b]9;slow\u0007' : '\u001b[1;1H.'
       terminal.write(text, () => {
         completed++
         presentation?.completeWrite(generation)
@@ -427,10 +422,10 @@ async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCo
     const evidence = await drained
     const screen = terminal.buffer.active.getLine(0)?.translateToString(true) ?? ''
     parsed.dispose()
+    slowParse.dispose()
     rendered.dispose()
     return { batches, firstBatchCompleted, firstRenderCompleted, settledAtCompletion, evidence, screen }
   } finally {
-    restoreClock()
     presentation?.dispose()
     terminal.dispose()
     element.remove()
