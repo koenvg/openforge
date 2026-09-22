@@ -357,8 +357,24 @@ impl ProviderPreservation {
         );
         self.fixture.write("geometry\ncli\n");
         self.fixture.output("PROVIDER-GEOMETRY 33 91");
-        self.fixture
-            .output("PROVIDER-CLI {\"status\":0,\"found\":true}");
+        self.fixture.output("PROVIDER-CLI-START");
+        let cli = self
+            .fixture
+            .output_within("PROVIDER-CLI {", Duration::from_secs(45));
+        assert!(
+            cli.contains("PROVIDER-CLI {\"status\":0,\"found\":true}"),
+            "CLI failed after launch: {cli:?}"
+        );
+        let timing = self.fixture.output("PROVIDER-CLI-ELAPSED ");
+        let elapsed_ms = timing
+            .lines()
+            .rev()
+            .find_map(|line| {
+                line.split_once("PROVIDER-CLI-ELAPSED ")
+                    .map(|(_, ms)| ms.trim())
+            })
+            .unwrap();
+        eprintln!("{} CLI completed in {elapsed_ms}ms", self.provider.name());
         let response = self
             .fixture
             .http
