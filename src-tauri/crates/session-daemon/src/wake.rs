@@ -121,8 +121,24 @@ pub(crate) fn daemon() -> &'static Wake {
 extern "C" fn on_child_exit(_: libc::c_int) {
     let fd = CHILD_EXIT_FD.load(Ordering::Relaxed);
     if fd >= 0 {
-        notify_fd(fd);
+        // The interrupted thread may be about to read errno from its own failed call.
+        // SAFETY: errno is thread-local and always valid to read and write.
+        unsafe {
+            let saved = *errno();
+            notify_fd(fd);
+            *errno() = saved;
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn errno() -> *mut libc::c_int {
+    libc::__error()
+}
+
+#[cfg(not(target_os = "macos"))]
+unsafe fn errno() -> *mut libc::c_int {
+    libc::__errno_location()
 }
 
 pub(crate) fn watch_child_exits() -> std::io::Result<()> {

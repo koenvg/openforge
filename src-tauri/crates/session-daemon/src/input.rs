@@ -136,38 +136,17 @@ impl InputWriter {
         Ok(())
     }
     fn drain(&mut self, budget: Duration) -> Result<(), Error> {
-        if self.state.failed {
-            return Err(Error::OutcomeUnknown);
-        }
         let deadline = Instant::now() + budget;
-        while let Some(pending) = self.state.pending.front_mut() {
-            match self.writer.write(&pending.bytes[pending.offset..]) {
-                Ok(written) if written > 0 => pending.offset += written,
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                    ) =>
-                {
-                    if Instant::now() >= deadline {
-                        return Err(Error::OutcomeUnknown);
-                    }
-                    std::thread::sleep(Duration::from_millis(2));
-                    continue;
-                }
-                _ => {
-                    self.state.failed = true;
-                    return Err(Error::OutcomeUnknown);
-                }
+        loop {
+            self.progress()?;
+            if !self.has_pending() {
+                return Ok(());
             }
-            if pending.offset == pending.bytes.len() {
-                self.state.pending.pop_front();
-            }
-            if !self.state.pending.is_empty() && Instant::now() >= deadline {
+            if Instant::now() >= deadline {
                 return Err(Error::OutcomeUnknown);
             }
+            std::thread::sleep(Duration::from_millis(2));
         }
-        Ok(())
     }
 }
 

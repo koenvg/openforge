@@ -79,3 +79,18 @@ fn input_that_overflows_the_pty_is_written_once_the_child_reads() {
     wait_for_text(&process, b"COUNT:65536");
     process.terminate().unwrap();
 }
+
+#[test]
+fn a_pause_does_not_wait_for_a_reader_blocked_on_an_idle_pty() {
+    let (process, root) = spawn(
+        "printf 'READY\\n'; while [ ! -e go ]; do sleep 0.01; done; printf 'AFTER\\n'; exec sleep 30",
+    );
+    wait_for_text(&process, b"READY");
+    let paused = process
+        .reader_gate
+        .pause(Duration::from_millis(200))
+        .unwrap();
+    std::fs::write(root.path().join("go"), "").unwrap();
+    drop(paused);
+    wait_for_text(&process, b"AFTER");
+}
