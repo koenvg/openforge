@@ -1,3 +1,5 @@
+mod event_pr_adapter;
+
 use crate::authored_pr_sync::{
     enrich_and_persist_authored_prs, AuthoredPrEnrichmentPolicy, AuthoredPrStalePolicy,
 };
@@ -162,91 +164,20 @@ async fn fetch_event_signal_prs(
 
     let fetch_results = join_all(fetch_futures).await;
 
-    let mut results = Vec::new();
-    for ((pr_ref, existing_id), detail_result) in signal_refs.into_iter().zip(fetch_results) {
-        match detail_result {
-            Ok(pr_details) => {
-                results.push(SearchPrResult {
-                    id: existing_id,
-                    number: pr_details.number,
-                    title: pr_details.title,
-                    body: pr_details
-                        .extra
-                        .get("body")
-                        .and_then(|body| body.as_str())
-                        .map(ToOwned::to_owned),
-                    state: pr_details.state,
-                    draft: pr_details.draft.unwrap_or(false),
-                    html_url: pr_details.html_url,
-                    user_login: pr_details.user.login,
-                    user_avatar_url: pr_details
-                        .user
-                        .extra
-                        .get("avatar_url")
-                        .and_then(|value| value.as_str())
-                        .map(ToOwned::to_owned),
-                    repo_owner: pr_ref.repo_owner.clone(),
-                    repo_name: pr_ref.repo_name.clone(),
-                    head_ref: pr_details.head.ref_name,
-                    base_ref: pr_details
-                        .extra
-                        .get("base")
-                        .and_then(|base| base.get("ref"))
-                        .and_then(|ref_name| ref_name.as_str())
-                        .unwrap_or("main")
-                        .to_string(),
-                    head_sha: pr_details.head.sha,
-                    additions: pr_details
-                        .extra
-                        .get("additions")
-                        .and_then(|additions| additions.as_i64())
-                        .unwrap_or(0),
-                    deletions: pr_details
-                        .extra
-                        .get("deletions")
-                        .and_then(|deletions| deletions.as_i64())
-                        .unwrap_or(0),
-                    changed_files: pr_details
-                        .extra
-                        .get("changed_files")
-                        .and_then(|changed_files| changed_files.as_i64())
-                        .unwrap_or(0),
-                    mergeable: pr_details.mergeable,
-                    mergeable_state: pr_details.mergeable_state,
-                    created_at: pr_details
-                        .extra
-                        .get("created_at")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                    updated_at: pr_details
-                        .extra
-                        .get("updated_at")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                    labels: pr_details
-                        .extra
-                        .get("labels")
-                        .and_then(|value| {
-                            serde_json::from_value::<Vec<crate::github_client::PrLabel>>(
-                                value.clone(),
-                            )
-                            .ok()
-                        })
-                        .unwrap_or_default(),
-                });
-            }
-            Err(e) => {
+    signal_refs
+        .into_iter()
+        .zip(fetch_results)
+        .filter_map(|((pr_ref, existing_id), detail_result)| match detail_result {
+            Ok(details) => Some(event_pr_adapter::from_event_detail(pr_ref, existing_id, details)),
+            Err(error) => {
                 error!(
                     "[authored_prs] Failed to fetch PR details pr_number={} detail_suppressed=true: {}",
-                    pr_ref.number, e
+                    pr_ref.number, error
                 );
+                None
             }
-        }
-    }
-
-    results
+        })
+        .collect()
 }
 
 /// A search may reconcile missing PRs; event signals only refresh known PRs.
@@ -421,6 +352,46 @@ mod tests {
     #[test]
     fn falls_back_to_authored_search_when_reconciliation_is_stale() {
         assert!(should_fallback_to_search(4, 2, 0, Some(100), 401));
+    }
+
+    #[tokio::test]
+    async fn failed_event_details_are_omitted_without_losing_successful_cached_prs() {
+        use axum::{extract::Path, http::StatusCode, routing::get, Json, Router};
+
+        let router = Router::new().route(
+            "/repos/acme/widgets/pulls/:number",
+            get(|Path(number): Path<i64>| async move {
+                if number == 2 {
+                    Err(StatusCode::NOT_FOUND)
+                } else {
+                    Ok(Json(serde_json::json!({
+                        "number": number, "title": "Still open", "state": "open",
+                        "html_url": "https://github.com/acme/widgets/pull/1",
+                        "user": {"login": "alice"},
+                        "head": {"ref": "fix", "sha": "abc"}
+                    })))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let client = crate::github_client::GitHubClient::new()
+            .with_test_api_base_url(format!("http://{address}"));
+        let refs = vec![
+            pr_ref("acme", "widgets", 1),
+            pr_ref("acme", "widgets", 2),
+            pr_ref("acme", "widgets", 3),
+        ];
+        let cached_ids = HashMap::from([
+            ("acme/widgets/1".to_string(), 101),
+            ("acme/widgets/2".to_string(), 202),
+        ]);
+
+        let results = super::fetch_event_signal_prs(&client, "token", &refs, &cached_ids).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 101);
+        assert_eq!(results[0].number, 1);
     }
 
     #[tokio::test]
