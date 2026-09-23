@@ -40,6 +40,7 @@ function makeThread(overrides: Partial<ReviewThread> = {}): ReviewThread {
     runId: null,
     idempotencyKey: null,
     seenAt: null,
+    hasUnreadAgentMessage: false,
     createdAt: 1,
     updatedAt: 1,
     messages: [{ id: 'rtm_1', role: 'agent', body: 'Needs a null check', createdAt: 1 }],
