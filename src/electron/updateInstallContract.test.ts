@@ -5,10 +5,12 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { build } from 'vite'
 import { UpdateAuthorizationStore } from './updateAuthorization.js'
+import { measureUpdateBundle } from './updateBundleManifest.js'
 import { cleanupUpdateBundles, updateBundleFixture } from './updateBundle.testUtils.js'
+import { addElectronRuntime } from './fixtures/updateElectronBundle.js'
 
 import { commitNativeUpdate, prepareNativeUpdateHandoff, verifyNativeUpdateLaunch } from './nativeUpdateHelper.js'
-// Opt-in builds private native executables. It never invokes an installed helper or desktop app.
+// Opt-in uses private native executables and an Electron fixture, never the developer installation.
 const enabled = process.env.RUN_UPDATE_HELPER_CONTRACT === '1'
 const cleanEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
 let executable: string
@@ -21,7 +23,8 @@ const pendingHelpers = new Set<() => Promise<void>>()
 describe.skipIf(!enabled)('Electron authorization to native install/recovery contract', () => {
   beforeAll(() => {
     const manifest = execFileSync(process.execPath, ['scripts/rust-sidecar-layout.mjs', 'update-helper-manifest-path'], { encoding: 'utf8', env: cleanEnvironment }).trim()
-    const build = execFileSync('cargo', ['build', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--example', 'install-transaction-fixture-v2', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
+    // Exercise the release-profile helper used by packaging against the full Electron bundle.
+    const build = execFileSync('cargo', ['build', '--release', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--example', 'install-transaction-fixture-v2', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
     const outputs = build.split('\n').filter(Boolean).map(line => JSON.parse(line))
     executable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'install-transaction-fixture' && row.executable)?.executable
     if (!executable) throw new Error('Native updater fixture was not built')
@@ -130,16 +133,15 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
     await cp(executable, join(source, 'Contents/MacOS/openforge-sidecar'))
+    await cp(daemonExecutable, join(source, 'Contents/MacOS/openforge-session-daemon'))
     const sidecarSubstitute = join(root, 'distinct-sidecar')
     await cp(alternateExecutable, sidecarSubstitute)
     const marker = join(root, 'launched')
-    const targetModule = 'Contents/Resources/app/dist-electron/target.mjs'
     await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
       ssr: 'src/electron/fixtures/updateTargetHost.ts', outDir: join(source, 'Contents/Resources/app/dist-electron'), emptyOutDir: false,
       rollupOptions: { external: ['electron'], output: { entryFileNames: 'target.mjs' } },
     } })
-    const quote = (path: string) => `'${path.replaceAll("'", "'\\''")}'`
-    await writeFile(join(source, 'Contents/MacOS/Open Forge'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(destination, targetModule))} ${quote(join(root, 'host.json'))} "$@"\n`)
+    await addElectronRuntime(source, root)
     const staged = await store.stage(source)
     const authorizationRoot = join(root, 'authorization')
     const authorization = new UpdateAuthorizationStore({
@@ -156,7 +158,7 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     const config = join(root, 'host.json')
     const target = { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }
     await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: authorizationRoot,
-      destination, recovery: join(root, 'transaction'), target, marker, sidecarSubstitute }), { mode: 0o600 })
+      destination, recovery: join(root, 'transaction'), target, marker, sidecarSubstitute, manifest: await measureUpdateBundle(staged.bundlePath) }), { mode: 0o600 })
     const settleTarget = async () => {
       await vi.waitFor(() => {
         const exited = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
@@ -177,14 +179,15 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       await vi.waitFor(() => {
         expect(errors).toBe('')
         expect(output).toContain('armed\n')
-      }, { timeout: 10_000, interval: 20 })
+      }, { timeout: 60_000, interval: 20 }) // Complete-bundle preparation, not a launch probe.
       expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
       pendingHelpers.add(settleTarget)
       host.stdin.end('exit\n')
       await exited
       await vi.waitFor(async () => {
-        expect(await readFile(marker, 'utf8')).toBe(`--openforge-restart-operation=contract-operation\n${root}\n${root}\n${root}\nauthenticated\n`)
-      }, { timeout: 10_000, interval: 20 })
+        expect(await readFile(marker, 'utf8')).not.toBe('')
+      }, { timeout: 60_000, interval: 20 }) // Replacement and admission transaction.
+      expect(await readFile(marker, 'utf8')).toBe(`--openforge-restart-operation=contract-operation\n${root}\n${root}\n${root}\nauthenticated\n`)
       await settleTarget()
       await expect(verifyNativeUpdateLaunch({ authorization, target, recoveryRoot: join(root, 'transaction') })).rejects.toThrow('did not acknowledge launch-verified')
       expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'))).toEqual(await readFile(executable))
@@ -193,7 +196,7 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       host.kill('SIGKILL')
       await exited
     }
-  }, 40_000)
+  }, 130_000)
 
   it('refuses a cold-install handoff when the authorized runtime root has a live owner', async () => {
     const { root, source, store } = await updateBundleFixture()

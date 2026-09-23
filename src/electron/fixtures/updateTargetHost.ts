@@ -2,19 +2,28 @@
 import { cp, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { UpdateAuthorizationStore } from '../updateAuthorization.js'
 import { UpdateBundleStore } from '../updateBundleStore.js'
+import { measureUpdateBundle } from '../updateBundleManifest.js'
 import { authorizeNativeUpdateSidecar, verifyNativeUpdateLaunch } from '../nativeUpdateHelper.js'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { strict as assert } from 'node:assert'
+import { app } from 'electron'
 
-const config = JSON.parse(await readFile(process.argv[2], 'utf8'))
-const deadline = setTimeout(() => process.exit(1), 20_000)
+const userData = process.env.OPENFORGE_ELECTRON_USER_DATA_DIR!
+app.setPath('userData', userData)
+app.setPath('sessionData', userData)
+app.setActivationPolicy('prohibited')
+app.commandLine.appendSwitch('disable-gpu')
+const config = JSON.parse(await readFile(join(userData, 'host.json'), 'utf8'))
+const deadline = setTimeout(() => app.exit(1), 20_000)
 deadline.unref()
 try {
   const authorization = new UpdateAuthorizationStore({
     root: config.authorization, installationId: config.target.installationId,
     installedBundlePath: config.destination, bundles: new UpdateBundleStore(config.staging),
   })
+  const staged = await new UpdateBundleStore(join(userData, 'electron-staged')).stage(config.destination)
+  assert.deepEqual(staged.images, config.target.images, 'Electron staging must preserve raw archive bytes')
   await verifyNativeUpdateLaunch({ authorization, target: config.target, recoveryRoot: config.recovery })
   const update = { authorization, target: config.target, recoveryRoot: config.recovery }
   await assert.rejects(authorizeNativeUpdateSidecar({ ...update, sidecarPid: process.pid }))
@@ -80,9 +89,15 @@ try {
   const replay = await runSidecar({ replay: valid.admission })
   assert.notEqual(replay.code, 0)
   assert.match(replay.errors, /not the authenticated launched process/)
-  await writeFile(config.marker, [process.argv[3], process.env.OPENFORGE_ELECTRON_USER_DATA_DIR,
+  await writeFile(config.marker, [process.argv.find(arg => arg.startsWith('--openforge-restart-operation=')), process.env.OPENFORGE_ELECTRON_USER_DATA_DIR,
     process.env.OPENFORGE_APP_DATA_DIR, process.env.OPENFORGE_SESSION_DAEMON_ROOT, 'authenticated', ''].join('\n'))
 } catch (error) {
-  await writeFile(config.marker, `refused: ${String(error)}`)
+  const expected = config.manifest.entries as Awaited<ReturnType<typeof measureUpdateBundle>>['entries']
+  const actual = (await measureUpdateBundle(config.destination)).entries
+  const changed = actual.filter(entry => JSON.stringify(entry) !== JSON.stringify(expected.find(item => item.path === entry.path)))
+  await writeFile(config.marker, `refused: ${error instanceof Error ? error.stack : String(error)}\nchanged: ${JSON.stringify(changed)}`)
   process.exitCode = 1
-} finally { clearTimeout(deadline) }
+} finally {
+  clearTimeout(deadline)
+  app.exit(Number(process.exitCode ?? 0))
+}

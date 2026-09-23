@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
-import { constants } from 'node:fs'
-import { lstat, open, readdir, readlink, realpath } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { updateFileSystem } from './updateFileSystem.js'
 import type { UpdateImages } from './appUpdateVerification.js'
+
+const { constants } = updateFileSystem
+const { lstat, open, readdir, readlink, realpath } = updateFileSystem.promises
 
 export interface UpdateBundleEntry {
   path: string

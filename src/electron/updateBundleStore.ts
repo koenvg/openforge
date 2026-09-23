@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { cp, lstat, mkdir, realpath, rename, rm } from 'node:fs/promises'
+import { updateFileSystem } from './updateFileSystem.js'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { measureUpdateBundle, updateBundleImages, updateManifestId, type UpdateBundleManifest } from './updateBundleManifest.js'
 import type { UpdateImages } from './appUpdateVerification.js'
+
+const { cp, lstat, mkdir, realpath, rename, rm } = updateFileSystem.promises
 
 export interface StagedUpdateBundle {
   readonly bundlePath: string

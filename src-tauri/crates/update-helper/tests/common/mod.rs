@@ -20,7 +20,7 @@ pub fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn bundle(root: &Path, version: &str) -> String {
+fn bundle(root: &Path, version: &[u8]) -> String {
     let mut entries = vec![];
     for directory in [
         "",
@@ -57,7 +57,7 @@ fn bundle(root: &Path, version: &str) -> String {
             "{{\"path\":{},\"kind\":\"file\",\"mode\":{},\"sha256\":\"{}\"}}",
             serde_json::to_string(name).unwrap(),
             mode,
-            digest(version.as_bytes())
+            digest(version)
         ));
     }
     entries.sort_by_key(|s| {
@@ -75,10 +75,14 @@ impl Fixture {
     }
 
     pub fn with_target_body(body: &str) -> Self {
+        Self::with_target_bytes(body.as_bytes())
+    }
+
+    pub fn with_target_bytes(body: &[u8]) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let destination = root.join("Installed.app");
-        bundle(&destination, "old");
+        bundle(&destination, b"old");
         let staging = root.join("staged");
         fs::create_dir(&staging).unwrap();
         fs::set_permissions(&staging, fs::Permissions::from_mode(0o700)).unwrap();

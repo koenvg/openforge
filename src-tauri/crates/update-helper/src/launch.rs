@@ -109,6 +109,10 @@ impl InstallTransaction {
         {
             return Err("authorized installed bundle changed".into());
         }
+        crate::native_image::verify(
+            caller_pid,
+            &self.destination.join("Contents/MacOS/Open Forge"),
+        )?;
         if let Some(runtime) = record.runtime {
             runtime.verify_running(
                 &authority
