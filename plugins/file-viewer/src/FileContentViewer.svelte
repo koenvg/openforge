@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { Archive, CircleAlert, FileQuestion, TriangleAlert } from '@lucide/svelte'
+  import { CircleAlert } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileContent } from '@openforge-app/plugin-sdk/domain'
   import { getMarkdownRepositoryLinkFragment } from '@openforge-app/plugin-sdk/markdown'
-  import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
-  import MarkdownFilePreview from './MarkdownFilePreview.svelte'
-  import PdfPreview from './PdfPreview.svelte'
+  import FilePreviewHeader from './FilePreviewHeader.svelte'
+  import FileTextPreview from './FileTextPreview.svelte'
+  import FileMediaPreview from './FileMediaPreview.svelte'
+  import FileUnavailablePreview from './FileUnavailablePreview.svelte'
   import type { FileBrowserWorkspaceSource } from './lib/workspaceSource'
   import { onDestroy, tick } from 'svelte'
 
@@ -55,16 +56,6 @@
   let videoPlaybackError = $state(false)
   let fragmentApplicationId = 0
 
-  const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
-  const language = $derived(getLanguageForFile(fileName))
-  const isMarkdown = $derived(language === 'markdown')
-  const lineCount = $derived(content?.type === 'text' ? textLines.length : null)
-
-  const highlightedCode = $derived.by(() => {
-    if (content?.type !== 'text' || isMarkdown) return ''
-    return highlightCode(content.content, fileName)
-  })
-
   const previewStatusMessage = $derived.by(() => {
     if (error !== null) return `Unable to load ${fileName}: ${error}`
     if (content === null) return `Loading ${fileName}`
@@ -84,29 +75,18 @@
       destination.scrollIntoView({ block: 'start' })
     }
   }
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  function formatModifiedAt(value: number): string {
-    return new Date(value).toLocaleString('en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
-  }
-
-  function handleScroll() {
-    if (scrollRegion) {
-      onScrollTopChange?.(scrollRegion.scrollTop)
+  function registerScrollRegion(element: HTMLDivElement) {
+    scrollRegion = element
+    return {
+      destroy() {
+        if (scrollRegion === element) scrollRegion = null
+      },
     }
   }
 
-  function trackVideoElement(element: HTMLVideoElement) {
+  function registerVideoElement(element: HTMLVideoElement) {
     activeVideoElement = element
   }
-
   const scrollKey = $derived(`${fileName}:${content?.type ?? 'none'}:${scrollTop}`)
 
   $effect(() => {
@@ -196,138 +176,32 @@
     </div>
   {:else if content !== null}
     <div class="flex h-full min-h-0 flex-col">
-      <div class="shrink-0 border-b border-of-border bg-of-surface px-5 py-3">
-        <div class="flex min-h-9 items-center justify-between gap-4" class:flex-wrap={content.type === 'document' && content.mimeType === 'application/pdf'}>
-          <div class="flex min-w-0 flex-wrap items-center gap-y-1">
-            <div class="mr-3 text-base font-semibold tracking-tight text-of-text break-all">{fileName}</div>
-            <div class="flex flex-wrap items-center gap-y-1 border-l border-of-border pl-3 text-xs text-of-text/60">
-              <span>{formatFileSize(content.size)}</span>
-              {#if content.mimeType}
-                <span class="ml-3 border-l border-of-border pl-3 font-mono">{content.mimeType}</span>
-              {/if}
-              {#if lineCount !== null}
-                <span class="ml-3 border-l border-of-border pl-3">{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
-              {/if}
-              {#if modifiedAt !== null}
-                <span class="ml-3 border-l border-of-border pl-3">Modified {formatModifiedAt(modifiedAt)}</span>
-              {/if}
-            </div>
-          </div>
-          {#if onReturnFocusToTree}
-            <Button class="shrink-0" variant="outline" size="sm" type="button" onclick={() => onReturnFocusToTree?.()}>
-              Return focus to selected file in tree
-            </Button>
-          {/if}
-        </div>
-      </div>
+      <FilePreviewHeader {content} {fileName} {modifiedAt} {onReturnFocusToTree} />
 
       {#if content.type === 'text'}
-        {#if isMarkdown}
-          <MarkdownFilePreview
-            {api}
-            content={content.content}
-            {filePath}
-            {workspaceSource}
-            {scrollTop}
-            onScrollTopChange={onScrollTopChange}
-            onOpenRepositoryPath={onOpenRepositoryPath
-              ? (target) => onOpenRepositoryPath?.(target.repositoryPath)
-              : undefined}
-          />
-        {:else}
-          <div
-            class="flex-1 min-h-0 overflow-auto p-4"
-            role="region"
-            aria-label="File text content"
-            bind:this={scrollRegion}
-            onscroll={handleScroll}
-          >
-            <div class="font-mono text-sm min-w-max">
-              <div class="flex leading-6">
-                <div
-                  class="w-12 shrink-0 pr-3 text-right text-of-text/30 select-none flex flex-col"
-                  aria-hidden="true"
-                >
-                  {#each textLines as _, index}
-                    <span id="L{index + 1}">{index + 1}</span>
-                  {/each}
-                </div>
-                <code class="file-preview-code block flex-1 whitespace-pre {language ? `language-${language}` : ''}">{@html highlightedCode || ' '}</code>
-              </div>
-            </div>
-          </div>
-        {/if}
-      {:else if content.type === 'image'}
-        <div
-          class="flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto"
-          role="region"
-          aria-label="Image file content"
-          bind:this={scrollRegion}
-          onscroll={handleScroll}
-        >
-          <img
-            src={`data:${content.mimeType ?? 'image/*'};base64,${content.content}`}
-            alt={`${fileName} preview`}
-            class="max-w-full max-h-full object-contain"
-          />
-        </div>
-      {:else if content.type === 'video'}
-        <div
-          class="relative flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto"
-          role="region"
-          aria-label="Video file content"
-        >
-          <!-- Project files do not include caption sidecars. Native controls remain available. -->
-          <!-- svelte-ignore a11y_media_has_caption -->
-          <video
-            use:trackVideoElement
-            src={`data:${content.mimeType ?? 'video/*'};base64,${content.content}`}
-            aria-label={`${fileName} preview`}
-            controls
-            preload="metadata"
-            onerror={() => { videoPlaybackError = true }}
-            class="max-w-full max-h-full rounded-[var(--of-radius-container)] bg-black object-contain"
-          >
-            Video playback is unavailable for this file.
-          </video>
-          {#if videoPlaybackError}
-            <div class="absolute bottom-6 rounded-[var(--of-radius-container)] bg-of-danger px-4 py-3 text-sm text-of-on-danger shadow-lg" role="alert">
-              Video playback unavailable. This file may use a codec that Electron cannot decode.
-            </div>
-          {/if}
-        </div>
-      {:else if content.type === 'binary'}
-        <div class="flex-1 flex items-center justify-center p-6">
-          <div class="max-w-md text-center space-y-2">
-            <Archive class="mx-auto h-8 w-8 text-of-text/50" aria-hidden="true" />
-            <h3 class="text-base font-semibold">Binary preview unavailable</h3>
-            <p class="text-sm text-of-text/60">
-              This file is stored as binary data and cannot be rendered in the preview pane.
-            </p>
-          </div>
-        </div>
-      {:else if content.type === 'document' && content.mimeType === 'application/pdf' && workspaceSource !== null}
-        <PdfPreview {workspaceSource} {filePath} {modifiedAt} />
-      {:else if content.type === 'document'}
-        <div class="flex-1 flex items-center justify-center p-6">
-          <div class="max-w-md text-center space-y-2">
-            <FileQuestion class="mx-auto h-8 w-8 text-of-text/50" aria-hidden="true" />
-            <h3 class="text-base font-semibold">Document preview unavailable</h3>
-            <p class="text-sm text-of-text/60">
-              PDFs and similar document formats are shown as metadata-only previews for now.
-            </p>
-          </div>
-        </div>
-      {:else if content.type === 'large-file'}
-        <div class="flex-1 flex items-center justify-center p-6">
-          <div class="max-w-md text-center space-y-2">
-            <TriangleAlert class="mx-auto h-8 w-8 text-of-text/50" aria-hidden="true" />
-            <h3 class="text-base font-semibold">File too large to preview</h3>
-            <p class="text-sm text-of-text/60">
-              This file exceeds the in-app preview limit, so only its metadata is shown.
-            </p>
-          </div>
-        </div>
+        <FileTextPreview
+          {api}
+          content={content.content}
+          {fileName}
+          {filePath}
+          {workspaceSource}
+          {scrollTop}
+          {onScrollTopChange}
+          {onOpenRepositoryPath}
+          {registerScrollRegion}
+        />
+      {:else if content.type === 'image' || content.type === 'video'}
+        <FileMediaPreview
+          {content}
+          {fileName}
+          {videoPlaybackError}
+          onVideoError={() => { videoPlaybackError = true }}
+          {onScrollTopChange}
+          {registerScrollRegion}
+          {registerVideoElement}
+        />
+      {:else}
+        <FileUnavailablePreview {content} {workspaceSource} {filePath} {modifiedAt} />
       {/if}
     </div>
   {/if}
