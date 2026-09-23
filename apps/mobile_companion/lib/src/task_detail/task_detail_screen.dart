@@ -25,6 +25,7 @@ class TaskDetailScreen extends StatefulWidget {
     this.terminalSurface,
     this.actionPaletteController,
     this.onRefresh,
+    this.onOutputPresented,
     this.onOpenTask,
     this.onCompleted,
     this.onDeleteSucceeded,
@@ -36,6 +37,7 @@ class TaskDetailScreen extends StatefulWidget {
   final AgentTerminalSurface? terminalSurface;
   final MobileActionPaletteController? actionPaletteController;
   final Future<void> Function()? onRefresh;
+  final Future<void> Function(String receipt)? onOutputPresented;
   final void Function(String taskId, String projectId)? onOpenTask;
   final Future<void> Function()? onCompleted;
   final Future<void> Function()? onDeleteSucceeded;
@@ -96,6 +98,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     startAction: _startAction,
     onStart: widget.controller.start,
     terminalSurface: widget.terminalSurface,
+    onOutputPresented: widget.controller.acknowledgeAgentOutput,
     actionPaletteController: widget.actionPaletteController,
   );
 }
@@ -104,6 +107,7 @@ class TaskDetailView extends StatefulWidget {
   const TaskDetailView({
     required this.state,
     required this.onRefresh,
+    this.onOutputPresented,
     this.onOpenTask,
     this.onComplete,
     this.onCompleted,
@@ -121,6 +125,7 @@ class TaskDetailView extends StatefulWidget {
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(String receipt)? onOutputPresented;
   final void Function(String taskId, String projectId)? onOpenTask;
   final Future<TaskCompleteAttempt> Function()? onComplete;
   final Future<void> Function()? onCompleted;
@@ -154,6 +159,9 @@ class _TaskDetailViewState extends State<TaskDetailView>
     WidgetsBinding.instance.addObserver(this);
     _tabs = TabController(length: 2, vsync: this)..addListener(_onTabChanged);
     widget.terminalSurface?.presentation.setForeground(_foreground);
+    widget.terminalSurface?.presentation.setOutputPresentedCallback(
+      widget.onOutputPresented,
+    );
     _syncAvailability();
   }
 
@@ -166,12 +174,16 @@ class _TaskDetailViewState extends State<TaskDetailView>
         ?..setForeground(_foreground)
         ..setVisible(_selectedTab == 1);
     }
+    widget.terminalSurface?.presentation.setOutputPresentedCallback(
+      widget.onOutputPresented,
+    );
     _syncAvailability();
   }
 
   @override
   void dispose() {
     widget.terminalSurface?.presentation.setVisible(false);
+    widget.terminalSurface?.presentation.setOutputPresentedCallback(null);
     WidgetsBinding.instance.removeObserver(this);
     _tabs
       ..removeListener(_onTabChanged)
@@ -180,12 +192,17 @@ class _TaskDetailViewState extends State<TaskDetailView>
   }
 
   void _syncAvailability() {
-    final available = switch (widget.state) {
-      TaskDetailLoaded(:final detail) => detail.agentTerminalAvailable,
-      _ => false,
+    final detail = switch (widget.state) {
+      TaskDetailLoaded(:final detail) => detail,
+      _ => null,
     };
+    final available = detail?.agentTerminalAvailable ?? false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        widget.terminalSurface?.presentation.updateOccurrence(
+          detail?.agentOutputReceipt,
+          detail?.agentOutputSessionBinding,
+        );
         widget.terminalSurface?.presentation.updateAvailability(available);
       }
     });

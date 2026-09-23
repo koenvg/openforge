@@ -1,16 +1,18 @@
 use super::{
     authorization_error_response, authorize_versioned_request, error_response,
-    CompanionAttentionItem, CompanionAttentionSnapshot, CompanionDependentTaskResponse,
-    CompanionErrorCode, CompanionHostStatusResponse, CompanionProjectBoardCounts,
-    CompanionProjectBoardLanes, CompanionProjectBoardResponse, CompanionProjectBoardTask,
-    CompanionProjectCatalogItem, CompanionProjectCatalogResponse, CompanionRouterState,
-    CompanionTaskDetailResponse, CompanionTaskRelationshipResponse, PROTOCOL_VERSION,
+    CompanionAgentOutputViewedResponse, CompanionAttentionItem, CompanionAttentionSnapshot,
+    CompanionDependentTaskResponse, CompanionErrorCode, CompanionHostStatusResponse,
+    CompanionProjectBoardCounts, CompanionProjectBoardLanes, CompanionProjectBoardResponse,
+    CompanionProjectBoardTask, CompanionProjectCatalogItem, CompanionProjectCatalogResponse,
+    CompanionRouterState, CompanionTaskDetailResponse, CompanionTaskRelationshipResponse,
+    PROTOCOL_VERSION,
 };
 use axum::{
-    extract::{Path, State},
+    body::Bytes,
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 
@@ -24,6 +26,10 @@ pub(super) fn routes() -> Router<CompanionRouterState> {
             get(project_board_handler),
         )
         .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
+        .route(
+            "/companion/v1/tasks/:task_id/agent-output/viewed",
+            post(agent_output_viewed_handler),
+        )
 }
 
 async fn status_handler(State(state): State<CompanionRouterState>, headers: HeaderMap) -> Response {
@@ -120,7 +126,10 @@ async fn project_catalog_handler(
     .into_response()
 }
 
-fn board_task(row: crate::project_board::ProjectBoardTask) -> Option<CompanionProjectBoardTask> {
+fn board_task(
+    row: crate::project_board::ProjectBoardTask,
+    include_agent_output: bool,
+) -> Option<CompanionProjectBoardTask> {
     Some(CompanionProjectBoardTask {
         task_id: row.task_id,
         title: row.title,
@@ -133,19 +142,30 @@ fn board_task(row: crate::project_board::ProjectBoardTask) -> Option<CompanionPr
         labels: row.labels,
         pull_request_count: row.pull_request_count,
         primary_pull_request_number: row.primary_pull_request_number,
+        has_unread_agent_output: include_agent_output.then_some(row.has_unread_agent_output),
     })
+}
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentOutputOptions {
+    #[serde(default)]
+    include_agent_output: bool,
 }
 
 fn board_lane(
     rows: Vec<crate::project_board::ProjectBoardTask>,
+    include_agent_output: bool,
 ) -> Option<Vec<CompanionProjectBoardTask>> {
-    rows.into_iter().map(board_task).collect()
+    rows.into_iter()
+        .map(|row| board_task(row, include_agent_output))
+        .collect()
 }
 
 async fn project_board_handler(
     State(state): State<CompanionRouterState>,
     Path(project_id): Path<String>,
     headers: HeaderMap,
+    Query(options): Query<AgentOutputOptions>,
 ) -> Response {
     if let Err(code) = authorize_versioned_request(&state, &headers) {
         return authorization_error_response(code);
@@ -173,16 +193,16 @@ async fn project_board_handler(
         out_of_focus: board.out_of_focus.len(),
         backlog: board.backlog.len(),
     };
-    let Some(focus) = board_lane(board.focus) else {
+    let Some(focus) = board_lane(board.focus, options.include_agent_output) else {
         return project_board_unavailable();
     };
-    let Some(in_flight) = board_lane(board.in_flight) else {
+    let Some(in_flight) = board_lane(board.in_flight, options.include_agent_output) else {
         return project_board_unavailable();
     };
-    let Some(out_of_focus) = board_lane(board.out_of_focus) else {
+    let Some(out_of_focus) = board_lane(board.out_of_focus, options.include_agent_output) else {
         return project_board_unavailable();
     };
-    let Some(backlog) = board_lane(board.backlog) else {
+    let Some(backlog) = board_lane(board.backlog, options.include_agent_output) else {
         return project_board_unavailable();
     };
     Json(CompanionProjectBoardResponse {
@@ -215,6 +235,7 @@ async fn task_detail_handler(
     State(state): State<CompanionRouterState>,
     Path(task_id): Path<String>,
     headers: HeaderMap,
+    Query(options): Query<AgentOutputOptions>,
 ) -> Response {
     if let Err(code) = authorize_versioned_request(&state, &headers) {
         return authorization_error_response(code);
@@ -283,6 +304,14 @@ async fn task_detail_handler(
         None => None,
     };
     let agent_terminal_available = state.pty_manager.agent_terminal_available(&task_id).await;
+    let occurrence = if options.include_agent_output {
+        match state.task_detail.agent_output_occurrence(&task_id) {
+            Ok(value) => value,
+            Err(_) => return attention_unavailable(),
+        }
+    } else {
+        None
+    };
 
     Json(CompanionTaskDetailResponse {
         task_id: detail.task_id,
@@ -321,6 +350,65 @@ async fn task_detail_handler(
         created_at,
         updated_at,
         agent_updated_at,
+        agent_output_receipt: occurrence.as_ref().map(|value| value.receipt.clone()),
+        agent_output_session_binding: occurrence.map(|value| value.session_binding),
     })
     .into_response()
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentOutputViewedRequest {
+    receipt: String,
+}
+
+async fn agent_output_viewed_handler(
+    State(state): State<CompanionRouterState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+    let request: AgentOutputViewedRequest =
+        match serde_json::from_slice::<AgentOutputViewedRequest>(&body) {
+            Ok(request) if body.len() <= 1024 && request.receipt.len() == 43 => request,
+            _ => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    CompanionErrorCode::InvalidRequest,
+                    "Invalid Agent output receipt",
+                )
+            }
+        };
+    let detail = match state.task_detail.get(&task_id) {
+        Ok(Some(detail)) => detail,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                CompanionErrorCode::NotFound,
+                "Task was not found",
+            )
+        }
+        Err(_) => return attention_unavailable(),
+    };
+    match state.project_board.is_project_visible(&detail.project_id) {
+        Ok(true) => {}
+        Ok(false) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                CompanionErrorCode::NotFound,
+                "Task was not found",
+            )
+        }
+        Err(_) => return attention_unavailable(),
+    }
+    match state
+        .task_detail
+        .mark_agent_output_viewed(&task_id, &request.receipt)
+    {
+        Ok(viewed) => Json(CompanionAgentOutputViewedResponse { viewed }).into_response(),
+        Err(_) => attention_unavailable(),
+    }
 }

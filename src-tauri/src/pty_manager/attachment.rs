@@ -254,6 +254,10 @@ impl LocalAgentTerminalAttachment {
         }
     }
 
+    pub(crate) fn instance_id(&self) -> u64 {
+        self.instance_id
+    }
+
     pub(crate) fn has_protocol_error(&self) -> bool {
         self.protocol_error_pending
     }

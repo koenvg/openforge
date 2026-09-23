@@ -139,6 +139,27 @@ impl super::Database {
         )?;
         Ok(changed > 0)
     }
+    /// Companion acknowledgement fences both the latest Session and exact stopped revision.
+    pub(crate) fn mark_latest_agent_output_viewed(
+        &self,
+        task_id: &str,
+        session_id: &str,
+        output_revision: i64,
+    ) -> Result<bool> {
+        let conn = self.lock_conn()?;
+        let changed = conn.execute(
+            "UPDATE agent_sessions
+                SET viewed_output_revision = ?3
+              WHERE ticket_id = ?1 AND id = ?2
+                AND id = (SELECT id FROM agent_sessions WHERE ticket_id = ?1
+                          ORDER BY created_at DESC, rowid DESC LIMIT 1)
+                AND status IN ('completed', 'paused', 'failed', 'interrupted')
+                AND output_revision = ?3
+                AND viewed_output_revision < ?3",
+            rusqlite::params![task_id, session_id, output_revision],
+        )?;
+        Ok(changed > 0)
+    }
 
     #[cfg(test)]
     pub fn set_agent_session_opencode_id(&self, id: &str, opencode_session_id: &str) -> Result<()> {

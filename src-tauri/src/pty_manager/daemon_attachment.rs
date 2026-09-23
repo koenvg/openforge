@@ -13,6 +13,7 @@ pub(super) struct DaemonAgentAttachment {
     replay: Vec<u8>,
     protocol_error: bool,
     exited: bool,
+    instance_id: u64,
 }
 
 impl DaemonAgentAttachment {
@@ -21,6 +22,7 @@ impl DaemonAgentAttachment {
             .filter(|(_, session)| session.exit_code.is_none()
                 && matches!(&session.owner, openforge_session_protocol::TerminalOwner::Agent { task_id } if task_id == &session.session_key))
             .ok_or(Error::NoActiveAgentTerminal)?;
+        let instance_id = session.pty.instance.value();
         let bridge = bridge
             .pin(session.pty.instance.value())
             .await
@@ -53,6 +55,7 @@ impl DaemonAgentAttachment {
         });
         let protocol_error = replay.is_err();
         Ok(Self {
+            instance_id,
             bridge,
             output: tokio::sync::Mutex::new(output),
             sanitizer,
@@ -60,6 +63,10 @@ impl DaemonAgentAttachment {
             protocol_error,
             exited: false,
         })
+    }
+
+    pub(crate) fn instance_id(&self) -> u64 {
+        self.instance_id
     }
 
     pub(super) fn has_protocol_error(&self) -> bool {

@@ -83,6 +83,202 @@ async fn authenticated_websocket_revalidates_no_active_agent_terminal() {
 
     server.shutdown().await;
 }
+#[tokio::test]
+async fn opted_in_terminal_attests_only_replay_of_the_matching_stopped_session() {
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("terminal_output_boundary");
+    let project = database
+        .create_project("Visible", "/private/project")
+        .unwrap();
+    let task = database
+        .create_task("Output", "doing", Some(&project.id), None, None)
+        .unwrap();
+    database
+        .create_agent_session(
+            "terminal-session",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "pi",
+        )
+        .unwrap();
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().unwrap();
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let instance_id = pty_manager
+        .spawn_companion_test_agent_pty(
+            &task.id,
+            temp_dir.path(),
+            "printf 'visible output\\n'; sleep 10",
+        )
+        .await
+        .unwrap();
+    database
+        .set_agent_session_pty_instance_id("terminal-session", instance_id)
+        .unwrap();
+    database
+        .update_agent_session("terminal-session", "implement", "paused", None, None)
+        .unwrap();
+    for _ in 0..100 {
+        let attachment = pty_manager.attach_agent_terminal(&task.id).await.unwrap();
+        if attachment
+            .replay()
+            .windows(b"visible output".len())
+            .any(|bytes| bytes == b"visible output")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let database = Arc::new(std::sync::Mutex::new(database));
+    let detail = Arc::new(super::task_detail::DatabaseCompanionTaskDetailSource::new(
+        Arc::clone(&database),
+    ));
+    let access = Arc::new(CancellationAccess::default());
+    let server =
+        AuthenticatedTerminalServer::start_with_pty_and_detail(pty_manager.clone(), access, detail)
+            .await;
+    let mut legacy = server.connect_task(&task.id).await;
+    attach_and_wait_until_ready(&mut legacy).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), legacy.next())
+            .await
+            .is_err(),
+        "legacy socket must not receive a boundary"
+    );
+    let mut opted = server.connect_task_with_agent_output(&task.id).await;
+    send_attach(&mut opted).await;
+    let mut saw_output = false;
+    let mut ready = false;
+    let first_receipt = loop {
+        match next_frame(&mut opted, "presentation boundary").await {
+            Message::Binary(bytes) => {
+                saw_output |= String::from_utf8_lossy(&bytes).contains("visible output")
+            }
+            Message::Text(encoded) => {
+                let value: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+                if value["type"] == "ready" {
+                    ready = true;
+                }
+                if value["type"] == "presentation_boundary" {
+                    assert!(saw_output && ready, "boundary must follow replay and ready");
+                    assert_eq!(value["finalOutput"], false);
+                    assert_eq!(value["receipt"].as_str().unwrap().len(), 43);
+                    assert_eq!(value["sessionBinding"].as_str().unwrap().len(), 43);
+                    break value["receipt"].as_str().unwrap().to_string();
+                }
+            }
+            _ => panic!("unexpected frame"),
+        }
+    };
+    let mut stale = server.connect_task_with_agent_output(&task.id).await;
+    database
+        .lock()
+        .unwrap()
+        .update_agent_session("terminal-session", "implement", "running", None, None)
+        .unwrap();
+    database
+        .lock()
+        .unwrap()
+        .update_agent_session("terminal-session", "implement", "paused", None, None)
+        .unwrap();
+    attach_and_wait_until_ready(&mut stale).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), stale.next())
+            .await
+            .is_err(),
+        "a replay captured after a newer revision must not carry the old receipt"
+    );
+    let mut current = server.connect_task_with_agent_output(&task.id).await;
+    send_attach(&mut current).await;
+    loop {
+        if let Message::Text(encoded) = next_frame(&mut current, "new occurrence boundary").await {
+            let value: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            if value["type"] == "presentation_boundary" {
+                assert_ne!(value["receipt"], first_receipt);
+                assert_eq!(value["finalOutput"], false);
+                break;
+            }
+        }
+    }
+    pty_manager.kill_pty(&task.id).await.unwrap();
+    let mut final_boundary = false;
+    loop {
+        if let Message::Text(encoded) = next_frame(&mut current, "final output boundary").await {
+            let value: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            if value["type"] == "presentation_boundary" {
+                assert_eq!(value["finalOutput"], true);
+                assert!(value.get("receipt").is_none());
+                final_boundary = true;
+            }
+            if value["type"] == "exited" {
+                assert!(final_boundary, "final boundary must precede exited");
+                break;
+            }
+        }
+    }
+    server.shutdown().await;
+}
+#[tokio::test]
+async fn opted_in_terminal_does_not_attest_an_empty_final_screen() {
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("terminal_empty_boundary");
+    let project = database
+        .create_project("Visible", "/private/project")
+        .unwrap();
+    let task = database
+        .create_task("Output", "doing", Some(&project.id), None, None)
+        .unwrap();
+    database
+        .create_agent_session(
+            "empty-session",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "pi",
+        )
+        .unwrap();
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().unwrap();
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let instance_id = pty_manager
+        .spawn_companion_test_agent_pty(&task.id, temp_dir.path(), "sleep 10")
+        .await
+        .unwrap();
+    database
+        .set_agent_session_pty_instance_id("empty-session", instance_id)
+        .unwrap();
+    database
+        .update_agent_session("empty-session", "implement", "paused", None, None)
+        .unwrap();
+    let detail = Arc::new(super::task_detail::DatabaseCompanionTaskDetailSource::new(
+        Arc::new(std::sync::Mutex::new(database)),
+    ));
+    let server = AuthenticatedTerminalServer::start_with_pty_and_detail(
+        pty_manager.clone(),
+        Arc::new(CancellationAccess::default()),
+        detail,
+    )
+    .await;
+    let mut socket = server.connect_task_with_agent_output(&task.id).await;
+    attach_and_wait_until_ready(&mut socket).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), socket.next())
+            .await
+            .is_err()
+    );
+    pty_manager.kill_pty(&task.id).await.unwrap();
+    loop {
+        if let Message::Text(encoded) = next_frame(&mut socket, "empty final screen").await {
+            let value: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+            assert_ne!(value["type"], "presentation_boundary");
+            if value["type"] == "exited" {
+                break;
+            }
+        }
+    }
+    server.shutdown().await;
+}
 
 #[tokio::test]
 async fn terminal_websocket_rejects_oversized_text_and_binary_frames() {

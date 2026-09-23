@@ -21,10 +21,14 @@ TaskDetail _detail({
   String agentState = 'running',
   bool agentTerminalAvailable = false,
   String? agentErrorSummary,
+  String? agentOutputReceipt,
+  String? agentOutputSessionBinding,
   List<String> labels = const <String>[],
   List<TaskRelationship> dependencies = const <TaskRelationship>[],
   List<DependentTask> dependentTasks = const <DependentTask>[],
 }) => TaskDetail(
+  agentOutputReceipt: agentOutputReceipt,
+  agentOutputSessionBinding: agentOutputSessionBinding,
   taskId: 'KVG-2946',
   initialPrompt: initialPrompt,
   title: title,
@@ -882,6 +886,51 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     await tester.pumpAndSettle();
     expect(successCallbacks, 1);
   });
+  testWidgets(
+    'Task detail forwards the current occurrence to its Terminal and clears the callback on exit',
+    (tester) async {
+      final presentation = _TerminalPresentation();
+      final surface = AgentTerminalSurface(
+        presentation: presentation,
+        terminal: const SizedBox(),
+        dispose: () {},
+      );
+      final seen = <String>[];
+      Future<void> show(String receipt) => tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(
+              _detail(
+                agentTerminalAvailable: true,
+                agentOutputReceipt: receipt,
+                agentOutputSessionBinding: 'b' * 43,
+              ),
+            ),
+            onRefresh: () async {},
+            terminalSurface: surface,
+            onOutputPresented: (value) async {
+              seen.add(value);
+            },
+          ),
+        ),
+      );
+      await show('a' * 43);
+      await tester.pump();
+      expect(presentation.receipt, 'a' * 43);
+      expect(presentation.binding, 'b' * 43);
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      expect(presentation.visible, isTrue);
+      await presentation.onPresented!('a' * 43);
+      expect(seen, <String>['a' * 43]);
+      await show('c' * 43);
+      await tester.pump();
+      expect(presentation.receipt, 'c' * 43);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      expect(presentation.onPresented, isNull);
+      expect(presentation.visible, isFalse);
+    },
+  );
 }
 
 final class _TerminalPresentation extends ChangeNotifier
@@ -891,6 +940,9 @@ final class _TerminalPresentation extends ChangeNotifier
   bool foreground = true;
   var closeCalls = 0;
   var retryCalls = 0;
+  String? receipt;
+  String? binding;
+  Future<void> Function(String)? onPresented;
   @override
   AgentTerminalState get state => _state;
 
@@ -909,6 +961,17 @@ final class _TerminalPresentation extends ChangeNotifier
 
   @override
   void setVisible(bool visible) => this.visible = visible;
+
+  @override
+  void updateOccurrence(String? receipt, String? binding) {
+    this.receipt = receipt;
+    this.binding = binding;
+  }
+
+  @override
+  void setOutputPresentedCallback(
+    Future<void> Function(String receipt)? callback,
+  ) => onPresented = callback;
 
   @override
   void updateAvailability(bool available) {}

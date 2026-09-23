@@ -11,12 +11,14 @@ final class TerminalConnectRequest {
     required this.certificateSha256,
     required this.credential,
     required this.taskId,
+    this.includeAgentOutput = true,
   });
 
   final Uri endpoint;
   final String certificateSha256;
   final String credential;
   final String taskId;
+  final bool includeAgentOutput;
 }
 
 typedef CompanionTerminalConnector =
@@ -68,7 +70,9 @@ Future<CompanionAgentTerminalChannel> openPinnedAgentTerminal(
       request.taskId,
       'agent-terminal',
     ],
-    query: null,
+    queryParameters: request.includeAgentOutput
+        ? <String, String>{'includeAgentOutput': 'true'}
+        : null,
     fragment: null,
   );
   try {

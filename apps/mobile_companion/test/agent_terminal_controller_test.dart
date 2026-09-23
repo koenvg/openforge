@@ -687,6 +687,166 @@ void main() {
       controller.dispose();
     },
   );
+  testWidgets(
+    'only a matching rendered boundary on the visible foreground screen is presented',
+    (tester) async {
+      final receipt = 'a' * 43;
+      final binding = 'b' * 43;
+      final seen = <String>[];
+      final channel = _FakeChannel();
+      final controller =
+          AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _FakeTerminalClient(channel),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+          )..setOutputPresentedCallback((value) async {
+            seen.add(value);
+          });
+      controller.updateOccurrence(receipt, binding);
+      controller.updateAvailability(true);
+      controller.setVisible(true);
+      await tester.runAsync(_flush);
+      channel.add(Uint8List.fromList('screen'.codeUnits));
+      channel.add('{"type":"ready","initialState":"replay"}');
+      channel.add(
+        '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$receipt","finalOutput":false}',
+      );
+      await tester.runAsync(_flush);
+      expect(seen, isEmpty, reason: 'the screen has not painted');
+      await tester.pump();
+      expect(seen, <String>[receipt]);
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'hidden and stale occurrences never acknowledge, but a final exited screen can',
+    (tester) async {
+      final old = 'a' * 43, newer = 'c' * 43, binding = 'b' * 43;
+      final seen = <String>[];
+      final channel = _FakeChannel();
+      final controller =
+          AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _FakeTerminalClient(channel),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+          )..setOutputPresentedCallback((value) async {
+            seen.add(value);
+          });
+      controller.updateOccurrence(newer, binding);
+      controller.updateAvailability(true);
+      controller.setVisible(true);
+      await tester.runAsync(_flush);
+      channel.add(Uint8List.fromList('screen'.codeUnits));
+      channel.add('{"type":"ready","initialState":"replay"}');
+      channel.add(
+        '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$old","finalOutput":false}',
+      );
+      controller.setVisible(false);
+      await tester.runAsync(_flush);
+      await tester.pump();
+      expect(seen, isEmpty);
+      controller.setVisible(true);
+      await tester.pump();
+      expect(seen, isEmpty);
+      channel.add(
+        '{"type":"presentation_boundary","sessionBinding":"$binding","finalOutput":true}',
+      );
+      channel.add('{"type":"exited"}');
+      await tester.runAsync(_flush);
+      await tester.pump();
+      expect(seen, <String>[newer]);
+      controller.dispose();
+    },
+  );
+  testWidgets('a newer stopped occurrence requires a fresh attachment and replay', (
+    tester,
+  ) async {
+    final old = 'a' * 43, newer = 'c' * 43, binding = 'b' * 43;
+    final channels = <_FakeChannel>[_FakeChannel(), _FakeChannel()];
+    final client = _QueueTerminalClient(channels);
+    final seen = <String>[];
+    final controller =
+        AgentTerminalController(
+          taskId: 'KVG-3018',
+          client: client,
+          storage: _Storage(),
+          terminal: _FakeTerminal(),
+        )..setOutputPresentedCallback((receipt) async {
+          seen.add(receipt);
+        });
+    controller.updateOccurrence(old, binding);
+    controller.updateAvailability(true);
+    controller.setVisible(true);
+    await tester.runAsync(_flush);
+    channels.first.add(Uint8List.fromList('old screen'.codeUnits));
+    channels.first.add('{"type":"ready","initialState":"replay"}');
+    channels.first.add(
+      '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$old","finalOutput":false}',
+    );
+    await tester.runAsync(_flush);
+    controller.updateOccurrence(newer, binding);
+    await tester.runAsync(_flush);
+    await tester.runAsync(_flush);
+    expect(channels.first.closed, isTrue);
+    expect(client.opens, 2);
+    await tester.pump();
+    expect(seen, isEmpty);
+    channels.last.add(Uint8List.fromList('new screen'.codeUnits));
+    channels.last.add('{"type":"ready","initialState":"replay"}');
+    channels.last.add(
+      '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$newer","finalOutput":false}',
+    );
+    await tester.runAsync(_flush);
+    await tester.pump();
+    expect(seen, <String>[newer]);
+    controller.dispose();
+  });
+  testWidgets(
+    'backgrounding before paint invalidates the boundary until fresh foreground replay',
+    (tester) async {
+      final receipt = 'a' * 43, binding = 'b' * 43;
+      final channels = <_FakeChannel>[_FakeChannel(), _FakeChannel()];
+      final seen = <String>[];
+      final controller =
+          AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _QueueTerminalClient(channels),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+          )..setOutputPresentedCallback((value) async {
+            seen.add(value);
+          });
+      controller.updateOccurrence(receipt, binding);
+      controller.updateAvailability(true);
+      controller.setVisible(true);
+      await tester.runAsync(_flush);
+      channels.first.add(Uint8List.fromList('old replay'.codeUnits));
+      channels.first.add('{"type":"ready","initialState":"replay"}');
+      channels.first.add(
+        '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$receipt","finalOutput":false}',
+      );
+      await tester.runAsync(_flush);
+      controller.setForeground(false);
+      await tester.pump();
+      expect(seen, isEmpty);
+      await tester.runAsync(_flush);
+      controller.setForeground(true);
+      await tester.runAsync(_flush);
+      await tester.runAsync(_flush);
+      channels.last.add(Uint8List.fromList('fresh replay'.codeUnits));
+      channels.last.add('{"type":"ready","initialState":"replay"}');
+      channels.last.add(
+        '{"type":"presentation_boundary","sessionBinding":"$binding","receipt":"$receipt","finalOutput":false}',
+      );
+      await tester.runAsync(_flush);
+      await tester.pump();
+      expect(seen, <String>[receipt]);
+      controller.dispose();
+    },
+  );
 }
 
 Future<void> _flush() async {

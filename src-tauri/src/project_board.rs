@@ -1,6 +1,7 @@
 use crate::task_attention::{
-    driving_pr, project_task_attention, task_needs_attention, task_reason, task_state,
-    TaskAttentionInput, TaskAttentionPullRequest, TaskAttentionSession, TaskAttentionTask,
+    driving_pr, has_unread_agent_output, project_task_attention, task_needs_attention, task_reason,
+    task_state, TaskAttentionInput, TaskAttentionPullRequest, TaskAttentionSession,
+    TaskAttentionTask,
 };
 use crate::task_prompt::task_display_title;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ pub(crate) struct ProjectBoardTask {
     pub state: String,
     pub reason: String,
     pub activity_at: i64,
+    #[serde(default)]
+    pub has_unread_agent_output: bool,
     #[serde(default)]
     pub dependency_count: usize,
     #[serde(default)]
@@ -122,6 +125,7 @@ pub(crate) fn project_task_board(
                 state: row.state,
                 reason: row.reason,
                 activity_at: row.activity_at,
+                has_unread_agent_output: row.has_unread_agent_output,
                 dependency_count: metadata.dependency_count,
                 waiting_dependency_count: metadata.waiting_dependency_count,
                 labels: metadata.labels,
@@ -201,6 +205,7 @@ pub(crate) fn project_task_board(
             state: state.to_string(),
             reason: task_reason(state, task_pull_requests),
             activity_at: session.map_or(task.updated_at, |session| session.updated_at),
+            has_unread_agent_output: has_unread_agent_output(session),
             dependency_count: metadata.dependency_count,
             waiting_dependency_count: metadata.waiting_dependency_count,
             labels: metadata.labels,
@@ -384,6 +389,76 @@ mod tests {
                 .map(|task| task.task_id.as_str())
                 .collect::<Vec<_>>(),
             vec!["t-parked-idle"]
+        );
+    }
+
+    #[test]
+    fn board_reports_unread_output_in_focus_and_out_of_focus_until_viewed() {
+        let fixture: CharacterizationFixture = serde_json::from_str(include_str!(
+            "../../fixtures/task_attention_characterization.json"
+        ))
+        .expect("characterization fixture should deserialize");
+        let mut input = TaskAttentionInput {
+            projects: fixture.projects,
+            tasks: fixture.tasks,
+            sessions: fixture.sessions,
+            pull_requests: fixture.pull_requests,
+            out_of_focus_by_project: fixture.out_of_focus_by_project,
+            focus_states_by_project: fixture.focus_states_by_project,
+        };
+        let session = input
+            .sessions
+            .iter_mut()
+            .find(|row| row.ticket_id == "T-input")
+            .unwrap();
+        session.output_revision = 2;
+        session.viewed_output_revision = 1;
+        input.sessions.push(TaskAttentionSession {
+            ticket_id: "T-set-aside".into(),
+            status: "completed".into(),
+            checkpoint_data: None,
+            updated_at: 100,
+            output_revision: 1,
+            viewed_output_revision: 0,
+        });
+        let unread = project_task_board(input.clone(), "P-alpha").unwrap();
+        assert!(
+            unread
+                .focus
+                .iter()
+                .find(|row| row.task_id == "T-input")
+                .unwrap()
+                .has_unread_agent_output
+        );
+        assert!(
+            unread
+                .out_of_focus
+                .iter()
+                .find(|row| row.task_id == "T-set-aside")
+                .unwrap()
+                .has_unread_agent_output
+        );
+        assert!(!unread.in_flight[0].has_unread_agent_output);
+        input
+            .sessions
+            .iter_mut()
+            .for_each(|session| session.viewed_output_revision = session.output_revision);
+        let read = project_task_board(input, "P-alpha").unwrap();
+        assert!(
+            !read
+                .focus
+                .iter()
+                .find(|row| row.task_id == "T-input")
+                .unwrap()
+                .has_unread_agent_output
+        );
+        assert!(
+            !read
+                .out_of_focus
+                .iter()
+                .find(|row| row.task_id == "T-set-aside")
+                .unwrap()
+                .has_unread_agent_output
         );
     }
 

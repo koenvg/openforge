@@ -319,6 +319,54 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
 }
 
 #[tokio::test]
+async fn board_unread_field_is_opted_in_without_changing_legacy_cards() {
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_unread_board");
+    let project = database
+        .create_project("Project", "/private/project")
+        .unwrap();
+    let task = database
+        .create_task("Review", "doing", Some(&project.id), None, None)
+        .unwrap();
+    database
+        .create_agent_session(
+            "unread-session",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "pi",
+        )
+        .unwrap();
+    database
+        .update_agent_session("unread-session", "implement", "paused", None, None)
+        .unwrap();
+    let source = Arc::new(DatabaseCompanionProjectBoardSource::new(Arc::new(
+        std::sync::Mutex::new(database),
+    )));
+    let router = create_router_with_project_board(
+        CompanionHostStatus::new(HOST_ID.to_string()),
+        Arc::new(AllowAllAuthorizer),
+        pairing(),
+        source,
+    );
+    let path = format!("/companion/v1/projects/{}/board", project.id);
+    let legacy = response_json(router.clone().oneshot(request(&path)).await.unwrap()).await;
+    assert_matches_openapi_schema("ProjectBoard", &legacy);
+    assert!(legacy["lanes"]["focus"][0]
+        .get("hasUnreadAgentOutput")
+        .is_none());
+    let opted_in = response_json(
+        router
+            .oneshot(request(format!("{path}?includeAgentOutput=true")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_matches_openapi_schema("ProjectBoard", &opted_in);
+    assert_eq!(opted_in["lanes"]["focus"][0]["hasUnreadAgentOutput"], true);
+}
+
+#[tokio::test]
 async fn project_board_hides_authorization_visibility_and_existence() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_project_board_safe_errors");

@@ -40,6 +40,7 @@ void main() {
       expect(attempts.last.taskId, 'KVG-3018');
       expect(attempts.last.certificateSha256, 'abc123');
       expect(attempts.last.credential, 'credential');
+      expect(attempts.last.includeAgentOutput, isTrue);
     },
   );
 

@@ -1,4 +1,6 @@
+use super::agent_output::AgentOutputOccurrence;
 use super::live_events::CompanionStreamTermination;
+use super::task_detail::CompanionTaskDetailSource;
 use super::terminal_protocol::{
     ClientTerminalControl, ServerTerminalControl, TerminalDimensions, TerminalErrorCode,
 };
@@ -21,6 +23,11 @@ const SOCKET_SEND_TIMEOUT: Duration = Duration::from_secs(2);
 type TerminalSocketSender = SplitSink<WebSocket, Message>;
 type TerminalSocketReceiver = SplitStream<WebSocket>;
 
+pub(crate) struct TerminalOutputPresentation {
+    pub(crate) pending_occurrence: Option<AgentOutputOccurrence>,
+    pub(crate) include_agent_output: bool,
+    pub(crate) detail_source: Arc<dyn CompanionTaskDetailSource>,
+}
 struct RegisteredAttachment {
     id: u64,
     replace: oneshot::Sender<()>,
@@ -62,6 +69,7 @@ pub(crate) async fn serve_terminal_socket(
     pty_manager: PtyManager,
     mut cancellation: tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     registry: CompanionTerminalRegistry,
+    presentation: TerminalOutputPresentation,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let (registration_id, mut replaced) = registry.register(&device_id).await;
@@ -72,6 +80,7 @@ pub(crate) async fn serve_terminal_socket(
         &pty_manager,
         &mut cancellation,
         &mut replaced,
+        &presentation,
     )
     .await;
     registry.unregister(&device_id, registration_id).await;
@@ -85,6 +94,7 @@ async fn serve_registered_socket(
     pty_manager: &PtyManager,
     cancellation: &mut tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     replaced: &mut oneshot::Receiver<()>,
+    presentation: &TerminalOutputPresentation,
 ) {
     let dimensions = match receive_initial_attach(receiver, cancellation, replaced).await {
         Ok(dimensions) => dimensions,
@@ -156,7 +166,8 @@ async fn serve_registered_socket(
         }
     }
     let replay = attachment.replay().to_vec();
-    if !replay.is_empty() {
+    let replay_presented = !replay.is_empty();
+    if replay_presented {
         match initialization_step(
             receiver,
             cancellation,
@@ -188,7 +199,32 @@ async fn serve_registered_socket(
             return;
         }
     }
+    if presentation.include_agent_output && replay_presented {
+        if let Some(pending) = presentation.pending_occurrence.as_ref() {
+            let current = presentation
+                .detail_source
+                .agent_output_for_pty(task_id, attachment.instance_id());
+            let matches = current.ok().flatten().is_some_and(|value| {
+                value.receipt == pending.receipt && value.session_binding == pending.session_binding
+            });
+            if matches
+                && send_control(
+                    sender,
+                    ServerTerminalControl::presentation_boundary(
+                        pending.session_binding.clone(),
+                        Some(pending.receipt.clone()),
+                        false,
+                    ),
+                )
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+    }
 
+    let mut presented_output = replay_presented;
     loop {
         tokio::select! {
             biased;
@@ -216,15 +252,23 @@ async fn serve_registered_socket(
             event = attachment.recv() => {
                 match event {
                     Ok(AgentTerminalEvent::Output(output)) => {
+                        let nonempty = !output.is_empty();
                         if send_output(sender, output).await.is_err() {
                             break;
                         }
+                        presented_output |= nonempty;
                     }
                     Ok(AgentTerminalEvent::ProtocolError) => {
                         let _ = send_protocol_error(sender).await;
                         break;
                     }
                     Ok(AgentTerminalEvent::Exited) => {
+                        if presentation.include_agent_output && presented_output {
+                            if let Ok(Some(binding)) = presentation.detail_source.agent_session_binding_for_pty(task_id, attachment.instance_id()) {
+                                let boundary = ServerTerminalControl::presentation_boundary(binding, None, true);
+                                if send_control(sender, boundary).await.is_err() { break; }
+                            }
+                        }
                         let _ = send_control(sender, ServerTerminalControl::Exited).await;
                         break;
                     }

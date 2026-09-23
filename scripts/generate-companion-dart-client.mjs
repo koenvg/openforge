@@ -399,6 +399,14 @@ function operationParameters(contract, operation, path) {
     result.push({ name: lowerCamel(parameter.name), type: dartType(parameter.schema, { owner: 'Operation', property: parameter.name }), required: true })
   }
 
+  for (const parameter of parameters.filter((parameter) => parameter.in === 'query')) {
+    result.push({
+      name: lowerCamel(parameter.name),
+      type: dartType(parameter.schema, { owner: 'Operation', property: parameter.name }, { optional: !parameter.required }),
+      required: Boolean(parameter.required),
+      query: parameter,
+    })
+  }
   const requestSchema = operation.requestBody?.content?.['application/json']?.schema
   if (requestSchema?.$ref) {
     const modelName = refName(requestSchema.$ref)
@@ -447,6 +455,10 @@ function renderOperation(contract, entry, protocol) {
   const serverUrl = contract.servers?.[0]?.url ?? ''
   const resolvedPath = renderResolvedPath(serverUrl, path)
   const headerLines = []
+  const queryParameters = parameters.filter((parameter) => parameter.query)
+  const uriExpression = queryParameters.length
+    ? `baseUrl.resolve(${dartInterpolatedString(resolvedPath)}).replace(queryParameters: <String, String>{${queryParameters.map((parameter) => `if (${parameter.name} != null) ${dartString(parameter.query.name)}: ${parameter.name}.toString(),`).join(' ')}})`
+    : `baseUrl.resolve(${dartInterpolatedString(resolvedPath)})`
   if (isStream) headerLines.push("      'accept': 'text/event-stream',")
   const requestSchema = operation.requestBody?.content?.['application/json']?.schema
   if (requestSchema) headerLines.push("      'content-type': 'application/json',")
@@ -471,7 +483,7 @@ function renderOperation(contract, entry, protocol) {
 ${signature}
   }) => CompanionV1StreamRequest(
     method: ${dartString(method.toUpperCase())},
-    uri: baseUrl.resolve(${dartInterpolatedString(resolvedPath)}),
+    uri: ${uriExpression},
     headers: <String, String>{
 ${headerLines.join('\n')}
     },
@@ -500,7 +512,7 @@ ${signature}
   }) async {
     final response = await transport.send(
       method: ${dartString(method.toUpperCase())},
-      uri: baseUrl.resolve(${dartInterpolatedString(resolvedPath)}),
+      uri: ${uriExpression},
       headers: <String, String>{
 ${headerLines.join('\n')}
       },${body}

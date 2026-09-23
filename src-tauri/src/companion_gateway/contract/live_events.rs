@@ -4,10 +4,13 @@ use super::{
 };
 use crate::{
     app_events::AppEventCursor,
-    companion_gateway::{live_events::companion_event_stream, terminal::serve_terminal_socket},
+    companion_gateway::{
+        live_events::companion_event_stream,
+        terminal::{serve_terminal_socket, TerminalOutputPresentation},
+    },
 };
 use axum::{
-    extract::{Path, State, WebSocketUpgrade},
+    extract::{Path, Query, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     response::{sse::KeepAlive, IntoResponse, Response, Sse},
     routing::get,
@@ -65,10 +68,18 @@ async fn events_handler(State(state): State<CompanionRouterState>, headers: Head
         .into_response()
 }
 
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalOptions {
+    #[serde(default)]
+    include_agent_output: bool,
+}
+
 async fn agent_terminal_handler(
     State(state): State<CompanionRouterState>,
     Path(task_id): Path<String>,
     headers: HeaderMap,
+    Query(options): Query<TerminalOptions>,
     upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
 ) -> Response {
     let device = match state.authorizer.authorize(&headers) {
@@ -86,6 +97,21 @@ async fn agent_terminal_handler(
         Ok(upgrade) => upgrade,
         Err(rejection) => return rejection.into_response(),
     };
+    let pending_occurrence = if options.include_agent_output {
+        match state.task_detail.agent_output_occurrence(&task_id) {
+            Ok(value) => value,
+            Err(_) => {
+                return error_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    CompanionErrorCode::TemporarilyUnavailable,
+                    "Agent output is temporarily unavailable",
+                )
+            }
+        }
+    } else {
+        None
+    };
+    let detail_source = Arc::clone(&state.task_detail);
     let pty_manager = state.pty_manager.clone();
     let registry = state.terminal_registry.clone();
     upgrade
@@ -99,6 +125,11 @@ async fn agent_terminal_handler(
                 pty_manager,
                 cancellation,
                 registry,
+                TerminalOutputPresentation {
+                    pending_occurrence,
+                    include_agent_output: options.include_agent_output,
+                    detail_source,
+                },
             )
         })
         .into_response()

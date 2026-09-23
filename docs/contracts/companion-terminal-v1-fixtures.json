@@ -16,6 +16,16 @@
       "message": { "type": "ready", "initialState": "replay" }
     },
     {
+      "name": "replay-presentation-boundary",
+      "direction": "server",
+      "message": { "type": "presentation_boundary", "sessionBinding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "receipt": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "finalOutput": false }
+    },
+    {
+      "name": "final-output-presentation-boundary",
+      "direction": "server",
+      "message": { "type": "presentation_boundary", "sessionBinding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "finalOutput": true }
+    },
+    {
       "name": "exited",
       "direction": "server",
       "message": { "type": "exited" }
@@ -74,6 +84,11 @@
       "name": "exited-extra-field",
       "direction": "server",
       "message": { "type": "exited", "instanceId": 42 }
+    },
+    {
+      "name": "presentation-boundary-internal-id",
+      "direction": "server",
+      "message": { "type": "presentation_boundary", "sessionBinding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "finalOutput": true, "instanceId": 42 }
     },
     {
       "name": "unsafe-error-extra-detail",

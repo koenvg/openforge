@@ -12,7 +12,7 @@ use super::{
     project_board::UnavailableCompanionProjectBoardSource,
     task_actions::UnavailableCompanionTaskActionService,
     task_creation::UnavailableCompanionTaskCreator,
-    task_detail::UnavailableCompanionTaskDetailSource,
+    task_detail::{CompanionTaskDetailSource, UnavailableCompanionTaskDetailSource},
     task_start::UnavailableCompanionTaskStarter,
 };
 use axum::{http::Request, Router};
@@ -119,6 +119,19 @@ impl AuthenticatedTerminalServer {
         pty_manager: crate::pty_manager::PtyManager,
         stream_access: Arc<dyn CompanionStreamAccess>,
     ) -> Self {
+        Self::start_with_pty_and_detail(
+            pty_manager,
+            stream_access,
+            Arc::new(UnavailableCompanionTaskDetailSource),
+        )
+        .await
+    }
+
+    pub(super) async fn start_with_pty_and_detail(
+        pty_manager: crate::pty_manager::PtyManager,
+        stream_access: Arc<dyn CompanionStreamAccess>,
+        detail: Arc<dyn CompanionTaskDetailSource>,
+    ) -> Self {
         let router = create_router_with_sources_event_access_and_pty(
             CompanionHostStatus::new(TEST_HOST_ID.to_string()),
             Arc::new(BearerAuthorizer),
@@ -126,7 +139,7 @@ impl AuthenticatedTerminalServer {
             CompanionRouterSources {
                 attention: Arc::new(UnavailableCompanionAttentionSource),
                 project_board: Arc::new(UnavailableCompanionProjectBoardSource),
-                task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+                task_detail: detail,
                 task_actions: Arc::new(UnavailableCompanionTaskActionService),
                 action_palette: Arc::new(UnavailableCompanionActionPaletteService),
                 task_creator: Arc::new(UnavailableCompanionTaskCreator),
@@ -165,16 +178,28 @@ impl AuthenticatedTerminalServer {
     }
 
     pub(super) async fn connect_task(&self, task_id: &str) -> TestTerminalSocket {
-        tokio_tungstenite::connect_async(self.request(task_id))
+        tokio_tungstenite::connect_async(self.request(task_id, false))
             .await
             .expect("WebSocket upgrade")
             .0
     }
 
-    fn request(&self, task_id: &str) -> Request<()> {
+    pub(super) async fn connect_task_with_agent_output(&self, task_id: &str) -> TestTerminalSocket {
+        tokio_tungstenite::connect_async(self.request(task_id, true))
+            .await
+            .expect("opted-in WebSocket upgrade")
+            .0
+    }
+
+    fn request(&self, task_id: &str, include_agent_output: bool) -> Request<()> {
         let mut request = format!(
-            "ws://{}/companion/v1/tasks/{task_id}/agent-terminal",
-            self.address
+            "ws://{}/companion/v1/tasks/{task_id}/agent-terminal{}",
+            self.address,
+            if include_agent_output {
+                "?includeAgentOutput=true"
+            } else {
+                ""
+            },
         )
         .into_client_request()
         .expect("WebSocket request");

@@ -66,6 +66,14 @@ pub(crate) enum ServerTerminalControl {
         #[serde(rename = "initialState")]
         initial_state: TerminalInitialState,
     },
+    PresentationBoundary {
+        #[serde(rename = "sessionBinding")]
+        session_binding: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        receipt: Option<String>,
+        #[serde(rename = "finalOutput")]
+        final_output: bool,
+    },
     Exited,
     Error {
         code: TerminalErrorCode,
@@ -87,6 +95,10 @@ impl ServerTerminalControl {
         {
             Some("ready") => &["type", "initialState"],
             Some("exited") | Some("authorization_revoked") | Some("gateway_closing") => &["type"],
+            Some("presentation_boundary") if object.contains_key("receipt") => {
+                &["type", "sessionBinding", "receipt", "finalOutput"]
+            }
+            Some("presentation_boundary") => &["type", "sessionBinding", "finalOutput"],
             Some("error") => &["type", "code", "message"],
             _ => return Err("invalid terminal control".to_string()),
         };
@@ -97,7 +109,28 @@ impl ServerTerminalControl {
         {
             return Err("invalid terminal control".to_string());
         }
-        serde_json::from_value(value).map_err(|_| "invalid terminal control".to_string())
+        let control: Self =
+            serde_json::from_value(value).map_err(|_| "invalid terminal control".to_string())?;
+        if let Self::PresentationBoundary {
+            session_binding,
+            receipt,
+            final_output,
+        } = &control
+        {
+            let valid = |token: &str| {
+                token.len() == 43
+                    && token
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            };
+            if !valid(session_binding)
+                || receipt.as_deref().is_some_and(|token| !valid(token))
+                || (!final_output && receipt.is_none())
+            {
+                return Err("invalid terminal control".to_string());
+            }
+        }
+        Ok(control)
     }
 
     pub(crate) fn encode(&self) -> Result<String, String> {
@@ -107,6 +140,17 @@ impl ServerTerminalControl {
     pub(crate) fn ready() -> Self {
         Self::Ready {
             initial_state: TerminalInitialState::Replay,
+        }
+    }
+    pub(crate) fn presentation_boundary(
+        session_binding: String,
+        receipt: Option<String>,
+        final_output: bool,
+    ) -> Self {
+        Self::PresentationBoundary {
+            session_binding,
+            receipt,
+            final_output,
         }
     }
 
