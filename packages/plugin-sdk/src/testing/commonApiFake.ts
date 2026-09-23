@@ -295,12 +295,15 @@ function taskReference(task: Task): TaskReference {
     dependsOn: [...task.depends_on],
   }
 }
+type TestingTaskWithCompletion = Task & { completed_at?: number | null }
+
 
 function taskSummary(task: Task, labels: TaskLabel[] = []): TaskSummary {
   return {
     ...taskReference(task),
     createdAt: task.created_at,
     updatedAt: task.updated_at,
+    completedAt: task.status === 'done' ? (task as TestingTaskWithCompletion).completed_at ?? null : null,
     promptPreview: testingTaskPromptPreview(task),
     labels: [...labels],
     sourceTicketUrl: task.source_ticket_url,
@@ -324,12 +327,15 @@ interface TestingCompletedTaskScope {
   projectId: string
   search: string
   labels: string[]
+  completedFrom: number | null
+  completedBefore: number | null
 }
 
 interface TestingCompletedTaskCursor {
-  version: 1
+  version: 1 | 2
   scope: TestingCompletedTaskScope
-  updatedAt: number
+  updatedAt?: number
+  completedAt?: number
   id: string
 }
 
@@ -339,6 +345,14 @@ function asciiLowercase(value: string): string {
 
 function compareCompletedTasks(left: Task, right: Task): number {
   if (left.updated_at !== right.updated_at) return right.updated_at - left.updated_at
+  if (left.id === right.id) return 0
+  return left.id > right.id ? -1 : 1
+}
+
+function compareCompletionDates(left: Task, right: Task): number {
+  const leftDate = (left as TestingTaskWithCompletion).completed_at ?? 0
+  const rightDate = (right as TestingTaskWithCompletion).completed_at ?? 0
+  if (leftDate !== rightDate) return rightDate - leftDate
   if (left.id === right.id) return 0
   return left.id > right.id ? -1 : 1
 }
@@ -353,6 +367,8 @@ function testingCompletedTaskScope(
     labels: [...new Set((query.labels ?? [])
       .map(name => name.trim().toLowerCase())
       .filter(Boolean))].sort(),
+    completedFrom: query.completedFrom ?? null,
+    completedBefore: query.completedBefore ?? null,
   }
 }
 
@@ -367,9 +383,13 @@ function decodeTestingCompletedTaskCursor(
   try {
     if (!encoded.startsWith('testing:')) throw new Error('wrong cursor format')
     const cursor = JSON.parse(decodeURIComponent(encoded.slice('testing:'.length))) as TestingCompletedTaskCursor
-    if (cursor.version !== 1
-      || !Number.isSafeInteger(cursor.updatedAt)
+    const dateOrdered = scope.completedFrom !== null
+    if (cursor.version !== (dateOrdered ? 2 : 1)
+      || (dateOrdered
+        ? !Number.isSafeInteger(cursor.completedAt) || cursor.updatedAt !== undefined
+        : !Number.isSafeInteger(cursor.updatedAt) || cursor.completedAt !== undefined)
       || typeof cursor.id !== 'string'
+      || cursor.id.length === 0
       || JSON.stringify(cursor.scope) !== JSON.stringify(scope)) {
       throw new Error('invalid cursor payload')
     }
@@ -384,6 +404,7 @@ function listTestingCompletedTasks(
   projectId: string,
   query: CompletedTaskQuery = {},
   labelsByTaskId: ReadonlyMap<string, TaskLabel[]> = new Map(),
+  trackedFrom: number | null = null,
 ): CompletedTaskPage {
   if (!projectId.trim()) throw new RangeError('projectId is required')
   const submittedLabels = query.labels ?? []
@@ -396,10 +417,21 @@ function listTestingCompletedTasks(
   if ([...(query.search?.trim() ?? '')].length > 200) {
     throw new RangeError('Completed Task search must be 200 characters or fewer')
   }
+  const hasFrom = query.completedFrom !== undefined
+  const hasBefore = query.completedBefore !== undefined
+  if (hasFrom !== hasBefore
+    || (hasFrom && (
+      !Number.isSafeInteger(query.completedFrom)
+      || !Number.isSafeInteger(query.completedBefore)
+      || query.completedFrom! < 0
+      || query.completedBefore! <= query.completedFrom!
+    ))) {
+    throw new RangeError('invalid Completed Task completion range')
+  }
   const scope = testingCompletedTaskScope(projectId, query)
   const labels = new Set(scope.labels)
   const cursor = query.cursor ? decodeTestingCompletedTaskCursor(query.cursor, scope) : null
-  const matching = allTasks
+  const matchingNonDate = allTasks
     .filter(task => task.status === 'done' && task.project_id === projectId)
     .filter(task => {
       const summary = taskSummary(task, labelsByTaskId.get(task.id))
@@ -412,23 +444,43 @@ function listTestingCompletedTasks(
         .labels.map(label => label.name.toLowerCase())
       return [...labels].every(label => names.includes(label))
     })
-    .sort(compareCompletedTasks)
+  const dateOrdered = scope.completedFrom !== null
+  const completionCoverage = {
+    trackedFrom,
+    unknownCompletedTaskCount: matchingNonDate.filter(task => (task as TestingTaskWithCompletion).completed_at == null).length,
+    rangeStatus: !dateOrdered ? 'notRequested' as const
+      : trackedFrom === null ? 'unavailable' as const
+      : scope.completedFrom! >= trackedFrom ? 'complete' as const
+      : scope.completedBefore! > trackedFrom ? 'partial' as const
+      : 'unavailable' as const,
+  }
+  const matching = matchingNonDate
+    .filter(task => {
+      if (!dateOrdered) return true
+      const date = (task as TestingTaskWithCompletion).completed_at
+      return date !== null && date !== undefined
+        && date >= scope.completedFrom! && date < scope.completedBefore!
+    })
+    .sort(dateOrdered ? compareCompletionDates : compareCompletedTasks)
   const remaining = cursor
-    ? matching.filter(task => task.updated_at < cursor.updatedAt
-      || (task.updated_at === cursor.updatedAt && task.id < cursor.id))
+    ? matching.filter(task => {
+      const key = dateOrdered ? (task as TestingTaskWithCompletion).completed_at! : task.updated_at
+      const cursorKey = dateOrdered ? cursor.completedAt! : cursor.updatedAt!
+      return key < cursorKey || (key === cursorKey && task.id < cursor.id)
+    })
     : matching
   const pageTasks = remaining.slice(0, 50)
   const tasks = pageTasks.map(task => taskSummary(task, labelsByTaskId.get(task.id)))
   const last = pageTasks.at(-1)
   const nextCursor = remaining.length > 50 && last
     ? encodeTestingCompletedTaskCursor({
-        version: 1,
+        version: dateOrdered ? 2 : 1,
         scope,
-        updatedAt: last.updated_at,
+        ...(dateOrdered ? { completedAt: (last as TestingTaskWithCompletion).completed_at! } : { updatedAt: last.updated_at }),
         id: last.id,
       })
     : null
-  return { tasks, nextCursor }
+  return { tasks, nextCursor, completionCoverage }
 }
 
 
@@ -881,6 +933,7 @@ export class TestingCommonApiFake {
             projectId,
             query,
             this.services.seededTaskLabelAssignments,
+            this.services.taskCompletionTrackedFrom,
           )
         },
         detail: async (projectId, taskId): Promise<TaskRead | null> => {

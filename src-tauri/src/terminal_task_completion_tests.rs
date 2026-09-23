@@ -119,6 +119,28 @@ async fn typed_delete_and_complete_requests_validate_backlog_and_doing_distinctl
         completed,
         TerminalTaskCompletionOutcome::Completed { .. }
     ));
+    assert!(completion_date(&db, &doing_id).is_some());
+    assert!(crate::db::acquire_db(&db)
+        .get_task(&backlog_id)
+        .expect("read deleted Task")
+        .is_none());
+    let desktop_id = crate::db::acquire_db(&db)
+        .create_task("Desktop completion", "doing", None, None, None)
+        .expect("create desktop Task")
+        .id;
+    service
+        .complete(TerminalTaskCompletionRequest::desktop(&desktop_id))
+        .await
+        .expect("desktop request completes doing Task");
+    assert!(completion_date(&db, &desktop_id).is_some());
+    let repeat = service
+        .complete(TerminalTaskCompletionRequest::complete(&doing_id))
+        .await
+        .expect_err("completed Task cannot complete twice");
+    assert!(matches!(
+        repeat,
+        TerminalTaskCompletionError::InvalidState { .. }
+    ));
 }
 
 #[tokio::test]
@@ -295,6 +317,7 @@ async fn running_task_stops_agent_and_shells_before_marking_task_complete() {
         .expect("get completed task")
         .expect("completed Task reference remains");
     assert_eq!(completed.status, "done");
+    assert!(completion_date(&db, &task_id).is_some());
 }
 
 #[tokio::test]
@@ -343,4 +366,17 @@ async fn duplicate_claim_and_runtime_failure_leave_task_uncompleted() {
             .status,
         "doing"
     );
+    assert_eq!(completion_date(&db, &task_id), None);
+}
+
+fn completion_date(db: &Arc<Mutex<Database>>, task_id: &str) -> Option<i64> {
+    let db = crate::db::acquire_db(db);
+    let conn = db.connection();
+    let conn = conn.lock().expect("lock database");
+    conn.query_row(
+        "SELECT completed_at FROM tasks WHERE id = ?1",
+        [task_id],
+        |row| row.get(0),
+    )
+    .expect("read completion date")
 }

@@ -28,7 +28,7 @@ const task: TaskDetail = {
   prompt: 'Inspect [image#1]', promptPreview: 'Inspect [image#1]',
   title: 'Inspect', titleSource: null, titleGeneratedAt: null,
   agent: null, permissionMode: null, worktreeSource: null, worktreeBranch: null,
-  sourceTicketUrl: null, dependsOn: [], labels: [], createdAt: 1, updatedAt: 1,
+  sourceTicketUrl: null, dependsOn: [], labels: [], createdAt: 1, updatedAt: 1, completedAt: null,
 }
 const firstPrompt = 'Inspect [image#1]\n\n[image#1]: data:image/png;base64,YQ=='
 

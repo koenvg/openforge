@@ -94,20 +94,28 @@ describe('plugin host commands', () => {
     }
     invoke
       .mockResolvedValueOnce({ tasks: [detail], related: [] })
-      .mockResolvedValueOnce({ tasks: [], nextCursor: null })
+      .mockResolvedValueOnce({
+        tasks: [{ id: 'T-done', status: 'done', completedAt: 1700000000 }],
+        nextCursor: null,
+        completionCoverage: { trackedFrom: 1700000000, unknownCompletedTaskCount: 0, rangeStatus: 'complete' },
+      })
       .mockResolvedValueOnce({ task: detail, related: [] })
       .mockResolvedValueOnce(null)
     const host = createPluginRuntimeHost('com.example.tasks')
 
     await expect(host.activeTasks?.('P-1')).resolves.toMatchObject({ tasks: [detail] })
-    await expect(host.completedTasks?.('P-1', { search: 'task' }))
-      .resolves.toEqual({ tasks: [], nextCursor: null })
+    await expect(host.completedTasks?.('P-1', { search: 'task', completedFrom: 1700000000, completedBefore: 1700000001 }))
+      .resolves.toEqual({
+        tasks: [{ id: 'T-done', status: 'done', completedAt: 1700000000 }],
+        nextCursor: null,
+        completionCoverage: { trackedFrom: 1700000000, unknownCompletedTaskCount: 0, rangeStatus: 'complete' },
+      })
     await expect(host.taskDetail?.('P-1', 'T-1')).resolves.toEqual({ task: detail, related: [] })
     await expect(host.taskDetail?.('P-1', 'T-missing')).resolves.toBeNull()
 
     expect(invoke.mock.calls).toEqual([
       ['tasks_active', { projectId: 'P-1' }],
-      ['tasks_completed', { projectId: 'P-1', query: { search: 'task' } }],
+      ['tasks_completed', { projectId: 'P-1', query: { search: 'task', completedFrom: 1700000000, completedBefore: 1700000001 } }],
       ['tasks_detail', { projectId: 'P-1', taskId: 'T-1' }],
       ['tasks_detail', { projectId: 'P-1', taskId: 'T-missing' }],
     ])

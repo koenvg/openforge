@@ -6,7 +6,8 @@ fn task_read_error(error: db::TaskReadError) -> (StatusCode, String) {
         db::TaskReadError::SearchTooLong { .. }
         | db::TaskReadError::TooManyLabels { .. }
         | db::TaskReadError::LabelNameTooLong { .. }
-        | db::TaskReadError::InvalidCursor => (StatusCode::BAD_REQUEST, error.to_string()),
+        | db::TaskReadError::InvalidCursor
+        | db::TaskReadError::InvalidCompletionRange => (StatusCode::BAD_REQUEST, error.to_string()),
         db::TaskReadError::Database(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to read Tasks: {error}"),

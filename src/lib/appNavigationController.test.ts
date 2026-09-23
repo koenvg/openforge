@@ -40,6 +40,7 @@ function detail(id: string, projectId = project1.id): TaskDetail {
     dependsOn: [],
     createdAt: 1,
     updatedAt: 2,
+    completedAt: null,
     labels: [],
     sourceTicketUrl: null,
     agent: null,

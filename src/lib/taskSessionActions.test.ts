@@ -84,6 +84,7 @@ const task: TaskDetail = {
   projectId: 'proj-1',
   createdAt: 1000,
   updatedAt: 1000,
+  completedAt: null,
   labels: [],
 }
 

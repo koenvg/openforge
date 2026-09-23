@@ -87,6 +87,7 @@ const task: TaskDetail = {
   dependsOn: [],
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
   promptPreview: 'Test task',
   labels: [],
   sourceTicketUrl: null,

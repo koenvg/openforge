@@ -59,6 +59,7 @@ function taskDetail(): TaskDetail {
     dependsOn: [],
     createdAt: 1,
     updatedAt: 2,
+    completedAt: null,
     promptPreview: 'Cached authoring prompt',
     labels: [],
     sourceTicketUrl: null,

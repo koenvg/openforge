@@ -6,8 +6,9 @@ use super::{
         task_relationship_reference_from_row, TASK_ROW_COLUMNS,
     },
     tasks::{
-        resolved_projection_title, ActiveTasks, CompletedTaskPage, CompletedTaskQuery, TaskDetail,
-        TaskRead, TaskReadError, TaskReference, TaskSummary,
+        resolved_projection_title, ActiveTasks, CompletedTaskPage, CompletedTaskQuery,
+        CompletionCoverage, CompletionRangeStatus, TaskDetail, TaskRead, TaskReadError,
+        TaskReference, TaskSummary,
     },
     Database,
 };
@@ -19,12 +20,18 @@ const COMPLETED_TASK_PAGE_SIZE: usize = 50;
 const MAX_COMPLETED_TASK_SEARCH_CHARS: usize = 200;
 const MAX_COMPLETED_TASK_LABEL_FILTERS: usize = 20;
 const COMPLETED_TASK_CURSOR_VERSION: u8 = 1;
+const COMPLETION_DATE_CURSOR_VERSION: u8 = 2;
+const MAX_SAFE_UNIX_SECOND: i64 = 9_007_199_254_740_991;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct CompletedTaskScope {
     project_id: String,
     search: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completed_from: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completed_before: Option<i64>,
     labels: Vec<String>,
 }
 
@@ -33,13 +40,17 @@ struct CompletedTaskScope {
 struct CompletedTaskCursor {
     version: u8,
     scope: CompletedTaskScope,
-    updated_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completed_at: Option<i64>,
     id: String,
 }
 
 struct NormalizedCompletedTaskQuery {
     scope: CompletedTaskScope,
     cursor: Option<CompletedTaskCursor>,
+    completion_range: Option<(i64, i64)>,
 }
 
 pub struct Tasks<'database> {
@@ -108,17 +119,45 @@ impl Tasks<'_> {
             );
             parameters.push(Value::Text(label.clone()));
         }
+        let completion_coverage =
+            completion_coverage(&transaction, &query, &conditions, &parameters)?;
+        let date_ordered = query.completion_range.is_some();
+        if let Some((from, before)) = query.completion_range {
+            conditions.extend([
+                "tasks.completed_at IS NOT NULL".to_string(),
+                "tasks.completed_at >= ?".to_string(),
+                "tasks.completed_at < ?".to_string(),
+            ]);
+            parameters.extend([Value::Integer(from), Value::Integer(before)]);
+        }
         if let Some(cursor) = &query.cursor {
-            conditions.push(
-                "(tasks.updated_at < ? OR (tasks.updated_at = ? AND tasks.id < ?))".to_string(),
-            );
-            parameters.push(Value::Integer(cursor.updated_at));
-            parameters.push(Value::Integer(cursor.updated_at));
-            parameters.push(Value::Text(cursor.id.clone()));
+            let key = if date_ordered {
+                cursor.completed_at.ok_or(TaskReadError::InvalidCursor)?
+            } else {
+                cursor.updated_at.ok_or(TaskReadError::InvalidCursor)?
+            };
+            let column = if date_ordered {
+                "completed_at"
+            } else {
+                "updated_at"
+            };
+            conditions.push(format!(
+                "(tasks.{column} < ? OR (tasks.{column} = ? AND tasks.id < ?))"
+            ));
+            parameters.extend([
+                Value::Integer(key),
+                Value::Integer(key),
+                Value::Text(cursor.id.clone()),
+            ]);
         }
 
+        let order_column = if date_ordered {
+            "completed_at"
+        } else {
+            "updated_at"
+        };
         let sql = format!(
-            "SELECT tasks.id, tasks.status, tasks.project_id, tasks.created_at, tasks.updated_at, tasks.title, tasks.source_ticket_url, tasks.prompt_preview FROM tasks WHERE {} ORDER BY tasks.updated_at DESC, tasks.id DESC LIMIT ?",
+            "SELECT tasks.id, tasks.status, tasks.project_id, tasks.created_at, tasks.updated_at, tasks.title, tasks.source_ticket_url, tasks.prompt_preview, tasks.completed_at FROM tasks WHERE {} ORDER BY tasks.{order_column} DESC, tasks.id DESC LIMIT ?",
             conditions.join(" AND ")
         );
         parameters.push(Value::Integer((COMPLETED_TASK_PAGE_SIZE + 1) as i64));
@@ -141,7 +180,11 @@ impl Tasks<'_> {
             None
         };
         transaction.commit()?;
-        Ok(CompletedTaskPage { tasks, next_cursor })
+        Ok(CompletedTaskPage {
+            tasks,
+            next_cursor,
+            completion_coverage,
+        })
     }
 
     pub fn detail(
@@ -190,11 +233,55 @@ fn require_project(
         Err(TaskReadError::ProjectNotFound(project_id.to_string()))
     }
 }
+fn completion_coverage(
+    connection: &rusqlite::Connection,
+    query: &NormalizedCompletedTaskQuery,
+    base_conditions: &[String],
+    base_parameters: &[Value],
+) -> Result<CompletionCoverage, TaskReadError> {
+    let tracked_from = connection
+        .query_row(
+            "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+            [],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .optional()?
+        .flatten();
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM tasks WHERE {} AND tasks.completed_at IS NULL",
+        base_conditions.join(" AND ")
+    );
+    let unknown_completed_task_count = connection.query_row(
+        &count_sql,
+        params_from_iter(base_parameters.iter()),
+        |row| row.get(0),
+    )?;
+    let range_status = match (query.completion_range, tracked_from) {
+        (None, _) => CompletionRangeStatus::NotRequested,
+        (Some((from, _)), Some(start)) if from >= start => CompletionRangeStatus::Complete,
+        (Some((_, before)), Some(start)) if before > start => CompletionRangeStatus::Partial,
+        (Some(_), _) => CompletionRangeStatus::Unavailable,
+    };
+    Ok(CompletionCoverage {
+        tracked_from,
+        unknown_completed_task_count,
+        range_status,
+    })
+}
 
 fn normalize_completed_task_query(
     project_id: &str,
     query: CompletedTaskQuery,
 ) -> Result<NormalizedCompletedTaskQuery, TaskReadError> {
+    let completion_range = match (query.completed_from, query.completed_before) {
+        (None, None) => None,
+        (Some(from), Some(before))
+            if from >= 0 && before <= MAX_SAFE_UNIX_SECOND && from < before =>
+        {
+            Some((from, before))
+        }
+        _ => return Err(TaskReadError::InvalidCompletionRange),
+    };
     let search = query
         .search
         .map(|search| search.trim().to_lowercase())
@@ -236,6 +323,8 @@ fn normalize_completed_task_query(
     let scope = CompletedTaskScope {
         project_id: project_id.to_string(),
         search,
+        completed_from: completion_range.map(|(from, _)| from),
+        completed_before: completion_range.map(|(_, before)| before),
         labels,
     };
     let cursor = query
@@ -244,11 +333,25 @@ fn normalize_completed_task_query(
         .map(decode_completed_task_cursor)
         .transpose()?;
     if cursor.as_ref().is_some_and(|cursor| {
-        cursor.version != COMPLETED_TASK_CURSOR_VERSION || cursor.scope != scope
+        cursor.scope != scope
+            || cursor.id.is_empty()
+            || if completion_range.is_some() {
+                cursor.version != COMPLETION_DATE_CURSOR_VERSION
+                    || cursor.completed_at.is_none()
+                    || cursor.updated_at.is_some()
+            } else {
+                cursor.version != COMPLETED_TASK_CURSOR_VERSION
+                    || cursor.updated_at.is_none()
+                    || cursor.completed_at.is_some()
+            }
     }) {
         return Err(TaskReadError::InvalidCursor);
     }
-    Ok(NormalizedCompletedTaskQuery { scope, cursor })
+    Ok(NormalizedCompletedTaskQuery {
+        scope,
+        cursor,
+        completion_range,
+    })
 }
 
 fn encode_completed_task_cursor(
@@ -256,9 +359,18 @@ fn encode_completed_task_cursor(
     task: &TaskSummary,
 ) -> Result<String, TaskReadError> {
     serde_json::to_vec(&CompletedTaskCursor {
-        version: COMPLETED_TASK_CURSOR_VERSION,
+        version: if scope.completed_from.is_some() {
+            COMPLETION_DATE_CURSOR_VERSION
+        } else {
+            COMPLETED_TASK_CURSOR_VERSION
+        },
         scope: scope.clone(),
-        updated_at: task.updated_at,
+        updated_at: scope.completed_from.is_none().then_some(task.updated_at),
+        completed_at: if scope.completed_from.is_some() {
+            task.completed_at
+        } else {
+            None
+        },
         id: task.id.clone(),
     })
     .map(|payload| URL_SAFE_NO_PAD.encode(payload))
@@ -291,6 +403,7 @@ fn task_summary_from_row(row: &rusqlite::Row<'_>) -> Result<TaskSummary> {
         project_id: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
+        completed_at: row.get(8)?,
         source_ticket_url: row.get(6)?,
         prompt_preview,
         depends_on: Vec::new(),

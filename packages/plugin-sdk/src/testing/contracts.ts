@@ -106,6 +106,8 @@ export interface TestingOpenForgeApiOptions {
    * mirroring the host capability. Defaults to an empty list.
    */
   tasks?: Task[]
+  /** Verified tracking start in Unix seconds. Null (default) means historical coverage is unavailable. */
+  taskCompletionTrackedFrom?: number | null
   /** Task Label assignments used by canonical Task projections. */
   taskLabelAssignments?: TestingTaskLabelAssignment[]
   /** Agent Sessions returned by `tasks.listSessions`. Defaults to an empty list. */

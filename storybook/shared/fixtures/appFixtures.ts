@@ -29,6 +29,7 @@ export function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     titleGeneratedAt: null,
     createdAt: FIXED_CREATED_AT,
     updatedAt: FIXED_UPDATED_AT,
+    completedAt: null,
     ...overrides,
     dependsOn: [...(overrides.dependsOn ?? [])],
     labels: [...(overrides.labels ?? [])],

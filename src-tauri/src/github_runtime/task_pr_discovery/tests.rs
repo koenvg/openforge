@@ -102,9 +102,12 @@ async fn stale_results_and_concurrent_manual_linking_never_commit() {
                     .register("registered-shell", &f.task_id, f.dir.path().into(), 2)
             }
             "completed" => {
-                acquire_db(&f.db)
-                    .update_task_status(&f.task_id, "done")
-                    .unwrap();
+                assert_eq!(
+                    acquire_db(&f.db)
+                        .complete_task_if_status(&f.task_id, "doing")
+                        .unwrap(),
+                    crate::db::CompleteTaskWriteOutcome::Completed,
+                );
             }
             "deleted" => {
                 acquire_db(&f.db).hard_delete_task(&f.task_id).unwrap();

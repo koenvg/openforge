@@ -60,6 +60,8 @@ export interface TaskReference {
 export interface TaskSummary extends TaskReference {
   createdAt: number
   updatedAt: number
+  /** Authoritative task completion time in Unix seconds; null means unknown for a done task. */
+  completedAt: number | null
   promptPreview: string
   labels: TaskLabel[]
   sourceTicketUrl: string | null
@@ -86,11 +88,23 @@ export interface CompletedTaskQuery {
   /** At most 20 Task Label names; each trimmed name is at most 40 Unicode characters. */
   labels?: string[]
   cursor?: string | null
+  /** Paired, half-open Unix-second bounds: [completedFrom, completedBefore). */
+  completedFrom?: number
+  completedBefore?: number
 }
 
 export interface CompletedTaskPage {
   tasks: TaskSummary[]
   nextCursor: string | null
+  completionCoverage: CompletionCoverage
+}
+
+export interface CompletionCoverage {
+  /** Start of continuous tracking in Unix seconds, or null when unverified. */
+  trackedFrom: number | null
+  /** Retained done Tasks with unknown completion dates in this project and non-date filters. */
+  unknownCompletedTaskCount: number
+  rangeStatus: 'complete' | 'partial' | 'unavailable' | 'notRequested'
 }
 
 export interface TaskRead {

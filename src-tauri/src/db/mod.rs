@@ -172,6 +172,7 @@ impl Database {
 
         migrations::ensure_no_scoped_agent_task_key_collision(&conn)?;
         migrations::ensure_tasks_columns(&conn)?;
+        migrations::ensure_task_completion_schema(&conn, false)?;
         migrations::ensure_handoff_notes_removed(&conn)?;
         migrations::ensure_pr_number_column(&conn)?;
         migrations::ensure_pr_comment_reply_parent_column(&conn)?;

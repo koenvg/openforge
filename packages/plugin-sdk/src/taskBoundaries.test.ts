@@ -23,6 +23,7 @@ const summary: TaskSummary = {
   ...reference,
   createdAt: 1,
   updatedAt: 2,
+  completedAt: null,
   promptPreview: 'Bounded preview',
   labels: [],
   sourceTicketUrl: null,
@@ -40,7 +41,11 @@ const detail: TaskDetail = {
 }
 
 const active: ActiveTasks = { tasks: [detail], related: [reference] }
-const completed: CompletedTaskPage = { tasks: [summary], nextCursor: null }
+const completed: CompletedTaskPage = {
+  tasks: [summary],
+  nextCursor: null,
+  completionCoverage: { trackedFrom: null, unknownCompletedTaskCount: 1, rangeStatus: 'notRequested' },
+}
 const read: TaskRead = { task: detail, related: [reference] }
 
 function acceptsTasksApi(api: TasksAPI): void {
@@ -220,4 +225,68 @@ describe('Task read contract', () => {
     })
     await expect(api.tasks.get(taskReadContract.missingTaskId)).resolves.toBeNull()
   })
+  it('returns known completion dates and coverage even for an empty interval', async () => {
+    const known = Object.assign(task('T-known', 'done', 10), { completed_at: taskReadContract.knownCompletedAt })
+    const unknown = task('T-unknown', 'done', 11)
+    const api = createMockFrontendOpenForgeApi({
+      tasks: [known, unknown],
+      taskCompletionTrackedFrom: taskReadContract.trackedFrom,
+    })
+    const query = {
+      completedFrom: taskReadContract.completedFrom,
+      completedBefore: taskReadContract.completedBefore,
+    }
+    const page = await api.tasks.completed('P-1', query)
+    expect(page.tasks.map(item => [item.id, item.completedAt])).toEqual([
+      ['T-known', taskReadContract.knownCompletedAt],
+    ])
+    expect(page.completionCoverage).toEqual({
+      trackedFrom: taskReadContract.trackedFrom,
+      unknownCompletedTaskCount: taskReadContract.unknownCompletedTaskCount,
+      rangeStatus: 'complete',
+    })
+    const empty = await api.tasks.completed('P-1', {
+      completedFrom: taskReadContract.knownCompletedAt + 1,
+      completedBefore: taskReadContract.knownCompletedAt + 2,
+    })
+    expect(empty.tasks).toEqual([])
+    expect(empty.completionCoverage.unknownCompletedTaskCount).toBe(taskReadContract.unknownCompletedTaskCount)
+    expect(empty.completionCoverage.rangeStatus).toBe('complete')
+    await expect(api.tasks.completed('P-1', {
+      completedFrom: taskReadContract.completedBefore,
+      completedBefore: taskReadContract.invalidCompletedBefore,
+    })).rejects.toThrow()
+  })
+
+  it('keeps date pages stable across metadata edits and reports boundary coverage', async () => {
+    const from = taskReadContract.completedFrom
+    const before = taskReadContract.completedBefore
+    const dated = Array.from({ length: taskReadContract.completedTaskCount }, (_, index) =>
+      Object.assign(task(`T-date-${String(index).padStart(2, '0')}`, 'done', index), { completed_at: from }))
+    const upper = Object.assign(task('T-upper', 'done'), { completed_at: before })
+    const unknown = task('T-unknown', 'done')
+    const api = createMockFrontendOpenForgeApi({
+      tasks: [...dated, upper, unknown],
+      taskCompletionTrackedFrom: from,
+    })
+    const query = { completedFrom: from, completedBefore: before }
+    const first = await api.tasks.completed('P-1', query)
+    expect(first.tasks).toHaveLength(taskReadContract.completedPageSize)
+    expect(first.tasks.every(item => item.completedAt === from)).toBe(true)
+    expect(first.tasks.some(item => item.id === upper.id || item.id === unknown.id)).toBe(false)
+    const remaining = dated.find(item => !first.tasks.some(pageItem => pageItem.id === item.id))!
+    remaining.updated_at = before + 1000
+    remaining.title = 'Edited after first page'
+    const second = await api.tasks.completed('P-1', { ...query, cursor: first.nextCursor })
+    expect(second.tasks.map(item => item.id)).toEqual([remaining.id])
+    expect(second.completionCoverage.unknownCompletedTaskCount).toBe(1)
+    const partial = await api.tasks.completed('P-1', { completedFrom: from - 1, completedBefore: from + 1 })
+    expect(partial.completionCoverage.rangeStatus).toBe('partial')
+    const unavailable = await api.tasks.completed('P-1', { completedFrom: from - 2, completedBefore: from })
+    expect(unavailable.tasks).toEqual([])
+    expect(unavailable.completionCoverage).toEqual({
+      trackedFrom: from, unknownCompletedTaskCount: 1, rangeStatus: 'unavailable',
+    })
+  })
+
 })

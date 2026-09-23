@@ -85,6 +85,8 @@ mod tests {
         let (db, _temp_dir) = make_test_db("browser_purge_task_completion");
         insert_test_task(&db);
 
+        db.update_task_status("T-100", "doing")
+            .expect("start Task before completion");
         db.complete_task("T-100").expect("complete task");
         db.complete_task("T-100")
             .expect("repeat completion is idempotent");

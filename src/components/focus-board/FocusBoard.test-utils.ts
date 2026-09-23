@@ -70,6 +70,7 @@ export const makeTask = (
   projectId: 'proj-1',
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
   labels,
 })
 

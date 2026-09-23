@@ -30,6 +30,7 @@ const baseTask: TaskDetail = {
   labels: [],
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
 }
 
 const basePr: PullRequestInfo = {

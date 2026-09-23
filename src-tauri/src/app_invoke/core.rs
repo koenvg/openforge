@@ -44,8 +44,11 @@ pub(super) async fn handle_app_core_task_project_command(
                     .and_then(|task| task.project_id);
                 db.update_task_status(&id, status.as_str())
                     .map_err(|error| match error {
-                        crate::db::TaskStatusUpdateError::ActiveTaskLimit { .. } => {
+                        crate::db::TaskStatusUpdateError::TerminalState { .. } => {
                             (StatusCode::CONFLICT, error.to_string())
+                        }
+                        crate::db::TaskStatusUpdateError::NonWritableStatus { .. } => {
+                            (StatusCode::BAD_REQUEST, error.to_string())
                         }
                         crate::db::TaskStatusUpdateError::Storage(_) => (
                             StatusCode::INTERNAL_SERVER_ERROR,

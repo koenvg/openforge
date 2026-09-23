@@ -60,6 +60,7 @@ const detail: TaskDetail = {
   dependsOn: [],
   createdAt: 1,
   updatedAt: 2,
+  completedAt: null,
   labels: [],
   sourceTicketUrl: null,
   agent: null,

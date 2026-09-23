@@ -322,9 +322,16 @@ async function readCompletedTasks(flags) {
   const params = new URLSearchParams();
   const search = optionalString(flags, 'search');
   const cursor = optionalString(flags, 'cursor');
+  const completedFrom = optionalString(flags, 'completedFrom');
+  const completedBefore = optionalString(flags, 'completedBefore');
+  if ((completedFrom === undefined) !== (completedBefore === undefined)) {
+    throw new Error('task completed requires both --completed-from and --completed-before');
+  }
   if (search !== undefined) params.set('search', search);
   for (const label of labelNamesFromFlag(flags)) params.append('labels', label);
   if (cursor !== undefined) params.set('cursor', cursor);
+  if (completedFrom !== undefined) params.set('completedFrom', completedFrom);
+  if (completedBefore !== undefined) params.set('completedBefore', completedBefore);
   const query = params.toString();
   printJson(await requestJson(`/v2/projects/${canonicalProjectPath(flags)}/tasks/completed${query ? `?${query}` : ''}`));
 }
@@ -399,8 +406,8 @@ export const TASK_COMMAND_SPECS = [
   },
   {
     path: ['task', 'completed'],
-    flags: ['projectId', 'search', 'label', 'cursor'],
-    usage: 'openforge task completed --project-id <id> [--search <text>] [--label <name>] [--cursor <cursor>]',
+    flags: ['projectId', 'search', 'label', 'cursor', 'completedFrom', 'completedBefore'],
+    usage: 'openforge task completed --project-id <id> [--search <text>] [--label <name>] [--cursor <cursor>] [--completed-from <unix-seconds> --completed-before <unix-seconds>]',
     handler: readCompletedTasks,
   },
   {

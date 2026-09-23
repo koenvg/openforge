@@ -11,7 +11,7 @@ import { getWaitingDependencyCount } from './taskDependencies'
 vi.mock('./ipc', () => ({ readActiveTasks: vi.fn(), readTaskDetail: vi.fn() }))
 function task(id: string, projectId = 'P-1', dependsOn: string[] = []): TaskDetail {
   return {
-    id, projectId, status: 'backlog', title: id, dependsOn, createdAt: 1, updatedAt: 1,
+    id, projectId, status: 'backlog', title: id, dependsOn, createdAt: 1, updatedAt: 1, completedAt: null,
     promptPreview: id, labels: [], sourceTicketUrl: null, prompt: id, agent: null,
     permissionMode: null, worktreeSource: null, worktreeBranch: null, titleSource: null, titleGeneratedAt: null,
   }

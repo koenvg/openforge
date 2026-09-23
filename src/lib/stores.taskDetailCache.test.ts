@@ -12,6 +12,7 @@ function detail(id: string): TaskDetail {
     dependsOn: [],
     createdAt: 1,
     updatedAt: 1,
+    completedAt: null,
     promptPreview: id,
     labels: [],
     sourceTicketUrl: null,

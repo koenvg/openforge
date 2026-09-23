@@ -2182,7 +2182,93 @@ INSERT OR IGNORE INTO config (key, value)
             .map_err(rusqlite_migration::HookError::RusqliteError)
     })
     .down(""),
+    // The first installed writer establishes continuous authoritative completion tracking.
+    M::up_with_hook("", |tx| {
+        ensure_task_completion_schema(tx, true)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    })
+    // Never drop completion history on rollback to a previous app build.
+    .down(""),
 );
+
+/// Repairs schema without inventing a new tracking start after the migration ran.
+pub(super) fn ensure_task_completion_schema(
+    conn: &Connection,
+    initialize_coverage: bool,
+) -> Result<()> {
+    if !table_exists(conn, "tasks")? {
+        return Ok(());
+    }
+    let has_completed_at: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'completed_at'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_completed_at {
+        conn.execute("ALTER TABLE tasks ADD COLUMN completed_at INTEGER", [])?;
+    }
+    let can_index: bool = conn.query_row(
+        "SELECT COUNT(*) = 3 FROM pragma_table_info('tasks')
+         WHERE name IN ('id', 'project_id', 'status')",
+        [],
+        |row| row.get(0),
+    )?;
+    if can_index {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_project_completed_at
+                ON tasks(project_id, completed_at DESC, id DESC)
+                WHERE status = 'done' AND completed_at IS NOT NULL;
+             CREATE INDEX IF NOT EXISTS idx_tasks_project_unknown_completed_at
+                ON tasks(project_id, id)
+                WHERE status = 'done' AND completed_at IS NULL;",
+        )?;
+    }
+    let has_coverage = table_exists(conn, "task_completion_coverage")?;
+    if !has_completed_at && !initialize_coverage && has_coverage {
+        // A repaired missing column may have lost dates; continuity is unprovable.
+        conn.execute(
+            "UPDATE task_completion_coverage SET tracked_from = NULL",
+            [],
+        )?;
+    }
+    if !has_coverage {
+        conn.execute_batch(
+            "CREATE TABLE task_completion_coverage (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                tracked_from INTEGER CHECK(tracked_from >= 0)
+            );",
+        )?;
+        if initialize_coverage {
+            // Second-resolution writes cannot prove events during the install second.
+            conn.execute(
+                "INSERT INTO task_completion_coverage (id, tracked_from)
+                 VALUES (1, CAST(strftime('%s', 'now') AS INTEGER) + 1)",
+                [],
+            )?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS invalidate_completion_coverage_on_insert
+         AFTER INSERT ON tasks
+         WHEN NEW.status = 'done' AND NEW.completed_at IS NULL
+         BEGIN
+             UPDATE task_completion_coverage SET tracked_from = NULL;
+         END;
+         CREATE TRIGGER IF NOT EXISTS invalidate_completion_coverage_on_update
+         AFTER UPDATE OF status, completed_at ON tasks
+         WHEN NEW.status = 'done' AND NEW.completed_at IS NULL
+         BEGIN
+             UPDATE task_completion_coverage SET tracked_from = NULL;
+         END;
+         CREATE TRIGGER IF NOT EXISTS invalidate_completion_coverage_on_delete
+         AFTER DELETE ON tasks
+         WHEN OLD.status = 'done' AND OLD.completed_at IS NOT NULL
+         BEGIN
+             UPDATE task_completion_coverage SET tracked_from = NULL;
+         END;",
+    )?;
+    Ok(())
+}
 
 /// Detects existing databases (created before the migration system) and sets
 /// user_version to skip V1 migration (which would be a no-op anyway since
@@ -5733,5 +5819,242 @@ mod tests {
             )
             .expect("read upgraded Task Agent Session table");
         assert_eq!(upgraded_sql, task_table_sql);
+    }
+    #[test]
+    fn completion_history_fresh_database_has_nullable_dates_indexes_and_coverage() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path.clone()).expect("create database");
+        let project = db
+            .create_project("Project", "/tmp/completion-fresh")
+            .expect("create project");
+        let tracked_before_import: i64 = {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock database");
+            conn.query_row(
+                "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read fresh tracking start")
+        };
+        assert!(tracked_before_import > 0);
+        let legacy_done = db
+            .create_task("Imported done", "done", Some(&project.id), None, None)
+            .expect("create imported Task");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        let completed_at: Option<i64> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                [&legacy_done.id],
+                |row| row.get(0),
+            )
+            .expect("read completion date");
+        assert_eq!(
+            completed_at, None,
+            "direct done creation is not a completion"
+        );
+        let tracked_from: Option<i64> = conn
+            .query_row(
+                "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read coverage marker");
+        assert_eq!(
+            tracked_from, None,
+            "undated imported completion invalidates coverage"
+        );
+        for index in [
+            "idx_tasks_project_completed_at",
+            "idx_tasks_project_unknown_completed_at",
+        ] {
+            assert!(conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |row| row.get::<_, bool>(0),
+                )
+                .expect("check completion index"));
+        }
+        drop(conn);
+        drop(db);
+        let db = Database::new(path).expect("reopen after import");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock reopened database");
+        let tracked_from: Option<i64> = conn
+            .query_row(
+                "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read persistent invalidation");
+        assert_eq!(tracked_from, None);
+    }
+
+    #[test]
+    fn completion_history_unverified_sql_transition_invalidates_coverage() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let task = db
+            .create_task("Undated", "doing", None, None, None)
+            .expect("create Task");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        conn.execute("UPDATE tasks SET status = 'done' WHERE id = ?1", [&task.id])
+            .expect("simulate older writer");
+        let (date, coverage): (Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT tasks.completed_at, task_completion_coverage.tracked_from
+                 FROM tasks JOIN task_completion_coverage ON task_completion_coverage.id = 1
+                 WHERE tasks.id = ?1",
+                [&task.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read unverified transition");
+        assert_eq!((date, coverage), (None, None));
+    }
+
+    #[test]
+    fn completion_history_migration_preserves_verified_date_and_unknown_legacy_date() {
+        let (_temp_dir, path) = temporary_database_path();
+        let (verified_id, unknown_id) = {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            let project = db
+                .create_project("Project", "/tmp/completion-upgrade")
+                .expect("create project");
+            let verified = db
+                .create_task("Verified", "done", Some(&project.id), None, None)
+                .expect("create verified Task");
+            let unknown = db
+                .create_task("Unknown", "done", Some(&project.id), None, None)
+                .expect("create unknown Task");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock database");
+            conn.execute(
+                "UPDATE tasks SET completed_at = 1234567890 WHERE id = ?1",
+                [&verified.id],
+            )
+            .expect("seed independently verified completion date");
+            conn.execute("DROP TABLE task_completion_coverage", [])
+                .expect("remove future coverage marker");
+            conn.pragma_update(None, "user_version", LATEST_USER_VERSION - 1)
+                .expect("rewind to previous migration");
+            (verified.id, unknown.id)
+        };
+        let db = Database::new(path.clone()).expect("upgrade database");
+        {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock upgraded database");
+            let dates: (Option<i64>, Option<i64>) = (
+                conn.query_row(
+                    "SELECT completed_at FROM tasks WHERE id = ?1",
+                    [&verified_id],
+                    |row| row.get(0),
+                )
+                .expect("read verified date"),
+                conn.query_row(
+                    "SELECT completed_at FROM tasks WHERE id = ?1",
+                    [&unknown_id],
+                    |row| row.get(0),
+                )
+                .expect("read unknown date"),
+            );
+            assert_eq!(dates, (Some(1234567890), None));
+        }
+        drop(db);
+        let db = Database::new(path).expect("reopen upgraded database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock reopened database");
+        let date: Option<i64> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                [&verified_id],
+                |row| row.get(0),
+            )
+            .expect("read preserved date after repair");
+        assert_eq!(date, Some(1234567890));
+    }
+
+    #[test]
+    fn completion_history_repair_never_resets_existing_or_missing_coverage() {
+        let (_temp_dir, path) = temporary_database_path();
+        let initial = {
+            let db = Database::new(path.clone()).expect("create database");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock database");
+            conn.query_row(
+                "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                [],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .expect("read initial marker")
+        };
+        let db = Database::new(path.clone()).expect("repair database");
+        {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock repaired database");
+            let tracked_from: Option<i64> = conn
+                .query_row(
+                    "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("read preserved marker");
+            assert_eq!(tracked_from, initial);
+            conn.execute("DELETE FROM task_completion_coverage", [])
+                .expect("remove untrusted marker");
+        }
+        drop(db);
+        let db = Database::new(path).expect("repair missing marker");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM task_completion_coverage", [], |row| {
+                row.get(0)
+            })
+            .expect("check marker absence");
+        assert_eq!(count, 0, "repair must not fabricate a continuity boundary");
+    }
+
+    #[test]
+    fn completion_history_repairs_partial_schema_without_claiming_lost_history() {
+        let (_temp_dir, path) = temporary_database_path();
+        {
+            let db = Database::new(path.clone()).expect("create database");
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock database");
+            conn.execute_batch(
+                "DROP TRIGGER invalidate_completion_coverage_on_insert;
+                 DROP TRIGGER invalidate_completion_coverage_on_update;
+                 DROP TRIGGER invalidate_completion_coverage_on_delete;
+                 DROP INDEX idx_tasks_project_completed_at;
+                 DROP INDEX idx_tasks_project_unknown_completed_at;
+                 ALTER TABLE tasks DROP COLUMN completed_at;",
+            )
+            .expect("simulate partial schema");
+        }
+        let db = Database::new(path).expect("repair partial schema");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock repaired database");
+        let column: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'completed_at'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check repaired column");
+        assert!(column);
+        let tracked_from: Option<i64> = conn
+            .query_row(
+                "SELECT tracked_from FROM task_completion_coverage WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read invalidated coverage");
+        assert_eq!(
+            tracked_from, None,
+            "missing date column loses tracking evidence"
+        );
     }
 }

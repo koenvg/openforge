@@ -36,6 +36,7 @@ function task(id: string, status: TaskDetail['status'] = 'doing'): TaskDetail {
     projectId: 'P-1',
     createdAt: 0,
     updatedAt: 0,
+    completedAt: null,
     labels: [],
   }
 }

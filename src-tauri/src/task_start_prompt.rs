@@ -197,6 +197,7 @@ mod tests {
             project_id: None,
             created_at: 0,
             updated_at: 0,
+            completed_at: None,
             prompt: prompt.map(|value| value.to_string()),
             agent: None,
             permission_mode: None,

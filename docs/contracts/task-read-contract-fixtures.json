@@ -6,5 +6,11 @@
   "maximumSearchCharacters": 200,
   "maximumLabelFilters": 20,
   "maximumLabelCharacters": 40,
+  "knownCompletedAt": 1700000000,
+  "completedFrom": 1699999990,
+  "completedBefore": 1700000010,
+  "invalidCompletedBefore": 1699999990,
+  "trackedFrom": 1699999990,
+  "unknownCompletedTaskCount": 1,
   "missingTaskId": "T-missing"
 }

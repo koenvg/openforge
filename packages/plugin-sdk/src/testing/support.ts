@@ -255,6 +255,7 @@ export class TestingRegistryServices {
   readonly storage: PluginStorage
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
+  readonly taskCompletionTrackedFrom: number | null
   readonly seededTaskLabelAssignments: Map<string, TaskLabel[]>
   readonly seededAgentSessions: AgentSession[]
   readonly agentSessionWorkspaces: Readonly<Record<string, AgentSessionWorkspace>>
@@ -283,6 +284,7 @@ export class TestingRegistryServices {
     this.seededTaskLabelAssignments = new Map(
       (options.taskLabelAssignments ?? []).map(assignment => [assignment.taskId, assignment.labels]),
     )
+    this.taskCompletionTrackedFrom = options.taskCompletionTrackedFrom ?? null
     this.seededAgentSessions = options.agentSessions ?? []
     this.agentSessionWorkspaces = options.agentSessionWorkspaces ?? {}
     this.externalTextFiles = options.externalTextFiles ?? []

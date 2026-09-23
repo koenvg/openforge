@@ -47,6 +47,7 @@ const makeTask = (id: string, status: BoardStatus): TaskDetail => ({
   projectId: 'project-1',
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
   title: 'Test task',
   titleSource: null,
   titleGeneratedAt: null,
