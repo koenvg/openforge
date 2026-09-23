@@ -116,6 +116,11 @@ pub enum Command {
         controller: Controller,
         after: u64,
     },
+    /// Keeps the connection open; the daemon pushes one `Events` reply per journal change.
+    Subscribe {
+        controller: Controller,
+        after: u64,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]

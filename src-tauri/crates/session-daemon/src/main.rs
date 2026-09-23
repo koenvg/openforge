@@ -17,6 +17,7 @@ mod quiescence;
 mod recovery_cli;
 mod replacement;
 mod server;
+mod subscription;
 mod wake;
 
 // Compile the existing domain-free authority and supervision code in the PTY owner.

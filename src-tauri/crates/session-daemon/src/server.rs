@@ -64,6 +64,7 @@ pub(crate) fn serve(
 ) -> Result<(), Error> {
     let socket = runtime.socket_path();
     crate::wake::watch_child_exits().map_err(io_error)?;
+    let mut subscribers = crate::subscription::Subscribers::new(host.backend.journal.clone());
     eprintln!("session daemon ready");
     loop {
         // Drain before polling so a wake that races this pass is not lost.
@@ -103,7 +104,8 @@ pub(crate) fn serve(
             continue;
         }
         let mut activation = None;
-        let result = read_frame::<_, Request>(&mut stream).and_then(|request| {
+        let mut subscribing = false;
+        let mut result = read_frame::<_, Request>(&mut stream).and_then(|request| {
             if !bool::from(
                 request
                     .token
@@ -112,10 +114,26 @@ pub(crate) fn serve(
             ) {
                 return Err(Error::Unauthorized);
             }
+            if let Command::Subscribe { controller, after } = request.command {
+                subscribing = true;
+                return host.handle(Command::Events { controller, after });
+            }
+            let connecting = matches!(request.command, Command::Connect { .. });
             let dispatch = manager.dispatch(&mut host, &runtime, &resources, request.command)?;
+            if connecting {
+                subscribers.close_all();
+            }
             activation = dispatch.activation;
             Ok(dispatch.response)
         });
+        if subscribing {
+            if let Ok(Response::Events(first)) = result {
+                match subscribers.add(&stream, first) {
+                    Ok(()) => continue,
+                    Err(error) => result = Err(error),
+                }
+            }
+        }
         if host.shutdown {
             std::fs::remove_file(&socket).map_err(io_error)?;
         }

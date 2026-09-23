@@ -8,7 +8,7 @@ use std::time::Duration;
 
 #[tokio::test]
 #[ignore = "build the Session Daemon first; run with OPENFORGE_TEST_DAEMON"]
-async fn daemon_pump_links_without_views_and_delivers_output_during_slow_github() {
+async fn daemon_events_link_without_views_and_deliver_output_during_slow_github() {
     let f = Fixture::new(true, Some("test-token")).await;
     let daemon = DaemonFixture::new();
     let manager = daemon.shells();
@@ -139,4 +139,61 @@ async fn daemon_reconnect_ignores_recovered_history_but_links_new_live_output() 
     std::fs::write(f.dir.path().join("finish"), "go").unwrap();
     drop(bridge);
     drop(manager);
+}
+
+fn pty(instance: u64) -> openforge_session_host::PtyIdentity {
+    openforge_session_host::PtyIdentity {
+        installation: openforge_session_host::InstallationId::parse("install").unwrap(),
+        lifetime: openforge_session_host::DaemonLifetimeId::parse("lifetime").unwrap(),
+        instance: openforge_session_host::PtyInstanceId::new(instance).unwrap(),
+    }
+}
+
+fn batch(
+    gap: bool,
+    events: Vec<openforge_session_protocol::Event>,
+) -> openforge_session_protocol::EventBatch {
+    openforge_session_protocol::EventBatch {
+        cursor: 1,
+        gap,
+        retained_bytes: 0,
+        events,
+    }
+}
+
+#[test]
+fn output_from_a_known_pty_does_not_refresh_inventory() {
+    use openforge_session_protocol::Event;
+    let known = std::collections::HashSet::from([pty(1)]);
+    let output = Event::Output {
+        pty: pty(1),
+        sequence: 1,
+        data: b"idle".to_vec(),
+    };
+    let recovery = Event::RecoveryRequired { pty: pty(1) };
+    assert!(!super::changes_sessions(
+        &known,
+        &batch(false, vec![output, recovery])
+    ));
+}
+
+#[test]
+fn spawn_exit_or_gap_refreshes_inventory() {
+    use openforge_session_protocol::Event;
+    let known = std::collections::HashSet::from([pty(1)]);
+    let spawned = Event::Output {
+        pty: pty(2),
+        sequence: 1,
+        data: Vec::new(),
+    };
+    let exited = Event::Exited {
+        pty: pty(1),
+        code: 0,
+    };
+    assert!(super::changes_sessions(
+        &known,
+        &batch(false, vec![spawned])
+    ));
+    assert!(super::changes_sessions(&known, &batch(false, vec![exited])));
+    assert!(super::changes_sessions(&known, &batch(true, Vec::new())));
 }

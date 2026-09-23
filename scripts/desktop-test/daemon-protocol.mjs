@@ -24,7 +24,7 @@ export async function exchangeDaemon(runtime, credentials, command) {
     socket.on('error', error => finish(error))
     socket.on('end', () => finish(new Error('Daemon fixture IPC ended before its reply')))
     socket.on('connect', () => {
-      const body = Buffer.from(JSON.stringify({ version: 5, body: { token: credentials.token, command } }))
+      const body = Buffer.from(JSON.stringify({ version: 6, body: { token: credentials.token, command } }))
       const header = Buffer.alloc(4)
       header.writeUInt32BE(body.length)
       socket.write(Buffer.concat([header, body]))
@@ -40,7 +40,7 @@ export async function exchangeDaemon(runtime, credentials, command) {
       try {
         reply = JSON.parse(bytes.subarray(4, length + 4).toString())
       } catch { return finish(new Error('Invalid daemon fixture reply')) }
-      if (reply?.version !== 5) return finish(new Error('Invalid daemon fixture reply version'))
+      if (reply?.version !== 6) return finish(new Error('Invalid daemon fixture reply version'))
       if (!reply.body?.Ok) {
         const failure = reply.body?.Err
         const known = ['version', 'capacity', 'foreignInstallation', 'staleController', 'unauthorized',

@@ -1,5 +1,6 @@
 use openforge_session_protocol::*;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 const MAX_EVENT_BYTES: usize = 512 * 1024;
@@ -27,6 +28,19 @@ impl JournalCell {
     }
     pub fn publish(&self, event: Event) {
         lock_journal(&self.journal).publish(event);
+        self.published.notify_all();
+    }
+    pub fn wait_after(&self, after: u64, closed: &AtomicBool) -> MutexGuard<'_, Journal> {
+        let journal = lock_journal(&self.journal);
+        self.published
+            .wait_while(journal, |journal| {
+                journal.cursor <= after && !closed.load(Ordering::Acquire)
+            })
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+    pub fn close(&self, closed: &AtomicBool) {
+        let _journal = lock_journal(&self.journal);
+        closed.store(true, Ordering::Release);
         self.published.notify_all();
     }
 }

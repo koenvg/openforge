@@ -106,6 +106,7 @@ impl Host {
     }
     pub fn handle(&mut self, command: Command) -> Result<Response, Error> {
         match command {
+            Command::Subscribe { .. } => Err(Error::InvalidRequest),
             Command::Capabilities
             | Command::Replacement { .. }
             | Command::ReplacementStatus { .. } => Err(Error::UnsupportedReplacement),

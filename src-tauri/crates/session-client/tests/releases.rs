@@ -15,7 +15,7 @@ fn bundle() -> tempfile::TempDir {
     fs::write(bundle.path().join("hook.js"), b"hook").unwrap();
     fs::write(bundle.path().join("manifest.json"), serde_json::to_vec(&serde_json::json!({
         "format": 1, "architecture": std::env::consts::ARCH,
-        "protocol": 4, "stateFormat": 1,
+        "protocol": 6, "stateFormat": 1,
         "files": [
             {"path": "openforge-session-daemon", "sha256": "f77b12a53ece5f6b7050800bbdbf8cc5ebe87f1b1387cf739f243e43e2ce886b", "executable": true},
             {"path": "hook.js", "sha256": "0648298b48be031996277ae472115a46e7964d2ac3882e61b84351f3c3f8a547", "executable": false}

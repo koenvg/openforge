@@ -215,7 +215,83 @@ impl Client {
     }
 }
 
+/// A long-lived daemon connection that yields one batch per journal change.
+pub struct EventSubscription {
+    stream: UnixStream,
+    first: Option<EventBatch>,
+}
+
+impl EventSubscription {
+    /// Blocks until the daemon pushes the next batch.
+    /// # Errors
+    /// Returns the daemon's refusal, or a transport error once either side closes.
+    pub fn recv(&mut self) -> Result<EventBatch, Error> {
+        if let Some(first) = self.first.take() {
+            return Ok(first);
+        }
+        match read_frame::<_, Result<Response, Error>>(&mut self.stream)?? {
+            Response::Events(batch) => Ok(batch),
+            _ => Err(Error::InvalidRequest),
+        }
+    }
+
+    /// Returns a handle that unblocks `recv` from another thread.
+    /// # Errors
+    /// Reports descriptor exhaustion.
+    pub fn closer(&self) -> Result<SubscriptionCloser, Error> {
+        Ok(SubscriptionCloser(
+            self.stream.try_clone().map_err(io_error)?,
+        ))
+    }
+}
+
+pub struct SubscriptionCloser(UnixStream);
+
+impl SubscriptionCloser {
+    pub fn close(&self) {
+        let _ = self.0.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+impl Client {
+    /// Opens a pushed event stream starting after `after`.
+    /// # Errors
+    /// Rejects future cursors and stale controllers, like `events`.
+    pub fn subscribe(&self, after: u64) -> Result<EventSubscription, Error> {
+        let stream = send(
+            &self.socket,
+            &self.credentials,
+            Command::Subscribe {
+                controller: self.controller.clone(),
+                after,
+            },
+        )?;
+        let mut subscription = EventSubscription {
+            stream,
+            first: None,
+        };
+        // The first reply arrives within the request timeout and carries any refusal.
+        subscription.first = Some(subscription.recv()?);
+        subscription
+            .stream
+            .set_read_timeout(None)
+            .map_err(io_error)?;
+        Ok(subscription)
+    }
+}
+
 fn exchange(socket: &Path, credentials: &Credentials, command: Command) -> Result<Response, Error> {
+    let mut stream = send(socket, credentials, command)?;
+    // A malformed reply is not a definitive server rejection. The request may already
+    // have executed; do not let callers acknowledge it based on inventory alone.
+    // A reply on another version comes from a daemon that refused this frame before dispatch.
+    read_frame::<_, Result<Response, Error>>(&mut stream).map_err(|error| match error {
+        Error::Transport(_) | Error::Version => error,
+        _ => Error::OutcomeUnknown,
+    })?
+}
+
+fn send(socket: &Path, credentials: &Credentials, command: Command) -> Result<UnixStream, Error> {
     let mut stream = UnixStream::connect(socket).map_err(io_error)?;
     check_peer(&stream)?;
     stream
@@ -234,11 +310,5 @@ fn exchange(socket: &Path, credentials: &Credentials, command: Command) -> Resul
             },
         },
     )?;
-    // A malformed reply is not a definitive server rejection. The request may already
-    // have executed; do not let callers acknowledge it based on inventory alone.
-    // A reply on another version comes from a daemon that refused this frame before dispatch.
-    read_frame::<_, Result<Response, Error>>(&mut stream).map_err(|error| match error {
-        Error::Transport(_) | Error::Version => error,
-        _ => Error::OutcomeUnknown,
-    })?
+    Ok(stream)
 }
