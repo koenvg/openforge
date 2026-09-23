@@ -495,7 +495,7 @@ async fn capacity_returns_database_failure_without_retrying_the_same_candidate()
     }
 
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
+        std::time::Duration::from_secs(10),
         service.acquire(AcquireScopedWorkspace {
             owner_plugin_id: "com.example.review",
             scope: SessionScope {

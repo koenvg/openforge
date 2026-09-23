@@ -978,4 +978,15 @@ mod tests {
 
         cleanup(&base);
     }
+
+    #[test]
+    fn detects_user_data_that_is_only_in_the_wal_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join(new_db_prod());
+        let db = crate::db::Database::new(db_path.clone()).unwrap();
+        db.create_project("P", "/tmp/p").unwrap();
+
+        assert!(sqlite_companion_paths(&db_path)[0].exists());
+        assert_eq!(database_has_user_data(&db_path), Some(true));
+    }
 }

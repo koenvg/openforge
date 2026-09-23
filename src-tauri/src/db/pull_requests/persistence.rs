@@ -201,7 +201,7 @@ impl Database {
         let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
         let existing = {
-            let mut query = tx.prepare(
+            let mut query = tx.prepare_cached(
                 "SELECT id, ticket_id, repo_owner, repo_name, pr_number FROM pull_requests
                  WHERE id = ?1 OR (repo_owner = ?2 COLLATE NOCASE AND repo_name = ?3 COLLATE NOCASE AND pr_number = ?4)",
             )?;

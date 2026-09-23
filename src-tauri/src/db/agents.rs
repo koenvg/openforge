@@ -266,7 +266,7 @@ impl super::Database {
 
     pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(&format!(
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE id = ?1"
         ))?;
         let mut rows = stmt.query([id])?;
@@ -282,7 +282,7 @@ impl super::Database {
         ticket_id: &str,
     ) -> Result<Option<AgentSessionRow>> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(&format!(
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1"
         ))?;
         let mut rows = stmt.query([ticket_id])?;
@@ -301,30 +301,7 @@ impl super::Database {
             return Ok(Vec::new());
         }
         let conn = self.lock_conn()?;
-        let placeholders: Vec<String> = ticket_ids
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("?{}", i + 1))
-            .collect();
-        let select_columns = AGENT_SESSION_SELECT_COLUMNS
-            .split(", ")
-            .map(|column| format!("s.{column}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "SELECT {select_columns}
-              FROM agent_sessions s
-             WHERE s.ticket_id IN ({})
-               AND s.rowid = (
-                 SELECT s2.rowid
-                   FROM agent_sessions s2
-                  WHERE s2.ticket_id = s.ticket_id
-                  ORDER BY s2.created_at DESC, s2.rowid DESC
-                  LIMIT 1
-               )",
-            placeholders.join(", ")
-        );
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare(&latest_sessions_for_tickets_sql(ticket_ids.len()))?;
         let params: Vec<&dyn rusqlite::types::ToSql> = ticket_ids
             .iter()
             .map(|id| id as &dyn rusqlite::types::ToSql)
@@ -344,7 +321,7 @@ impl super::Database {
         created_at_or_after: Option<i64>,
     ) -> Result<Vec<AgentSessionRow>> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(&format!(
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS}
                FROM agent_sessions
               WHERE ticket_id = ?1
@@ -464,9 +441,60 @@ impl super::Database {
     }
 }
 
+fn latest_sessions_for_tickets_sql(ticket_count: usize) -> String {
+    let placeholders = (1..=ticket_count)
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let select_columns = AGENT_SESSION_SELECT_COLUMNS
+        .split(", ")
+        .map(|column| format!("s.{column}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "SELECT {select_columns}
+          FROM agent_sessions s
+         WHERE s.ticket_id IN ({placeholders})
+           AND s.rowid = (
+             SELECT s2.rowid
+               FROM agent_sessions s2
+              WHERE s2.ticket_id = s.ticket_id
+              ORDER BY s2.created_at DESC, s2.rowid DESC
+              LIMIT 1
+           )"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
+
+    #[test]
+    fn latest_sessions_for_tickets_query_uses_ticket_created_index_order() {
+        let (db, _temp_dir) = make_test_db("latest_sessions_query_plan");
+        let conn = db.lock_conn().expect("lock connection");
+        let query = format!(
+            "EXPLAIN QUERY PLAN {}",
+            super::latest_sessions_for_tickets_sql(2)
+        );
+        let plan = conn
+            .prepare(&query)
+            .expect("prepare latest session query plan")
+            .query_map(["T-1", "T-2"], |row| row.get::<_, String>(3))
+            .expect("query latest session plan")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("read latest session plan")
+            .join("\n");
+
+        assert!(
+            plan.contains("idx_agent_sessions_ticket_created"),
+            "latest session lookup should use the ticket/created index:\n{plan}"
+        );
+        assert!(
+            !plan.contains("USE TEMP B-TREE"),
+            "latest session lookup should read index order:\n{plan}"
+        );
+    }
 
     #[test]
     fn test_agent_session_lifecycle() {

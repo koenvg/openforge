@@ -304,3 +304,34 @@ fn unknown_github_identity_counts_every_unaddressed_thread_root() {
 
     assert_eq!(count, 2);
 }
+
+#[test]
+fn task_pull_request_query_uses_ticket_and_comment_indexes() {
+    let (db, _temp_dir) = make_test_db("pr_task_query_plan");
+
+    let connection = db.connection();
+    let conn = connection.lock().expect("lock connection");
+    let query = format!(
+        "EXPLAIN QUERY PLAN {}",
+        crate::db::pull_requests::queries::pull_requests_sql(
+            crate::db::pull_requests::queries::PULL_REQUESTS_FOR_TASK_CLAUSE
+        )
+    );
+    let plan = conn
+        .prepare(&query)
+        .expect("prepare task pull request query plan")
+        .query_map(["T-1"], |row| row.get::<_, String>(3))
+        .expect("query task pull request plan")
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .expect("read task pull request plan")
+        .join("\n");
+
+    assert!(
+        plan.contains("idx_pull_requests_ticket"),
+        "task lookup should use the ticket index:\n{plan}"
+    );
+    assert!(
+        plan.contains("idx_pr_comments_pr_created"),
+        "unaddressed comment count should use the comment index:\n{plan}"
+    );
+}

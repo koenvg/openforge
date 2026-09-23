@@ -45,6 +45,20 @@ pub(super) const PULL_REQUEST_REPOSITORY_NUMBER_INDEX_SQL: &str =
     "CREATE INDEX IF NOT EXISTS idx_pull_requests_repository_number
          ON pull_requests(repo_owner, repo_name, pr_number, updated_at DESC);";
 
+const TASK_CHILD_LOOKUP_INDEXES: [(&str, &str, &[&str]); 3] = [
+    (
+        "idx_agent_sessions_ticket_created",
+        "agent_sessions",
+        &["ticket_id", "created_at"],
+    ),
+    ("idx_pull_requests_ticket", "pull_requests", &["ticket_id"]),
+    (
+        "idx_pr_comments_pr_created",
+        "pr_comments",
+        &["pr_id", "created_at"],
+    ),
+];
+
 pub(super) const SCOPED_WORKSPACES_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS scoped_workspaces (
     id TEXT PRIMARY KEY,
@@ -2189,7 +2203,43 @@ INSERT OR IGNORE INTO config (key, value)
     })
     // Never drop completion history on rollback to a previous app build.
     .down(""),
+    M::up_with_hook("", |tx| {
+        create_task_child_lookup_indexes(tx)
+            .map_err(rusqlite_migration::HookError::RusqliteError)
+    })
+    .down(
+        "DROP INDEX IF EXISTS idx_agent_sessions_ticket_created;
+         DROP INDEX IF EXISTS idx_pull_requests_ticket;
+         DROP INDEX IF EXISTS idx_pr_comments_pr_created;",
+    ),
 );
+
+fn create_task_child_lookup_indexes(conn: &Connection) -> Result<()> {
+    for (index, table, columns) in TASK_CHILD_LOOKUP_INDEXES {
+        let present_columns: i64 = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name IN ({})",
+                columns
+                    .iter()
+                    .map(|column| format!("'{column}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            [],
+            |row| row.get(0),
+        )?;
+        if present_columns == columns.len() as i64 {
+            conn.execute(
+                &format!(
+                    "CREATE INDEX IF NOT EXISTS {index} ON {table}({})",
+                    columns.join(", ")
+                ),
+                [],
+            )?;
+        }
+    }
+    Ok(())
+}
 
 /// Repairs schema without inventing a new tracking start after the migration ran.
 pub(super) fn ensure_task_completion_schema(
@@ -3110,6 +3160,7 @@ mod tests {
         ScopedAgentSessions,
         PullRequestRepositoryNumberIndex,
         ReviewPrReviewedHeadSha,
+        TaskChildLookupIndexes,
     }
 
     impl MigrationBoundary {
@@ -3137,6 +3188,7 @@ mod tests {
                 Self::ScopedAgentSessions => 68,
                 Self::PullRequestRepositoryNumberIndex => 69,
                 Self::ReviewPrReviewedHeadSha => 72,
+                Self::TaskChildLookupIndexes => 75,
             }
         }
     }
@@ -5433,6 +5485,87 @@ mod tests {
             )
             .expect("select most recently updated exact match");
         assert_eq!(selected_id, 1002);
+    }
+
+    fn index_columns(conn: &Connection, index: &str) -> Vec<String> {
+        conn.prepare(&format!(
+            "SELECT name FROM pragma_index_info('{index}') ORDER BY seqno"
+        ))
+        .expect("prepare index columns")
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("query index columns")
+        .collect::<Result<Vec<_>>>()
+        .expect("read index columns")
+    }
+
+    fn assert_task_child_lookup_indexes(conn: &Connection) {
+        for (index, _, columns) in TASK_CHILD_LOOKUP_INDEXES {
+            assert_eq!(index_columns(conn, index), columns, "columns of {index}");
+        }
+    }
+
+    #[test]
+    fn fresh_database_indexes_task_child_lookups() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock database");
+
+        assert_task_child_lookup_indexes(&conn);
+    }
+
+    #[test]
+    fn existing_database_gains_task_child_lookup_indexes_without_losing_rows() {
+        let (_temp_dir, path) = temporary_database_path();
+        let task_id;
+        {
+            let db = Database::new(path.clone()).expect("create pre-upgrade database");
+            task_id = db
+                .create_task("Linked task", "doing", None, None, None)
+                .expect("create task")
+                .id;
+            let connection = db.connection();
+            let conn = connection.lock().expect("lock pre-upgrade database");
+            for (index, _, _) in TASK_CHILD_LOOKUP_INDEXES {
+                conn.execute(&format!("DROP INDEX {index}"), [])
+                    .expect("remove future index");
+            }
+            conn.execute(
+                "INSERT INTO pull_requests (
+                    id, pr_number, ticket_id, repo_owner, repo_name, title, url, state,
+                    created_at, updated_at
+                 ) VALUES (1001, 77, ?1, 'owner', 'repo', 'PR', 'url', 'open', 1, 1)",
+                [&task_id],
+            )
+            .expect("insert existing pull request");
+            conn.execute(
+                "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, created_at)
+                 VALUES (2001, 1001, 'reviewer', 'Fix', 'review', 1)",
+                [],
+            )
+            .expect("insert existing comment");
+            set_user_version_before(&conn, MigrationBoundary::TaskChildLookupIndexes);
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock upgraded database");
+
+        assert_task_child_lookup_indexes(&conn);
+        let comment_pr_id: i64 = conn
+            .query_row("SELECT pr_id FROM pr_comments WHERE id = 2001", [], |row| {
+                row.get(0)
+            })
+            .expect("read preserved comment");
+        assert_eq!(comment_pr_id, 1001);
+        let pull_request_task_id: String = conn
+            .query_row(
+                "SELECT ticket_id FROM pull_requests WHERE id = 1001",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read preserved pull request");
+        assert_eq!(pull_request_task_id, task_id);
     }
 
     #[test]
