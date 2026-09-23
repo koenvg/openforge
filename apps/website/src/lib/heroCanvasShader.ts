@@ -18,8 +18,8 @@ const CAMERA = {
 
 /**
  * The hero visual: a translucent, ray-marched glass anvil on a light technical
- * grid. Everything lives in one fullscreen fragment effect — no mesh assets,
- * no extra passes.
+ * grid. Everything lives in one fullscreen fragment effect: no mesh assets, no
+ * extra passes.
  *
  * `layer` is a build-time debug knob for sculpting: 0 renders only the base,
  * 1 adds the waist, 2 adds the plate and wedge horn (all with matte shading so the
@@ -63,6 +63,10 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     let right = normalize(cross(fwd, vec3f(0.0, 1.0, 0.0)));
     let up = cross(right, fwd);
     return CamBasis(eye, fwd, right, up, CAM_TAN_H, aspect);
+  }
+
+  fn heroCam(aspect: f32) -> CamBasis {
+    return makeCam(aspect, mix(1.22, 1.0, smoothstep(0.62, 1.0, aspect)));
   }
 
   fn uvToRay(cam: CamBasis, uv: vec2f) -> vec3f {
@@ -135,14 +139,19 @@ export function createHeroCanvasShaderSource(layer = 3): string {
 
   // A broad planar upper body, a short curved pinch, and a sloping foot.
   // Signed axial bounds must stay negative inside the solid, not clamp to zero.
-  fn waistDistances(p: vec3f) -> vec3f {
-    let y = clamp(p.y, 0.24, 1.32);
+  fn waistProfile(height: f32) -> vec3f {
+    let y = clamp(height, 0.24, 1.32);
     let lower = clamp((0.62 - y) / 0.38, 0.0, 1.0);
     let upper = clamp((y - 0.62) / 0.70, 0.0, 1.0);
     let left = -0.30 - 0.55 * lower * lower - 0.22 * smoothstep(0.0, 0.35, upper);
     let right = 0.24 + 0.54 * lower * lower + upper;
     let depth = 0.20 + 0.22 * max(lower, smoothstep(0.0, 0.30, upper));
-    return vec3f(max(left - p.x, p.x - right), max(0.24 - p.y, p.y - 1.32), abs(p.z) - depth);
+    return vec3f(left, right, depth);
+  }
+
+  fn waistDistances(p: vec3f) -> vec3f {
+    let waist = waistProfile(p.y);
+    return vec3f(max(waist.x - p.x, p.x - waist.y), max(0.24 - p.y, p.y - 1.32), abs(p.z) - waist.z);
   }
 
   fn waistSdf(p: vec3f) -> f32 {
@@ -256,148 +265,43 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     return 1.0 - smoothstep(0.001, 0.015, abs(secondPlane(d)));
   }
 
-  // Interior discharge volumes cover the horn, shoulder, body, heel, waist and base.
-  // Each entire box fits inside the solid, including branches and drifting sparks.
-  fn lightningSite(site: i32) -> vec3f {
-    switch site {
-      case 0: { return vec3f(-1.08, 1.06, 0.0); }
-      case 1: { return vec3f(-0.42, 0.965, 0.0); }
-      case 2: { return vec3f(0.30, 0.93, 0.0); }
-      case 3: { return vec3f(0.83, 1.045, 0.0); }
-      case 4: { return vec3f(-0.04, 0.55, 0.0); }
-      case 5: { return vec3f(-0.10, 0.148, 0.0); }
-      default: { return vec3f(-0.10, 0.044, 0.0); }
-    }
+  const EMBER: vec3f = vec3f(1.0, 0.50, 0.12);
+  const EMBER_CORE: vec3f = vec3f(1.0, 0.91, 0.76);
+  const EMBER_EDGE: vec3f = vec3f(1.0, 0.80, 0.56);
+
+  fn emberFalloff(offset: vec3f) -> f32 {
+    return 1.0 / (1.0 + dot(offset, offset) * 3.5);
   }
 
-  fn lightningSpread(site: i32) -> vec3f {
-    switch site {
-      case 0: { return vec3f(0.24, 0.045, 0.105); }
-      case 1: { return vec3f(0.18, 0.065, 0.20); }
-      case 2: { return vec3f(0.24, 0.09, 0.22); }
-      case 3: { return vec3f(0.12, 0.08, 0.18); }
-      case 4: { return vec3f(0.16, 0.09, 0.12); }
-      case 5: { return vec3f(0.64, 0.035, 0.26); }
-      default: { return vec3f(0.79, 0.022, 0.35); }
-    }
+  fn pointerPlanePoint(cam: CamBasis, pointer: vec2f) -> vec3f {
+    let rd = uvToRay(cam, pointer);
+    return cam.eye + rd * (-cam.eye.z / min(rd.z, -0.05));
   }
 
-  fn lightningCycle(time: f32, motion: f32, lane: i32) -> vec2f {
-    // Stagger three discharges; each holds its path for 800ms instead of 200ms.
-    let phase = time * motion * 1.25 + f32(lane) * 0.31;
-    return vec2f(floor(phase), fract(phase));
+  // A gradient push against anvilSdf flips across the notch under the heel, so clamp to the profiles instead.
+  fn containEmber(aim: vec3f) -> vec3f {
+    let inset = 0.06;
+    let y = clamp(aim.y / 0.86, 0.24 + inset, 1.32 - inset);
+    let waist = waistProfile(y);
+    let hornLeft = -0.50 - 1.20 * (y - 0.86 - inset) / 0.415;
+    let x = clamp(aim.x, min(waist.x, hornLeft) + inset, waist.y - inset);
+    let hornDepth = 0.42 - 0.365 * max((-0.50 - x) / 1.20, 0.0);
+    let depth = min(waist.z, hornDepth) - inset;
+    return vec3f(x, y * 0.86, clamp(aim.z, -depth, depth));
   }
 
-  fn lightningRegion(lane: i32, epoch: f32, focus: i32) -> i32 {
-    if (lane == 0 && focus >= 0) { return focus; }
-    return i32(floor(hash21(vec2f(epoch + 13.0, f32(lane) * 7.3 + 19.0)) * 7.0));
+  fn emberPoint(cam: CamBasis, time: f32, follow: f32, pointer: vec2f) -> vec3f {
+    let t = time * 0.16;
+    let drift = vec3f(-0.15 + 1.1 * sin(t + 0.4), 0.70 + 0.40 * sin(t * 1.37 + 2.1), 0.18 * sin(t * 0.83));
+    return containEmber(mix(drift, pointerPlanePoint(cam, pointer), clamp(follow, 0.0, 1.0)));
   }
 
-  fn lightningFocus(cam: CamBasis) -> i32 {
-    if (params.hover < 0.15 || params.motion == 0.0) { return -1; }
-    var nearest = 0;
-    var distance = 100.0;
-    for (var site = 0; site < 7; site++) {
-      let delta = (params.pointer - worldToUv(cam, lightningSite(site))) * vec2f(cam.aspect, 1.0);
-      let d = dot(delta, delta);
-      if (d < distance) { distance = d; nearest = site; }
-    }
-    return nearest;
-  }
-
-  fn lightningLocalPoint(index: i32, epoch: f32) -> vec3f {
-    let i = f32(index);
-    let along = i * 0.38 - 0.76;
-    let jitter = (hash21(vec2f(i * 3.7 + 11.0, epoch + 5.0)) - 0.5) * 0.65;
-    let depth = (hash21(vec2f(i * 7.1 + 23.0, epoch + 17.0)) - 0.5) * 0.85;
-    return select(vec3f(along, jitter, depth), vec3f(jitter, along, depth), hash21(vec2f(epoch, 31.0)) > 0.5);
-  }
-
-  fn lightningWorldPoint(local: vec3f, epoch: f32, site: i32) -> vec3f {
-    var point = local;
-    if (site >= 5) {
-      // Keep base discharges short; wander across the wide foot instead of tracing a neon strip.
-      point.x = point.x * 0.20 + (hash21(vec2f(epoch + 41.0, f32(site))) - 0.5) * 1.4;
-    }
-    return lightningSite(site) + lightningSpread(site) * point;
-  }
-
-  fn lightningPoint(index: i32, epoch: f32, site: i32) -> vec3f {
-    return lightningWorldPoint(lightningLocalPoint(index, epoch), epoch, site);
-  }
-
-  fn lightningBranchPoint(epoch: f32, site: i32, part: i32) -> vec3f {
-    let offset = select(vec3f(0.22, 0.60, -0.1), vec3f(-0.1, 0.35, 0.1), part == 1);
-    let local = clamp(lightningLocalPoint(2, epoch) + offset, vec3f(-0.9), vec3f(0.9));
-    return lightningWorldPoint(local, epoch, site);
-  }
-
-  fn lightningSparkPoint(index: i32, epoch: f32, site: i32, age: f32) -> vec3f {
-    let drift = vec3f(
-      hash21(vec2f(f32(index) + 37.0, epoch)) - 0.5,
-      hash21(vec2f(f32(index) + 51.0, epoch)) - 0.5,
-      hash21(vec2f(f32(index) + 73.0, epoch)) - 0.5,
-    ) * 0.8;
-    let local = clamp(lightningLocalPoint(1 + index, epoch) + drift * age, vec3f(-0.9), vec3f(0.9));
-    return lightningWorldPoint(local, epoch, site);
-  }
-
-  // Closest distance between the in-glass ray and one piece of a light filament.
-  fn lightFilamentDistance(entry: vec3f, ray: vec3f, a: vec3f, b: vec3f) -> f32 {
-    let filament = b - a;
-    let offset = entry - a;
-    let rr = max(dot(ray, ray), 0.000001);
-    let ff = max(dot(filament, filament), 0.000001);
-    let rf = dot(ray, filament);
-    let ro = dot(ray, offset);
-    let fo = dot(filament, offset);
-    let determinant = rr * ff - rf * rf;
-    var s = clamp(-ro / rr, 0.0, 1.0);
-    if (determinant > 0.000001) { s = clamp((rf * fo - ff * ro) / determinant, 0.0, 1.0); }
-    var t = clamp((rf * s + fo) / ff, 0.0, 1.0);
-    s = clamp((rf * t - ro) / rr, 0.0, 1.0);
-    t = clamp((rf * s + fo) / ff, 0.0, 1.0);
-    let separation = offset + ray * s - filament * t;
-    return dot(separation, separation);
-  }
-
-  // Distance is measured against the bounded refracted ray, never screen UV.
-  fn internalLightRadiance(entry: vec3f, direction: vec3f, pathLength: f32, time: f32, motion: f32, focus: i32) -> vec3f {
-    if (pathLength <= 0.0) { return vec3f(0.0); }
-    let ray = direction * pathLength;
-    var radiance = 0.0;
-    for (var lane = 0; lane < 3; lane++) {
-      let cycle = lightningCycle(time, motion, lane);
-      let site = lightningRegion(lane, cycle.x, focus);
-      let epoch = cycle.x + f32(lane) * 23.0;
-      var boltDistance = 10.0;
-      var previous = lightningPoint(0, epoch, site);
-      for (var i = 1; i <= 4; i++) {
-        let next = lightningPoint(i, epoch, site);
-        boltDistance = min(boltDistance, lightFilamentDistance(entry, ray, previous, next));
-        previous = next;
-      }
-      let junction = lightningPoint(2, epoch, site);
-      let elbow = lightningBranchPoint(epoch, site, 1);
-      let end = lightningBranchPoint(epoch, site, 2);
-      let branchDistance = min(lightFilamentDistance(entry, ray, junction, elbow), lightFilamentDistance(entry, ray, elbow, end));
-
-      var sparkDistance = 10.0;
-      for (var i = 0; i < 2; i++) {
-        let age = fract(cycle.y + f32(i) * 0.37);
-        let spark = lightningSparkPoint(i, epoch, site, age);
-        let tail = lightningSparkPoint(i, epoch, site, max(0.0, age - 0.18));
-        sparkDistance = min(sparkDistance, lightFilamentDistance(entry, ray, tail, spark));
-      }
-      let bolt = exp(-boltDistance * 50000.0) * 0.95 + exp(-boltDistance * 2300.0) * 0.085;
-      let branches = exp(-branchDistance * 70000.0) * 0.50 + exp(-branchDistance * 2600.0) * 0.035;
-      let sparks = exp(-sparkDistance * 22000.0) * 0.90 + exp(-sparkDistance * 2000.0) * 0.09;
-      // Slow, staggered envelopes soften relocation; never flash the entire glass.
-      let envelope = smoothstep(0.0, 0.18, cycle.y) * (1.0 - smoothstep(0.65, 1.0, cycle.y));
-      let attraction = select(1.0, 1.0 + params.hover * motion * 0.45, lane == 0 && focus >= 0);
-      radiance += (bolt + branches + sparks) * (0.35 + 0.65 * envelope) * attraction;
-    }
-    return vec3f(radiance * (1.0 - exp(-pathLength * 12.0)));
+  // In-scattered light from a point source, integrated along the in-glass ray.
+  fn pointGlow(entry: vec3f, direction: vec3f, pathLength: f32, source: vec3f, radius: f32) -> f32 {
+    let toSource = source - entry;
+    let along = dot(toSource, direction);
+    let h = sqrt(max(dot(toSource, toSource) - along * along, 0.0) + radius * radius);
+    return (atan((pathLength - along) / h) + atan(along / h)) * radius / (3.14159265 * h);
   }
 
   // --- Main ---
@@ -407,8 +311,7 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     let time = params.time;
     let motion = params.motion;
 
-    let zoom = mix(1.22, 1.0, smoothstep(0.62, 1.0, aspect));
-    let cam = makeCam(aspect, zoom);
+    let cam = heroCam(aspect);
 
     // Background and ground contact shadow under the base.
     var color = background(uv, aspect, 0.0, params.detail);
@@ -416,6 +319,13 @@ export function createHeroCanvasShaderSource(layer = 3): string {
     let shadowP = (uv - baseUv) * vec2f(aspect, 1.0);
     let shadow = (1.0 - smoothstep(0.22, 1.0, length(shadowP / vec2f(0.30, 0.055)))) * 0.26;
     color = mix(color, vec3f(0.42, 0.46, 0.58), shadow);
+
+    let ember = emberPoint(cam, time * motion, params.hover * motion, params.pointer);
+    let emberStrength = 0.9 + 0.1 * sin(time * motion * 1.4);
+    let emberFloor = (uv - worldToUv(cam, vec3f(ember.x, 0.0, ember.z))) * vec2f(aspect, 1.0) / vec2f(0.34, 0.07);
+    if (LAYER == 3) {
+      color = mix(color, EMBER, exp(-dot(emberFloor, emberFloor)) * 0.10 * emberStrength);
+    }
 
     let intro = mix(1.0, smoothstep(0.05, 0.95, time), motion);
     let maxSteps = select(64, 96, params.detail > 0.5);
@@ -462,30 +372,27 @@ export function createHeroCanvasShaderSource(layer = 3): string {
         glass += vec3f(0.96) * backEdge * 0.07;
         glass = mix(glass, vec3f(0.93), smoothstep(0.15, 0.95, exitNormal.y) * 0.10);
 
-        let focus = lightningFocus(cam);
-        let cycle = lightningCycle(time, motion, 0);
-        let lightPos = lightningSite(lightningRegion(0, cycle.x, focus));
-        glass += internalLightRadiance(entry, rdIn, thickness, time, motion, focus);
-        let lightDirection = normalize(pos - lightPos);
-        let grazing = pow(clamp(1.0 - abs(dot(n, lightDirection)), 0.0, 1.0), 3.0);
-        let causticPhase = dot(exitPos, vec3f(4.8, 7.2, 3.6)) + time * motion * 0.8;
-        let caustic = smoothstep(0.82, 1.0, 0.5 + 0.5 * sin(causticPhase));
-        glass += vec3f(1.0) * grazing * caustic * (0.018 + 0.020 * fres);
+        let frontLight = emberFalloff(pos - ember);
+        let backLight = emberFalloff(exitPos - ember);
+        let haze = pointGlow(entry, rdIn, thickness, ember, 0.38);
+        let core = pointGlow(entry, rdIn, thickness, ember, 0.05);
+        let emberLight = EMBER * (haze * 0.50 + backLight * (0.12 + backEdge * 0.5) + frontLight * 0.06) + EMBER_CORE * core * 0.55;
+        glass = glass * 0.92 + emberLight * emberStrength;
 
         // Sparse structural seams and ordinary external reflections.
         glass += vec3f(1.0) * wire * 0.30;
         let keyLight = normalize(vec3f(0.45, 0.85, 0.55));
-        let spec = pow(max(dot(reflect(rd, n), keyLight), 0.0), 52.0) * 0.30;
-        let fill = pow(max(dot(reflect(rd, n), normalize(vec3f(-0.62, 0.30, 0.42))), 0.0), 16.0) * 0.08;
+        let spec = pow(max(dot(reflection, keyLight), 0.0), 52.0) * 0.30;
+        let fill = pow(max(dot(reflection, normalize(vec3f(-0.62, 0.30, 0.42))), 0.0), 16.0) * 0.08;
 
         // Keep the bright tip, heel, and bevels achromatic.
         glass += vec3f(1.0) * fres * smoothstep(1.35, 1.70, -pos.x) * 0.10;
         glass += vec3f(1.0) * fres * smoothstep(0.95, 1.30, pos.x) * 0.06;
         let rim = fres * vec3f(1.0) * 0.25;
 
-        let glassCol = mix(glass + vec3f(spec + fill) + rim, vec3f(1.0), edge * 0.92);
-        let coverage = 0.97 * intro;
-        color = mix(color, glassCol, coverage);
+        let glassCol = mix(glass + vec3f(spec + fill) + rim, vec3f(1.0), edge * 0.80);
+        let emberEdges = mix(glassCol, EMBER_EDGE, edge * frontLight * 0.7 * emberStrength);
+        color = mix(color, emberEdges, 0.97 * intro);
       }
     }
 
