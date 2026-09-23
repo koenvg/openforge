@@ -64,6 +64,9 @@ impl Host {
     pub fn poll(&self) -> Result<(), Error> {
         self.backend.poll()
     }
+    pub fn next_deadline(&self) -> Result<Option<std::time::Instant>, Error> {
+        self.backend.next_deadline()
+    }
     pub fn validate_replacement_controller(&self, controller: &Controller) -> Result<(), Error> {
         self.runtime
             .block_on(self.host.reconcile(controller))

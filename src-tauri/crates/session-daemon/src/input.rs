@@ -112,8 +112,28 @@ impl InputWriter {
         }
         result
     }
+    pub fn has_pending(&self) -> bool {
+        !self.state.failed && !self.state.pending.is_empty()
+    }
     pub fn progress(&mut self) -> Result<(), Error> {
-        self.drain(Duration::from_millis(5))
+        if self.state.failed {
+            return Err(Error::OutcomeUnknown);
+        }
+        while let Some(pending) = self.state.pending.front_mut() {
+            match self.writer.write(&pending.bytes[pending.offset..]) {
+                Ok(written) if written > 0 => pending.offset += written,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
+                _ => {
+                    self.state.failed = true;
+                    return Err(Error::OutcomeUnknown);
+                }
+            }
+            if pending.offset == pending.bytes.len() {
+                self.state.pending.pop_front();
+            }
+        }
+        Ok(())
     }
     fn drain(&mut self, budget: Duration) -> Result<(), Error> {
         if self.state.failed {
@@ -179,6 +199,20 @@ mod tests {
     }
 
     #[test]
+    fn progress_stops_at_a_full_pty_without_waiting() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let mut writer = InputWriter::new(Box::new(Sink {
+            bytes: Arc::clone(&bytes),
+            allowance: 0,
+        }));
+        assert_eq!(writer.submit(b"queued"), Err(Error::OutcomeUnknown));
+        let started = Instant::now();
+        writer.progress().unwrap();
+        assert!(started.elapsed() < Duration::from_millis(2));
+        assert!(writer.has_pending());
+    }
+
+    #[test]
     fn partial_accepted_input_keeps_its_offset_and_order_through_checkpoint_restore() {
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let mut writer = InputWriter::new(Box::new(Sink {
@@ -199,8 +233,9 @@ mod tests {
             saved,
         )
         .unwrap();
+        assert!(resumed.has_pending());
         resumed.progress().unwrap();
-        resumed.progress().unwrap();
+        assert!(!resumed.has_pending());
         assert_eq!(*bytes.lock().unwrap(), b"hello world");
         resumed.submit(b"!").unwrap();
         assert_eq!(*bytes.lock().unwrap(), b"hello world!");

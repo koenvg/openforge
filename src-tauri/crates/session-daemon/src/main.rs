@@ -17,6 +17,7 @@ mod quiescence;
 mod recovery_cli;
 mod replacement;
 mod server;
+mod wake;
 
 // Compile the existing domain-free authority and supervision code in the PTY owner.
 // Both adapters use the same implementation during this migration slice.

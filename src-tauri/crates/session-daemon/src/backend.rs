@@ -127,13 +127,13 @@ impl Record {
             let cursor = lock(journal).cursor;
             let recovery = process.recover(cursor);
             if recovery.is_err() {
-                lock(journal).publish(Event::RecoveryRequired {
+                journal.publish(Event::RecoveryRequired {
                     pty: self.metadata.pty.clone(),
                 });
             }
             self.final_recovery = Some(recovery);
             self.process.take();
-            lock(journal).publish(Event::Exited {
+            journal.publish(Event::Exited {
                 pty: self.metadata.pty.clone(),
                 code,
             });
@@ -252,6 +252,14 @@ impl Backend {
             }
         });
         Ok(())
+    }
+    pub fn next_deadline(&self) -> Result<Option<std::time::Instant>, Error> {
+        Ok(self
+            .table()?
+            .records
+            .values()
+            .filter_map(|record| record.process.as_ref()?.drain_deadline())
+            .min())
     }
     pub fn session(&self, hosted: &HostedSession) -> Result<Session, HostError> {
         let table = self.table()?;

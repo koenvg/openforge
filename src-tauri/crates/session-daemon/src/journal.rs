@@ -1,6 +1,6 @@
 use openforge_session_protocol::*;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 const MAX_EVENT_BYTES: usize = 512 * 1024;
 const MAX_EVENTS: usize = 4096;
@@ -13,8 +13,29 @@ pub struct Journal {
     retained_bytes: usize,
 }
 
-pub type SharedJournal = Arc<Mutex<Journal>>;
+#[derive(Default)]
+pub struct JournalCell {
+    journal: Mutex<Journal>,
+    published: Condvar,
+}
+impl JournalCell {
+    pub fn new(journal: Journal) -> Self {
+        Self {
+            journal: Mutex::new(journal),
+            published: Condvar::new(),
+        }
+    }
+    pub fn publish(&self, event: Event) {
+        lock_journal(&self.journal).publish(event);
+        self.published.notify_all();
+    }
+}
+
+pub type SharedJournal = Arc<JournalCell>;
 pub fn lock(journal: &SharedJournal) -> MutexGuard<'_, Journal> {
+    lock_journal(&journal.journal)
+}
+fn lock_journal(journal: &Mutex<Journal>) -> MutexGuard<'_, Journal> {
     journal
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

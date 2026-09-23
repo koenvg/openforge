@@ -2,6 +2,7 @@ use crate::host::Host;
 use crate::replacement::{Manager, Resources};
 use openforge_session_client::runtime::{check_peer, io_error, RuntimeDirectory};
 use openforge_session_protocol::*;
+use std::os::fd::AsRawFd;
 use std::os::unix::{fs::PermissionsExt, net::UnixListener};
 use std::time::Duration;
 use subtle::ConstantTimeEq;
@@ -62,16 +63,30 @@ pub(crate) fn serve(
     mut manager: Manager,
 ) -> Result<(), Error> {
     let socket = runtime.socket_path();
+    crate::wake::watch_child_exits().map_err(io_error)?;
     eprintln!("session daemon ready");
     loop {
+        // Drain before polling so a wake that races this pass is not lost.
+        crate::wake::daemon().drain();
         host.poll()?;
         manager.poll();
+        let deadline = [host.next_deadline()?, manager.next_deadline()]
+            .into_iter()
+            .flatten()
+            .min();
+        let ready = crate::wake::wait(
+            resources.control.as_raw_fd(),
+            false,
+            crate::wake::daemon(),
+            deadline,
+        )
+        .map_err(io_error)?;
+        if !ready.readable {
+            continue;
+        }
         let mut stream = match resources.control.accept() {
             Ok((stream, _)) => stream,
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(5));
-                continue;
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(error) => return Err(io_error(error)),
         };
         if check_peer(&stream).is_err() {

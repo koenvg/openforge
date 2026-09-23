@@ -27,6 +27,12 @@ impl Gate {
         state.active = state.active.checked_add(1)?;
         Some(Permit(Arc::clone(self)))
     }
+    pub fn wait_until_open(&self) {
+        let Ok(state) = self.state.lock() else {
+            return;
+        };
+        drop(self.changed.wait_while(state, |state| state.paused));
+    }
     pub fn pause(self: &Arc<Self>, budget: Duration) -> Result<Paused, Error> {
         let deadline = Instant::now() + budget;
         let mut state = self.state.lock().map_err(|_| Error::OutcomeUnknown)?;
@@ -38,6 +44,7 @@ impl Gate {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 state.paused = false;
+                self.changed.notify_all();
                 return Err(Error::OutcomeUnknown);
             }
             state = self
@@ -61,6 +68,7 @@ impl Drop for Paused {
     fn drop(&mut self) {
         if let Ok(mut state) = self.0.state.lock() {
             state.paused = false;
+            self.0.changed.notify_all();
         }
     }
 }
@@ -105,6 +113,22 @@ mod tests {
         assert!(gate.enter().is_none());
         drop(paused);
         assert!(gate.enter().is_some());
+    }
+
+    #[test]
+    fn releasing_a_pause_wakes_a_waiting_worker() {
+        let gate = Arc::new(Gate::default());
+        let paused = gate.pause(Duration::ZERO).unwrap();
+        let waiting = Arc::clone(&gate);
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            waiting.wait_until_open();
+            done_tx.send(()).unwrap();
+        });
+        assert!(done_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(paused);
+        done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        thread.join().unwrap();
     }
 
     #[test]
