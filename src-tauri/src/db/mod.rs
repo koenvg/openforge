@@ -2,6 +2,7 @@ use log::warn;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 mod agent_completions;
 #[cfg(test)]
@@ -150,6 +151,8 @@ impl std::fmt::Display for ConnectionMutexPoisoned {
 
 impl std::error::Error for ConnectionMutexPoisoned {}
 
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -163,6 +166,13 @@ impl Database {
         }
 
         let mut conn = Connection::open(&db_path)?;
+        conn.busy_timeout(BUSY_TIMEOUT)?;
+        let journal_mode: String =
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+        if !journal_mode.eq_ignore_ascii_case("wal") {
+            warn!("[db] SQLite kept journal_mode={journal_mode} instead of WAL");
+        }
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
 
         migrations::bootstrap_existing_db(&conn)?;
 
@@ -275,6 +285,24 @@ mod tests {
             .create_task("Next task", "backlog", None, None, None)
             .expect("create next task");
         assert_eq!(next_task.id, "T-101");
+    }
+
+    #[test]
+    fn opened_database_uses_wal_normal_sync_busy_timeout_and_foreign_keys() {
+        let (db, _temp_dir) = make_test_db("connection_pragmas");
+        let conn = db.lock_conn().expect("lock connection");
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .expect("read journal_mode");
+        let pragma = |name: &str| -> i64 {
+            conn.query_row(&format!("PRAGMA {name}"), [], |row| row.get(0))
+                .unwrap_or_else(|error| panic!("read {name}: {error}"))
+        };
+
+        assert_eq!(journal_mode, "wal");
+        assert_eq!(pragma("synchronous"), 1, "synchronous should be NORMAL");
+        assert_eq!(pragma("busy_timeout"), 5000);
+        assert_eq!(pragma("foreign_keys"), 1);
     }
 
     #[test]

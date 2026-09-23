@@ -124,3 +124,17 @@ fn unsupported_or_failed_journal_migration_preserves_existing_records() {
         receipt
     );
 }
+
+#[test]
+fn journal_keeps_a_single_file_without_wal_companions() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("journal.sqlite");
+    let mut journal = NotificationJournal::open(&path).unwrap();
+    journal.accept(&agent(), envelope("first")).unwrap();
+
+    let entries = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(entries, ["journal.sqlite"]);
+}
