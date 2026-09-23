@@ -5,6 +5,8 @@ import { RUST_SIDECAR_SIGTERM_GRACE_MS } from './shutdownBudgetContract.js'
 import type { ElectronFailureReporter } from './failureReporting.js'
 import type { ChildProcessLike, SidecarHandle, StopSidecarOptions } from './sidecar.js'
 
+export const DEVELOPER_LOG_FLUSH_DEADLINE_MS = 1_000
+
 export type ShutdownStatus = 'ok' | 'timeout' | 'failed'
 
 export interface ShutdownAdapterResult {
@@ -219,6 +221,7 @@ export interface ElectronShutdownAdapterOptions {
   shutdown: ShutdownCoordinator
   exitCode?: number
   logger?: ShutdownLogSink | null
+  flushLogs?: () => Promise<void>
 }
 
 export interface EventForwarderShutdownAdapterOptions {
@@ -283,6 +286,7 @@ export class ElectronShutdownAdapter {
   private readonly shutdown: ShutdownCoordinator
   private readonly exitCode: number
   private readonly logger: ShutdownLogSink | null
+  private readonly flushLogs: (() => Promise<void>) | null
   private registered = false
   private exiting = false
   private exitPromise: Promise<void> | null = null
@@ -292,6 +296,7 @@ export class ElectronShutdownAdapter {
     this.shutdown = options.shutdown
     this.exitCode = options.exitCode ?? 0
     this.logger = options.logger === undefined ? console : options.logger
+    this.flushLogs = options.flushLogs ?? null
   }
 
   register(): void {
@@ -311,10 +316,21 @@ export class ElectronShutdownAdapter {
       .catch(error => {
         this.logger?.error?.(`[electron] Shutdown cleanup failed before exit: ${errorMessage(error)}`)
       })
+      .then(() => this.flushLogsWithinDeadline())
       .finally(() => {
         if (this.exiting) return
         this.exiting = true
         this.app.exit(this.exitCode)
       })
+  }
+
+  private async flushLogsWithinDeadline(): Promise<void> {
+    if (!this.flushLogs) return
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      this.flushLogs().catch(() => undefined),
+      new Promise<void>(resolve => { deadline = setTimeout(resolve, DEVELOPER_LOG_FLUSH_DEADLINE_MS) }),
+    ])
+    clearTimeout(deadline)
   }
 }

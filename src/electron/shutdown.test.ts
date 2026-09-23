@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
-import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown'
+import { DEVELOPER_LOG_FLUSH_DEADLINE_MS, ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown'
 import {
   RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
   RUST_SIDECAR_SIGTERM_GRACE_MS,
@@ -233,5 +233,51 @@ describe('Shutdown Cleanup Module', () => {
 
     expect(app.exit).toHaveBeenCalledTimes(1)
     expect(app.exit).toHaveBeenCalledWith(0)
+  })
+
+  it('flushes developer logs after the cleanup report and before exit', async () => {
+    const calls: string[] = []
+    const app = {
+      on: vi.fn(),
+      exit: vi.fn(() => { calls.push('exit') }),
+    }
+    const logger = { info: vi.fn((message: string) => { calls.push(message.split(':')[0]) }) }
+    const shutdown = new ShutdownCoordinator({ logger: null, adapters: [] })
+    const adapter = new ElectronShutdownAdapter({
+      app,
+      shutdown,
+      logger,
+      flushLogs: async () => { calls.push('flush') },
+    })
+
+    adapter.register()
+    app.on.mock.calls[0][1]({ preventDefault: vi.fn() })
+    await flushMicrotasks()
+
+    expect(calls).toEqual(['[electron] Shutdown cleanup report', 'flush', 'exit'])
+  })
+
+  it('exits when the developer log flush does not settle in time', async () => {
+    vi.useFakeTimers()
+    try {
+      const app = { on: vi.fn(), exit: vi.fn() }
+      const shutdown = new ShutdownCoordinator({ logger: null, adapters: [] })
+      const adapter = new ElectronShutdownAdapter({
+        app,
+        shutdown,
+        logger: null,
+        flushLogs: () => new Promise<void>(() => undefined),
+      })
+
+      adapter.register()
+      app.on.mock.calls[0][1]({ preventDefault: vi.fn() })
+      await vi.advanceTimersByTimeAsync(DEVELOPER_LOG_FLUSH_DEADLINE_MS - 1)
+      expect(app.exit).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(app.exit).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
