@@ -77,6 +77,24 @@ fn emit(value: &serde_json::Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+fn await_decision(
+    input: &mut std::io::BufReader<crate::handoff_input::HandoffInput>,
+    key: &hmac::Key,
+    challenge: &str,
+    operation: &str,
+) -> Result<String, String> {
+    emit(&json!({"status":"prepared","operation":operation}))?;
+    *input.get_mut() = crate::handoff_input::HandoffInput::new();
+    let envelope = frame(input)?;
+    verify(key, &envelope)?;
+    let decision: Decision =
+        serde_json::from_str(&envelope.payload).map_err(|_| "invalid handoff decision")?;
+    if decision.version != 1 || decision.challenge != challenge || decision.operation != operation {
+        return Err("stale handoff decision".into());
+    }
+    Ok(decision.action)
+}
+
 fn run() -> Result<(), String> {
     let host = crate::host_exit::HostExit::watch()?;
     let mut random = [0_u8; 32];
@@ -84,7 +102,10 @@ fn run() -> Result<(), String> {
         .fill(&mut random)
         .map_err(|_| "cannot generate handoff challenge")?;
     let challenge: String = random.iter().map(|b| format!("{b:02x}")).collect();
-    emit(&json!({"version":1,"challenge":challenge}))?;
+    // Handshake v2 requires process-bound readiness/commit. Signed record formats stay v1.
+    emit(
+        &json!({"version":2,"challenge":challenge,"capabilities":["relaunch","launch-gate","atomic-replace"]}),
+    )?;
     let mut input = std::io::BufReader::new(crate::handoff_input::HandoffInput::new());
     let envelope = frame(&mut input)?;
     let request: Prepare =
@@ -93,9 +114,15 @@ fn run() -> Result<(), String> {
         || request.challenge != challenge
         || !matches!(
             request.action.as_str(),
-            "prepare" | "commit" | "verify-launch" | "register-sidecar"
+            "prepare"
+                | "commit"
+                | "verify-launch"
+                | "verify-ready"
+                | "register-sidecar"
+                | "prepare-relaunch"
         )
         || (request.action == "register-sidecar") != request.sidecar_pid.is_some()
+        || (request.action == "prepare-relaunch" && request.controller.is_some())
     {
         return Err("stale or unsupported handoff request".into());
     }
@@ -163,10 +190,45 @@ fn run() -> Result<(), String> {
             &json!({"status":"sidecar-registered","operation":request.operation,"admission":admission}),
         );
     }
+    if request.action == "verify-ready" {
+        transaction.verify_readiness(&request.operation, host.parent_pid()?, request.controller)?;
+        return emit(&json!({"status":"target-ready","operation":request.operation}));
+    }
     if request.action == "commit" {
-        transaction.commit_with_controller(&request.operation, request.controller)?;
+        transaction.commit_from_process(
+            &request.operation,
+            host.parent_pid()?,
+            request.controller,
+        )?;
         return emit(&json!({"status":"committed","operation":request.operation}));
     }
+    if request.action == "prepare-relaunch" {
+        transaction.prepare_relaunch(&request.operation, host.parent_pid()?)?;
+        let record = transaction.require(&request.operation)?;
+        if record.runtime.is_none() {
+            return Err("cold update relaunch requires separate recovery".into());
+        }
+        let action = await_decision(&mut input, &key, &challenge, &request.operation)?;
+        if action == "cancel" {
+            // Recovery cancellation releases ownership; it must never roll back installed data.
+            return emit(&json!({"status":"cancelled","operation":request.operation}));
+        }
+        if action != "relaunch" {
+            return Err("unsupported relaunch decision".into());
+        }
+        transaction.prepare_relaunch(&request.operation, host.parent_pid()?)?;
+        if let Some(sidecar) = record.sidecar {
+            if sidecar.running()? {
+                return Err("admitted Sidecar is still running".into());
+            }
+        }
+        emit(&json!({"status":"armed","operation":request.operation}))?;
+        host.wait()?;
+        transaction.relaunch(&request.operation)?;
+        return Ok(());
+    }
+    // Refuse an unsealed target while the source app and Sidecar are still running.
+    crate::native_image::verify_integrity(&authority.bundle_path)?;
     let cold_runtime = if request.controller.is_none() {
         Some(crate::runtime_update::ColdRuntime::reserve(
             &launch.daemon_root,
@@ -175,6 +237,11 @@ fn run() -> Result<(), String> {
         None
     };
     transaction.prepare(&request.authorization, &request.staging, &request.operation)?;
+    if let Some(cold) = &cold_runtime {
+        let mut record = transaction.require(&request.operation)?;
+        record.cold_installation = Some(cold.installation.clone());
+        crate::journal::write(&transaction.root, &record)?;
+    }
     let mut runtime = if let Some(controller) = request.controller {
         match crate::runtime_update::RuntimeUpdate::stage(&authority, controller) {
             Ok(runtime) => Some(runtime),
@@ -199,24 +266,13 @@ fn run() -> Result<(), String> {
         }
     }
     let decision: Result<String, String> = (|| {
-        emit(&json!({"status":"prepared","operation":request.operation}))?;
-        *input.get_mut() = crate::handoff_input::HandoffInput::new();
-        let envelope = frame(&mut input)?;
-        verify(&key, &envelope)?;
-        let decision: Decision =
-            serde_json::from_str(&envelope.payload).map_err(|_| "invalid handoff decision")?;
-        if decision.version != 1
-            || decision.challenge != challenge
-            || decision.operation != request.operation
-        {
-            return Err("stale handoff decision".into());
-        }
-        match decision.action.as_str() {
-            "cancel" => Ok(decision.action),
+        let action = await_decision(&mut input, &key, &challenge, &request.operation)?;
+        match action.as_str() {
+            "cancel" => Ok(action),
             "install" => {
                 emit(&json!({"status":"armed","operation":request.operation}))?;
                 host.wait()?;
-                Ok(decision.action)
+                Ok(action)
             }
             _ => Err("unsupported handoff decision".into()),
         }
@@ -241,7 +297,19 @@ fn run() -> Result<(), String> {
         return Err(error);
     }
     if let Some(runtime) = &runtime {
-        if let Err(error) = runtime.activate(&request.operation) {
+        let activation = runtime.activate(&request.operation);
+        #[cfg(feature = "test-fixtures")]
+        let activation = activation.and_then(|()| {
+            if transaction
+                .root
+                .join("lose-runtime-activation-ack")
+                .exists()
+            {
+                return Err("fixture lost runtime activation acknowledgement".into());
+            }
+            Ok(())
+        });
+        if let Err(error) = activation {
             transaction.recover(&request.operation)?;
             return Err(error);
         }

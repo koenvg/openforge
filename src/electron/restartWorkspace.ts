@@ -29,7 +29,10 @@ export interface RestartTerminalInventory {
   controller: RestartTerminalController
   sessions: Array<{ key: string; instanceId: number; isLive: boolean }>
   hasLegacySessions?: boolean
+  /** Armed in this Sidecar process. This is not process-exit proof. */
+  parentExitGuardArmed?: boolean
   daemonRoot?: string
+  appDataRoot?: string
 }
 
 export interface RestartTerminalFence {

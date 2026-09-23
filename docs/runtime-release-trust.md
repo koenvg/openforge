@@ -1,6 +1,6 @@
 # Runtime release signatures
 
-Runtime publisher verification is a prerequisite for session-preserving updates, not an enabled updater. Source installation, production daemon replacement, and pending-update Sidecar launch remain blocked.
+Publisher verification is mandatory for published session-preserving updates. Explicit local approval is a separate trust path. Update entry points and source installation remain disabled; pending-update Sidecar startup requires native process-bound authorization, not an ordinary launch fallback.
 
 ## Approved trust policy
 
@@ -37,9 +37,9 @@ Complete-app publisher signatures use `openforge-app-update-v1\0` followed by th
 
 Local authorization uses a native confirmation dialog with Cancel as the default. It shows the destination and exact build identity and does not grant first-adoption interruption approval. After confirmation, the store verifies the bytes again and writes an authenticated record bound to the installation, operation, destination, staged path, and manifest identity. The installation-private HMAC key is separate from the release signing key. Altered records and cross-operation or cross-installation replay are rejected.
 
-These modules are not yet connected to a production installer or helper. Reading an authorization authenticates the record only; the consumer must reverify artifact bytes, enforce current-operation ownership, and serialize replacement. Partial or corrupt authorization files fail closed rather than granting authority.
+The packaged native helper consumes these authenticated records, remeasures complete bundle bytes, enforces operation ownership and serializes replacement. A stored authorization alone does not grant startup or recovery authority. Partial or corrupt records fail closed.
 
-The KVG-5206 internal native transaction library now consumes these authenticated records and rechecks complete bundle bytes. It is not packaged or connected to the coordinator/source installer. See [the implementation checkpoint and activation gates](update-helper-transaction.md).
+The local driver, coordinator and native startup/admission/readiness checks are wired, but the menu and source installer remain disabled. Original source identity and preparation/Installed recovery, additional fault coverage and packaged continuity acceptance remain unfinished. See [the disabled checkpoint and activation gates](update-helper-transaction.md).
 
 ## Runtime probe deadlines
 
@@ -49,9 +49,9 @@ The client's five-second initial readiness wait is unchanged. If a cold daemon i
 
 ## Remaining prerequisites
 
-- Back up the private signing key securely and configure protected release signing infrastructure.
-- Connect complete-target authorization to the authenticated helper and the install/update coordinator.
-- Authenticate helper handoff and crash recovery, delegate source installs, and verify compatible daemon activation.
-- Demonstrate install-to-relaunch continuity and failure recovery in isolated packaged builds before enabling updates.
+- Complete source-process attestation, preparation-loss and Installed/no-launch recovery, and required lost-acknowledgement/crash coverage before local activation.
+- Demonstrate install-to-relaunch continuity and failure recovery in isolated packaged macOS arm64 builds, including restoration before commit.
+- Keep legacy first adoption and source installation disabled until their separate integration and acceptance are complete.
+- Before publication, provision protected release signing and back up the private signing key securely. These deferred publication requirements do not block an integrity-sealed, explicitly approved local checkpoint.
 
 Test keys in `session-client/tests/releases.rs` are public fixtures, never production trust anchors. The fixed signature vectors were generated independently with Node crypto and are checked by Rust's verifier.

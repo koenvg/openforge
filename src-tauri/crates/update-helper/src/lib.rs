@@ -1,18 +1,25 @@
 //! Authenticated app replacement. This crate does not own sessions or authorize interruption.
 mod authorization;
 mod bundle;
+mod exchange;
 mod files;
 mod handoff;
 mod handoff_input;
 mod host_exit;
 mod journal;
 mod launch;
+mod launch_gate;
 mod native_image;
 mod process_identity;
+mod readiness;
+mod replacement;
 mod runtime_update;
 mod sidecar_startup;
+mod startup;
 pub use handoff::run_helper;
+pub use host_exit::{exit_with_host, parent_exit_guard_armed};
 pub use journal::Phase;
+pub use launch_gate::{run_app_bootstrap, APP_BOOTSTRAP_ARGUMENT};
 pub use sidecar_startup::{authorize_sidecar_startup, SidecarAdmission, SIDECAR_STARTUP_ARGUMENT};
 
 use std::{
@@ -131,6 +138,7 @@ impl InstallTransaction {
                 );
             }
         }
+        exchange::probe(&self.root)?;
         // Durable tombstones prevent reusing an old authorization after rollback.
         files::write_new(&self.root.join(format!("used-{operation}")), b"used")?;
         journal::write(
@@ -146,6 +154,10 @@ impl InstallTransaction {
                 previous_hash,
                 phase: Phase::Prepared,
                 runtime: None,
+                cold_installation: None,
+                launch_attempt: 0,
+                launch_gate: None,
+                exchange_path: None,
                 launched: None,
                 sidecar: None,
             },
@@ -162,68 +174,6 @@ impl InstallTransaction {
             return Err("runtime preflight requires a prepared app transaction".into());
         }
         record.runtime = Some(runtime);
-        journal::write(&self.root, &record)
-    }
-
-    /// # Errors
-    /// Requires the current operation and reauthenticates bytes immediately before replacement.
-    /// On interruption, the durable record remains available for recovery.
-    pub fn replace(&mut self, operation: &str) -> Result<(), String> {
-        let mut record = self.require(operation)?;
-        if record.phase != Phase::Prepared {
-            return Err("stale update replacement".into());
-        }
-        let authority = authorization::read(
-            &record.authorization,
-            operation,
-            &self.installation,
-            &self.destination,
-            &record.staging,
-        )?;
-        if authority.manifest_sha256 != record.target_hash
-            || bundle::measure(&authority.bundle_path)? != record.target_hash
-        {
-            return Err("authorized bundle changed".into());
-        }
-        if authority.installed_digest(&self.destination)? != record.previous_hash {
-            return Err("installed bundle changed".into());
-        }
-        let backup = self.root.join(format!("previous-{operation}.app"));
-        if backup.try_exists().map_err(|e| e.to_string())? {
-            return Err("recovery destination already exists".into());
-        }
-        record.phase = Phase::Replacing;
-        journal::write(&self.root, &record)?;
-        // Hashing may take time. Reauthenticate the exact grant after those reads
-        // and the durable intent write, immediately before touching the installation.
-        let current_authority = authorization::read(
-            &record.authorization,
-            operation,
-            &self.installation,
-            &self.destination,
-            &record.staging,
-        )?;
-        if current_authority != authority {
-            return Err("update authorization changed before replacement".into());
-        }
-        std::fs::rename(&self.destination, &backup).map_err(|e| e.to_string())?;
-        files::sync_directory(&self.root)?;
-        files::sync_directory(
-            self.destination
-                .parent()
-                .ok_or("missing installation parent")?,
-        )?;
-        std::fs::rename(&authority.bundle_path, &self.destination).map_err(|e| e.to_string())?;
-        files::sync_directory(&record.staging)?;
-        files::sync_directory(
-            self.destination
-                .parent()
-                .ok_or("missing installation parent")?,
-        )?;
-        if bundle::measure(&self.destination)? != record.target_hash {
-            return Err("replaced bundle changed".into());
-        }
-        record.phase = Phase::Installed;
         journal::write(&self.root, &record)
     }
 
@@ -269,7 +219,7 @@ impl InstallTransaction {
         controller: Option<openforge_session_protocol::Controller>,
     ) -> Result<(), String> {
         let mut record = self.require(operation)?;
-        if !matches!(record.phase, Phase::LaunchStarted | Phase::Committed) {
+        if !record.phase.may_own_domain() {
             return Err("update has not launched".into());
         }
         let authority = authorization::read(
@@ -284,7 +234,7 @@ impl InstallTransaction {
         {
             return Err("authorized installed bundle changed".into());
         }
-        if record.phase == Phase::LaunchStarted {
+        if record.phase.awaiting_commit() {
             if let Some(runtime) = &record.runtime {
                 let root = &authority
                     .launch
@@ -296,56 +246,6 @@ impl InstallTransaction {
         }
         record.phase = Phase::Committed;
         journal::write(&self.root, &record)
-    }
-
-    /// Restore only before any target domain process could have migrated the database.
-    /// # Errors
-    /// Refuses stale operations, corrupt recovery artifacts and post-launch rollback.
-    pub fn recover(&mut self, operation: &str) -> Result<Phase, String> {
-        let mut record = self.require(operation)?;
-        if matches!(record.phase, Phase::LaunchStarted | Phase::Committed) {
-            return Err(
-                "target launch may have migrated data; retain the new app for recovery".into(),
-            );
-        }
-        if record.phase == Phase::RolledBack {
-            return Ok(record.phase);
-        }
-        let backup = self.root.join(format!("previous-{operation}.app"));
-        if backup.try_exists().map_err(|e| e.to_string())? {
-            if bundle::measure_previous(&backup)? != record.previous_hash {
-                return Err("recovery bundle changed".into());
-            }
-            if self.destination.try_exists().map_err(|e| e.to_string())? {
-                if bundle::measure(&self.destination)? != record.target_hash {
-                    return Err("replacement destination changed".into());
-                }
-                let failed = self.root.join(format!("failed-{operation}.app"));
-                if failed.try_exists().map_err(|e| e.to_string())? {
-                    return Err("failed target destination already exists".into());
-                }
-                std::fs::rename(&self.destination, failed).map_err(|e| e.to_string())?;
-                files::sync_directory(&self.root)?;
-                files::sync_directory(
-                    self.destination
-                        .parent()
-                        .ok_or("missing installation parent")?,
-                )?;
-            }
-            std::fs::rename(&backup, &self.destination).map_err(|e| e.to_string())?;
-            files::sync_directory(&self.root)?;
-            files::sync_directory(
-                self.destination
-                    .parent()
-                    .ok_or("missing installation parent")?,
-            )?;
-        }
-        if bundle::measure_previous(&self.destination)? != record.previous_hash {
-            return Err("original installation cannot be recovered".into());
-        }
-        record.phase = Phase::RolledBack;
-        journal::write(&self.root, &record)?;
-        Ok(record.phase)
     }
 
     fn record(&self) -> Result<Option<journal::Record>, String> {

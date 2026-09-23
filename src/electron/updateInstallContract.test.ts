@@ -5,7 +5,6 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { build } from 'vite'
 import { UpdateAuthorizationStore } from './updateAuthorization.js'
-import { measureUpdateBundle } from './updateBundleManifest.js'
 import { cleanupUpdateBundles, updateBundleFixture } from './updateBundle.testUtils.js'
 import { addElectronRuntime } from './fixtures/updateElectronBundle.js'
 
@@ -106,11 +105,15 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     expect(invoke('replace').status).not.toBe(0)
   }, 30_000)
 
-  it('prepares and cancels through the real authenticated helper without replacing the app', async () => {
+  it.each([true, false])('checks local code integrity before preparing a cancellable handoff: signed=%s', async signed => {
     const { root, source, store } = await updateBundleFixture()
     const destination = join(root, 'Installed.app')
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    for (const name of ['Open Forge', 'openforge-sidecar', 'openforge-session-daemon']) {
+      await cp(executable, join(source, 'Contents/MacOS', name))
+    }
+    if (!signed) await writeFile(join(source, 'Contents/MacOS/Open Forge'), 'unsigned local executable')
     const staged = await store.stage(source)
     const authorization = new UpdateAuthorizationStore({
       root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
@@ -118,29 +121,35 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       bundles: store, confirmLocalBuild: async () => 'approve',
     })
     await authorization.authorizeLocal(staged, 'contract-operation')
-    const handoff = await prepareNativeUpdateHandoff({
+    const preparing = prepareNativeUpdateHandoff({
       authorization, bundles: store, recoveryRoot: join(root, 'transaction'),
       target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images },
     })
+    if (!signed) {
+      await expect(preparing.then(async handoff => {
+        await handoff.cancel()
+        throw new Error('An unsigned local executable was accepted')
+      })).rejects.toThrow('did not acknowledge prepared')
+      expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
+      return
+    }
+    const handoff = await preparing
     await handoff.cancel()
     expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'), 'utf8')).toBe('sidecar')
     await expect(handoff.arm()).rejects.toThrow('already decided')
   }, 20_000)
 
-  it('replaces and launches the authorized target only after the real owning host exits', async () => {
+  it.each(['admission', 'cold-image', 'cold-ready'])('replaces and launches after the real owning host exits: %s', async scenario => {
     const { root, source, store } = await updateBundleFixture()
     const destination = join(root, 'Installed.app')
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
     await cp(executable, join(source, 'Contents/MacOS/openforge-sidecar'))
     await cp(daemonExecutable, join(source, 'Contents/MacOS/openforge-session-daemon'))
+    await cp(targetDaemonExecutable, join(root, 'unapproved-daemon'))
     const sidecarSubstitute = join(root, 'distinct-sidecar')
     await cp(alternateExecutable, sidecarSubstitute)
     const marker = join(root, 'launched')
-    await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
-      ssr: 'src/electron/fixtures/updateTargetHost.ts', outDir: join(source, 'Contents/Resources/app/dist-electron'), emptyOutDir: false,
-      rollupOptions: { external: ['electron'], output: { entryFileNames: 'target.mjs' } },
-    } })
     await addElectronRuntime(source, root)
     const staged = await store.stage(source)
     const authorizationRoot = join(root, 'authorization')
@@ -158,16 +167,18 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     const config = join(root, 'host.json')
     const target = { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }
     await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: authorizationRoot,
-      destination, recovery: join(root, 'transaction'), target, marker, sidecarSubstitute, manifest: await measureUpdateBundle(staged.bundlePath) }), { mode: 0o600 })
-    const settleTarget = async () => {
+      destination, recovery: join(root, 'transaction'), target, marker, scenario, sidecarSubstitute, manifest: staged.manifest,
+      ...(scenario === 'cold-ready' ? { ready: join(root, 'ready-to-commit'), resume: join(root, 'allow-commit') } : {}),
+    }), { mode: 0o600 })
+    const settleTarget = async (action: 'idle' | 'target-exited' = 'target-exited') => {
       await vi.waitFor(() => {
         const exited = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
           root: join(root, 'transaction'), destination, authorization: authorizationRoot, staging: resolve(staged.bundlePath, '..'),
-          installation: target.installationId, operation: target.operationId, action: 'target-exited',
+          installation: target.installationId, operation: target.operationId, action,
         }) })
         expect(exited.status, exited.stderr).toBe(0)
       }, { timeout: 60_000, interval: 50 })
-      pendingHelpers.delete(settleTarget)
+      if (action === 'target-exited') pendingHelpers.delete(settleTarget)
     }
     const host = spawn(process.execPath, [hostScript, config], { env: { ...cleanEnvironment, HOME: root, TMPDIR: root }, stdio: ['pipe', 'pipe', 'pipe'] })
     let output = ''
@@ -184,6 +195,13 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       pendingHelpers.add(settleTarget)
       host.stdin.end('exit\n')
       await exited
+      await settleTarget('idle') // Replacement has its own transaction budget; startup begins now.
+      if (scenario === 'cold-ready') {
+        await vi.waitFor(async () => { expect(await readFile(join(root, 'ready-to-commit'), 'utf8')).not.toBe('') }, { timeout: 60_000, interval: 20 })
+        const controller = JSON.parse(await readFile(join(root, 'ready-to-commit'), 'utf8'))
+        await expect(commitNativeUpdate({ authorization, target, recoveryRoot: join(root, 'transaction'), controller })).rejects.toThrow('did not acknowledge committed')
+        await writeFile(join(root, 'allow-commit'), '')
+      }
       await vi.waitFor(async () => {
         expect(await readFile(marker, 'utf8')).not.toBe('')
       }, { timeout: 60_000, interval: 20 }) // Replacement and admission transaction.
@@ -191,18 +209,29 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
       await settleTarget()
       await expect(verifyNativeUpdateLaunch({ authorization, target, recoveryRoot: join(root, 'transaction') })).rejects.toThrow('did not acknowledge launch-verified')
       expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'))).toEqual(await readFile(executable))
-      await commitNativeUpdate({ authorization, target: { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }, recoveryRoot: join(root, 'transaction') })
+      const commit = commitNativeUpdate({ authorization, target, recoveryRoot: join(root, 'transaction') })
+      if (scenario === 'cold-ready') await commit
+      else await expect(commit).rejects.toThrow('did not acknowledge committed')
+    } catch (error) {
+      const progress = await readFile(join(root, 'target-entered'), 'utf8').catch(() => 'no JS entry')
+      const record = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+      const launchLog = await readFile(join(root, 'transaction/target-launch.log'), 'utf8').catch(() => '')
+      console.error(JSON.stringify({ progress, phase: record.phase, launched: record.launched, sidecar: record.sidecar }), launchLog.slice(-8000))
+      throw error
     } finally {
       host.kill('SIGKILL')
       await exited
     }
-  }, 130_000)
+  }, 210_000)
 
   it('refuses a cold-install handoff when the authorized runtime root has a live owner', async () => {
     const { root, source, store } = await updateBundleFixture()
     const destination = join(root, 'Installed.app')
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
+    for (const name of ['Open Forge', 'openforge-sidecar', 'openforge-session-daemon']) {
+      await cp(executable, join(source, 'Contents/MacOS', name))
+    }
     const staged = await store.stage(source)
     const authorization = new UpdateAuthorizationStore({
       root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
@@ -239,19 +268,25 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     }
   }, 30_000)
 
-  it.each(['cancel', 'install', 'wrong-daemon', 'missing-cli'])('preflights a live daemon without fencing Sidecar: %s', async mode => {
+  it.each(['cancel', 'install', 'lost-activation-ack', 'relaunch-pending', 'relaunch-committed', 'relaunch-cancel', 'relaunch-live-sidecar', 'relaunch-eof', 'wrong-daemon', 'missing-cli'])('preflights a live daemon without fencing Sidecar: %s', async mode => {
     const { root, source, store } = await updateBundleFixture()
     const destination = join(root, 'Installed.app')
+    await cp(daemonExecutable, join(source, 'Contents/MacOS/openforge-session-daemon'))
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
     await cp(targetDaemonExecutable, join(source, 'Contents/MacOS/openforge-session-daemon'))
     const marker = join(root, 'target-started')
-    await writeFile(join(source, 'Contents/MacOS/Open Forge'), `#!/bin/sh\nprintf updated > ${JSON.stringify(marker)}\n`, { mode: 0o755 })
+    await cp(executable, join(source, 'Contents/MacOS/Open Forge'))
+    await cp(executable, join(source, 'Contents/MacOS/openforge-sidecar'))
     execFileSync(process.execPath, ['--input-type=module', '-e', `
       import { packageRuntimeRelease } from './scripts/electron-package/runtime-release.mjs';
       const [daemonPath, cliAssetsPath, outputPath] = process.argv.slice(1);
       await packageRuntimeRelease({ daemonPath, cliAssetsPath, outputPath, architecture: process.arch === 'arm64' ? 'arm64' : 'x86_64' });
-    `, mode === 'wrong-daemon' ? daemonExecutable : targetDaemonExecutable, mode === 'missing-cli' ? '' : join(source, 'Contents/Resources/openforge-cli'), join(source, 'Contents/MacOS/session-runtime')], { env: cleanEnvironment })
+    `, mode === 'wrong-daemon' ? daemonExecutable : targetDaemonExecutable, mode === 'missing-cli' ? '' : join(source, 'Contents/Resources/openforge-cli'), join(source, 'Contents/Resources/session-runtime')], { env: cleanEnvironment })
+    if (mode === 'install' || mode.startsWith('relaunch-')) {
+      await cp(alternateExecutable, join(root, 'distinct-sidecar'))
+      await addElectronRuntime(source, root)
+    }
     const staged = await store.stage(source)
     const authorization = new UpdateAuthorizationStore({
       root: join(root, 'authorization'), installationId: 'contract-installation', installedBundlePath: destination,
@@ -260,9 +295,9 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     await authorization.authorizeLocal(staged, 'contract-operation')
     const daemon = spawn(daemonExecutable, [root], { env: {}, stdio: 'ignore' })
     const exited = new Promise<void>(resolve => daemon.once('exit', () => resolve()))
-    const observe = (controller?: unknown) => spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
+    const observe = (controller?: unknown, action: 'runtime-inventory' | 'runtime-observe' = 'runtime-inventory') => spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
       root, destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
-      installation: 'contract-installation', operation: 'contract-operation', action: 'runtime-inventory', controller,
+      installation: 'contract-installation', operation: 'contract-operation', action, controller,
     }) })
     try {
       let controller: { installation: string; lifetime: string; generation: number } | undefined
@@ -291,18 +326,23 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
           rollupOptions: { external: ['electron'], output: { entryFileNames: 'host.mjs' } },
         } })
         const config = join(root, 'host.json')
-        await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: join(root, 'authorization'), destination, recovery: join(root, 'transaction'), target, controller }), { mode: 0o600 })
-        const settleHelper = async () => {
+        await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: join(root, 'authorization'), destination, recovery: join(root, 'transaction'), target, controller, marker, scenario: mode, sidecarSubstitute: join(root, 'distinct-sidecar'), manifest: staged.manifest }), { mode: 0o600 })
+        const settleHelper = async (action: 'idle' | 'target-exited' = 'target-exited') => {
           // Bundle remeasurement is an install transaction, not a daemon probe.
           // Observe released kernel ownership before deleting this fixture root.
           await vi.waitFor(() => {
             const idle = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
               root: join(root, 'transaction'), destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
-              installation: target.installationId, operation: target.operationId, action: 'idle',
+              installation: target.installationId, operation: target.operationId, action: mode === 'lost-activation-ack' ? 'idle' : action,
             }) })
             expect(idle.status).toBe(0)
           }, { timeout: 60_000, interval: 50 })
-          pendingHelpers.delete(settleHelper)
+          if (mode === 'lost-activation-ack') {
+            const record = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+            expect(['installed', 'rolled-back']).toContain(record.phase)
+            expect(record.launched).toBeNull()
+          }
+          if (action === 'target-exited') pendingHelpers.delete(settleHelper)
         }
         pendingHelpers.add(settleHelper)
         const host = spawn(process.execPath, [hostScript, config], { env: { ...cleanEnvironment, HOME: root, TMPDIR: root }, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -311,36 +351,79 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
         host.stdout.on('data', chunk => { output += String(chunk) })
         host.stderr.resume()
         try {
-          await vi.waitFor(() => expect(output).toContain('armed'), { timeout: 15_000, interval: 20 })
+          await vi.waitFor(() => expect(output).toContain('armed'), { timeout: 60_000, interval: 20 })
           expect(observe(controller).status).toBe(0)
+          if (mode === 'lost-activation-ack') await writeFile(join(root, 'transaction/lose-runtime-activation-ack'), 'lose acknowledgement', { mode: 0o600 })
           await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
           host.stdin.end('exit\n')
           await hostExit
           try {
-            await settleHelper()
-            await vi.waitFor(async () => expect(await readFile(marker, 'utf8')).toBe('updated'), { timeout: 10_000, interval: 20 })
+            await settleHelper('idle')
+            if (mode === 'lost-activation-ack') {
+              const pending = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+              expect(pending.phase).toBe('installed')
+              expect(await readFile(join(destination, 'Contents/MacOS/openforge-sidecar'))).toEqual(await readFile(executable))
+              const observation = observe(controller, 'runtime-observe')
+              expect(observation.status, observation.stderr).toBe(0)
+              const after = JSON.parse(observation.stdout)
+              expect(after.status.state).toEqual({ kind: 'activated' })
+              expect(after.status.fromVersion).toBe(before.capabilities.imageVersion)
+              expect(after.status.actualVersion).toBe(after.capabilities.imageVersion)
+              expect(after.capabilities.pid).toBe(before.capabilities.pid)
+              expect(after.capabilities.imageVersion).not.toBe(before.capabilities.imageVersion)
+              await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+              pendingHelpers.delete(settleHelper) // No target was launched; ownership was released above.
+              return
+            }
+            if (mode === 'relaunch-committed' || mode === 'relaunch-pending') {
+              await vi.waitFor(async () => {
+                const progress = await Promise.allSettled([readFile(join(root, 'relaunch-armed')), readFile(marker)])
+                expect(progress.some(result => result.status === 'fulfilled')).toBe(true)
+              }, { timeout: 60_000, interval: 20 })
+              await readFile(join(root, 'relaunch-armed'))
+              const waiting = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+              expect(waiting.launchAttempt).toBe(1)
+              expect(waiting.launched.pid).toBe(Number(await readFile(join(root, 'previous-target-pid'), 'utf8')))
+              const held = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
+                root: join(root, 'transaction'), destination, authorization: join(root, 'authorization'), staging: resolve(staged.bundlePath, '..'),
+                installation: target.installationId, operation: target.operationId, action: 'idle',
+              }) })
+              expect(held.status).toBe(1)
+              await writeFile(join(root, 'allow-relaunch-exit'), 'exit', { mode: 0o600 })
+              await settleHelper('idle')
+            }
+            await vi.waitFor(async () => expect(await readFile(marker, 'utf8')).not.toBe(''), { timeout: 60_000, interval: 20 })
+            expect(await readFile(marker, 'utf8')).toContain('\nauthenticated\n')
           } catch (error) {
             const record = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
-            throw new Error(`Target launch failed; native phase=${record.phase}`, { cause: error })
+            const progress = await readFile(join(root, 'target-entered'), 'utf8').catch(() => 'no JS entry')
+            const launchLog = await readFile(join(root, 'transaction/target-launch.log'), 'utf8').catch(() => '')
+            console.error(launchLog.slice(-8000))
+            throw new Error(`Target launch failed; native phase=${record.phase}; app=${JSON.stringify(record.launched)}; sidecar=${JSON.stringify(record.sidecar)}; progress=${progress}`, { cause: error })
           }
+          await settleHelper()
+          const completed = JSON.parse(JSON.parse(await readFile(join(root, 'transaction/current.json'), 'utf8')).payload)
+          expect(completed.phase).toBe('committed')
+          expect(completed.launchAttempt).toBe(mode === 'relaunch-committed' || mode === 'relaunch-pending' ? 2 : 1)
           const after = JSON.parse(observe().stdout)
           expect(after.controller.lifetime).toBe(before.controller.lifetime)
           expect(after.capabilities.pid).toBe(before.capabilities.pid)
           expect(after.capabilities.imageVersion).not.toBe(before.capabilities.imageVersion)
           const commit = { authorization, target, recoveryRoot: join(root, 'transaction') }
-          await expect(commitNativeUpdate(commit)).rejects.toThrow('did not acknowledge committed')
-          const borrowedController = { ...before.controller }
-          const staleCommit = commitNativeUpdate({ ...commit, controller: borrowedController })
-          Object.assign(borrowedController, after.controller)
-          await expect(staleCommit).rejects.toThrow('did not acknowledge committed')
-          await expect(commitNativeUpdate({ ...commit, controller: before.controller })).rejects.toThrow('did not acknowledge committed')
+          // The target already tested missing/stale/mutated controllers before committing.
+          // Lost-acknowledgement retries recheck authority/bytes without reacquiring it.
           await commitNativeUpdate({ ...commit, controller: after.controller })
           await commitNativeUpdate({ ...commit, controller: after.controller })
-        } finally { host.kill('SIGKILL'); await hostExit; await settleHelper() }
+        } finally {
+          host.kill('SIGKILL')
+          await hostExit
+          if (mode === 'relaunch-committed' || mode === 'relaunch-pending') await writeFile(join(root, 'allow-relaunch-exit'), 'exit', { mode: 0o600 })
+          await settleHelper()
+        }
       }
     } finally {
       daemon.kill('SIGTERM')
       await exited
     }
-  }, 150_000)
+  }, 210_000)
 })

@@ -46,7 +46,12 @@ fn bundle(root: &Path, version: &[u8]) -> String {
         "Contents/Resources/app/dist-electron/main.js",
         "Contents/Resources/openforge-cli/cli.js",
     ] {
-        fs::write(root.join(name), version).unwrap();
+        let bytes = if name == "Contents/MacOS/openforge-update-helper" {
+            fs::read(env!("CARGO_BIN_EXE_openforge-update-helper")).unwrap()
+        } else {
+            version.to_vec()
+        };
+        fs::write(root.join(name), &bytes).unwrap();
         let mode = if name.contains("/MacOS/") {
             0o755
         } else {
@@ -57,7 +62,7 @@ fn bundle(root: &Path, version: &[u8]) -> String {
             "{{\"path\":{},\"kind\":\"file\",\"mode\":{},\"sha256\":\"{}\"}}",
             serde_json::to_string(name).unwrap(),
             mode,
-            digest(version)
+            digest(&bytes)
         ));
     }
     entries.sort_by_key(|s| {

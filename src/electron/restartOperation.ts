@@ -21,6 +21,10 @@ export interface RestartOperationRecord {
 const terminal = (phase: Phase) => ['committed', 'cancelled', 'terminated'].includes(phase)
 const operationFiles = new Map<string, CrashSafeFilePersistence>()
 
+export function restartInstallationId(root: string, daemonInstallation: string): string {
+  return createHash('sha256').update(JSON.stringify([root, daemonInstallation])).digest('hex')
+}
+
 /** Durable authorization. Recovery reads this before the Sidecar is available. */
 export class RestartOperation {
   private readonly persistence: CrashSafeFilePersistence
@@ -34,7 +38,7 @@ export class RestartOperation {
     const path = join(root, 'restart-operation.json')
     const record = await readRecord(path)
     if (!record) return null
-    const identity = createHash('sha256').update(JSON.stringify([root, record.controller.installation])).digest('hex')
+    const identity = restartInstallationId(root, record.controller.installation)
     if (identity !== record.installationId) throw new Error('Restart belongs to a different installation')
     return new RestartOperation(path, identity)
   }

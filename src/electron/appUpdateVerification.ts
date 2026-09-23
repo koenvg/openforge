@@ -13,12 +13,14 @@ export interface UpdateTarget {
 
 /**
  * Trusted host boundary, never supplied by IPC payloads or environment variables.
- * No production implementation is available until release trust verification exists.
- * Preflight must verify publisher trust, stage/pin target and fallback assets, check
- * compatibility, and verify the helper before returning. A checksum alone is not trust.
+ * Preflight stages and authorizes the complete target, using verified publisher
+ * policy or explicit local approval. Native preparation follows durable recovery
+ * recording; a checksum alone is not trust.
  */
 export interface AppUpdateDriver {
   preflight(identity: { installationId: string; operationId: string }): Promise<UpdateTarget>
+  /** May prepare the runtime only after the host durably records this update. */
+  prepare(target: UpdateTarget): Promise<void>
   /** Release prepared helper/runtime ownership before detach. */
   cancel(target: UpdateTarget): Promise<void>
   /** Authorize the verified helper, not app.relaunch or a direct bundle copy. */

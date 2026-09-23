@@ -10,8 +10,18 @@ pub(crate) struct ProcessIdentity {
 }
 
 impl ProcessIdentity {
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
     pub fn running(&self) -> Result<bool, String> {
         Ok(snapshot(self.pid)?.map(|(identity, _)| identity) == Some(*self))
+    }
+
+    pub fn observe(pid: u32) -> Result<Self, String> {
+        snapshot(pid)?
+            .map(|(identity, _)| identity)
+            .ok_or_else(|| "update process is not running".into())
     }
 
     pub fn child(child: &std::process::Child) -> Result<Self, String> {

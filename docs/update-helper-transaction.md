@@ -1,118 +1,115 @@
-# Updater transaction implementation checkpoint
+# Disabled updater checkpoint
 
-KVG-5206 is unfinished. Production updates and source installation remain disabled. The native helper and Electron handoff now execute against isolated installations, but the production updater is not wired end to end.
+KVG-5206 is an implementation checkpoint, not an enabled session-preserving updater. The owner approved landing the groundwork with update entry points disabled. The local update menu, published updates, legacy first adoption and source installation remain disabled. Ordinary Restart and Quit retain their separate policies.
+
+The intended first update path is explicit local approval between compatible, daemon-aware macOS arm64 installations. A source must report an armed parent-exit guard and supply its actual data roots and authenticated daemon controller. The guard capability is not proof of the original app or Sidecar's identity or exit. Other architectures and platforms are not update acceptance targets for this checkpoint.
 
 ## Implemented boundaries
 
-- Complete-app staging requires Electron, the Sidecar, session daemon, CLI payload and native updater helper. Packaging builds and copies `openforge-update-helper` and checks its Mach-O architecture alongside the other executables.
-- Electron reloads authenticated authorization and remeasures staged bytes before copying the helper into private recovery storage. It hashes the copied bytes before executing them. Local-build approval does not authorize session interruption.
-- The helper uses a fresh random challenge and a domain-separated HMAC over the exact request. Authority binds the installation, operation, destination, staging, recovery root and target manifest. Commands arrive through inherited pipes, not an unauthenticated socket or environment override.
-- The helper independently checks the persisted grant and complete bundle. It authenticates before acquiring installation ownership. Kernel locks and permanent destination-to-recovery-root binding serialize owners. Durable operation tombstones reject replay.
-- A macOS kernel process-exit watch identifies the spawning host before preparation. An authenticated install decision arms the operation, but closing stdin alone never permits replacement. The helper waits for that host to exit. It neither guesses PIDs nor kills sessions.
-- EOF before install authority cancels preparation. Protocol frames and the post-arming host-exit wait have bounded deadlines. Unsupported platforms fail closed.
-- The authenticated grant carries Electron user data, application data and daemon roots. The helper validates those directories and passes only those explicit OpenForge settings to the replacement. It does not inherit arbitrary `OPENFORGE_*` values or silently launch against default developer data. Grants without launch context cannot use the executable handoff.
-- An authenticated, atomically written journal records preparation, replacement, launch fencing and commit. Replacement retains the old bundle and flushes files and directory changes. Pre-launch recovery verifies old bytes before restoring them. After launch, rollback is refused because target domain processes may have migrated data.
-- Native commit rechecks authorization and installed bytes, is retryable after a lost acknowledgement, and allows a later operation without deleting retained bundles. The coordinator calls the update driver's commit only after runtime readiness and workspace restoration. It also cancels prepared helper ownership when preparation fails.
-- The coordinator now requires a Sidecar-exit verifier before update preparation. After authenticated detach it waits for the exact spawned Sidecar's exit before calling the replacement driver. The Electron adapter records exit from spawn time and bounds shutdown using the existing shutdown budget. Signal acknowledgement, `killed`, and shutdown reports do not count as exit proof.
-- `MaintenanceClient` borrows the current Sidecar controller for preflight without `Connect`, daemon launch or session mutation methods. Its read-only replacement observation also works after that controller becomes stale, without fencing the replacement Sidecar.
-- A live-runtime handoff authenticates the source controller. The helper copies the target runtime into installation-owned immutable storage, verifies that its daemon and complete CLI payload match the authorized app, and keeps durable release pins. It records the source controller, daemon PID, source image, release digest and preparation intent before asking the daemon to prepare. A cold handoff instead holds launch and lifetime locks and refuses an existing owner.
-- After host exit and bundle replacement, the helper activates the prepared daemon before launching the target app. Native commit requires a fresh Sidecar controller for the preserved lifetime, the original daemon PID, and an activated operation receipt whose actual image matches the prepared image. Unknown receipts are not evidence of successful cancellation.
-- The helper launches only the authorized app entry point and journals its kernel PID/birth identity. Authenticated `verify-launch` checks that recorded caller, authorization, installed bytes and live-runtime activation without acquiring a controller. Wrong processes, dead identities and changed authority are refused. The launch fence survives failed exec.
-- Native Sidecar registration binds the launched app's exact child to the journal. The child requires an inherited local pipe/socketpair, checks its own birth identity and parent, destination/recovery binding, executable path, data roots, installed bytes and runtime receipt before keychain or database initialization. A flag alone grants nothing. Copied journals under another root and admission replay by another child are refused.
-- Electron launch verification and Sidecar admission compare each process's kernel-loaded CDHash with the code signature of its authorized executable. Security.framework checks integrity with network access disabled. An `exec` into another image cannot retain authority just by keeping the PID/birth identity. These checks do not supply publisher trust, which still comes from the authenticated bundle grant.
-- Bundle staging and measurement use Electron's `original-fs` to preserve raw archive bytes. ASAR's virtual directory view must not change the authenticated manifest; no process-wide `noAsar` switch is used.
-- Electron's Sidecar lifecycle can await native admission before sending it over stdin or polling readiness. These startup APIs are not connected to production boot. Cold-runtime readiness and independent target-bound commit checks remain unfinished.
-- Commit controller authority is copied before asynchronous work; caller mutation cannot upgrade a stale controller during verification.
+### Authorization and preparation
 
-The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle.
+- Complete-app staging measures Electron, Sidecar, daemon, CLI, helper, resources, permissions and internal links. Electron uses `original-fs` so ASAR files are measured as raw bytes. Escaping links and incomplete bundles are refused.
+- Published artifacts require the installed publisher trust anchor. Local approval is separate, explicit and bound to immutable bytes, installation, destination and operation. Failed publisher verification never falls back to local approval. First-adoption interruption consent is another authority; its implemented grant format does not enable legacy installation.
+- Electron durably records the selected target, controller and roots before native preparation, backend preparation and workspace capture. Controller authority is copied before asynchronous work.
+- A privately copied, hash-checked helper uses inherited pipes, a fresh challenge and domain-separated HMACs. Handshake version 2 advertises `relaunch`, `launch-gate` and `atomic-replace`; authenticated request, grant and journal formats remain version 1.
+- Installation ownership is serialized by kernel locks and a permanent canonical destination/recovery-root binding. Replay tombstones, complete-byte remeasurement and private-directory checks survive process loss.
+- Preparation becomes uncertain before sending a request. Only a typed, provably unsent failure after owned-helper cleanup can clear that uncertainty. Lost prepare, cancel or arm acknowledgements are not successful cancellation.
 
-First-adoption authorization now requires a separate native interruption confirmation after build trust succeeds. The authenticated grant binds both installed and target bundle hashes to the installation and operation. The helper accepts a pre-daemon source only with this explicit grant and unchanged installed bytes. Pre-launch rollback can restore that legacy source. This does not yet wire legacy process shutdown or the source-installer UI into an end-to-end first-adoption flow.
+### Replacement and runtime ownership
 
-A daemon-aware source may lack the helper introduced by its target; that alone does not require interruption approval. The helper still requires a daemon-aware source's daemon and CLI, and every target must contain the complete app including its helper.
+- The coordinator requires authenticated detach and observed exit of its exact owned Sidecar. The helper independently observes its actual Electron parent through the kernel. A signal acknowledgement, `killed`, EOF or a shutdown report is not exit proof.
+- `MaintenanceClient` borrows the supplied controller without connecting a new controller or launching a daemon. Runtime preparation retains complete daemon/CLI assets with durable release references. Cold preparation reserves both launch and lifetime locks rather than inferring absence from missing discovery files.
+- macOS publication uses atomic directory exchange, not removal followed by rename. The journal records the exchange location before publication. Recovery validates canonical staging and exchange paths and the retained source bytes; a redirected staging symlink cannot supply rollback authority.
+- Before restoring the source or newly recording rollback for a live-runtime operation, recovery independently checks the original controller, daemon PID, source version and loaded code, plus a matching terminal abort/failure receipt. An activated or unknown runtime outcome cannot authorize rollback. An already-recorded rollback acknowledgement still rechecks restored source bytes.
+- If activation succeeds but its acknowledgement is lost, the installed target stays in place. That is forward-only uncertainty, not a successful cancellation. Forward recovery from Installed without a recorded app launch remains an activation gate.
 
-## Evidence and limits
+### Launch, readiness and restoration
 
-The native suite covers tampering, operation replay, conflicting roots and owners, corrupt journals, rollback, post-launch refusal, commit, lost pipes and killed owners. Process tests reject unauthenticated and stale-challenge requests before acquiring installation ownership. Launch tests cover reopened authority, wrong callers/operations, changed authorization, target death, failed exec and remeasurement before launch.
+- A bootstrap execution gate records the launch owner before spawn, then records the child's kernel birth identity and fresh challenge before releasing app execution. Missing birth evidence remains unknown. The narrow abandoned-gate exception requires independently verified owner exit and proof that execution authority was never released.
+- Electron authenticates native launch before creating a Sidecar. Sidecar admission checks its own birth, parent, executable, operation, roots, grant, installed bytes and runtime receipt before keychain or domain/database initialization. Flags alone grant no authority.
+- Electron, Sidecar and readiness checks compare authorized code signatures with kernel-loaded CDHashes. Restoring bytes on disk or keeping the PID/birth across `exec` cannot retain authority for another running image.
+- Readiness independently verifies the admitted Sidecar and daemon/controller/image. Live readiness requires the preserved daemon PID/lifetime, a newer controller and the activated target receipt. Cold fixture readiness binds the installation and daemon parentage. The production local driver requires a live authenticated controller; cold native relaunch without a retained live-runtime plan refuses.
+- Every replacement app lifetime restores and acknowledges its own windows. Retained snapshots do not carry predecessor acknowledgements into a new launch. Native commit precedes backend commit so an uncertain native result cannot enable ordinary Quit cleanup.
+- A fresh matching backend update startup reopens restoration fencing for a committed update. Same-transport retries do not. The existing restart environment context is not new native authentication; no conditional Connect/CAS or native-verified backend startup-context API is claimed.
 
-The opt-in Electron/native contract uses actual compiled helper and daemon bytes, real Electron authorization and an owned temporary host process. It covers cancellation, cold-install refusal over a live owner, incompatible daemon/CLI payloads, host exit, replacement, distinct-image daemon activation and fresh-controller commit. The daemon retains its PID and lifetime. The startup case now launches a private Electron app with a fixture main module; its Sidecar remains a native fixture. This contract does not create PTYs or run the production boot flow. A separate Rust test activates a distinct image through `MaintenanceClient` while preserving a real `/bin/cat` PID, PTY and input/output. Neither test establishes packaged Electron/Sidecar/daemon continuity or KVG-4730 acceptance.
+### Process loss and recovery
 
-Latest Electron image/ASAR checks:
+- macOS Electron-owned Sidecars arm the kernel parent-exit guard before domain startup, including ordinary source Sidecars. Parent loss uses `_exit` and bypasses Quit cleanup. Ownership mode does not grant update admission. Standalone and non-macOS ordinary startup remain unchanged.
+- Failed admitted update children are retired through their captured child handle and observed exit, without falling back to ordinary SIGTERM/Quit cleanup. An unadmitted source Sidecar is observed, not signalled by update recovery.
+- Native relaunch uses fresh challenge/HMAC authority and waits for the actual requester to exit. Requester preparation does not grant target startup authority. Cancellation and pre-authority EOF cannot launch or commit.
+- Update recovery is separate from ordinary restart recovery and its CLI. The native dialog offers Retry, Close app and leave sessions running, and Keep waiting. Keep waiting is the default and Escape action. Failed verification is displayed without ordinary `app.relaunch()`, rollback or session termination fallback.
+- `LocalUpdateDriver.recover()` supports installed-target post-launch recovery. Original source birth/exit attestation, preparation-loss recovery and forward Installed/no-launch recovery are not complete. They remain required before activation.
 
-- Root: 878 files passed; 7,478 tests passed, 3 expected failures and 55 skips across 12 skipped files, in 280.26 seconds.
-- Complete opt-in native contract: 12 passed in 49.12 seconds. The private Electron runtime both stages and verifies a full bundle, including raw ASAR bytes, before exercising Sidecar admission. Helper/Sidecar fixtures use release builds. Only this temporary app receives an ad-hoc signature; no publisher key is involved.
-- Helper default/all-feature suites: 21/23 passed. The all-feature suite adds the native target fixture, including a red/green regression in which `exec` preserved process birth but changed the loaded image. The shell-launch refusal was also red before the check.
-- A separate Electron regression exposed `default_app.asar` as virtual entries rather than an archive file. `original-fs` fixes staging and measurement without relaxing integrity checks or globally changing filesystem behavior.
-- Backend default/all-feature suites: 2,370 passed / 49 ignored each. The first all-feature run failed six task-start tests with `openpty` OS error 6 (`Device not configured`). Focused and full reruns passed without changes. Cause remains unknown; cleanup investigation KVG-5245 is separate from this updater work and KVG-5188.
-- Helper and backend all-target/all-feature check/build, strict Clippy and formatting passed. TypeScript, plugin-host types, lint and Electron/Companion contracts passed. `pnpm electron:package` passed; that production-shaped build was not installed or launched.
-- A separate strict signature probe of the built app and its Electron executable failed: `code has no resources but signature indicates they must be present`. The Sidecar executable passed. The packager does not yet produce the complete local integrity seal used by the private fixture. Local-build sealing must be integrated before authenticated production launch; this needs no production private key and must not be confused with publisher authorization or KVG-1789 signing/notarization.
-- Fresh/warmed/state probes remain 10s/2s/5s. The full Electron preparation and replacement/admission transactions use separate 60s waits; these replace the small stand-in's 10s transaction waits, not the executable probes. The target fixture's 20s lifetime bound remains unchanged. Normal test parallelism is unchanged. No remaining updater fixture processes were observed.
-- Logs: `/tmp/KVG-5206-electron-image-*.log`, plus `/tmp/KVG-5206-electron-exec-red.log` and `/tmp/KVG-5206-electron-asar-red.log`. Earlier daemon, workspace and browser-conformance evidence below was not rerun in this increment; those subsystems did not change. Full feature acceptance and the completion review are still pending.
+Recovery, authorization and staging storage must be outside both replaceable bundles. Destination, staging and recovery must share the installation filesystem. A journal or retained image cannot recover live PTYs after fatal loss of their sole owning process.
 
-Previous Sidecar image/startup checks:
+## Packaging and ordinary-startup evidence
 
-- Root: 878 files passed; 7,478 tests passed, 3 expected failures and 55 skips across 12 skipped files, in 179.88 seconds. This supersedes the earlier root timeout failures below.
-- Opt-in Electron/native contract: all 12 passed in 76.05 seconds. A real regression first admitted a distinct running Sidecar image after authorized bytes were restored at its path. The new check rejects that image by kernel CDHash and still admits the authorized image. Other cases cover controller mutation, startup, copied recovery roots and replay.
-- Helper default/all-feature suites: 21 passed each. Sidecar default/all-feature suites: 2,370 passed and 49 ignored each, including a private executable refusing EOF/forged admission before application-data creation. Both crates passed all-target/all-feature check/build, strict Clippy and formatting.
-- Latest daemon all-feature rerun passed: 290 reported cases across binary targets, 5 ignored. The 59 unit tests run under four binaries. Focused updater/PTY tests also passed. The preceding all-feature run failed `sustained_managed_mutations_keep_daemon_capacity_available` at `tests/operation_retention.rs:41` with `Transport("failed to fill whole buffer")`; its isolated rerun passed both tests. No deadline or parallelism changes were made. Earlier agent-gateway failures remain historical evidence, not a current failed run; their root cause was not established.
-- TypeScript, plugin-host types, lint, Electron/Companion contracts and whitespace checks passed. The Sidecar lifecycle tests passed 23 tests across two files.
-- `pnpm electron:package` passed again with the startup/admission changes, including release Sidecar, daemon and helper builds and app assembly. The app was built, not installed or launched; this is not packaged continuity acceptance.
-- Latest checks and red/green evidence use `/tmp/KVG-5206-running-image-*.log`. The preceding startup/admission runs use `/tmp/KVG-5206-startup-*.log` and `/tmp/KVG-5206-sidecar-*.log`.
-- The image test uses a separately linked, feature-gated fixture and waits for its explicit pre-admission signal before changing files. Earlier re-signing/early-swap attempts died with SIGKILL and did not establish the regression. No production signing key was used, and probe/transaction deadlines were not increased.
+Packaging now seals nested code bundles before the outer app and verifies the result with strict code-signature checks. It does not deep-sign arbitrary retained executables or rewrite daemon manifest hashes. Ad-hoc sealing proves local integrity, not publisher trust or notarization.
 
-Earlier runtime-integration checks:
+Runtime and plugin-host resources live under `Contents/Resources/session-runtime` and `Contents/Resources/plugin-host`; the CLI payload is under `Contents/Resources/openforge-cli`. Mach-O entry points remain under `Contents/MacOS`.
 
-- Opt-in native contract: 12 passed. An initial fixture wait expired while the journal still reported `replacing`. The test now observes release of native transaction ownership before checking target startup or deleting its root. State probes remain bounded at five seconds; transaction completion has a separate deadline.
-- Client default/all-feature suites: 18 passed each. Helper suites: 18 passed each. Both crates passed all-target/all-feature check, build, strict Clippy and formatting.
-- Daemon default suite: 93 passed, 2 ignored. All-target/all-feature check, build, strict Clippy and formatting passed. Two focused updater tests passed, including live PTY continuity and read-only replacement observation.
-- Daemon all-feature runs failed in `tests/agent_gateway.rs:22` during `Client::launch`, with `daemon startup timed out; retry attachment without launching a host`. A separate retry also failed. Related parallel-startup work already exists as KVG-5188; no duplicate task or unrelated timeout change was made.
-- TypeScript, plugin-host typecheck, lint and Electron/Companion contracts passed.
-- The first full root attempt exceeded its 300-second tool limit with browser-test timeouts. The next completed in 377.85 seconds with 876 files and 7,475 tests passed, one failure, 3 expected failures and 55 skips. The failure is the unchanged five-second limit in `scripts/check-ui-migration-inventory.test.mjs:202`. Its isolated rerun passed all 27 tests in 2.24 seconds. This is not a green full-task run.
-- Logs use `/tmp/KVG-5206-runtime-*.log`. Unrelated worktrees were running Vite and Vitest during these attempts; none of those processes were stopped. Broader package, Sidecar and packaged acceptance evidence below predates this increment.
+The disabled checkpoint was rebuilt from current source on macOS arm64 using the packaging orchestration's layout injection and the private backend target. Output:
 
-Earlier successful checkpoints:
-
-- Last full root run: 877 files passed, 7,476 tests passed, 3 expected failures, 49 skipped across 12 files. The opt-in native contract subsequently passed 7 tests, including the added daemon-aware source without an old helper.
-- Helper default and all-feature suites: 18 tests each. All-target/all-feature check, build and strict Clippy passed, along with formatting.
-- TypeScript, plugin-host typecheck, lint, Electron and Companion contracts passed.
-- `pnpm electron:package` passed, including plugin builds, renderer/Electron builds, release Sidecar/daemon/helper compilation, architecture checks and app assembly. The bundle was built, not installed or launched.
-- Workspace package builds/tests, plugin SDK published-package conformance, package metadata checks and plugin-host typecheck passed. Terminal-runtime tests include one skip.
-- Sidecar tests: 2,369 passed and 49 ignored. Sidecar check, build and Clippy passed.
-- Daemon default tests and all-target/all-feature check, build and strict Clippy passed. Earlier all-feature daemon evidence remains applicable; ignored tests are not acceptance evidence.
-- The earlier standalone host/client blockers were fixed with owner approval. Their default/all-feature tests, check/build, strict Clippy and formatting passed. KVG-5209 and KVG-5210 were deleted at the owner's request.
-
-Logs for the helper checkpoint are under `/tmp/KVG-5206-next-*.log`; the owned-exit increment uses `/tmp/KVG-5206-exit-*.log`. The first root test run exceeded its two-minute tool deadline; the rerun passed in 146 seconds. Isolated Node child tests establish exit ordering, not real Sidecar/daemon continuity.
-
-First-adoption red/green and validation logs use `/tmp/KVG-5206-adoption-*.log`. Native contract cases cover approved legacy replacement/recovery, missing interruption consent and changed installed bytes. Authorization tests cover separate cancellation, source mutation during consent and refusing failed publisher trust without any approval prompt. Native dialog response tests use the external Electron dialog boundary; no real legacy processes were interrupted. The first Rust check wrapper mis-split arguments and was discarded; explicit commands then passed both default/all-feature suites and all-target/all-feature static checks.
-
-Run the native contract and checks through the layout resolver:
-
-```sh
-MANIFEST="$(node scripts/rust-sidecar-layout.mjs update-helper-manifest-path)"
-cargo test --manifest-path "$MANIFEST" --all-features
-cargo check --manifest-path "$MANIFEST" --all-features --all-targets
-cargo build --manifest-path "$MANIFEST" --all-features --all-targets
-cargo clippy --manifest-path "$MANIFEST" --all-features --all-targets -- -D warnings
-cargo fmt --manifest-path "$MANIFEST" -- --check
-RUN_UPDATE_HELPER_CONTRACT=1 pnpm exec vitest run src/electron/updateInstallContract.test.ts
+```text
+src-tauri/target/backend-update-contract/release/bundle/checkpoint-8976dc86c/Open Forge.app
 ```
 
-Strip inherited `OPENFORGE_*` settings before validation. Tests use private copies and owned temporary roots, never the developer installation or runtime. A fresh private executable gets a ten-second first probe, warmed fixture probes use two seconds, and state probes use five seconds. Keep tests parallel and clean up only their owned fixtures.
+Evidence:
 
-## Remaining KVG-5206 work
+- Strict verification passed for the whole app, Electron executable, Sidecar, daemon and helper. All four entry points report arm64.
+- All 16 retained runtime manifest entries match their hashes. The retained daemon is byte-identical to the packaged daemon entry point. The obsolete `MacOS/session-runtime` and `MacOS/plugin-host` directories are absent.
+- Isolated packaged ordinary startup exposed the sandbox preload and completed `get_projects`, returning an empty array from its private database. Authenticated fixture cleanup completed. Its retained private evidence root is `/tmp/of-packaged-smoke-8fSLT6`.
+- The packaged plugin host answered `plugin.host.diagnostics` through the bundled Electron Node runtime with a system-only PATH, without Bun or a repository entrypoint override.
+- The release-mode packaged-runtime contract used this app's actual runtime payload. It passed staged launch, temporary source-bundle removal, untrusted replacement refusal, shell PID/PTY preservation and authenticated owned cleanup.
 
-- Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
-- Add complete local-build code-integrity sealing to packaging before testing authenticated launch of its output. The current packaged Electron executable fails strict resource-seal validation. Do not weaken `native_image` checks or treat an ad-hoc signature as publisher trust.
-- Connect daemon maintenance and launch/Sidecar admission to real boot before domain access. Complete cold-runtime readiness and independent target-bound commit checks; then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
-- Wire the separate native first-adoption consent into verified legacy shutdown and the source installer. Consent and authorized legacy transaction support exist, but no end-to-end first-adoption flow or seamless migration claim is made.
-- Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
-- Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.
-- Finish affected-system validation, including applicable package-local builds/conformance and isolated packaged smoke/live checks, then publish completed implementation evidence. No complete-feature validation or acceptance claim is made here.
-- The owner approved isolated Playwright Chromium for required conformance tests. Terminal-runtime conformance passed 35 semantic checks, 13 visual baselines and the native terminal colour-profile test. Report: `artifacts/terminal-presentation/report.json`. This clears the browser-conformance approval blocker, not packaged updater continuity or production enablement.
+These checks establish package integrity and ordinary startup. They do not establish a complete packaged app update with agents, tools and multi-window restoration. KVG-4730 retains that acceptance gate. The app was not installed over the developer's application.
 
-## Activation gates
+## Validation at the disabled checkpoint
 
-1. Finish the remaining implementation and focused evidence. OpenSpec remains 15/54 checked; task 8.2 is partial.
-2. Complete affected-system validation. Passing helper and fixture tests does not clear the packaged continuity gate.
-3. KVG-4730 supplies comprehensive packaged acceptance and release evidence. The approved implementation target is macOS arm64; reconcile that task's x64 wording before acceptance claims. Do not create a duplicate acceptance task.
-4. KVG-1789 satisfies macOS signing/notarization prerequisites. Publisher signing must run in owner-approved protected infrastructure with the pinned public key and encrypted private-key backup.
-5. Only after these gates pass may a reviewed change enable production updates.
+Review baseline: `8976dc86c`, the rebased equivalent of the earlier `e7e79196d` checkpoint. Commands use normal test parallelism and strip inherited `OPENFORGE_*` settings. Backend validation uses `src-tauri/target/backend-update-contract`, not another worktree's shared cache.
+
+| Check | Result |
+| --- | --- |
+| Root desktop tests | 896 files passed; 7,678 tests passed, 3 expected failures and 96 skips across 18 skipped files |
+| TypeScript, plugin-host types, lint, Electron/Companion contracts, SDK package contract | Passed |
+| Native Electron/helper install and recovery contracts | 21 passed |
+| Packaging/integrity contracts | 20 passed across 2 files |
+| Helper default / all-feature tests | 25 / 39 integration tests, plus 1 doctest each |
+| Backend default / all-feature tests | 2,407 passed and 54 ignored each |
+| Explicit Sidecar / daemon IPC / committed-update reconnect contracts | 27 / 10 / 1 passed |
+| Session Protocol default / all-feature tests | 11 / 11 passed |
+| Session Host default / all-feature tests | 17 / 17 passed |
+| Session Client default / all-feature tests | 19 / 19 passed |
+| Session Daemon default / all-feature tests | 95 / 296 reported cases, with 2 / 5 ignored; binary targets repeat unit tests |
+| Helper, backend, host, client and daemon check/build, strict Clippy and formatting | Passed |
+| Protocol check/build and strict Clippy | Passed; separate formatting check failed as described below |
+
+The extended standalone Protocol formatting check found a line-wrap mismatch at `session-protocol/src/notification.rs:126`. That file is unchanged from `origin/main`; KVG-5291 tracks the separate cleanup. The protocol behavior checks pass. This is not a claim that every repository check is green.
+
+Logs are `/tmp/KVG-5206-disabled-*.log`. Prior source-guard and reconnect red/green evidence remains in the task Handoff Notes. Earlier parallel Sidecar startup failures are tracked in KVG-5290; the current 27-case pass does not establish their cause or prove that rebasing fixed them. KVG-5245 separately tracks intermittent backend `openpty` failures. Earlier package resource-seal failures are historical; the rebuilt package above passed strict verification.
+
+No terminal-renderer/conformance implementation changed in this checkpoint. Existing package source tests ran through the root suite, plugin artifacts were rebuilt during packaging, and SDK published-package contract checks passed. Full packaged update continuity, additional live/resource scenarios, representative update UX inspection and release acceptance remain pending. A disabled checkpoint must not be represented as completion of the full OpenSpec change.
+
+Useful verification commands:
+
+```sh
+cargo test --locked --manifest-path src-tauri/crates/update-helper/Cargo.toml --all-features
+cargo clippy --locked --manifest-path src-tauri/crates/update-helper/Cargo.toml --all-targets --all-features -- -D warnings
+RUN_UPDATE_HELPER_CONTRACT=1 pnpm exec vitest run src/electron/updateInstallContract.test.ts
+RUN_ELECTRON_PACKAGE_CONTRACT=1 pnpm exec vitest run scripts/electron-package.integrity.test.mjs scripts/electron-package.test.mjs
+node scripts/electron-packaged-smoke.mjs --skip-package --app '/path/to/private/Open Forge.app'
+```
+
+## Remaining gates
+
+The single fresh-context read-only completion review approved the disabled checkpoint with no correctness, security or structural blockers. It covered all 62 changed tracked paths and 18 untracked files against `8976dc86c`. Review run: `e5f0b4af-3a5c-4878-bed7-8ef02b9ff919`; report: `/tmp/KVG-5206-disabled-completion-review.md`. Strict OpenSpec validation and whitespace checks passed. This approval does not enable updates or complete the OpenSpec change; keep the update menu and source installer disabled.
+
+Before enabling the local macOS arm64 update path:
+
+1. Complete original source app/Sidecar birth and exit attestation, authenticated preparation-loss recovery, and Installed/no-launch forward recovery. Missing authority or runtime outcome must remain unknown.
+2. Finish required crash-boundary and lost-acknowledgement coverage, including packaged backend-commit reconciliation and explicit same-transport retry faults.
+3. Finish safe install/cancellation/recovery UX and representative visual checks.
+4. Obtain KVG-4730 packaged agent/tool/shell PID/PTY, per-window restoration-before-commit and failure/recovery acceptance. Reconcile that task's broader architecture wording with the approved macOS arm64 update scope.
+5. Validate and review the enabling change against its complete affected-system diff. Fixture success alone cannot enable updates.
+
+Published releases additionally require KVG-1789 signing/notarization and protected publisher-key provisioning and backup. Those deferred publication gates do not block a locally approved integrity-sealed checkpoint. Legacy first adoption, source-installer integration and additional update platforms require separate implementation and acceptance; they remain disabled. No production private key was accessed for this work.

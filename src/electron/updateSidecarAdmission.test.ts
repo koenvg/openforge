@@ -66,3 +66,42 @@ it.each(['approve', 'refuse'] as const)('waits for native child admission before
     await rm(root, { recursive: true, force: true })
   }
 })
+
+it('does not run Quit cleanup when an admitted update Sidecar fails event readiness', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'of-update-readiness-failure-'))
+  const marker = join(root, 'quit-cleanup')
+  const config = createSidecarLaunchConfig({ executablePath: process.execPath, processEnv: {}, port: 17423 })
+  config.args = ['--input-type=module', '-e', `
+    import { writeFileSync } from 'node:fs';
+    process.on('SIGTERM', () => { writeFileSync(${JSON.stringify(marker)}, 'Quit ran'); process.exit(0); });
+    process.stdin.resume();
+    process.stdin.on('end', () => process.stdout.write('ready'));
+    setTimeout(() => process.exit(9), 60_000);
+  `, '--']
+  let child: ChildProcess | undefined
+  let exited = Promise.resolve()
+  let ready = Promise.resolve()
+  try {
+    await expect(startSidecarReadiness(config, {
+      spawn: (command, args, options) => {
+        child = spawn(command, [...args], options)
+        exited = new Promise<void>(resolve => child!.once('exit', () => resolve()))
+        ready = new Promise<void>(resolve => child!.stdout!.once('data', () => resolve()))
+        return asChildProcessLike(child)
+      },
+      authorizeStartup: async () => 'native-admission',
+      fetch: async () => {
+        await ready
+        return { ok: true, json: async () => ({ status: 'ok', events: { available: true }, startupResume: { phase: 'complete' } }) }
+      },
+      sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+      createEventStream: () => ({ start: async () => {}, ready: async () => { throw new Error('event stream unavailable') }, stop: () => {} }),
+    })).rejects.toThrow('event stream unavailable')
+    await exited
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+  } finally {
+    if (child?.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    await exited
+    await rm(root, { recursive: true, force: true })
+  }
+})

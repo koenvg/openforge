@@ -340,3 +340,30 @@ async fn indexed_daemon_shell_reattaches_through_existing_ipc_after_sidecar_stat
     let client = openforge_session_client::Client::connect(root.path()).unwrap();
     client.shutdown_empty().unwrap();
 }
+
+#[tokio::test]
+#[ignore = "build the Session Daemon first; run with the session-daemon contract command"]
+async fn restart_inventory_reports_the_actual_backend_data_root() {
+    let fixture = super::daemon_fixture::DaemonFixture(
+        tempfile::Builder::new()
+            .prefix("of-update-roots-")
+            .tempdir_in("/tmp")
+            .unwrap(),
+    );
+    let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("crates/session-daemon/target/debug/openforge-session-daemon");
+    let (mut state, _db) = test_state("update-roots");
+    let app_data = fixture.0.path().join("app-data");
+    std::fs::create_dir(&app_data).unwrap();
+    state.app = Some(crate::backend_runtime::AppHandle::with_app_paths(
+        app_data.clone(),
+        fixture.0.path().join("resources"),
+    ));
+    state
+        .pty_manager
+        .as_mut()
+        .unwrap()
+        .enable_installation_daemon(fixture.0.path().into(), executable);
+    let inventory = invoke_ok(&state, "get_restart_terminal_inventory", json!({})).await;
+    assert_eq!(inventory["appDataRoot"], json!(app_data));
+}

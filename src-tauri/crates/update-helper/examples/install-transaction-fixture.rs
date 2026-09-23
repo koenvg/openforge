@@ -3,6 +3,9 @@ use openforge_update_helper::InstallTransaction;
 use serde::Deserialize;
 use std::{io::Read, path::PathBuf};
 
+#[path = "common/admitted_runtime.rs"]
+mod admitted_runtime;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Request {
@@ -22,6 +25,14 @@ fn run() -> Result<(), String> {
     }
     if openforge_update_helper::authorize_sidecar_startup()? {
         println!("sidecar-authorized");
+        if let Some(mode) = std::env::args().find(|arg| {
+            matches!(
+                arg.as_str(),
+                "--cold-runtime" | "--live-runtime" | "--wrong-cold-runtime"
+            )
+        }) {
+            return admitted_runtime::run(&mode);
+        }
         return Ok(());
     }
     let mut input = Vec::new();
@@ -33,6 +44,25 @@ fn run() -> Result<(), String> {
         return Err("request exceeds limit".into());
     }
     let request: Request = serde_json::from_slice(&input).map_err(|_| "invalid fixture request")?;
+    if request.action == "runtime-observe" {
+        let controller = request
+            .controller
+            .ok_or("missing observation installation")?;
+        let operation = openforge_session_protocol::OperationId::parse(&request.operation)
+            .map_err(|e| e.to_string())?;
+        let (capabilities, status) =
+            openforge_session_client::MaintenanceClient::observe_replacement(
+                &request.root,
+                &controller.installation,
+                &operation,
+            )
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::json!({ "capabilities": capabilities, "status": status })
+        );
+        return Ok(());
+    }
     if request.action == "runtime-inventory" {
         let (inventory, capabilities) = if let Some(controller) = request.controller {
             openforge_session_client::MaintenanceClient::attach(&request.root, controller)

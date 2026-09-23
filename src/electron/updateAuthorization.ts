@@ -122,15 +122,15 @@ export class UpdateAuthorizationStore {
   }
 
   /** Main-process capability. A fresh helper challenge binds each proof to one live pipe. */
-  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit' | 'verify-launch' | 'register-sidecar', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController, sidecarPid?: number): Promise<{ payload: string; mac: string }> {
-    if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit', 'verify-launch', 'register-sidecar'].includes(action)
+  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit' | 'verify-launch' | 'verify-ready' | 'register-sidecar' | 'prepare-relaunch' | 'relaunch', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController, sidecarPid?: number): Promise<{ payload: string; mac: string }> {
+    if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit', 'verify-launch', 'verify-ready', 'register-sidecar', 'prepare-relaunch', 'relaunch'].includes(action)
       || !isAbsolute(recoveryRoot) || resolve(recoveryRoot) !== recoveryRoot) throw new Error('Invalid helper handoff request')
     const authorization = await this.read(operationId)
     if (!authorization) throw new Error('Helper handoff requires update authorization')
     if (authorization.manifestSha256 !== manifestSha256) throw new Error('Helper handoff target does not match authorization')
     const key = await readPrivateFile(join(this.options.root, 'authorization.key'), 32)
     if (key.length !== 32) throw new Error('Invalid update authorization key')
-    const payload = JSON.stringify(action !== 'install' && action !== 'cancel' ? {
+    const payload = JSON.stringify(!['install', 'relaunch', 'cancel'].includes(action) ? {
       version: 1, challenge, action, manifestSha256, root: recoveryRoot, destination: authorization.installedBundlePath,
       authorization: this.options.root, staging: dirname(authorization.bundlePath),
       installation: authorization.installationId, operation: operationId,

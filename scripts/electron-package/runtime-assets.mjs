@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, realpath, rm } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { resolveRustSidecarLayout } from '../rust-sidecar-layout.mjs'
 import { assertExists, pathExists } from './file-system.mjs'
 import { repoRootFromScript } from './repo-root.mjs'
@@ -118,17 +118,23 @@ export async function copyElectronAppRuntimeDependencies(repoRoot, appResourcesP
     const targetPackagePath = join(appResourcesPath, 'node_modules', ...packagePathParts)
     await rm(targetPackagePath, { recursive: true, force: true })
     await mkdir(dirname(targetPackagePath), { recursive: true })
-    await cp(sourcePackagePath, targetPackagePath, { recursive: true })
+    // Package contents, not workspace node_modules links back into the checkout.
+    // The required host dependencies are listed explicitly above; renderer dependencies
+    // are bundled by the renderer/plugin builds.
+    await cp(sourcePackagePath, targetPackagePath, {
+      recursive: true, verbatimSymlinks: true,
+      filter: source => !relative(sourcePackagePath, source).split(sep).includes('node_modules'),
+    })
   }
 
   return packagedDependencies
 }
 
-export async function copyBackendPluginHostRuntime(electronDist, macosDir) {
+export async function copyBackendPluginHostRuntime(electronDist, resourcesDir) {
   const bundledHostEntrypoint = join(electronDist, 'plugin-host', 'index.js')
   await assertExists(bundledHostEntrypoint, 'Bundled backend plugin host runtime')
 
-  const pluginHostDir = join(macosDir, 'plugin-host')
+  const pluginHostDir = join(resourcesDir, 'plugin-host')
   await rm(pluginHostDir, { recursive: true, force: true })
   await mkdir(pluginHostDir, { recursive: true })
   await cp(bundledHostEntrypoint, join(pluginHostDir, 'index.js'))

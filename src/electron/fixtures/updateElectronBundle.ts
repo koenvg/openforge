@@ -3,8 +3,13 @@ import { execFileSync } from 'node:child_process'
 import { cp, rename, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
+import { build } from 'vite'
 
 export async function addElectronRuntime(bundle: string, home: string): Promise<void> {
+  await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
+    ssr: 'src/electron/fixtures/updateTargetHost.ts', outDir: join(bundle, 'Contents/Resources/app/dist-electron'), emptyOutDir: false,
+    rollupOptions: { external: ['electron'], output: { entryFileNames: 'target.mjs' } },
+  } })
   const executable = createRequire(import.meta.url)('electron') as string
   await cp(resolve(executable, '../../..'), bundle, { recursive: true, verbatimSymlinks: true })
   await rename(join(bundle, 'Contents/MacOS/Electron'), join(bundle, 'Contents/MacOS/Open Forge'))

@@ -16,10 +16,13 @@ import {
   expectedDarwinArchForTarget,
 } from './electron-package/architecture-validation.mjs'
 import { buildAndPackageElectronApp } from './electron-package/build-orchestration.mjs'
-import { packageElectronApp } from './electron-package/package-assembly.mjs'
+import { packageElectronApp as assembleElectronApp } from './electron-package/package-assembly.mjs'
 import { hydrateElectronTemplate } from './electron-package/runtime-hydration.mjs'
 import { readBuiltinPluginCatalog } from './electron-package/runtime-assets.mjs'
 import { BACKEND_LAYOUT_CONFIG_FILE, resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+
+// These unit fixtures use text executables. Real sealing is covered by the macOS contract.
+const packageElectronApp = options => assembleElectronApp({ sealApplication: async () => {}, ...options })
 
 const currentLayoutConfig = {
   backendCrateRoot: 'src-tauri',
@@ -566,13 +569,23 @@ describe('Electron macOS packaging helpers', () => {
       await writeBuiltInPluginRuntimeArtifacts(root, plugin.directoryName, plugin.id)
     }
 
+    const sdkDevelopment = join(root, 'node_modules/@openforge-app/plugin-sdk/node_modules')
+    await mkdir(sdkDevelopment, { recursive: true })
+    await symlink(root, join(sdkDevelopment, 'checkout-only'))
+
     await expect(readBuiltinPluginCatalog(root)).resolves.toEqual(builtInPluginCatalog)
+
+    await expect(packageElectronApp({
+      repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'],
+      sealApplication: async () => { throw new Error('native integrity sealing failed') },
+    })).rejects.toThrow('native integrity sealing failed')
 
     await packageElectronApp({ repoRoot: root, readExecutableArchitectures: async () => ['arm64', 'x86_64'] })
     const packagedElectronMain = await import(pathToFileURL(
       join(output, 'Contents/Resources/app/dist-electron/main.js'),
     ).href)
     expect(packagedElectronMain.classifyTaskBrowserDevToolsShortcut).toBeTypeOf('function')
+    await expect(stat(join(output, 'Contents/Resources/app/node_modules/@openforge-app/plugin-sdk/node_modules'))).rejects.toThrow()
     await expect(stat(join(output, 'Contents/MacOS/Open Forge'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     const daemonPath = join(output, 'Contents/MacOS/openforge-session-daemon')
@@ -581,7 +594,7 @@ describe('Electron macOS packaging helpers', () => {
     const helperPath = join(output, 'Contents/MacOS/openforge-update-helper')
     await expect(readFile(helperPath, 'utf8')).resolves.toContain('echo updater-helper')
     expect((await stat(helperPath)).mode & 0o111).toBe(0o111)
-    const runtimeDir = join(output, 'Contents/MacOS/session-runtime')
+    const runtimeDir = join(output, 'Contents/Resources/session-runtime')
     const releaseManifest = JSON.parse(await readFile(join(runtimeDir, 'manifest.json'), 'utf8'))
     expect(releaseManifest.files.some(file => file.path === 'openforge-session-daemon')).toBe(true)
     expect(releaseManifest.files.some(file => file.path.startsWith('openforge-cli/'))).toBe(true)
@@ -598,7 +611,7 @@ describe('Electron macOS packaging helpers', () => {
       await expect(stat(join(packagedPluginRoot, 'src/index.ts'))).rejects.toMatchObject({ code: 'ENOENT' })
       await expect(stat(join(packagedPluginRoot, 'node_modules/left-pad/index.js'))).rejects.toMatchObject({ code: 'ENOENT' })
     }
-    await expect(readFile(join(output, 'Contents/MacOS/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
+    await expect(readFile(join(output, 'Contents/Resources/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/plugin-commands.js'), 'utf8')).resolves.toContain('packaged plugin-commands.js')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')

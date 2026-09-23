@@ -1,11 +1,16 @@
 //! Bind the kernel's loaded code identity to authenticated on-disk bytes.
 //! Code-signature validity here does not establish publisher trust.
 #[cfg(target_os = "macos")]
-pub(crate) use macos::verify;
+pub(crate) use macos::{verify, verify_integrity};
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn verify(_pid: u32, _executable: &std::path::Path) -> Result<(), String> {
     Err("running update image verification requires macOS".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn verify_integrity(_bundle: &std::path::Path) -> Result<(), String> {
+    Err("update code integrity verification requires macOS".into())
 }
 
 #[cfg(target_os = "macos")]
@@ -42,17 +47,7 @@ mod macos {
         if pid <= 1 {
             return Err("invalid image process".into());
         }
-        let path = CFURL::from_path(executable, false).ok_or("invalid image path")?;
-        let code = SecStaticCode::from_path(&path, Flags::NONE).map_err(message)?;
-        let requirement: SecRequirement = "true".parse().map_err(message)?;
-        // Validate the executable's signature/pages without network access. Trust
-        // still comes from the separately authenticated complete-bundle grant.
-        code.check_validity(
-            Flags::STRICT_VALIDATE | Flags::NO_NETWORK_ACCESS,
-            &requirement,
-        )
-        .map_err(message)?;
-        let expected = signing_hash(&code)?;
+        let expected = code_hash(executable)?;
         const CS_OPS_CDHASH: libc::c_uint = 5;
         let mut running = [0u8; 20];
         // SAFETY: pid is positive and the output spans exactly running.len().
@@ -71,6 +66,32 @@ mod macos {
             return Err("running update image does not match the authorized executable".into());
         }
         Ok(())
+    }
+
+    pub(crate) fn verify_integrity(bundle: &Path) -> Result<(), String> {
+        for name in [
+            "Open Forge",
+            "openforge-sidecar",
+            "openforge-session-daemon",
+            "openforge-update-helper",
+        ] {
+            code_hash(&bundle.join("Contents/MacOS").join(name))
+                .map_err(|error| format!("{name}: {error}"))?;
+        }
+        Ok(())
+    }
+
+    fn code_hash(executable: &Path) -> Result<Vec<u8>, String> {
+        let path = CFURL::from_path(executable, false).ok_or("invalid image path")?;
+        let code = SecStaticCode::from_path(&path, Flags::NONE).map_err(message)?;
+        let requirement: SecRequirement = "true".parse().map_err(message)?;
+        // Integrity is independent of the separately authenticated publisher/local grant.
+        code.check_validity(
+            Flags::STRICT_VALIDATE | Flags::NO_NETWORK_ACCESS,
+            &requirement,
+        )
+        .map_err(message)?;
+        signing_hash(&code)
     }
 
     fn signing_hash(code: &SecStaticCode) -> Result<Vec<u8>, String> {

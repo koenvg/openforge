@@ -51,6 +51,7 @@ it('keeps an update in recovery until every target image is running, then restor
     cancel: async () => {},
     commit: async () => {},
     preflight: async (identity: { operationId: string; installationId: string }) => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+    prepare: async () => {},
     replace: async () => { replacementRequested = true },
     readiness: async (target: { operationId: string }) => ({ operationId: target.operationId, images: runningImages, controller: { ...controller, generation }, reconciled: true }),
   }
@@ -87,6 +88,7 @@ it('preserves preflight refusal and allows a later retry without preparing or re
     backend: { prepare: async () => { prepared = true }, cancel: async () => {}, detach: async () => {}, commit: async () => {}, stopForUpdate: async () => {} },
     replace: async () => { throw new Error('not an update helper') },
     update: {
+      prepare: async () => {},
       cancel: async () => {},
       commit: async () => {},
       preflight: async identity => {
@@ -119,6 +121,7 @@ async function preparedUpdate() {
     cancel: async () => {},
     commit: async () => {},
     preflight: async (identity: { operationId: string; installationId: string }) => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+    prepare: async () => {},
     replace: async () => {},
     readiness: async (target: { operationId: string }) => ({ operationId: target.operationId, images, controller: { ...controller, generation: state.generation }, reconciled: true }),
   }
@@ -162,8 +165,13 @@ it('rechecks executable identities after a lost commit acknowledgement and anoth
   expect(state.commits).toBe(0)
   options.update.readiness = readiness
   const recovered = await createControlledRestartHost({ ...options, operationId })
+  expect(await recovered.shutdownIntent()).toBe('update')
+  expect(await recovered.launchWindowIds()).toEqual(['window'])
+  expect(state.commits).toBe(0)
+  recovered.register(30, 'window', () => {})
+  expect(await recovered.handle(30, 'get_restart_workspace', {})).not.toBeNull()
+  await recovered.handle(30, 'complete_restart_workspace', { operationId })
   expect(await recovered.shutdownIntent()).toBe('quit')
-  expect(await recovered.launchWindowIds()).not.toContain('window')
   expect(state.commits).toBe(1)
 })
 
@@ -206,7 +214,8 @@ it.each([false, true])('releases the prepared helper on preparation failure, inc
     replace: async () => { throw new Error('plain restart is forbidden') },
     backend: { prepare: async () => { throw new Error('drain refused') }, cancel: async () => { if (cancelFails) throw new Error('cancel outcome unknown') }, detach: async () => {}, commit: async () => {}, stopForUpdate: async () => {} },
     update: {
-      preflight: async identity => { helperOwned = true; return { ...identity, manifestSha256: 'f'.repeat(64), images } },
+      preflight: async identity => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+      prepare: async () => { helperOwned = true },
       cancel: async () => { helperOwned = false },
       commit: async () => {},
       replace: async () => { throw new Error('must not replace') },
@@ -220,16 +229,19 @@ it.each([false, true])('releases the prepared helper on preparation failure, inc
 })
 
 it('keeps the update recoverable until durable helper commit acknowledges after restoration', async () => {
-  const { options, operationId } = await preparedUpdate()
+  const { options, operationId, state } = await preparedUpdate()
   let helperReady = false
   options.update.commit = async () => { if (!helperReady) throw new Error('helper commit failed') }
   const host = await createControlledRestartHost({ ...options, operationId })
   host.register(20, 'window', () => {})
   await expect(host.handle(20, 'complete_restart_workspace', { operationId })).rejects.toThrow('helper commit failed')
   expect(await host.shutdownIntent()).toBe('update')
+  // A Sidecar commit enables Quit cleanup. Native uncertainty must retain preservation.
+  expect(state.commits).toBe(0)
   helperReady = true
   await host.handle(20, 'get_restart_workspace', {})
   expect(await host.shutdownIntent()).toBe('quit')
+  expect(state.commits).toBe(1)
 })
 
 it('does not replace the app when owned Sidecar exit cannot be verified after detach', async () => {
@@ -250,6 +262,7 @@ it('does not replace the app when owned Sidecar exit cannot be verified after de
     },
     update: {
       preflight: async identity => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+      prepare: async () => {},
       cancel: async () => {}, commit: async () => {},
       replace: async () => { replaced = true },
       readiness: async target => ({ operationId: target.operationId, controller, images, reconciled: true }),
@@ -287,6 +300,7 @@ it.each(['exit', 'signal-only'] as const)('arms replacement only after the owned
       },
       update: {
         preflight: async identity => ({ ...identity, manifestSha256: 'f'.repeat(64), images }),
+        prepare: async () => {},
         cancel: async () => {}, commit: async () => {},
         replace: async () => { replaced = true },
         readiness: async target => ({ operationId: target.operationId, controller, images, reconciled: true }),

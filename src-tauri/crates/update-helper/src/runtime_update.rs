@@ -19,6 +19,7 @@ use std::{
 /// A missing socket is not proof that the installation has no live PTY owner.
 /// Hold both launch and lifetime locks while preparing a cold replacement.
 pub(crate) struct ColdRuntime {
+    pub installation: openforge_session_protocol::InstallationId,
     _launch: File,
     _owner: File,
 }
@@ -29,6 +30,7 @@ impl ColdRuntime {
         let launch = runtime.claim_launch().map_err(message)?;
         let owner = runtime.claim().map_err(message)?;
         Ok(Self {
+            installation: runtime.credentials().installation.clone(),
             _launch: launch,
             _owner: owner,
         })
@@ -47,6 +49,36 @@ pub(crate) struct RuntimePlan {
 }
 
 impl RuntimePlan {
+    /// A failed or lost activation reply cannot authorize restoring the source app.
+    /// Borrow the original controller and verify a terminal receipt plus the loaded source image.
+    pub fn verify_source(&self, root: &Path, operation: &str, source: &Path) -> Result<(), String> {
+        let client = MaintenanceClient::attach(root, self.controller.clone()).map_err(message)?;
+        let capabilities = client.capabilities().map_err(message)?;
+        let status = client.status(&operation_id(operation)?).map_err(message)?;
+        if capabilities.pid != self.pid
+            || capabilities.image_version != self.source_version
+            || status.from_version != self.source_version
+            || status.actual_version != self.source_version
+            || !matches!(
+                status.state,
+                ReplacementState::Aborted | ReplacementState::Failed { .. }
+            )
+            || self
+                .target_version
+                .as_ref()
+                .is_some_and(|expected| status.target_version.as_ref() != Some(expected))
+        {
+            return Err("source runtime recovery is not independently confirmed".into());
+        }
+        let daemon = crate::process_identity::ProcessIdentity::observe(self.pid)?;
+        crate::native_image::verify(
+            self.pid,
+            &source.join("Contents/MacOS/openforge-session-daemon"),
+        )?;
+        client.inventory().map_err(message)?;
+        daemon.verify(self.pid)
+    }
+
     pub fn verify_ready(
         &self,
         root: &Path,
@@ -123,7 +155,11 @@ impl RuntimeUpdate {
         }
         let store = ReleaseStore::open(&runtime).map_err(message)?;
         let release = store
-            .stage(&authority.bundle_path.join("Contents/MacOS/session-runtime"))
+            .stage(
+                &authority
+                    .bundle_path
+                    .join("Contents/Resources/session-runtime"),
+            )
             .map_err(message)?;
         let daemon_sha256 = digest(
             &authority

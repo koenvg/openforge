@@ -25,6 +25,7 @@ import {
 import { assertExists, pathExists } from './file-system.mjs'
 import { repoRootFromScript } from './repo-root.mjs'
 import { packageRuntimeRelease } from './runtime-release.mjs'
+import { sealLocalApplication } from './local-integrity.mjs'
 
 async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier = ELECTRON_BUNDLE_IDENTIFIER } = {}) {
   const plistPath = join(appPath, 'Contents', 'Info.plist')
@@ -105,6 +106,7 @@ export async function packageElectronApp({
   sessionDaemonBinaryPath = join(dirname(sidecarBinaryPath), 'openforge-session-daemon'),
   updateHelperBinaryPath = join(dirname(sidecarBinaryPath), 'openforge-update-helper'),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
+  sealApplication = sealLocalApplication,
 } = {}) {
   const rendererDist = join(repoRoot, 'dist')
   const electronDist = join(repoRoot, 'dist-electron')
@@ -144,7 +146,7 @@ export async function packageElectronApp({
   const helperTargetPath = join(macosDir, 'openforge-update-helper')
   await cp(updateHelperBinaryPath, helperTargetPath)
   await chmod(helperTargetPath, 0o755)
-  await copyBackendPluginHostRuntime(electronDist, macosDir)
+  await copyBackendPluginHostRuntime(electronDist, resourcesDir)
 
   await assertPackageArchitectureCompatibility({
     cargoBuildTarget,
@@ -184,9 +186,10 @@ export async function packageElectronApp({
   await packageRuntimeRelease({
     daemonPath: daemonTargetPath,
     cliAssetsPath: await pathExists(cliAssetsPath) ? cliAssetsPath : undefined,
-    outputPath: join(macosDir, 'session-runtime'),
+    outputPath: join(resourcesDir, 'session-runtime'),
     architecture: expectedDarwinArchForTarget(cargoBuildTarget) ?? (process.arch === 'arm64' ? 'arm64' : 'x86_64'),
   })
 
+  await sealApplication(outputAppPath)
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
 }

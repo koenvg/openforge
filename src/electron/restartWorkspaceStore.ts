@@ -18,6 +18,15 @@ export class RestartWorkspaceStore {
     return this.persistence.runExclusive(() => this.read(operationId))
   }
 
+  /** A replacement app cannot reuse acknowledgements from windows that died with its predecessor. */
+  restartRestoration(operationId: string): Promise<void> {
+    return this.persistence.runExclusive(async () => {
+      const record = await this.read(operationId, true)
+      if (!record) throw new Error('Missing restart workspace for restoration retry')
+      if (record.restoredWindowIds.length) await this.persist({ ...record, restoredWindowIds: [] })
+    })
+  }
+
   allWindowsAcknowledged(operationId: string): Promise<boolean> {
     return this.persistence.runExclusive(async () => {
       const record = await this.read(operationId, true)

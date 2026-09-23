@@ -54,22 +54,39 @@ mod platform {
         }
 
         pub fn parent_pid(&self) -> Result<u32, String> {
+            // A copied parent PID is not caller authority after this helper is orphaned.
+            // SAFETY: getppid has no arguments or memory preconditions.
+            let current = unsafe { libc::getppid() };
+            if u32::try_from(current).ok() != Some(self.parent) {
+                return Err("handoff host is no longer this helper's parent".into());
+            }
             Ok(self.parent)
         }
 
         pub fn wait(&self) -> Result<(), String> {
-            let deadline = Instant::now() + Duration::from_secs(120);
+            self.wait_until(Some(Instant::now() + Duration::from_secs(120)))
+        }
+
+        pub fn wait_forever(&self) -> Result<(), String> {
+            self.wait_until(None)
+        }
+
+        fn wait_until(&self, deadline: Option<Instant>) -> Result<(), String> {
             loop {
-                let remaining = deadline
-                    .checked_duration_since(Instant::now())
-                    .ok_or("host exit deadline exceeded")?;
-                let timeout = libc::timespec {
-                    tv_sec: remaining
-                        .as_secs()
-                        .try_into()
-                        .map_err(|_| "invalid deadline")?,
-                    tv_nsec: remaining.subsec_nanos().into(),
-                };
+                let timeout = deadline
+                    .map(|deadline| -> Result<_, String> {
+                        let remaining = deadline
+                            .checked_duration_since(Instant::now())
+                            .ok_or("host exit deadline exceeded")?;
+                        Ok(libc::timespec {
+                            tv_sec: remaining
+                                .as_secs()
+                                .try_into()
+                                .map_err(|_| "invalid deadline")?,
+                            tv_nsec: remaining.subsec_nanos().into(),
+                        })
+                    })
+                    .transpose()?;
                 // SAFETY: a zeroed kevent is valid writable output storage.
                 let mut event: libc::kevent = unsafe { std::mem::zeroed() };
                 // SAFETY: queue is owned, event/timeout point to valid storage and no changes are submitted.
@@ -80,7 +97,9 @@ mod platform {
                         0,
                         &mut event,
                         1,
-                        &timeout,
+                        timeout
+                            .as_ref()
+                            .map_or(std::ptr::null(), std::ptr::from_ref),
                     )
                 };
                 if count < 0 {
@@ -115,7 +134,35 @@ mod platform {
         pub fn wait(&self) -> Result<(), String> {
             Err("updater handoff requires macOS".into())
         }
+        pub fn wait_forever(&self) -> Result<(), String> {
+            Err("updater handoff requires macOS".into())
+        }
     }
 }
 
 pub(crate) use platform::HostExit;
+
+static GUARDED_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Whether this process installed a kernel-observed parent-exit guard.
+#[must_use]
+pub fn parent_exit_guard_armed() -> bool {
+    GUARDED_PID.load(std::sync::atomic::Ordering::Acquire) == std::process::id()
+}
+
+/// Stop an owned Sidecar when its actual app exits, without invoking
+/// Quit cleanup. Neither Rust destructors nor C exit handlers may stop sessions.
+/// # Errors
+/// Requires a live macOS parent, kernel exit observation and an owned watcher thread.
+pub fn exit_with_host() -> Result<(), String> {
+    let host = HostExit::watch()?;
+    std::thread::Builder::new()
+        .name("sidecar-host-exit".into())
+        .spawn(move || {
+            let status = i32::from(host.wait_forever().is_err());
+            // SAFETY: terminate only this process, deliberately bypassing Quit handlers.
+            unsafe { libc::_exit(status) }
+        })
+        .map(|_| GUARDED_PID.store(std::process::id(), std::sync::atomic::Ordering::Release))
+        .map_err(|error| error.to_string())
+}

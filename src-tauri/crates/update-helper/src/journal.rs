@@ -14,7 +14,19 @@ pub enum Phase {
     Installed,
     LaunchStarted,
     Committed,
+    /// A committed install has started a new, uncommitted recovery launch.
+    RelaunchStarted,
     RolledBack,
+}
+
+impl Phase {
+    pub(crate) fn awaiting_commit(self) -> bool {
+        matches!(self, Self::LaunchStarted | Self::RelaunchStarted)
+    }
+
+    pub(crate) fn may_own_domain(self) -> bool {
+        self.awaiting_commit() || self == Self::Committed
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +42,13 @@ pub(crate) struct Record {
     pub previous_hash: String,
     pub phase: Phase,
     pub runtime: Option<crate::runtime_update::RuntimePlan>,
+    pub cold_installation: Option<openforge_session_protocol::InstallationId>,
+    #[serde(default)]
+    pub launch_attempt: u32,
+    #[serde(default)]
+    pub launch_gate: Option<crate::launch_gate::Gate>,
+    #[serde(default)]
+    pub exchange_path: Option<PathBuf>,
     pub launched: Option<crate::process_identity::ProcessIdentity>,
     pub sidecar: Option<crate::process_identity::ProcessIdentity>,
 }

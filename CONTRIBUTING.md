@@ -142,9 +142,9 @@ pnpm electron:package
 
 Source installation is currently blocked. `pnpm electron:install` refuses before building, stopping processes, refreshing the CLI, or changing an installed bundle. Trusted-release verification and the verified install-to-relaunch helper must be available before this path can be enabled.
 
-Use `pnpm electron:package` to build without installing. Do not manually replace a running app bundle and expect sessions to survive. First adoption from a pre-daemon build interrupts existing sessions and requires explicit approval; that approval flow is not implemented yet.
+Use `pnpm electron:package` to build without installing. It creates a locally integrity-sealed app, not a publisher-authorized or notarized release. Do not manually replace a running app bundle and expect sessions to survive. First adoption from a pre-daemon build interrupts existing sessions and remains disabled pending its separate approval, shutdown and acceptance path.
 
-Electron also refuses an incomplete update before starting its Sidecar while trusted launch verification is unavailable. Native recovery remains available, and the refusal does not discard the session handoff. This prevents update recovery from accidentally running a different domain backend against the database. Ordinary session-preserving Restart is unaffected.
+The disabled updater checkpoint has native launch, Sidecar admission and readiness verification wired before domain startup. Pending updates cannot use ordinary startup or an older app/database rollback as a fallback. Original source identity and preparation-loss recovery remain unfinished, so the update menu and source installer stay disabled. Ordinary session-preserving Restart is separate. See [checkpoint evidence and activation gates](docs/update-helper-transaction.md).
 
 Rust-only validation does not require a prebuilt `dist/` renderer bundle. Release packaging is owned by Electron; use `pnpm electron:package` for a complete local build.
 

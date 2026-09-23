@@ -1,11 +1,14 @@
 use std::{
+    fs::File,
     io::{self, Read},
+    os::fd::AsRawFd,
     time::{Duration, Instant},
 };
 
 /// Bounds a whole frame, including a peer that sends only part of a JSON line.
 pub(crate) struct HandoffInput {
     deadline: Instant,
+    source: Option<File>,
 }
 
 impl HandoffInput {
@@ -16,6 +19,14 @@ impl HandoffInput {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             deadline: Instant::now() + timeout,
+            source: None,
+        }
+    }
+
+    pub fn from_file(source: File, timeout: Duration) -> Self {
+        Self {
+            deadline: Instant::now() + timeout,
+            source: Some(source),
         }
     }
 }
@@ -25,6 +36,10 @@ impl Read for HandoffInput {
         if buffer.is_empty() {
             return Ok(0);
         }
+        let fd = self
+            .source
+            .as_ref()
+            .map_or(libc::STDIN_FILENO, AsRawFd::as_raw_fd);
         loop {
             let remaining = self
                 .deadline
@@ -34,7 +49,7 @@ impl Read for HandoffInput {
                 })?;
             let timeout = i32::try_from(remaining.as_millis()).unwrap_or(i32::MAX);
             let mut poll = libc::pollfd {
-                fd: libc::STDIN_FILENO,
+                fd,
                 events: libc::POLLIN,
                 revents: 0,
             };
@@ -53,9 +68,8 @@ impl Read for HandoffInput {
                     "handoff frame deadline exceeded",
                 ));
             }
-            // SAFETY: buffer is writable for its length; stdin is only read by this protocol.
-            let count =
-                unsafe { libc::read(libc::STDIN_FILENO, buffer.as_mut_ptr().cast(), buffer.len()) };
+            // SAFETY: buffer is writable; fd is owned by this reader or is protocol-owned stdin.
+            let count = unsafe { libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len()) };
             if count >= 0 {
                 return usize::try_from(count).map_err(io::Error::other);
             }

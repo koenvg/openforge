@@ -3,6 +3,7 @@ import { UpdateSidecarExit } from './updateSidecarExit.js'
 import { NativeRestartRecovery } from './nativeRestartRecovery.js'
 import { RestartOperation } from './restartOperation.js'
 import { preflightProductionUpdateLaunch } from './productionUpdateLaunch.js'
+import { LocalUpdateDriver } from './localUpdateDriver.js'
 import type { RecoveryFailure } from './restartOperation.js'
 import { randomUUID } from 'node:crypto'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
@@ -11,7 +12,7 @@ import { installRestartMenu, installRestartRecoveryMenu } from './restartMenu.js
 import { RestartGeometryLeases } from './restartGeometryLeases.js'
 import type { RestartAttachmentIdentity } from './restartGeometryLeases.js'
 import type { RestartTerminalFence, RestartTerminalInventory } from './restartWorkspace.js'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import {
@@ -121,6 +122,36 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   const appRenderers = new Set<number>()
   const restartGeometryLeases = new RestartGeometryLeases()
   let restartWorkspace: Promise<RestartWorkspaceIpc> | null = null
+  let localUpdate: LocalUpdateDriver | null = null
+  let updateLaunchAuthorized = false
+  async function terminalInventory(): Promise<RestartTerminalInventory> {
+    if (!backendInvokeContext) throw new Error('Restart backend is not ready')
+    return await handleElectronInvoke({ command: 'get_restart_terminal_inventory', payload: {} }, createInvokeDeps(backendInvokeContext)) as RestartTerminalInventory
+  }
+  function updates(): LocalUpdateDriver {
+    localUpdate ??= new LocalUpdateDriver({
+      root: app.getPath('userData'), installedBundlePath: resolve(dirname(process.execPath), '..', '..'),
+      inventory: terminalInventory,
+      chooseBundle: async () => {
+        const result = await dialog.showOpenDialog({
+          title: 'Install a local OpenForge build', buttonLabel: 'Select build',
+          properties: ['openFile'], filters: [{ name: 'OpenForge application', extensions: ['app'] }],
+        })
+        return result.canceled ? null : result.filePaths[0] ?? null
+      },
+      quit: () => { authorizedRelaunch = true; app.quit() },
+    })
+    return localUpdate
+  }
+  async function retireFailedUpdateLaunch(): Promise<void> {
+    if (!updateLaunchAuthorized || !sidecarLaunchProcess) return
+    const child = sidecarLaunchProcess
+    const exit = updateSidecarExit
+    if (!exit) throw new Error('Owned update Sidecar is unavailable for retirement')
+    await exit.retire(child)
+    if (sidecarLaunchProcess !== child) throw new Error('Update Sidecar ownership changed during retirement')
+    backendInvokeContext = null
+  }
   const operationPrefix = '--openforge-restart-operation='
   let launchOperation = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null
   let authorizedRelaunch = false
@@ -138,6 +169,23 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       root: app.getPath('userData'), env: options.env, currentDir: options.currentDir,
       relaunch: operationId => { checkingQuit = false; relaunch(operationId) },
       quit: () => { quitApproved = true; app.quit() },
+      update: {
+        retry: async target => {
+          await retireFailedUpdateLaunch()
+          await updates().recover(target)
+        },
+        close: async () => {
+          await retireFailedUpdateLaunch()
+          const child = sidecarLaunchProcess
+          if (child) {
+            if (!updateSidecarExit) throw new Error('Owned Sidecar exit is unavailable')
+            await updateSidecarExit.wait(child)
+            if (sidecarLaunchProcess !== child) throw new Error('Sidecar ownership changed during recovery')
+          }
+          // No ordinary Quit cleanup: sessions remain owned by the surviving daemon.
+          app.exit(0)
+        },
+      },
     })
     return recovery
   }
@@ -149,10 +197,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     const operationId = launchOperation
     restartWorkspace = createControlledRestartHost({
       root: app.getPath('userData'), operationId,
-      inventory: async () => {
-        if (!backendInvokeContext) throw new Error('Restart backend is not ready')
-        return await handleElectronInvoke({ command: 'get_restart_terminal_inventory', payload: {} }, createInvokeDeps(backendInvokeContext)) as RestartTerminalInventory
-      },
+      inventory: terminalInventory,
+      update: updates(),
       backend: {
         prepare: (operationId, intent) => restartBackendCommand('prepare_app_restart', { operationId, intent }),
         cancel: operationId => restartBackendCommand('cancel_app_restart', { operationId }),
@@ -462,14 +508,18 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     async waitForAppReady(): Promise<void> {
       await app.whenReady()
       const pending = await (await RestartOperation.open(app.getPath('userData')))?.status()
-      if (pending && ['detached', 'reconnecting'].includes(pending.phase)) launchOperation ??= pending.operationId
+      if (pending && pending.intent !== 'update' && ['detached', 'reconnecting'].includes(pending.phase)) launchOperation ??= pending.operationId
       installRestartRecoveryMenu(async () => {
         const status = await (await RestartOperation.open(app.getPath('userData')))?.status()
         await recoverRestart(status?.failure ?? 'relaunch-delayed')
       })
     },
 
-    preflightUpdateLaunch: () => preflightProductionUpdateLaunch(app.getPath('userData')),
+    preflightUpdateLaunch: async () => {
+      updateLaunchAuthorized = Boolean(await preflightProductionUpdateLaunch(app.getPath('userData'), {
+        operationId: launchOperation, authorize: target => updates().authorizeLaunch(target),
+      }))
+    },
 
     resolveSidecarPath(): string | null {
       return resolveElectronSidecarPath(options.env, options.currentDir)
@@ -490,6 +540,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       developerLogSink.info(`[electron] Starting Rust sidecar: ${config.command} --host ${config.host} --port ${config.port}`)
       const sidecar = await startSidecarReadiness(config, {
         spawn: (command, args, spawnOptions) => asChildProcessLike(spawn(command, [...args], spawnOptions)),
+        authorizeStartup: updateLaunchAuthorized ? child => {
+          if (!child.pid) throw new Error('Update Sidecar has no owned process identity')
+          return updates().admitSidecar(child.pid)
+        } : undefined,
         fetch: (url, init) => fetch(url, init),
         sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
         onSpawned: (child) => {
@@ -559,6 +613,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     createMainWindow,
+    retireFailedUpdateLaunch,
     recoverRestart: failure => nativeRecovery().recoverBoot(failure),
 
     quit(): void {

@@ -1,10 +1,9 @@
 //! Domain admission is tied to a recorded child, not a command-line flag.
 use crate::{
     authorization, bundle, files, journal, process_identity::ProcessIdentity, InstallTransaction,
-    Phase,
 };
 use serde::{Deserialize, Serialize};
-use std::{io::Read, path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 pub const SIDECAR_STARTUP_ARGUMENT: &str = "--openforge-update-startup";
 
@@ -30,7 +29,7 @@ impl InstallTransaction {
     ) -> Result<SidecarAdmission, String> {
         self.verify_launch(operation, caller_pid)?;
         let mut record = self.require(operation)?;
-        if record.phase != Phase::LaunchStarted {
+        if !record.phase.awaiting_commit() {
             return Err("sidecar admission requires an uncommitted launch".into());
         }
         let child = ProcessIdentity::child_of(sidecar_pid, caller_pid)?;
@@ -60,29 +59,11 @@ impl SidecarAdmission {
         if record.installation != self.installation
             || record.operation != self.operation
             || record.destination != self.destination
-            || record.phase != Phase::LaunchStarted
+            || !record.phase.awaiting_commit()
         {
             return Err("stale sidecar admission".into());
         }
-        let parent = self
-            .destination
-            .parent()
-            .ok_or("missing installation parent")?;
-        let name = self
-            .destination
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or("invalid installation name")?;
-        let binding = files::read_private(
-            &parent.join(format!(".{name}.openforge-update.lock")),
-            16 * 1024,
-        )?;
-        let expected = serde_json::to_vec(&(
-            self.root.canonicalize().map_err(message)?,
-            &self.installation,
-        ))
-        .map_err(message)?;
-        if binding != expected {
+        if !crate::startup::binding_matches(&self.root, &self.installation, &self.destination)? {
             return Err("sidecar admission belongs to another recovery root".into());
         }
         record
@@ -172,50 +153,10 @@ pub fn authorize_sidecar_startup() -> Result<bool, String> {
         return Ok(false);
     }
     let admission: SidecarAdmission =
-        serde_json::from_slice(&read_admission()?).map_err(|_| "invalid sidecar admission")?;
+        serde_json::from_slice(&crate::startup::read_admission("sidecar")?)
+            .map_err(|_| "invalid sidecar admission")?;
     admission.verify_current_process()?;
     Ok(true)
-}
-
-fn read_admission() -> Result<Vec<u8>, String> {
-    let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
-    // SAFETY: metadata is writable stat storage; stdin is only inspected, not taken.
-    if unsafe { libc::fstat(libc::STDIN_FILENO, metadata.as_mut_ptr()) } != 0 {
-        return Err("missing sidecar admission pipe".into());
-    }
-    // SAFETY: successful fstat initialized the entire structure.
-    let kind = unsafe { metadata.assume_init() }.st_mode & libc::S_IFMT;
-    if kind == libc::S_IFSOCK {
-        // Node uses an inherited Unix socketpair for stdio. Never accept TCP.
-        let mut address = std::mem::MaybeUninit::<libc::sockaddr_storage>::zeroed();
-        let mut size = std::mem::size_of::<libc::sockaddr_storage>()
-            .try_into()
-            .map_err(message)?;
-        // SAFETY: address and size are writable, correctly sized storage.
-        if unsafe { libc::getsockname(libc::STDIN_FILENO, address.as_mut_ptr().cast(), &mut size) }
-            != 0
-        {
-            return Err("invalid sidecar admission socket".into());
-        }
-        // SAFETY: successful getsockname initialized the address family.
-        if i32::from(unsafe { address.assume_init() }.ss_family) != libc::AF_UNIX {
-            return Err("sidecar admission requires a local inherited stream".into());
-        }
-    } else if kind != libc::S_IFIFO {
-        return Err("sidecar admission requires an inherited pipe".into());
-    }
-    let mut bytes = Vec::new();
-    crate::handoff_input::HandoffInput::with_timeout(Duration::from_secs(30))
-        .take(16 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(message)?;
-    if bytes.is_empty() {
-        return Err("missing authenticated sidecar admission".into());
-    }
-    if bytes.len() > 16 * 1024 {
-        return Err("sidecar admission exceeds size limit".into());
-    }
-    Ok(bytes)
 }
 
 fn message(error: impl std::fmt::Display) -> String {

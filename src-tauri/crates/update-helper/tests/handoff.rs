@@ -20,10 +20,25 @@ struct Helper {
 
 impl Helper {
     fn start() -> Self {
+        Self::with_owner(false)
+    }
+
+    fn with_owner(orphanable: bool) -> Self {
         let copy = tempfile::tempdir().unwrap();
         let executable = copy.path().join("helper");
         fs::copy(env!("CARGO_BIN_EXE_openforge-update-helper"), &executable).unwrap();
-        let mut child = Command::new(executable)
+        let mut command = if orphanable {
+            let mut owner = Command::new("/bin/sh");
+            owner
+                .arg("-c")
+                .arg("\"$1\" <&0 & printf 'owned-helper:%s\\n' \"$!\"; wait")
+                .arg("owned-helper-parent")
+                .arg(&executable);
+            owner
+        } else {
+            Command::new(executable)
+        };
+        let mut child = command
             .env_clear()
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -46,6 +61,7 @@ impl Helper {
         }
     }
 
+    #[track_caller]
     fn response(&self, seconds: u64) -> Value {
         serde_json::from_str(
             &self
@@ -86,7 +102,7 @@ fn unauthenticated_handoff_cannot_acquire_or_change_an_installation() {
     let fixture = common::Fixture::new();
     let mut helper = Helper::start();
     let hello = helper.response(10);
-    assert_eq!(hello["version"], 1);
+    assert_eq!(hello["version"], 2);
     assert_eq!(hello["challenge"].as_str().unwrap().len(), 64);
     helper.send(json!({"payload":request(&fixture, &hello["challenge"]), "mac":"00".repeat(32)}));
     assert_eq!(helper.response(5)["status"], "refused");
@@ -119,11 +135,14 @@ fn signed(payload: String) -> Value {
 
 #[test]
 fn authenticated_install_waits_for_its_live_host_and_retains_recovery_if_killed() {
-    let fixture = common::Fixture::new();
+    let fixture = common::Fixture::with_target_bytes(
+        &fs::read(env!("CARGO_BIN_EXE_openforge-update-helper")).unwrap(),
+    );
     let mut helper = Helper::start();
     let hello = helper.response(10);
     helper.send(signed(request(&fixture, &hello["challenge"])));
-    assert_eq!(helper.response(5)["status"], "prepared");
+    // Full integrity/ownership preparation has the transaction budget, not a probe budget.
+    assert_eq!(helper.response(60)["status"], "prepared");
     helper.send(signed(
         json!({"version":1,"challenge":hello["challenge"],
         "action":"install","operation":"operation-one"})
@@ -165,11 +184,13 @@ fn signed_commands_from_another_helper_instance_are_not_replayable() {
 
 #[test]
 fn losing_the_pipe_before_install_authority_cancels_without_replacement() {
-    let fixture = common::Fixture::new();
+    let fixture = common::Fixture::with_target_bytes(
+        &fs::read(env!("CARGO_BIN_EXE_openforge-update-helper")).unwrap(),
+    );
     let mut helper = Helper::start();
     let hello = helper.response(10);
     helper.send(signed(request(&fixture, &hello["challenge"])));
-    assert_eq!(helper.response(5)["status"], "prepared");
+    assert_eq!(helper.response(60)["status"], "prepared");
     drop(helper.child.stdin.take());
     assert_eq!(helper.response(5)["status"], "refused");
     drop(helper);
@@ -184,4 +205,61 @@ fn losing_the_pipe_before_install_authority_cancels_without_replacement() {
         openforge_update_helper::Phase::RolledBack
     );
     assert!(fixture.bundle.exists());
+}
+
+#[test]
+fn an_orphaned_helper_cannot_attribute_new_requests_to_its_former_parent() {
+    let fixture = common::Fixture::new();
+    {
+        let mut transaction = openforge_update_helper::InstallTransaction::open(
+            &fixture.state,
+            "installation-one",
+            &fixture.destination,
+        )
+        .unwrap();
+        transaction
+            .prepare(&fixture.authorization, &fixture.staging, "operation-one")
+            .unwrap();
+        transaction.replace("operation-one").unwrap();
+        transaction.begin_launch("operation-one").unwrap();
+        transaction.commit("operation-one").unwrap();
+    }
+    let mut helper = Helper::with_owner(true);
+    let rows = [
+        helper.lines.recv_timeout(Duration::from_secs(10)).unwrap(),
+        helper.lines.recv_timeout(Duration::from_secs(10)).unwrap(),
+    ];
+    let pid = rows
+        .iter()
+        .find_map(|row| row.strip_prefix("owned-helper:"))
+        .unwrap();
+    let hello: Value =
+        serde_json::from_str(rows.iter().find(|row| row.starts_with('{')).unwrap()).unwrap();
+    // Keep only the inherited writer. Kill/reap our actual owner, never the observed helper PID.
+    let mut input = helper.child.stdin.take().unwrap();
+    helper.child.kill().unwrap();
+    helper.child.wait().unwrap();
+    let mut payload: Value = serde_json::from_str(&request(&fixture, &hello["challenge"])).unwrap();
+    payload["action"] = json!("commit");
+    writeln!(input, "{}", signed(payload.to_string())).unwrap();
+    let response = helper.response(10);
+    drop(input);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let status = Command::new("/bin/ps")
+            .env_clear()
+            .args(["-p", pid, "-o", "stat="])
+            .output()
+            .unwrap();
+        let status = String::from_utf8(status.stdout).unwrap();
+        if status.trim().is_empty() || status.trim_start().starts_with('Z') {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "owned helper did not exit"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(response["status"], "refused");
 }

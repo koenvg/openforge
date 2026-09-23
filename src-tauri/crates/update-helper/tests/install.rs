@@ -232,3 +232,44 @@ fn commit_requires_launch_and_keeps_the_post_launch_rollback_fence() {
     .unwrap();
     assert!(reopened.commit("operation-one").is_err());
 }
+
+#[test]
+fn rollback_acknowledgement_rechecks_the_restored_source() {
+    let fixture = common::Fixture::new();
+    let mut transaction =
+        InstallTransaction::open(&fixture.state, "installation-one", &fixture.destination).unwrap();
+    transaction
+        .prepare(&fixture.authorization, &fixture.staging, "operation-one")
+        .unwrap();
+    transaction.recover("operation-one").unwrap();
+    fs::write(
+        fixture.destination.join("Contents/MacOS/openforge-sidecar"),
+        "changed after rollback",
+    )
+    .unwrap();
+    assert!(transaction
+        .recover("operation-one")
+        .unwrap_err()
+        .contains("recovered installation changed"));
+}
+
+#[test]
+fn recovers_a_missing_app_left_by_an_older_non_exchanging_installer() {
+    let fixture = common::Fixture::new();
+    let mut transaction =
+        InstallTransaction::open(&fixture.state, "installation-one", &fixture.destination).unwrap();
+    transaction
+        .prepare(&fixture.authorization, &fixture.staging, "operation-one")
+        .unwrap();
+    fs::rename(
+        &fixture.destination,
+        fixture.state.join("previous-operation-one.app"),
+    )
+    .unwrap();
+    transaction.recover("operation-one").unwrap();
+    assert_eq!(
+        fs::read_to_string(fixture.destination.join("Contents/MacOS/openforge-sidecar")).unwrap(),
+        "old"
+    );
+    assert!(fixture.bundle.exists());
+}
