@@ -1,6 +1,6 @@
 import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import ResizablePanel from './ResizablePanel.svelte'
+import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
 
 function requireElement<T extends HTMLElement>(value: Element | null, ctor: { new (...args: never[]): T }): T {
   if (!(value instanceof ctor)) {
@@ -122,27 +122,48 @@ describe('ResizablePanel', () => {
     expect(localStorage.getItem('resizable-panel:test-persist')).toBe('300')
   })
 
-  it.each(['left', 'right'] as const)('releases drag listeners on %s panel unmount without saving', async (side) => {
+  it.each(['left', 'right'] as const)('cancels a %s drag when unmounted so a later panel keeps its own width', async (side) => {
     localStorage.setItem('resizable-panel:test-unmount', '250')
-    const { container, unmount } = render(ResizablePanel, {
+    const first = render(ResizablePanel, {
       props: { storageKey: 'test-unmount', defaultWidth: 250, side },
+    })
+
+    await fireEvent.mouseDown(getHandle(first.container), { clientX: 250 })
+    await fireEvent.mouseMove(document, { clientX: side === 'left' ? 300 : 200 })
+    expect(getPanel(first.container).style.width).toBe('300px')
+
+    first.unmount()
+    await fireEvent.mouseMove(document, { clientX: side === 'left' ? 350 : 150 })
+    await fireEvent.mouseUp(document)
+    expect(localStorage.getItem('resizable-panel:test-unmount')).toBe('250')
+
+    const second = render(ResizablePanel, {
+      props: { storageKey: 'test-unmount', defaultWidth: 250, side },
+    })
+    expect(getPanel(second.container).style.width).toBe('250px')
+
+    await fireEvent.mouseDown(getHandle(second.container), { clientX: 250 })
+    await fireEvent.mouseMove(document, { clientX: side === 'left' ? 280 : 220 })
+    await fireEvent.mouseUp(document)
+    expect(getPanel(second.container).style.width).toBe('280px')
+    expect(localStorage.getItem('resizable-panel:test-unmount')).toBe('280')
+  })
+
+  it('releases both document drag listeners when unmounted', async () => {
+    const view = render(ResizablePanel, {
+      props: { storageKey: 'test-listeners', defaultWidth: 250 },
     })
     const added = vi.spyOn(document, 'addEventListener')
     const removed = vi.spyOn(document, 'removeEventListener')
     try {
-      await fireEvent.mouseDown(getHandle(container), { clientX: 250 })
-      await fireEvent.mouseMove(document, { clientX: side === 'left' ? 300 : 200 })
-      expect(getPanel(container).style.width).toBe('300px')
+      await fireEvent.mouseDown(getHandle(view.container), { clientX: 250 })
       const dragListeners = added.mock.calls.filter(([type]) => type === 'mousemove' || type === 'mouseup')
       expect(dragListeners.map(([type]) => type).sort()).toEqual(['mousemove', 'mouseup'])
 
-      unmount()
+      view.unmount()
       for (const [type, listener] of dragListeners) {
         expect(removed).toHaveBeenCalledWith(type, listener)
       }
-      await fireEvent.mouseMove(document, { clientX: 350 })
-      await fireEvent.mouseUp(document)
-      expect(localStorage.getItem('resizable-panel:test-unmount')).toBe('250')
     } finally {
       await fireEvent.mouseUp(document)
       added.mockRestore()
