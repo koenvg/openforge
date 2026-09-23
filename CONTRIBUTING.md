@@ -214,3 +214,5 @@ openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
 ```
 
 `task dependencies set` replaces the entire dependency list. Pass each dependent task's full desired list, changing only the obsolete task ID. Use the actual task IDs, labels, and prerequisites from your project rather than copying these example values.
+
+To remove just one obsolete prerequisite without changing the others, run `openforge task dependencies remove --task-id T-999 --depends-on T-123`. To remove every prerequisite, run `openforge task dependencies clear --task-id T-999`. The native backend rejects an unknown current task ID. Removing a prerequisite ID that is not linked is a no-op. `set` still requires a non-empty `--depends-on`.

@@ -148,6 +148,8 @@ describe('OpenForge CLI', () => {
       'openforge task dependencies set --task-id <id> --depends-on <task-id>',
       'openforge task dependencies add --task-id <id> --depends-on <task-id>',
       'openforge project list',
+      'openforge task dependencies remove --task-id <id> --depends-on <task-id>',
+      'openforge task dependencies clear --task-id <id>',
       'openforge project labels list --project-id <id>',
       'openforge debug process-memory',
       'openforge debug process-memory-history',

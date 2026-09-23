@@ -5,6 +5,7 @@ import {
   listen,
   runCli,
   runCliAgainstJsonBridge,
+  runCliAgainstRequestSequence,
 } from './cli-test-utils.js';
 
 describe('OpenForge task dependency commands', () => {
@@ -64,6 +65,57 @@ describe('OpenForge task dependency commands', () => {
       ],
     });
   });
+  it('removes only the named prerequisite through the native remove operation', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'task', 'dependencies', 'remove', '--task-id', 'KVG-5232', '--depends-on', 'KVG-5266',
+    ], {
+      method: 'POST',
+      url: '/remove_task_dependency',
+      expectedBody: { task_id: 'KVG-5232', depends_on: 'KVG-5266' },
+      response: { task_id: 'KVG-5232', status: 'updated' },
+    })).resolves.toEqual({ task_id: 'KVG-5232', status: 'updated' });
+  });
+
+  it('clears all prerequisites only when explicitly requested', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'task', 'dependencies', 'clear', '--task-id', 'KVG-5232',
+    ], {
+      method: 'POST',
+      url: '/set_task_dependencies',
+      expectedBody: { task_id: 'KVG-5232', depends_on: [] },
+      response: { task_id: 'KVG-5232', status: 'updated' },
+    })).resolves.toEqual({ task_id: 'KVG-5232', status: 'updated' });
+  });
+
+  it('rejects empty prerequisite IDs rather than clearing through remove or set', async () => {
+    for (const action of ['remove', 'set']) {
+      for (const args of [[], ['--depends-on', ' , ']]) {
+        await expect(runCli([
+          'task', 'dependencies', action, '--task-id', 'T-2', ...args,
+        ])).rejects.toMatchObject({
+          stderr: expect.stringContaining('requires'),
+        });
+      }
+    }
+    await expect(runCli([
+      'task', 'dependencies', 'remove', '--task-id', 'T-2', '--depends-on', 'T-1,T-0',
+    ])).rejects.toMatchObject({ stderr: expect.stringContaining('exactly one') });
+  });
+
+  it('rejects unknown task IDs from the native dependency endpoints', async () => {
+    for (const [action, url, body] of [
+      ['remove', '/remove_task_dependency', { task_id: 'T-404', depends_on: 'T-1' }],
+      ['clear', '/set_task_dependencies', { task_id: 'T-404', depends_on: [] }],
+    ]) {
+      const error = await runCliAgainstRequestSequence([
+        'task', 'dependencies', action, '--task-id', 'T-404',
+        ...(action === 'remove' ? ['--depends-on', 'T-1'] : []),
+      ], [{ method: 'POST', url, body, statusCode: 400, response: { error: 'task T-404 not found' } }]).catch((failure) => failure);
+      expect(error.seenRequests).toEqual([{ method: 'POST', url, body }]);
+      expect(error.stderr).toContain('T-404');
+    }
+  });
+
 
   it('sets dependencies for an existing task', async () => {
     let seenBody = null;

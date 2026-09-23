@@ -64,9 +64,13 @@ openforge task labels add --task-id T-123 --label bug
 openforge task labels remove --task-id T-123 --label-id 42
 openforge task dependencies set --task-id T-123 --depends-on T-121,T-122
 openforge task dependencies add --task-id T-123 --depends-on T-122
+openforge task dependencies remove --task-id T-123 --depends-on T-121
+openforge task dependencies clear --task-id T-123
 openforge task dependencies link --chain "T-121 -> T-122 -> T-123"
 openforge task delete --task-id T-123
 ```
+
+`task dependencies remove` deletes only the named direct prerequisite, preserving other links. `task dependencies clear` removes all prerequisites explicitly. `set` still requires at least one ID. Native validation rejects unknown current task IDs.
 
 Plan JSON shape:
 
