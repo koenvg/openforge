@@ -71,6 +71,10 @@ fn bundle(root: &Path, version: &str) -> String {
 
 impl Fixture {
     pub fn new() -> Self {
+        Self::with_target_body("new")
+    }
+
+    pub fn with_target_body(body: &str) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let destination = root.join("Installed.app");
@@ -79,7 +83,7 @@ impl Fixture {
         fs::create_dir(&staging).unwrap();
         fs::set_permissions(&staging, fs::Permissions::from_mode(0o700)).unwrap();
         let target = staging.join("bundle-11111111.app");
-        let hash = bundle(&target, "new");
+        let hash = bundle(&target, body);
         let authorization = root.join("authorization");
         fs::create_dir(&authorization).unwrap();
         fs::set_permissions(&authorization, fs::Permissions::from_mode(0o700)).unwrap();

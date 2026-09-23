@@ -82,26 +82,61 @@ export async function prepareNativeUpdateHandoff(options: {
 }
 
 /** Called by the trusted coordinator only after runtime reconciliation and every window restores. */
-export async function commitNativeUpdate(options: {
+export async function commitNativeUpdate(options: InstalledUpdateOptions): Promise<void> {
+  await runInstalledHelper(options, 'commit')
+}
+
+/** Authenticate this target process through the native journal before backend startup. */
+export async function verifyNativeUpdateLaunch(options: Omit<InstalledUpdateOptions, 'controller'>): Promise<void> {
+  await runInstalledHelper(options, 'verify-launch')
+}
+
+/** Return native child admission for its inherited stdin, never for renderer IPC. */
+export async function authorizeNativeUpdateSidecar(options: Omit<InstalledUpdateOptions, 'controller'> & { sidecarPid: number }): Promise<string> {
+  if (!Number.isSafeInteger(options.sidecarPid) || options.sidecarPid <= 1) throw new Error('Invalid owned Sidecar pid')
+  const result = await runInstalledHelper(options, 'register-sidecar', options.sidecarPid)
+  if (!result.admission || typeof result.admission !== 'object') throw new Error('Missing native Sidecar admission')
+  return JSON.stringify(result.admission)
+}
+
+interface InstalledUpdateOptions {
   authorization: UpdateAuthorizationStore; target: UpdateTarget; recoveryRoot: string; controller?: RestartTerminalController
-}): Promise<void> {
+}
+
+async function runInstalledHelper(options: InstalledUpdateOptions, action: 'commit' | 'verify-launch' | 'register-sidecar', sidecarPid?: number): Promise<Record<string, unknown>> {
+  const controller = options.controller ? Object.freeze({ ...options.controller }) : undefined
   const target = parseUpdateTarget(options.target)
   const grant = await options.authorization.read(target.operationId)
-  if (!grant || grant.installationId !== target.installationId || grant.manifestSha256 !== target.manifestSha256) throw new Error('Update commit has no matching authorization')
+  if (!grant || grant.installationId !== target.installationId || grant.manifestSha256 !== target.manifestSha256) throw new Error('Installed update has no matching authorization')
   const images = updateBundleImages(await measureUpdateBundle(grant.installedBundlePath))
-  if (Object.keys(images).some(name => images[name as keyof typeof images] !== target.images[name as keyof typeof images])) throw new Error('Installed update image changed before commit')
+  if (Object.keys(images).some(name => images[name as keyof typeof images] !== target.images[name as keyof typeof images])) throw new Error('Installed update image changed')
   const root = options.recoveryRoot
   const metadata = await lstat(root)
   if (!isAbsolute(root) || resolve(root) !== root || !metadata.isDirectory() || metadata.uid !== process.getuid?.() || (metadata.mode & 0o7777) !== 0o700) throw new Error('Unsafe helper recovery directory')
-  const executable = join(root, `commit-${target.operationId}-${randomUUID()}`)
+  const executable = join(root, `${action}-${target.operationId}-${randomUUID()}`)
   let helper: UpdateHelperProcess | undefined
   try {
     await copyVerifiedHelper(join(grant.installedBundlePath, 'Contents/MacOS/openforge-update-helper'), executable, target.images.helper)
-    helper = new UpdateHelperProcess(executable)
-    const hello = await helper.receive(10_000)
-    if (hello.version !== 1 || typeof hello.challenge !== 'string') throw new Error('Invalid helper challenge')
-    await helper.send(await options.authorization.helperProof(target.operationId, hello.challenge, 'commit', root, target.manifestSha256, options.controller))
-    expectStatus(await helper.receive(), 'committed', target.operationId)
+    const pendingUntil = Date.now() + 5_000
+    let firstProbe = true
+    for (;;) {
+      helper = new UpdateHelperProcess(executable)
+      const hello = await helper.receive(firstProbe ? 10_000 : 2_000)
+      firstProbe = false
+      if (hello.version !== 1 || typeof hello.challenge !== 'string') throw new Error('Invalid helper challenge')
+      await helper.send(await options.authorization.helperProof(target.operationId, hello.challenge, action, root, target.manifestSha256, controller, sidecarPid))
+      const result = await helper.receive()
+      if (action === 'verify-launch' && result.status === 'launch-pending' && result.operation === target.operationId) {
+        await helper.stop()
+        helper = undefined
+        if (Date.now() >= pendingUntil) throw new Error('Native installation ownership was not released for startup')
+        await new Promise(resolve => setTimeout(resolve, 50))
+        continue
+      }
+      const expected = { commit: 'committed', 'verify-launch': 'launch-verified', 'register-sidecar': 'sidecar-registered' }[action]
+      expectStatus(result, expected, target.operationId)
+      return result
+    }
   } finally {
     await helper?.stop()
     await rm(executable, { force: true })

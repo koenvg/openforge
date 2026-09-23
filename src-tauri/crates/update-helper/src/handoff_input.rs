@@ -10,8 +10,12 @@ pub(crate) struct HandoffInput {
 
 impl HandoffInput {
     pub fn new() -> Self {
+        Self::with_timeout(Duration::from_secs(120))
+    }
+
+    pub fn with_timeout(timeout: Duration) -> Self {
         Self {
-            deadline: Instant::now() + Duration::from_secs(120),
+            deadline: Instant::now() + timeout,
         }
     }
 }

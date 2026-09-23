@@ -392,6 +392,10 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
+    if let Err(error) = openforge_update_helper::authorize_sidecar_startup() {
+        eprintln!("[update-startup] refused: {error}");
+        std::process::exit(1);
+    }
     if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
     }

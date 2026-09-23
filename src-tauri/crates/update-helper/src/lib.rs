@@ -6,9 +6,13 @@ mod handoff;
 mod handoff_input;
 mod host_exit;
 mod journal;
+mod launch;
+mod process_identity;
 mod runtime_update;
+mod sidecar_startup;
 pub use handoff::run_helper;
 pub use journal::Phase;
+pub use sidecar_startup::{authorize_sidecar_startup, SidecarAdmission, SIDECAR_STARTUP_ARGUMENT};
 
 use std::{
     fs::File,
@@ -141,6 +145,8 @@ impl InstallTransaction {
                 previous_hash,
                 phase: Phase::Prepared,
                 runtime: None,
+                launched: None,
+                sidecar: None,
             },
         )
     }

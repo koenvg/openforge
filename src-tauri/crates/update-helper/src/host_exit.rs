@@ -7,7 +7,10 @@ mod platform {
         time::{Duration, Instant},
     };
 
-    pub struct HostExit(OwnedFd);
+    pub struct HostExit {
+        queue: OwnedFd,
+        parent: u32,
+    }
 
     impl HostExit {
         pub fn watch() -> Result<Self, String> {
@@ -44,7 +47,14 @@ mod platform {
             if unsafe { libc::getppid() } != parent {
                 return Err("host exited before handoff".into());
             }
-            Ok(Self(queue))
+            Ok(Self {
+                queue,
+                parent: parent.try_into().map_err(|_| "invalid host pid")?,
+            })
+        }
+
+        pub fn parent_pid(&self) -> Result<u32, String> {
+            Ok(self.parent)
         }
 
         pub fn wait(&self) -> Result<(), String> {
@@ -65,7 +75,7 @@ mod platform {
                 // SAFETY: queue is owned, event/timeout point to valid storage and no changes are submitted.
                 let count = unsafe {
                     libc::kevent(
-                        self.0.as_raw_fd(),
+                        self.queue.as_raw_fd(),
                         std::ptr::null(),
                         0,
                         &mut event,
@@ -96,6 +106,9 @@ mod platform {
 mod platform {
     pub struct HostExit;
     impl HostExit {
+        pub fn parent_pid(&self) -> Result<u32, String> {
+            Err("updater handoff requires macOS".into())
+        }
         pub fn watch() -> Result<Self, String> {
             Err("updater handoff requires macOS".into())
         }

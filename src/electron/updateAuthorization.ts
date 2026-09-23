@@ -122,19 +122,20 @@ export class UpdateAuthorizationStore {
   }
 
   /** Main-process capability. A fresh helper challenge binds each proof to one live pipe. */
-  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController): Promise<{ payload: string; mac: string }> {
-    if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit'].includes(action)
+  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit' | 'verify-launch' | 'register-sidecar', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController, sidecarPid?: number): Promise<{ payload: string; mac: string }> {
+    if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit', 'verify-launch', 'register-sidecar'].includes(action)
       || !isAbsolute(recoveryRoot) || resolve(recoveryRoot) !== recoveryRoot) throw new Error('Invalid helper handoff request')
     const authorization = await this.read(operationId)
     if (!authorization) throw new Error('Helper handoff requires update authorization')
     if (authorization.manifestSha256 !== manifestSha256) throw new Error('Helper handoff target does not match authorization')
     const key = await readPrivateFile(join(this.options.root, 'authorization.key'), 32)
     if (key.length !== 32) throw new Error('Invalid update authorization key')
-    const payload = JSON.stringify(action === 'prepare' || action === 'commit' ? {
+    const payload = JSON.stringify(action !== 'install' && action !== 'cancel' ? {
       version: 1, challenge, action, manifestSha256, root: recoveryRoot, destination: authorization.installedBundlePath,
       authorization: this.options.root, staging: dirname(authorization.bundlePath),
       installation: authorization.installationId, operation: operationId,
       ...(controller ? { controller: { installation: controller.installation, lifetime: controller.lifetime, generation: controller.generation } } : {}),
+      ...(sidecarPid === undefined ? {} : { sidecarPid }),
     } : { version: 1, challenge, action, operation: operationId })
     return { payload, mac: createHmac('sha256', key).update('openforge-update-handoff-v1\0').update(payload).digest('hex') }
   }

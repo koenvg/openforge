@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto'
+import type { Writable } from 'node:stream'
+import { admitSidecarStartup, sidecarStartupConfig } from './sidecarStartupAdmission.js'
 import { StringDecoder } from 'node:string_decoder'
 import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
@@ -13,6 +15,7 @@ export interface SidecarOutputStreamLike {
 
 export interface ChildProcessLike {
   readonly killed: boolean
+  readonly stdin?: Pick<Writable, 'end' | 'once'> | null
   readonly stdout?: SidecarOutputStreamLike | null
   readonly stderr?: SidecarOutputStreamLike | null
   readonly pid?: number
@@ -179,6 +182,8 @@ export interface StartSidecarDeps {
   fetch: HealthFetch
   sleep: Sleep
   onSpawned?: (child: ChildProcessLike) => void
+  /** A native helper must register this exact child before its stdin is released. */
+  authorizeStartup?: (child: ChildProcessLike) => Promise<string>
   healthTimeoutMs?: number
   healthIntervalMs?: number
   logSidecarOutput?: boolean
@@ -502,9 +507,10 @@ export async function stopSidecar(
 }
 
 export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidecarDeps): Promise<SidecarHandle> {
+  config = sidecarStartupConfig(config, deps.authorizeStartup)
   const child = deps.spawn(config.command, config.args, {
     env: config.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [deps.authorizeStartup ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   })
   deps.onSpawned?.(child)
 
@@ -513,6 +519,7 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
   }
 
   try {
+    if (deps.authorizeStartup) await admitSidecarStartup(child, deps.authorizeStartup)
     await waitForSidecarHealth({
       healthUrl: config.healthUrl,
       token: config.token,
@@ -607,9 +614,10 @@ export async function startSidecarReadiness(
   config: SidecarLaunchConfig,
   deps: StartSidecarReadinessDeps,
 ): Promise<SidecarReadinessHandle> {
+  config = sidecarStartupConfig(config, deps.authorizeStartup)
   const child = deps.spawn(config.command, config.args, {
     env: config.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [deps.authorizeStartup ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   })
   deps.onSpawned?.(child)
 
@@ -622,6 +630,7 @@ export async function startSidecarReadiness(
   let snapshot: SidecarReadinessSnapshot | null = null
 
   try {
+    if (deps.authorizeStartup) await admitSidecarStartup(child, deps.authorizeStartup)
     const readinessAbort = new AbortController()
     const readiness = await withReadinessDeadline(waitForSidecarReadiness({
       readinessUrl: config.readinessUrl,

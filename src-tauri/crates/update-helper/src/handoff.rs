@@ -36,6 +36,8 @@ struct Prepare {
     #[serde(rename = "manifestSha256")]
     manifest_sha256: String,
     controller: Option<openforge_session_protocol::Controller>,
+    #[serde(rename = "sidecarPid")]
+    sidecar_pid: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -89,7 +91,11 @@ fn run() -> Result<(), String> {
         serde_json::from_str(&envelope.payload).map_err(|_| "invalid handoff request")?;
     if request.version != 1
         || request.challenge != challenge
-        || !matches!(request.action.as_str(), "prepare" | "commit")
+        || !matches!(
+            request.action.as_str(),
+            "prepare" | "commit" | "verify-launch" | "register-sidecar"
+        )
+        || (request.action == "register-sidecar") != request.sidecar_pid.is_some()
     {
         return Err("stale or unsupported handoff request".into());
     }
@@ -129,8 +135,34 @@ fn run() -> Result<(), String> {
         .as_ref()
         .ok_or("missing authorized launch context")?;
     launch.validate(&destination, &authority.bundle_path)?;
-    let mut transaction =
-        InstallTransaction::open(&request.root, &request.installation, &request.destination)?;
+    let mut transaction = match InstallTransaction::open(
+        &request.root,
+        &request.installation,
+        &request.destination,
+    ) {
+        Ok(transaction) => transaction,
+        Err(error)
+            if request.action == "verify-launch"
+                && error == "another updater owns this installation" =>
+        {
+            return emit(&json!({"status":"launch-pending","operation":request.operation}));
+        }
+        Err(error) => return Err(error),
+    };
+    if request.action == "verify-launch" {
+        transaction.verify_launch(&request.operation, host.parent_pid()?)?;
+        return emit(&json!({"status":"launch-verified","operation":request.operation}));
+    }
+    if request.action == "register-sidecar" {
+        let admission = transaction.register_sidecar(
+            &request.operation,
+            host.parent_pid()?,
+            request.sidecar_pid.ok_or("missing sidecar pid")?,
+        )?;
+        return emit(
+            &json!({"status":"sidecar-registered","operation":request.operation,"admission":admission}),
+        );
+    }
     if request.action == "commit" {
         transaction.commit_with_controller(&request.operation, request.controller)?;
         return emit(&json!({"status":"committed","operation":request.operation}));
@@ -217,36 +249,15 @@ fn run() -> Result<(), String> {
     // The old host has exited. Release cold-start admission before the target
     // can launch its daemon; target readiness must still verify the running image.
     drop(cold_runtime);
-    transaction.begin_launch(&request.operation)?;
-    // Only the authorized app entry point, never caller-provided shell commands or argv.
-    let mut command =
-        std::process::Command::new(request.destination.join("Contents/MacOS/Open Forge"));
-    command
-        .arg(format!(
-            "--openforge-restart-operation={}",
-            request.operation
-        ))
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    command
-        .env(
-            "OPENFORGE_ELECTRON_USER_DATA_DIR",
-            &launch.electron_user_data,
-        )
-        .env("OPENFORGE_APP_DATA_DIR", &launch.app_data)
-        .env("OPENFORGE_SESSION_DAEMON_ROOT", &launch.daemon_root);
-    for name in ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG"] {
-        if let Some(value) = std::env::var_os(name) {
-            command.env(name, value);
+    match transaction.launch(&request.operation) {
+        Ok(_target) => Ok(()),
+        Err(error) => {
+            if transaction.require(&request.operation)?.phase == crate::Phase::Installed {
+                transaction.recover(&request.operation)?;
+            }
+            Err(error)
         }
     }
-    command
-        .spawn()
-        .map_err(|e| format!("target launch failed; retain installed app for recovery: {e}"))?;
-    Ok(())
 }
 
 /// Serve exactly one authenticated operation through inherited stdin/stdout.

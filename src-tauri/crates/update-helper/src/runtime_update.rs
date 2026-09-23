@@ -65,6 +65,24 @@ impl RuntimePlan {
         let client = MaintenanceClient::attach(root, controller).map_err(message)?;
         let capabilities = client.capabilities().map_err(message)?;
         let status = client.status(&operation_id(operation)?).map_err(message)?;
+        self.verify_observation(capabilities, status)
+    }
+
+    pub fn verify_running(&self, root: &Path, operation: &str) -> Result<(), String> {
+        let (capabilities, status) = MaintenanceClient::observe_replacement(
+            root,
+            &self.controller.installation,
+            &operation_id(operation)?,
+        )
+        .map_err(message)?;
+        self.verify_observation(capabilities, status)
+    }
+
+    fn verify_observation(
+        &self,
+        capabilities: openforge_session_protocol::Capabilities,
+        status: openforge_session_protocol::ReplacementStatus,
+    ) -> Result<(), String> {
         let expected = self
             .target_version
             .as_ref()

@@ -17,6 +17,10 @@ struct Request {
 }
 
 fn run() -> Result<(), String> {
+    if openforge_update_helper::authorize_sidecar_startup()? {
+        println!("sidecar-authorized");
+        return Ok(());
+    }
     let mut input = Vec::new();
     std::io::stdin()
         .take(16 * 1024 + 1)
@@ -45,6 +49,11 @@ fn run() -> Result<(), String> {
         InstallTransaction::open(&request.root, &request.installation, &request.destination)?;
     match request.action.as_str() {
         "idle" => {}
+        "target-exited" => {
+            if transaction.launched_process_running(&request.operation)? {
+                return Err("target process is still running".into());
+            }
+        }
         "prepare" => {
             transaction.prepare(&request.authorization, &request.staging, &request.operation)?
         }

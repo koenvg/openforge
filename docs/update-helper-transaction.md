@@ -16,7 +16,11 @@ KVG-5206 is unfinished. Production updates and source installation remain disabl
 - The coordinator now requires a Sidecar-exit verifier before update preparation. After authenticated detach it waits for the exact spawned Sidecar's exit before calling the replacement driver. The Electron adapter records exit from spawn time and bounds shutdown using the existing shutdown budget. Signal acknowledgement, `killed`, and shutdown reports do not count as exit proof.
 - `MaintenanceClient` borrows the current Sidecar controller for preflight without `Connect`, daemon launch or session mutation methods. Its read-only replacement observation also works after that controller becomes stale, without fencing the replacement Sidecar.
 - A live-runtime handoff authenticates the source controller. The helper copies the target runtime into installation-owned immutable storage, verifies that its daemon and complete CLI payload match the authorized app, and keeps durable release pins. It records the source controller, daemon PID, source image, release digest and preparation intent before asking the daemon to prepare. A cold handoff instead holds launch and lifetime locks and refuses an existing owner.
-- After host exit and bundle replacement, the helper activates the prepared daemon before launching the target app. Native commit requires a fresh Sidecar controller for the preserved lifetime, the original daemon PID, and an activated operation receipt whose actual image matches the prepared image. Unknown receipts are not evidence of successful cancellation. Target-app startup authentication remains unfinished.
+- After host exit and bundle replacement, the helper activates the prepared daemon before launching the target app. Native commit requires a fresh Sidecar controller for the preserved lifetime, the original daemon PID, and an activated operation receipt whose actual image matches the prepared image. Unknown receipts are not evidence of successful cancellation.
+- The helper launches only the authorized app entry point and journals its kernel PID/birth identity. Authenticated `verify-launch` checks that recorded caller, authorization, installed bytes and live-runtime activation without acquiring a controller. Wrong processes, dead identities and changed authority are refused. The launch fence survives failed exec.
+- Native Sidecar registration binds the launched app's exact child to the journal. The child requires an inherited local pipe/socketpair, checks its own birth identity and parent, destination/recovery binding, executable path, data roots, installed bytes and runtime receipt before keychain or database initialization. A flag alone grants nothing. Copied journals under another root and admission replay by another child are refused.
+- Electron's Sidecar lifecycle can await native admission before sending it over stdin or polling readiness. These startup primitives are not connected to production boot. Kernel birth/path checks are not complete running-image authentication for Electron and Sidecar, and do not replace the remaining cold-runtime and commit-readiness checks.
+- Commit controller authority is copied before asynchronous work; caller mutation cannot upgrade a stale controller during verification.
 
 The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle.
 
@@ -26,11 +30,21 @@ A daemon-aware source may lack the helper introduced by its target; that alone d
 
 ## Evidence and limits
 
-The native suite covers tampering, operation replay, conflicting roots and owners, corrupt journals, rollback, post-launch refusal, commit, lost pipes and killed owners. Process tests reject unauthenticated and stale-challenge requests before acquiring installation ownership.
+The native suite covers tampering, operation replay, conflicting roots and owners, corrupt journals, rollback, post-launch refusal, commit, lost pipes and killed owners. Process tests reject unauthenticated and stale-challenge requests before acquiring installation ownership. Launch tests cover reopened authority, wrong callers/operations, changed authorization, target death, failed exec and remeasurement before launch.
 
 The opt-in Electron/native contract uses actual compiled helper and daemon bytes, real Electron authorization and an owned temporary host process. It covers cancellation, cold-install refusal over a live owner, incompatible daemon/CLI payloads, host exit, replacement, distinct-image daemon activation and fresh-controller commit. The daemon retains its PID and lifetime. Electron and Sidecar are still stand-ins, and this contract does not create PTYs. A separate Rust test activates a distinct image through `MaintenanceClient` while preserving a real `/bin/cat` PID, PTY and input/output. Neither test establishes packaged Electron/Sidecar/daemon continuity or KVG-4730 acceptance.
 
-Latest runtime-integration checks:
+Latest startup/admission checks:
+
+- Root: 878 files passed; 7,478 tests passed, 3 expected failures and 55 skips across 12 skipped files, in 189.00 seconds. This supersedes the earlier root timeout failures below.
+- Opt-in Electron/native contract: all 12 passed in 76.52 seconds, including the controller-mutation regression, target startup, native Sidecar admission, copied-recovery rejection and cross-process replay refusal.
+- Helper default/all-feature suites: 21 passed each. Sidecar default/all-feature suites: 2,370 passed and 49 ignored each, including a private executable refusing EOF/forged admission before application-data creation. Both crates passed all-target/all-feature check/build, strict Clippy and formatting.
+- Latest daemon all-feature rerun passed: 290 reported cases across binary targets, 5 ignored. The 59 unit tests run under four binaries. Focused updater/PTY tests also passed. The preceding all-feature run failed `sustained_managed_mutations_keep_daemon_capacity_available` at `tests/operation_retention.rs:41` with `Transport("failed to fill whole buffer")`; its isolated rerun passed both tests. No deadline or parallelism changes were made. Earlier agent-gateway failures remain historical evidence, not a current failed run; their root cause was not established.
+- TypeScript, plugin-host types, lint, Electron/Companion contracts and whitespace checks passed. The Sidecar lifecycle tests passed 23 tests across two files.
+- `pnpm electron:package` passed again with the startup/admission changes, including release Sidecar, daemon and helper builds and app assembly. The app was built, not installed or launched; this is not packaged continuity acceptance.
+- Logs: `/tmp/KVG-5206-startup-*.log` and `/tmp/KVG-5206-sidecar-*.log`.
+
+Earlier runtime-integration checks:
 
 - Opt-in native contract: 12 passed. An initial fixture wait expired while the journal still reported `replacing`. The test now observes release of native transaction ownership before checking target startup or deleting its root. State probes remain bounded at five seconds; transaction completion has a separate deadline.
 - Client default/all-feature suites: 18 passed each. Helper suites: 18 passed each. Both crates passed all-target/all-feature check, build, strict Clippy and formatting.
@@ -72,7 +86,7 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 ## Remaining KVG-5206 work
 
 - Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
-- Connect the implemented daemon preflight, activation, immutable runtime/CLI retention and fresh-controller commit to the real update driver. Authenticate target-app startup before any Sidecar or database access, then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
+- Connect daemon maintenance and the new launch/Sidecar admission primitives to real boot before domain access. Complete Electron/Sidecar running-image authentication, cold-runtime readiness and target-bound commit checks; then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
 - Wire the separate native first-adoption consent into verified legacy shutdown and the source installer. Consent and authorized legacy transaction support exist, but no end-to-end first-adoption flow or seamless migration claim is made.
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
 - Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.

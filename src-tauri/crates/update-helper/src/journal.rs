@@ -30,6 +30,8 @@ pub(crate) struct Record {
     pub previous_hash: String,
     pub phase: Phase,
     pub runtime: Option<crate::runtime_update::RuntimePlan>,
+    pub launched: Option<crate::process_identity::ProcessIdentity>,
+    pub sidecar: Option<crate::process_identity::ProcessIdentity>,
 }
 
 #[derive(Serialize, Deserialize)]
