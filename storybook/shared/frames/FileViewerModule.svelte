@@ -21,12 +21,12 @@
   const tab = { pluginId: 'com.openforge.file-viewer', contributionId: 'files', namespacedId: 'com.openforge.file-viewer:files', title: 'Files', icon: 'folder-open', order: 20, requiresWorkspace: false }
 </script>
 
-<div class="h-screen flex flex-col bg-base-100">
+<div class="h-screen flex flex-col bg-of-surface">
   <TaskPaneFrame {tab}>
     {#if module === 'browser'}
       <FilesBrowserSection {api} {workspaceSource} {view} {actions} rootErrorTitle="Failed to load files" workspaceLoadingLabel="Loading project files…" rootRetryLabel="Retry loading project files" />
     {:else if module === 'toolbar' || module === 'tree'}
-      <div class="w-60 h-full min-h-0 flex flex-col border-r border-base-300">
+      <div class="w-60 h-full min-h-0 flex flex-col border-r border-of-border">
         {#if module === 'toolbar'}
           <FileTreeToolbar model={view.toolbar} actions={actions.toolbar} />
         {:else}

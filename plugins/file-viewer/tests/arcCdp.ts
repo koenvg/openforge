@@ -47,6 +47,10 @@ export async function openArcTab(endpoint: string, url: string) {
     async screenshot() {
       return (await send<{ data: string }>('Page.captureScreenshot', { format: 'png' })).data
     },
+    async viewport(width: number, height: number) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
+      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    },
     async key(key: string) {
       await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, text: key === 'Enter' ? '\r' : undefined, windowsVirtualKeyCode: key === 'Enter' ? 13 : 9 })
       await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: key === 'Enter' ? 13 : 9 })

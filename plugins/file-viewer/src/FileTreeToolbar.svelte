@@ -17,16 +17,16 @@
   )
 </script>
 
-<div class="border-b border-base-300 bg-base-100 p-3">
+<div class="border-b border-of-border bg-of-surface p-3">
   {#if model.sourceLabel}
-    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-base-content/65" aria-label="File source: {model.sourceLabel}">
+    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-of-text/65" aria-label="File source: {model.sourceLabel}">
       <FolderOpen size={14} aria-hidden="true" />
       <span>{model.sourceLabel}</span>
     </div>
   {/if}
   <div class="flex items-center gap-2">
     <div class="file-search-field relative min-w-0 flex-1">
-      <Search size={16} class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-base-content/50" aria-hidden="true" />
+      <Search size={16} class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-of-text/50" aria-hidden="true" />
       <label class="sr-only" for="file-search">Search files</label>
       <input
         id="file-search"

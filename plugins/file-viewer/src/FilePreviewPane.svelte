@@ -16,7 +16,7 @@
 
 <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
   {#if model.selectedPath === null}
-    <div class="flex-1 flex items-center justify-center text-base-content/40 text-sm p-6 text-center">
+    <div class="flex-1 flex items-center justify-center text-of-text/40 text-sm p-6 text-center">
       Select a file to view its content
     </div>
   {:else}
