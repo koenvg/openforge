@@ -5,8 +5,9 @@ import { inventoryLegacyUiConsumers, readLegacyUiSources } from './check-ui-migr
 // names and domain loading states. The dynamic language class is syntax highlighting.
 const candidates = {
   'arcCdp.ts': ['tab'],
-  'FileContentViewer.svelte': ['class="file-preview-code block flex-1 whitespace-pre {language ? `language-${language}` : \'\'}"'],
+  'FileTextPreview.svelte': ['class="file-preview-code block flex-1 whitespace-pre {language ? `language-${language}` : \'\'}"'],
   'FileContentViewer.test.ts': ['loading', 'alert'],
+  'FilePreviewViews.test.ts': ['alert'],
   'FilesView.browsing.test.ts': ['toggle'],
   'FilesView.loading-errors.test.ts': ['loading'],
   'FilesView.reveal.test.ts': ['select'],

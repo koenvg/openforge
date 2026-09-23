@@ -41,6 +41,8 @@ function renderViewer(props: Partial<{
   modifiedAt: number | null
   onRetryFile: () => void
   focusRequestKey: number
+  scrollTop: number
+  onScrollTopChange: (scrollTop: number) => void
   onReturnFocusToTree: () => void
 }> = {}) {
   return render(FileContentViewer, {
@@ -234,6 +236,22 @@ describe('plugin FileContentViewer recovery and accessibility states', () => {
     await waitFor(() => expect(pause).toHaveBeenCalledTimes(1))
   })
 
+  it('restores the selected file scroll position and reports subsequent scrolling', async () => {
+    const onScrollTopChange = vi.fn()
+    const { rerender } = renderViewer({ content: textContent, fileName: 'first.txt', scrollTop: 19, onScrollTopChange })
+    const region = screen.getByRole('region', { name: 'File text content' })
+    expect(region.scrollTop).toBe(19)
+
+    region.scrollTop = 42
+    await fireEvent.scroll(region)
+    expect(onScrollTopChange).toHaveBeenCalledWith(42)
+
+    await rerender({
+      api: makeApi(), content: textContent, fileName: 'second.txt', filePath: 'second.txt',
+      workspaceSource: null, error: null, modifiedAt: null, scrollTop: 7, onScrollTopChange,
+    })
+    expect(screen.getByRole('region', { name: 'File text content' }).scrollTop).toBe(7)
+  })
   it('pauses video playback during teardown', () => {
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
     const content: FileContent = { type: 'video', content: 'video', mimeType: 'video/mp4', size: 5 }
