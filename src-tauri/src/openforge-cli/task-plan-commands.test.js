@@ -111,6 +111,44 @@ describe('OpenForge task plan commands', () => {
     });
   });
 
+  it('maps JavaScript object property names to task IDs in output and dependency requests', async () => {
+    const planPath = await writePlanFile('property-names', {
+      tasks: [
+        { key: '__proto__', prompt: 'Build prototype task' },
+        { key: 'constructor', prompt: 'Build constructor task' },
+        { key: 'consumer', prompt: 'Build consumer task', dependsOn: ['__proto__', 'constructor', 'KVG-1'] },
+      ],
+    });
+
+    const { stdout, seenRequests } = await runCliAgainstRequestSequence([
+      'task', 'plan', 'apply', '--file', planPath,
+    ], [
+      { method: 'POST', url: '/create_task', response: { task_id: 'KVG-10' } },
+      { method: 'POST', url: '/create_task', response: { task_id: 'KVG-11' } },
+      { method: 'POST', url: '/create_task', response: { task_id: 'KVG-12' } },
+      { method: 'POST', url: '/set_task_dependencies', response: { status: 'updated' } },
+    ]);
+
+    expect(seenRequests).toEqual([
+      { method: 'POST', url: '/create_task', body: { initial_prompt: 'Build prototype task' } },
+      { method: 'POST', url: '/create_task', body: { initial_prompt: 'Build constructor task' } },
+      { method: 'POST', url: '/create_task', body: { initial_prompt: 'Build consumer task' } },
+      { method: 'POST', url: '/set_task_dependencies', body: { task_id: 'KVG-12', depends_on: ['KVG-10', 'KVG-11', 'KVG-1'] } },
+    ]);
+    expect(JSON.parse(stdout)).toEqual({
+      status: 'created',
+      tasks: { ['__proto__']: 'KVG-10', constructor: 'KVG-11', consumer: 'KVG-12' },
+      created: [
+        { key: '__proto__', task_id: 'KVG-10' },
+        { key: 'constructor', task_id: 'KVG-11' },
+        { key: 'consumer', task_id: 'KVG-12' },
+      ],
+      dependencies: [
+        { key: 'consumer', task_id: 'KVG-12', depends_on: ['KVG-10', 'KVG-11', 'KVG-1'], status: 'updated' },
+      ],
+    });
+  });
+
   it('rejects worktree in task plans before contacting the HTTP bridge', async () => {
     const planPath = await writePlanFile('worktree', {
       projectId: 'P-1',
