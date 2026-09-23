@@ -402,6 +402,23 @@ const inventory = {
       'components-file-viewer--content-empty', 'components-file-viewer--content-overflow',
     ] },
     { source: 'plugins/file-viewer/src/MarkdownFilePreview.svelte', stories: ['components-file-viewer--markdown'] },
+    { source: 'plugins/file-viewer/src/FilePreviewHeader.svelte', stories: [
+      'components-file-viewer--content', 'components-file-viewer--content-image',
+      'components-file-viewer--content-video', 'components-file-viewer--content-binary',
+      'components-file-viewer--content-document', 'components-file-viewer--content-large',
+      'components-file-viewer--content-empty', 'components-file-viewer--content-overflow',
+    ] },
+    { source: 'plugins/file-viewer/src/FileTextPreview.svelte', stories: [
+      'components-file-viewer--content', 'components-file-viewer--content-empty',
+      'components-file-viewer--content-overflow',
+    ] },
+    { source: 'plugins/file-viewer/src/FileMediaPreview.svelte', stories: [
+      'components-file-viewer--content-image', 'components-file-viewer--content-video',
+    ] },
+    { source: 'plugins/file-viewer/src/FileUnavailablePreview.svelte', stories: [
+      'components-file-viewer--content-binary', 'components-file-viewer--content-document',
+      'components-file-viewer--content-large',
+    ] },
     { source: 'packages/plugin-sdk/src/ui/LoadingIndicator.svelte', stories: ['components-self-review-panels--diff-loading'] },
     { source: 'packages/plugin-sdk/src/ui/MermaidDiagramPreview.svelte', stories: ['sdk-markdown--diagram'] },
     { source: 'packages/pr-review-ui/src/InlineCommentForm.svelte', stories: ['components-pr-review-inline-comment-form--populated'] },
