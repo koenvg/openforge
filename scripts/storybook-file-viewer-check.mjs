@@ -61,16 +61,17 @@ try {
   const populated = 'pages-file-viewer--populated'
   await page.goto(`${server.url}/pages/iframe.html?id=${populated}&viewMode=story`, { waitUntil: 'networkidle' })
   await finished(populated)
+  const filesSeparator = page.getByRole('separator', { name: 'Resize files panel' })
   await page.evaluate(() => { window.__fileViewerDocumentMarker = 'same-document' })
   for (let iteration = 0; iteration < 2; iteration++) {
     await page.getByRole('treeitem', { name: /^README\.md/ }).click()
     await page.getByRole('heading', { name: 'File Viewer guide' }).waitFor()
-    await page.getByRole('separator').press('ArrowRight')
-    assert.notEqual(await page.getByRole('separator').getAttribute('aria-valuenow'), '240')
+    await filesSeparator.press('ArrowRight')
+    assert.notEqual(await filesSeparator.getAttribute('aria-valuenow'), '240')
     await page.evaluate(id => window.__STORYBOOK_ADDONS_CHANNEL__.emit('forceRemount', { storyId: id }), populated)
     await page.getByText('Select a file to view its content', { exact: true }).waitFor()
     await finished(populated)
-    assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'), '240')
+    assert.equal(await filesSeparator.getAttribute('aria-valuenow'), '240')
     assert.equal(await page.evaluate(() => localStorage.getItem('resizable-panel:files-tree')), null)
   }
   await page.getByRole('treeitem', { name: /^README\.md/ }).click()
