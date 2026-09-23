@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
 
 import '../storage/companion_secure_storage.dart';
@@ -47,6 +48,10 @@ abstract interface class AgentTerminalPresentation implements Listenable {
 
   void setVisible(bool visible);
 
+  void updateOccurrence(String? receipt, String? sessionBinding);
+  void setOutputPresentedCallback(
+    Future<void> Function(String receipt)? callback,
+  );
   void setForeground(bool foreground);
 
   void retryNow();
@@ -66,6 +71,7 @@ final class AgentTerminalController extends ChangeNotifier
     double Function()? randomUnit,
     Future<void> Function(Duration)? delay,
     VoidCallback? onAuthorizationLost,
+    Future<void> Function(String receipt)? onOutputPresented,
   }) => AgentTerminalController._(
     taskId,
     client,
@@ -77,6 +83,7 @@ final class AgentTerminalController extends ChangeNotifier
     randomUnit ?? Random().nextDouble,
     delay ?? _defaultDelay,
     onAuthorizationLost,
+    onOutputPresented,
   );
 
   AgentTerminalController._(
@@ -90,6 +97,7 @@ final class AgentTerminalController extends ChangeNotifier
     this._randomUnit,
     this._delay,
     this._onAuthorizationLost,
+    this._onOutputPresented,
   ) {
     _terminal.outputErrorHandler = _handleTerminalOutputError;
   }
@@ -105,6 +113,14 @@ final class AgentTerminalController extends ChangeNotifier
   final double Function() _randomUnit;
   final Future<void> Function(Duration) _delay;
 
+  Future<void> Function(String receipt)? _onOutputPresented;
+  String? _expectedReceipt;
+  String? _expectedBinding;
+  String? _replayReceipt;
+  String? _replayBinding;
+  String? _finalBinding;
+  String? _presentedReceipt;
+  int _presentationVersion = 0;
   AgentTerminalState _state = const AgentTerminalNoActiveSession();
   @override
   AgentTerminalState get state => _state;
@@ -128,6 +144,84 @@ final class AgentTerminalController extends ChangeNotifier
   Stopwatch? _readyUptime;
 
   @override
+  void updateOccurrence(String? receipt, String? sessionBinding) {
+    if (_disposed ||
+        (receipt == _expectedReceipt && sessionBinding == _expectedBinding)) {
+      return;
+    }
+    _expectedReceipt = receipt;
+    _expectedBinding = sessionBinding;
+    _presentationVersion++;
+    if (receipt != null &&
+        _state is AgentTerminalReady &&
+        _channel != null &&
+        (_replayReceipt != receipt || _replayBinding != sessionBinding)) {
+      unawaited(_reattachForOccurrence());
+      return;
+    }
+    _maybePresent();
+  }
+
+  @override
+  void setOutputPresentedCallback(
+    Future<void> Function(String receipt)? callback,
+  ) {
+    _onOutputPresented = callback;
+    _maybePresent();
+  }
+
+  Future<void> _reattachForOccurrence() async {
+    await _detach(clear: true);
+    _reconcile();
+  }
+
+  void _maybePresent() {
+    final receipt = _expectedReceipt;
+    final binding = _expectedBinding;
+    if (receipt == null ||
+        binding == null ||
+        _presentedReceipt == receipt ||
+        _onOutputPresented == null ||
+        !_visible ||
+        !_foreground ||
+        _disposed) {
+      return;
+    }
+    final matchingReplay =
+        _state is AgentTerminalReady &&
+        _replayReceipt == receipt &&
+        _replayBinding == binding;
+    final matchingExit =
+        _state is AgentTerminalExited && _finalBinding == binding;
+    if (!matchingReplay && !matchingExit) return;
+    final version = _presentationVersion;
+    final generation = _generation;
+    unawaited(
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        if (!_isCurrent(generation) ||
+            version != _presentationVersion ||
+            !_foreground ||
+            !_visible ||
+            _expectedReceipt != receipt ||
+            _expectedBinding != binding ||
+            _presentedReceipt == receipt) {
+          return;
+        }
+        final replayStillMatches =
+            _state is AgentTerminalReady &&
+            _replayReceipt == receipt &&
+            _replayBinding == binding;
+        final exitStillMatches =
+            _state is AgentTerminalExited && _finalBinding == binding;
+        if (!replayStillMatches && !exitStillMatches) return;
+        _presentedReceipt = receipt;
+        final callback = _onOutputPresented;
+        if (callback != null) unawaited(callback(receipt));
+      }),
+    );
+  }
+
+  @override
   void updateAvailability(bool available) {
     if (_disposed) return;
     final becameAvailable = available && !_available;
@@ -146,6 +240,8 @@ final class AgentTerminalController extends ChangeNotifier
   void setVisible(bool visible) {
     if (_disposed || _visible == visible) return;
     _visible = visible;
+    _presentationVersion++;
+    if (visible) _maybePresent();
     _reconcile();
   }
 
@@ -153,10 +249,12 @@ final class AgentTerminalController extends ChangeNotifier
   void setForeground(bool foreground) {
     if (_disposed || _foreground == foreground) return;
     _foreground = foreground;
+    _presentationVersion++;
     if (!foreground) {
       unawaited(_detach(clear: true));
       return;
     }
+    _maybePresent();
     _reconcile();
   }
 
@@ -248,6 +346,10 @@ final class AgentTerminalController extends ChangeNotifier
         }
         return;
       }
+      _replayReceipt = null;
+      _replayBinding = null;
+      _finalBinding = null;
+      _presentationVersion++;
       _channel = channel;
       _replayOutput = BytesBuilder(copy: false);
       _replaceTerminalOnReady = _state is AgentTerminalReconnecting;
@@ -315,11 +417,33 @@ final class AgentTerminalController extends ChangeNotifier
         _clearReadyUptime();
         _readyUptime = Stopwatch()..start();
         _setState(const AgentTerminalReady());
+        _maybePresent();
       case ExitedTerminalControl():
         if (!_commitReplay(generation)) return;
         _terminalExited = true;
         _setState(const AgentTerminalExited());
+        _maybePresent();
         unawaited(_closeCurrentChannel());
+      case PresentationBoundaryTerminalControl(
+        :final sessionBinding,
+        :final receipt,
+        :final finalOutput,
+      ):
+        if (finalOutput) {
+          if (_state is! AgentTerminalReady ||
+              !_flushTerminalOutput(generation)) {
+            return;
+          }
+          _finalBinding = sessionBinding;
+        } else {
+          if (_state is! AgentTerminalReady) {
+            _protocolFailure(generation);
+            return;
+          }
+          _replayReceipt = receipt;
+          _replayBinding = sessionBinding;
+          _maybePresent();
+        }
       case ErrorTerminalControl(:final code):
         if (code == 'protocol_error') {
           _protocolFailure(generation);
@@ -425,7 +549,11 @@ final class AgentTerminalController extends ChangeNotifier
   }
 
   Future<void> _detach({required bool clear}) async {
+    _presentationVersion++;
     _generation += 1;
+    _replayReceipt = null;
+    _replayBinding = null;
+    _finalBinding = null;
     _connecting = false;
     _handlingDisconnect = false;
     _terminalExited = false;
@@ -500,6 +628,8 @@ final class AgentTerminalController extends ChangeNotifier
     if (_disposed) return;
     _disposed = true;
     _generation += 1;
+    _presentationVersion++;
+    _onOutputPresented = null;
     _terminal.outputErrorHandler = null;
     unawaited(_closeCurrentChannel());
     _terminal.clear();

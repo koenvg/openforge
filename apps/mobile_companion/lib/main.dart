@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'src/action_palette/action_palette_controller.dart';
 import 'src/app.dart';
+import 'src/attention/attention_controller.dart';
 import 'src/project_board/project_board_controller.dart';
 import 'src/client/companion_client.dart';
 import 'src/discovery/bonjour_discovery_browser.dart';
@@ -30,6 +31,11 @@ void main() {
     storage: storage,
     onAuthorizationLost: pairingController.authorizationLost,
   );
+  final attentionController = AttentionController(
+    client: client,
+    storage: storage,
+    onAuthorizationLost: pairingController.authorizationLost,
+  );
   final actionPaletteController = MobileActionPaletteController(
     taskClient: client,
     completionClient: client,
@@ -52,6 +58,7 @@ void main() {
   runApp(
     CompanionApp(
       controller: pairingController,
+      attentionController: attentionController,
       projectBoardController: projectBoardController,
       actionPaletteController: actionPaletteController,
       liveUpdatesController: liveUpdatesController,
@@ -59,6 +66,8 @@ void main() {
         taskId: taskId,
         client: client,
         actionClient: client,
+        agentOutputClient: client,
+        onAttentionRefresh: attentionController.refresh,
         storage: storage,
         onAuthorizationLost: pairingController.authorizationLost,
         onBoardRefresh: projectBoardController.refreshWithOutcome,

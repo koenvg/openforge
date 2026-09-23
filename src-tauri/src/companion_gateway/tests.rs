@@ -1646,7 +1646,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     }
     assert!(!api_description.to_ascii_lowercase().contains("read-only"));
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 21);
+    assert_eq!(paths.len(), 22);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),

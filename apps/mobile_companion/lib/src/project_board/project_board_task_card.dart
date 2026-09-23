@@ -63,6 +63,8 @@ class ProjectBoardTaskCard extends StatelessWidget {
                                       ),
                                 ),
                                 _StateBadge(state: task.state, label: state),
+                                if (task.hasUnreadAgentOutput == true)
+                                  _UnreadAgentOutputBadge(),
                               ],
                             ),
                           ),
@@ -211,6 +213,28 @@ class ProjectBoardTaskCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UnreadAgentOutputBadge extends StatelessWidget {
+  const _UnreadAgentOutputBadge();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Text(
+        'Unread agent output',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSecondaryContainer,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
 }
 
 class _StateBadge extends StatelessWidget {
@@ -375,6 +399,7 @@ String _taskSemanticsLabel(
     'Task ${task.taskId}',
     task.title,
     state,
+    if (task.hasUnreadAgentOutput == true) 'Unread agent output',
     task.reason,
     if (task.dependencyCount > 0)
       _pluralize(task.dependencyCount, 'dependency', 'dependencies'),

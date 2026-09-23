@@ -40,6 +40,13 @@ impl AgentTerminalAttachment {
         ))))
     }
 
+    pub(crate) fn instance_id(&self) -> u64 {
+        match &self.0 {
+            Backend::Local(attachment) => attachment.instance_id(),
+            Backend::Daemon(attachment) => attachment.instance_id(),
+        }
+    }
+
     pub(crate) fn has_protocol_error(&self) -> bool {
         match &self.0 {
             Backend::Local(attachment) => attachment.has_protocol_error(),

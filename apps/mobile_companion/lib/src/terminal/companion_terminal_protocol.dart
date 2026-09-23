@@ -76,6 +76,7 @@ sealed class ServerTerminalControl {
     return switch (json['type']) {
       'ready' => _ready(json),
       'exited' => _unit(json, const ExitedTerminalControl()),
+      'presentation_boundary' => _presentationBoundary(json),
       'error' => _error(json),
       'authorization_revoked' => _unit(
         json,
@@ -89,6 +90,18 @@ sealed class ServerTerminalControl {
 
 final class ReadyTerminalControl extends ServerTerminalControl {
   const ReadyTerminalControl();
+}
+
+final class PresentationBoundaryTerminalControl extends ServerTerminalControl {
+  const PresentationBoundaryTerminalControl({
+    required this.sessionBinding,
+    required this.receipt,
+    required this.finalOutput,
+  });
+
+  final String sessionBinding;
+  final String? receipt;
+  final bool finalOutput;
 }
 
 final class ExitedTerminalControl extends ServerTerminalControl {
@@ -137,6 +150,31 @@ ServerTerminalControl _ready(Map<String, Object?> json) {
     throw const FormatException('Invalid terminal initial state.');
   }
   return const ReadyTerminalControl();
+}
+
+ServerTerminalControl _presentationBoundary(Map<String, Object?> json) {
+  _expectFields(
+    json,
+    json.containsKey('receipt')
+        ? const <String>{'type', 'sessionBinding', 'receipt', 'finalOutput'}
+        : const <String>{'type', 'sessionBinding', 'finalOutput'},
+  );
+  final binding = json['sessionBinding'];
+  final receipt = json['receipt'];
+  final finalOutput = json['finalOutput'];
+  final token = RegExp(r'^[A-Za-z0-9_-]{43}$');
+  if (binding is! String ||
+      !token.hasMatch(binding) ||
+      (receipt != null && (receipt is! String || !token.hasMatch(receipt))) ||
+      finalOutput is! bool ||
+      (!finalOutput && receipt == null)) {
+    throw const FormatException('Invalid terminal presentation boundary.');
+  }
+  return PresentationBoundaryTerminalControl(
+    sessionBinding: binding,
+    receipt: receipt as String?,
+    finalOutput: finalOutput,
+  );
 }
 
 ServerTerminalControl _unit(

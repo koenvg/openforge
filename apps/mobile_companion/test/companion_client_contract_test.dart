@@ -48,6 +48,7 @@ void main() {
       expect(encodedContract, contains('getCompanionTaskPromptCatalog'));
       expect(encodedContract, contains('createCompanionTask'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
+      expect(encodedContract, contains('markCompanionAgentOutputViewed'));
       expect(encodedContract, contains('completeCompanionTask'));
       expect(encodedContract, contains('startCompanionTask'));
       expect(encodedContract, contains('deleteCompanionBacklogTask'));
@@ -73,6 +74,7 @@ void main() {
           '/projects/{projectId}/task-prompt-catalog',
           '/projects/{projectId}/tasks',
           '/tasks/{taskId}',
+          '/tasks/{taskId}/agent-output/viewed',
           '/tasks/{taskId}/complete',
           '/tasks/{taskId}/start',
           '/tasks/{taskId}/delete',
@@ -128,6 +130,8 @@ void main() {
           'createdAt',
           'updatedAt',
           'agentUpdatedAt',
+          'agentOutputReceipt',
+          'agentOutputSessionBinding',
         ]),
       );
       for (final forbidden in <String>[

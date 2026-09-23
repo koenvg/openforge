@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '5b75e33f14e500b8b1ae25e8b9fa0ada8a2ef0b0e11d26f110ed61ccfe15dce0';
+    '2b76e950e0d50ee81d34b34c8bc7f7f2633182938430db877c77330ebb79b10c';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '3';
 
@@ -749,10 +749,11 @@ final class ProjectBoardTask {
     required List<String> labels,
     required this.pullRequestCount,
     required this.primaryPullRequestNumber,
+    this.hasUnreadAgentOutput,
   }) : labels = List<String>.unmodifiable(labels);
 
   factory ProjectBoardTask.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'lane', 'state', 'reason', 'activityAt', 'dependencyCount', 'waitingDependencyCount', 'labels', 'pullRequestCount', 'primaryPullRequestNumber'});
+    _expectOnly(json, const <String>{'taskId', 'title', 'lane', 'state', 'reason', 'activityAt', 'dependencyCount', 'waitingDependencyCount', 'labels', 'pullRequestCount', 'primaryPullRequestNumber', 'hasUnreadAgentOutput'});
     final model = ProjectBoardTask(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
@@ -765,6 +766,7 @@ final class ProjectBoardTask {
       labels: _required(json, 'labels', (value) => _asList(value, 'labels').map((item) => _asString(item, 'labelsItem', minLength: 1)).toList()),
       pullRequestCount: _required(json, 'pullRequestCount', (value) => _asInt(value, 'pullRequestCount', minimum: 0)),
       primaryPullRequestNumber: _requiredNullable(json, 'primaryPullRequestNumber', (value) => _asInt(value, 'primaryPullRequestNumber', minimum: 1)),
+      hasUnreadAgentOutput: _optional(json, 'hasUnreadAgentOutput', (value) => _asBool(value, 'hasUnreadAgentOutput')),
     );
     return model;
   }
@@ -781,6 +783,7 @@ final class ProjectBoardTask {
       'labels': labels.map((item) => item).toList(),
       'pullRequestCount': pullRequestCount,
       'primaryPullRequestNumber': primaryPullRequestNumber == null ? null : primaryPullRequestNumber!,
+      if (hasUnreadAgentOutput != null) 'hasUnreadAgentOutput': hasUnreadAgentOutput!,
   };
 
   final String taskId;
@@ -794,6 +797,7 @@ final class ProjectBoardTask {
   final List<String> labels;
   final int pullRequestCount;
   final int? primaryPullRequestNumber;
+  final bool? hasUnreadAgentOutput;
 }
 
 final class ProjectBoardCounts {
@@ -1006,12 +1010,14 @@ final class TaskDetail {
     required this.createdAt,
     required this.updatedAt,
     required this.agentUpdatedAt,
+    this.agentOutputReceipt,
+    this.agentOutputSessionBinding,
   }) : labels = List<String>.unmodifiable(labels),
        dependencies = List<TaskRelationship>.unmodifiable(dependencies),
        dependentTasks = List<DependentTask>.unmodifiable(dependentTasks);
 
   factory TaskDetail.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'initialPrompt', 'title', 'projectId', 'projectName', 'boardStatus', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
+    _expectOnly(json, const <String>{'taskId', 'initialPrompt', 'title', 'projectId', 'projectName', 'boardStatus', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt', 'agentOutputReceipt', 'agentOutputSessionBinding'});
     final model = TaskDetail(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       initialPrompt: _required(json, 'initialPrompt', (value) => _asString(value, 'initialPrompt', minLength: 1)),
@@ -1028,6 +1034,8 @@ final class TaskDetail {
       createdAt: _required(json, 'createdAt', (value) => _asDateTime(value, 'createdAt')),
       updatedAt: _required(json, 'updatedAt', (value) => _asDateTime(value, 'updatedAt')),
       agentUpdatedAt: _requiredNullable(json, 'agentUpdatedAt', (value) => _asDateTime(value, 'agentUpdatedAt')),
+      agentOutputReceipt: _optional(json, 'agentOutputReceipt', (value) => _asString(value, 'agentOutputReceipt', minLength: 43, maxLength: 43)),
+      agentOutputSessionBinding: _optional(json, 'agentOutputSessionBinding', (value) => _asString(value, 'agentOutputSessionBinding', minLength: 43, maxLength: 43)),
     );
     return model;
   }
@@ -1048,6 +1056,8 @@ final class TaskDetail {
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       'agentUpdatedAt': agentUpdatedAt == null ? null : agentUpdatedAt!.toUtc().toIso8601String(),
+      if (agentOutputReceipt != null) 'agentOutputReceipt': agentOutputReceipt!,
+      if (agentOutputSessionBinding != null) 'agentOutputSessionBinding': agentOutputSessionBinding!,
   };
 
   final String taskId;
@@ -1065,6 +1075,48 @@ final class TaskDetail {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? agentUpdatedAt;
+  final String? agentOutputReceipt;
+  final String? agentOutputSessionBinding;
+}
+
+final class AgentOutputViewedRequest {
+  const AgentOutputViewedRequest({
+    required this.receipt,
+  });
+
+  factory AgentOutputViewedRequest.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'receipt'});
+    final model = AgentOutputViewedRequest(
+      receipt: _required(json, 'receipt', (value) => _asString(value, 'receipt', minLength: 43, maxLength: 43)),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'receipt': receipt,
+  };
+
+  final String receipt;
+}
+
+final class AgentOutputViewedResult {
+  const AgentOutputViewedResult({
+    required this.viewed,
+  });
+
+  factory AgentOutputViewedResult.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'viewed'});
+    final model = AgentOutputViewedResult(
+      viewed: _required(json, 'viewed', (value) => _asBool(value, 'viewed')),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'viewed': viewed,
+  };
+
+  final bool viewed;
 }
 
 final class TaskPromptSuggestion {
@@ -1447,11 +1499,12 @@ final class CompanionV1Client {
 
   Future<ProjectBoard> getCompanionProjectBoard({
     required String projectId,
+    bool? includeAgentOutput,
     required String credential,
   }) async {
     final response = await transport.send(
       method: 'GET',
-      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/board'),
+      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/board').replace(queryParameters: <String, String>{if (includeAgentOutput != null) 'includeAgentOutput': includeAgentOutput.toString(),}),
       headers: <String, String>{
       'authorization': 'Bearer $credential',
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
@@ -1505,17 +1558,42 @@ final class CompanionV1Client {
 
   Future<TaskDetail> getCompanionTaskDetail({
     required String taskId,
+    bool? includeAgentOutput,
     required String credential,
   }) async {
     final response = await transport.send(
       method: 'GET',
-      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}'),
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}').replace(queryParameters: <String, String>{if (includeAgentOutput != null) 'includeAgentOutput': includeAgentOutput.toString(),}),
       headers: <String, String>{
       'authorization': 'Bearer $credential',
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
     return TaskDetail.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
+  Future<AgentOutputViewedResult> markCompanionAgentOutputViewed({
+    required String taskId,
+    required String receipt,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/agent-output/viewed'),
+      headers: <String, String>{
+      'content-type': 'application/json',
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+      body: jsonEncode(
+        AgentOutputViewedRequest(
+          receipt: receipt,
+        ).toJson(),
+      ),
+    );
+    return AgentOutputViewedResult.fromJson(
       _successJson(response, const <int>{200}),
     );
   }

@@ -229,7 +229,7 @@ pub(crate) fn task_state(
     "idle"
 }
 
-fn has_unread_agent_output(session: Option<&TaskAttentionSession>) -> bool {
+pub(crate) fn has_unread_agent_output(session: Option<&TaskAttentionSession>) -> bool {
     session.is_some_and(|session| {
         matches!(
             session.status.as_str(),

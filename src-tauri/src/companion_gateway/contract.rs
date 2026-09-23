@@ -168,6 +168,8 @@ pub(crate) struct CompanionProjectBoardTask {
     pub(crate) labels: Vec<String>,
     pub(crate) pull_request_count: usize,
     pub(crate) primary_pull_request_number: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) has_unread_agent_output: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -228,6 +230,16 @@ pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
     pub(crate) agent_updated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) agent_output_receipt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) agent_output_session_binding: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionAgentOutputViewedResponse {
+    pub(crate) viewed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

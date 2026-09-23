@@ -109,6 +109,15 @@ abstract interface class CompanionTaskActionClient {
   );
 }
 
+/// The occurrence acknowledgement never retries on another endpoint.
+abstract interface class CompanionAgentOutputClient {
+  Future<AgentOutputViewedResult> markAgentOutputViewed(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+    String receipt,
+  );
+}
+
 abstract interface class CompanionActionPaletteClient {
   Future<ProjectActionsSnapshot> fetchProjectActions(
     CompanionTrustRecord trustRecord,
@@ -140,6 +149,7 @@ final class GeneratedCompanionClient
     implements
         CompanionClient,
         CompanionTaskActionClient,
+        CompanionAgentOutputClient,
         CompanionActionPaletteClient,
         CompanionTerminalClient {
   factory GeneratedCompanionClient({
@@ -309,6 +319,7 @@ final class GeneratedCompanionClient
     (client) => client.getCompanionProjectBoard(
       projectId: projectId,
       credential: trustRecord.deviceCredential,
+      includeAgentOutput: true,
     ),
   );
 
@@ -347,6 +358,7 @@ final class GeneratedCompanionClient
     (client) => client.getCompanionTaskDetail(
       taskId: taskId,
       credential: trustRecord.deviceCredential,
+      includeAgentOutput: true,
     ),
   );
 
@@ -447,6 +459,20 @@ final class GeneratedCompanionClient
     trustRecord,
     (client) => client.completeCompanionTask(
       taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
+  @override
+  Future<AgentOutputViewedResult> markAgentOutputViewed(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+    String receipt,
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.markCompanionAgentOutputViewed(
+      taskId: taskId,
+      receipt: receipt,
       credential: trustRecord.deviceCredential,
     ),
   );

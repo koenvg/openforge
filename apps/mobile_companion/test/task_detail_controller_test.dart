@@ -191,7 +191,101 @@ final class _FakeStorage implements CompanionSecureStorage {
   Future<void> save(CompanionTrustRecord value) async => saveCalls += 1;
 }
 
+final class _FakeOutputAction implements CompanionAgentOutputClient {
+  final receipts = <String>[];
+  Object result = const AgentOutputViewedResult(viewed: true);
+  Completer<AgentOutputViewedResult>? pending;
+
+  @override
+  Future<AgentOutputViewedResult> markAgentOutputViewed(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+    String receipt,
+  ) async {
+    receipts.add(receipt);
+    if (pending case final future?) return future.future;
+    final value = result;
+    if (value is! AgentOutputViewedResult) throw value;
+    return value;
+  }
+}
+
 void main() {
+  test(
+    'only the current Task receipt may acknowledge; confirmation refreshes all projections',
+    () async {
+      final old = 'a' * 43, newer = 'b' * 43, binding = 'c' * 43;
+      final client = _FakeClient();
+      final action = _FakeOutputAction();
+      var boardRefreshes = 0, attentionRefreshes = 0;
+      client.result = TaskDetail.fromJson(<String, Object?>{
+        ..._detail.toJson(),
+        'agentOutputReceipt': newer,
+        'agentOutputSessionBinding': binding,
+      });
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+        agentOutputClient: action,
+        onBoardRefresh: () async {
+          boardRefreshes++;
+          return CompanionRefreshOutcome.loaded;
+        },
+        onAttentionRefresh: () async {
+          attentionRefreshes++;
+        },
+      );
+      await controller.refresh();
+      await controller.acknowledgeAgentOutput(old);
+      expect(action.receipts, isEmpty);
+      await controller.acknowledgeAgentOutput(newer);
+      expect(action.receipts, <String>[newer]);
+      expect(boardRefreshes, 1);
+      expect(attentionRefreshes, 1);
+      expect(client.taskDetailCalls, 2);
+      controller.dispose();
+    },
+  );
+  test(
+    'uncertain acknowledgement is not retried and authoritative projections are fetched',
+    () async {
+      final receipt = 'a' * 43;
+      final client = _FakeClient();
+      final action = _FakeOutputAction()
+        ..result = const SocketException('response lost');
+      client.result = TaskDetail.fromJson(<String, Object?>{
+        ..._detail.toJson(),
+        'agentOutputReceipt': receipt,
+        'agentOutputSessionBinding': 'b' * 43,
+      });
+      var boardRefreshes = 0, attentionRefreshes = 0;
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+        agentOutputClient: action,
+        onBoardRefresh: () async {
+          boardRefreshes++;
+          return CompanionRefreshOutcome.loaded;
+        },
+        onAttentionRefresh: () async {
+          attentionRefreshes++;
+        },
+      );
+      await controller.refresh();
+      await controller.acknowledgeAgentOutput(receipt);
+      expect(action.receipts, <String>[receipt]);
+      expect(boardRefreshes, 1);
+      expect(attentionRefreshes, 1);
+      expect(
+        (controller.state as TaskDetailLoaded).detail.agentOutputReceipt,
+        receipt,
+      );
+      controller.dispose();
+    },
+  );
+
   test('loads current Task detail into memory without persisting it', () async {
     final client = _FakeClient();
     final storage = _FakeStorage();

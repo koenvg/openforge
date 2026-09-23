@@ -39,6 +39,33 @@ pub(crate) struct CompanionTaskDetail {
 
 pub(crate) trait CompanionTaskDetailSource: Send + Sync {
     fn get(&self, task_id: &str) -> Result<Option<CompanionTaskDetail>, String>;
+
+    fn agent_output_occurrence(
+        &self,
+        _task_id: &str,
+    ) -> Result<Option<super::agent_output::AgentOutputOccurrence>, String> {
+        Ok(None)
+    }
+
+    fn agent_output_for_pty(
+        &self,
+        _task_id: &str,
+        _pty_instance_id: u64,
+    ) -> Result<Option<super::agent_output::AgentOutputOccurrence>, String> {
+        Ok(None)
+    }
+
+    fn agent_session_binding_for_pty(
+        &self,
+        _task_id: &str,
+        _pty_instance_id: u64,
+    ) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    fn mark_agent_output_viewed(&self, _task_id: &str, _receipt: &str) -> Result<bool, String> {
+        Err("Companion Agent output is unavailable".to_string())
+    }
 }
 
 #[derive(Clone)]
@@ -82,6 +109,79 @@ fn task_relationship(
     })
 }
 impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
+    fn agent_output_occurrence(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<super::agent_output::AgentOutputOccurrence>, String> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| "Companion Task detail database lock was poisoned".to_string())?;
+        let session = database
+            .get_latest_session_for_ticket(task_id)
+            .map_err(|error| format!("failed to read Companion Agent output: {error}"))?;
+        Ok(session
+            .as_ref()
+            .and_then(|session| super::agent_output::occurrence(task_id, session)))
+    }
+
+    fn agent_output_for_pty(
+        &self,
+        task_id: &str,
+        pty_instance_id: u64,
+    ) -> Result<Option<super::agent_output::AgentOutputOccurrence>, String> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| "Companion Task detail database lock was poisoned".to_string())?;
+        let session = database
+            .get_latest_session_for_ticket(task_id)
+            .map_err(|error| format!("failed to read Companion Agent output: {error}"))?;
+        Ok(session
+            .as_ref()
+            .filter(|session| session.pty_instance_id == Some(pty_instance_id))
+            .and_then(|session| super::agent_output::occurrence(task_id, session)))
+    }
+
+    fn agent_session_binding_for_pty(
+        &self,
+        task_id: &str,
+        pty_instance_id: u64,
+    ) -> Result<Option<String>, String> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| "Companion Task detail database lock was poisoned".to_string())?;
+        let session = database
+            .get_latest_session_for_ticket(task_id)
+            .map_err(|error| format!("failed to read Companion Agent Session: {error}"))?;
+        Ok(session
+            .as_ref()
+            .filter(|session| session.pty_instance_id == Some(pty_instance_id))
+            .map(|session| super::agent_output::session_binding(task_id, &session.id)))
+    }
+
+    fn mark_agent_output_viewed(&self, task_id: &str, receipt: &str) -> Result<bool, String> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| "Companion Task detail database lock was poisoned".to_string())?;
+        let session = database
+            .get_latest_session_for_ticket(task_id)
+            .map_err(|error| format!("failed to read Companion Agent output: {error}"))?;
+        let Some(session) = session else {
+            return Ok(false);
+        };
+        if !super::agent_output::occurrence(task_id, &session)
+            .is_some_and(|value| value.receipt == receipt)
+        {
+            return Ok(false);
+        }
+        database
+            .mark_latest_agent_output_viewed(task_id, &session.id, session.output_revision)
+            .map_err(|error| format!("failed to acknowledge Companion Agent output: {error}"))
+    }
+
     fn get(&self, task_id: &str) -> Result<Option<CompanionTaskDetail>, String> {
         let database = self
             .database

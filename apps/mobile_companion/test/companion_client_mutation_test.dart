@@ -37,6 +37,17 @@ void main() {
       run: (client, trust) => client.completeTask(trust, 'KVG-3033'),
     ),
     (
+      name: 'Agent output view makes one request and never fails over',
+      path: '/companion/v1/tasks/T-1/agent-output/viewed',
+      failure: const SocketException('uncertain acknowledgement'),
+      fallbackResponse: const CompanionV1HttpResponse(
+        statusCode: 200,
+        body: '{"viewed":true}',
+      ),
+      run: (client, trust) =>
+          client.markAgentOutputViewed(trust, 'T-1', 'opaque-receipt'),
+    ),
+    (
       name: 'Task Delete never retries across endpoint candidates',
       path: '/companion/v1/tasks/T-1/delete',
       failure: const SocketException('uncertain outcome'),
@@ -106,6 +117,7 @@ void main() {
         () => client.startTask(trust, 'T-1'),
         () => client.deleteBacklogTask(trust, 'T-1'),
         () => client.completeTask(trust, 'T-1'),
+        () => client.markAgentOutputViewed(trust, 'T-1', 'opaque-receipt'),
       ];
 
       for (final mutate in mutations) {

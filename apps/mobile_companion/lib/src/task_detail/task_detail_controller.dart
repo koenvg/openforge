@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../client/companion_client.dart';
+import '../generated/companion_v1_client.dart';
 import '../client/companion_refresh_outcome.dart';
 import '../storage/companion_secure_storage.dart';
 import 'task_complete_action_controller.dart';
@@ -17,9 +18,13 @@ final class TaskDetailController extends ChangeNotifier {
     required CompanionClient client,
     CompanionTaskActionClient? actionClient,
     required CompanionSecureStorage storage,
+    CompanionAgentOutputClient? agentOutputClient,
+    Future<void> Function()? onAttentionRefresh,
     VoidCallback? onAuthorizationLost,
     TaskBoardRefresh? onBoardRefresh,
   }) : taskId = taskId {
+    _agentOutputClient = agentOutputClient;
+    _onAttentionRefresh = onAttentionRefresh;
     _lifecycle = TaskDetailLifecycleController(
       taskId: taskId,
       client: client,
@@ -50,6 +55,9 @@ final class TaskDetailController extends ChangeNotifier {
   late final TaskStartActionController _startController;
   late final TaskCompleteActionController _completeController;
   late final TaskDeleteActionController _deleteController;
+  late final CompanionAgentOutputClient? _agentOutputClient;
+  late final Future<void> Function()? _onAttentionRefresh;
+  String? _acknowledgingReceipt;
   var _disposed = false;
 
   TaskDetailViewState get state => _lifecycle.state;
@@ -66,6 +74,57 @@ final class TaskDetailController extends ChangeNotifier {
     if (_deleteController.pending) return CompanionRefreshOutcome.superseded;
     _completeController.clearError();
     return _lifecycle.refreshWithOutcome();
+  }
+
+  Future<void> acknowledgeAgentOutput(String receipt) async {
+    final action = _agentOutputClient;
+    final current = _lifecycle.state;
+    if (_disposed ||
+        action == null ||
+        _acknowledgingReceipt != null ||
+        current is! TaskDetailLoaded ||
+        current.detail.agentOutputReceipt != receipt ||
+        current.detail.agentOutputSessionBinding == null) {
+      return;
+    }
+    _acknowledgingReceipt = receipt;
+    var attempted = false;
+    try {
+      final trustRecord = await _lifecycle.requireTrustRecord();
+      final latest = _lifecycle.state;
+      if (trustRecord == null ||
+          _disposed ||
+          latest is! TaskDetailLoaded ||
+          latest.detail.agentOutputReceipt != receipt) {
+        return;
+      }
+      attempted = true;
+      await action.markAgentOutputViewed(trustRecord, taskId, receipt);
+      if (!_disposed) await _refreshOutputProjections();
+    } on CompanionV1Exception catch (error) {
+      if (error.code == 'revoked' || error.code == 'unauthenticated') {
+        _lifecycle.markAuthorizationLost();
+      } else if (attempted) {
+        await _refreshOutputProjections();
+      }
+    } on Object {
+      // An uncertain response is never retried; refresh authoritative state.
+      if (attempted) await _refreshOutputProjections();
+    } finally {
+      _acknowledgingReceipt = null;
+    }
+  }
+
+  Future<void> _refreshOutputProjections() async {
+    if (_disposed) return;
+    try {
+      await Future.wait(<Future<void>>[
+        _lifecycle.refreshAuthoritativeState().then((_) {}),
+        if (_onAttentionRefresh case final refresh?) refresh(),
+      ]);
+    } on Object {
+      // The individual read controllers retain their unavailable states.
+    }
   }
 
   Future<TaskCompleteAttempt> complete() => _completeController.complete();
