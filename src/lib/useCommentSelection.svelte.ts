@@ -36,17 +36,15 @@ export function createCommentSelection(deps: {
   getGithubUsername?: () => string | null
 }): CommentSelectionState {
   let selectedPrCommentIds = $state<Set<number>>(new Set())
-  let localPrComments = $state<PrComment[]>([])
+  let locallyAddressedIds = $state<Set<number>>(new Set())
   const commentAddressing = createCommentAddressing()
 
-  // Sync local copy from external source reactively
-  $effect(() => {
-    localPrComments = deps.getPrComments()
-  })
-
-  let threadRoots = $derived(getPrCommentThreadRoots(localPrComments))
+  let prComments = $derived(deps.getPrComments().map(c =>
+    locallyAddressedIds.has(c.id) ? { ...c, addressed: 1 } : c
+  ))
+  let threadRoots = $derived(getPrCommentThreadRoots(prComments))
   let unaddressedComments = $derived(
-    getUnaddressedPrCommentThreadRoots(localPrComments, deps.getGithubUsername?.()),
+    getUnaddressedPrCommentThreadRoots(prComments, deps.getGithubUsername?.()),
   )
   let unaddressedCount = $derived(unaddressedComments.length)
   let addressedCount = $derived(threadRoots.filter(c => c.addressed === 1).length)
@@ -72,9 +70,7 @@ export function createCommentSelection(deps: {
   async function markAddressed(commentId: number): Promise<void> {
     await commentAddressing.run(commentId, async () => {
       await markCommentAddressed(commentId)
-      localPrComments = localPrComments.map(c =>
-        c.id === commentId ? { ...c, addressed: 1 } : c
-      )
+      locallyAddressedIds = new Set(locallyAddressedIds).add(commentId)
       if (selectedPrCommentIds.has(commentId)) {
         const next = new Set(selectedPrCommentIds)
         next.delete(commentId)

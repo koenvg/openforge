@@ -34,7 +34,6 @@ export interface SelfReviewCommentControllerOptions {
   getPrComments: () => PrComment[]
   getGithubUsername?: () => string | null
   getLinkedPr?: () => PullRequestInfo | null
-  getReplyPullRequest?: () => PullRequestInfo | null
   getComparisonFilenames: () => Set<string>
   setPendingComments?: (taskId: string, comments: ReviewSubmissionComment[]) => void
   onCommentsNeedAttention?: () => void
@@ -50,7 +49,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
     getGithubUsername: options.getGithubUsername,
   })
   const getState = () => options.getState() ?? emptySelfReviewTaskState
-  const getReplyPullRequest = options.getReplyPullRequest ?? options.getLinkedPr ?? (() => null)
+  const getLinkedPr = options.getLinkedPr ?? (() => null)
   const setPendingComments = options.setPendingComments ?? setPendingSelfReviewComments
 
   let pendingInlineComments = $derived(getState().pendingInlineComments)
@@ -64,12 +63,12 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
   let visiblePendingInlineComments = $derived(
     pendingInlineComments.filter((comment) => !options.getComparisonFilenames().has(comment.path)),
   )
-  let canReplyToExistingComments = $derived(getReplyPullRequest()?.state === 'open')
-  let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(options.getLinkedPr?.() ?? null))
+  let canReplyToExistingComments = $derived(getLinkedPr()?.state === 'open')
+  let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(getLinkedPr()))
 
   function synchronize(): void {
     const taskId = options.getTaskId()
-    const prId = getReplyPullRequest()?.id ?? null
+    const prId = getLinkedPr()?.id ?? null
     if (synchronizedTaskId !== taskId || synchronizedPrId !== prId) {
       synchronizedTaskId = taskId
       synchronizedPrId = prId
@@ -133,7 +132,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
   // signed-in browser session can fetch; the sidecar trades it for a URL this app
   // can render, and tells us whether it is a picture or a recording.
   async function resolveRemoteMedia(url: string): Promise<ResolvedMarkdownMedia | null> {
-    const pr = getReplyPullRequest()
+    const pr = getLinkedPr()
     if (!pr || !isGitHubAttachmentUrl(url)) return null
 
     try {
@@ -145,7 +144,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
 
   async function replyToExistingComment(commentId: number, body: string): Promise<void> {
     const taskId = options.getTaskId()
-    const pr = options.getLinkedPr?.() ?? null
+    const pr = getLinkedPr()
     if (!pr || pr.state !== 'open') throw new Error('No linked open pull request')
 
     const reply = await createReviewCommentReply(
@@ -155,7 +154,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
       commentId,
       body,
     )
-    if (options.getTaskId() !== taskId || getReplyPullRequest()?.id !== pr.id) return
+    if (options.getTaskId() !== taskId || getLinkedPr()?.id !== pr.id) return
     acceptedReplies = mergeReviewComments(acceptedReplies, [reply])
   }
 
