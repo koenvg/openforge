@@ -88,4 +88,39 @@ describe.skipIf(!storybookUrl)('Visual feedback header', () => {
       }, 30_000)
     }
   }
+  it('keeps a long review scrollable and the attached page visible at host-sized bounds', async () => {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 720 }, reducedMotion: 'reduce' })
+    try {
+      await page.goto(`${storybookUrl}/iframe.html?id=components-task-browser--review-overflow&viewMode=story&globals=openforgeTheme:openforge-light;openforgeMotion:reduced`)
+      await page.locator('body[data-task-browser-ready="components-task-browser--review-overflow"]').waitFor({ state: 'attached' })
+      await page.evaluate(() => document.fonts.ready)
+      const bounds = await page.locator('[aria-label="Visual feedback review"]').evaluate(panel => {
+        const box = panel.getBoundingClientRect()
+        const css = getComputedStyle(panel)
+        const attachedPage = panel.nextElementSibling?.getBoundingClientRect()
+        const columns = selector => getComputedStyle(panel.querySelector(selector)).gridTemplateColumns.split(' ').length
+        return {
+          height: box.height,
+          maxHeight: css.maxHeight,
+          overflowY: css.overflowY,
+          scrollHeight: panel.scrollHeight,
+          clientHeight: panel.clientHeight,
+          attachedPageHeight: attachedPage?.height ?? 0,
+          captureColumns: columns('div.grid.gap-3'),
+          metadataColumns: columns('dl.grid'),
+          geometryColumns: getComputedStyle(panel.querySelector('fieldset.grid')).gridTemplateColumns,
+        }
+      })
+      expect(bounds.maxHeight).toBe('288px')
+      expect(bounds.height).toBe(288)
+      expect(bounds.overflowY).toBe('auto')
+      expect(bounds.scrollHeight).toBeGreaterThan(bounds.clientHeight)
+      expect(bounds.attachedPageHeight).toBeGreaterThan(0)
+      expect(bounds.captureColumns).toBe(2)
+      expect(bounds.metadataColumns).toBe(2)
+      expect(bounds.geometryColumns).toBe('repeat(4, minmax(0px, 1fr))')
+    } finally {
+      await page.close()
+    }
+  }, 30_000)
 })

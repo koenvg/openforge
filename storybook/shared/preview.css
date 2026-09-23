@@ -4,9 +4,11 @@
 @source '../../packages/plugin-sdk/src';
 @source '../../packages/pr-review-ui/src';
 @source '../../packages/terminal-runtime/src';
-@source '../../plugins/*/src';
 @source '../../plugins/file-viewer/src';
 @source '../../plugins/task-schedules/src';
+/* Task Browser's review and error layouts are not reliably discovered by the wildcard.
+   Include only the classes actually used there; scanning the whole plugin changes other card bounds. */
+@source inline("max-h-72 lg:grid-cols-2 grid-cols-[auto_minmax(0,1fr)] grid-cols-4 top-3 w-auto");
 @source '../';
 
 /* Freeze visual state without replacing runtime timers used by interactions. */
