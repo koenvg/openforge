@@ -16,12 +16,12 @@ openforge-session-protocol = { path = "crates/session-protocol" }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "net", "process", "signal", "sync", "time"] }
 tokio-stream = "0.1"
 bytes = "1.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rusqlite_migration = "2.6.0"
-reqwest = { version = "0.13", features = ["json", "stream", "blocking"] }
+reqwest = { version = "0.13", features = ["json", "stream"] }
 which = "6.0"
 
 base64 = "0.22"
@@ -64,6 +64,12 @@ rusqlite = { version = "0.40", features = ["trace"] }
 tower = { version = "0.5", features = ["util"] }
 jsonschema = { version = "0.33", default-features = false }
 tokio-tungstenite = "0.24"
+reqwest = { version = "0.13", features = ["blocking"] }
 
 [features]
 default = []
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "debuginfo"

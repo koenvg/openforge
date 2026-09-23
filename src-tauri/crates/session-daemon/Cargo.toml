@@ -51,6 +51,11 @@ openforge-session-host = { path = "../session-host", features = ["test-contracts
 tokio = { version = "1", features = ["macros"] }
 tempfile = "3"
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "debuginfo"
+
 [profile.dev.package.sha2]
 # Preflight has production deadlines even in debug builds. Hashing up to 128 MiB
 # must not spend that budget executing unoptimized cryptographic rounds.

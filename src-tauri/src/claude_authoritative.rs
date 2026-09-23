@@ -407,27 +407,30 @@ fn docs_cache() -> &'static Mutex<Option<std::collections::HashMap<String, DocCo
     DOCS.get_or_init(|| Mutex::new(None))
 }
 
-/// Fetch and cache the published command reference. Called once per app launch, off the
-/// startup path; a failure (offline, timeout, docs moved) simply leaves the cache empty
-/// and the picker behaves exactly as it did before — names with no description.
-pub fn warm_docs() {
-    std::thread::spawn(|| {
-        let Ok(response) = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(DOC_FETCH_TIMEOUT_SECS))
-            .build()
-            .and_then(|client| client.get(COMMANDS_DOC_URL).send())
-        else {
-            return;
-        };
-        if !response.status().is_success() {
-            return;
-        }
-        let Ok(body) = response.text() else { return };
-        let parsed = parse_commands_doc(&body);
-        if !parsed.is_empty() {
-            *docs_cache().lock().unwrap() = Some(parsed);
-        }
-    });
+async fn fetch_commands_doc(url: &str) -> Option<std::collections::HashMap<String, DocCommand>> {
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DOC_FETCH_TIMEOUT_SECS))
+        .build()
+        .ok()?
+        .get(url)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let parsed = parse_commands_doc(&response.text().await.ok()?);
+    (!parsed.is_empty()).then_some(parsed)
+}
+
+/// Fetch and cache the published command reference. Run once per app launch rather than
+/// per picker open, so new Anthropic commands show up without a network hit on the hot
+/// path. A failure (offline, timeout, docs moved) leaves the cache empty, and the picker
+/// shows names with no description.
+pub async fn warm_docs() {
+    if let Some(parsed) = fetch_commands_doc(COMMANDS_DOC_URL).await {
+        *docs_cache().lock().unwrap() = Some(parsed);
+    }
 }
 
 // ── Background warm + process-global cache ──────────────────────────────────
@@ -915,5 +918,46 @@ mod tests {
         std::fs::create_dir_all(&active).unwrap();
         let roots = resolver_roots(std::slice::from_ref(&active));
         assert_eq!(roots, vec![active]);
+    }
+
+    async fn serve_commands_doc(status: axum::http::StatusCode, body: &'static str) -> String {
+        let router = axum::Router::new().route(
+            "/commands.md",
+            axum::routing::get(move || async move { (status, body) }),
+        );
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind fake docs server");
+        let address = listener.local_addr().expect("read fake docs address");
+        tokio::spawn(async move {
+            axum::serve(listener, router)
+                .await
+                .expect("serve fake docs");
+        });
+        format!("http://{address}/commands.md")
+    }
+
+    #[tokio::test]
+    async fn fetch_commands_doc_parses_a_successful_response() {
+        let url = serve_commands_doc(
+            axum::http::StatusCode::OK,
+            "| Command | Purpose |\n| ------- | ------- |\n| `/context` | Show context usage |\n",
+        )
+        .await;
+
+        let docs = fetch_commands_doc(&url).await.expect("docs should parse");
+
+        assert_eq!(docs["context"].description, "Show context usage");
+    }
+
+    #[tokio::test]
+    async fn fetch_commands_doc_ignores_an_error_status() {
+        let url = serve_commands_doc(
+            axum::http::StatusCode::NOT_FOUND,
+            "| `/context` | Show context usage |\n",
+        )
+        .await;
+
+        assert!(fetch_commands_doc(&url).await.is_none());
     }
 }
