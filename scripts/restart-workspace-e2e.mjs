@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Real Electron replacement against an isolated daemon; never attaches to a developer app. */
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
@@ -9,6 +9,8 @@ import { createDesktopTestLifecycle } from './desktop-test/lifecycle.mjs'
 import { createDesktopAppDriver } from './desktop-test/driver.mjs'
 import { createElectronDevLauncher } from './electron-dev.mjs'
 import { stopProcess, waitForDevTools } from './electron-process.mjs'
+import { waitForOwnedDaemonExit } from './desktop-test/daemon-ownership.mjs'
+import { cleanupRestartFixture } from './restart-workspace-fixture.mjs'
 
 function spawnCommand(command, args, options = {}) {
   const detached = process.platform !== 'win32'
@@ -67,7 +69,6 @@ async function inventory(candidate) {
 }
 
 let context
-let cleanupSucceeded = false
 try {
   const build = spawnSync('cargo', ['build', '--manifest-path', 'src-tauri/crates/session-daemon/Cargo.toml'], { stdio: 'inherit' })
   assert.equal(build.status, 0)
@@ -160,6 +161,7 @@ try {
   await page.evaluate(async () => (await import('/src/lib/ipc.ts')).quitApp()).catch(() => {})
   await until(() => !restoredBrowser.isConnected())
   await until(async () => !(await readdir(join(daemonRoot, 'session-v1'))).includes('control.sock'))
+  await waitForOwnedDaemonExit(join(daemonRoot, 'session-v1'))
   assert.ok(originalLaunch)
   normalProcess = spawnCommand(originalLaunch.command, originalLaunch.args, originalLaunch.options)
   await waitForDevTools(context.ports.chromiumDebugPort, { timeoutMs: 60_000 })
@@ -180,19 +182,25 @@ try {
   if (context) await browser?.contexts()[0]?.pages()[0]?.screenshot({ path: context.paths.failureScreenshotPath }).catch(() => {})
   throw error
 } finally {
-  if (page && !page.isClosed()) await page.evaluate(async () => (await import('/src/lib/ipc.ts')).quitApp()).catch(() => {})
-  await browser?.close().catch(() => {})
-  if (normalProcess) await stopProcess(normalProcess)
-  await lifecycle.shutdown()
-  const empty = (await readdir(daemonRoot)).length === 0
-  const daemonStopped = !(await readdir(join(daemonRoot, 'session-v1')).catch(() => [])).includes('control.sock')
-  const cleanup = empty || daemonStopped ? { status: 0, stderr: '' } : spawnSync('cargo', ['run', '--quiet', '--manifest-path', 'src-tauri/crates/session-client/Cargo.toml', '--example', 'shutdown-fixture', '--', daemonRoot], { encoding: 'utf8' })
-  cleanupSucceeded = cleanup.status === 0
-  if (cleanupSucceeded) {
-    await rm(daemonRoot, { recursive: true, force: true })
-    if (context) await rm(context.paths.runRoot, { recursive: true, force: true })
-  } else {
-    console.error(`Fixture cleanup failed; retained ${daemonRoot}: ${cleanup.stderr.slice(-1000)}`)
+  await cleanupRestartFixture({
+    daemonRoot,
+    runRoot: context?.paths.runRoot,
+    stopOwnedWriters: async () => {
+      if (page && !page.isClosed()) await page.evaluate(async () => (await import('/src/lib/ipc.ts')).quitApp()).catch(() => {})
+      await browser?.close().catch(() => {})
+      try {
+        if (normalProcess) {
+          await stopProcess(normalProcess, { forceWaitMs: 5000 })
+          if (normalProcess.exitCode === null && normalProcess.signalCode === null) {
+            throw new Error('Owned normal Electron launcher did not exit; retaining fixture resources')
+          }
+        }
+      } finally {
+        await lifecycle.shutdown()
+      }
+    },
+  }).catch(error => {
+    console.error(error.message)
     process.exitCode = 1
-  }
+  })
 }
