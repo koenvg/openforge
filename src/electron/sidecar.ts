@@ -379,6 +379,8 @@ export async function waitForSidecarReadiness(options: WaitForSidecarReadinessOp
   throw new Error(`sidecar did not become ready: ${message}`)
 }
 
+export const SIDECAR_OUTPUT_LINE_MAX_CHARS = 64 * 1024
+
 function logSidecarLine(line: string, source: 'stdout' | 'stderr', logger: SidecarLogSink): void {
   if (line.trim().length === 0) return
   const structuredLevel = /^level=(TRACE|DEBUG|INFO|WARN|ERROR)\b/.exec(line)?.[1]
@@ -399,6 +401,7 @@ function forwardSidecarStream(
   if (!stream) return
   const decoder = new StringDecoder('utf8')
   let pending = ''
+  let discardingOverflow = false
   let ended = false
 
   stream.on('data', (chunk) => {
@@ -407,8 +410,16 @@ function forwardSidecarStream(
     while (newline >= 0) {
       const line = pending.slice(0, newline).replace(/\r$/, '')
       pending = pending.slice(newline + 1)
-      logSidecarLine(line, source, logger)
+      if (!discardingOverflow) logSidecarLine(line, source, logger)
+      discardingOverflow = false
       newline = pending.indexOf('\n')
+    }
+    if (discardingOverflow) {
+      pending = ''
+    } else if (pending.length > SIDECAR_OUTPUT_LINE_MAX_CHARS) {
+      logSidecarLine(pending.slice(0, SIDECAR_OUTPUT_LINE_MAX_CHARS), source, logger)
+      pending = ''
+      discardingOverflow = true
     }
   })
 
@@ -416,6 +427,7 @@ function forwardSidecarStream(
     if (ended) return
     ended = true
     pending += decoder.end()
+    if (discardingOverflow) return
     logSidecarLine(pending.replace(/\r$/, ''), source, logger)
   }
   stream.on('end', flush)

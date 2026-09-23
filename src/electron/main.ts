@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dialog } from 'electron'
 import { bootOpenForgeDesktop } from './bootLifecycle.js'
-import { developerLogSink } from './developerLogs.js'
+import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createElectronBootAdapter } from './electronBootAdapter.js'
 import { ElectronFailureReporterAdapter, createFailureReport, reportFailure } from './failureReporting.js'
 
@@ -30,6 +30,7 @@ void bootOpenForgeDesktop(adapter, {
   warnOnMissingSidecar: !process.env.OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR,
   logger: developerLogSink,
   failureReporter,
+  flushLogs: () => developerLogStore.flush(),
 }).catch(async error => {
   await reportFailure(failureReporter, createFailureReport({
     phase: 'boot:main',

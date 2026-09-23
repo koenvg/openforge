@@ -69,6 +69,7 @@ export interface BootLifecycleOptions {
   logger?: BootLifecycleLogger
   warnOnMissingSidecar?: boolean
   failureReporter?: ElectronFailureReporter | null
+  flushLogs?: () => Promise<void>
 }
 
 export interface BootResult {
@@ -127,6 +128,7 @@ export async function bootOpenForgeDesktop(
     },
     shutdown: shutdownCoordinator,
     logger,
+    flushLogs: options.flushLogs,
   })
 
   const cleanupStartedResources = async (): Promise<void> => {

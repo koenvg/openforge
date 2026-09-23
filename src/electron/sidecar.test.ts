@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { RecordingFailureReporterAdapter } from './failureReporting'
 import { RUST_SIDECAR_SIGTERM_GRACE_MS, SIDECAR_EVENT_STREAM_TEARDOWN_TIMEOUT_MS } from './shutdownBudgetContract'
-import { DEFAULT_SIDECAR_PORT, createSidecarLaunchConfig, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
+import { DEFAULT_SIDECAR_PORT, SIDECAR_OUTPUT_LINE_MAX_CHARS, createSidecarLaunchConfig, forwardSidecarOutput, resolveSidecarPort, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
 class FakeChild extends EventEmitter implements ChildProcessLike {
@@ -221,6 +221,20 @@ describe('Electron Rust sidecar supervision', () => {
     expect(logger.warn).toHaveBeenCalledOnce()
     expect(logger.error).toHaveBeenCalledWith('[sidecar:error] level=ERROR module=openforge::http_server message=[http_server] startup failed')
     expect(logger.error).toHaveBeenCalledWith('[sidecar:error] thread panicked unexpectedly')
+  })
+
+  it('caps an unterminated sidecar output line and resumes at the next newline', () => {
+    const child = new FakeChild()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    forwardSidecarOutput(child, logger)
+
+    child.stdout.emit('data', 'x'.repeat(SIDECAR_OUTPUT_LINE_MAX_CHARS + 10))
+    child.stdout.emit('data', 'more of the same line\nnext line\n')
+
+    expect(logger.info.mock.calls).toEqual([
+      [`[sidecar] ${'x'.repeat(SIDECAR_OUTPUT_LINE_MAX_CHARS)}`],
+      ['[sidecar] next line'],
+    ])
   })
 
   it('force-kills a sidecar that does not exit during graceful shutdown', async () => {
