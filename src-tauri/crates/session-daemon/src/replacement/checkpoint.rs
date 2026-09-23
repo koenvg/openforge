@@ -8,6 +8,7 @@ use crate::{
     notification_checkpoint::NotificationCheckpoint,
 };
 use openforge_session_client::runtime::RuntimeDirectory;
+use openforge_session_host::CapacityKind;
 use openforge_session_protocol::{Credentials, Error, OperationId};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -146,11 +147,13 @@ impl Write for Bounded {
 }
 pub(super) fn encode(mut header: Header, body: &Body) -> Result<Vec<u8>, Error> {
     let mut bytes = Bounded(Vec::new(), MAX_BODY);
-    serde_json::to_writer(&mut bytes, body).map_err(|_| Error::Capacity)?;
+    serde_json::to_writer(&mut bytes, body)
+        .map_err(|_| Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
     header.body_length = bytes.0.len();
     header.body_digest = format!("{:x}", Sha256::digest(&bytes.0));
     let mut prefix = Bounded(Vec::new(), MAX_HEADER);
-    serde_json::to_writer(&mut prefix, &header).map_err(|_| Error::Capacity)?;
+    serde_json::to_writer(&mut prefix, &header)
+        .map_err(|_| Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
     let mut file = Vec::with_capacity(8 + prefix.0.len() + bytes.0.len());
     file.extend_from_slice(b"OFRX");
     file.extend_from_slice(&(prefix.0.len() as u32).to_le_bytes());

@@ -192,6 +192,8 @@ impl<B: HostBackend> PtyHost for InProcessHost<B> {
         if let Some(Receipt::Spawn(pty)) = state.retry(&operation, &mutation)? {
             return Ok(pty);
         }
+        // A settled exit can free a live slot even when the caller never requests inventory.
+        state.observe(&controller.installation, self.backend.inventory().await?);
         state.admit_spawn()?;
         state.begin(operation.clone(), mutation, bytes)?;
         let backend = self.backend.clone();

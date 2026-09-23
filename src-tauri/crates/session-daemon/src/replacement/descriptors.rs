@@ -169,7 +169,7 @@ fn unconnected_stream(fd: i32) -> Result<(), Error> {
     Ok(())
 }
 pub(super) fn validate_list(fds: &[i32]) -> Result<(), Error> {
-    if fds.len() > 36
+    if fds.len() > openforge_session_host::MAX_SESSIONS + 4
         || fds.iter().any(|fd| !(3..1_048_576).contains(fd))
         || fds.iter().copied().collect::<BTreeSet<_>>().len() != fds.len()
     {
@@ -248,5 +248,22 @@ impl Drop for Inheritance {
                 eprintln!("descriptor inheritance rollback failed");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_list;
+    use openforge_session_protocol::Error;
+
+    #[test]
+    fn inherited_descriptors_scale_without_accepting_duplicates_or_invalid_fds() {
+        let many: Vec<i32> = (3..259).collect();
+        assert_eq!(validate_list(&many), Ok(()));
+        assert_eq!(validate_list(&[3, 3]), Err(Error::InvalidRequest));
+        assert_eq!(validate_list(&[0]), Err(Error::InvalidRequest));
+        assert_eq!(validate_list(&[1_048_576]), Err(Error::InvalidRequest));
+        let oversized: Vec<i32> = (3..(openforge_session_host::MAX_SESSIONS as i32 + 8)).collect();
+        assert_eq!(validate_list(&oversized), Err(Error::InvalidRequest));
     }
 }

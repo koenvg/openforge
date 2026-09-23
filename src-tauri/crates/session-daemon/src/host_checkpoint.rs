@@ -40,6 +40,8 @@ impl HostCheckpoint {
 }
 impl Host {
     pub fn checkpoint(&self) -> Result<(HostCheckpoint, HostPause), Error> {
+        // Reject resource pressure while the old image is still freely serving.
+        self.backend.preflight_checkpoint()?;
         // Ingress drains before the ledger/table gates: active forwarding and notification
         // transactions may themselves need the table. Readers drain before the model barriers.
         let ingress = self.ingress_gate.pause(Duration::from_secs(32))?;
@@ -76,13 +78,20 @@ impl Host {
         if let Some(endpoint) = &saved.sidecar {
             endpoint.validate()?;
         }
-        let state = HostState::restore_checkpoint(&saved.ledger)?;
+        let mut state = HostState::restore_checkpoint(&saved.ledger)?;
         saved.backend.validate_ledger(&installation, &state)?;
         let backend = Backend::restore(
             saved.backend,
             &installation,
             state.lifetime(),
             agent_runtime,
+        )?;
+        let limits = scaled_limits();
+        state.expand_session_limits(
+            limits.live_sessions,
+            limits.retained_sessions,
+            limits.exit_history,
+            limits.cleanup_reserve,
         )?;
         let state = Arc::new(Mutex::new(state));
         let host = InProcessHost::new(backend.clone(), installation, Arc::clone(&state));

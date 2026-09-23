@@ -11,9 +11,34 @@ use std::{
     time::{Duration, Instant},
 };
 
-const MAX_RESOURCES: usize = 32;
-const MAX_RECORDS: usize = 128;
-const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
+const MAX_RESOURCES: usize = openforge_session_host::MAX_SESSIONS;
+const MAX_RECORDS: usize = openforge_session_host::MAX_SESSIONS;
+pub(super) const MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
+
+pub(super) fn retained_byte_limit() -> usize {
+    #[cfg(feature = "replacement-fixtures")]
+    if let Some(limit) = std::env::var("OPENFORGE_TEST_CHECKPOINT_BYTE_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|limit| *limit > 0 && *limit < MAX_RETAINED_BYTES)
+    {
+        return limit;
+    }
+    MAX_RETAINED_BYTES
+}
+
+fn checkpoint_time_budget() -> Duration {
+    const MAX_MS: u64 = 4_000;
+    #[cfg(feature = "replacement-fixtures")]
+    if let Some(milliseconds) = std::env::var("OPENFORGE_TEST_CHECKPOINT_DEADLINE_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| (1..MAX_MS).contains(value))
+    {
+        return Duration::from_millis(milliseconds);
+    }
+    Duration::from_millis(MAX_MS)
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,7 +153,7 @@ impl BackendCheckpoint {
                 }
                 bytes = bytes
                     .checked_add(process.retained_bytes())
-                    .ok_or(Error::Capacity)?;
+                    .ok_or(Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
             }
             if let Some(agent) = &record.agent {
                 if &agent.config.pty != pty
@@ -145,10 +170,10 @@ impl BackendCheckpoint {
                     .checked_add(recovery.portable_vt.len())
                     .and_then(|bytes| bytes.checked_add(recovery.compatibility_replay.len()))
                     .and_then(|bytes| bytes.checked_add(recovery.continuation.len()))
-                    .ok_or(Error::Capacity)?;
+                    .ok_or(Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
             }
-            if bytes > MAX_RETAINED_BYTES {
-                return Err(Error::Capacity);
+            if bytes > retained_byte_limit() {
+                return Err(Error::CapacityExceeded(CapacityKind::CheckpointBytes));
             }
         }
         if self.next_instance == 0 {
@@ -170,11 +195,11 @@ impl Backend {
         {
             return Err(Error::Capacity);
         }
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + checkpoint_time_budget();
         let mut pauses = Vec::new();
         for (instance, record) in &table.records {
             if Instant::now() >= deadline {
-                return Err(Error::Capacity);
+                return Err(Error::CapacityExceeded(CapacityKind::CheckpointTime));
             }
             if let Some(process) = &record.process {
                 pauses.push((*instance, process.pause()?));
@@ -184,7 +209,7 @@ impl Backend {
         let mut bytes = 0usize;
         for (instance, record) in &table.records {
             if Instant::now() >= deadline {
-                return Err(Error::Capacity);
+                return Err(Error::CapacityExceeded(CapacityKind::CheckpointTime));
             }
             let process = match &record.process {
                 Some(process) => {
@@ -196,9 +221,9 @@ impl Backend {
                     let saved = process.checkpoint(pause)?;
                     bytes = bytes
                         .checked_add(saved.retained_bytes())
-                        .ok_or(Error::Capacity)?;
-                    if bytes > MAX_RETAINED_BYTES {
-                        return Err(Error::Capacity);
+                        .ok_or(Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
+                    if bytes > retained_byte_limit() {
+                        return Err(Error::CapacityExceeded(CapacityKind::CheckpointBytes));
                     }
                     Some(saved)
                 }
