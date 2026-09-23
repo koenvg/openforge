@@ -420,12 +420,23 @@ mod tests {
             .expect_err("injected update failure should be returned");
 
         assert!(error.contains("injected terminal colour profile update failure"));
-        assert!(session.diagnostics().iter().any(|diagnostic| {
-            diagnostic.phase == "update-color-profile"
-                && diagnostic
-                    .message
-                    .contains("injected terminal colour profile update failure")
-        }));
+        // The worker replies before it publishes the disabled diagnostic.
+        let deadline = std::time::Instant::now() + REQUEST_TIMEOUT;
+        loop {
+            if session.diagnostics().iter().any(|diagnostic| {
+                diagnostic.phase == "update-color-profile"
+                    && diagnostic
+                        .message
+                        .contains("injected terminal colour profile update failure")
+            }) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "disabled diagnostic did not arrive after the update failed"
+            );
+            std::thread::yield_now();
+        }
         assert!(session.portable_snapshot().is_err());
     }
 
