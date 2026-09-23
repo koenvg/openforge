@@ -51,6 +51,13 @@ function invokeHostCommand<TOutput>(openforge: BackendOpenForgeAPI, command: str
   return openforge.commands.invokeGlobal<TOutput>(hostCommandId(command), payload ?? null)
 }
 
+async function loadReviewPullRequest(openforge: BackendOpenForgeAPI, reviewPrId: number): Promise<ReviewPullRequest> {
+  const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'getReviewPrs'))
+    .find(candidate => candidate.id === reviewPrId)
+  if (!pullRequest) throw new Error('Walkthrough scope unavailable: pull request not found')
+  return pullRequest
+}
+
 async function resolveProjectIdsByRepo(openforge: BackendOpenForgeAPI): Promise<Record<string, string>> {
   const projects = await openforge.projects.list()
   const resolved = await Promise.all(projects.map(async project => ({
@@ -284,28 +291,21 @@ export default defineBackendPlugin({
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, WalkthroughRecordV1 | null>('getPrWalkthrough', {
       handler: (request) => readWalkthrough(openforge, request.reviewPrId, request.headSha, {
         scope: async () => {
-          const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'getReviewPrs'))
-            .find(candidate => candidate.id === request.reviewPrId)
-          if (!pullRequest) throw new Error('Walkthrough scope unavailable: pull request not found')
+          const pullRequest = await loadReviewPullRequest(openforge, request.reviewPrId)
           return { ...reviewScopeForPullRequest(pullRequest), revision: request.headSha }
         },
         snapshot: async () => {
-          const loadPullRequest = async (): Promise<ReviewPullRequest> => {
-            const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'fetchReviewPrs'))
-              .find(candidate => candidate.id === request.reviewPrId)
-            if (!pullRequest) throw new Error('Walkthrough snapshot unavailable: pull request not found')
-            return pullRequest
+          const pullRequest = await loadReviewPullRequest(openforge, request.reviewPrId)
+          const repository = {
+            owner: pullRequest.repo_owner,
+            repo: pullRequest.repo_name,
+            prNumber: pullRequest.number,
           }
-          const pullRequest = await loadPullRequest()
           const scope = { ...reviewScopeForPullRequest(pullRequest), revision: request.headSha }
           return buildWalkthroughValidationSnapshot(
             scope,
-            async () => (await loadPullRequest()).head_sha,
-            () => invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
-              owner: pullRequest.repo_owner,
-              repo: pullRequest.repo_name,
-              prNumber: pullRequest.number,
-            }),
+            () => invokeHostCommand<string>(openforge, 'getPrHeadSha', repository),
+            () => invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', repository),
           )
         },
       }),
@@ -336,33 +336,35 @@ export default defineBackendPlugin({
           number: request.prNumber,
           head_sha: request.headSha,
         })
-        const loadHeadRevision = async (): Promise<string> => {
-          const pullRequest = (await invokeHostCommand<ReviewPullRequest[]>(openforge, 'fetchReviewPrs'))
-            .find(candidate => candidate.id === request.reviewPrId)
-          if (!pullRequest) throw new Error('Walkthrough snapshot unavailable: pull request not found')
-          return pullRequest.head_sha
-        }
+        const repository = { owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber }
         let files: PrFileDiff[] = []
-        const snapshot = await buildWalkthroughValidationSnapshot(
-          scope,
-          loadHeadRevision,
-          async () => {
-            files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
-              owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-            })
-            return files
-          },
-        )
-        const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
-          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
-        }).catch(() => [] as ReviewComment[])
-        const ticketSnapshot = await resolveTicketSnapshot({
-          config: await readJiraConfig(openforge),
-          tokenConfigured: await jiraTokenConfigured(openforge),
-          override: await readJiraKeyOverride(openforge, request.reviewPrId),
-          pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
-          fetchWorkItem: payload => invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
-        })
+        const loadTicketSnapshot = async () => {
+          const [config, tokenConfigured, override] = await Promise.all([
+            readJiraConfig(openforge),
+            jiraTokenConfigured(openforge),
+            readJiraKeyOverride(openforge, request.reviewPrId),
+          ])
+          return resolveTicketSnapshot({
+            config,
+            tokenConfigured,
+            override,
+            pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
+            fetchWorkItem: payload => invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
+          })
+        }
+        const [snapshot, existingComments, ticketSnapshot] = await Promise.all([
+          buildWalkthroughValidationSnapshot(
+            scope,
+            () => invokeHostCommand<string>(openforge, 'getPrHeadSha', repository),
+            async () => {
+              files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', repository)
+              return files
+            },
+          ),
+          invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', repository)
+            .catch(() => [] as ReviewComment[]),
+          loadTicketSnapshot(),
+        ])
         if (ticketSnapshot) {
           await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
         }

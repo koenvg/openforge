@@ -285,6 +285,21 @@ pub(super) async fn handle_app_github_review_command(
                 .await
                 .map_err(runtime_error)?,
         )?,
+        "get_pr_head_sha" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            to_app_value(
+                crate::github_runtime::get_pr_head_sha(
+                    &state.github_client,
+                    &owner,
+                    &repo,
+                    pr_number,
+                )
+                .await
+                .map_err(runtime_error)?,
+            )?
+        }
         "get_pr_file_diffs" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
