@@ -150,7 +150,7 @@ function buildRollbackError(originalError, rollback) {
 async function applyTaskPlan(flags) {
   const plan = await loadTaskPlan(flags);
   const created = [];
-  const keyToTaskId = {};
+  const keyToTaskId = Object.create(null);
   const dependencies = [];
 
   try {
