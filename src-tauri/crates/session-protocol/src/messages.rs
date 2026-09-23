@@ -135,8 +135,11 @@ pub struct Recovery {
     pub pty: PtyIdentity,
     pub watermark: u64,
     pub cursor: u64,
+    #[serde(with = "openforge_session_host::wire_bytes")]
     pub portable_vt: Vec<u8>,
+    #[serde(with = "openforge_session_host::wire_bytes")]
     pub compatibility_replay: Vec<u8>,
+    #[serde(with = "openforge_session_host::wire_bytes")]
     pub continuation: Vec<u8>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +156,7 @@ pub enum Event {
     Output {
         pty: PtyIdentity,
         sequence: u64,
+        #[serde(with = "openforge_session_host::wire_bytes")]
         data: Vec<u8>,
     },
     Exited {
