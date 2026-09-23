@@ -22,7 +22,7 @@
 </script>
 
 <span
-  class="file-type-icon inline-flex items-center justify-center shrink-0 {className}"
+  class="file-type-icon {className}"
   data-icon={iconName}
   aria-hidden="true"
 >
@@ -30,6 +30,7 @@
 </span>
 
 <style>
+  .file-type-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; }
   .file-type-icon :global(svg) {
     width: 100%;
     height: 100%;

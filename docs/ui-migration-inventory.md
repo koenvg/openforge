@@ -131,6 +131,14 @@ The machine-readable ledger above is the KVG-4863 snapshot, not a refreshed comp
 
 See [feedback validation](ui-feedback-validation.md) for public test boundaries, baseline geometry, publication checks, and remaining validation gaps.
 
+## SDK views and diagram actions, KVG-4865
+
+`MermaidDiagramPreview` now uses the public SDK button controls, while its diagram toolbar and canvas use scoped token styles, including narrow-screen wrapping and 44px action targets without host CSS. `CollapsibleSection`, `PluginPageHeader`, `PluginPageShell`, `ProjectFileTree`, `ResizablePanel`, and `FileTypeIcon` no longer need host utility CSS for their own layout, paint, or controls. The two routed Storybook fixtures use semantic host colors. Public props, focus, callbacks, tree navigation, collapse persistence, zoom shortcuts, and the compatibility adapter remain unchanged.
+
+`scripts/sdk-ui-migration.test.mjs` checks shipped SDK Svelte views, their executable browser and packed fixtures, and both routed Storybook fixtures. The SDK inventory has no legacy color or component consumers. Scanner candidates `toggle` in the tree callback and `modal`, `menu`, `tooltip`, and `loading` in fixture scenario strings are not CSS classes. Supported caller-supplied `class` props, attribute spreads, and the listbox's caller-owned `optionClass` are reviewed in an exact path-and-expression allowlist; new unresolved expressions fail the test, including dynamically composed control names. Negative-test/prose samples elsewhere in the SDK are intentionally outside this shipped-view gate; the final removal ticket owns repository-wide exclusions.
+
+`SdkViews.browser.test.ts` mounts the views without host CSS, checks token-driven paint and geometry across all four built-ins and a namespaced contributed theme, and exercises selection, collapse, zoom, and close at 640px and 320px. The SDK publication contract also mounts the packed public views in a clean consumer without host CSS and switches a contributed theme without losing draft state. The packed feedback/README fixture remains unchanged. The pinned Storybook visual check passed all 432 baseline cases after the view migration.
+
 ## Host task detail and self-review, KVG-4872
 
 The task-detail consumer group is migrated to semantic color utilities and SDK feedback controls. This includes `src/components/task-detail`, host `PrCommentsList`, `PrPipelineChecks`, `TaskRelationshipDetailSection`, and the `StatusFrame` and `TaskPaneFrame` stories. Terminal-runtime and shared review package internals, settings behavior, plugin-owned CSS, and compatibility styles remain unchanged.
