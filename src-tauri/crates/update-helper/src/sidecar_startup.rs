@@ -143,6 +143,10 @@ impl SidecarAdmission {
         {
             return Err("authorized sidecar bundle changed".into());
         }
+        crate::native_image::verify(
+            std::process::id(),
+            &self.destination.join("Contents/MacOS/openforge-sidecar"),
+        )?;
         if let Some(runtime) = &record.runtime {
             runtime.verify_running(&launch.daemon_root, &self.operation)?;
         }

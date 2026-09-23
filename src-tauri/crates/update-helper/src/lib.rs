@@ -7,6 +7,7 @@ mod handoff_input;
 mod host_exit;
 mod journal;
 mod launch;
+mod native_image;
 mod process_identity;
 mod runtime_update;
 mod sidecar_startup;

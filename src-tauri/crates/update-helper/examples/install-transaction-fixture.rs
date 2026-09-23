@@ -1,4 +1,4 @@
-//! Test-only process boundary. Not packaged or used by the production installer.
+// Test-only process boundary. Not packaged or used by the production installer.
 use openforge_update_helper::InstallTransaction;
 use serde::Deserialize;
 use std::{io::Read, path::PathBuf};
@@ -17,6 +17,9 @@ struct Request {
 }
 
 fn run() -> Result<(), String> {
+    if std::env::args_os().any(|arg| arg == openforge_update_helper::SIDECAR_STARTUP_ARGUMENT) {
+        println!("sidecar-awaiting-admission");
+    }
     if openforge_update_helper::authorize_sidecar_startup()? {
         println!("sidecar-authorized");
         return Ok(());

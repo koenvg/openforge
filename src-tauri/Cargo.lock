@@ -1791,10 +1791,12 @@ dependencies = [
 name = "openforge-update-helper"
 version = "0.1.0"
 dependencies = [
+ "core-foundation 0.10.1",
  "libc",
  "openforge-session-client",
  "openforge-session-protocol",
  "ring",
+ "security-framework 3.7.0",
  "serde",
  "serde_json",
  "sha2",

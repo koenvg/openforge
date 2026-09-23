@@ -19,7 +19,8 @@ KVG-5206 is unfinished. Production updates and source installation remain disabl
 - After host exit and bundle replacement, the helper activates the prepared daemon before launching the target app. Native commit requires a fresh Sidecar controller for the preserved lifetime, the original daemon PID, and an activated operation receipt whose actual image matches the prepared image. Unknown receipts are not evidence of successful cancellation.
 - The helper launches only the authorized app entry point and journals its kernel PID/birth identity. Authenticated `verify-launch` checks that recorded caller, authorization, installed bytes and live-runtime activation without acquiring a controller. Wrong processes, dead identities and changed authority are refused. The launch fence survives failed exec.
 - Native Sidecar registration binds the launched app's exact child to the journal. The child requires an inherited local pipe/socketpair, checks its own birth identity and parent, destination/recovery binding, executable path, data roots, installed bytes and runtime receipt before keychain or database initialization. A flag alone grants nothing. Copied journals under another root and admission replay by another child are refused.
-- Electron's Sidecar lifecycle can await native admission before sending it over stdin or polling readiness. These startup primitives are not connected to production boot. Kernel birth/path checks are not complete running-image authentication for Electron and Sidecar, and do not replace the remaining cold-runtime and commit-readiness checks.
+- Sidecar admission also compares the kernel's loaded CDHash with the code signature of the authorized executable. Security.framework checks executable integrity with network access disabled. This does not supply publisher trust, which still comes from the authenticated bundle grant.
+- Electron's Sidecar lifecycle can await native admission before sending it over stdin or polling readiness. These startup APIs are not connected to production boot. Electron running-image authentication, cold-runtime readiness and independent target-bound commit checks remain unfinished.
 - Commit controller authority is copied before asynchronous work; caller mutation cannot upgrade a stale controller during verification.
 
 The destination, staging and recovery directories must share a filesystem. Recovery storage, authorization and staging cannot be inside the installed bundle. Launch data cannot be inside either replaceable bundle.
@@ -36,13 +37,14 @@ The opt-in Electron/native contract uses actual compiled helper and daemon bytes
 
 Latest startup/admission checks:
 
-- Root: 878 files passed; 7,478 tests passed, 3 expected failures and 55 skips across 12 skipped files, in 189.00 seconds. This supersedes the earlier root timeout failures below.
-- Opt-in Electron/native contract: all 12 passed in 76.52 seconds, including the controller-mutation regression, target startup, native Sidecar admission, copied-recovery rejection and cross-process replay refusal.
+- Root: 878 files passed; 7,478 tests passed, 3 expected failures and 55 skips across 12 skipped files, in 179.88 seconds. This supersedes the earlier root timeout failures below.
+- Opt-in Electron/native contract: all 12 passed in 76.05 seconds. A real regression first admitted a distinct running Sidecar image after authorized bytes were restored at its path. The new check rejects that image by kernel CDHash and still admits the authorized image. Other cases cover controller mutation, startup, copied recovery roots and replay.
 - Helper default/all-feature suites: 21 passed each. Sidecar default/all-feature suites: 2,370 passed and 49 ignored each, including a private executable refusing EOF/forged admission before application-data creation. Both crates passed all-target/all-feature check/build, strict Clippy and formatting.
 - Latest daemon all-feature rerun passed: 290 reported cases across binary targets, 5 ignored. The 59 unit tests run under four binaries. Focused updater/PTY tests also passed. The preceding all-feature run failed `sustained_managed_mutations_keep_daemon_capacity_available` at `tests/operation_retention.rs:41` with `Transport("failed to fill whole buffer")`; its isolated rerun passed both tests. No deadline or parallelism changes were made. Earlier agent-gateway failures remain historical evidence, not a current failed run; their root cause was not established.
 - TypeScript, plugin-host types, lint, Electron/Companion contracts and whitespace checks passed. The Sidecar lifecycle tests passed 23 tests across two files.
 - `pnpm electron:package` passed again with the startup/admission changes, including release Sidecar, daemon and helper builds and app assembly. The app was built, not installed or launched; this is not packaged continuity acceptance.
-- Logs: `/tmp/KVG-5206-startup-*.log` and `/tmp/KVG-5206-sidecar-*.log`.
+- Latest checks and red/green evidence use `/tmp/KVG-5206-running-image-*.log`. The preceding startup/admission runs use `/tmp/KVG-5206-startup-*.log` and `/tmp/KVG-5206-sidecar-*.log`.
+- The image test uses a separately linked, feature-gated fixture and waits for its explicit pre-admission signal before changing files. Earlier re-signing/early-swap attempts died with SIGKILL and did not establish the regression. No production signing key was used, and probe/transaction deadlines were not increased.
 
 Earlier runtime-integration checks:
 
@@ -86,7 +88,7 @@ Strip inherited `OPENFORGE_*` settings before validation. Tests use private copi
 ## Remaining KVG-5206 work
 
 - Connect the real update driver and source installer to the coordinator's verified Sidecar-exit boundary. Production launch and source-install guards remain unchanged; a working helper and exit verifier do not supply this missing end-to-end integration.
-- Connect daemon maintenance and the new launch/Sidecar admission primitives to real boot before domain access. Complete Electron/Sidecar running-image authentication, cold-runtime readiness and target-bound commit checks; then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
+- Connect daemon maintenance and launch/Sidecar admission to real boot before domain access. Complete Electron running-image authentication, cold-runtime readiness and independent target-bound commit checks; then reconcile sessions and restore windows before commit. Add complete agent/tool/shell PID and PTY evidence.
 - Wire the separate native first-adoption consent into verified legacy shutdown and the source installer. Consent and authorized legacy transaction support exist, but no end-to-end first-adoption flow or seamless migration claim is made.
 - Exercise every replacement/rollback durability boundary, failed relaunch and actual packaged continuity. Current process-loss tests do not cover every rename or power-loss boundary.
 - Integrate protected publisher signing and arrange credential provisioning and encrypted backup with the owner. No production private key was read, printed, committed or uploaded for this work.

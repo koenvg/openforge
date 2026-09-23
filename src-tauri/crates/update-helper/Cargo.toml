@@ -14,6 +14,10 @@ uuid = { version = "1", features = ["v4"] }
 openforge-session-client = { path = "../session-client" }
 openforge-session-protocol = { path = "../session-protocol" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+security-framework = "3.7"
+
 [dev-dependencies]
 tempfile = "3"
 
@@ -22,4 +26,8 @@ test-fixtures = []
 
 [[example]]
 name = "install-transaction-fixture"
+required-features = ["test-fixtures"]
+
+[[example]]
+name = "install-transaction-fixture-v2"
 required-features = ["test-fixtures"]

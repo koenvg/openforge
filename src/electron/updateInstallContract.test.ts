@@ -12,6 +12,7 @@ import { commitNativeUpdate, prepareNativeUpdateHandoff, verifyNativeUpdateLaunc
 const enabled = process.env.RUN_UPDATE_HELPER_CONTRACT === '1'
 const cleanEnvironment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
 let executable: string
+let alternateExecutable: string
 let nativeExecutable: string
 let daemonExecutable: string
 let targetDaemonExecutable: string
@@ -20,10 +21,12 @@ const pendingHelpers = new Set<() => Promise<void>>()
 describe.skipIf(!enabled)('Electron authorization to native install/recovery contract', () => {
   beforeAll(() => {
     const manifest = execFileSync(process.execPath, ['scripts/rust-sidecar-layout.mjs', 'update-helper-manifest-path'], { encoding: 'utf8', env: cleanEnvironment }).trim()
-    const build = execFileSync('cargo', ['build', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
+    const build = execFileSync('cargo', ['build', '--manifest-path', manifest, '--features', 'test-fixtures', '--example', 'install-transaction-fixture', '--example', 'install-transaction-fixture-v2', '--bins', '--message-format=json'], { encoding: 'utf8', env: cleanEnvironment, maxBuffer: 8 * 1024 ** 2 })
     const outputs = build.split('\n').filter(Boolean).map(line => JSON.parse(line))
     executable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'install-transaction-fixture' && row.executable)?.executable
     if (!executable) throw new Error('Native updater fixture was not built')
+    alternateExecutable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'install-transaction-fixture-v2' && row.executable)?.executable
+    if (!alternateExecutable) throw new Error('Distinct native updater fixture was not built')
     nativeExecutable = outputs.find(row => row.reason === 'compiler-artifact' && row.target.name === 'openforge-update-helper' && row.target.kind.includes('bin') && row.executable)?.executable
     if (!nativeExecutable) throw new Error('Native updater was not built')
     const daemonManifest = execFileSync(process.execPath, ['scripts/rust-sidecar-layout.mjs', 'session-daemon-manifest-path'], { encoding: 'utf8', env: cleanEnvironment }).trim()
@@ -127,6 +130,8 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     await cp(source, destination, { recursive: true })
     await cp(nativeExecutable, join(source, 'Contents/MacOS/openforge-update-helper'))
     await cp(executable, join(source, 'Contents/MacOS/openforge-sidecar'))
+    const sidecarSubstitute = join(root, 'distinct-sidecar')
+    await cp(alternateExecutable, sidecarSubstitute)
     const marker = join(root, 'launched')
     const targetModule = 'Contents/Resources/app/dist-electron/target.mjs'
     await build({ configFile: false, publicDir: false, logLevel: 'silent', build: {
@@ -151,7 +156,7 @@ describe.skipIf(!enabled)('Electron authorization to native install/recovery con
     const config = join(root, 'host.json')
     const target = { installationId: 'contract-installation', operationId: 'contract-operation', manifestSha256: staged.manifestSha256, images: staged.images }
     await writeFile(config, JSON.stringify({ staging: resolve(staged.bundlePath, '..'), authorization: authorizationRoot,
-      destination, recovery: join(root, 'transaction'), target, marker }), { mode: 0o600 })
+      destination, recovery: join(root, 'transaction'), target, marker, sidecarSubstitute }), { mode: 0o600 })
     const settleTarget = async () => {
       await vi.waitFor(() => {
         const exited = spawnSync(executable, [], { env: {}, encoding: 'utf8', timeout: 5_000, input: JSON.stringify({
