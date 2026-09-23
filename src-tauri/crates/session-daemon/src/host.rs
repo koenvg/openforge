@@ -22,18 +22,23 @@ pub struct Host {
     pub ingress_gate: Arc<crate::quiescence::Gate>,
     restore_ingress_pause: Option<crate::quiescence::Paused>,
 }
+fn scaled_limits() -> HostLimits {
+    HostLimits {
+        // Leave room for settled exits inside the host checkpoint's structural bound.
+        live_sessions: openforge_session_host::MAX_SESSIONS - crate::backend::EXIT_HISTORY,
+        retained_sessions: openforge_session_host::MAX_SESSIONS,
+        exit_history: crate::backend::EXIT_HISTORY,
+        cleanup_reserve: 128,
+        ..HostLimits::default()
+    }
+}
+
 impl Host {
     pub fn new(
         installation: InstallationId,
         agent_runtime: crate::agent_config::AgentRuntime,
     ) -> Result<Self, Error> {
-        let state = HostState::with_limits(HostLimits {
-            live_sessions: 32,
-            retained_sessions: 128,
-            exit_history: 128,
-            cleanup_reserve: 128,
-            ..HostLimits::default()
-        });
+        let state = HostState::with_limits(scaled_limits());
         let backend = Backend::new(
             installation.clone(),
             state.lifetime().clone(),
@@ -91,6 +96,7 @@ impl Host {
                 live_limit: capacity.limits.live_sessions,
                 retained_sessions: sessions.len(),
                 session_limit: capacity.limits.retained_sessions,
+                resources: self.backend.resource_capacity().ok(),
             },
             sessions,
         })

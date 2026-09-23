@@ -48,6 +48,20 @@ pub enum CapacityKind {
     RequestBytes,
     #[error("live or retained terminal sessions")]
     Sessions,
+    #[error("retained terminal history")]
+    RetainedHistory,
+    #[error("open file descriptors")]
+    FileDescriptors,
+    #[error("process slots")]
+    ProcessSlots,
+    #[error("memory headroom")]
+    MemoryHeadroom,
+    #[error("checkpoint bytes")]
+    CheckpointBytes,
+    #[error("checkpoint time")]
+    CheckpointTime,
+    #[error("PTY devices")]
+    PtyDevices,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

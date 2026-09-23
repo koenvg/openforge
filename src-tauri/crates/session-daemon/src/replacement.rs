@@ -10,6 +10,7 @@ mod version;
 use crate::host::{Host, HostPause};
 pub(crate) use descriptors::Resources;
 use openforge_session_client::runtime::RuntimeDirectory;
+use openforge_session_host::CapacityKind;
 use openforge_session_protocol::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -137,6 +138,8 @@ pub(crate) struct Activation {
     retained: Vec<i32>,
     image: images::Image,
     operation: OperationId,
+    checkpoint_bytes: usize,
+    paused_at: Instant,
     _spare_descriptors: Vec<File>,
     _pause: HostPause,
 }
@@ -279,6 +282,10 @@ impl Manager {
                                 .state = ReplacementState::Executing;
                             match self.capture(host, runtime, resources, operation.clone()) {
                                 Ok(prepared) => activation = Some(prepared),
+                                Err(Error::CapacityExceeded(kind)) => {
+                                    eprintln!("session checkpoint capacity refused: {kind}");
+                                    self.fail(&operation, ReplacementStage::Checkpoint);
+                                }
                                 Err(_) => self.fail(&operation, ReplacementStage::Checkpoint),
                             }
                         } else if matches!(state, ReplacementState::Preparing) {
@@ -360,13 +367,19 @@ impl Manager {
         resources: &Resources,
         operation: OperationId,
     ) -> Result<Activation, Error> {
+        let paused_at = Instant::now();
         let (host, pause) = host.checkpoint()?;
         // Reserve initialization headroom while refusal can still reopen the old owner.
         // Exec closes these CLOEXEC descriptors before rebuilding reader/writer/runtime wrappers.
-        let spare = File::open("/dev/null").map_err(|_| Error::Capacity)?;
+        let spare = File::open("/dev/null")
+            .map_err(|_| Error::CapacityExceeded(CapacityKind::FileDescriptors))?;
         let mut spare_descriptors = Vec::new();
-        for _ in 0..64 {
-            spare_descriptors.push(spare.try_clone().map_err(|_| Error::Capacity)?);
+        for _ in 0..crate::backend::RESTORE_FD_RESERVE {
+            spare_descriptors.push(
+                spare
+                    .try_clone()
+                    .map_err(|_| Error::CapacityExceeded(CapacityKind::FileDescriptors))?,
+            );
         }
         let manager = Snapshot {
             current: self.current.clone().ok_or(Error::UnsupportedReplacement)?,
@@ -388,6 +401,8 @@ impl Manager {
             retained,
             image,
             operation,
+            checkpoint_bytes: bytes.len(),
+            paused_at,
             _spare_descriptors: spare_descriptors,
             _pause: pause,
         })
@@ -441,6 +456,12 @@ impl Activation {
                 std::fs::set_permissions(&self.image.path, std::fs::Permissions::from_mode(0o400))
                     .map_err(|_| Error::RecoveryUnavailable)?;
             }
+            eprintln!(
+                "session handoff metrics: {},{},{}",
+                self.checkpoint_bytes,
+                self.retained.len(),
+                self.paused_at.elapsed().as_millis()
+            );
             let error = std::process::Command::new(&self.image.path)
                 .arg("--resume")
                 .arg(self.file.as_raw_fd().to_string())

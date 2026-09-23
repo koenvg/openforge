@@ -99,6 +99,15 @@ impl Server {
                                 live_limit: 1024,
                                 retained_sessions: 1,
                                 session_limit: 1024,
+                                resources: Some(ResourceCapacity {
+                                    open_descriptors: 56,
+                                    descriptor_limit: 256,
+                                    occupied_processes: 90,
+                                    process_limit: 1024,
+                                    available_memory_bytes: 2 * 1024 * 1024 * 1024,
+                                    spawn_memory_reserve_bytes: 66 * 1024 * 1024,
+                                    checkpoint_byte_limit: 32 * 1024 * 1024,
+                                }),
                             },
                         })
                     }
@@ -191,6 +200,15 @@ impl Drop for Server {
             let _ = thread.join();
         }
     }
+}
+
+#[test]
+fn inventory_exposes_numeric_resource_headroom_without_session_data() {
+    let (_server, client, _pty) = Server::start();
+    let resources = client.inventory().unwrap().capacity.resources.unwrap();
+    assert_eq!(resources.open_descriptors, 56);
+    assert_eq!(resources.descriptor_limit, 256);
+    assert_eq!(resources.checkpoint_byte_limit, 32 * 1024 * 1024);
 }
 
 #[test]

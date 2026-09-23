@@ -12,6 +12,26 @@ This is artifact integrity verification, **not publisher authentication**. Initi
 
 No release feed, download, discovery, updater UI, or automatic app rollback is introduced. Manifest compatibility is not proof that an arbitrary new executable can restore a live checkpoint. Production activation still requires publisher verification and the daemon's isolated image/state probe before destructive exec.
 
+## Capacity and replacement at scale
+
+A fresh Session Daemon allows up to 896 live PTYs within 1,024 retained records; it keeps at most 128 settled exits. These are structural limits, not a promise that 896 PTYs will fit on every machine. Before spawn, the daemon checks file descriptors, process slots, and memory headroom. A refusal names the limiting resource and leaves existing PTYs alone. `inventory.capacity.resources` reports the sampled counts, reserve, and checkpoint byte limit. Do not raise `liveLimit` alone: the host ledger, inherited descriptors, and checkpoint must all fit.
+
+In the macOS arm64 replacement fixture, 33 live PTYs produced a 234,856-byte checkpoint and 37 inherited FDs with a 385 ms pause. At 256 PTYs, the checkpoint was 1,793,059 bytes with 260 inherited FDs and a 2,133 ms pause. The backend allows four seconds for coordinated checkpoint capture. It refuses an over-budget or timed-out checkpoint before exec, reopens paused readers, and keeps the old daemon serving. Fixture tests also write to PTYs after refusal. These measurements are not a production update benchmark.
+
+If admission fails, inspect the resource in the typed `capacityExceeded` error and compare it with `inventory.capacity.resources`. The host retires settled entries automatically when history fills; ending live sessions releases descriptors and process slots. Do not kill the daemon to work around a limit while it owns PTYs. If a replacement fails at `checkpoint`, keep using the old daemon and investigate checkpoint size, pause time, and available memory before retrying. Production trusted activation remains closed pending KVG-5206 and publisher verification in KVG-1789. Recheck packaged-update compatibility with the shipped updater when that work lands.
+
+Compatibility is deliberately narrow while the production update gate is closed:
+
+| Direction | Current status |
+| --- | --- |
+| Fresh launch with this daemon | Uses the resource checks and limits above. |
+| Validated 32-live-session ledger into this daemon | Unit tests preserve the PTY identity and operation receipts while expanding limits. An installed legacy binary has not been exercised. |
+| This daemon into a 32-session image | Unsupported. The future updater must reject the downgrade before exec; do not use a fixture success as evidence otherwise. |
+| Unknown checkpoint format or altered descriptors | Rejected by image validation. No compatibility promise for older formats. |
+| Packaged production update | Disabled until KVG-5206 supplies trusted activation and KVG-1789 supplies publisher verification. |
+
+The operation window exposes retained receipt counts and limits separately from PTY capacity. A client may retire observed receipts; a refusal does not authorize replaying an uncertain mutation. A blocked replacement reports its failed stage and keeps the old image serving if it has not crossed exec.
+
 ## Retention and cleanup
 
 - A staged handle holds a shared lease until its caller finishes using it.
