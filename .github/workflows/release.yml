@@ -21,7 +21,7 @@ jobs:
           - platform: macos-15-intel
             target: x86_64-apple-darwin
             electron_arch: x64
-    timeout-minutes: 20
+    timeout-minutes: 40
     runs-on: ${{ matrix.platform }}
     env:
       SOURCE_DATE_EPOCH: "1"
