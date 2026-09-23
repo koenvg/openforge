@@ -69,7 +69,7 @@ describe('storybook visual coverage inventory', () => {
 
     for (const entry of inventory.cases.filter(entry => entry.disposition === 'replaced')) {
       const storySource = readFileSync(resolve(root, entry.storySource ?? taskListStorySource), 'utf8')
-      expect(storySource).toContain(`export const ${entry.originalStoryExport}: Story`)
+      expect(storySource).toContain(`export const ${entry.originalStoryExport}:`)
     }
 
     const protectedEntries = inventory.cases.filter(entry => entry.protectedBy?.length)
@@ -77,6 +77,22 @@ describe('storybook visual coverage inventory', () => {
     for (const entry of protectedEntries) {
       expect(entry.disposition, entry.identity).toBe('retained')
       expect(currentIds.has(entry.identity), entry.identity).toBe(true)
+    }
+  })
+  it('tracks page removals against reviewed appearance and surviving development stories', () => {
+    const inventory = readJson('storybook/visual-coverage-inventory.json')
+    const currentIds = new Set(readJson('storybook/visual-manifest.json').map(identity))
+    const pageRemovals = inventory.cases.filter(entry => entry.identity.startsWith('pages/') && entry.disposition === 'replaced')
+    expect(pageRemovals.length).toBeGreaterThan(0)
+    for (const entry of pageRemovals) {
+      expect(entry.storySource, entry.identity).toMatch(/^storybook\/stories\/pages\/.*\.stories\.ts$/)
+      expect(entry.originalStoryExport, entry.identity).toBeTruthy()
+      expect(entry.rationale, entry.identity).not.toMatch(/later component and page curation/)
+      expect(entry.appearanceCoverage, entry.identity).not.toBe(entry.identity)
+      expect(currentIds.has(entry.appearanceCoverage), entry.identity).toBe(true)
+      for (const match of entry.rationale.matchAll(/(?:pages|components)\/[a-z][a-z0-9-]+--[a-z0-9-]+--openforge-(?:light|dark)--\d+x\d+/g)) {
+        expect(currentIds.has(match[0]), `${entry.identity}: ${match[0]}`).toBe(true)
+      }
     }
   })
 
@@ -100,4 +116,30 @@ describe('storybook visual coverage inventory', () => {
     expect(inventory.review.obsoleteBaselines.sort()).toEqual(inventory.before.removedIdentities.sort())
     expect(inventory.review.decision.trim()).not.toBe('')
   })
+  it('documents every retained page family after curation', () => {
+    const inventory = readJson('storybook/visual-coverage-inventory.json')
+    const currentPages = readJson('storybook/visual-manifest.json').filter(entry => entry.catalog === 'pages')
+    const families = new Set(currentPages.map(entry => entry.story.split('--')[0]))
+    expect(new Set(Object.keys(inventory.pageSlice.retainedFamilies))).toEqual(families)
+    for (const reason of Object.values(inventory.pageSlice.retainedFamilies)) expect(reason.trim().length).toBeGreaterThan(25)
+  })
+
+  it('records the page slice timing and exact baseline deletions', () => {
+    const inventory = readJson('storybook/visual-coverage-inventory.json')
+    const manifest = readJson('storybook/visual-manifest.json')
+    const removedPages = inventory.cases.filter(entry => entry.identity.startsWith('pages/') && entry.disposition === 'replaced').map(entry => entry.identity)
+    const pageSlice = inventory.pageSlice
+    expect(pageSlice.before.revision).toMatch(/^[0-9a-f]{40}$/)
+    expect(pageSlice.after.revision).toContain('working tree based on')
+    expect(pageSlice.before.environment).toEqual(pageSlice.after.environment)
+    expect(pageSlice.before.timing.status).toBe('passed')
+    expect(pageSlice.after.timing.status).toBe('passed')
+    expect(pageSlice.after.counts).toEqual({ total: manifest.length, pages: manifest.filter(entry => entry.catalog === 'pages').length, components: manifest.filter(entry => entry.catalog === 'components').length })
+    expect(pageSlice.before.counts.total - pageSlice.after.counts.total).toBe(removedPages.length)
+    expect(pageSlice.review.addedBaselines).toEqual([])
+    expect(new Set(pageSlice.review.obsoleteBaselines)).toEqual(new Set(removedPages))
+    expect(pageSlice.review.obsoleteBaselines).toHaveLength(removedPages.length)
+    expect(pageSlice.review.decision.trim()).not.toBe('')
+  })
+
 })

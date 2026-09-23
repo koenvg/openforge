@@ -28,10 +28,8 @@
   {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--inherited-defaults","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--inherited-defaults\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-project-setup--new-repository","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-project-setup--new-repository\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-task-creation--empty","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--empty\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--project-directory","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--project-directory\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--no-commits","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--no-commits\"]","expectedErrors": []},
-  {"catalog": "pages","story": "pages-task-creation--loading","theme": "openforge-dark","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--loading\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--saving","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--saving\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--validation","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--validation\"]","expectedErrors": []},
   {"catalog": "pages","story": "pages-task-creation--long-content","theme": "openforge-light","viewport": {"width": 1280,"height": 900},"ready": "body[data-creation-ready=\"pages-task-creation--long-content\"]","expectedErrors": []},
@@ -188,17 +186,6 @@
     "catalog": "pages",
     "story": "application-shell--narrow",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 900,
-      "height": 900
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "application-shell--narrow",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 900,
       "height": 900
@@ -2623,30 +2610,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-attention-overview--empty",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=You're all caught up",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-attention-overview--loading",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Gathering what needs your attention\u2026",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-attention-overview--loading",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2667,30 +2632,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-attention-overview--failure",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[role=\"alert\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-attention-overview--long-content",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Review integration 1:",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-attention-overview--long-content",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2711,30 +2654,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-attention-overview--narrow",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 900,
-      "height": 800
-    },
-    "ready": "text=Normalize the greeting",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-attention-overview--reviews-hidden",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "button[aria-pressed=\"false\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-attention-overview--reviews-hidden",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2755,30 +2676,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-attention-overview--in-flight",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Build keyboard navigation",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-attention-overview--collapsed",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=2 focus",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-attention-overview--collapsed",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2799,30 +2698,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-focus-board--empty",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=All clear",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-focus-board--loading",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Loading tasks...",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-focus-board--loading",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2843,30 +2720,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-focus-board--failure",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Could not load tasks. The local backend is unavailable.",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-focus-board--attention",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "[aria-label=\"Unread agent output\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-focus-board--attention",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2887,17 +2742,6 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-focus-board--narrow",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 900,
-      "height": 800
-    },
-    "ready": "[aria-label=\"Task list\"]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-focus-board--overflow",
     "theme": "openforge-light",
     "viewport": {
@@ -2909,30 +2753,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-focus-board--overflow",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Review integration 1:",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-focus-board--filtered",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "button[aria-label=\"Filter by Task Labels\"][aria-describedby]",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-focus-board--filtered",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -2975,30 +2797,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-self-review--empty",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=No changes for current selection",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
     "story": "pages-self-review--loading",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Loading diff...",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-self-review--loading",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -3021,32 +2821,8 @@
   },
   {
     "catalog": "pages",
-    "story": "pages-self-review--failure",
-    "theme": "openforge-dark",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=Failed to load diff. Please try again.",
-    "expectedErrors": [
-      "Failed to load self-review data: Error: Story fixture: review workspace unavailable"
-    ]
-  },
-  {
-    "catalog": "pages",
     "story": "pages-self-review--long-content",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1280,
-      "height": 800
-    },
-    "ready": "text=greeting-normalization.ts",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-self-review--long-content",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1280,
       "height": 800
@@ -3102,14 +2878,6 @@
     "catalog": "pages",
     "story": "pages-self-review--linked-pull-request",
     "theme": "openforge-light",
-    "viewport": { "width": 1280, "height": 800 },
-    "ready": "[role='tab'][aria-label='GitHub comments (1)']",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-self-review--linked-pull-request",
-    "theme": "openforge-dark",
     "viewport": { "width": 1280, "height": 800 },
     "ready": "[role='tab'][aria-label='GitHub comments (1)']",
     "expectedErrors": []
@@ -4218,17 +3986,6 @@
     "catalog": "pages",
     "story": "pages-self-review--populated",
     "theme": "openforge-light",
-    "viewport": {
-      "width": 1600,
-      "height": 900
-    },
-    "ready": "text=Please cover the empty-name case too.",
-    "expectedErrors": []
-  },
-  {
-    "catalog": "pages",
-    "story": "pages-self-review--populated",
-    "theme": "openforge-dark",
     "viewport": {
       "width": 1600,
       "height": 900

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scope": "KVG-5141 task-list galleries and KVG-5142 shared-component curation slice of curate-storybook-snapshots",
+  "scope": "KVG-5141 task-list galleries, KVG-5142 shared components, and KVG-5143 page curation of curate-storybook-snapshots",
   "selectionRules": [
     "Retain a separate case when it covers a distinct responsive layout, overflow condition, interaction state, renderer, or documented regression.",
     "Replace repeated business-state screenshots only when a readable gallery covers appearance and a rendered behavioral assertion covers label, icon, badge, and action mapping.",
@@ -405,17 +405,17 @@
     "baseRevision": "b5083aa6c8d80f7bf8a4e64ec28dbd1d876d1a97",
     "upstreamRemovalRevision": "b2d4f59c8f9d538bc482dfbd27a824874f3a51ae",
     "counts": {
-      "total": 443,
+      "total": 419,
       "catalogs": {
-        "pages": 238,
+        "pages": 214,
         "components": 205
       },
       "themes": {
-        "openforge-light": 274,
-        "openforge-dark": 169
+        "openforge-light": 273,
+        "openforge-dark": 146
       },
       "viewports": {
-        "1280x800": 133,
+        "1280x800": 115,
         "1000x720": 31,
         "360x900": 5,
         "600x400": 2,
@@ -426,8 +426,8 @@
         "320x320": 1,
         "720x600": 2,
         "320x240": 2,
-        "1280x900": 69,
-        "900x900": 7,
+        "1280x900": 67,
+        "900x900": 6,
         "640x640": 5,
         "480x240": 2,
         "1280x1200": 4,
@@ -456,14 +456,14 @@
         "160x120": 1,
         "480x480": 2,
         "640x720": 4,
-        "900x800": 12,
+        "900x800": 10,
         "900x640": 1,
         "320x640": 2,
         "1920x1080": 2,
         "640x280": 16,
         "420x800": 7,
         "1600x820": 2,
-        "1600x900": 4,
+        "1600x900": 3,
         "1600x650": 2,
         "560x360": 6,
         "1280x240": 7,
@@ -486,7 +486,87 @@
       "components/components-github-sync-walkthrough-button--generating--openforge-dark--480x320",
       "components/components-github-sync-walkthrough-button--ready--openforge-light--480x320"
     ],
-    "rationale": "Rebased onto main after the canonical KVG-5141 timing run. KVG-2290 independently removed seven stale walkthrough captures, and KVG-5142 removes 12 redundant theme captures while retaining each exact state or layout in the opposite theme. The integrated manifest now has 443 cases."
+    "rationale": "The integrated manifest has 419 cases. KVG-2290 removed seven obsolete walkthrough captures upstream; KVG-5142 removed 12 redundant component theme captures; KVG-5143 removed 24 reviewed page cases without removing development stories or protected probes."
+  },
+  "pageSlice": {
+    "before": {
+      "revision": "855d845547eaeb8e7625599b15d1a308883ba70a",
+      "counts": { "total": 443, "pages": 238, "components": 205 },
+      "environment": { "image": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:941cc91e5022880ac1d14ae90b476b624deb6399dbbc28d612d5d5bd7928fcbd", "chromium": "151.0.7922.34", "platform": "linux", "arch": "arm64", "host": "Apple M5 MacBook Air, 10 cores, 32 GiB RAM, macOS 26.6.2", "docker": "client 29.5.3-rd, server 29.5.2", "scale": 1, "locale": "en-US", "timezone": "UTC", "time": "2026-01-02T09:30:00.000Z" },
+      "timing": { "status": "passed", "elapsedMs": 1507089, "captures": { "attempted": 956, "completed": 953, "failed": 3 }, "phases": { "validation": 16, "baseline": 658574, "repeatability": 689645, "terminalReadiness": 62606, "cursorStability": 6776, "readinessDiagnostics": 4846, "captureStability": 74531, "runnerProbes": 9604 } }
+    },
+    "after": {
+      "revision": "working tree based on 855d845547eaeb8e7625599b15d1a308883ba70a",
+      "recordedAt": "2026-09-22T21:06:20Z",
+      "counts": { "total": 419, "pages": 214, "components": 205 },
+      "environment": { "image": "mcr.microsoft.com/playwright:v1.62.1-noble@sha256:941cc91e5022880ac1d14ae90b476b624deb6399dbbc28d612d5d5bd7928fcbd", "chromium": "151.0.7922.34", "platform": "linux", "arch": "arm64", "host": "Apple M5 MacBook Air, 10 cores, 32 GiB RAM, macOS 26.6.2", "docker": "client 29.5.3-rd, server 29.5.2", "scale": 1, "locale": "en-US", "timezone": "UTC", "time": "2026-01-02T09:30:00.000Z" },
+      "timing": { "status": "passed", "elapsedMs": 1146367, "captures": { "attempted": 908, "completed": 905, "failed": 3 }, "phases": { "validation": 14, "baseline": 528685, "repeatability": 496072, "terminalReadiness": 38768, "cursorStability": 5208, "readinessDiagnostics": 4326, "captureStability": 63751, "runnerProbes": 9171 } }
+    },
+    "retainedFamilies": {
+      "pages-task-browser": "Keep loaded web content, disconnected runtime, failed preview and feedback editor: each changes the embedded browser or host layout. Both populated themes cover browser contrast.",
+      "pages-command-palette": "Keep populated palettes in both themes, loading/failure list placement, narrow overflow and the theme override; focus and overlay geometry differ from inline controls.",
+      "pages-project-switching": "Keep the project picker, empty list, attention badges, overflow and theme override; each changes menu contents, grouping or clipping.",
+      "pages-action-palette": "Keep both-theme populated actions, backlog/unavailable options, empty results, confirmation overlay and theme override: actions and nested dialog placement differ.",
+      "pages-task-creation": "Keep the themed default dialog, source-directory/no-commit controls, saving, validation, long copy, edit overlay, distinct failure banners and narrow modal. Blank prompt and defaults loading moved to shared appearance plus playable assertions.",
+      "pages-project-setup": "Keep the mode selector, new/clone/local repository forms, validation, loading, failure, long values and narrow dialog; each changes the modal fields or feedback placement.",
+      "pages-branch-divergence": "Keep diverged choices, stale comparison warning, long branch details and narrow confirmation overlay; all have distinct modal layouts.",
+      "pages-focus-board": "Keep both-theme populated layout and one page-level empty, loading, failure-toast, attention, filter, narrow and overflow composition. Shared status colors live in the task-list galleries.",
+      "application-shell": "Keep light/dark expanded chrome, collapsed/zen/global navigation, 900px shell, shortcuts and quit dialogs, feedback toast types and combined dialog-with-feedback overlay; expanded light is the runner probe identity.",
+      "pages-terminal": "Keep light/dark ready terminal output and unavailable-runtime presentation; the PTY renderer and fallback differ from generic page states.",
+      "pages-terminal-task-pane": "Keep ready terminal, missing workspace and lookup error in the task pane; each changes terminal ownership or recovery layout.",
+      "pages-task-detail": "Keep both themes for backlog, narrow and terminal lifecycle states, review diff, active agent, waiting, failure, completion, dependency and long content. Backlog/narrow are protected raster probes.",
+      "pages-sdk-page-shell": "Keep normal plugin page and narrow overflowing header/body shell; shared SDK view states cover generic empty/loading/error appearance.",
+      "pages-file-quick-open": "Keep initial search, both-theme populated, no results, loading, failure, unavailable and overflow; dark populated/unavailable inputs are protected focused-raster regressions.",
+      "pages-global-settings": "Keep each settings section, edited/failed/saving messages, connected credentials, long copy and narrow navigation; loading retains its documented raster allowance, and general remains in both themes.",
+      "pages-project-settings": "Keep all distinct settings sections and inherited/provider/label/disabled states, edited/error/saving messages, long text and narrow navigation; loading retains its documented raster allowance, general both themes.",
+      "pages-file-viewer": "Keep all distinct source, markdown, image, video, binary, PDF and large/empty file renderers, search and tree failures, task-pane availability, narrow and overflow; these change the preview and tree independently.",
+      "pages-attention-overview": "Keep both-theme populated dialog plus one empty, loading, error/retry, long list, narrow, hidden-reviews, in-flight and collapsed composition; the removed dark copies had matching light layouts.",
+      "pages-self-review": "Keep both-theme populated diff, dark comments, narrow feedback, full-width layout, light empty/loading/error and long-content states, linked PR and both-theme protected send-feedback raster probes.",
+      "pages-task-schedules": "Keep both-theme populated schedules, empty/loading, narrow list, long rows, history, composer, save failure and delete confirmation; these exercise distinct page/plugin state arrangements.",
+      "pages-github-sync-settings-jira": "Keep both-theme connected state, disconnected form and connection failure; configuration fields and error placement differ.",
+      "pages-github-sync-task-status": "Keep both-theme populated PR status, empty, failure and disabled actions; the plugin integration changes task header and action availability."
+    },
+    "review": {
+      "addedBaselines": [],
+      "obsoleteBaselines": [
+        "pages/pages-task-creation--empty--openforge-light--1280x900",
+        "pages/pages-task-creation--loading--openforge-dark--1280x900",
+        "pages/application-shell--narrow--openforge-dark--900x900",
+        "pages/pages-attention-overview--empty--openforge-dark--1280x800",
+        "pages/pages-attention-overview--loading--openforge-dark--1280x800",
+        "pages/pages-attention-overview--failure--openforge-dark--1280x800",
+        "pages/pages-attention-overview--long-content--openforge-dark--1280x800",
+        "pages/pages-attention-overview--narrow--openforge-dark--900x800",
+        "pages/pages-attention-overview--reviews-hidden--openforge-dark--1280x800",
+        "pages/pages-attention-overview--in-flight--openforge-dark--1280x800",
+        "pages/pages-attention-overview--collapsed--openforge-dark--1280x800",
+        "pages/pages-focus-board--empty--openforge-dark--1280x800",
+        "pages/pages-focus-board--loading--openforge-dark--1280x800",
+        "pages/pages-focus-board--failure--openforge-dark--1280x800",
+        "pages/pages-focus-board--attention--openforge-dark--1280x800",
+        "pages/pages-focus-board--narrow--openforge-dark--900x800",
+        "pages/pages-focus-board--overflow--openforge-dark--1280x800",
+        "pages/pages-focus-board--filtered--openforge-dark--1280x800",
+        "pages/pages-self-review--empty--openforge-dark--1280x800",
+        "pages/pages-self-review--loading--openforge-dark--1280x800",
+        "pages/pages-self-review--failure--openforge-dark--1280x800",
+        "pages/pages-self-review--long-content--openforge-dark--1280x800",
+        "pages/pages-self-review--linked-pull-request--openforge-dark--1280x800",
+        "pages/pages-self-review--populated--openforge-dark--1600x900"
+      ],
+      "decision": "Reviewed the 24 obsolete page images against the retained family contact sheets and shared-component images before explicit deletion. No page gallery or new baseline was added. The full canonical run found no missing, obsolete, or unexpected PNGs."
+    },
+    "validation": [
+      { "command": "pnpm i", "status": "passed" },
+      { "command": "pnpm storybook:visual:test (443-case before and 419-case after)", "status": "passed", "details": "Both full baseline/repeatability matrices and protected probes passed in the pinned container; no obsolete or missing baselines." },
+      { "command": "pnpm storybook:visual:unit", "status": "passed", "details": "19 files, 150 tests." },
+      { "command": "env -u OPENFORGE_AGENT_CONFIG pnpm exec vitest run --maxWorkers=3", "status": "passed", "details": "872 files and 7,489 tests passed; 11 files skipped, 3 expected failures, 43 skipped tests. Two default-worker runs timed out in unrelated node suites; limiting workers without changing test timeouts passed." },
+      { "command": "pnpm exec tsc --noEmit && pnpm lint && pnpm storybook:coverage:test && pnpm storybook:coverage:check", "status": "passed", "details": "43 coverage tests passed; both TypeScript projects and lint passed." },
+      { "command": "pnpm storybook:build && pnpm storybook:coverage", "status": "passed", "details": "Both catalogs built; incremental coverage reported 0 errors and 118 currently unadopted modules." },
+      { "command": "STORYBOOK_URL=http://localhost:6006 pnpm exec vitest run storybook/stories/pages/FocusBoard.browser.test.ts storybook/stories/pages/SelfReview.browser.test.ts", "status": "passed", "details": "13 page integration tests passed against a ready pages Storybook; server cleanup exceeded the command's shell timeout after results were written." },
+      { "command": "RUN_STORYBOOK_CREATION=1 pnpm exec vitest run storybook/creation.browser.test.ts", "status": "blocked-unrelated", "details": "Twice failed in unchanged components-prompt-input--cancel play after all page creation stories; follow-up KVG-5222." },
+      { "command": "git diff --check", "status": "passed" }
+    ]
   },
   "review": {
     "changedImages": [
@@ -763,9 +843,12 @@
     },
     {
       "identity": "pages/pages-task-creation--empty--openforge-light--1280x900",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-task-creation--empty in openforge-light at 1280x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Initial blank task prompt and task-creation dialog geometry.",
+      "rationale": "The reviewed light InheritedDefaults page retains the same dialog geometry with filled prompt; components-prompt-input--empty--openforge-light--640x640 covers the blank prompt. The Empty story remains playable for initial state.",
+      "appearanceCoverage": "pages/pages-task-creation--inherited-defaults--openforge-light--1280x900",
+      "storySource": "storybook/stories/pages/TaskCreation.stories.ts",
+      "originalStoryExport": "Empty"
     },
     {
       "identity": "pages/pages-task-creation--project-directory--openforge-dark--1280x900",
@@ -781,9 +864,13 @@
     },
     {
       "identity": "pages/pages-task-creation--loading--openforge-dark--1280x900",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-task-creation--loading in openforge-dark at 1280x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Defaults-loading label and disabled Start Task button inside task creation.",
+      "rationale": "The reviewed dark InheritedDefaults page retains the dialog layout; components-plugin-sdk-actions--loading--openforge-dark--800x500 retains the loading-button treatment. Loading play asserts the page's label and disabled action, which a still image cannot verify.",
+      "appearanceCoverage": "pages/pages-task-creation--inherited-defaults--openforge-dark--1280x900",
+      "storySource": "storybook/stories/pages/TaskCreation.stories.ts",
+      "originalStoryExport": "Loading",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/TaskCreation.stories.ts", "test": "findByText('Loading task defaults…')" }]
     },
     {
       "identity": "pages/pages-task-creation--saving--openforge-light--1280x900",
@@ -1021,9 +1108,12 @@
     },
     {
       "identity": "pages/application-shell--narrow--openforge-dark--900x900",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for application-shell--narrow in openforge-dark at 900x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark 900px application-shell navigation and board columns.",
+      "rationale": "The reviewed light Narrow image retains the compressed rail and board/inspector split; dark Expanded retains shell, rail, and board tokens. There is no dark-only column reflow.",
+      "appearanceCoverage": "pages/application-shell--narrow--openforge-light--900x900",
+      "storySource": "storybook/stories/pages/ApplicationShell.stories.ts",
+      "originalStoryExport": "Narrow"
     },
     {
       "identity": "pages/application-shell--shortcuts--openforge-light--960x800",
@@ -2221,9 +2311,12 @@
     },
     {
       "identity": "pages/pages-attention-overview--empty--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--empty in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark empty-state placement inside the Attention overview dialog.",
+      "rationale": "The reviewed light Empty image preserves dialog spacing and the empty message; dark Populated preserves this dialog's dark tokens. A second dark empty capture adds no layout risk.",
+      "appearanceCoverage": "pages/pages-attention-overview--empty--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "Empty"
     },
     {
       "identity": "pages/pages-attention-overview--loading--openforge-light--1280x800",
@@ -2233,9 +2326,12 @@
     },
     {
       "identity": "pages/pages-attention-overview--loading--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--loading in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark loading indicator placement within the Attention overview dialog.",
+      "rationale": "The reviewed light Loading dialog preserves spinner position; dark Populated covers dialog chrome. The spinner's theme treatment is already captured in components/sdk-view-states--loading--openforge-dark--480x400.",
+      "appearanceCoverage": "pages/pages-attention-overview--loading--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "Loading"
     },
     {
       "identity": "pages/pages-attention-overview--failure--openforge-light--1280x800",
@@ -2245,9 +2341,12 @@
     },
     {
       "identity": "pages/pages-attention-overview--failure--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--failure in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark Attention overview error and retry placement.",
+      "rationale": "The reviewed light Failure image keeps the dialog-specific error and retry layout; dark Populated covers the same dialog shell colors. RetryFailure remains a playable story.",
+      "appearanceCoverage": "pages/pages-attention-overview--failure--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "Failure"
     },
     {
       "identity": "pages/pages-attention-overview--long-content--openforge-light--1280x800",
@@ -2257,9 +2356,12 @@
     },
     {
       "identity": "pages/pages-attention-overview--long-content--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--long-content in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark long-list scrolling inside the Attention dialog.",
+      "rationale": "The reviewed light LongContent image retains the clipped-scroll boundary and long labels; dark Populated retains dark dialog contrast. The layout does not change with theme.",
+      "appearanceCoverage": "pages/pages-attention-overview--long-content--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "LongContent"
     },
     {
       "identity": "pages/pages-attention-overview--narrow--openforge-light--900x800",
@@ -2269,9 +2371,12 @@
     },
     {
       "identity": "pages/pages-attention-overview--narrow--openforge-dark--900x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--narrow in openforge-dark at 900x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark 900px Attention dialog arrangement.",
+      "rationale": "The reviewed light Narrow image preserves the constrained dialog and focused row; dark Populated covers dark dialog and focus tokens. No dark-only reflow was observed.",
+      "appearanceCoverage": "pages/pages-attention-overview--narrow--openforge-light--900x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "Narrow"
     },
     {
       "identity": "pages/pages-attention-overview--reviews-hidden--openforge-light--1280x800",
@@ -2281,9 +2386,13 @@
     },
     {
       "identity": "pages/pages-attention-overview--reviews-hidden--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--reviews-hidden in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark hidden-reviews toggle state in the Attention dialog.",
+      "rationale": "The reviewed light ReviewsHidden image retains the pressed-state, count, and row layout; dark Populated retains the same dialog's tokens. The ReviewsHidden play assertion verifies hiding the review row.",
+      "appearanceCoverage": "pages/pages-attention-overview--reviews-hidden--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "ReviewsHidden",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/AttentionOverview.stories.ts", "test": "queryByText('Review keyboard navigation')" }]
     },
     {
       "identity": "pages/pages-attention-overview--in-flight--openforge-light--1280x800",
@@ -2293,9 +2402,13 @@
     },
     {
       "identity": "pages/pages-attention-overview--in-flight--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--in-flight in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark in-flight tab selection and focused row in the Attention dialog.",
+      "rationale": "The reviewed light InFlight image retains the focused in-flight row and counts; dark Populated retains the dialog's dark tokens. InFlight play verifies switching the tab.",
+      "appearanceCoverage": "pages/pages-attention-overview--in-flight--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "InFlight",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/AttentionOverview.stories.ts", "test": "findByText('Build keyboard navigation')" }]
     },
     {
       "identity": "pages/pages-attention-overview--collapsed--openforge-light--1280x800",
@@ -2305,9 +2418,13 @@
     },
     {
       "identity": "pages/pages-attention-overview--collapsed--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-attention-overview--collapsed in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark collapsed-project row and outline in the Attention dialog.",
+      "rationale": "The reviewed light Collapsed image preserves the group toggle and remaining rows; dark Populated covers the dialog's dark outline. Collapsed play verifies the hidden task.",
+      "appearanceCoverage": "pages/pages-attention-overview--collapsed--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/AttentionOverview.stories.ts",
+      "originalStoryExport": "Collapsed",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/AttentionOverview.stories.ts", "test": "queryByText('Normalize the greeting')" }]
     },
     {
       "identity": "pages/pages-focus-board--empty--openforge-light--1280x800",
@@ -2317,9 +2434,12 @@
     },
     {
       "identity": "pages/pages-focus-board--empty--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--empty in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark board empty-state placement beside the task inspector.",
+      "rationale": "The reviewed light Empty page preserves the board/inspector arrangement; components-board-empty-state--focus--openforge-light--640x480 and components-board-empty-state--in-flight--openforge-dark--640x480 cover shared empty-state treatments. Dark Populated preserves board chrome.",
+      "appearanceCoverage": "pages/pages-focus-board--empty--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Empty"
     },
     {
       "identity": "pages/pages-focus-board--loading--openforge-light--1280x800",
@@ -2329,9 +2449,12 @@
     },
     {
       "identity": "pages/pages-focus-board--loading--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--loading in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark full-page board loading spinner.",
+      "rationale": "The reviewed light Loading page retains spinner placement in the board; dark Populated retains shell tokens. Shared loading treatment is already captured by components/sdk-view-states--loading--openforge-dark--480x400.",
+      "appearanceCoverage": "pages/pages-focus-board--loading--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Loading"
     },
     {
       "identity": "pages/pages-focus-board--failure--openforge-light--1280x800",
@@ -2341,9 +2464,12 @@
     },
     {
       "identity": "pages/pages-focus-board--failure--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--failure in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark board failure toast beside the empty inspector.",
+      "rationale": "The reviewed light Failure image retains the page-specific toast placement; components-feedback-toast--error retains dark error styling. Dark Populated retains board chrome.",
+      "appearanceCoverage": "pages/pages-focus-board--failure--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Failure"
     },
     {
       "identity": "pages/pages-focus-board--attention--openforge-light--1280x800",
@@ -2353,9 +2479,12 @@
     },
     {
       "identity": "pages/pages-focus-board--attention--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--attention in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark board attention badge and unread-output row.",
+      "rationale": "The reviewed light Attention page retains the unread-output placement and inspector; dark Populated preserves the page's dark shell, while the two-theme task-list galleries retain status badge colors.",
+      "appearanceCoverage": "pages/pages-focus-board--attention--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Attention"
     },
     {
       "identity": "pages/pages-focus-board--narrow--openforge-light--900x800",
@@ -2365,9 +2494,13 @@
     },
     {
       "identity": "pages/pages-focus-board--narrow--openforge-dark--900x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--narrow in openforge-dark at 900x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark 900px board columns and task card wrapping.",
+      "rationale": "The reviewed light Narrow image retains the 900px column squeeze and card wrapping; dark Populated and the dark task-list gallery retain color treatment. The focus board browser test checks toolbar reachability across widths.",
+      "appearanceCoverage": "pages/pages-focus-board--narrow--openforge-light--900x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Narrow",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/FocusBoard.browser.test.ts", "test": "keeps every toolbar control visible and filters operable" }]
     },
     {
       "identity": "pages/pages-focus-board--overflow--openforge-light--1280x800",
@@ -2377,9 +2510,12 @@
     },
     {
       "identity": "pages/pages-focus-board--overflow--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--overflow in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark board list overflow and inspector width.",
+      "rationale": "The reviewed light Overflow image retains the long-list scroll and panel split; dark Populated retains shell contrast and dark component task-list galleries preserve row contrast.",
+      "appearanceCoverage": "pages/pages-focus-board--overflow--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Overflow"
     },
     {
       "identity": "pages/pages-focus-board--filtered--openforge-light--1280x800",
@@ -2389,9 +2525,13 @@
     },
     {
       "identity": "pages/pages-focus-board--filtered--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-focus-board--filtered in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark filtered board state and label-filter chip.",
+      "rationale": "The reviewed light Filtered page retains the selected filter and changed card; dark Populated retains page theme tokens, and the filter controls have separate component coverage. The page browser test checks filters.",
+      "appearanceCoverage": "pages/pages-focus-board--filtered--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/FocusBoard.stories.ts",
+      "originalStoryExport": "Filtered",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/FocusBoard.browser.test.ts", "test": "button.getAttribute('aria-pressed')" }]
     },
     {
       "identity": "pages/pages-self-review--populated--openforge-light--1280x800",
@@ -2413,9 +2553,12 @@
     },
     {
       "identity": "pages/pages-self-review--empty--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--empty in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark empty diff pane beside the changed-files panel.",
+      "rationale": "The reviewed light Empty page retains the two-pane empty arrangement; components-self-review-panels--diff-empty--openforge-light--1000x720 and dark Populated cover the diff's empty treatment and dark workspace chrome.",
+      "appearanceCoverage": "pages/pages-self-review--empty--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "Empty"
     },
     {
       "identity": "pages/pages-self-review--loading--openforge-light--1280x800",
@@ -2425,9 +2568,12 @@
     },
     {
       "identity": "pages/pages-self-review--loading--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--loading in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark review diff-loading indicator within the workspace.",
+      "rationale": "The reviewed light Loading page retains the loading placement; components-self-review-panels--diff-loading--openforge-light--1000x720 covers the shared pane, and dark Populated covers workspace chrome.",
+      "appearanceCoverage": "pages/pages-self-review--loading--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "Loading"
     },
     {
       "identity": "pages/pages-self-review--failure--openforge-light--1280x800",
@@ -2437,9 +2583,12 @@
     },
     {
       "identity": "pages/pages-self-review--failure--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--failure in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark failed diff pane and retry action inside the review page.",
+      "rationale": "The reviewed light Failure page retains the failed-pane and Retry placement; components-self-review-panels--diff-failure--openforge-light--1000x720 covers the shared pane, while dark Populated covers workspace contrast.",
+      "appearanceCoverage": "pages/pages-self-review--failure--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "Failure"
     },
     {
       "identity": "pages/pages-self-review--long-content--openforge-light--1280x800",
@@ -2449,9 +2598,12 @@
     },
     {
       "identity": "pages/pages-self-review--long-content--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--long-content in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark long changed-files tree and diff overflow.",
+      "rationale": "The reviewed light LongContent page retains tree scrolling and diff overflow; dark Populated and the dark 1280px GitHubComments image retain diff contrast and comment styling.",
+      "appearanceCoverage": "pages/pages-self-review--long-content--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "LongContent"
     },
     {
       "identity": "pages/pages-self-review--narrow--openforge-light--900x800",
@@ -2491,9 +2643,13 @@
     },
     {
       "identity": "pages/pages-self-review--linked-pull-request--openforge-dark--1280x800",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--linked-pull-request in openforge-dark at 1280x800.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark linked-PR tab label in the review workspace.",
+      "rationale": "The reviewed light LinkedPullRequest page retains the linked-PR tab arrangement; dark GitHubComments retains that tab's dark appearance. The browser test asserts linked feedback still sends after switching tabs.",
+      "appearanceCoverage": "pages/pages-self-review--linked-pull-request--openforge-light--1280x800",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "LinkedPullRequest",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/SelfReview.browser.test.ts", "test": "sends combined inline and selected GitHub feedback" }]
     },
     {
       "identity": "pages/pages-self-review--github-comments--openforge-light--1280x800",
@@ -3750,9 +3906,13 @@
     },
     {
       "identity": "pages/pages-self-review--populated--openforge-dark--1600x900",
-      "disposition": "retained",
-      "risk": "Canonical pages appearance for pages-self-review--populated in openforge-dark at 1600x900.",
-      "rationale": "Retained unchanged because KVG-5141 curates only repeated task-list status captures; later component and page curation must review this identity before removal."
+      "disposition": "replaced",
+      "risk": "Dark 1600px review three-column layout and diff visibility.",
+      "rationale": "The reviewed light 1600px Populated image preserves wide-column geometry; dark 1280px Populated preserves diff color contrast. The Self Review browser test checks all columns at 1600px and panel resizing.",
+      "appearanceCoverage": "pages/pages-self-review--populated--openforge-light--1600x900",
+      "storySource": "storybook/stories/pages/SelfReview.stories.ts",
+      "originalStoryExport": "Populated",
+      "behavioralAssertions": [{ "file": "storybook/stories/pages/SelfReview.browser.test.ts", "test": "keeps files, code, and review actions visible" }]
     },
     {
       "identity": "pages/pages-task-schedules--populated--openforge-light--1440x900",
