@@ -236,8 +236,9 @@ fn exchange(socket: &Path, credentials: &Credentials, command: Command) -> Resul
     )?;
     // A malformed reply is not a definitive server rejection. The request may already
     // have executed; do not let callers acknowledge it based on inventory alone.
+    // A reply on another version comes from a daemon that refused this frame before dispatch.
     read_frame::<_, Result<Response, Error>>(&mut stream).map_err(|error| match error {
-        Error::Transport(_) => error,
+        Error::Transport(_) | Error::Version => error,
         _ => Error::OutcomeUnknown,
     })?
 }

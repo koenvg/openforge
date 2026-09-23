@@ -228,7 +228,7 @@ pub struct Connection {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum IoAction {
-    Write(Vec<u8>),
+    Write(#[serde(with = "crate::wire_bytes")] Vec<u8>),
     Resize { columns: u16, rows: u16 },
 }
 impl std::fmt::Debug for IoAction {

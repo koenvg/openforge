@@ -24,7 +24,7 @@ export async function packageRuntimeRelease({ daemonPath, cliAssetsPath, outputP
     }
   }
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
-  const manifest = { format: 1, architecture: architectures[architecture], protocol: 4, stateFormat: 1, files }
+  const manifest = { format: 1, architecture: architectures[architecture], protocol: 5, stateFormat: 1, files }
   await writeFile(join(outputPath, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
   return manifest
 }

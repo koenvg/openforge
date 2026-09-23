@@ -11,6 +11,7 @@ pub use operation_window::OperationWindow;
 mod state;
 mod terminal_color_profile;
 mod types;
+pub mod wire_bytes;
 pub use backend::{
     BackendAttachment, BackendOutput, BackendOutputStream, BackendSession, HostBackend,
 };
