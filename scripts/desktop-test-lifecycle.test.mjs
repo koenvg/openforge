@@ -19,12 +19,16 @@ function createHarness({
   repoPath = null,
   launchError = null,
   ghosttyOptimizeMode,
+  isolatedSessionDaemon = false,
+  runRoot = '/run',
+  daemonCleanupError = null,
+  operations = [],
 } = {}) {
   const page = { screenshot: vi.fn(async () => undefined) }
   const browser = { close: vi.fn(async () => undefined) }
   const launcher = {
     output: vi.fn(() => 'captured child output'),
-    shutdown: vi.fn(async () => ({ processes: ['terminated', 'terminated'], runtimeDirs: [] })),
+    shutdown: vi.fn(async () => { operations.push('launcher-shutdown'); return { processes: ['terminated', 'terminated'], runtimeDirs: [] } }),
     children: vi.fn(() => ({ vite: {}, electron: {} })),
     start: vi.fn(async function start() {
       if (launchError) throw launchError
@@ -46,7 +50,16 @@ function createHarness({
   }))
   const seedFixtureAppData = vi.fn(async () => manifest)
   const writeFile = vi.fn(async () => undefined)
-  const rm = vi.fn(async () => undefined)
+  const rm = vi.fn(async () => { operations.push('remove') })
+  const mkdtemp = vi.fn(async prefix => `${prefix}abc123`)
+  const daemonOwnership = {
+    cleanup: vi.fn(async () => {
+      operations.push('daemon-cleanup')
+      if (daemonCleanupError) throw daemonCleanupError
+      return { owned: true, resources: [] }
+    }),
+  }
+  const createDaemonOwnershipRegistry = vi.fn(async () => daemonOwnership)
   const mkdir = vi.fn(async () => undefined)
   const connectOverCDP = vi.fn(async () => browser)
   const waitForDevTools = vi.fn(async () => ({ Browser: 'Chrome/123' }))
@@ -54,15 +67,18 @@ function createHarness({
 
   const lifecycle = createDesktopTestLifecycle(
     {
-      runRoot: '/run',
+      runRoot,
       outputDir: '/artifacts/run-1',
       connectPlaywright,
       repoPath,
       retainRuntime,
       timeoutMs: 12_000,
       ghosttyOptimizeMode,
+      isolatedSessionDaemon,
     },
     {
+      createDaemonOwnershipRegistry,
+      mkdtemp,
       allocateLoopbackPort,
       createFixtureRepository,
       seedFixtureAppData,
@@ -80,8 +96,12 @@ function createHarness({
     allocateLoopbackPort,
     browser,
     connectOverCDP,
+    createDaemonOwnershipRegistry,
     createElectronDevLauncher,
     createFixtureRepository,
+    daemonOwnership,
+    mkdtemp,
+    operations,
     launcher,
     lifecycle,
     mkdir,
@@ -168,6 +188,48 @@ describe('desktop test lifecycle', () => {
     expect(harness.launcher.shutdown).toHaveBeenCalledOnce()
     expect(harness.writeFile).toHaveBeenCalledWith('/artifacts/run-1/children.log', 'captured child output')
     expect(harness.rm).toHaveBeenCalledWith('/run', { recursive: true, force: true })
+  })
+
+  it('launches an owned session daemon inside the isolated run root and stops it before removing data', async () => {
+    const harness = createHarness({ isolatedSessionDaemon: true })
+
+    await harness.lifecycle.start()
+    await harness.lifecycle.shutdown()
+
+    expect(harness.createDaemonOwnershipRegistry).toHaveBeenCalledWith({ mode: 'isolated', runRoot: '/run' })
+    expect(harness.createElectronDevLauncher).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({ OPENFORGE_SESSION_DAEMON_ROOT: '/run/app-data/session-daemon' }),
+    }))
+    expect(harness.operations).toEqual(['launcher-shutdown', 'daemon-cleanup', 'remove'])
+  })
+
+  it('keeps session daemon settings out of default isolated launches', async () => {
+    const harness = createHarness()
+
+    await harness.lifecycle.start()
+    await harness.lifecycle.shutdown()
+
+    expect(harness.createDaemonOwnershipRegistry).not.toHaveBeenCalled()
+    expect(harness.launcher.options.env.OPENFORGE_SESSION_DAEMON_ROOT).toBeUndefined()
+    expect(harness.launcher.options.env.OPENFORGE_SESSION_DAEMON_PATH).toBeUndefined()
+  })
+
+  it('retains runtime data and reports failure when owned daemon cleanup fails', async () => {
+    const harness = createHarness({ isolatedSessionDaemon: true, daemonCleanupError: new Error('daemon still running') })
+
+    await harness.lifecycle.start()
+
+    await expect(harness.lifecycle.shutdown()).rejects.toThrow('daemon still running')
+    expect(harness.rm).not.toHaveBeenCalled()
+  })
+
+  it.runIf(process.platform === 'darwin')('uses a short macOS run root so the daemon socket path fits', async () => {
+    const harness = createHarness({ isolatedSessionDaemon: true, runRoot: null })
+
+    await harness.lifecycle.start()
+    await harness.lifecycle.shutdown()
+
+    expect(harness.mkdtemp).toHaveBeenCalledWith('/tmp/openforge-desktop-test-')
   })
 
   it('can keep the headed manual app open without attaching a Playwright client', async () => {

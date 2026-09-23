@@ -19,6 +19,7 @@ export const DEFAULT_IDLE_OPTIONS = Object.freeze({
   maxAverageCores: 0.35,
   maxEventRate: 20,
   maxSidecarPeakMiB: 1024,
+  sessionDaemonScope: null,
 })
 
 export function parseCpuTime(value) {
@@ -101,6 +102,11 @@ export function parseIdleOptions(argv) {
     else if (value === '--max-average-cores') options.maxAverageCores = nextNumber()
     else if (value === '--max-event-rate') options.maxEventRate = nextNumber()
     else if (value === '--max-sidecar-peak-mib') options.maxSidecarPeakMiB = nextNumber()
+    else if (value === '--session-daemon-scope') {
+      const next = argv[index += 1]
+      if (!next || next.startsWith('--')) throw new Error(`Invalid value for ${value}`)
+      options.sessionDaemonScope = next
+    }
     else if (value === '--no-thresholds') {
       options.maxAverageCores = null
       options.maxEventRate = null
@@ -159,7 +165,34 @@ export function discoverSidecarForElectron(rows, electronPid, expectedPort = nul
 }
 
 
-export function discoverIdleProcessSet(rows, requestedSidecarPid = null) {
+export function isSessionDaemonCommand(command) {
+  return /(?:^|\/)openforge-session-daemon(?:\s|$)/.test(command)
+}
+
+function commandReferencesPath(command, path) {
+  let from = 0
+  for (;;) {
+    const index = command.indexOf(path, from)
+    if (index < 0) return false
+    const next = command[index + path.length]
+    if (next === undefined || next === '/' || next === ' ') return true
+    from = index + 1
+  }
+}
+
+export function discoverSessionDaemon(rows, scope) {
+  if (!scope) return null
+  const daemons = rows.filter(row => isSessionDaemonCommand(row.command) && commandReferencesPath(row.command, scope))
+  if (daemons.length !== 1) return null
+  const [daemon] = daemons
+  return {
+    ...daemon,
+    role: 'session-daemon',
+    childPids: rows.filter(row => row.parentPid === daemon.pid).map(row => row.pid).sort((left, right) => left - right),
+  }
+}
+
+export function discoverIdleProcessSet(rows, requestedSidecarPid = null, sessionDaemonScope = null) {
   const sidecars = rows.filter(row => isOpenForgeSidecarCommand(row.command))
   const sidecar = requestedSidecarPid === null
     ? (sidecars.length === 1 ? sidecars[0] : null)
@@ -191,7 +224,58 @@ export function discoverIdleProcessSet(rows, requestedSidecarPid = null) {
       throw new Error(`Required idle process role ${role} was not discovered`)
     }
   }
-  return { sidecar: required.find(row => row.role === 'sidecar'), required, optional }
+  return {
+    sidecar: required.find(row => row.role === 'sidecar'),
+    required,
+    optional,
+    sessionDaemon: discoverSessionDaemon(rows, sessionDaemonScope),
+  }
+}
+
+function wakeupDelta(pid, wakeupsBefore, wakeupsAfter, durationSeconds) {
+  const before = wakeupsBefore?.get(pid)
+  const after = wakeupsAfter?.get(pid)
+  if (!before || !after) return null
+  const contextSwitches = Math.max(0, after.contextSwitches - before.contextSwitches)
+  const idleWakeups = Math.max(0, after.idleWakeups - before.idleWakeups)
+  return {
+    contextSwitches,
+    idleWakeups,
+    contextSwitchesPerSecond: contextSwitches / durationSeconds,
+    idleWakeupsPerSecond: idleWakeups / durationSeconds,
+  }
+}
+
+function sessionDaemonEvidence(daemon, afterRows, afterByPid, durationSeconds, wakeupsBefore, wakeupsAfter) {
+  const after = daemon ? afterByPid.get(daemon.pid) : null
+  if (!after || after.command !== daemon.command) return null
+  if (!Number.isFinite(daemon.cpuSeconds) || !Number.isFinite(after.cpuSeconds)) return null
+  const cpuDeltaSeconds = Math.max(0, after.cpuSeconds - daemon.cpuSeconds)
+  const childPids = afterRows.filter(row => row.parentPid === daemon.pid).map(row => row.pid).sort((left, right) => left - right)
+  return {
+    role: 'session-daemon',
+    pid: daemon.pid,
+    cpuDeltaSeconds,
+    averageCores: cpuDeltaSeconds / durationSeconds,
+    rssBytes: after.rssBytes,
+    childCount: childPids.length,
+    childPids,
+    wakeups: wakeupDelta(daemon.pid, wakeupsBefore, wakeupsAfter, durationSeconds),
+  }
+}
+
+function totalWakeups(entries, durationSeconds, error) {
+  const measured = entries.filter(entry => entry?.wakeups).map(entry => entry.wakeups)
+  const contextSwitches = measured.reduce((total, wakeups) => total + wakeups.contextSwitches, 0)
+  const idleWakeups = measured.reduce((total, wakeups) => total + wakeups.idleWakeups, 0)
+  return {
+    processCount: measured.length,
+    contextSwitches,
+    idleWakeups,
+    contextSwitchesPerSecond: contextSwitches / durationSeconds,
+    idleWakeupsPerSecond: idleWakeups / durationSeconds,
+    ...(error ? { error } : {}),
+  }
 }
 
 function evidenceFailureForMetric(process, name, value, phase) {
@@ -205,6 +289,9 @@ export function evaluateIdleSample({
   eventEvidence,
   footprints,
   thresholds,
+  wakeupsBefore = null,
+  wakeupsAfter = null,
+  wakeupError = null,
 }) {
   const afterByPid = new Map(afterRows.map(row => [row.pid, row]))
   const evidenceFailures = []
@@ -233,6 +320,7 @@ export function evaluateIdleSample({
       averageCores: cpuDeltaSeconds / durationSeconds,
       rssBytes: after.rssBytes,
       vmmap: footprints.get(before.pid) ?? { currentBytes: null, peakBytes: null },
+      wakeups: wakeupDelta(before.pid, wakeupsBefore, wakeupsAfter, durationSeconds),
     })
   }
 
@@ -250,6 +338,14 @@ export function evaluateIdleSample({
     evidenceFailures.push(`event stream covered ${eventEvidence?.durationMs ?? 0} ms of required ${requiredDurationMs} ms`)
   }
 
+  const sessionDaemon = sessionDaemonEvidence(
+    processSet.sessionDaemon,
+    afterRows,
+    afterByPid,
+    durationSeconds,
+    wakeupsBefore,
+    wakeupsAfter,
+  )
   const averageCores = processes.reduce((total, process) => total + process.averageCores, 0)
   const eventCount = Number.isFinite(eventEvidence?.eventCount) ? eventEvidence.eventCount : 0
   const eventRate = eventCount / durationSeconds
@@ -275,6 +371,8 @@ export function evaluateIdleSample({
     eventPayloadBytes: eventEvidence?.payloadBytes ?? 0,
     topEventTypes: eventEvidence?.topEventTypes ?? [],
     processes,
+    sessionDaemon,
+    wakeups: totalWakeups([...processes, sessionDaemon], durationSeconds, wakeupError),
     optionalProcesses: processSet.optional,
     thresholds,
     evidenceFailures,
@@ -289,6 +387,40 @@ export async function readProcessRows({ execFileImpl = execFile } = {}) {
     maxBuffer: MAX_PROCESS_OUTPUT_BYTES,
   })
   return parseProcessRows(stdout)
+}
+
+function parseTopCounter(value) {
+  const match = value.match(/^(\d+(?:\.\d+)?)([KMG])?[+-]?$/i)
+  if (!match) return null
+  const scales = { K: 1024, M: 1024 ** 2, G: 1024 ** 3 }
+  return Math.round(Number(match[1]) * (match[2] ? scales[match[2].toUpperCase()] : 1))
+}
+
+export function parseTopWakeupCounters(output) {
+  const counters = new Map()
+  let inTable = false
+  for (const line of output.split('\n')) {
+    const columns = line.trim().split(/\s+/)
+    if (columns[0] === 'PID' && columns[1] === 'CSW' && columns[2] === 'IDLEW') {
+      inTable = true
+      continue
+    }
+    if (!inTable || columns.length < 3 || !/^\d+$/.test(columns[0])) continue
+    const contextSwitches = parseTopCounter(columns[1])
+    const idleWakeups = parseTopCounter(columns[2])
+    if (contextSwitches === null || idleWakeups === null) continue
+    counters.set(Number(columns[0]), { contextSwitches, idleWakeups })
+  }
+  return counters
+}
+
+export async function readWakeupCounters(pids, { execFileImpl = execFile } = {}) {
+  const { stdout } = await execFileImpl('top', [
+    '-l', '1',
+    '-stats', 'pid,csw,idlew',
+    ...pids.flatMap(pid => ['-pid', String(pid)]),
+  ], { maxBuffer: MAX_PROCESS_OUTPUT_BYTES })
+  return parseTopWakeupCounters(stdout)
 }
 
 export async function readSidecarConnection(sidecarPid, command, {
@@ -364,6 +496,7 @@ export async function sampleIdleResources(options = {}, dependencies = {}) {
     readProcesses = readProcessRows,
     collectEvents = collectEventEvidence,
     collectFootprint = collectVmmapFootprint,
+    readWakeups = readWakeupCounters,
     wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
     now = () => new Date(),
     platform = process.platform,
@@ -382,10 +515,21 @@ export async function sampleIdleResources(options = {}, dependencies = {}) {
   }
 
   const beforeRows = await readProcesses()
-  const processSet = discoverIdleProcessSet(beforeRows, resolved.sidecarPid)
-  const [eventEvidence, afterRows] = await Promise.all([
+  const processSet = discoverIdleProcessSet(beforeRows, resolved.sidecarPid, resolved.sessionDaemonScope)
+  const wakeupPids = [...processSet.required, processSet.sessionDaemon].filter(Boolean).map(process => process.pid)
+  let wakeupError = null
+  const readWakeupsSafely = async () => {
+    try {
+      return await readWakeups(wakeupPids)
+    } catch (error) {
+      wakeupError ??= error instanceof Error ? error.message : String(error)
+      return null
+    }
+  }
+  const wakeupsBefore = await readWakeupsSafely()
+  const [eventEvidence, [afterRows, wakeupsAfter]] = await Promise.all([
     collectEvents(processSet.sidecar, resolved.durationSeconds),
-    wait(resolved.durationSeconds * 1000).then(() => readProcesses()),
+    wait(resolved.durationSeconds * 1000).then(() => Promise.all([readProcesses(), readWakeupsSafely()])),
   ])
   const footprints = new Map(await Promise.all(processSet.required.map(async process => {
     try {
@@ -411,6 +555,9 @@ export async function sampleIdleResources(options = {}, dependencies = {}) {
         maxEventRate: resolved.maxEventRate,
         maxSidecarPeakMiB: resolved.maxSidecarPeakMiB,
       },
+      wakeupsBefore,
+      wakeupsAfter,
+      wakeupError,
     }),
   }
 }
