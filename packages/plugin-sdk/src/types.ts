@@ -941,8 +941,9 @@ export interface ScopedAgentSessionState {
 
 /**
  * Scoped session change. Frontend delivery may coalesce invalidations. Backend
- * observers receive durable provider-turn snapshots in order; other state and
- * terminal-output changes may coalesce to the latest snapshot.
+ * observers receive durable provider-turn snapshots in order; other state
+ * changes may coalesce to the latest snapshot. Terminal output alone does not
+ * produce a change.
  */
 export interface ScopedAgentSessionChangeEvent extends SessionScope {
   state?: ScopedAgentSessionState | null

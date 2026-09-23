@@ -226,10 +226,70 @@ describe('plugin scoped Agent Session host', () => {
 
     expect(changed).toHaveBeenCalledOnce()
     expect(changed).toHaveBeenCalledWith(scope)
-    const outputHandler = [...desktopHandlers.entries()].find(([event]) => event.startsWith('pty-output-'))?.[1]
-    outputHandler?.({ data: 'output' })
+    const exitHandler = [...desktopHandlers.entries()].find(([event]) => event.startsWith('pty-exit-'))?.[1]
+    exitHandler?.({ instance_id: 1 })
     expect(changed).toHaveBeenCalledTimes(2)
     subscription.dispose()
+  })
+
+  it('notifies subscribers when app events were dropped', async () => {
+    const desktopHandlers = new Map<string, (payload: unknown) => void>()
+    events.subscribe.mockImplementation((_pluginId, event, handler) => {
+      desktopHandlers.set(event, handler)
+      return vi.fn()
+    })
+    const changed = vi.fn()
+    const host = createPluginAgentSessionHostCapabilities('com.example.gap')
+    const subscription = host.subscribeScopedAgentSessionChanges(scope, changed)
+    await vi.waitFor(() => expect(events.subscribe).toHaveBeenCalledTimes(3))
+    changed.mockClear()
+
+    desktopHandlers.get('openforge-app-events-gap')?.({ dropped: 3 })
+
+    expect(changed).toHaveBeenCalledOnce()
+    expect(changed).toHaveBeenCalledWith(scope)
+    subscription.dispose()
+  })
+
+  it('does not read status while a mounted session streams output or sits idle', async () => {
+    vi.useFakeTimers()
+    try {
+      terminal.attach.mockResolvedValue({ detach: vi.fn() })
+      const host = createPluginAgentSessionHostCapabilities('com.example.streaming')
+      const mount = await host.mountScopedAgentSessionTerminal(scope, document.createElement('div'))
+      await vi.waitFor(() => expect(events.subscribe).toHaveBeenCalledTimes(3))
+      const callsAfterMount = ipc.getScopedAgentSessionStatus.mock.calls.length
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(events.subscribe.mock.calls.map(([, event]) => event)).not.toContainEqual(expect.stringMatching(/^pty-output-/))
+      expect(ipc.getScopedAgentSessionStatus).toHaveBeenCalledTimes(callsAfterMount)
+      mount.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('removes every subscription and timer when the last observer is disposed', async () => {
+    vi.useFakeTimers()
+    try {
+      const unsubscribers: Array<ReturnType<typeof vi.fn>> = []
+      events.subscribe.mockImplementation(() => {
+        const unsubscribe = vi.fn()
+        unsubscribers.push(unsubscribe)
+        return unsubscribe
+      })
+      const host = createPluginAgentSessionHostCapabilities('com.example.teardown')
+      const subscription = host.subscribeScopedAgentSessionChanges(scope, vi.fn())
+      await vi.waitFor(() => expect(events.subscribe).toHaveBeenCalledTimes(3))
+
+      subscription.dispose()
+
+      expect(unsubscribers.every(unsubscribe => unsubscribe.mock.calls.length === 1)).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shares one host observer across subscribers for the same scope', async () => {
@@ -262,17 +322,16 @@ describe('plugin scoped Agent Session host', () => {
     expect(unsubscribers.every(unsubscribe => unsubscribe.mock.calls.length === 1)).toBe(true)
   })
 
-  it('covers output lost while keyed event listener registration is pending', async () => {
+  it('covers lifecycle events lost while keyed event listener registration is pending', async () => {
     let resolveRegistration!: () => void
     const registration = new Promise<void>(resolve => { resolveRegistration = resolve })
     events.ready.mockImplementation(event => event.startsWith('pty-') ? registration : Promise.resolve())
     const changed = vi.fn()
-    const host = createPluginAgentSessionHostCapabilities('com.example.setup-output')
+    const host = createPluginAgentSessionHostCapabilities('com.example.setup-lifecycle')
 
     const subscription = host.subscribeScopedAgentSessionChanges(scope, changed)
     await vi.waitFor(() => expect(events.ready).toHaveBeenCalledTimes(2))
     expect(changed).not.toHaveBeenCalled()
-    // Output emitted by main during this window is not delivered to the renderer.
     resolveRegistration()
 
     await vi.waitFor(() => expect(changed).toHaveBeenCalled())

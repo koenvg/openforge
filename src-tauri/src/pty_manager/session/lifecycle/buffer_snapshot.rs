@@ -128,24 +128,4 @@ impl PtyManager {
             Some(content)
         }
     }
-
-    pub(crate) async fn pty_output_revision(&self, session_key: &str) -> u64 {
-        let buffers = self.terminal_sessions.output_buffers.lock().await;
-        let Some(buffer) = buffers.get(session_key).cloned() else {
-            return 0;
-        };
-        drop(buffers);
-        let revision = match buffer.lock() {
-            Ok(buffer) => buffer.revision(),
-            Err(poisoned) => {
-                warn!(
-                    "[pty-manager] key={} output buffer lock poisoned; recovering output revision",
-                    session_key
-                );
-                buffer.clear_poison();
-                poisoned.into_inner().revision()
-            }
-        };
-        revision
-    }
 }

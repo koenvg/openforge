@@ -13,12 +13,18 @@ const PLUGIN_WORKER_ROLE = 'openforge-plugin-backend'
 
 type WorkerRuntime = {
   handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse>
+  handleJsonRpcNotification(notification: JsonRpcRequest): void
 }
 
 type ParentRequestMessage = {
   type: 'rpc'
   requestId: number
   request: JsonRpcRequest
+}
+
+type ParentNotificationMessage = {
+  type: 'notification'
+  notification: JsonRpcRequest
 }
 
 type ParentCallbackResultMessage = {
@@ -45,7 +51,7 @@ type WorkerCallbackMessage = {
   request: HostCallbackRequest
 }
 
-type ParentMessage = ParentRequestMessage | ParentCallbackResultMessage | ParentCallbackCancelMessage
+type ParentMessage = ParentRequestMessage | ParentNotificationMessage | ParentCallbackResultMessage | ParentCallbackCancelMessage
 type WorkerMessage = WorkerResponseMessage | WorkerCallbackMessage | ParentCallbackCancelMessage
 
 type PendingCallback = {
@@ -117,6 +123,10 @@ export function startPluginBackendWorker(createRuntime: (hostCallbacks: HostCall
       else pending.resolve(message.result)
       return
     }
+    if (message.type === 'notification') {
+      runtime.handleJsonRpcNotification(message.notification)
+      return
+    }
     if (message.type !== 'rpc') return
     void runtime.handleJsonRpcRequest(message.request).then(
       response => workerParentPort.postMessage({ type: 'rpc-result', requestId: message.requestId, response } satisfies WorkerResponseMessage),
@@ -157,6 +167,11 @@ class PluginWorkerHandle {
       this.pendingRequests.set(requestId, { resolve, reject })
       this.worker.postMessage({ type: 'rpc', requestId, request } satisfies ParentRequestMessage)
     })
+  }
+
+  notify(notification: JsonRpcRequest): void {
+    if (this.stopped) return
+    this.worker.postMessage({ type: 'notification', notification } satisfies ParentNotificationMessage)
   }
 
   async terminate(): Promise<void> {
@@ -250,6 +265,15 @@ export class IsolatedPluginHostRuntime {
     } catch (error) {
       return errorResponse(request, error instanceof Error ? error.message : String(error))
     }
+  }
+
+  handleJsonRpcNotification(notification: JsonRpcRequest): void {
+    if (notification.method === 'plugin.agentSessions.resync') {
+      for (const worker of this.workers.values()) worker.notify(notification)
+      return
+    }
+    const pluginId = notification.params?.pluginId
+    if (pluginId !== undefined) this.workers.get(pluginId)?.notify(notification)
   }
 
   private worker(pluginId: string): PluginWorkerHandle {

@@ -361,6 +361,47 @@ impl PluginHost {
         }
     }
 
+    pub(super) fn is_current_transport(&self, session_id: u64, process_token: u64) -> bool {
+        self.current_writer(session_id, process_token).is_some()
+    }
+
+    fn current_writer(
+        &self,
+        session_id: u64,
+        process_token: u64,
+    ) -> Option<Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>> {
+        match self.transport_lock() {
+            Ok(transport)
+                if transport.session_id == session_id
+                    && transport.process_token == process_token =>
+            {
+                transport.writer.as_ref().cloned()
+            }
+            _ => None,
+        }
+    }
+
+    pub(super) async fn write_notification(
+        &self,
+        session_id: u64,
+        process_token: u64,
+        notification: &str,
+    ) -> bool {
+        let Some(writer) = self.current_writer(session_id, process_token) else {
+            return false;
+        };
+        match self
+            .write_framed_message(writer, 0, notification, "notification")
+            .await
+        {
+            Ok(()) => true,
+            Err(error) => {
+                warn!("[plugin_host] {error}");
+                false
+            }
+        }
+    }
+
     async fn write_request(
         &self,
         writer: Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>,

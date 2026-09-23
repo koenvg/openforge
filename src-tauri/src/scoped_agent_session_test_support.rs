@@ -6,7 +6,6 @@ use crate::{
     },
 };
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -15,16 +14,11 @@ use std::{
 pub(crate) struct TestScopedSessionRuntime {
     pub(crate) inputs: Mutex<Vec<String>>,
     pub(crate) aborts: Mutex<Vec<String>>,
-    output_revisions: Mutex<HashMap<String, u64>>,
 }
 
 impl ScopedSessionRuntime for TestScopedSessionRuntime {
     fn launch<'a>(&'a self, request: ScopedLaunchRequest) -> RuntimeFuture<'a, ScopedLaunchResult> {
         Box::pin(async move {
-            self.output_revisions
-                .lock()
-                .expect("lock output revisions")
-                .insert(request.terminal_key, 0);
             Ok(ScopedLaunchResult {
                 pty_instance_id: 41,
                 provider_session_id: request.provider_session_id,
@@ -53,25 +47,8 @@ impl ScopedSessionRuntime for TestScopedSessionRuntime {
         Box::pin(async { Ok(String::new()) })
     }
 
-    fn output_revision<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, u64> {
-        Box::pin(async move {
-            Ok(*self
-                .output_revisions
-                .lock()
-                .expect("lock output revisions")
-                .get(terminal_key)
-                .unwrap_or(&0))
-        })
-    }
-
-    fn dispose<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()> {
-        Box::pin(async move {
-            self.output_revisions
-                .lock()
-                .expect("lock output revisions")
-                .remove(terminal_key);
-            Ok(())
-        })
+    fn dispose<'a>(&'a self, _terminal_key: &'a str) -> RuntimeFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -115,6 +92,7 @@ pub(crate) fn test_scoped_agent_session_service(
         database,
         Arc::new(TestScopedSessionWorkspace),
         runtime.clone(),
+        crate::app_events::RuntimeEventPublisher::default(),
     );
     (service, runtime)
 }

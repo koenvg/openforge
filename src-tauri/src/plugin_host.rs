@@ -1,4 +1,5 @@
 mod agent_session_callbacks;
+mod agent_session_change_forwarding;
 mod callbacks;
 mod command_callbacks;
 mod filesystem_callbacks;

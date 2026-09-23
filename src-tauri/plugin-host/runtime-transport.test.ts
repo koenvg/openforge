@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { unicodeLineSeparatorFixturePath, writeBackendModule } from './backend-module.test-fixtures'
 import { BuiltPluginHostTestHarness } from './built-plugin-host.test-harness'
 import { createPluginHostRuntime } from './index'
@@ -201,6 +201,60 @@ describe('plugin-host JSON-RPC and stdio transport', () => {
       await host.stop()
     }
   })
+  it('routes pushed scoped Agent Session changes to the owning isolated worker', async () => {
+    const backendPath = join(await mkdtemp(join(tmpdir(), 'openforge-scoped-backend-')), 'backend.mjs')
+    await writeFile(backendPath, `
+      const statuses = []
+      export default {
+        activate(openforge, context) {
+          const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+          context.subscriptions.add(openforge.agentSessions.onDidChange(scope, event => statuses.push(event.state.status)))
+          context.subscriptions.add(openforge.backend.registerMethod('statuses', { handler() { return statuses } }))
+        }
+      }
+    `)
+
+    const host = await BuiltPluginHostTestHarness.start()
+    let observations = 0
+    const stopHostCallbacks = host.onMessage((message) => {
+      if (!('method' in message) || message.method !== 'openforge.agentSessions.observe') return
+      observations += 1
+      const status = observations === 1 ? 'running' : 'completed'
+      host.send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: { state: { id: 'sas-1', turnId: 'turn-1', status, updatedAt: observations }, cursor: 0, transitions: [] },
+      })
+    })
+
+    try {
+      await expect(host.request({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'plugin.backend.whenReady',
+        params: { pluginId: 'reviewer', backendPath },
+      })).resolves.toMatchObject({ result: { state: 'ready' } })
+      await vi.waitFor(() => expect(observations).toBe(1))
+
+      host.send({
+        jsonrpc: '2.0',
+        method: 'plugin.agentSessions.changed',
+        params: { pluginId: 'reviewer', namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' },
+      })
+
+      await vi.waitFor(async () => expect((await host.request({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'reviewer.statuses',
+        params: { pluginId: 'reviewer', backendPath, command: 'statuses' },
+      })).result).toEqual(['completed']))
+      expect(host.stdoutLines.map(line => JSON.parse(line)).filter(message => !('id' in message))).toEqual([])
+    } finally {
+      stopHostCallbacks()
+      await host.stop()
+    }
+  })
+
   it('completes external text reads and propagates errors through the built stdio host', async () => {
     const fixture = await readFile(unicodeLineSeparatorFixturePath, 'utf8')
     const fixtureBytes = Buffer.byteLength(fixture)
