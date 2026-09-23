@@ -43,6 +43,27 @@ describe('CI artifact result reading', () => {
       rust: { formatFailed: false, clippyFailed: true, testsFailed: false },
     })
   })
+
+  it('distinguishes missing and unreadable Rust results from passing checks', () => {
+    const readFileSync = vi.fn((path) => {
+      if (path === RESULT_PATHS.rustClippy) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
+      if (path === RESULT_PATHS.rustFormat) return '0'
+      if (path === RESULT_PATHS.rustTests) return '101'
+      throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
+    })
+    const core = { info: vi.fn(), warning: vi.fn() }
+    const results = readCiResults({ readFileSync, core })
+    expect(results.rust).toEqual({ formatFailed: false, clippyFailed: null, testsFailed: true })
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('Rust Clippy exit code file'))
+    expect(core.info).not.toHaveBeenCalledWith(expect.stringContaining('Rust formatting exit code file'))
+  })
+
+  it('treats absent Rust exit-code files as incomplete', () => {
+    const core = { info: vi.fn(), warning: vi.fn() }
+    const results = readCiResults({ readFileSync: createFileReader(), core })
+    expect(results.rust).toEqual({ formatFailed: null, clippyFailed: null, testsFailed: null })
+    expect(core.info).toHaveBeenCalledWith(expect.stringContaining('Rust formatting exit code file'))
+  })
 })
 
 describe('frontend CI comment rendering', () => {
@@ -282,6 +303,52 @@ describe('CI comment posting', () => {
       repo: 'openforge',
       comment_id: 83,
     })
+  })
+  it.each(['missing', 'unreadable'])('keeps the Rust comment for %s results and includes available logs', async (artifact) => {
+    const github = createGitHub()
+    github.rest.issues.listComments = vi.fn().mockResolvedValue({
+      data: [{ id: 83, body: '<!-- ci-rust-failures -->\nold failure' }],
+    })
+    const files = {
+      [RESULT_PATHS.rustFormat]: '0',
+      [RESULT_PATHS.rustTests]: '0',
+      '/tmp/rust-logs/rust-clippy.log': 'error: redundant clone',
+    }
+    const readFileSync = createFileReader(files)
+    if (artifact === 'unreadable') {
+      readFileSync.mockImplementation((path) => {
+        if (path === RESULT_PATHS.rustClippy) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
+        if (Object.hasOwn(files, path)) return files[path]
+        throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
+      })
+    }
+    await postCiComments({
+      github,
+      context: { repo: { owner: 'open-forge', repo: 'openforge' } },
+      core: { info: vi.fn(), warning: vi.fn() },
+      readFileSync,
+      prNumber: 42,
+    })
+    expect(github.rest.issues.deleteComment).not.toHaveBeenCalledWith(expect.objectContaining({ comment_id: 83 }))
+    expect(github.rest.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({
+      comment_id: 83,
+      body: expect.stringMatching(/<!-- ci-rust-failures -->[\s\S]*Clippy[\s\S]*Incomplete[\s\S]*error: redundant clone/),
+    }))
+  })
+
+  it('creates a marked incomplete Rust comment when result artifacts and logs are absent', async () => {
+    const github = createGitHub()
+    github.rest.issues.listComments = vi.fn().mockResolvedValue({ data: [] })
+    await postCiComments({
+      github,
+      context: { repo: { owner: 'open-forge', repo: 'openforge' } },
+      core: { info: vi.fn(), warning: vi.fn() },
+      readFileSync: createFileReader(),
+      prNumber: 42,
+    })
+    expect(github.rest.issues.createComment).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.stringMatching(/<!-- ci-rust-failures -->[\s\S]*Rust CI Incomplete[\s\S]*Formatting[\s\S]*Logs unavailable/),
+    }))
   })
 })
 
