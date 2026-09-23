@@ -260,60 +260,77 @@ async fn ghostty_model_queue_saturation_backpressures_and_recovers_the_session()
         .await
         .expect("Ghostty PTY should spawn");
 
-    let recovery = tokio::spawn(wait_for_model_output(
-        events,
-        session_key.clone(),
-        instance_id,
-        b"model-queue-recovered",
-    ));
-    let blocked_gate = queue_gate.clone();
-    tokio::task::spawn_blocking(move || blocked_gate.wait_until_queue_saturated())
+    let manager = harness.manager.clone();
+    let check_key = session_key.clone();
+    let check_gate = queue_gate.clone();
+    let mut assertions = tokio::spawn(async move {
+        let mut recovery = tokio::task::JoinSet::new();
+        recovery.spawn(wait_for_model_output(
+            events,
+            check_key.clone(),
+            instance_id,
+            b"model-queue-recovered",
+        ));
+        tokio::time::timeout(Duration::from_secs(30), async {
+            while !check_gate.is_queue_saturated() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
         .await
-        .expect("queue saturation wait should join");
-    queue_gate.release_first_command();
-    recovery
-        .await
-        .expect("model output wait should join after queue recovery");
+        .expect("model command queue should saturate before the deadline");
+        check_gate.release_first_command();
+        tokio::time::timeout(Duration::from_secs(30), recovery.join_next())
+            .await
+            .expect("model output should recover before the deadline")
+            .expect("model output wait should complete")
+            .expect("model output wait should succeed");
 
-    let terminal_model = harness
-        .manager
-        .sessions
-        .lock()
-        .await
-        .get(&session_key)
-        .and_then(|session| session.terminal_model.as_ref().map(Arc::clone))
-        .expect("recovered authoritative session should retain its model");
-    assert!(
-        terminal_model.queue_saturated_for_test(),
-        "the worker must observe a full command queue before recovery",
-    );
-    let snapshot = tokio::task::spawn_blocking(move || terminal_model.portable_snapshot())
-        .await
-        .expect("model snapshot task should join")
-        .expect("the model worker should drain its saturated queue");
-    assert_eq!(snapshot.instance_id, instance_id);
-    assert!(snapshot
-        .portable_vt
-        .windows(b"model-queue-recovered".len())
-        .any(|window| window == b"model-queue-recovered"));
-
-    assert_eq!(
-        harness
-            .manager
+        let terminal_model = manager
             .sessions
             .lock()
             .await
-            .get(&session_key)
-            .map(|session| session.instance_id),
-        Some(instance_id),
-    );
-    harness
-        .manager
-        .kill_pty(&session_key)
+            .get(&check_key)
+            .and_then(|session| session.terminal_model.as_ref().map(Arc::clone))
+            .expect("recovered authoritative session should retain its model");
+        assert!(
+            terminal_model.queue_saturated_for_test(),
+            "the worker must observe a full command queue before recovery",
+        );
+        let snapshot = tokio::time::timeout(
+            Duration::from_secs(15),
+            tokio::task::spawn_blocking(move || terminal_model.portable_snapshot()),
+        )
         .await
-        .expect("recovered PTY should be cleaned up");
-}
+        .expect("model snapshot should complete before the deadline")
+        .expect("model snapshot task should join")
+        .expect("the model worker should drain its saturated queue");
+        assert_eq!(snapshot.instance_id, instance_id);
+        assert!(snapshot
+            .portable_vt
+            .windows(b"model-queue-recovered".len())
+            .any(|window| window == b"model-queue-recovered"));
 
+        assert_eq!(
+            manager
+                .sessions
+                .lock()
+                .await
+                .get(&check_key)
+                .map(|session| session.instance_id),
+            Some(instance_id),
+        );
+    });
+    let result = tokio::time::timeout(Duration::from_secs(80), &mut assertions).await;
+    if result.is_err() {
+        assertions.abort();
+    }
+    queue_gate.release_first_command();
+    let cleanup = harness.manager.kill_pty(&session_key).await;
+    result
+        .expect("queue saturation and recovery assertions should finish before the deadline")
+        .expect("queue saturation and recovery assertions should succeed");
+    cleanup.expect("test-owned PTY should be cleaned up");
+}
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ghostty_model_worker_panic_terminates_the_affected_session() {
     let harness = ShellTestHarness::new();

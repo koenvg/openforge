@@ -28,7 +28,7 @@ use openforge_session_host::{TerminalColorProfile, TerminalRgbColor};
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(test)]
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Condvar, Mutex};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 const DEFAULT_SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
@@ -39,37 +39,45 @@ const MAX_SNAPSHOT_CONTINUATION_BYTES: usize = 256 * 1024;
 #[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct TerminalModelQueueSaturationGate {
-    queue_saturated: Arc<Barrier>,
     queue_saturation_signaled: Arc<AtomicBool>,
-    release_first_command: Arc<Barrier>,
+    first_command_release: Arc<(Mutex<bool>, Condvar)>,
 }
 
 #[cfg(test)]
 impl TerminalModelQueueSaturationGate {
     pub(crate) fn new() -> Self {
         Self {
-            queue_saturated: Arc::new(Barrier::new(2)),
             queue_saturation_signaled: Arc::new(AtomicBool::new(false)),
-            release_first_command: Arc::new(Barrier::new(2)),
+            first_command_release: Arc::new((Mutex::new(false), Condvar::new())),
         }
     }
 
-    pub(crate) fn wait_until_queue_saturated(&self) {
-        self.queue_saturated.wait();
+    pub(crate) fn is_queue_saturated(&self) -> bool {
+        self.queue_saturation_signaled.load(Ordering::Acquire)
     }
 
     pub(crate) fn release_first_command(&self) {
-        self.release_first_command.wait();
+        let (released, wake) = &*self.first_command_release;
+        *released
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
+        wake.notify_all();
     }
 
     fn mark_queue_saturated(&self) {
-        if !self.queue_saturation_signaled.swap(true, Ordering::AcqRel) {
-            self.queue_saturated.wait();
-        }
+        self.queue_saturation_signaled
+            .store(true, Ordering::Release);
     }
 
     fn block_first_command(&self) {
-        self.release_first_command.wait();
+        let (released, wake) = &*self.first_command_release;
+        let guard = released
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        drop(
+            wake.wait_while(guard, |released| !*released)
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
     }
 }
 
