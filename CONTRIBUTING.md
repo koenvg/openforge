@@ -73,8 +73,8 @@ To reseed or clear worktree-local state, stop `pnpm electron:dev` and delete `.o
 
 For repository-approved page and component screenshots, see [the visual review guide](docs/storybook-visuals.md). `pnpm storybook:visual:check` uses the same pinned Linux container locally and in CI.
 Reproduce one partition with `pnpm storybook:visual:shard --shard-index 2 --shard-count 4`, or run only regression probes with `pnpm storybook:visual:probes`. Both validate the complete inventory first and write isolated reports. `pnpm storybook:visual:test` still runs every baseline, repeatability capture, and probe.
-CI stores each shard and probe report separately and publishes complete-gate diagnostics in `storybook-visual-review`. See [CI parallelization evidence](docs/ci-parallelization.md) for artifact paths and timing evidence.
-For missing page and component stories, see [the coverage guide](docs/storybook-coverage.md). Build both catalogs with `pnpm storybook:build`, then run `pnpm storybook:coverage` to validate adopted entries and list uncovered UI.
+CI stores each visual shard and probe report separately and publishes complete-gate diagnostics in `storybook-visual-review`. The coverage job builds both catalogs and blocks the gate if any UI module or visual plugin contribution remains unclassified. See [CI parallelization evidence](docs/ci-parallelization.md) for artifact paths and timing evidence.
+For missing page and component stories, see [the coverage guide](docs/storybook-coverage.md). Build both catalogs with `pnpm storybook:build`, then run `pnpm storybook:coverage`; it fails on unclassified UI and prints every missing source.
 
 The frontend and Plugin SDK suites include Chromium checks of core control styles. After installing dependencies, run `pnpm exec playwright install --with-deps chromium` once, and again after Playwright upgrades.
 

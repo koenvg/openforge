@@ -53,7 +53,7 @@ export function createStoryFileSystem(definition: StoryFileSystemDefinition, fal
       await wait(`write:${path}`)
       files.set(path, createTextFileContent({ content }))
     },
-    task: { readDir, readFile, searchFiles },
+    task: { ...fallback.task, readDir, readFile, searchFiles },
   }
   return {
     fs,

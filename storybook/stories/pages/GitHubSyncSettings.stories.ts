@@ -17,7 +17,7 @@ const meta = {
 } satisfies Meta<typeof JiraSettingsSection>
 
 export default meta
-type Story = StoryObj<typeof meta>
+type Story = StoryObj
 
 export const Connected: Story = {
   play: async ({ canvasElement }) => {

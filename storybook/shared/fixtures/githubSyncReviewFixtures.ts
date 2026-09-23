@@ -1,4 +1,4 @@
-import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 const FIXED_CREATED_AT = Date.UTC(2026, 0, 2, 8) / 1000
 const FIXED_UPDATED_AT = Date.UTC(2026, 0, 2, 9, 20) / 1000
@@ -104,6 +104,19 @@ export const mergedReviewRequest = createReviewPullRequest({
   changed_files: 5,
   labels: [{ name: 'design-system', color: '5319e7' }],
 })
+export const authoredReviewRequest: AuthoredPullRequest = {
+  id: 82, number: 82, title: 'Polish the release checklist',
+  body: 'Make releases easier to verify.', state: 'open', draft: false,
+  html_url: 'https://github.com/openforge/openforge/pull/82',
+  user_login: 'catalog-author', user_avatar_url: null,
+  repo_owner: 'openforge', repo_name: 'openforge',
+  head_ref: 'openforge/release-checklist', base_ref: 'main', head_sha: 'author123',
+  additions: 42, deletions: 8, changed_files: 3,
+  ci_status: 'success', ci_check_runs: null, review_status: null,
+  mergeable: true, mergeable_state: 'clean', is_queued: false, task_id: null,
+  created_at: FIXED_CREATED_AT, updated_at: FIXED_UPDATED_AT,
+  labels: [{ name: 'documentation', color: '1d76db' }],
+}
 
 export const closedReviewRequest = createReviewPullRequest({
   id: 39,

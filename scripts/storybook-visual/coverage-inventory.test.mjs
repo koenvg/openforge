@@ -20,20 +20,28 @@ describe('storybook visual coverage inventory', () => {
     const replaced = inventory.cases.filter(entry => entry.disposition === 'replaced')
     const removedUpstream = inventory.cases.filter(entry => entry.disposition === 'removed-upstream')
     const replacementIds = new Set(replaced.map(entry => entry.appearanceCoverage))
+    const addedIds = inventory.additionalSelections.map(entry => entry.identity)
+    const historicalManifest = currentManifest.filter(entry => !addedIds.includes(identity(entry)))
+    expect(new Set(addedIds).size).toBe(addedIds.length)
 
     expect(inventory.version).toBe(1)
     expect(inventoriedIds).toHaveLength(inventory.before.counts.total)
     expect(new Set(inventoriedIds).size).toBe(inventoriedIds.length)
-    expect(new Set([...retainedIds, ...replacementIds])).toEqual(currentIds)
+    expect(new Set([...retainedIds, ...replacementIds, ...addedIds])).toEqual(currentIds)
+    for (const entry of inventory.additionalSelections) {
+      expect(currentIds.has(entry.identity), entry.identity).toBe(true)
+      expect(entry.risk.trim(), entry.identity).not.toBe('')
+      expect(entry.rationale.trim(), entry.identity).not.toBe('')
+    }
     expect(new Set(removedUpstream.map(entry => entry.identity))).toEqual(
       new Set(inventory.integration.upstreamRemovedIdentities),
     )
     expect(inventory.integration.baseRevision).toMatch(/^[0-9a-f]{40}$/)
     expect(inventory.integration.counts).toEqual({
-      total: currentManifest.length,
-      catalogs: countBy(currentManifest.map(entry => entry.catalog)),
-      themes: countBy(currentManifest.map(entry => entry.theme)),
-      viewports: countBy(currentManifest.map(entry => `${entry.viewport.width}x${entry.viewport.height}`)),
+      total: historicalManifest.length,
+      catalogs: countBy(historicalManifest.map(entry => entry.catalog)),
+      themes: countBy(historicalManifest.map(entry => entry.theme)),
+      viewports: countBy(historicalManifest.map(entry => `${entry.viewport.width}x${entry.viewport.height}`)),
     })
 
     for (const entry of inventory.cases) {
@@ -120,8 +128,8 @@ describe('storybook visual coverage inventory', () => {
     const inventory = readJson('storybook/visual-coverage-inventory.json')
     const currentPages = readJson('storybook/visual-manifest.json').filter(entry => entry.catalog === 'pages')
     const families = new Set(currentPages.map(entry => entry.story.split('--')[0]))
-    expect(new Set(Object.keys(inventory.pageSlice.retainedFamilies))).toEqual(families)
-    for (const reason of Object.values(inventory.pageSlice.retainedFamilies)) expect(reason.trim().length).toBeGreaterThan(25)
+    expect(new Set([...Object.keys(inventory.pageSlice.retainedFamilies), ...Object.keys(inventory.additionalPageFamilies)])).toEqual(families)
+    for (const reason of [...Object.values(inventory.pageSlice.retainedFamilies), ...Object.values(inventory.additionalPageFamilies)]) expect(reason.trim().length).toBeGreaterThan(25)
   })
 
   it('records the page slice timing and exact baseline deletions', () => {
@@ -134,7 +142,9 @@ describe('storybook visual coverage inventory', () => {
     expect(pageSlice.before.environment).toEqual(pageSlice.after.environment)
     expect(pageSlice.before.timing.status).toBe('passed')
     expect(pageSlice.after.timing.status).toBe('passed')
-    expect(pageSlice.after.counts).toEqual({ total: manifest.length, pages: manifest.filter(entry => entry.catalog === 'pages').length, components: manifest.filter(entry => entry.catalog === 'components').length })
+    const addedIds = new Set(inventory.additionalSelections.map(entry => entry.identity))
+    const historicalManifest = manifest.filter(entry => !addedIds.has(identity(entry)))
+    expect(pageSlice.after.counts).toEqual({ total: historicalManifest.length, pages: historicalManifest.filter(entry => entry.catalog === 'pages').length, components: historicalManifest.filter(entry => entry.catalog === 'components').length })
     expect(pageSlice.before.counts.total - pageSlice.after.counts.total).toBe(removedPages.length)
     expect(pageSlice.review.addedBaselines).toEqual([])
     expect(new Set(pageSlice.review.obsoleteBaselines)).toEqual(new Set(removedPages))

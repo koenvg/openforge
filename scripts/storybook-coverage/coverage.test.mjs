@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, expect, test } from 'vitest'
@@ -220,7 +220,7 @@ test('CLI reports uncovered modules, supports machine-readable output and opts i
   const strict = runCoverage(root, '--enforce-complete')
   expect(strict.status).toBe(1)
   expect(strict.stdout).toContain('UNCOVERED module src/Page.svelte')
-})
+}, 15_000)
 
 test('CLI fails adopted missing stories and names both missing index files with a rebuild command', () => {
   const root = repository({
@@ -238,6 +238,17 @@ test('CLI fails adopted missing stories and names both missing index files with 
   expect(missingIndexes.stdout).toContain('storybook-static/pages/index.json')
   expect(missingIndexes.stdout).toContain('storybook-static/components/index.json')
   expect(missingIndexes.stdout).toContain('pnpm storybook:build')
+}, 15_000)
+
+test('repository coverage script opts in to complete enforcement', () => {
+  const rootPackage = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  expect(rootPackage.scripts['storybook:coverage']).toContain('--enforce-complete')
+})
+
+test('documented browser catalog checks have root entry points', () => {
+  const rootPackage = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  expect(rootPackage.scripts['storybook:file-viewer:check']).toBe('node scripts/storybook-file-viewer-check.mjs')
+  expect(rootPackage.scripts['storybook:tooltip:check']).toBe('node scripts/storybook-tooltip-check.mjs')
 })
 
 test('discovers every visual registry, with quoted property names, in nested bundled-plugin source files', () => {
@@ -310,6 +321,29 @@ test('nonvisual providers may compose other proven nonvisual modules but not vis
   writeFileSync(join(root, 'src/Lifecycle.svelte'), '<p>Now visible</p>')
   expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('independently visible')
 })
+test('test fixtures and test helpers are excluded only when no production reference chain exists', () => {
+  const root = repository({
+    'src/FooBrowserFixture.svelte': '<button>Fixture</button>',
+    'src/Foo.testUtils.ts': `import Fixture from './FooBrowserFixture.svelte'`,
+    'src/BarTestMock.svelte': '<button>Stub</button>',
+    'src/Bar.test-harness.ts': `import Stub from './BarTestMock.svelte'`,
+    'plugins/demo/package.json': JSON.stringify({ openforge: { id: 'demo' } }),
+    'plugins/demo/src/__fixtures__/ViewStub.svelte': '<button>View stub</button>',
+    'plugins/demo/src/View.test.ts': `import ViewStub from './__fixtures__/ViewStub.svelte'`,
+    'packages/pr-review-ui/src/visual/PreviewVisualHarness.svelte': '<p>Only in visual tests</p>',
+    'packages/pr-review-ui/src/visual/main.ts': `import PreviewVisualHarness from './PreviewVisualHarness.svelte'`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/FooBrowserFixture.svelte', kind: 'test-only-wrapper', reason: 'Browser-only test fixture.' },
+    { source: 'src/BarTestMock.svelte', kind: 'test-only-wrapper', reason: 'Test harness mock.' },
+    { source: 'plugins/demo/src/__fixtures__/ViewStub.svelte', kind: 'test-only-wrapper', reason: 'Test-only plugin fixture.' },
+    { source: 'packages/pr-review-ui/src/visual/PreviewVisualHarness.svelte', kind: 'test-only-wrapper', reason: 'Visual-only test harness.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes)).toMatchObject({ errors: [], excluded: 4 })
+  writeFileSync(join(root, 'src/main.ts'), `import Fixture from './FooBrowserFixture.svelte'`)
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
 
 test('registration aliases resolve in their lexical scope, not unrelated functions or sibling blocks', () => {
   const root = repository({

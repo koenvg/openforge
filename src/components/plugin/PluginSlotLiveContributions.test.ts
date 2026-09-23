@@ -8,7 +8,7 @@ import {
 } from '../../lib/plugin/pluginRegistryTestSupport'
 import { publishTaskInvalidation } from '../../lib/plugin/pluginTaskInvalidations'
 import PluginSlot from './PluginSlot.svelte'
-import PluginSlotLifecycleView from './PluginSlotLifecycleView.svelte'
+import PluginSlotLifecycleView from './PluginSlotLifecycleTestView.svelte'
 
 const pluginId = 'live-contributions'
 const registrations = {

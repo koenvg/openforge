@@ -18,7 +18,7 @@ import {
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import TaskDetailPluginTestView from './TaskDetailPluginTestView.svelte'
 import TaskDetailLifecyclePluginTestView from './TaskDetailLifecyclePluginTestView.svelte'
-import PluginSlotCrashingView from '../plugin/PluginSlotCrashingView.svelte'
+import PluginSlotCrashingView from '../plugin/PluginSlotCrashingTestView.svelte'
 import TaskDetailProviderHost from './TaskDetailProviderHost.svelte'
 import TaskDetailView from './TaskDetailView.svelte'
 

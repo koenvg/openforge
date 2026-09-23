@@ -1,12 +1,12 @@
 # Review screenshot changes
 
-The manifest includes foundation, task workspace, host chrome, Plugin SDK, terminal, navigation/search, and Task Browser cases. See [task workspaces](storybook-task-workspaces.md), [host chrome and feedback](storybook-host-chrome.md), [SDK composite layouts](storybook-sdk-composites.md), [navigation workflows](storybook-navigation.md), and [Task Browser](storybook-task-browser.md) for their adopted states and interaction checks. It does not enforce coverage of the remaining Storybook catalog.
+The manifest selects reviewed, design-significant cases from both catalogs. It covers supported OpenForge Light and Dark themes and representative narrow and wide viewports; Workshop themes remain available in native Storybook but have no approved baseline. A story can exist without a canonical screenshot when another selected case covers its appearance and a rendered assertion covers its behavior. Check inventory and the [coverage guide](storybook-coverage.md) before dropping or adding an image.
 
 For Task Creation, prompt editing, Project Setup, and branch-divergence dialogs, see [the creation/setup catalog](storybook-creation-setup.md).
 
 ## Icon-button tooltip checks
 
-After `pnpm storybook:build`, run `node scripts/storybook-tooltip-check.mjs`. It starts the built Storybook server and checks default positioning, edge wrapping, unavailable controls, opt-out, dialogs, and menus in all four themes, plus keyboard/click counts, reduced motion, narrow toolbars, and first-touch activation. Screenshots and results go to `artifacts/tooltips/browser`; these are review evidence, not canonical baselines.
+After `pnpm storybook:build`, run `pnpm storybook:tooltip:check`. It starts the built Storybook server and checks default positioning, edge wrapping, unavailable controls, opt-out, dialogs, and menus in all four themes, plus keyboard/click counts, reduced motion, narrow toolbars, and first-touch activation. Screenshots and results go to `artifacts/tooltips/browser`; these are review evidence, not canonical baselines.
 
 The `Components/Plugin SDK/Tooltips` stories exercise both automatic IconButton tooltips and opt-in Button tooltips. The canonical split-button keyboard snapshots include the focused menu-trigger tooltip; standalone tooltip snapshots include the eight-pixel viewport gutter.
 
@@ -67,7 +67,7 @@ The visual unit command also exercises native media capture in local Chromium. I
 3. For an intentional change, run `update`, inspect the Git image diff, then run `check` again.
 4. Commit the selected PNGs together with the story or UI change. Generated comparison artifacts stay out of Git.
 
-CI runs four case shards and one regression-probe job in the same pinned ARM Linux environment. The `smoke` aggregate gate accepts only complete, compatible evidence from every job. Download `storybook-visual-review` and open `storybook-visual-aggregate/summary.md` first. Individual reports are under `storybook-visual-input/shard-N/index.html` and `storybook-visual-input/probes/index.html`; the separately uploaded `storybook-visual-shard-N` and `storybook-visual-probes` artifacts retain the same report content when aggregation cannot download another job's artifact. Reports are retained for 14 days. See [CI parallelization evidence](ci-parallelization.md) for the compatibility map, baseline measurements, and timing protocol.
+Affected-UI CI builds both static catalogs in the coverage job, then runs the strict production/module inventory check. Four visual case shards and one regression-probe job use the pinned ARM Linux environment. The `smoke` gate requires coverage success and complete, compatible visual evidence. Download `storybook-visual-review` and open `storybook-visual-aggregate/summary.md` first. Individual reports are under `storybook-visual-input/shard-N/index.html` and `storybook-visual-input/probes/index.html`; separately uploaded shard and probe artifacts retain reports if aggregation cannot download another job's artifact. Reports are retained for 14 days. See [CI parallelization evidence](ci-parallelization.md) for the compatibility map and timing protocol.
 ## Timing evidence
 
 Each command writes `timings.json` beside `results.json`. Child probes write their own timing files in `self-test/<probe>/`. Phase-start and phase-completion logs show progress; the final summary lists at most five slowest captures.
@@ -81,6 +81,8 @@ Handled failures retain timing evidence for work already attempted. Invalid envi
 ## Snapshot selection and coverage inventory
 
 `storybook/visual-coverage-inventory.json` records all 502 identities from revision `f4b94552f7f8e51dd2eadc7a439189bc05b2cb06`. Each entry states its visual risk and why it remains, which retained screenshot replaces it, or which upstream change removed it. The inventory test reconciles retained and replacement identities to the current manifest, confirms that replaced isolated stories still exist, and protects runner representatives and documented regressions. The `before` and `after` fields retain KVG-5141/KVG-5142 timing history; `pageSlice` records the later KVG-5143 comparison.
+
+KVG-4704 adds 13 selected cases without altering the historical 419-case page-curation measurement. `additionalSelections` and `additionalPageFamilies` in the inventory record each new identity and its risk separately; current manifest totals are 432 (221 pages, 211 components). They sample the real App and its modal, both-theme PR review queue, walkthrough and repository filters, a review conversation and detached threads, plugin inventory/discovery/slot, and media navigation. Other new stories rely on these selected appearances or existing terminal, review, and host-frame baselines plus rendered assertions.
 
 Use these rules when curating later component and page families:
 
@@ -132,6 +134,8 @@ Both complete runs passed on the same Apple M5 MacBook Air (10 cores, 32 GiB), D
 The parent goal of roughly 200–250 cases is not reachable in this page-only slice without dropping distinct coverage. The manifest still has 205 component cases, leaving room for only 45 page cases at a 250-case total, across more than 20 page families. The 214 retained page cases include narrow and overflow views, media formats, terminal states, focused dialogs, plugin settings, feedback overlays, and named raster probes. Reaching 250 from here would require removing another 169 cases. None of those removals was approved as redundant by this review.
 
 Validation caveat: the optional `RUN_STORYBOOK_CREATION=1` same-document suite failed twice in the unchanged `components-prompt-input--cancel` story after its page-creation pass. KVG-5222 tracks that independent story interaction. The full canonical visual run, root tests with three workers, and focused page browser checks passed; no capture readiness or tolerance was loosened.
+
+KVG-4704 resolved that interaction: Escape now dismisses Prompt Input suggestions without inventing a cancellation callback, and the creation browser suite passes. The earlier KVG-5143 run remains documented above as measured.
 
 ## Manifest contract
 

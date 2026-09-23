@@ -4185,5 +4185,24 @@
       "risk": "Canonical components appearance for components-github-sync-walkthrough-button--ready in openforge-light at 480x320.",
       "rationale": "Removed upstream by KVG-2290 as stale walkthrough coverage before KVG-5141 was rebased onto main."
     }
+  ],
+  "additionalPageFamilies": {
+    "pages-application": "Real application board and its app-owned creation dialog establish the desktop shell layout in both themes.",
+    "pages-pull-request-review": "Global review queue, ready walkthrough diff, and repository-filter dialog preserve page-specific review navigation."
+  },
+  "additionalSelections": [
+    { "identity": "pages/pages-application--board--openforge-light--1280x900", "risk": "Real application board chrome and content placement in light theme.", "rationale": "The actual App shell is now covered, beyond the isolated shell frame." },
+    { "identity": "pages/pages-application--board--openforge-dark--1280x900", "risk": "Dark application board chrome and project contrast.", "rationale": "Pair the real App shell with its dark-theme appearance." },
+    { "identity": "pages/pages-application--new-task--openforge-light--1280x900", "risk": "App-owned creation modal placement above the real board.", "rationale": "The dialog is launched through App rather than a separate page frame." },
+    { "identity": "pages/pages-pull-request-review--review-queue--openforge-light--1280x900", "risk": "Global pull-request review queue row layout.", "rationale": "Capture the actual plugin page alongside its host navigation." },
+    { "identity": "pages/pages-pull-request-review--review-queue--openforge-dark--1280x900", "risk": "Dark review queue cards and host contrast.", "rationale": "Pair the global queue with its dark-theme appearance." },
+    { "identity": "pages/pages-pull-request-review--walkthrough--openforge-light--1280x900", "risk": "Walkthrough concept navigation and changed-file diff layout.", "rationale": "The ready walkthrough mounts its real diff and AI-question panel." },
+    { "identity": "pages/pages-pull-request-review--repository-filters--openforge-light--1280x900", "risk": "Review repository filter dialog geometry and overlay placement.", "rationale": "Filtering is a distinct review-page interaction state." },
+    { "identity": "components/components-review-comment-thread--conversation--openforge-light--640x540", "risk": "Review conversation and inline reply layout.", "rationale": "The real thread expands its GitHub reply editor in play." },
+    { "identity": "components/components-installed-plugin-inventory--installed--openforge-light--720x650", "risk": "Installed plugin card, controls, and diagnostics layout.", "rationale": "The seeded inventory renders the real global plugin management controls." },
+    { "identity": "components/components-plugin-folder-discovery--installable--openforge-light--720x480", "risk": "Discovered installable plugin and local folder treatment.", "rationale": "The folder scanner response produces a real installable package row." },
+    { "identity": "components/components-plugin-settings-slot--global--openforge-light--720x420", "risk": "Registered global settings contribution inside the plugin slot.", "rationale": "The host renders a locally registered contribution through the real settings slot." },
+    { "identity": "components/components-review-media-viewer--images--openforge-light--1000x720", "risk": "Review media dialog and image navigation.", "rationale": "The viewer advances to the second image before the approved capture." },
+    { "identity": "components/components-orphaned-review-threads--detached--openforge-light--720x480", "risk": "Detached review thread grouping and reason text.", "rationale": "The orphaned-thread region is distinct from an anchored conversation." }
   ]
 }

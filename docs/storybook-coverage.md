@@ -9,11 +9,26 @@ pnpm storybook:coverage:test
 pnpm storybook:coverage:check
 ```
 
-The coverage command reads both `storybook-static/pages/index.json` and `storybook-static/components/index.json`. Rebuild after changing stories; the checker does not build or determine whether an existing build is fresh. It fails for invalid inventory entries, duplicate assignments, invalid exclusions, missing indexes, and missing or renamed story IDs. Diagnostics identify the catalog, production source or plugin contribution, and story ID. Docs entries do not count as stories.
+`storybook:coverage` requires zero uncovered visual modules and contributions. It reads both built `index.json` files and fails for missing or renamed story IDs, duplicate assignments, invalid exclusions, and unclassified sources. Rebuild after editing stories; the checker does not build or check whether an old build is fresh. Diagnostics name the catalog and production source or plugin contribution. Docs entries do not count. `pnpm --silent storybook:coverage --json` prints the complete report for tooling.
 
-Coverage is currently incremental. A successful command means the adopted entries are valid, **not that the repository has complete story coverage**. Every unassigned item prints an `UNCOVERED` line. `pnpm storybook:coverage --json` returns the complete report for tooling. Use `pnpm --silent storybook:coverage --json` when redirecting output to a JSON file.
+`storybook:coverage` is fail-closed: every discovered visual module and plugin contribution needs a real catalog story or a verified nonvisual/test-only exclusion. Keep both catalogs freshly built before checking.
 
-KVG-4704, the final catalog delivery ticket, owns enabling full-repository enforcement. `pnpm storybook:coverage --enforce-complete` previews that gate now and fails while any item remains uncovered. Do not enable it in the default root command or CI during incremental adoption.
+## Develop and build either catalog
+
+Run one development server at a time or both on separate ports:
+
+```sh
+pnpm storybook:pages
+pnpm storybook:components
+pnpm storybook:build:pages
+pnpm storybook:build:components
+```
+
+The pages catalog runs on port 6006, the components catalog on 6007. Their static indexes and assets live in separate `storybook-static/pages` and `storybook-static/components` directories. `pnpm storybook:build` builds both before coverage validation. The root scripts are the supported entry points; builds do not need Electron, a backend, or a live plugin service.
+
+Put page destinations and visual plugin registrations in `storybook/stories/pages`. Put standalone controls and reusable visual parts in `storybook/stories/components`. Use production components inside the shared host frames, not lookalike markup. A story owns a named resting state with controlled time and local adapters: populated, empty, loading, failure, disabled, narrow, and overflow where they change behavior or layout. State changes belong in story args or `parameters.openforge` and `play` interactions; do not mutate shared stores without resetting them. `storybook/shared/storyEnvironmentPreview` installs a fresh scenario for each render and tears it down on exit. See the subsystem story guides for their fixtures and interaction commands.
+
+The `pages` and `components` arrays in `storybook/coverage-inventory.mjs` assign each production `.svelte` module once, with real IDs from its built catalog. A separate `pages` entry owns each visual bundled-plugin registration. Source discovery also includes test wrappers, which need a justified `test-only-wrapper` exclusion rather than silent filtering. `nonvisual-provider` and `registration-shim` exclusions are allowed only when the parser proves they render no independent UI; visual contributions cannot be excluded. The checker also rejects a test-only wrapper referenced by production. When a module has no actual story, keep it uncovered and make the check fail rather than attaching an unrelated ID.
 
 ## Add an inventory entry
 
@@ -71,9 +86,9 @@ Visual contributions cannot be excluded. Neither complexity, missing adapters, p
 
 ## Foundation adoption
 
-The initial inventory adopts Application Shell, Focus Board, Task Detail, Self Review, and the SDK Button, including their existing declared states. It deliberately adds no exclusions. The initial report contains 243 uncovered items: 232 Svelte modules and 11 visual plugin contributions. Discovery, not these counts, is authoritative as the repository changes.
+The foundation originally adopted Application Shell, Focus Board, Task Detail, Self Review, and the SDK Button. Its historical report had 243 uncovered items. Discovery and the current strict check, not that count, are authoritative.
 
-Catalog-ready fixtures, story-environment fixtures, and placeholder host-frame examples are infrastructure, not proof of production plugin coverage. The real Focus Board host-frame story is included in its page assignment. Subsystem catalog tickets own the remaining production stories; KVG-4704 completes inventory adoption and enforcement.
+Catalog-ready fixtures, story-environment fixtures, and placeholder host-frame examples are infrastructure, not proof of production plugin coverage. The real Focus Board host-frame story counts for its page assignment. Missing production UI remains visible in the strict coverage report until a real story is added.
 
 `infrastructure-host-frames--plugin-page` is the foundation exception: it mounts File Viewer's exported `FilesViewComponent` in `PageFrame` with the plugin API and context, reads a local directory fixture, and opens a file into its preview. Its play check verifies both the visible contents and the filesystem API requests. The scenario resets the plugin's file-selection stores between renders. Task pane, settings, row-action, and status examples remain explicitly named layout placeholders and have no production contribution assignments.
 
@@ -83,7 +98,7 @@ KVG-4697 supplies the full File Viewer catalog and inventory entries described b
 
 File Viewer owns its page and Task-pane contributions plus its six visible child modules. Shared SDK controls remain owned by the SDK catalog. Stories use the production components and host frames with an in-memory plugin filesystem; no workspace files are opened or changed.
 
-After building both catalogs, run `node scripts/storybook-file-viewer-check.mjs` to check every File Viewer story in Chromium, including play interactions, video metadata, repeated remounts, and same-document story switching. Unexpected console diagnostics and external requests fail the check. Evidence goes to `artifacts/file-viewer/browser`. These native checks do not replace the canonical screenshot commands.
+After building both catalogs, run `pnpm storybook:file-viewer:check` to check every File Viewer story in Chromium, including play interactions, video metadata, repeated remounts, and same-document story switching. Unexpected console diagnostics and external requests fail the check. Evidence goes to `artifacts/file-viewer/browser`. These native checks do not replace the canonical screenshot commands.
 
 Fixture edits, selections, pending operations, and saved panel widths reset through the shared story environment. `storybook/shared/fileViewerStories.test.ts` exercises the same lifecycle through portable stories, including fixture edits through the plugin API.
 

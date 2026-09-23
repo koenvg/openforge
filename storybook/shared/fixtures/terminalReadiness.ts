@@ -37,7 +37,7 @@ export async function terminalReady(context: TerminalStoryContext, expectedText 
   })
   // Local replay requests a steady ANSI cursor. Keep focus deterministic too.
   const input = [...context.canvasElement.querySelectorAll<HTMLTextAreaElement>('.xterm-helper-textarea')]
-    .find(element => element.checkVisibility())
+    .find(element => element.checkVisibility({ visibilityProperty: true }))
   input?.focus()
   // xterm auto-hides its scrollbars with a timer, not a CSS animation. Hover
   // through the public interaction boundary so overflow stays visibly scrollable.

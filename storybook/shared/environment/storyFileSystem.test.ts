@@ -17,6 +17,7 @@ describe('story plugin filesystem', () => {
     entries.length = 0
     expect(await adapter.api.fs.task.readDir({ taskId: 'T-42', path: null })).toHaveLength(1)
     await adapter.api.fs.writeFile({ ...request, content: 'Edited' })
+    await expect(adapter.api.fs.task.readDocument({ taskId: 'T-42', path: 'hello.txt' })).rejects.toThrow('DOCUMENT_PREVIEW_NOT_FOUND')
     expect((await adapter.api.fs.readFile(request)).content).toBe('Edited')
     await adapter.reset()
     expect((await adapter.api.fs.readFile(request)).content).toBe('Original')
