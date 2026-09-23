@@ -47,6 +47,14 @@ pub struct PullRequest {
     pub extra: serde_json::Value,
 }
 
+/// Fields present only in the PR detail response, shared by search and event refreshes.
+pub(crate) struct PrDetailFields {
+    pub base_ref: String,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changed_files: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PullRequestTerminalState {
     Closed,
@@ -54,6 +62,33 @@ pub(crate) enum PullRequestTerminalState {
 }
 
 impl PullRequest {
+    pub(crate) fn detail_fields(&self) -> PrDetailFields {
+        PrDetailFields {
+            base_ref: self
+                .extra
+                .get("base")
+                .and_then(|base| base.get("ref"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("main")
+                .to_string(),
+            additions: self
+                .extra
+                .get("additions")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0),
+            deletions: self
+                .extra
+                .get("deletions")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0),
+            changed_files: self
+                .extra
+                .get("changed_files")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0),
+        }
+    }
+
     pub(crate) fn terminal_state(&self) -> Option<PullRequestTerminalState> {
         let state = self.state.to_ascii_lowercase();
         if state == "open" {

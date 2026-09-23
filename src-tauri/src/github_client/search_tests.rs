@@ -78,6 +78,71 @@ async fn authored_and_review_searches_return_more_than_100_prs() {
 }
 
 #[tokio::test]
+async fn search_keeps_search_item_fields_and_reads_detail_defaults() {
+    let mut first = search_item(1);
+    first["title"] = "Search title".into();
+    first["body"] = "Search body".into();
+    first["created_at"] = "search-created".into();
+    first["labels"] = serde_json::json!([{"name": "search"}]);
+    let client = client_for(
+        Router::new()
+            .route("/search/issues", get(search_page))
+            .with_state(Arc::new(vec![serde_json::json!({
+                "total_count": 2, "items": [first, search_item(2)]
+            })]))
+            .route(
+                "/repos/acme/widgets/pulls/:number",
+                get(|Path(number): Path<i64>| async move {
+                    let mut response = detail(Path(number)).await.0;
+                    response["title"] = "Detail title".into();
+                    response["body"] = "Detail body".into();
+                    response["created_at"] = "detail-created".into();
+                    if number == 1 {
+                        response["base"] = serde_json::json!({"ref": "release"});
+                        response["additions"] = 12.into();
+                        response["deletions"] = 3.into();
+                        response["changed_files"] = 2.into();
+                    } else {
+                        response["base"] = serde_json::json!({"ref": 42});
+                        response["additions"] = "unknown".into();
+                        response["deletions"] = serde_json::Value::Null;
+                        response["changed_files"] = 1.5.into();
+                    }
+                    Json(response)
+                }),
+            ),
+    )
+    .await;
+    let snapshot = client.search_authored_prs("alice", "token").await.unwrap();
+    assert_eq!(snapshot.ids, vec![1, 2]);
+    let [populated, defaulted] = snapshot.prs.as_slice() else {
+        panic!("expected two PRs")
+    };
+    assert_eq!(populated.title, "Search title");
+    assert_eq!(populated.body.as_deref(), Some("Search body"));
+    assert_eq!(populated.created_at, "search-created");
+    assert_eq!(populated.labels[0].name, "search");
+    assert_eq!(populated.base_ref, "release");
+    assert_eq!(
+        (
+            populated.additions,
+            populated.deletions,
+            populated.changed_files
+        ),
+        (12, 3, 2)
+    );
+    assert_eq!(defaulted.base_ref, "main");
+    assert_eq!(
+        (
+            defaulted.additions,
+            defaulted.deletions,
+            defaulted.changed_files
+        ),
+        (0, 0, 0)
+    );
+}
+
+#[tokio::test]
 async fn partial_detail_failure_is_an_error_and_retried_after_search_304() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let attempts = Arc::new(AtomicUsize::new(0));
