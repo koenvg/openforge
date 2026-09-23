@@ -24,10 +24,19 @@ it('runs visual unit coverage and regression probes exactly once in a dedicated 
   expect(probes).toContain('name: storybook-visual-probes')
   expect(probes).toContain('if: always()')
 })
+it('builds both catalogs and blocks the aggregate gate when complete inventory coverage fails', () => {
+  const coverage = job('catalog-coverage')
+  expect(coverage).toContain('pnpm storybook:build')
+  expect(coverage).toContain('pnpm storybook:coverage')
+  expect(coverage).toContain('pnpm storybook:coverage:check')
+  expect(job('smoke')).toContain('needs: [catalog-coverage, visual-shards, visual-probes]')
+  expect(readFileSync(new URL('./aggregate.mjs', import.meta.url), 'utf8')).toContain("['catalog-coverage', 'visual-shards', 'visual-probes']")
+})
+
 
 it('preserves the smoke gate identity and fails closed over all jobs and evidence', () => {
   const aggregate = job('smoke')
-  expect(aggregate).toContain('needs: [visual-shards, visual-probes]')
+  expect(aggregate).toContain('needs: [catalog-coverage, visual-shards, visual-probes]')
   expect(aggregate).toContain('if: always()')
   expect(aggregate).toContain('VISUAL_NEEDS: ${{ toJSON(needs) }}')
   expect(aggregate).toContain('node scripts/storybook-visual/aggregate.mjs')

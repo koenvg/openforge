@@ -31,7 +31,7 @@ try {
   needs = {}
   issues.push('invalid VISUAL_NEEDS metadata')
 }
-for (const job of ['visual-shards', 'visual-probes']) {
+for (const job of ['catalog-coverage', 'visual-shards', 'visual-probes']) {
   const result = needs[job]?.result
   if (result !== 'success') issues.push(`${job} result is ${describe(result)}`)
 }

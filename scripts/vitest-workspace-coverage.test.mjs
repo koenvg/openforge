@@ -84,8 +84,9 @@ describe('root Vitest workspace coverage', () => {
     expect(coveredGeneratedSuites).toEqual([])
   })
 
-  it('reserves worker headroom for async test timers during full-suite runs', () => {
-    expect(vitestConfig.test?.maxWorkers).toBe('60%')
+  it('bounds workers and allows overloaded async timers to complete during full-suite runs', () => {
+    expect(vitestConfig.test?.maxWorkers).toBe(2)
+    expect(vitestConfig.test?.testTimeout).toBe(15_000)
   })
 
   it('runs every renderer suite in the thread pool', async () => {

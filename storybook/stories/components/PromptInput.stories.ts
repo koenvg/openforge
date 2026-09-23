@@ -5,7 +5,7 @@ import { creationScenario, longCreationPrompt } from '../../shared/fixtures/crea
 
 const meta = {
   title: 'Components/Prompt Input', component: PromptInput,
-  args: { projectId: 'project-1', value: '', ariaLabel: 'Task prompt', containerClass: 'm-6 max-w-2xl', rows: 8, onSubmit: fn(), onCancel: fn(), onValueChange: fn() },
+  args: { projectId: 'project-1', value: '', ariaLabel: 'Task prompt', containerClass: 'm-6 max-w-2xl', rows: 8, onSubmit: fn(), onValueChange: fn() },
   parameters: { openforge: creationScenario('task') },
   beforeEach: (context) => {
     delete context.canvasElement.ownerDocument.body.dataset.creationReady
@@ -56,10 +56,16 @@ export const FileMention: Story = {
   },
 }
 export const Cancel: Story = {
-  play: async ({ canvasElement, args, id }) => {
-    await userEvent.click(within(canvasElement).getByRole('textbox', { name: 'Task prompt' }))
+  name: 'Dismiss suggestions',
+  play: async ({ canvasElement, id }) => {
+    const canvas = within(canvasElement)
+    const input = canvas.getByRole('textbox', { name: 'Task prompt' })
+    await userEvent.type(input, '/')
+    await canvas.findByRole('option', { name: /review/ })
     await userEvent.keyboard('{Escape}')
-    await expect(args.onCancel).toHaveBeenCalledTimes(1)
+    await expect(canvas.queryByRole('option')).not.toBeInTheDocument()
+    await expect(input).toHaveValue('/')
+    await expect(input).toHaveFocus()
     canvasElement.ownerDocument.body.dataset.creationReady = id
   },
 }

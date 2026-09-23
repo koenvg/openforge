@@ -18,7 +18,7 @@ import {
 } from '../../lib/plugin/projectDashboardProviders'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import ProjectDashboardPluginTestView from './ProjectDashboardPluginTestView.svelte'
-import PluginSlotCrashingView from '../plugin/PluginSlotCrashingView.svelte'
+import PluginSlotCrashingView from '../plugin/PluginSlotCrashingTestView.svelte'
 import TaskDetailPluginTestView from '../task-detail/TaskDetailPluginTestView.svelte'
 import ProjectDashboardProviderHost from './ProjectDashboardProviderHost.svelte'
 import FocusBoard from './FocusBoard.svelte'

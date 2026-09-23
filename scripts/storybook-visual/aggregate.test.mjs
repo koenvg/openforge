@@ -46,7 +46,7 @@ function run(change = () => {}, rawNeeds) {
     'shard-4': evidence('shard', 4),
     probes: evidence('probes'),
   }
-  const needs = { 'visual-shards': { result: 'success' }, 'visual-probes': { result: 'success' } }
+  const needs = { 'catalog-coverage': { result: 'success' }, 'visual-shards': { result: 'success' }, 'visual-probes': { result: 'success' } }
   change(reports, needs)
   for (const [name, report] of Object.entries(reports)) {
     mkdirSync(join(input, name), { recursive: true })
@@ -71,6 +71,12 @@ it.each(['failure', 'cancelled', 'skipped', undefined])('rejects %s shard job me
   const result = run((_reports, needs) => { needs['visual-shards'].result = state })
   expect(result.status).toBe(1)
   expect(readFileSync(join(result.output, 'summary.md'), 'utf8')).toContain(`visual-shards result is ${state ?? 'missing'}`)
+})
+
+it.each(['failure', 'cancelled', 'skipped', undefined])('rejects %s coverage job metadata even when visuals pass', state => {
+  const result = run((_reports, needs) => { needs['catalog-coverage'].result = state })
+  expect(result.status).toBe(1)
+  expect(readFileSync(join(result.output, 'summary.md'), 'utf8')).toContain(`catalog-coverage result is ${state ?? 'missing'}`)
 })
 
 it.each(['failure', 'cancelled', 'skipped', undefined])('rejects %s probe job metadata even when artifacts look successful', state => {

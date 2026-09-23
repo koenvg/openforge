@@ -5,7 +5,7 @@ import type { ReviewThread } from '@openforge-app/plugin-sdk'
 import DiffViewer from './DiffViewer.svelte'
 
 vi.mock('@git-diff-view/svelte', async () => {
-  const { default: ExtendLineDiffViewMock } = await import('./ExtendLineDiffViewMock.svelte')
+  const { default: ExtendLineDiffViewMock } = await import('./ExtendLineDiffViewTestMock.svelte')
   return {
     DiffView: ExtendLineDiffViewMock,
     DiffModeEnum: { Split: 0, Unified: 1 },

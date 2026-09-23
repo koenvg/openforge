@@ -24,7 +24,7 @@ function files(root, path) {
 
 /** @param {string} source */
 export function isTestSource(source) {
-  return /(?:^|\/)(?:__tests__|test-fixtures|testing)(?:\/)|(?:\.test|\.spec|\.testFixture|TestWrapper|TestView|TestMock)(?:\.|\/)/.test(source)
+  return /(?:^|\/)(?:__tests__|__fixtures__|test-fixtures|testing)(?:\/)|(?:\.test-fixtures)(?:\/)|^(?:packages\/pr-review-ui\/src\/visual|src\/components\/shared\/ui\/visual)\/|(?:\.test|\.spec|\.testFixture|\.testUtils|\.test-harness|TestWrapper|TestView|TestMock|BrowserFixture|KeyboardFixture|ThemeFixture|VisualHarness)(?:\.|\/)/.test(source)
 }
 
 /**

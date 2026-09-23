@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 
 import PluginSlot from './PluginSlot.svelte'
-import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'
+import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsTestView.svelte'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { activatePlugin } from '../../lib/plugin/pluginRegistry'
 import { clearComponentRegistry } from '../../lib/plugin/componentRegistry'

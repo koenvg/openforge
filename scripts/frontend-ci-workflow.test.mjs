@@ -6,7 +6,7 @@ import config from '../vitest.config.ts'
 const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const job = name => workflow.split(`\n  ${name}:\n`)[1]?.split(/\n  [\w-]+:\n/)[0] ?? ''
 
-it('runs three independent shards with complete local prerequisites and unchanged workers', () => {
+it('runs three independent shards with complete local prerequisites and configured workers', () => {
   const shards = job('frontend-shards')
   expect(shards).toContain('fail-fast: false')
   expect(shards).toContain('shard: [1, 2, 3]')
@@ -18,7 +18,8 @@ it('runs three independent shards with complete local prerequisites and unchange
   expect(shards).toContain('pnpm test --shard=${{ matrix.shard }}/3')
   expect(shards).not.toContain('--project')
   expect(shards).not.toContain('--maxWorkers')
-  expect(config.test.maxWorkers).toBe('60%')
+  expect(config.test.maxWorkers).toBe(2)
+  expect(config.test.testTimeout).toBe(15_000)
 })
 
 it('preserves the required aggregate identity, legacy artifacts, static checks and package gate', () => {

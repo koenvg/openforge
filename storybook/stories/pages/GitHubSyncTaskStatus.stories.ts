@@ -36,7 +36,7 @@ const meta = {
 } satisfies Meta<typeof TaskPullRequestStatus>
 
 export default meta
-type Story = StoryObj<typeof meta>
+type Story = StoryObj<{ taskActionPending?: boolean }>
 
 export const Populated: Story = {
   play: async ({ canvasElement }) => {

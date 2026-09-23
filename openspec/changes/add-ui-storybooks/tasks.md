@@ -34,7 +34,7 @@ This ticket adds the attention destination from 4.3, the host board/task-workspa
 
 - [x] 4.1 Add Focus Board page stories for populated, empty, loading, failure, attention, filtered, narrow, and overflow scenarios, then verify the page catalog build renders every declared story without console errors.
 - [x] 4.2 Add Task Detail and Self Review page stories for backlog, active, waiting, failed, completed, dependency, terminal, review, and long-content scenarios, then verify their interaction checks reach the declared states using local adapters. Include the approved Self Review disposal guard and mount/unmount regression test.
-- [ ] 4.3 Add project settings, global settings, project setup, project switching, command/action palettes, file quick-open, attention overview, and application dialog stories in their production host frames, then verify the page catalog build and declared interactions pass.
+- [x] 4.3 Add project settings, global settings, project setup, project switching, command/action palettes, file quick-open, attention overview, and application dialog stories in their production host frames, then verify the page catalog build and declared interactions pass.
 - [ ] 4.4 Add File Viewer and Terminal plugin stories for their full-page and task-pane contributions, including empty, populated, loading, failure, and unavailable-runtime states, then verify they render without real filesystem or PTY access.
 - [ ] 4.5 Add GitHub Sync plugin stories for pull-request pages, review detail, walkthrough, Jira settings, row actions, and task status contributions, then verify populated, empty, loading, disconnected, and failure scenarios render without network access.
 - [ ] 4.6 Add Task Schedules, Task Browser, and demo plugin stories for every visual contribution and relevant state, then verify schedules use the local backend adapter and browser stories use the testing browser-surface adapter.
@@ -55,20 +55,20 @@ This ticket adds the attention destination from 4.3, the host board/task-workspa
 
 - [x] 6.1 Write failing tests for source discovery, page and component inventory entries, duplicate assignments, and non-empty exclusion reasons, then implement the typed coverage inventory validator until the tests pass.
 - [x] 6.2 Add failing tests for missing and renamed Storybook IDs, then validate inventory entries against each static Storybook index and verify diagnostics identify the catalog, source path, and missing story ID.
-- [ ] 6.3 Populate the inventory for all host, package, and bundled-plugin Svelte files and visual contributions, record only allowed non-visual exclusions, then verify `pnpm storybook:coverage` passes with no unclassified source modules or contributions.
+- [x] 6.3 Populate the inventory for all host, package, and bundled-plugin Svelte files and visual contributions, record only allowed non-visual exclusions, then verify `pnpm storybook:coverage` passes with no unclassified source modules or contributions. KVG-4704: 223 covered, 43 excluded, zero uncovered/errors.
 
 ## 7. Repository visual snapshots
 
-- [ ] 7.1 Write failing tests for visual manifest validation, stable image naming, duplicate cases, readiness timeouts, and stale baseline detection, then implement the manifest loader until the tests pass.
-- [ ] 7.2 Write failing tests for PNG comparison and report generation, then implement the Playwright capture and Pixelmatch comparison runner so failures retain baseline, current, and difference images under stable identifiers.
+- [x] 7.1 Write failing tests for visual manifest validation, stable image naming, duplicate cases, readiness timeouts, and stale baseline detection, then implement the manifest loader until the tests pass.
+- [x] 7.2 Write failing tests for PNG comparison and report generation, then implement the Playwright capture and Pixelmatch comparison runner so failures retain baseline, current, and difference images under stable identifiers.
 - [ ] 7.3 Add the pinned Linux Playwright container entrypoint and root snapshot check/update commands, then verify the same smoke snapshot has identical output on a developer machine through the container and in the CI command.
-- [ ] 7.4 Define the design-significant page snapshot matrix across themes and viewports, capture the initial approved page baselines into the repository, and verify the check command passes without modifying tracked files.
-- [ ] 7.5 Define the design-significant component snapshot matrix, capture the initial approved component baselines into the repository, and verify the check command passes without modifying tracked files.
-- [ ] 7.6 Intentionally alter one disposable fixture during a test, verify the runner fails with a reviewable before/current/difference report, restore the fixture, and verify stale, missing, and unexpected baselines also fail with actionable diagnostics.
+- [x] 7.4 Define the design-significant page snapshot matrix across themes and viewports, capture the initial approved page baselines into the repository, and verify the check command passes without modifying tracked files.
+- [x] 7.5 Define the design-significant component snapshot matrix, capture the initial approved component baselines into the repository, and verify the check command passes without modifying tracked files.
+- [x] 7.6 Intentionally alter one disposable fixture during a test, verify the runner fails with a reviewable before/current/difference report, restore the fixture, and verify stale, missing, and unexpected baselines also fail with actionable diagnostics.
 
 ## 8. CI, documentation, and completion
 
-- [ ] 8.1 Add affected-UI CI jobs for coverage validation, both static Storybook builds, and the canonical visual snapshot check, including uploaded comparison artifacts on failure, then verify the workflow configuration and local equivalent commands succeed.
-- [ ] 8.2 Document page and component development, story state conventions, coverage exclusions, native preview, canonical snapshot checking, intentional baseline updates, and review artifacts, then verify every documented command matches a root package script.
+- [x] 8.1 Add affected-UI CI jobs for coverage validation, both static Storybook builds, and the canonical visual snapshot check, including uploaded comparison artifacts on failure, then verify the workflow configuration and local equivalent commands succeed.
+- [x] 8.2 Document page and component development, story state conventions, coverage exclusions, native preview, canonical snapshot checking, intentional baseline updates, and review artifacts, then verify every documented command matches a root package script.
 - [ ] 8.3 Run all focused story infrastructure tests, affected renderer and plugin tests, root lint, both static builds, coverage validation, and canonical snapshots; record any skipped subsystem check and verify the working tree contains no generated current or difference artifacts.
 - [ ] 8.4 Run the full affected-system validation required by `CONTRIBUTING.md`, perform the required fresh-context code review, resolve or report every finding, and verify the final checked-in baselines match the completed story manifest.

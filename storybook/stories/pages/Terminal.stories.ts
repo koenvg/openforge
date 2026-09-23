@@ -35,8 +35,12 @@ export const ShellTabsAndInput: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Open new shell' }))
     await waitFor(() => expect(canvas.getAllByRole('tab')).toHaveLength(2))
     await waitFor(() => expect(context.canvasElement.querySelectorAll('.xterm-helper-textarea')).toHaveLength(2))
-    const input = canvas.getAllByRole('tabpanel')[0].querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')!
-    await userEvent.click(input)
+    await terminalReady(context)
+    const activeTab = canvas.getByRole('tab', { name: /Shell 2, active/ })
+    const panel = context.canvasElement.ownerDocument.getElementById(activeTab.getAttribute('aria-controls')!)!
+    const input = panel.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')!
+    input.focus()
+    await expect(input).toHaveFocus()
     await userEvent.keyboard('pwd{Enter}')
     await waitFor(() => expect(terminal.transport.inputs.map(input => input.data).join('')).toContain('pwd'))
     expect([...new Set(terminal.transport.inputs.map(input => input.shellSessionKey))]).toEqual(['project-P-1-shell-1'])

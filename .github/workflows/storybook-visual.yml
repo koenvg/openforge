@@ -35,6 +35,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  catalog-coverage:
+    name: Complete UI catalog coverage
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build both catalogs
+        run: pnpm storybook:build
+      - name: Validate complete production and plugin coverage
+        run: pnpm storybook:coverage
+      - name: Typecheck the coverage inventory
+        run: pnpm storybook:coverage:check
+
   visual-shards:
     name: Visual shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04-arm
@@ -103,7 +122,7 @@ jobs:
           if-no-files-found: warn
 
   smoke:
-    needs: [visual-shards, visual-probes]
+    needs: [catalog-coverage, visual-shards, visual-probes]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10

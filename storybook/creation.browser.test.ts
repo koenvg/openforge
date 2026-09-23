@@ -58,4 +58,17 @@ describe.runIf(enabled)('creation catalog browser interactions', () => {
       } finally { await context.close() }
     }
   }, 300_000)
+  it('dismisses Prompt Input suggestions with Escape and keeps the draft focused', async () => {
+    const id = 'components-prompt-input--cancel'
+    const page = await browser.newPage()
+    try {
+      await page.goto(`${server.url}/components/iframe.html?id=${id}&viewMode=story`)
+      await expect.poll(() => page.locator(`body[data-creation-ready="${id}"]`).count(), { timeout: 20_000 }).toBe(1)
+      const input = page.getByRole('textbox', { name: 'Task prompt' })
+      expect(await input.inputValue()).toBe('/')
+      expect(await input.evaluate(element => element === document.activeElement)).toBe(true)
+      expect(await page.getByRole('option').count()).toBe(0)
+    } finally { await page.close() }
+  }, 30_000)
+
 })
