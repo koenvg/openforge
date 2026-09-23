@@ -11,9 +11,11 @@ import {
 } from './project-commands.js';
 import { REVIEW_THREAD_COMMAND_SPECS } from './review-thread-commands.js';
 import { TASK_COMMAND_SPECS } from './task-commands.js';
+import { TASK_PLAN_COMMAND_SPECS } from './task-plan-commands.js';
 
 const COMMAND_SPECS = [
   ...TASK_COMMAND_SPECS,
+  ...TASK_PLAN_COMMAND_SPECS,
   PROJECT_LIST_COMMAND_SPEC,
   ...DEBUG_COMMAND_SPECS,
   PROJECT_LABELS_COMMAND_SPEC,
