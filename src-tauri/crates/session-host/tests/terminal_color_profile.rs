@@ -81,8 +81,10 @@ async fn profile_mutation_is_retry_safe_conflict_checked_and_controller_fenced()
         Arc::new(tokio::sync::Mutex::new(HostState::new())),
     );
     let first = host.connect(&installation).await.unwrap().controller;
-    let mut profile = TerminalColorProfile::default();
-    profile.foreground = TerminalRgbColor::new(1, 2, 3);
+    let profile = TerminalColorProfile {
+        foreground: TerminalRgbColor::new(1, 2, 3),
+        ..TerminalColorProfile::default()
+    };
     let operation = OperationId::parse("profile-1").unwrap();
 
     host.set_terminal_color_profile(&first, operation.clone(), profile)
@@ -126,8 +128,10 @@ async fn programmatic_profile_version_is_validated_before_backend_mutation() {
         Arc::new(tokio::sync::Mutex::new(HostState::new())),
     );
     let controller = host.connect(&installation).await.unwrap().controller;
-    let mut profile = TerminalColorProfile::default();
-    profile.version = 2;
+    let profile = TerminalColorProfile {
+        version: 2,
+        ..TerminalColorProfile::default()
+    };
 
     assert_eq!(
         host.set_terminal_color_profile(
