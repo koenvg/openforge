@@ -24,6 +24,29 @@ fn supported_large_image_keeps_replacement_available() {
 }
 
 #[test]
+fn markerless_compatible_image_reaches_prepared() {
+    let (fixture, client) = Fixture::new();
+    let image = fixture.root.path().join("markerless-image");
+    assert!(std::process::Command::new("cc")
+        .args(["-arch", "arm64", "-Wall", "-Wextra", "-Werror"])
+        .arg(format!("-DPROTOCOL_VERSION={VERSION}"))
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/replacement/markerless.c"))
+        .arg("-o")
+        .arg(&image)
+        .status()
+        .unwrap()
+        .success());
+    let operation = OperationId::parse("markerless-probe").unwrap();
+    client
+        .replacement_phase(
+            operation.clone(),
+            ReplacementPhase::Prepare { executable: image },
+        )
+        .unwrap();
+    fixture.status(operation.as_str(), "prepared");
+}
+
+#[test]
 fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() {
     let (mut fixture, client) = Fixture::new();
     let command = ShellCommand {
