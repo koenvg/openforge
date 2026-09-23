@@ -184,14 +184,17 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
 
   function write(data: string | Uint8Array, ptyInstanceId?: number | null): void {
     hasOutput ||= hasData(data)
-    presentation.recordWrite(ptyInstanceId)
-    terminal.write(data)
+    const generation = presentation.recordWrite(ptyInstanceId)
+    terminal.write(data, () => presentation.completeWrite(generation))
   }
 
 
   function writeAndWait(data: string | Uint8Array): Promise<void> {
-    presentation.recordWrite()
-    return new Promise(resolve => terminal.write(data, resolve))
+    const generation = presentation.recordWrite()
+    return new Promise(resolve => terminal.write(data, () => {
+      presentation.completeWrite(generation)
+      resolve()
+    }))
   }
 
   function hasData(data: string | Uint8Array | undefined): data is string | Uint8Array {

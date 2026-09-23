@@ -1,3 +1,5 @@
+import { Terminal } from '@xterm/xterm'
+import { createXtermPresentationController } from '../../src/xtermPresentation'
 import { createCapturedEventRecorder } from './capturedEventRecorder'
 import { getTerminalConformanceRenderer } from './rendererRegistry'
 import { getPresentationRecordings, terminalModelRecordingCorpus } from '../../src/terminalPresentationCorpus'
@@ -372,6 +374,64 @@ async function waitForInputCount(count: number): Promise<PlayResult> {
   }
 }
 
+async function runLiveWriteBatchProbe(): Promise<{ batches: number; firstBatchCompleted: number; firstRenderCompleted: number; settledAtCompletion: number; evidence: TerminalViewPresentationEvidence; screen: string }> {
+  const element = document.createElement('div')
+  element.style.cssText = 'width: 640px; height: 360px; position: absolute; left: 0; top: 0'
+  document.body.appendChild(element)
+  const terminal = new Terminal({ cols: 80, rows: 24 })
+  let presentation: ReturnType<typeof createXtermPresentationController> | undefined
+  try {
+    terminal.open(element)
+    let completed = 0
+    let batches = 0
+    let firstBatchCompleted = -1
+    let firstRenderCompleted = -1
+    const parsed = terminal.onWriteParsed(() => {
+      batches++
+      if (firstBatchCompleted === -1) firstBatchCompleted = completed
+    })
+    const rendered = terminal.onRender(() => {
+      if (batches > 0 && firstRenderCompleted === -1) firstRenderCompleted = completed
+    })
+    presentation = createXtermPresentationController({
+      terminal, rendererName: () => 'xterm-default', canPresent: () => true,
+      refresh: () => terminal.refresh(0, terminal.rows - 1),
+    })
+    // A bounded public parser handler consumes xterm's parse time budget,
+    // yielding after the first write while the target live write is queued.
+    const slowParse = terminal.parser.registerOscHandler(9, () => {
+      const deadline = performance.now() + 20
+      while (performance.now() < deadline) {}
+      return true
+    })
+    const count = 12
+    for (let index = 0; index < count; index++) {
+      const generation = presentation.recordWrite()
+      const text = index === count - 1 ? '\u001b[1;1HTARGET'
+        : index === 0 ? '\u001b[1;1HEARLY\u001b]9;slow\u0007' : '\u001b[1;1H.'
+      terminal.write(text, () => {
+        completed++
+        presentation?.completeWrite(generation)
+      })
+    }
+    let settledAtCompletion = -1
+    const drained = presentation.drain().then(result => {
+      settledAtCompletion = completed
+      return result
+    })
+    const evidence = await drained
+    const screen = terminal.buffer.active.getLine(0)?.translateToString(true) ?? ''
+    parsed.dispose()
+    slowParse.dispose()
+    rendered.dispose()
+    return { batches, firstBatchCompleted, firstRenderCompleted, settledAtCompletion, evidence, screen }
+  } finally {
+    presentation?.dispose()
+    terminal.dispose()
+    element.remove()
+  }
+}
+
 const api = {
   renderer: renderer.id,
   corpus: terminalModelRecordingCorpus,
@@ -385,6 +445,7 @@ const api = {
   runConcurrentLifecycleCycle,
   reconnect,
   runTerminalColourProfileProbe,
+  runLiveWriteBatchProbe,
   focus: () => requireView().focus(),
   drain: () => requireView().drainPresentation(),
   capture: () => requireView().capturePresentation(),

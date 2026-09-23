@@ -95,6 +95,7 @@ describe('terminal runtime acquisition', () => {
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       3,
       Uint8Array.from(new TextEncoder().encode(' later output')),
+      expect.any(Function),
     )
   })
 

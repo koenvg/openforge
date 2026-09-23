@@ -451,6 +451,28 @@ function readProcessRows() {
   }
 }
 
+async function runLiveWriteBatchConformance(browser, report) {
+  if (renderer !== 'xterm') return
+  const harness = await openHarness(browser, { surface: 'agent', theme: 'dark', dpr: 1 })
+  try {
+    const result = await runWithPhaseTimeout(
+      'live write batches',
+      harness.page.evaluate(() => window.terminalConformance.runLiveWriteBatchProbe()),
+      30_000,
+    )
+    if (result.batches < 2 || result.firstBatchCompleted >= 12) {
+      throw new Error(`live-write probe did not time-slice queued writes: ${JSON.stringify(result)}`)
+    }
+    if (result.settledAtCompletion !== 12 || result.evidence.parsedGeneration !== 12
+      || result.evidence.renderFrame < 1 || !result.screen.startsWith('TARGET')) {
+      throw new Error(`live-write drain preceded target parse/render: ${JSON.stringify(result)}`)
+    }
+    recordCheck(report, 'real-xterm-time-sliced-live-write-drain', result)
+  } finally {
+    await harness.context.close()
+  }
+}
+
 const report = {
   schemaVersion: 1,
   renderer,
@@ -478,6 +500,7 @@ try {
     args: ['--enable-precise-memory-info'],
   })
   browser = await chromium.connect(browserServer.wsEndpoint())
+  await runLiveWriteBatchConformance(browser, report)
   await runTerminalColourProfileConformance(browser, report)
   await runSemanticAndVisualMatrix(browser, report)
   await runConcurrentTerminalLifecycle(browser, report)
