@@ -69,3 +69,15 @@ export const Cancel: Story = {
     canvasElement.ownerDocument.body.dataset.creationReady = id
   },
 }
+export const CancelWithCallback: Story = {
+  name: 'Cancel with callback',
+  args: { onCancel: fn() },
+  play: async ({ canvasElement, args, id }) => {
+    const input = within(canvasElement).getByRole('textbox', { name: 'Task prompt' })
+    await userEvent.click(input)
+    await expect(input).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    await expect(args.onCancel).toHaveBeenCalledTimes(1)
+    canvasElement.ownerDocument.body.dataset.creationReady = id
+  },
+}

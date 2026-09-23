@@ -23,6 +23,7 @@
     projectId: string
     onSubmit: (prompt: string) => void
     onValueChange?: (value: string) => void
+    onCancel?: () => void
     onPasteImage?: (file: File) => string | null | void | Promise<string | null | void>
     onImageMarkerClick?: (marker: string) => void
     imageMarkerInsertRequest?: { id: number, marker: string } | null
@@ -44,6 +45,7 @@
     maxLength,
     projectId,
     onSubmit,
+    onCancel,
     onValueChange,
     onPasteImage,
     onImageMarkerClick,
@@ -247,6 +249,12 @@
       e.preventDefault()
       e.stopPropagation()
       ac.closePopover()
+      return
+    }
+    if (e.key === 'Escape' && onCancel) {
+      e.preventDefault()
+      e.stopPropagation()
+      onCancel()
       return
     }
 
