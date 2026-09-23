@@ -60,13 +60,18 @@ Optional native checks SHALL remain available as complete manual runs and SHALL 
 
 ### Requirement: Canonical Linux terminal visual conformance
 
-Terminal presentation and Markdown browser visual conformance SHALL run in a pinned Linux environment against reviewed Linux baselines. The Linux job SHALL retain the existing semantic, interaction, readiness, repeatability, pixel-tolerance, blank-output, diagnostic, and failure-artifact behavior.
+Terminal presentation and Markdown browser visual conformance SHALL run in a pinned ARM64 Linux environment against reviewed `linux-arm64` baselines. The same immutable environment SHALL support reproducible baseline update and check commands on Apple Silicon development hosts. The Linux job SHALL retain the existing semantic, interaction, readiness, repeatability, pixel-tolerance, blank-output, diagnostic, and failure-artifact behavior.
 
 #### Scenario: Browser conformance passes
 - **WHEN** the Linux terminal presentation job runs against unchanged rendering behavior
-- **THEN** it compares every declared screenshot with the approved Linux baseline
+- **THEN** it runs on an ARM64 Linux runner and compares every declared screenshot with the approved `linux-arm64` baseline
 - **AND** it runs every existing semantic and interaction assertion
 - **AND** it uploads its report and screenshots
+
+#### Scenario: Developer updates canonical baselines
+- **WHEN** a developer on an Apple Silicon host runs the documented visual update or check command
+- **THEN** it uses the same immutable ARM64 Linux image as CI
+- **AND** the generated images are directly comparable with the canonical CI baselines
 
 #### Scenario: Linux baseline inventory is invalid
 - **WHEN** an approved baseline is missing, obsolete, or differs beyond the existing tolerance

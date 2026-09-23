@@ -1,10 +1,11 @@
 import { spawnSync, execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { resolve, join } from 'node:path'
+import { PLAYWRIGHT_IMAGE } from '../playwright-image.mjs'
 import { parseVisualCommand } from './execution.mjs'
 import { resolveVisualInputs } from './inputs.mjs'
 
-export const image = 'mcr.microsoft.com/playwright:v1.62.1-noble@sha256:941cc91e5022880ac1d14ae90b476b624deb6399dbbc28d612d5d5bd7928fcbd'
+export const image = PLAYWRIGHT_IMAGE
 const { mode, shard, env } = parseVisualCommand(process.argv.slice(2))
 // Public flags are the only host-side selection API; never silently ignore overrides.
 if (['VISUAL_SHARD_INDEX', 'VISUAL_SHARD_COUNT'].some(key => process.env[key] !== undefined)) throw new Error('use --shard-index and --shard-count flags, not host environment overrides')

@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import {
+  assertTerminalPresentationEnvironment,
+  runTerminalPresentation,
+  terminalBaselineIdentity,
+} from './execution.mjs'
+import {
   assertPresentation,
   assertTerminalColourProfileProbe,
   assertTerminalScreenshotCursorAtCell,
@@ -19,10 +24,24 @@ import {
 const directory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(directory, '../../..')
 const updateBaselines = process.argv.includes('--update-baselines')
+const browserOnly = process.argv.includes('--browser-only')
 const renderer = process.argv.find(argument => argument.startsWith('--renderer='))?.slice('--renderer='.length) ?? 'xterm'
 const outputArgument = process.argv.find(argument => argument.startsWith('--output='))?.slice('--output='.length)
 const outputDirectory = resolve(repositoryRoot, outputArgument ?? 'artifacts/terminal-presentation')
-const baselineDirectory = join(directory, 'baselines', `${platform()}-${arch()}`, renderer)
+const currentPlatform = platform()
+const currentArchitecture = arch()
+assertTerminalPresentationEnvironment({
+  browserOnly,
+  platform: currentPlatform,
+  architecture: currentArchitecture,
+  image: process.env.TERMINAL_VISUAL_IMAGE,
+})
+const baselineDirectory = join(
+  directory,
+  'baselines',
+  terminalBaselineIdentity(currentPlatform, currentArchitecture),
+  renderer,
+)
 const visualBounds = { pixelThreshold: 0.15, maxDiffPixelRatio: 0.01 }
 const lifecycleVisualBounds = { pixelThreshold: 0, maxDiffPixelRatio: 0 }
 mkdirSync(outputDirectory, { recursive: true })
@@ -477,7 +496,7 @@ const report = {
   schemaVersion: 1,
   renderer,
   generatedAt: new Date().toISOString(),
-  platform: { os: platform(), arch: arch() },
+  platform: { os: currentPlatform, arch: currentArchitecture },
   fixtureCorpus: 'packages/terminal-runtime/fixtures/terminal-model-recordings.v1.json',
   checks: [],
   visual: [],
@@ -493,18 +512,23 @@ const vite = await createServer({
 let browserServer
 let browser
 try {
-  runNativeTerminalColourProfileConformance(report)
   await vite.listen()
   browserServer = await chromium.launchServer({
     headless: true,
     args: ['--enable-precise-memory-info'],
   })
   browser = await chromium.connect(browserServer.wsEndpoint())
-  await runLiveWriteBatchConformance(browser, report)
-  await runTerminalColourProfileConformance(browser, report)
-  await runSemanticAndVisualMatrix(browser, report)
-  await runConcurrentTerminalLifecycle(browser, report)
-  await runInteractionAndRecovery(browser, report, browserServer.process()?.pid)
+  await runTerminalPresentation({
+    browserOnly,
+    runNative: () => runNativeTerminalColourProfileConformance(report),
+    browserChecks: {
+      'live-write-batch': () => runLiveWriteBatchConformance(browser, report),
+      'terminal-colour-profile': () => runTerminalColourProfileConformance(browser, report),
+      'semantic-and-visual-matrix': () => runSemanticAndVisualMatrix(browser, report),
+      'concurrent-terminal-lifecycle': () => runConcurrentTerminalLifecycle(browser, report),
+      'interaction-and-recovery': () => runInteractionAndRecovery(browser, report, browserServer.process()?.pid),
+    },
+  })
   const failedVisuals = report.visual.filter(result => result.status === 'failed')
   report.status = failedVisuals.length === 0 ? 'passed' : 'failed'
 } catch (error) {

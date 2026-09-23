@@ -6,7 +6,7 @@ const workflowDirectory = join(import.meta.dirname, '..', '.github', 'workflows'
 const retiredMacosLabel = ['macos', '14'].join('-')
 
 const expectedMacosLabels = new Map([
-  ['ci.yml', Array(4).fill('macos-15')],
+  ['ci.yml', Array(3).fill('macos-15')],
   ['mobile-release.yml', ['macos-15']],
   ['native-compatibility.yml', Array(2).fill('macos-15')],
   ['packaged-session-runtime.yml', ['macos-15', 'macos-15-intel']],

@@ -6,23 +6,25 @@ The current renderer is xterm. A native libghostty renderer can join the matrix 
 
 ## Run it
 
-```sh
-pnpm terminal:presentation
-```
-
-The command writes screenshots and `report.json` to `artifacts/terminal-presentation`. Choose another output directory with `--output=path`. Select a registered renderer with `--renderer=id`.
-
-Create or refresh baselines on a machine approved for that platform:
+Run the canonical terminal and Markdown browser checks in the same pinned ARM64 Linux container as CI:
 
 ```sh
-pnpm terminal:presentation:update
+pnpm terminal:visual:check
 ```
 
-Baselines live under `baselines/<os>-<arch>/<renderer>`. Review changed PNG files before committing them. A platform without checked-in baselines still runs all semantic and interaction checks. Its report marks screenshots `unbaselined` instead of treating another platform's raster output as authoritative.
+Create or refresh the canonical Linux baselines from an Apple Silicon development host with:
+
+```sh
+pnpm terminal:visual:update
+```
+
+These commands also own Markdown visual checking and updates; `pnpm markdown:visual` and `pnpm markdown:visual:update` route through the same container. Review every changed PNG before committing it.
+
+For a native host diagnostic that also invokes the live PTY colour-profile assertion, run `pnpm terminal:presentation`. It uses `baselines/<os>-<arch>/<renderer>` and writes screenshots and `report.json` to `artifacts/terminal-presentation`. Choose another output directory with `--output=path` or a registered renderer with `--renderer=id`. `pnpm terminal:presentation:update` refreshes only that host-specific diagnostic baseline; it does not update the canonical CI images.
 
 ## CI
 
-The `terminal-presentation` CI job installs Chromium on a pinned macOS 15 ARM64 runner, runs `pnpm terminal:presentation`, and uploads the report and screenshots. Its `darwin-arm64/xterm` baselines are authoritative, so bounded pixel differences fail the build alongside semantic, interaction, compositor-drain, and blank-terminal checks.
+The `terminal-presentation` CI job runs `pnpm terminal:visual:check` on `ubuntu-24.04-arm`. The command uses the digest-pinned Playwright Ubuntu Noble image and the reviewed `linux-arm64/xterm` terminal and Linux Markdown baselines. Bounded pixel differences fail alongside semantic, interaction, compositor-drain, and blank-terminal checks. The native PTY assertion remains in the macOS Rust suite and is intentionally omitted from this browser-only Linux job.
 
 ## What it checks
 

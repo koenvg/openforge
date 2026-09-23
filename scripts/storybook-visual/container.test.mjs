@@ -11,6 +11,7 @@ beforeEach(async () => {
   const scripts = join(root, 'scripts/storybook-visual')
   await mkdir(scripts, { recursive: true })
   for (const file of ['container.mjs', 'execution.mjs', 'inputs.mjs', 'manifest.mjs']) await copyFile(new URL(file, import.meta.url), join(scripts, file))
+  await copyFile(new URL('../playwright-image.mjs', import.meta.url), join(root, 'scripts/playwright-image.mjs'))
   const bin = join(root, 'bin')
   await mkdir(bin)
   await writeFile(join(bin, 'docker'), '#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)))\n', { mode: 0o755 })
