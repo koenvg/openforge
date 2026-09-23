@@ -4,6 +4,7 @@
   import { getPrReviewerRows, getPrStatusBadgeStatus, getPrStatusChips, getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import StatusBadge, { type StatusBadgeStatus } from '@openforge-app/plugin-sdk/ui/StatusBadge.svelte'
   import { collapsedSections, isSectionCollapsed, toggleSection } from '@openforge-app/plugin-sdk/collapsibleSectionState'
@@ -88,7 +89,7 @@
 
 </script>
 
-<article class="rounded-[var(--of-radius-container)] border border-l-2 {isClosedOrMergedPullRequest(pr.state) ? 'bg-base-200/50 border-base-300/60' : 'bg-base-100 border-base-300/70'} overflow-hidden" aria-label={cardLabel(pr)}>
+<article class="rounded-[var(--of-radius-container)] border border-l-2 {isClosedOrMergedPullRequest(pr.state) ? 'bg-of-surface-subtle/50 border-of-border/60' : 'bg-of-surface border-of-border/70'} overflow-hidden" aria-label={cardLabel(pr)}>
   <!-- A linked pull request carries checks, merge state and review comments, so several
        of them stack up taller than the task panel. Collapsing leaves the identity row:
        number, title, state. The caret column matches CollapsibleSection's so a card
@@ -97,14 +98,14 @@
     <h4 class="m-0 min-w-0 flex-1">
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-[var(--of-radius-container)] px-1.5 pt-2.5 text-left hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary {collapsed ? 'pb-2.5' : 'pb-1'}"
+        class="flex w-full items-center gap-2 rounded-[var(--of-radius-container)] px-1.5 pt-2.5 text-left hover:bg-of-surface-subtle/40 focus-visible:ring-2 focus-visible:ring-of-accent {collapsed ? 'pb-2.5' : 'pb-1'}"
         aria-expanded={!collapsed}
         aria-controls={bodyId}
         aria-label={`#${prNumber(pr)} ${pr.title}`}
         onclick={() => toggleSection(sectionKey)}
       >
         <span
-          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}"
+          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-of-text/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}"
           aria-hidden="true"
         >▾</span>
         <span class="font-mono text-sm font-bold">#{prNumber(pr)}</span>
@@ -125,7 +126,7 @@
         <Button
           variant="ghost"
           size="xs"
-          class="w-fit justify-start break-all text-left text-[0.7rem] text-primary hover:underline"
+          class="w-fit justify-start break-all text-left text-[0.7rem] text-of-accent hover:underline"
           onclick={() => onOpenUrl(pr.url)}
         >{pr.url}</Button>
       </div>
@@ -145,12 +146,12 @@
       </div>
 
       {#if reviewerRows.length > 0}
-        <div class="border-t border-base-300/70 px-2.5 py-2 flex flex-col gap-1">
-          <div class="text-[0.7rem] font-medium text-base-content/55" id={reviewersLabelId}>Reviewers</div>
+        <div class="border-t border-of-border/70 px-2.5 py-2 flex flex-col gap-1">
+          <div class="text-[0.7rem] font-medium text-of-text/55" id={reviewersLabelId}>Reviewers</div>
           <ul class="flex flex-col gap-1" aria-labelledby={reviewersLabelId}>
             {#each reviewerRows as reviewer (`${reviewer.kind}-${reviewer.login}`)}
               <li class="flex items-center gap-2 text-xs">
-                <span class="truncate text-base-content/70" title={reviewer.name}>{reviewer.name}</span>
+                <span class="truncate text-of-text/70" title={reviewer.name}>{reviewer.name}</span>
                 <StatusBadge
                   status={reviewer.status}
                   role="img"
@@ -165,8 +166,8 @@
       {/if}
 
       {#if checkSummary.visible.length > 0 || checkSummary.passingCount > 0}
-        <div class="border-t border-base-300/70 px-2.5 py-2 flex flex-col gap-1" aria-label="Pipeline checks">
-          <div class="text-[0.7rem] font-medium text-base-content/55">Pipeline checks</div>
+        <div class="border-t border-of-border/70 px-2.5 py-2 flex flex-col gap-1" aria-label="Pipeline checks">
+          <div class="text-[0.7rem] font-medium text-of-text/55">Pipeline checks</div>
           {#each checkSummary.visible as check (check.id)}
             <div class="flex items-center gap-2 text-xs">
               <StatusBadge
@@ -178,7 +179,7 @@
               >
                 <span class="sr-only">{checkStatusLabel(check)}</span>
               </StatusBadge>
-              <span class="text-base-content/70">{check.name}</span>
+              <span class="text-of-text/70">{check.name}</span>
             </div>
           {/each}
           {#if checkSummary.passingCount > 0}
@@ -186,19 +187,19 @@
               <StatusBadge status="success" role="img" aria-label="Passed" title="Passed" class="github-sync-status-icon shrink-0">
                 <span class="sr-only">Passed</span>
               </StatusBadge>
-              <span class="text-base-content/50">{checkSummary.passingCount} passing</span>
+              <span class="text-of-text/50">{checkSummary.passingCount} passing</span>
             </div>
           {/if}
         </div>
       {/if}
 
       {#if canMerge || canEnqueuePullRequest(pr) || feedback}
-        <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
+        <div class="border-t border-of-border/70 bg-of-surface-subtle/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
           <div class="flex items-center gap-2">
             {#if canEnqueuePullRequest(pr)}
               <Button size="xs" aria-label={pendingPrId === pr.id || taskActionPending ? 'Enqueueing…' : 'Enqueue'} disabled={pendingPrId !== null || taskActionPending} onclick={() => onRequestAction(pr, 'enqueue')}>
                 {#if pendingPrId === pr.id || taskActionPending}
-                  <span class="loading loading-spinner loading-xs" role="status" aria-label="Enqueueing pull request"></span>
+                  <LoadingIndicator size="xs" aria-label="Enqueueing pull request" />
                   Enqueueing…
                 {:else}
                   Enqueue
@@ -207,34 +208,34 @@
             {:else if canMerge}
               <Button size="xs" aria-label={pendingPrId === pr.id || taskActionPending ? 'Merging…' : mergeActionLabel} disabled={pendingPrId !== null || taskActionPending} onclick={() => onRequestAction(pr, 'merge')}>
                 {#if pendingPrId === pr.id || taskActionPending}
-                  <span class="loading loading-spinner loading-xs" role="status" aria-label="Merging pull request"></span>
+                  <LoadingIndicator size="xs" aria-label="Merging pull request" />
                   Merging…
                 {:else}
                   {mergeActionLabel}
                 {/if}
               </Button>
             {/if}
-            {#if feedback}<span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>{/if}
+            {#if feedback}<span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-of-success' : feedback.kind === 'warning' ? 'text-of-warning' : 'text-of-danger'}">{feedback.message}</span>{/if}
           </div>
         </div>
       {/if}
 
       {#if unaddressedComments.length > 0}
-        <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments">
-          <div class="text-[0.7rem] font-medium text-base-content/55">Unaddressed comments</div>
+        <div class="border-t border-of-border/70 bg-of-surface-subtle/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments">
+          <div class="text-[0.7rem] font-medium text-of-text/55">Unaddressed comments</div>
           {#each unaddressedComments as comment (comment.id)}
-            <article class="rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}>
+            <article class="rounded-[var(--of-radius-container)] border border-of-border/70 bg-of-surface p-2.5" aria-label={`Comment by ${comment.author}`}>
               <div class="flex items-start justify-between gap-2">
-                <span class="min-w-0 break-all text-[0.65rem] font-semibold text-base-content/60" title={comment.file_path ?? undefined}>{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
+                <span class="min-w-0 break-all text-[0.65rem] font-semibold text-of-text/60" title={comment.file_path ?? undefined}>{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="xs"
-                  class="shrink-0 whitespace-nowrap text-success"
+                  class="shrink-0 whitespace-nowrap text-of-success"
                   onclick={() => void onMarkAddressed(comment.id)}
                 >✓ Mark addressed</Button>
               </div>
-              <div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {resolveRemoteMedia} {onOpenUrl} /></div>
+              <div class="text-xs text-of-text/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {resolveRemoteMedia} {onOpenUrl} /></div>
             </article>
           {/each}
         </div>

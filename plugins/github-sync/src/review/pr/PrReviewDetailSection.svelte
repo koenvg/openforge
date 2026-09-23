@@ -11,6 +11,7 @@
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Alert from '@openforge-app/plugin-sdk/ui/Alert.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import Tabs from '@openforge-app/plugin-sdk/ui/Tabs.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
@@ -204,18 +205,18 @@
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden">
   {#if replyPostingError || isPostingReplies}
-    <div class="flex items-center gap-3 border-b border-base-300 px-4 py-2 text-sm text-error" role="alert">
+    <div class="flex items-center gap-3 border-b border-of-border px-4 py-2 text-sm text-of-danger" role="alert">
       <span>{isPostingReplies ? 'Posting queued replies…' : replyPostingError}</span>
       {#if onRetryReplies && pendingReplies.length > 0}
         <Button size="xs" disabled={isPostingReplies} onclick={onRetryReplies}>Retry replies</Button>
       {/if}
     </div>
   {/if}
-  <div class="flex flex-col gap-1.5 border-b border-base-300 bg-base-200 px-4 py-2.5 shrink-0">
+  <div class="flex flex-col gap-1.5 border-b border-of-border bg-of-surface-subtle px-4 py-2.5 shrink-0">
     <div class="flex items-center gap-2 min-w-0">
-      <Button variant="ghost" size="xs" class="shrink-0 text-base-content/50" onclick={onBackToList}>← Back</Button>
+      <Button variant="ghost" size="xs" class="shrink-0 text-of-text/50" onclick={onBackToList}>← Back</Button>
       <Badge variant="info" class="shrink-0">{pr.repo_owner}/{pr.repo_name}</Badge>
-      <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{pr.title}</h2>
+      <h2 class="text-sm font-semibold text-of-text m-0 truncate flex-1">{pr.title}</h2>
       {#if activeTab === 'agent'}
         <Button
           size="xs"
@@ -226,34 +227,34 @@
       <Button
         variant="ghost"
         size="xs"
-        class="shrink-0 text-primary"
+        class="shrink-0 text-of-accent"
         role="link"
         onclick={onOpenPrOnGitHub}
       >GitHub ↗</Button>
       <Button
         variant="ghost"
         size="xs"
-        class="shrink-0 text-base-content/50"
+        class="shrink-0 text-of-text/50"
         title="Remove this pull request from your review list"
         onclick={onRemove}
       >Remove from list</Button>
     </div>
-    <div class="flex items-center gap-2 text-xs text-base-content/50">
-      <span class="font-semibold text-base-content">#{pr.number}</span>
-      <span class="text-base-300">•</span>
+    <div class="flex items-center gap-2 text-xs text-of-text/50">
+      <span class="font-semibold text-of-text">#{pr.number}</span>
+      <span class="text-of-border">•</span>
       <span class="font-medium">{pr.user_login}</span>
-      <span class="text-base-300">•</span>
+      <span class="text-of-border">•</span>
       <span>{timeAgoFromSeconds(pr.created_at)}</span>
     </div>
     {#if reviewFollowUpUnavailableReason}
-      <p class="m-0 text-xs text-base-content/60" role="status">
+      <p class="m-0 text-xs text-of-text/60" role="status">
         AI follow-ups are unavailable. {reviewFollowUpUnavailableReason}
       </p>
     {/if}
   </div>
 
   {#if reviewUpdateAvailable && onRefreshReview}
-    <div class="shrink-0 border-b border-base-300 px-4 py-2.5">
+    <div class="shrink-0 border-b border-of-border px-4 py-2.5">
       <Alert variant="warning" role="status" aria-live="polite">
         <div class="flex items-center gap-3">
           <div class="flex-1">
@@ -273,7 +274,7 @@
       </Alert>
     </div>
   {:else if pendingCommentsToReview.length > 0}
-    <div class="shrink-0 border-b border-base-300 px-4 py-2.5">
+    <div class="shrink-0 border-b border-of-border px-4 py-2.5">
       <Alert variant="info" role="status" aria-live="polite">
         Latest changes loaded. Recheck your pending comments before submitting.
       </Alert>
@@ -346,12 +347,12 @@
       {:else}
         <div class="flex h-full min-h-0 overflow-hidden">
           {#if isLoading}
-            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-base-content/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
-              <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+            <div class="flex flex-col items-center justify-center flex-1 gap-3 text-of-text/50 text-sm" role="status" aria-live="polite" aria-atomic="true">
+              <LoadingIndicator size="md" decorative class="text-of-accent" />
               <span>Loading diffs...</span>
             </div>
           {:else if error}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5" role="alert" aria-live="assertive">
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-of-danger text-sm text-center p-5" role="alert" aria-live="assertive">
               <span class="text-5xl" aria-hidden="true">⚠</span>
               <span>{error}</span>
             </div>

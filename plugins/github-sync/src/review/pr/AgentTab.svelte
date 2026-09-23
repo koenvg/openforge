@@ -130,7 +130,7 @@
     ></div>
     {#if passiveMessage}
       <div
-        class="absolute inset-0 flex items-center justify-center bg-[var(--of-agent-terminal-bg)] px-6 text-center font-mono text-sm text-base-content/70"
+        class="absolute inset-0 flex items-center justify-center bg-[var(--of-agent-terminal-bg)] px-6 text-center font-mono text-sm text-of-text/70"
         role={availabilityError || terminalError || error ? 'alert' : 'status'}
       >
         {passiveMessage}

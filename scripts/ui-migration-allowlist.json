@@ -178,15 +178,15 @@
     {"tag":"div","context":"class=\"flex flex-col h-full min-h-0 overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex flex-col gap-1.5 min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex items-baseline gap-2 min-w-0\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"h3","context":"class=\"text-sm font-semibold text-base-content m-0 leading-snug min-w-0 {stepDetailsExpanded ? '' : 'truncate'}\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"h3","context":"class=\"text-sm font-semibold text-of-text m-0 leading-snug min-w-0 {stepDetailsExpanded ? '' : 'truncate'}\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex flex-col gap-2 max-h-[28vh] overflow-y-auto pr-1 {stepDetailsExpanded ? '' : 'hidden'}\"","tokens":["max-h-[28vh]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex flex-1 min-h-0 overflow-hidden\"","tokens":["min-h-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"div","context":"class=\"flex flex-col items-center justify-center flex-1 gap-4 text-center p-8 max-w-xl mx-auto\"","tokens":["max-w-xl"],"count":1,"reason":"Walkthrough empty-state explanation uses a bounded reading column."}
   ],
   "plugins/github-sync/src/task/PullRequestCard.svelte": [
     {"tag":"h4","context":"class=\"m-0 min-w-0 flex-1\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
-    {"tag":"span","context":"class=\"w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}\"","tokens":["w-3"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
-    {"tag":"span","context":"class=\"min-w-0 break-all text-[0.65rem] font-semibold text-base-content/60\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
+    {"tag":"span","context":"class=\"w-3 shrink-0 text-center text-[0.7rem] leading-none text-of-text/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}\"","tokens":["w-3"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."},
+    {"tag":"span","context":"class=\"min-w-0 break-all text-[0.65rem] font-semibold text-of-text/60\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."}
   ],
   "plugins/github-sync/src/task/TaskPullRequestStatus.svelte": [
     {"tag":"span","context":"class=\"w-3 shrink-0\"","tokens":["w-3"],"count":1,"reason":"Reserve the metadata, status glyph or alignment column without sizing a shared control."}

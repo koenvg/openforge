@@ -122,7 +122,7 @@
     <section class="mb-6" aria-labelledby={repoHeadingId}>
       <h3
         id={repoHeadingId}
-        class="text-xs font-semibold text-base-content/60 m-0 mb-3 uppercase tracking-wider"
+        class="text-xs font-semibold text-of-text/60 m-0 mb-3 uppercase tracking-wider"
       >{repo}</h3>
       <div class="flex flex-col gap-3">
         {#each prs as pr}
@@ -179,10 +179,10 @@
     />
   {:else}
     <div class="flex flex-1 overflow-hidden">
-      <div class="flex-1 flex flex-col overflow-hidden border-r border-base-300">
-        <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
+      <div class="flex-1 flex flex-col overflow-hidden border-r border-of-border">
+        <div class="flex items-center justify-between px-5 py-3 bg-of-surface-subtle/50 border-b border-of-border shrink-0">
           <div class="flex items-center gap-2">
-            <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
+            <h3 class="text-sm font-semibold text-of-text m-0">Review Requests</h3>
             <Badge
               variant="info"
               aria-label={`${reviewRequests.needsReviewCount} ${pluralize(reviewRequests.needsReviewCount, 'review request')} needing review`}
@@ -191,7 +191,7 @@
           <Button
             variant="ghost"
             size="xs"
-            class="text-base-content/50"
+            class="text-of-text/50"
             aria-label="Refresh review requests"
             onclick={onRefreshPrs}
             disabled={isLoading}
@@ -249,7 +249,7 @@
             {/if}
 
             <section aria-labelledby="needs-review-heading">
-              <h2 id="needs-review-heading" class="m-0 mb-4 text-sm font-semibold text-base-content">
+              <h2 id="needs-review-heading" class="m-0 mb-4 text-sm font-semibold text-of-text">
                 Needs your review ({reviewRequests.needsReviewCount})
               </h2>
               {@render reviewGroups(reviewRequests.groupedNeedsReview, 'needs-review-repo', true)}
@@ -289,15 +289,15 @@
       </div>
 
       <div class="flex-1 flex flex-col overflow-hidden">
-        <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
+        <div class="flex items-center justify-between px-5 py-3 bg-of-surface-subtle/50 border-b border-of-border shrink-0">
           <div class="flex items-center gap-2">
-            <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
+            <h3 class="text-sm font-semibold text-of-text m-0">My Pull Requests</h3>
             <Badge variant="info">{filteredAuthoredPrs.length}</Badge>
           </div>
           <Button
             variant="ghost"
             size="xs"
-            class="text-base-content/50"
+            class="text-of-text/50"
             aria-label="Refresh authored pull requests"
             onclick={onRefreshAuthoredPrs}
             disabled={isLoadingAuthored}
@@ -352,7 +352,7 @@
           {:else}
             {#each [...groupedAuthoredPrs.entries()] as [repo, prs]}
               <div class="mb-6">
-                <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
+                <h3 class="text-xs font-semibold text-of-text/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
                 <div class="flex flex-col gap-3">
                   {#each prs as pr}
                     <AuthoredPrCard

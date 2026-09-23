@@ -4,6 +4,7 @@
   import Badge from '@openforge-app/plugin-sdk/ui/Badge.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import Panel from '@openforge-app/plugin-sdk/ui/Panel.svelte'
+  import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import Textarea from '@openforge-app/plugin-sdk/ui/Textarea.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
@@ -74,20 +75,20 @@
 {#if visible && activeStep}
   <div class="flex flex-col gap-2">
     {#each activeThreads as thread}
-      <Panel class="border-l-4 border-l-info text-[0.8rem]">
+      <Panel class="border-l-4 border-l-of-info text-[0.8rem]">
         <div class="flex items-center gap-2 mb-1">
           <Badge variant="info">Ask the AI</Badge>
           {#if thread.awaiting === 'agent'}
-            <span class="loading loading-spinner loading-xs"></span>
-            <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
+            <LoadingIndicator size="xs" decorative />
+            <span class="text-of-text/50 text-[0.7rem]" role="status">thinking…</span>
           {/if}
           {#if thread.awaiting === 'error'}
-            <span class="text-error text-[0.7rem]">Send failed. Your question is saved.</span>
+            <span class="text-of-danger text-[0.7rem]">Send failed. Your question is saved.</span>
           {/if}
         </div>
         {#each thread.messages as message}
           <div class="mb-1">
-            <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'human' ? 'font-semibold' : ''}">{message.role === 'agent' ? 'AI author' : 'You'}</span>
+            <span class="text-of-text/50 text-[0.7rem] mr-1 {message.role === 'human' ? 'font-semibold' : ''}">{message.role === 'agent' ? 'AI author' : 'You'}</span>
             <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
           </div>
         {/each}
@@ -116,7 +117,7 @@
     {/each}
 
     {#if unavailableReason}
-      <p class="m-0 text-xs text-base-content/60">AI follow-ups are unavailable. {unavailableReason}</p>
+      <p class="m-0 text-xs text-of-text/60">AI follow-ups are unavailable. {unavailableReason}</p>
     {:else if questionOpen}
       <div>
         <Textarea
@@ -138,7 +139,7 @@
         </div>
       </div>
     {:else if onAskAgentStep}
-      <Button type="button" variant="ghost" size="xs" class="self-start text-info" onclick={() => { questionOpen = true }}>+ Ask about this step</Button>
+      <Button type="button" variant="ghost" size="xs" class="self-start text-of-info" onclick={() => { questionOpen = true }}>+ Ask about this step</Button>
     {/if}
   </div>
 {/if}

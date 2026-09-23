@@ -154,9 +154,9 @@
 </script>
 
 {#snippet body()}
-  {#if loadError}<p class="m-0 text-xs text-error" role="alert">Could not load pull requests: {loadError}</p>{/if}
-  {#if visibleRefreshError}<p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {visibleRefreshError}</p>{/if}
-  {#if revalidation.showLoading}<p class="m-0 text-xs text-base-content/55">Loading pull requests…</p>{/if}
+  {#if loadError}<p class="m-0 text-xs text-of-danger" role="alert">Could not load pull requests: {loadError}</p>{/if}
+  {#if visibleRefreshError}<p class="m-0 text-xs text-of-danger" role="alert">Could not refresh GitHub status: {visibleRefreshError}</p>{/if}
+  {#if revalidation.showLoading}<p class="m-0 text-xs text-of-text/55">Loading pull requests…</p>{/if}
 
   {#if adding}
     <PullRequestLinkForm onLink={linkPullRequest} onLinked={() => { adding = false }} onCancel={() => { adding = false }} />
@@ -189,7 +189,7 @@
     data-task-info-card="pull-requests"
     data-card-sizing="natural"
     data-card-layout="row"
-    class="flex flex-col gap-1.5 rounded-[var(--of-radius-container)] border border-base-300/70 bg-base-100 px-3 py-2 shrink-0"
+    class="flex flex-col gap-1.5 rounded-[var(--of-radius-container)] border border-of-border/70 bg-of-surface px-3 py-2 shrink-0"
     aria-label="Pull Requests"
     aria-busy={loading}
   >
@@ -197,13 +197,13 @@
       <!-- Blank stand-in for the collapsible sections' caret column, so this row's icon
            and title sit in the same columns as theirs. -->
       <span class="w-3 shrink-0" aria-hidden="true"></span>
-      <GitPullRequest size={14} class="shrink-0 text-base-content/50" aria-hidden="true" />
-      <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Pull Requests</h3>
+      <GitPullRequest size={14} class="shrink-0 text-of-text/50" aria-hidden="true" />
+      <h3 class="m-0 shrink-0 text-sm font-semibold text-of-text">Pull Requests</h3>
       <IconButton
         type="button"
         variant="ghost"
         size="xs"
-        class="text-base-content/50 hover:text-base-content"
+        class="text-of-text/50 hover:text-of-text"
         label={PR_LINKING_HELP}
         tooltipSide="bottom"
         tooltipAlign="start"
@@ -214,7 +214,7 @@
         type="button"
         variant="ghost"
         size="xs"
-        class="gap-1 px-1 font-normal text-base-content/60"
+        class="gap-1 px-1 font-normal text-of-text/60"
         onclick={toggleAdding}
       >
         <Plus size={12} class="shrink-0" aria-hidden="true" />
@@ -235,7 +235,7 @@
         type="button"
         variant="ghost"
         size="xs"
-        class="text-base-content/50 hover:text-base-content"
+        class="text-of-text/50 hover:text-of-text"
         label="Refresh GitHub status"
         disabled={refreshing}
         onclick={() => void refreshGithubStatus()}

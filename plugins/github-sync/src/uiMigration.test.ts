@@ -52,6 +52,16 @@ describe('GitHub Sync public UI migration', () => {
     }
   })
 
+  it('uses semantic colors and supported feedback in every plugin view and its story frame', () => {
+    const legacyColor = /(?:^|[^\w-])(?:bg|text|border(?:-[lrtbxy])?|ring|fill|stroke)-(?:base-(?:100|200|300|content)|primary(?:-content)?|secondary(?:-content)?|accent(?:-content)?|neutral(?:-content)?|info(?:-content)?|success(?:-content)?|warning(?:-content)?|error(?:-content)?)(?:\/\d+)?(?=$|[^\w-])/gm
+    const files = [...MIGRATION_TARGETS.map(({ relativePath }) => source(relativePath)),
+      readFileSync(resolve(import.meta.dirname, '../../../storybook/shared/frames/GitHubSyncCardFrame.svelte'), 'utf8')]
+    for (const file of files) {
+      expect(file.match(legacyColor)).toBeNull()
+      expect(file).not.toMatch(/class="loading loading-spinner/)
+    }
+  })
+
   it('imports each migrated shared control from its public SDK UI entrypoint', () => {
     for (const { relativePath, publicComponents } of MIGRATION_TARGETS) {
       const fileSource = source(relativePath)

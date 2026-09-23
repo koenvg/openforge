@@ -81,7 +81,8 @@ it('paints every inventoried production color, variant chain and opacity form', 
     && !/(?:\.test|\.spec|[Ff]ixture|[Hh]arness|\/testing\/)/.test(source.path))
   const classes = [...new Set(inventoryLegacyUiConsumers(sources)
     .filter(record => ['color', 'script-candidate'].includes(record.kind)).map(record => record.replacement))]
-  expect(classes.length).toBeGreaterThan(50)
+  // The remaining legacy inventory shrinks as migration batches finish; the fixed extras keep
+  // representative utility families covered after the final legacy consumer disappears.
   const extra = ['border-x-of-border/50', 'focus:ring-offset-of-accent', 'from-of-accent/20', 'via-of-control', 'to-of-danger/0']
   const directory = mkdtempSync(join(tmpdir(), 'of-semantic-matrix-'))
   let browser
