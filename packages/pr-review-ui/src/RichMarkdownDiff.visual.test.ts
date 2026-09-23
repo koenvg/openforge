@@ -10,13 +10,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, type ViteDevServer } from 'vite'
 import { createOpenForgePluginSdkSourceAliases } from '../../plugin-sdk/src/vite'
 import { createDaisyUiTailwindPluginAliases } from '../../../src/lib/viteDaisyUi'
+import { shouldRunMarkdownVisuals } from './markdownVisualExecution'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const harnessPath = '/packages/pr-review-ui/src/visual/index.html'
 const baselineDirectory = join(repoRoot, 'packages/pr-review-ui/src/visual-baselines')
 const artifactDirectory = join(repoRoot, 'screenshots/markdown-visual')
 const updateBaselines = process.env.UPDATE_MARKDOWN_VISUALS === '1'
-const runsMarkdownVisuals = process.platform === 'darwin' && process.env.RUN_MARKDOWN_VISUALS === '1'
+const runsMarkdownVisuals = shouldRunMarkdownVisuals()
 
 let server: ViteDevServer
 let browser: Browser
@@ -225,7 +226,7 @@ function compareScreenshot(name: string, actualBuffer: Buffer) {
 
   expect(
     existsSync(baselinePath),
-    `Missing ${baselinePath}. Run UPDATE_MARKDOWN_VISUALS=1 pnpm markdown:visual to review and create it.`,
+    `Missing ${baselinePath}. Run pnpm terminal:visual:update to review and create it in the pinned Linux container.`,
   ).toBe(true)
 
   const actual = PNG.sync.read(actualBuffer)

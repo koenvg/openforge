@@ -98,3 +98,15 @@ Checks run on 2026-09-22:
 - Independent classifier, workflow, OpenSpec, maintainability, and test-quality review: completed. Its packaging dependency, failure-evidence, and cancellation findings were accepted and verified after fixes.
 
 Native Rust, iOS, Ghostty, packaged-session, Whisper, and live GitHub Actions jobs were not run locally because no native product code changed and this ticket is specifically changing when those checks run. `actionlint` was not available. Post-change CI trials and rollout measurements remain assigned to KVG-2319.
+
+## Linux terminal and Markdown baseline review
+
+Reviewed on 2026-09-23 in the immutable ARM64 Playwright Ubuntu Noble image used by both Apple Silicon development hosts and `ubuntu-24.04-arm` CI.
+
+- `pnpm terminal:visual:update` completed with 34 terminal semantic checks, 13 terminal visual comparisons, and 11 Markdown visual tests.
+- All 12 new `linux-arm64` terminal PNGs and all 10 regenerated Markdown PNGs were inspected at original resolution. Terminal text, ANSI colours, cursor variants, links, Unicode, powerline glyphs, light and dark surfaces, Markdown spacing, tables, Mermaid diagrams, controls, and fallback content were present and legible.
+- Pixel thresholds, readiness waits, semantic assertions, diagnostic capture, and blank-output checks were unchanged.
+- Two consecutive `pnpm terminal:visual:check` runs passed after generated outputs were cleared.
+- The public `pnpm markdown:visual` command was run separately and passed by delegating to the same ARM64 container; its update counterpart delegates to the canonical container update command.
+- A controlled 3.77% terminal baseline mismatch failed against the existing 1% limit and retained both current and difference PNG evidence. The approved baseline was restored and hash-verified before the passing runs.
+- Independent review found unsafe direct-host Markdown commands, a disconnected browser-phase test plan, and manifest-only Playwright version checking. All three findings were accepted and fixed; terminal-runtime, PR-review, Storybook visual, visual-infrastructure, TypeScript, lint, workflow-contract, and strict OpenSpec checks were rerun afterward.

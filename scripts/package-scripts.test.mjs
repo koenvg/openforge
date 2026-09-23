@@ -144,7 +144,6 @@ describe('package build scripts', () => {
     expect(ghosttyAction).toContain(`echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"`)
 
     for (const [workflow, jobName] of [
-      [ciWorkflow, 'terminal-presentation'],
       [ciWorkflow, 'ghostty-compatibility'],
       [ciWorkflow, 'rust'],
       [ciWorkflow, 'packaged-electron-smoke'],

@@ -172,7 +172,7 @@ jobs:
   terminal-presentation:
     name: Terminal Presentation Conformance
     timeout-minutes: 15
-    runs-on: macos-15
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
 
@@ -183,25 +183,9 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: pnpm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Chromium
-        run: pnpm exec playwright install chromium
-
-      - name: Run terminal presentation conformance
-        run: pnpm terminal:presentation
-
-      - name: Run Markdown visual regression tests
-        run: pnpm markdown:visual
+      - name: Run terminal and Markdown visual conformance
+        run: pnpm terminal:visual:check
 
       - name: Upload Markdown visual diffs
         if: failure()

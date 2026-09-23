@@ -30,13 +30,13 @@
 
 ## 5. Linux terminal and Markdown visuals
 
-- [ ] 5.1 Add failing terminal-presentation tests for a browser-only mode that skips the native Rust command while retaining every browser phase, and for the default mode retaining the native PTY assertion; verify both ownership cases fail before implementation.
-- [ ] 5.2 Implement browser-only terminal presentation and package scripts without changing the default local command or report semantics; verify focused runner tests pass and the macOS Rust suite still discovers `live_shell_answers_updated_theme_queries_and_recovers_with_stable_identity`.
-- [ ] 5.3 Add failing Markdown visual tests for explicit environment-controlled Linux execution and removal of the Darwin-only guard; implement the platform-neutral gate and verify normal unit runs still skip visual capture unless explicitly enabled.
-- [ ] 5.4 Add failing contract tests for an x64 Playwright Ubuntu Noble image pinned by digest, lockfile-aligned browser version, `linux-x64` terminal baseline selection, and reproducible local update and check commands; verify mutable host-only execution is rejected.
-- [ ] 5.5 Implement the pinned terminal visual container commands and switch `Terminal Presentation Conformance` to Linux browser-only execution with `--with-deps` or container-provided browser dependencies; verify workflow tests retain terminal and Markdown artifacts and no longer install Rust or Ghostty in that job.
-- [ ] 5.6 Generate terminal and Markdown baselines in the pinned Linux container, inspect every changed PNG at full size, and record the review result; verify no tolerance, readiness, diagnostic, semantic, or blank-output assertion changed to accept the migration.
-- [ ] 5.7 Run the pinned Linux terminal presentation and Markdown visual checks from clean outputs, then inject or retain a covered mismatch case; verify the normal commands pass and pixel differences still fail with current and difference evidence.
+- [x] 5.1 Add failing terminal-presentation tests for a browser-only mode that skips the native Rust command while retaining every browser phase, and for the default mode retaining the native PTY assertion; verify both ownership cases fail before implementation.
+- [x] 5.2 Implement browser-only terminal presentation and package scripts without changing the default local command or report semantics; verify focused runner tests pass and the macOS Rust suite still discovers `live_shell_answers_updated_theme_queries_and_recovers_with_stable_identity`.
+- [x] 5.3 Add failing Markdown visual tests for explicit environment-controlled Linux execution and removal of the Darwin-only guard; implement the platform-neutral gate and verify normal unit runs still skip visual capture unless explicitly enabled.
+- [x] 5.4 Add failing contract tests for an ARM64 Playwright Ubuntu Noble image pinned by digest, lockfile-aligned browser version, `linux-arm64` terminal baseline selection, and reproducible Apple Silicon update and check commands; verify mutable host-only and emulated x64 execution are rejected.
+- [x] 5.5 Implement the pinned ARM64 terminal visual container commands and switch `Terminal Presentation Conformance` to `ubuntu-24.04-arm` browser-only execution with container-provided browser dependencies; verify workflow tests retain terminal and Markdown artifacts and no longer install Rust or Ghostty in that job.
+- [x] 5.6 Generate terminal and Markdown baselines in the pinned Linux container, inspect every changed PNG at full size, and record the review result; verify no tolerance, readiness, diagnostic, semantic, or blank-output assertion changed to accept the migration.
+- [x] 5.7 Run the pinned Linux terminal presentation and Markdown visual checks from clean outputs, then inject or retain a covered mismatch case; verify the normal commands pass and pixel differences still fail with current and difference evidence.
 
 ## 6. Timing evidence and documentation
 

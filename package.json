@@ -51,7 +51,8 @@
     "build": "pnpm build:plugin-sdk-runtime && vite build --configLoader native",
     "lint": "node scripts/check-svelte-unused-imports.mjs && node scripts/check-plugin-import-boundaries.mjs && pnpm check:ui-migration",
     "check:ui-migration": "node scripts/check-ui-migration-inventory.mjs",
-    "markdown:visual": "RUN_MARKDOWN_VISUALS=1 vitest run packages/pr-review-ui/src/RichMarkdownDiff.visual.test.ts",
+    "markdown:visual": "pnpm terminal:visual:check",
+    "markdown:visual:update": "pnpm terminal:visual:update",
     "interaction:visual": "RUN_INTERACTION_VISUALS=1 vitest run src/components/shared/ui/InteractionOverlays.visual.test.ts",
     "mobile:contract:generate": "node scripts/generate-companion-dart-client.mjs",
     "mobile:contract:check": "node scripts/check-companion-dart-contract.mjs",
@@ -62,8 +63,11 @@
     "packages:pack:dry-run": "pnpm packages:metadata:check && node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",
     "terminal:presentation": "node packages/terminal-runtime/conformance/run.mjs",
+    "terminal:presentation:browser": "node packages/terminal-runtime/conformance/run.mjs --browser-only",
     "performance:idle": "node scripts/check-idle-resources.mjs",
     "terminal:presentation:update": "node packages/terminal-runtime/conformance/run.mjs --update-baselines",
+    "terminal:visual:check": "node scripts/terminal-visual/container.mjs check",
+    "terminal:visual:update": "node scripts/terminal-visual/container.mjs update",
     "test": "vitest run"
   },
   "dependencies": {
