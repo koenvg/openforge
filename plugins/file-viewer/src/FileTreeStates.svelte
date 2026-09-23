@@ -12,11 +12,11 @@
 </script>
 
 {#if model.directoryError !== null}
-  <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
+  <div class="border-b border-of-border bg-of-surface p-3 text-xs">
     <div class="space-y-2">
       <div>
-        <p class="font-medium text-base-content break-all">Unable to load directory {model.directoryError.path}</p>
-        <p class="mt-1 text-error break-words">{model.directoryError.message}</p>
+        <p class="font-medium text-of-text break-all">Unable to load directory {model.directoryError.path}</p>
+        <p class="mt-1 text-of-danger break-words">{model.directoryError.message}</p>
       </div>
       <Button
         variant="outline"
@@ -30,9 +30,9 @@
   </div>
 {/if}
 {#if model.failedRevealPath !== null}
-  <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
+  <div class="border-b border-of-border bg-of-surface p-3 text-xs">
     <div class="space-y-2">
-      <p class="font-medium text-base-content break-all">Unable to reveal {model.failedRevealPath}</p>
+      <p class="font-medium text-of-text break-all">Unable to reveal {model.failedRevealPath}</p>
       <Button
         variant="outline"
         size="xs"
@@ -50,8 +50,8 @@
       <div class="p-3 text-xs">
         <div class="space-y-2">
           <div>
-            <p class="font-medium text-base-content">File search failed</p>
-            <p class="mt-1 text-error break-words">{model.search.error}</p>
+            <p class="font-medium text-of-text">File search failed</p>
+            <p class="mt-1 text-of-danger break-words">{model.search.error}</p>
           </div>
           <Button variant="outline" size="xs" type="button" onclick={actions.onRetrySearch}>
             Retry file search
@@ -70,22 +70,22 @@
           />
         </div>
         {#if model.search.limitReached}
-          <div class="border-t border-base-300 px-3 py-1.5 text-center text-[0.7rem] text-base-content/50">
+          <div class="border-t border-of-border px-3 py-1.5 text-center text-[0.7rem] text-of-text/50">
             Showing top {model.search.limit} results
           </div>
         {/if}
       </div>
     {:else if model.search.loading}
-      <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+      <div class="flex items-center justify-center h-full text-of-text/50 text-xs p-4 text-center">
         Searching…
       </div>
     {:else}
-      <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+      <div class="flex items-center justify-center h-full text-of-text/50 text-xs p-4 text-center">
         No files match your search
       </div>
     {/if}
   {:else if model.rootEntries.length === 0}
-    <div class="flex items-center justify-center h-full text-base-content/50 text-xs p-4 text-center">
+    <div class="flex items-center justify-center h-full text-of-text/50 text-xs p-4 text-center">
       This project folder is empty
     </div>
   {:else}

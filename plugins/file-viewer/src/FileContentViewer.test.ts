@@ -74,6 +74,15 @@ describe('plugin FileContentViewer recovery and accessibility states', () => {
     expect(status.textContent).toContain('Loading README.md')
   })
 
+  it('keeps one loading announcement while the visual indicator is decorative', () => {
+    renderViewer({ content: null, error: null })
+
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    const indicator = screen.getByLabelText('Loading file content').querySelector('[aria-hidden="true"]')
+    expect(indicator).not.toBeNull()
+    expect(indicator?.getAttribute('data-size')).toBe('md')
+  })
+
   it('announces file load completion with status semantics', () => {
     renderViewer({ content: textContent, error: null })
 

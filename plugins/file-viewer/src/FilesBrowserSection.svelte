@@ -29,7 +29,7 @@
   }: Props = $props()
 </script>
 
-<div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-base-100">
+<div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-of-surface">
 
   <div class="flex flex-1 min-h-0 overflow-hidden">
     {#if !view.workspace.identity}

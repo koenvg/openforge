@@ -164,3 +164,7 @@ Task Browser loading, toolbar, errors, and visual-feedback review now use semant
 `scripts/task-browser-ui-migration.test.mjs` checks the complete plugin, including executable tests. The only remaining scanner candidates are documented non-class strings: browser state keys, command inputs, surface IDs, keyboard actions, and accessibility roles. There are no unexplained legacy consumers or dynamic producers. The earlier machine-readable ledger remains historical.
 
 See [Task Browser migration validation](task-browser-presentation-migration.md) for baseline reproduction, validation scope, and the pre-existing narrow-toolbar issue tracked as KVG-5100.
+
+## File Viewer presentation, KVG-4869
+
+File content, loading and error states, tree feedback, and the executable Storybook frame now use semantic colors and the SDK loading indicator. `scripts/file-viewer-ui-migration.test.mjs` reports no unexplained legacy consumers in the plugin or its frame. See [File Viewer validation](file-viewer-presentation-migration.md) for Arc paint/bounds checks, production-static checks, and remaining gaps.
