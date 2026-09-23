@@ -280,6 +280,21 @@ fn serve(version: u8, state: &mut Checkpoint, model: &mut GhosttyTerminalModel) 
     Ok(())
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("service: {service}; cleanup: {cleanup}")]
+struct ServiceAndCleanupError {
+    service: Box<dyn std::error::Error>,
+    cleanup: Box<dyn std::error::Error>,
+}
+
+fn finish(service: Result<()>, cleanup: Result<()>) -> Result<()> {
+    match (service, cleanup) {
+        (Err(service), Err(cleanup)) => Err(Box::new(ServiceAndCleanupError { service, cleanup })),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
 pub fn run(version: u8) -> Result<()> {
     if !cfg!(target_os = "macos") {
         return Err("macOS evidence only".into());
@@ -363,7 +378,22 @@ pub fn run(version: u8) -> Result<()> {
     unsafe {
         libc::close(state.state_fd);
     }
-    result?;
-    cleanup?;
-    Ok(())
+    finish(result, cleanup)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_and_cleanup_failures_are_both_preserved() {
+        let service = io::Error::other("service failed");
+        let cleanup = io::Error::other("reaping failed");
+        let error = finish(Err(service.into()), Err(cleanup.into())).unwrap_err();
+        let combined = error.downcast_ref::<ServiceAndCleanupError>().unwrap();
+        assert_eq!(combined.service.to_string(), "service failed");
+        assert_eq!(combined.cleanup.to_string(), "reaping failed");
+        assert!(error.to_string().contains("service failed"));
+        assert!(error.to_string().contains("reaping failed"));
+    }
 }
