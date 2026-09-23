@@ -400,6 +400,7 @@ impl GitHubClient {
 
         let mut results = Vec::new();
         for ((item, owner, repo), pr_details) in items_with_coords.into_iter().zip(detail_results) {
+            let detail_fields = pr_details.detail_fields();
             results.push(SearchPrResult {
                 id: item.id,
                 number: item.number,
@@ -413,29 +414,11 @@ impl GitHubClient {
                 repo_owner: owner,
                 repo_name: repo,
                 head_ref: pr_details.head.ref_name,
-                base_ref: pr_details
-                    .extra
-                    .get("base")
-                    .and_then(|b| b.get("ref"))
-                    .and_then(|r| r.as_str())
-                    .unwrap_or("main")
-                    .to_string(),
+                base_ref: detail_fields.base_ref,
                 head_sha: pr_details.head.sha,
-                additions: pr_details
-                    .extra
-                    .get("additions")
-                    .and_then(|a| a.as_i64())
-                    .unwrap_or(0),
-                deletions: pr_details
-                    .extra
-                    .get("deletions")
-                    .and_then(|d| d.as_i64())
-                    .unwrap_or(0),
-                changed_files: pr_details
-                    .extra
-                    .get("changed_files")
-                    .and_then(|c| c.as_i64())
-                    .unwrap_or(0),
+                additions: detail_fields.additions,
+                deletions: detail_fields.deletions,
+                changed_files: detail_fields.changed_files,
                 mergeable: pr_details.mergeable,
                 mergeable_state: pr_details.mergeable_state,
                 created_at: item.created_at,
