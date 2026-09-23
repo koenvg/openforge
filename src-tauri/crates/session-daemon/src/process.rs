@@ -17,6 +17,7 @@ use crate::terminal_model::{
     TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
     TerminalModelSession,
 };
+use openforge_session_host::CapacityKind;
 use openforge_session_protocol::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::Read;
@@ -56,7 +57,15 @@ impl Process {
     ) -> Result<Self, Error> {
         let pair = native_pty_system()
             .openpty(size(command.columns, command.rows))
-            .map_err(host_error)?;
+            .map_err(|error| {
+                let kind = error
+                    .chain()
+                    .find_map(|cause| cause.downcast_ref::<std::io::Error>())
+                    .and_then(|cause| cause.raw_os_error())
+                    .and_then(classify_pty_resource_error);
+                kind.map(Error::CapacityExceeded)
+                    .unwrap_or_else(|| host_error(error))
+            })?;
         let fd = pair
             .master
             .as_raw_fd()
@@ -317,4 +326,36 @@ fn size(columns: u16, rows: u16) -> PtySize {
 }
 fn host_error(error: impl std::fmt::Display) -> Error {
     Error::Host(error.to_string())
+}
+fn classify_pty_resource_error(code: i32) -> Option<CapacityKind> {
+    match code {
+        libc::ENXIO | libc::ENOSPC => Some(CapacityKind::PtyDevices),
+        libc::EMFILE | libc::ENFILE => Some(CapacityKind::FileDescriptors),
+        libc::EAGAIN => Some(CapacityKind::ProcessSlots),
+        libc::ENOMEM => Some(CapacityKind::MemoryHeadroom),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+    use openforge_session_host::CapacityKind;
+
+    #[test]
+    fn os_pty_refusals_keep_resource_identity() {
+        assert_eq!(
+            classify_pty_resource_error(libc::ENXIO),
+            Some(CapacityKind::PtyDevices)
+        );
+        assert_eq!(
+            classify_pty_resource_error(libc::EMFILE),
+            Some(CapacityKind::FileDescriptors)
+        );
+        assert_eq!(
+            classify_pty_resource_error(libc::EAGAIN),
+            Some(CapacityKind::ProcessSlots)
+        );
+        assert_eq!(classify_pty_resource_error(libc::EIO), None);
+    }
 }

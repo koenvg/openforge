@@ -6,6 +6,7 @@ pub(super) fn from_event_detail(
     existing_id: i64,
     details: PullRequest,
 ) -> SearchPrResult {
+    let detail_fields = details.detail_fields();
     SearchPrResult {
         id: existing_id,
         number: details.number,
@@ -28,29 +29,11 @@ pub(super) fn from_event_detail(
         repo_owner: pr_ref.repo_owner.clone(),
         repo_name: pr_ref.repo_name.clone(),
         head_ref: details.head.ref_name,
-        base_ref: details
-            .extra
-            .get("base")
-            .and_then(|base| base.get("ref"))
-            .and_then(|value| value.as_str())
-            .unwrap_or("main")
-            .to_string(),
+        base_ref: detail_fields.base_ref,
         head_sha: details.head.sha,
-        additions: details
-            .extra
-            .get("additions")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0),
-        deletions: details
-            .extra
-            .get("deletions")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0),
-        changed_files: details
-            .extra
-            .get("changed_files")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0),
+        additions: detail_fields.additions,
+        deletions: detail_fields.deletions,
+        changed_files: detail_fields.changed_files,
         mergeable: details.mergeable,
         mergeable_state: details.mergeable_state,
         created_at: details
@@ -166,5 +149,34 @@ mod tests {
         assert_eq!(result.labels.len(), 1);
         assert_eq!(result.labels[0].name, "ready");
         assert_eq!(result.labels[0].color, "aabbcc");
+    }
+
+    #[test]
+    fn malformed_detail_values_default_without_changing_event_identity() {
+        let pr_ref = PrRef {
+            repo_owner: "acme".into(),
+            repo_name: "widgets".into(),
+            number: 7,
+        };
+        let details: PullRequest = serde_json::from_value(json!({
+            "number": 7, "title": "Detail title", "state": "open",
+            "html_url": "https://github.com/acme/widgets/pull/7",
+            "user": {"login": "alice"}, "head": {"ref": "fix", "sha": "abc123"},
+            "base": {"ref": 42}, "additions": "unknown",
+            "deletions": null, "changed_files": 1.5
+        }))
+        .unwrap();
+        let result = from_event_detail(&pr_ref, 987, details);
+        assert_eq!(result.id, 987);
+        assert_eq!(
+            (result.repo_owner.as_str(), result.repo_name.as_str()),
+            ("acme", "widgets")
+        );
+        assert_eq!(result.title, "Detail title");
+        assert_eq!(result.base_ref, "main");
+        assert_eq!(
+            (result.additions, result.deletions, result.changed_files),
+            (0, 0, 0)
+        );
     }
 }

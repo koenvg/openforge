@@ -10,6 +10,9 @@ test-contracts = ["dep:base64"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "sync", "time"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = { version = "0.22", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

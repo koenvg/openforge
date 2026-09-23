@@ -4,6 +4,7 @@
     feature = "replacement-fixtures"
 ))]
 use openforge_session_client::{runtime::RuntimeDirectory, Client};
+use openforge_session_host::CapacityKind;
 use openforge_session_protocol::*;
 use serde_json::{json, Value};
 use std::{
@@ -36,16 +37,55 @@ mod pi;
 #[path = "replacement/preflight.rs"]
 mod preflight;
 
+// Image probes and hundreds of PTYs compete for macOS process/descriptor headroom.
+static FIXTURE_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 struct Fixture {
     root: tempfile::TempDir,
     daemon: Child,
     tracked: Vec<managed_process::ManagedProcessIdentity>,
+    _serial: std::sync::MutexGuard<'static, ()>,
 }
 impl Fixture {
     fn new() -> (Self, Client) {
         Self::with_executable(Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")))
     }
     fn with_executable(executable: &Path) -> (Self, Client) {
+        Self::with_executable_and_limit(executable, None, None, None)
+    }
+    fn with_fd_limit(limit: libc::rlim_t) -> (Self, Client) {
+        Self::with_executable_and_limit(
+            Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
+            Some(limit),
+            None,
+            None,
+        )
+    }
+    fn with_checkpoint_budget(limit: usize) -> (Self, Client) {
+        Self::with_executable_and_limit(
+            Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
+            None,
+            Some(limit),
+            None,
+        )
+    }
+    fn with_checkpoint_deadline_ms(limit: u64) -> (Self, Client) {
+        Self::with_executable_and_limit(
+            Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
+            None,
+            None,
+            Some(limit),
+        )
+    }
+    fn with_executable_and_limit(
+        executable: &Path,
+        fd_limit: Option<libc::rlim_t>,
+        checkpoint_limit: Option<usize>,
+        checkpoint_deadline_ms: Option<u64>,
+    ) -> (Self, Client) {
+        let serial = FIXTURE_SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = tempfile::Builder::new()
             .prefix("of-rx-")
             .tempdir_in("/tmp")
@@ -57,9 +97,25 @@ impl Fixture {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(std::fs::File::create(root.path().join("fixture.log")).unwrap());
+        if let Some(limit) = checkpoint_limit {
+            command.env("OPENFORGE_TEST_CHECKPOINT_BYTE_LIMIT", limit.to_string());
+        }
+        if let Some(limit) = checkpoint_deadline_ms {
+            command.env("OPENFORGE_TEST_CHECKPOINT_DEADLINE_MS", limit.to_string());
+        }
         // SAFETY: setsid is async-signal-safe; only the test-owned daemon's session changes.
         unsafe {
-            command.pre_exec(|| {
+            command.pre_exec(move || {
+                if let Some(limit) = fd_limit {
+                    let mut current = std::mem::zeroed::<libc::rlimit>();
+                    if libc::getrlimit(libc::RLIMIT_NOFILE, &mut current) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    current.rlim_cur = limit.min(current.rlim_max);
+                    if libc::setrlimit(libc::RLIMIT_NOFILE, &current) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
                 if libc::setsid() < 0 {
                     Err(std::io::Error::last_os_error())
                 } else {
@@ -72,6 +128,7 @@ impl Fixture {
             root,
             daemon,
             tracked: Vec::new(),
+            _serial: serial,
         };
         let deadline = Instant::now() + STARTUP_WAIT;
         loop {
@@ -297,6 +354,454 @@ fn repeated_real_images_keep_daemon_and_shell_pids_pty_identity_state_and_retry_
     }
 }
 #[test]
+fn descriptor_pressure_refuses_only_the_new_spawn() {
+    let (mut fixture, client) = Fixture::with_fd_limit(128);
+    client.enable_operation_retirement().unwrap();
+    let mut oldest = None;
+    let mut admitted = 0;
+    for index in 0..64 {
+        let command = ShellCommand {
+            owner: TerminalOwner::Shell {
+                task_id: "fd-admission".into(),
+                index: Some(index),
+            },
+            command: PreparedCommand {
+                program: "/bin/cat".into(),
+                args: vec![],
+                cwd: fixture.root.path().into(),
+                env: BTreeMap::new(),
+            },
+            columns: 80,
+            rows: 24,
+            image_protocol: None,
+        };
+        match client.spawn_ordered(&command) {
+            Ok(session) => {
+                fixture
+                    .tracked
+                    .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+                oldest.get_or_insert(session.pty);
+                admitted += 1;
+            }
+            Err(Error::CapacityExceeded(CapacityKind::FileDescriptors)) => break,
+            Err(error) => panic!("admission {index} failed without capacity diagnosis: {error}"),
+        }
+    }
+    assert!(
+        admitted > 0 && admitted < 64,
+        "unexpected admitted count {admitted}"
+    );
+    let oldest = oldest.unwrap();
+    client
+        .write_ordered(&oldest, 1, b"pressure-survivor\n")
+        .unwrap();
+    wait_text(&client, &oldest, "pressure-survivor");
+    assert_eq!(client.inventory().unwrap().capacity.live_sessions, admitted);
+}
+
+#[test]
+fn checkpoint_descriptor_pressure_preserves_running_terminal() {
+    let (mut fixture, client) = Fixture::with_fd_limit(85);
+    let command = ShellCommand {
+        owner: TerminalOwner::Shell {
+            task_id: "descriptor-pressure".into(),
+            index: None,
+        },
+        command: PreparedCommand {
+            program: "/bin/cat".into(),
+            args: vec![],
+            cwd: fixture.root.path().into(),
+            env: BTreeMap::new(),
+        },
+        columns: 80,
+        rows: 24,
+        image_protocol: None,
+    };
+    let session = client.spawn("spawn-pressure", &command).unwrap();
+    fixture
+        .tracked
+        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    let operation = OperationId::parse("replace-under-pressure").unwrap();
+    client
+        .replacement_phase(
+            operation.clone(),
+            ReplacementPhase::Prepare {
+                executable: PathBuf::from(env!(
+                    "CARGO_BIN_EXE_openforge-session-daemon-fixture-v2"
+                )),
+            },
+        )
+        .unwrap();
+    fixture.status(operation.as_str(), "prepared");
+    client
+        .replacement_phase(operation.clone(), ReplacementPhase::Commit)
+        .unwrap();
+    let status = fixture.status(operation.as_str(), "failed");
+    assert_eq!(status["state"]["stage"], "checkpoint");
+    let after = client.inventory().unwrap();
+    assert_eq!(after.capacity.live_sessions, 1);
+    assert_eq!(after.sessions[0].pid, session.pid);
+    client
+        .write("after-pressure", &session.pty, 1, b"still-here\n")
+        .unwrap();
+    wait_text(&client, &session.pty, "still-here");
+}
+
+#[test]
+fn oversized_checkpoint_refuses_before_exec_without_dropping_any_terminal() {
+    let (mut fixture, client) = Fixture::with_checkpoint_budget(1024);
+    let mut sessions = Vec::new();
+    for index in 0..3 {
+        let command = ShellCommand {
+            owner: TerminalOwner::Shell {
+                task_id: "dense-checkpoint".into(),
+                index: Some(index),
+            },
+            command: PreparedCommand {
+                program: "/bin/cat".into(),
+                args: vec![],
+                cwd: fixture.root.path().into(),
+                env: BTreeMap::new(),
+            },
+            columns: 80,
+            rows: 24,
+            image_protocol: None,
+        };
+        let session = client
+            .spawn(&format!("dense-spawn-{index}"), &command)
+            .unwrap();
+        fixture
+            .tracked
+            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        client
+            .write(
+                &format!("dense-write-{index}"),
+                &session.pty,
+                1,
+                format!("DENSE-{index}-{}\n", "x".repeat(512)).as_bytes(),
+            )
+            .unwrap();
+        wait_text(&client, &session.pty, &format!("DENSE-{index}"));
+        sessions.push(session);
+    }
+    let operation = OperationId::parse("oversized-checkpoint").unwrap();
+    client
+        .replacement_phase(
+            operation.clone(),
+            ReplacementPhase::Prepare {
+                executable: PathBuf::from(env!(
+                    "CARGO_BIN_EXE_openforge-session-daemon-fixture-v2"
+                )),
+            },
+        )
+        .unwrap();
+    fixture.status(operation.as_str(), "prepared");
+    client
+        .replacement_phase(operation.clone(), ReplacementPhase::Commit)
+        .unwrap();
+    let status = fixture.status(operation.as_str(), "failed");
+    assert_eq!(status["state"]["stage"], "checkpoint");
+    let log = std::fs::read_to_string(fixture.root.path().join("fixture.log")).unwrap();
+    assert!(
+        log.contains("session checkpoint capacity refused: checkpoint bytes"),
+        "wrong refusal: {log}"
+    );
+    let inventory = client.inventory().unwrap();
+    assert_eq!(inventory.capacity.live_sessions, sessions.len());
+    assert_eq!(
+        inventory.capacity.resources.unwrap().checkpoint_byte_limit,
+        1024
+    );
+    for (index, original) in sessions.iter().enumerate() {
+        let retained = inventory
+            .sessions
+            .iter()
+            .find(|session| session.pty == original.pty)
+            .unwrap();
+        assert_eq!(retained.pid, original.pid);
+        client
+            .write(
+                &format!("dense-after-{index}"),
+                &original.pty,
+                2,
+                format!("AFTER-DENSE-{index}\n").as_bytes(),
+            )
+            .unwrap();
+        wait_text(&client, &original.pty, &format!("AFTER-DENSE-{index}"));
+    }
+}
+
+#[test]
+fn checkpoint_timeout_reopens_busy_readers_without_losing_input() {
+    let (mut fixture, client) = Fixture::with_checkpoint_deadline_ms(1);
+    client.enable_operation_retirement().unwrap();
+    let mut sessions = Vec::new();
+    for index in 0..33 {
+        let command = ShellCommand {
+            owner: TerminalOwner::Shell {
+                task_id: "timeout".into(),
+                index: Some(index),
+            },
+            command: PreparedCommand {
+                program: "/bin/cat".into(),
+                args: vec![],
+                cwd: fixture.root.path().into(),
+                env: BTreeMap::new(),
+            },
+            columns: 80,
+            rows: 24,
+            image_protocol: None,
+        };
+        let session = client.spawn_ordered(&command).unwrap();
+        fixture
+            .tracked
+            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        client
+            .write_ordered(&session.pty, 1, format!("BEFORE-{index}\n").as_bytes())
+            .unwrap();
+        sessions.push(session);
+    }
+    client.flush_operation_receipts().unwrap();
+    let operation = OperationId::parse("timeout-checkpoint").unwrap();
+    client
+        .replacement_phase(
+            operation.clone(),
+            ReplacementPhase::Prepare {
+                executable: PathBuf::from(env!(
+                    "CARGO_BIN_EXE_openforge-session-daemon-fixture-v2"
+                )),
+            },
+        )
+        .unwrap();
+    fixture.status(operation.as_str(), "prepared");
+    for (index, session) in sessions.iter().enumerate() {
+        client
+            .write_ordered(&session.pty, 2, format!("INFLIGHT-{index}\n").as_bytes())
+            .unwrap();
+    }
+    client
+        .replacement_phase(operation.clone(), ReplacementPhase::Commit)
+        .unwrap();
+    let status = fixture.status(operation.as_str(), "failed");
+    assert_eq!(status["state"]["stage"], "checkpoint");
+    let log = std::fs::read_to_string(fixture.root.path().join("fixture.log")).unwrap();
+    assert!(
+        log.contains("session checkpoint capacity refused: checkpoint time"),
+        "wrong refusal: {log}"
+    );
+    let inventory = client.inventory().unwrap();
+    assert_eq!(inventory.capacity.live_sessions, sessions.len());
+    for (index, original) in sessions.iter().enumerate() {
+        assert_eq!(
+            inventory
+                .sessions
+                .iter()
+                .find(|session| session.pty == original.pty)
+                .unwrap()
+                .pid,
+            original.pid
+        );
+        wait_text(&client, &original.pty, &format!("INFLIGHT-{index}"));
+    }
+    for index in [0, 16, 32] {
+        client
+            .write_ordered(
+                &sessions[index].pty,
+                3,
+                format!("SURVIVED-{index}\n").as_bytes(),
+            )
+            .unwrap();
+        wait_text(&client, &sessions[index].pty, &format!("SURVIVED-{index}"));
+    }
+}
+
+#[test]
+fn settled_exits_keep_replacement_checkpoint_consistent() {
+    let (fixture, client) = Fixture::new();
+    client.enable_operation_retirement().unwrap();
+    let mut cursor = client.inventory().unwrap().cursor;
+    let mut oldest = None;
+    let mut newest = None;
+    for index in 0..129 {
+        let command = ShellCommand {
+            owner: TerminalOwner::Shell {
+                task_id: "turnover".into(),
+                index: Some(index),
+            },
+            command: PreparedCommand {
+                program: "/bin/sh".into(),
+                args: vec!["-c".into(), format!("printf 'DONE-{index}\\n'; exit 0")],
+                cwd: fixture.root.path().into(),
+                env: BTreeMap::new(),
+            },
+            columns: 80,
+            rows: 24,
+            image_protocol: None,
+        };
+        let session = client.spawn_ordered(&command).unwrap();
+        if oldest.is_none() {
+            oldest = Some(session.pty.clone());
+        }
+        newest = Some(session.pty.clone());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let events = client.events(cursor).unwrap();
+            if events
+                .events
+                .iter()
+                .any(|event| event.is_exit(&session.pty))
+            {
+                cursor = events.cursor;
+                break;
+            }
+            assert!(Instant::now() < deadline, "exit {index} never settled");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        client.flush_operation_receipts().unwrap();
+    }
+    let operation = OperationId::parse("replace-after-turnover").unwrap();
+    client
+        .replacement_phase(
+            operation.clone(),
+            ReplacementPhase::Prepare {
+                executable: PathBuf::from(env!(
+                    "CARGO_BIN_EXE_openforge-session-daemon-fixture-v2"
+                )),
+            },
+        )
+        .unwrap();
+    fixture.status(operation.as_str(), "prepared");
+    let commit = client.replacement_phase(operation.clone(), ReplacementPhase::Commit);
+    assert!(commit.is_ok() || matches!(&commit, Err(Error::Transport(_) | Error::OutcomeUnknown)));
+    fixture.status(operation.as_str(), "activated");
+    let reconnected = Client::connect(fixture.root.path()).unwrap();
+    assert!(reconnected.recover(&oldest.unwrap()).is_err());
+    assert!(reconnected.recover(&newest.unwrap()).is_ok());
+    assert!(reconnected.inventory().unwrap().sessions.len() <= 128);
+}
+
+#[test]
+fn many_live_sessions_survive_image_replacement() {
+    for count in [33, 256] {
+        let (mut fixture, client) = Fixture::new();
+        client.enable_operation_retirement().unwrap();
+        let mut sessions = Vec::with_capacity(count);
+        for index in 0..count {
+            let command = ShellCommand {
+                owner: if index % 2 == 0 {
+                    TerminalOwner::Shell {
+                        task_id: format!("scale-{index}"),
+                        index: Some(0),
+                    }
+                } else {
+                    TerminalOwner::Agent {
+                        task_id: format!("scale-{index}"),
+                    }
+                },
+                command: PreparedCommand {
+                    program: "/bin/cat".into(),
+                    args: vec![],
+                    cwd: fixture.root.path().into(),
+                    env: BTreeMap::new(),
+                },
+                columns: 80,
+                rows: 24,
+                image_protocol: None,
+            };
+            let session = client
+                .spawn_ordered(&command)
+                .unwrap_or_else(|error| panic!("spawn {index} of {count} failed: {error}"));
+            fixture
+                .tracked
+                .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+            sessions.push(session);
+        }
+        // Leave output in flight on many readers when the image handoff begins.
+        for (index, session) in sessions.iter().enumerate() {
+            client
+                .write_ordered(&session.pty, 1, format!("BEFORE-{index}\n").as_bytes())
+                .unwrap();
+        }
+        for index in [0, count / 2, count - 1] {
+            wait_text(&client, &sessions[index].pty, &format!("BEFORE-{index}"));
+        }
+        client.flush_operation_receipts().unwrap();
+        let usage = client.inventory().unwrap().capacity.resources.unwrap();
+        eprintln!(
+            "{count} PTYs: descriptors={}/{}, processes={}/{}, reclaimable_memory={} bytes, spawn_reserve={} bytes, checkpoint_limit={} bytes",
+            usage.open_descriptors,
+            usage.descriptor_limit,
+            usage.occupied_processes,
+            usage.process_limit,
+            usage.available_memory_bytes,
+            usage.spawn_memory_reserve_bytes,
+            usage.checkpoint_byte_limit
+        );
+        let operation = OperationId::parse(format!("replace-{count}")).unwrap();
+        client
+            .replacement_phase(
+                operation.clone(),
+                ReplacementPhase::Prepare {
+                    executable: PathBuf::from(env!(
+                        "CARGO_BIN_EXE_openforge-session-daemon-fixture-v2"
+                    )),
+                },
+            )
+            .unwrap();
+        fixture.status(operation.as_str(), "prepared");
+        let started = Instant::now();
+        let commit = client.replacement_phase(operation.clone(), ReplacementPhase::Commit);
+        assert!(
+            commit.is_ok() || matches!(&commit, Err(Error::Transport(_) | Error::OutcomeUnknown)),
+            "unexpected replacement refusal: {commit:?}"
+        );
+        fixture.status(operation.as_str(), "activated");
+        let log = std::fs::read_to_string(fixture.root.path().join("fixture.log")).unwrap();
+        let metrics = log
+            .lines()
+            .rev()
+            .find_map(|line| line.strip_prefix("session handoff metrics: "))
+            .expect("bounded checkpoint and pause metrics");
+        let numbers: Vec<usize> = metrics
+            .split(',')
+            .map(|value| value.parse().unwrap())
+            .collect();
+        assert_eq!(numbers.len(), 3);
+        assert!(numbers[0] > count, "checkpoint body omitted live state");
+        assert_eq!(numbers[1], count + 4, "unexpected inherited FD inventory");
+        assert!(numbers[2] < 10_000, "handoff pause exceeded ten seconds");
+        eprintln!(
+            "{count} PTYs: checkpoint={} bytes, inherited={} FDs, pause={}ms",
+            numbers[0], numbers[1], numbers[2]
+        );
+        eprintln!("replacement of {count} PTYs took {:?}", started.elapsed());
+        let next = Client::connect(fixture.root.path()).unwrap();
+        next.enable_operation_retirement().unwrap();
+        let inventory = next.inventory().unwrap();
+        assert_eq!(inventory.capacity.live_sessions, count);
+        for (index, original) in sessions.iter().enumerate() {
+            let restored = inventory
+                .sessions
+                .iter()
+                .find(|session| session.pty == original.pty)
+                .unwrap();
+            assert_eq!(restored.pid, original.pid, "process {index} restarted");
+            assert_eq!(restored.owner, original.owner);
+        }
+        for (index, original) in sessions.iter().enumerate() {
+            wait_text(&next, &original.pty, &format!("BEFORE-{index}"));
+        }
+        for index in [0, count / 2, count - 1] {
+            let pty = &sessions[index].pty;
+            next.resize_ordered(pty, 2, 90, 30).unwrap();
+            next.write_ordered(pty, 3, format!("AFTER-{index}\n").as_bytes())
+                .unwrap();
+            wait_text(&next, pty, &format!("AFTER-{index}"));
+        }
+    }
+}
+
+#[test]
 fn failed_exec_and_controlled_initialization_report_failure_without_losing_the_owner() {
     for (image, stage) in [
         (
@@ -394,7 +899,7 @@ fn wait_text(client: &Client, pty: &PtyIdentity, expected: &str) {
     }) {
         assert!(
             Instant::now() < deadline,
-            "expected PTY output did not arrive"
+            "expected PTY output {expected} did not arrive"
         );
         std::thread::sleep(Duration::from_millis(10));
     }

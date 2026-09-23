@@ -17,3 +17,8 @@ it('runs the terminal presentation harness on macOS with its native build depend
   expect(terminalPresentationJob).toContain('pnpm terminal:presentation')
   expect(terminalPresentationJob).toContain('artifacts/terminal-presentation')
 })
+
+it('allows the terminal presentation and Markdown visual suites to finish on a cold macOS runner', () => {
+  const timeout = Number(terminalPresentationJob.match(/timeout-minutes: (\d+)/)?.[1])
+  expect(timeout).toBeGreaterThanOrEqual(15)
+})

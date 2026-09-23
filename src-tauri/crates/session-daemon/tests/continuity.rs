@@ -290,7 +290,7 @@ fn exhausted_receipts_remain_retryable_and_reserve_capacity_for_scoped_stop() {
     let inventory = replacement.inventory().unwrap();
     assert_eq!(inventory.capacity.operation_receipts, 1024);
     assert_eq!(inventory.capacity.operation_limit, 1024);
-    assert_eq!(inventory.capacity.live_limit, 32);
+    assert!(inventory.capacity.live_limit > 256);
     assert_eq!(
         replacement.spawn("capacity-spawn", &command).unwrap().pty,
         shell.pty

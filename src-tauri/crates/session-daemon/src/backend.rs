@@ -14,6 +14,98 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+pub(crate) const EXIT_HISTORY: usize = 128;
+pub(crate) const RESTORE_FD_RESERVE: usize = 64;
+const PROCESS_RESERVE: u128 = 64;
+const BASE_MEMORY_RESERVE: u128 = 64 * 1024 * 1024;
+const PER_PTY_MEMORY_RESERVE: u128 = 2 * 1024 * 1024;
+
+struct ResourceEnvelope {
+    descriptor_limit: u128,
+    open_descriptors: u128,
+    process_limit: u128,
+    occupied_processes: u128,
+    available_memory: u128,
+}
+impl ResourceEnvelope {
+    fn sample() -> Result<Self, HostError> {
+        let limit = |resource| -> Result<u128, HostError> {
+            let mut value = std::mem::MaybeUninit::<libc::rlimit>::uninit();
+            // SAFETY: getrlimit initializes the supplied rlimit on success.
+            if unsafe { libc::getrlimit(resource, value.as_mut_ptr()) } != 0 {
+                return Err(HostError::Capacity);
+            }
+            // SAFETY: successful getrlimit initialized both fields.
+            Ok(unsafe { value.assume_init() }.rlim_cur as u128)
+        };
+        let open_descriptors = std::fs::read_dir("/dev/fd")
+            .map_err(|_| HostError::CapacityExceeded(CapacityKind::FileDescriptors))?
+            .try_fold(0_u128, |count, entry| {
+                entry
+                    .map(|_| count + 1)
+                    .map_err(|_| HostError::CapacityExceeded(CapacityKind::FileDescriptors))
+            })?;
+        let mut system = sysinfo::System::new();
+        system.refresh_memory();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing().with_user(sysinfo::UpdateKind::Always),
+        );
+        // SAFETY: geteuid reads the effective UID without dereferencing pointers.
+        let uid = sysinfo::Uid::try_from(unsafe { libc::geteuid() } as usize)
+            .map_err(|_| HostError::Capacity)?;
+        let occupied_processes = system
+            .processes()
+            .values()
+            .filter(|process| process.user_id() == Some(&uid))
+            .count() as u128;
+        Ok(Self {
+            descriptor_limit: limit(libc::RLIMIT_NOFILE)?,
+            open_descriptors,
+            process_limit: limit(libc::RLIMIT_NPROC)?,
+            occupied_processes,
+            // macOS can report zero available while inactive pages remain reclaimable.
+            available_memory: system.total_memory().saturating_sub(system.used_memory()) as u128,
+        })
+    }
+
+    fn admit(&self, live: usize) -> Result<(), HostError> {
+        self.require(live as u128 + 1)
+    }
+    fn check_checkpoint(&self, live: usize) -> Result<(), HostError> {
+        self.require((live as u128).max(1))
+    }
+    fn require(&self, next: u128) -> Result<(), HostError> {
+        // Three wrappers per PTY can coexist during restore; reserve descriptors
+        // for the new PTY, replacement initialization and control traffic.
+        if self.open_descriptors + 3 * next + RESTORE_FD_RESERVE as u128 > self.descriptor_limit {
+            return Err(HostError::CapacityExceeded(CapacityKind::FileDescriptors));
+        }
+        if self.occupied_processes + 1 + PROCESS_RESERVE > self.process_limit {
+            return Err(HostError::CapacityExceeded(CapacityKind::ProcessSlots));
+        }
+        if self.available_memory < BASE_MEMORY_RESERVE + next * PER_PTY_MEMORY_RESERVE {
+            return Err(HostError::CapacityExceeded(CapacityKind::MemoryHeadroom));
+        }
+        Ok(())
+    }
+    fn describe(&self, live: usize) -> openforge_session_protocol::ResourceCapacity {
+        let bounded = |value: u128| u64::try_from(value).unwrap_or(u64::MAX);
+        openforge_session_protocol::ResourceCapacity {
+            open_descriptors: bounded(self.open_descriptors),
+            descriptor_limit: bounded(self.descriptor_limit),
+            occupied_processes: bounded(self.occupied_processes),
+            process_limit: bounded(self.process_limit),
+            available_memory_bytes: bounded(self.available_memory),
+            spawn_memory_reserve_bytes: bounded(
+                BASE_MEMORY_RESERVE + (live as u128 + 1) * PER_PTY_MEMORY_RESERVE,
+            ),
+            checkpoint_byte_limit: checkpoint::retained_byte_limit() as u64,
+        }
+    }
+}
+
 pub(crate) struct Record {
     metadata: Session,
     process: Option<Process>,
@@ -116,11 +208,49 @@ impl Backend {
     fn table(&self) -> Result<MutexGuard<'_, Table>, HostError> {
         self.table.lock().map_err(|_| HostError::OutcomeUnknown)
     }
+    pub fn resource_capacity(
+        &self,
+    ) -> Result<openforge_session_protocol::ResourceCapacity, HostError> {
+        let live = self
+            .table()?
+            .records
+            .values()
+            .filter(|record| record.process.is_some())
+            .count();
+        Ok(ResourceEnvelope::sample()?.describe(live))
+    }
+    pub fn preflight_checkpoint(&self) -> Result<(), Error> {
+        let live = self
+            .table()?
+            .records
+            .values()
+            .filter(|record| record.process.is_some())
+            .count();
+        ResourceEnvelope::sample()?.check_checkpoint(live)?;
+        Ok(())
+    }
     pub fn poll(&self) -> Result<(), Error> {
         let mut table = self.table()?;
         for record in table.records.values_mut() {
             record.poll(&self.journal)?;
         }
+        // An Exited event is already in the journal before a record becomes disposable.
+        // Keep the newest settled exits for recovery; older PTY identities stay stale.
+        let excess = table
+            .records
+            .values()
+            .filter(|record| record.process.is_none() && record.metadata.exit_code.is_some())
+            .count()
+            .saturating_sub(EXIT_HISTORY);
+        let mut remaining = excess;
+        table.records.retain(|_, record| {
+            if remaining > 0 && record.process.is_none() && record.metadata.exit_code.is_some() {
+                remaining -= 1;
+                false
+            } else {
+                true
+            }
+        });
         Ok(())
     }
     pub fn session(&self, hosted: &HostedSession) -> Result<Session, HostError> {
@@ -223,6 +353,13 @@ impl HostBackend for Backend {
             return Err(HostError::Capacity);
         }
         let mut table = self.table()?;
+        ResourceEnvelope::sample()?.admit(
+            table
+                .records
+                .values()
+                .filter(|record| record.process.is_some())
+                .count(),
+        )?;
         let key = request.owner.session_key();
         for record in table
             .records
@@ -320,5 +457,44 @@ impl HostBackend for Backend {
                 cursor,
             )),
         })
+    }
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+
+    #[test]
+    fn provisioned_256_is_accepted_but_each_resource_can_refuse_admission() {
+        let mut envelope = ResourceEnvelope {
+            descriptor_limit: 2_000,
+            open_descriptors: 20,
+            process_limit: 1_000,
+            occupied_processes: 100,
+            available_memory: 2 * 1024 * 1024 * 1024,
+        };
+        assert_eq!(envelope.admit(255), Ok(()));
+        assert_eq!(envelope.check_checkpoint(256), Ok(()));
+        envelope.descriptor_limit = 100;
+        assert_eq!(
+            envelope.check_checkpoint(10),
+            Err(HostError::CapacityExceeded(CapacityKind::FileDescriptors))
+        );
+        assert_eq!(
+            envelope.admit(10),
+            Err(HostError::CapacityExceeded(CapacityKind::FileDescriptors))
+        );
+        envelope.descriptor_limit = 2_000;
+        envelope.process_limit = 160;
+        assert_eq!(
+            envelope.admit(255),
+            Err(HostError::CapacityExceeded(CapacityKind::ProcessSlots))
+        );
+        envelope.process_limit = 1_000;
+        envelope.available_memory = 128 * 1024 * 1024;
+        assert_eq!(
+            envelope.admit(255),
+            Err(HostError::CapacityExceeded(CapacityKind::MemoryHeadroom))
+        );
     }
 }

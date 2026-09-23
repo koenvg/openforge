@@ -183,4 +183,17 @@ pub struct Capacity {
     pub live_limit: usize,
     pub retained_sessions: usize,
     pub session_limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceCapacity>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCapacity {
+    pub open_descriptors: u64,
+    pub descriptor_limit: u64,
+    pub occupied_processes: u64,
+    pub process_limit: u64,
+    pub available_memory_bytes: u64,
+    pub spawn_memory_reserve_bytes: u64,
+    pub checkpoint_byte_limit: u64,
 }

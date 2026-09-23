@@ -87,16 +87,45 @@ impl HostState {
             limits: self.limits,
         }
     }
+    /// Expand a validated restored image's session envelope without resetting its identity,
+    /// operations, or retained records. Never contract limits during a handoff.
+    pub fn expand_session_limits(
+        &mut self,
+        live_sessions: usize,
+        retained_sessions: usize,
+        exit_history: usize,
+        cleanup_reserve: usize,
+    ) -> Result<(), HostError> {
+        if live_sessions < self.limits.live_sessions
+            || retained_sessions < self.limits.retained_sessions
+            || exit_history < self.limits.exit_history
+            || cleanup_reserve < self.limits.cleanup_reserve
+            || live_sessions > MAX_SESSIONS
+            || retained_sessions > MAX_SESSIONS
+            || exit_history > MAX_EXIT_HISTORY
+            || cleanup_reserve > MAX_SESSIONS
+            || live_sessions + exit_history > retained_sessions
+        {
+            return Err(HostError::UnsupportedReplacement);
+        }
+        self.limits.live_sessions = live_sessions;
+        self.limits.retained_sessions = retained_sessions;
+        self.limits.exit_history = exit_history;
+        self.limits.cleanup_reserve = cleanup_reserve;
+        Ok(())
+    }
     pub(super) fn admit_spawn(&self) -> Result<(), HostError> {
-        if self.sessions.len() >= self.limits.retained_sessions
-            || self
-                .sessions
-                .values()
-                .filter(|s| s.state != HostedSessionState::Exited)
-                .count()
-                >= self.limits.live_sessions
+        if self
+            .sessions
+            .values()
+            .filter(|session| session.state != HostedSessionState::Exited)
+            .count()
+            >= self.limits.live_sessions
         {
             return Err(self.capacity_error(CapacityKind::Sessions));
+        }
+        if self.sessions.len() >= self.limits.retained_sessions {
+            return Err(self.capacity_error(CapacityKind::RetainedHistory));
         }
         Ok(())
     }

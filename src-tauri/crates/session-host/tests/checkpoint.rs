@@ -281,3 +281,129 @@ fn restored_ledger_preserves_receipts_input_order_and_lifetime_while_fencing_old
         assert_eq!(twice.capacity().operations, 4);
     });
 }
+
+#[test]
+fn spawn_reconciles_settled_exits_before_admission_without_a_client_inventory() {
+    runtime().block_on(async {
+        let installation = InstallationId::parse("reconcile-before-spawn").unwrap();
+        let resources = Resources::default();
+        let state = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(
+            HostLimits {
+                live_sessions: 3,
+                retained_sessions: 4,
+                exit_history: 2,
+                ..HostLimits::default()
+            },
+        )));
+        let host = InProcessHost::new(resources.clone(), installation.clone(), Arc::clone(&state));
+        let controller = host.connect(&installation).await.unwrap().controller;
+        let mut first = None;
+        for index in 0..3 {
+            let mut next = request();
+            next.owner = TerminalOwner::Shell {
+                task_id: "capacity".into(),
+                index: Some(index),
+            };
+            let pty = host
+                .spawn(&controller, operation(&format!("spawn-{index}")), next)
+                .await
+                .unwrap();
+            first.get_or_insert(pty);
+        }
+        resources.0.lock().unwrap().sessions[0].state = HostedSessionState::Exited;
+        let mut next = request();
+        next.owner = TerminalOwner::Shell {
+            task_id: "capacity".into(),
+            index: Some(3),
+        };
+        let pty = host
+            .spawn(&controller, operation("spawn-3"), next)
+            .await
+            .unwrap();
+        assert_ne!(pty, first.unwrap());
+        assert_eq!(resources.0.lock().unwrap().next, 4);
+    });
+}
+
+#[test]
+fn retained_history_and_live_refusals_have_distinct_reasons() {
+    runtime().block_on(async {
+        let installation = InstallationId::parse("history-diagnostic").unwrap();
+        let resources = Resources::default();
+        let state = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(
+            HostLimits {
+                live_sessions: 2,
+                retained_sessions: 1,
+                exit_history: 1,
+                ..HostLimits::default()
+            },
+        )));
+        let host = InProcessHost::new(resources.clone(), installation.clone(), state);
+        let controller = host.connect(&installation).await.unwrap().controller;
+        let window = host.open_operation_stream(&controller).await.unwrap();
+        host.spawn(
+            &controller,
+            OperationId::ordered(window.stream, 1).unwrap(),
+            request(),
+        )
+        .await
+        .unwrap();
+        resources.0.lock().unwrap().sessions[0].state = HostedSessionState::Exited;
+        let mut second = request();
+        second.owner = TerminalOwner::Shell {
+            task_id: "history".into(),
+            index: Some(1),
+        };
+        assert_eq!(
+            host.spawn(
+                &controller,
+                OperationId::ordered(window.stream, 2).unwrap(),
+                second
+            )
+            .await,
+            Err(HostError::CapacityExceeded(CapacityKind::RetainedHistory)),
+        );
+    });
+}
+
+#[test]
+fn validated_legacy_checkpoint_can_expand_limits_without_changing_identity_or_receipts() {
+    let (saved, pty) = runtime().block_on(async {
+        let installation = InstallationId::parse("legacy-capacity").unwrap();
+        let state = Arc::new(tokio::sync::Mutex::new(HostState::with_limits(
+            HostLimits {
+                live_sessions: 32,
+                retained_sessions: 128,
+                exit_history: 128,
+                cleanup_reserve: 32,
+                ..HostLimits::default()
+            },
+        )));
+        let host = InProcessHost::new(
+            Resources::default(),
+            installation.clone(),
+            Arc::clone(&state),
+        );
+        let controller = host.connect(&installation).await.unwrap().controller;
+        let pty = host
+            .spawn(&controller, operation("legacy-spawn"), request())
+            .await
+            .unwrap();
+        let bytes = state.lock().await.checkpoint().unwrap();
+        (bytes, pty)
+    });
+    let mut restored = HostState::restore_checkpoint(&saved).unwrap();
+    assert_eq!(restored.capacity().limits.live_sessions, 32);
+    restored.expand_session_limits(896, 1024, 128, 128).unwrap();
+    assert_eq!(restored.capacity().limits.live_sessions, 896);
+    assert_eq!(restored.capacity().limits.retained_sessions, 1024);
+    assert_eq!(restored.capacity().limits.cleanup_reserve, 128);
+    assert_eq!(restored.retained_sessions().next().unwrap().pty, pty);
+    assert_eq!(
+        restored.expand_session_limits(32, 128, 128, 32),
+        Err(HostError::UnsupportedReplacement)
+    );
+    let roundtrip = HostState::restore_checkpoint(&restored.checkpoint().unwrap()).unwrap();
+    assert_eq!(roundtrip.retained_sessions().next().unwrap().pty, pty);
+    assert_eq!(roundtrip.capacity().operations, 1);
+}

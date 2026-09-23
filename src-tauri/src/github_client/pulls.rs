@@ -126,6 +126,53 @@ fn append_review_body_comments(
     }
 }
 
+fn repository_coordinates(item: SearchItem) -> Result<(SearchItem, String, String), GitHubError> {
+    let repository = reqwest::Url::parse(&item.repository_url)
+        .map_err(|_| GitHubError::IncompleteSearch("invalid repository URL".into()))?;
+    let parts: Vec<_> = repository.path().split('/').collect();
+    if parts.len() != 4 || parts[1] != "repos" || parts[2].is_empty() || parts[3].is_empty() {
+        return Err(GitHubError::IncompleteSearch(
+            "invalid repository coordinates".into(),
+        ));
+    }
+    let owner = parts[2].to_string();
+    let repo = parts[3].to_string();
+    Ok((item, owner, repo))
+}
+
+fn assemble_search_pr(
+    item: SearchItem,
+    owner: String,
+    repo: String,
+    pr_details: PullRequest,
+) -> SearchPrResult {
+    let detail_fields = pr_details.detail_fields();
+    SearchPrResult {
+        id: item.id,
+        number: item.number,
+        title: item.title,
+        body: item.body,
+        state: item.state,
+        draft: item.draft.unwrap_or(false),
+        html_url: item.html_url,
+        user_login: item.user.login,
+        user_avatar_url: item.user.avatar_url,
+        repo_owner: owner,
+        repo_name: repo,
+        head_ref: pr_details.head.ref_name,
+        base_ref: detail_fields.base_ref,
+        head_sha: pr_details.head.sha,
+        additions: detail_fields.additions,
+        deletions: detail_fields.deletions,
+        changed_files: detail_fields.changed_files,
+        mergeable: pr_details.mergeable,
+        mergeable_state: pr_details.mergeable_state,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        labels: item.labels,
+    }
+}
+
 impl GitHubClient {
     /// Fetch every open PR for a qualified head, including drafts and all authors.
     pub(crate) async fn open_prs_by_head(
@@ -314,12 +361,36 @@ impl GitHubClient {
         url: &str,
         token: &str,
     ) -> Result<CompletePrSearchSnapshot, GitHubError> {
+        let items = self.complete_search_items(url, token).await?;
+        let all_search_ids = items.iter().map(|item| item.id).collect();
+        let items_with_coords = items
+            .into_iter()
+            .map(repository_coordinates)
+            .collect::<Result<Vec<_>, _>>()?;
+        let details = self
+            .fetch_search_pr_details(&items_with_coords, token)
+            .await?;
+        let prs = items_with_coords
+            .into_iter()
+            .zip(details)
+            .map(|((item, owner, repo), details)| assemble_search_pr(item, owner, repo, details))
+            .collect();
+        Ok(CompletePrSearchSnapshot {
+            prs,
+            ids: all_search_ids,
+        })
+    }
+
+    async fn complete_search_items(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<Vec<SearchItem>, GitHubError> {
         // Cache each raw page independently. A 304 on page one says nothing about
         // later pages or PR details, which must still be refreshed.
         let mut items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
         let mut expected_count = None;
-        let mut complete = false;
         // GitHub Search exposes at most 1,000 matches, in pages of 100.
         for page in 1..=10 {
             let page_url = if page == 1 {
@@ -351,44 +422,26 @@ impl GitHubClient {
                 items.push(item);
             }
             if items.len() == response.total_count {
-                complete = true;
-                break;
+                return Ok(items);
             }
             if empty_page || items.len() > response.total_count {
                 break;
             }
         }
-        if !complete {
-            return Err(GitHubError::IncompleteSearch(
-                "search pages did not cover the reported result count".into(),
-            ));
-        }
-        let all_search_ids: Vec<i64> = items.iter().map(|item| item.id).collect();
-        let items_with_coords: Vec<(SearchItem, String, String)> = items
-            .into_iter()
-            .map(|item| {
-                let repository = reqwest::Url::parse(&item.repository_url)
-                    .map_err(|_| GitHubError::IncompleteSearch("invalid repository URL".into()))?;
-                let parts: Vec<_> = repository.path().split('/').collect();
-                if parts.len() != 4
-                    || parts[1] != "repos"
-                    || parts[2].is_empty()
-                    || parts[3].is_empty()
-                {
-                    return Err(GitHubError::IncompleteSearch(
-                        "invalid repository coordinates".into(),
-                    ));
-                }
-                let owner = parts[2].to_string();
-                let repo = parts[3].to_string();
-                Ok((item, owner, repo))
-            })
-            .collect::<Result<_, GitHubError>>()?;
+        Err(GitHubError::IncompleteSearch(
+            "search pages did not cover the reported result count".into(),
+        ))
+    }
 
-        let mut detail_results = Vec::with_capacity(items_with_coords.len());
+    async fn fetch_search_pr_details(
+        &self,
+        items_with_coords: &[(SearchItem, String, String)],
+        token: &str,
+    ) -> Result<Vec<PullRequest>, GitHubError> {
+        let mut details = Vec::with_capacity(items_with_coords.len());
         // Keep pagination from multiplying the previous 100-request fan-out.
         for batch in items_with_coords.chunks(100) {
-            detail_results.extend(
+            details.extend(
                 join_all(batch.iter().map(|(item, owner, repo)| {
                     self.get_pr_details(owner, repo, item.number, token)
                 }))
@@ -397,57 +450,7 @@ impl GitHubClient {
                 .collect::<Result<Vec<_>, GitHubError>>()?,
             );
         }
-
-        let mut results = Vec::new();
-        for ((item, owner, repo), pr_details) in items_with_coords.into_iter().zip(detail_results) {
-            results.push(SearchPrResult {
-                id: item.id,
-                number: item.number,
-                title: item.title,
-                body: item.body,
-                state: item.state,
-                draft: item.draft.unwrap_or(false),
-                html_url: item.html_url,
-                user_login: item.user.login,
-                user_avatar_url: item.user.avatar_url,
-                repo_owner: owner,
-                repo_name: repo,
-                head_ref: pr_details.head.ref_name,
-                base_ref: pr_details
-                    .extra
-                    .get("base")
-                    .and_then(|b| b.get("ref"))
-                    .and_then(|r| r.as_str())
-                    .unwrap_or("main")
-                    .to_string(),
-                head_sha: pr_details.head.sha,
-                additions: pr_details
-                    .extra
-                    .get("additions")
-                    .and_then(|a| a.as_i64())
-                    .unwrap_or(0),
-                deletions: pr_details
-                    .extra
-                    .get("deletions")
-                    .and_then(|d| d.as_i64())
-                    .unwrap_or(0),
-                changed_files: pr_details
-                    .extra
-                    .get("changed_files")
-                    .and_then(|c| c.as_i64())
-                    .unwrap_or(0),
-                mergeable: pr_details.mergeable,
-                mergeable_state: pr_details.mergeable_state,
-                created_at: item.created_at,
-                updated_at: item.updated_at,
-                labels: item.labels,
-            });
-        }
-
-        Ok(CompletePrSearchSnapshot {
-            prs: results,
-            ids: all_search_ids,
-        })
+        Ok(details)
     }
 
     /// Fetch all non-draft review requests, up to GitHub's 1,000-match search cap.
