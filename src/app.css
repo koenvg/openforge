@@ -21,11 +21,13 @@
 @import "@fontsource/space-mono/400.css";
 @import "@fontsource/space-mono/700.css";
 @import "tailwindcss";
-/* GitHub Sync ships its own CSS; compile only its semantic token utilities here.
-   Scanning the entire plugin would activate unrelated layout classes in the host. */
+/* Bundled plugins use host semantic colors. Pin their paint utilities without scanning
+   plugin-owned layout classes into the host or Storybook stylesheet. */
 @source inline("bg-of-accent bg-of-border/60 bg-of-info/10 bg-of-surface bg-of-surface-subtle bg-of-surface-subtle/35 bg-of-surface-subtle/40 bg-of-surface-subtle/50 bg-of-text/20 bg-of-warning/10");
 @source inline("border-l-of-info border-of-border border-of-border/60 border-of-border/70 border-of-info/30 border-of-warning/30 focus-visible:ring-of-accent hover:bg-of-border hover:bg-of-surface-subtle/40 hover:bg-of-text/30 hover:text-of-danger hover:text-of-text");
 @source inline("text-of-accent text-of-border text-of-danger text-of-info text-of-on-accent text-of-on-warning/80 text-of-success text-of-text text-of-text/40 text-of-text/50 text-of-text/55 text-of-text/60 text-of-text/70 text-of-text/75 text-of-text/80 text-of-text/90 text-of-warning");
+/* Task Browser uses three paint variants not shared by GitHub Sync. */
+@source inline("bg-of-danger/10 bg-of-surface-subtle/60 border-of-danger/30");
 @import "./styles/theme-adapter.css";
 @import "./styles/semantic-utilities.css";
 @import "./styles/keyboard-hints.css";
