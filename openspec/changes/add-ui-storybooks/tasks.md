@@ -61,7 +61,7 @@ This ticket adds the attention destination from 4.3, the host board/task-workspa
 
 - [x] 7.1 Write failing tests for visual manifest validation, stable image naming, duplicate cases, readiness timeouts, and stale baseline detection, then implement the manifest loader until the tests pass.
 - [x] 7.2 Write failing tests for PNG comparison and report generation, then implement the Playwright capture and Pixelmatch comparison runner so failures retain baseline, current, and difference images under stable identifiers.
-- [ ] 7.3 Add the pinned Linux Playwright container entrypoint and root snapshot check/update commands, then verify the same smoke snapshot has identical output on a developer machine through the container and in the CI command.
+- [x] 7.3 Add the pinned Linux Playwright container entrypoint and root snapshot check/update commands, then verify the same smoke snapshot has identical output on a developer machine through the container and in the CI command. See `validation.md` for the PR-run artifact and byte comparison.
 - [x] 7.4 Define the design-significant page snapshot matrix across themes and viewports, capture the initial approved page baselines into the repository, and verify the check command passes without modifying tracked files.
 - [x] 7.5 Define the design-significant component snapshot matrix, capture the initial approved component baselines into the repository, and verify the check command passes without modifying tracked files.
 - [x] 7.6 Intentionally alter one disposable fixture during a test, verify the runner fails with a reviewable before/current/difference report, restore the fixture, and verify stale, missing, and unexpected baselines also fail with actionable diagnostics.
