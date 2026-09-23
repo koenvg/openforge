@@ -47,14 +47,14 @@ pub use legacy_transport::{
     hook_pre_tool_use_handler, hook_session_end_handler, hook_stop_handler,
     hook_user_prompt_submit_handler, link_task_chain_handler, list_task_labels_handler,
     opencode_event_handler, pi_agent_end_handler, pi_agent_start_handler,
-    remove_task_label_handler, set_task_dependencies_handler, start_task_handler,
-    update_task_handler, AddTaskDependencyRequest, AddTaskLabelRequest, AddTaskLabelResponse,
-    AgentLifecycleNotificationPayload, ClaudeHookPayload, ClaudeHookQuery, CreateTaskRequest,
-    CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse, GetTaskInfoResponse, GrokHookQuery,
-    LinkTaskChainRequest, LinkTaskChainResponse, OpenCodePluginEventPayload,
-    PiAgentLifecyclePayload, RemoveTaskLabelRequest, SetTaskDependenciesRequest, StartTaskRequest,
-    TaskDependencyLink, TaskLabelsResponse, TaskListRow, TasksQuery, UpdateTaskRequest,
-    UpdateTaskResponse,
+    remove_task_dependency_handler, remove_task_label_handler, set_task_dependencies_handler,
+    start_task_handler, update_task_handler, AddTaskDependencyRequest, AddTaskLabelRequest,
+    AddTaskLabelResponse, AgentLifecycleNotificationPayload, ClaudeHookPayload, ClaudeHookQuery,
+    CreateTaskRequest, CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse,
+    GetTaskInfoResponse, GrokHookQuery, LinkTaskChainRequest, LinkTaskChainResponse,
+    OpenCodePluginEventPayload, PiAgentLifecyclePayload, RemoveTaskLabelRequest,
+    SetTaskDependenciesRequest, StartTaskRequest, TaskDependencyLink, TaskLabelsResponse,
+    TaskListRow, TasksQuery, UpdateTaskRequest, UpdateTaskResponse,
 };
 #[allow(unused_imports)]
 pub use server_lifecycle::{create_router, electron_sidecar_app_handle, start_http_sidecar_server};

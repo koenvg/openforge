@@ -335,6 +335,28 @@ pub async fn set_task_dependencies_handler(
     }))
 }
 
+pub async fn remove_task_dependency_handler(
+    State(state): State<AppState>,
+    Json(request): Json<AddTaskDependencyRequest>,
+) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
+    let db = db::acquire_db(&state.db);
+    db.remove_task_dependency(&request.task_id, &request.depends_on)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to remove task dependency: {e}"),
+            )
+        })?;
+    drop(db);
+
+    emit_task_changed(&state, "updated", &request.task_id, None);
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+    }))
+}
+
 pub async fn add_task_dependency_handler(
     State(state): State<AppState>,
     Json(request): Json<AddTaskDependencyRequest>,

@@ -27,6 +27,11 @@ Task listing:
   task detail requires --project-id and --task-id and returns the TaskDetail plus immediate relationship references.
   task list and task get are deprecated version 1 compatibility commands and will be removed in version 2.
 
+Task prerequisites:
+  task dependencies remove deletes only the named direct prerequisite and leaves the others intact.
+  task dependencies clear explicitly removes every direct prerequisite; set still requires a non-empty --depends-on list.
+  Native validation rejects an unknown current task ID; removing a prerequisite ID that is not linked is a no-op.
+
 Review Threads:
   review thread create anchors one comment to a file and line and stores it immediately; a rejection names the field to correct.
   Post each finding as its own create; one rejected create leaves the rest of the run's threads stored.
@@ -57,6 +62,8 @@ Examples:
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
   openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
   openforge task plan apply --file follow-up-plan.json
+  openforge task dependencies remove --task-id T-999 --depends-on T-456
+  openforge task dependencies clear --task-id T-999
   openforge review thread list --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3
   openforge review thread create --namespace github --target "gh:acme/web#1421" --revision 0f1c2d3 --file src/main.rs --line 42 --body "Missing null check" --key "finding:src/main.rs:42:missing-null-check"
   openforge review thread reply --thread-id rt_9f2 --body "Corrected in the next commit"

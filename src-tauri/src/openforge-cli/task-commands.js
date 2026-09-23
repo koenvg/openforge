@@ -255,6 +255,25 @@ async function setTaskDependencies(flags) {
   }));
 }
 
+async function clearTaskDependencies(flags) {
+  printJson(await requestJson('/set_task_dependencies', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: requireFlag(flags, 'taskId'), depends_on: [] }),
+  }));
+}
+
+async function removeTaskDependency(flags) {
+  const dependsOn = dependencyIdsFromFlag(flags);
+  if (dependsOn.length !== 1) {
+    throw new Error('task dependencies remove requires exactly one --depends-on task id');
+  }
+  printJson(await requestJson('/remove_task_dependency', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: requireFlag(flags, 'taskId'), depends_on: dependsOn[0] }),
+  }));
+}
+
+
 async function addTaskDependency(flags) {
   const dependsOn = dependencyIdsFromFlag(flags);
   if (dependsOn.length !== 1) {
@@ -378,6 +397,18 @@ export const TASK_COMMAND_SPECS = [
     flags: ['taskId', 'dependsOn'],
     usage: 'openforge task dependencies set --task-id <id> --depends-on <task-id>[,<task-id>...]',
     handler: setTaskDependencies,
+  },
+  {
+    path: ['task', 'dependencies', 'remove'],
+    flags: ['taskId', 'dependsOn'],
+    usage: 'openforge task dependencies remove --task-id <id> --depends-on <task-id>',
+    handler: removeTaskDependency,
+  },
+  {
+    path: ['task', 'dependencies', 'clear'],
+    flags: ['taskId'],
+    usage: 'openforge task dependencies clear --task-id <id>',
+    handler: clearTaskDependencies,
   },
   {
     path: ['task', 'dependencies', 'add'],

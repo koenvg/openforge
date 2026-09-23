@@ -168,6 +168,91 @@ async fn test_set_task_dependencies_handler_replaces_dependencies() {
 }
 
 #[tokio::test]
+async fn remove_task_dependency_handler_preserves_other_prerequisites_and_rejects_missing_task() {
+    let (state, _temp_dir) = test_state("http_remove_task_dependency");
+    {
+        let db = state.db.lock().expect("lock db");
+        db.set_config("task_id_prefix", "T").expect("set prefix");
+        for name in ["First", "Second", "Dependent"] {
+            db.create_task(name, "backlog", None, None, None)
+                .expect("create task");
+        }
+        db.add_task_dependency("T-3", "T-1").expect("add first");
+        db.add_task_dependency("T-3", "T-2").expect("add second");
+    }
+    let router = create_router(state.clone());
+    for (task_id, expected_status) in [("T-3", StatusCode::OK), ("T-404", StatusCode::BAD_REQUEST)]
+    {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/remove_task_dependency")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{task_id}","depends_on":"T-1"}}"#
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request completes");
+        assert_eq!(response.status(), expected_status);
+    }
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-3")
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.depends_on, vec!["T-2".to_string()]);
+}
+
+#[tokio::test]
+async fn set_task_dependencies_handler_clears_list_and_rejects_missing_task() {
+    let (state, _temp_dir) = test_state("http_clear_task_dependencies");
+    {
+        let db = state.db.lock().expect("lock db");
+        db.set_config("task_id_prefix", "T").expect("set prefix");
+        db.create_task("Prerequisite", "done", None, None, None)
+            .expect("create prerequisite");
+        db.create_task("Dependent", "backlog", None, None, None)
+            .expect("create dependent");
+        db.add_task_dependency("T-2", "T-1")
+            .expect("add prerequisite");
+    }
+    let router = create_router(state.clone());
+    for (task_id, expected_status) in [("T-2", StatusCode::OK), ("T-404", StatusCode::BAD_REQUEST)]
+    {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/set_task_dependencies")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{task_id}","depends_on":[]}}"#
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request completes");
+        assert_eq!(response.status(), expected_status);
+    }
+    assert!(state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-2")
+        .expect("get task")
+        .expect("task exists")
+        .depends_on
+        .is_empty());
+}
+
+#[tokio::test]
 async fn test_add_task_dependency_handler_appends_dependency() {
     let (state, _temp_dir) = test_state("http_add_task_dependency_handler");
     {

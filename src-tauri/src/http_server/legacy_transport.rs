@@ -32,8 +32,8 @@ pub use task_routes::{
     add_task_dependency_handler, add_task_label_handler, create_task_handler, delete_task_handler,
     get_project_attention_handler, get_project_task_labels_handler, get_projects_handler,
     get_task_info_handler, get_tasks_handler, hard_delete_task_handler, link_task_chain_handler,
-    list_task_labels_handler, remove_task_label_handler, set_task_dependencies_handler,
-    start_task_handler, update_task_handler,
+    list_task_labels_handler, remove_task_dependency_handler, remove_task_label_handler,
+    set_task_dependencies_handler, start_task_handler, update_task_handler,
 };
 
 #[cfg(test)]
@@ -61,6 +61,10 @@ pub(super) fn router() -> Router<AppState> {
         )
         .route("/add_task_dependency", post(add_task_dependency_handler))
         .route("/link_task_chain", post(link_task_chain_handler))
+        .route(
+            "/remove_task_dependency",
+            post(remove_task_dependency_handler),
+        )
         .route("/task/:id/labels", get(list_task_labels_handler))
         .route("/add_task_label", post(add_task_label_handler))
         .route("/remove_task_label", post(remove_task_label_handler))
