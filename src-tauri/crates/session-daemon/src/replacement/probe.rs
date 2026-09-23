@@ -103,127 +103,188 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
         refused()
     })?));
     let child = helper.0.as_mut().ok_or_else(refused)?;
-    let result = (|| {
-        let mut stdout = child.stdout.take().ok_or_else(refused)?;
+    let result = probe_child(child, state);
+    helper.finish()?;
+    result
+}
+fn probe_child(child: &mut std::process::Child, state: Option<&[u8]>) -> Result<Contract, Error> {
+    let mut pipes = ProbePipes::new(child, state.unwrap_or_default())?;
+    let expected_digest = state.map(|bytes| format!("{:x}", Sha256::digest(bytes)));
+    let mut deadlines = ProbeDeadlines::new(state.is_some());
+    loop {
+        pipes.send_input()?;
+        pipes.read_readiness(&mut deadlines)?;
+        pipes.read_output(&mut deadlines)?;
+        if let Some(success) = exited_without_reaping(child.id())? {
+            if !success {
+                return Err(refused());
+            }
+            // The leader remains an unreaped zombie, reserving its PID while we
+            // stop descendants that might otherwise keep stdout open indefinitely.
+            stop_group(child.id())?;
+            if pipes.eof {
+                return validate_contract(
+                    &pipes.bytes,
+                    pipes.sent == pipes.input.len(),
+                    expected_digest,
+                );
+            }
+        }
+        deadlines.check(state.is_some(), pipes.bytes.len(), pipes.eof, pipes.sent)?;
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+struct ProbePipes<'a> {
+    stdout: std::process::ChildStdout,
+    stdin: Option<std::process::ChildStdin>,
+    stderr: Option<std::process::ChildStderr>,
+    input: &'a [u8],
+    sent: usize,
+    bytes: Vec<u8>,
+    eof: bool,
+    stderr_bytes: Vec<u8>,
+}
+impl<'a> ProbePipes<'a> {
+    fn new(child: &mut std::process::Child, input: &'a [u8]) -> Result<Self, Error> {
+        let stdout = child.stdout.take().ok_or_else(refused)?;
         nonblocking(stdout.as_raw_fd())?;
-        let mut stdin = child.stdin.take();
-        let mut stderr = child.stderr.take();
+        let stdin = child.stdin.take();
+        let stderr = child.stderr.take();
         if let Some(stderr) = &stderr {
             nonblocking(stderr.as_raw_fd())?;
         }
         if let Some(stdin) = &stdin {
             nonblocking(stdin.as_raw_fd())?;
         }
-        let input = state.unwrap_or_default();
-        let expected_digest = state.map(|bytes| format!("{:x}", Sha256::digest(bytes)));
-        let startup_deadline = Instant::now() + MAX_STARTUP_WAIT;
-        let mut deadline = state.map(|_| Instant::now() + Duration::from_secs(5));
-        let mut sent = 0;
-        let mut bytes = Vec::new();
-        let mut eof = false;
-        let mut stderr_bytes = Vec::new();
-        loop {
-            if let Some(pipe) = &mut stdin {
-                match pipe.write(&input[sent..]) {
-                    Ok(count) => sent += count,
-                    Err(error)
-                        if matches!(
-                            error.kind(),
-                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                        ) => {}
-                    Err(_) => return Err(refused()),
-                }
-                if sent == input.len() {
-                    stdin.take();
-                }
+        Ok(Self {
+            stdout,
+            stdin,
+            stderr,
+            input,
+            sent: 0,
+            bytes: Vec::new(),
+            eof: false,
+            stderr_bytes: Vec::new(),
+        })
+    }
+    fn send_input(&mut self) -> Result<(), Error> {
+        if let Some(pipe) = &mut self.stdin {
+            match pipe.write(&self.input[self.sent..]) {
+                Ok(count) => self.sent += count,
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                    ) => {}
+                Err(_) => return Err(refused()),
             }
-            let mut stderr_eof = false;
-            if let Some(pipe) = &mut stderr {
-                let mut buffer = [0; 64];
-                loop {
-                    match pipe.read(&mut buffer) {
-                        Ok(0) => {
-                            stderr_eof = true;
-                            break;
-                        }
-                        Ok(count) => {
-                            if stderr_bytes.len() + count > 256 {
-                                return Err(Error::Capacity);
-                            }
-                            stderr_bytes.extend_from_slice(&buffer[..count]);
-                            if stderr_bytes.starts_with(READY_MARKER) {
-                                deadline
-                                    .get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
-                            }
-                        }
-                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
-                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                        Err(_) => return Err(refused()),
-                    }
-                }
+            if self.sent == self.input.len() {
+                self.stdin.take();
             }
-            if stderr_eof {
-                stderr.take();
-            }
-            let mut buffer = [0; 512];
+        }
+        Ok(())
+    }
+    fn read_readiness(&mut self, deadlines: &mut ProbeDeadlines) -> Result<(), Error> {
+        let mut stderr_eof = false;
+        if let Some(pipe) = &mut self.stderr {
+            let mut buffer = [0; 64];
             loop {
-                match stdout.read(&mut buffer) {
+                match pipe.read(&mut buffer) {
                     Ok(0) => {
-                        eof = true;
+                        stderr_eof = true;
                         break;
                     }
                     Ok(count) => {
-                        if bytes.len() + count > 4096 {
+                        if self.stderr_bytes.len() + count > 256 {
                             return Err(Error::Capacity);
                         }
-                        // Older compatible images do not emit the readiness marker.
-                        // Their first output starts the same bounded response window.
-                        deadline.get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
-                        bytes.extend_from_slice(&buffer[..count]);
+                        self.stderr_bytes.extend_from_slice(&buffer[..count]);
+                        if self.stderr_bytes.starts_with(READY_MARKER) {
+                            deadlines.ready();
+                        }
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
                     Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                     Err(_) => return Err(refused()),
                 }
             }
-            if let Some(success) = exited_without_reaping(child.id())? {
-                if !success {
-                    return Err(refused());
-                }
-                // The leader remains an unreaped zombie, reserving its PID while we
-                // stop descendants that might otherwise keep stdout open indefinitely.
-                stop_group(child.id())?;
-                if eof {
-                    let contract: Contract =
-                        serde_json::from_slice(&bytes).map_err(|_| refused())?;
-                    if sent != input.len()
-                        || contract.protocol != VERSION
-                        || contract.state_format != STATE_FORMAT
-                        || contract.authority_codec != CODEC
-                        || contract.architecture != "aarch64"
-                        || contract.image_version.is_empty()
-                        || contract.image_version.len() > 256
-                        || contract.sha256.len() != 64
-                        || !contract.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
-                        || contract.state_digest != expected_digest
-                    {
-                        return Err(refused());
-                    }
-                    return Ok(contract);
-                }
-            }
-            if Instant::now() >= deadline.unwrap_or(startup_deadline) {
-                eprintln!(
-                    "image preflight deadline exceeded (state={}, ready={}, stdout_bytes={}, eof={}, sent={})",
-                    state.is_some(), deadline.is_some(), bytes.len(), eof, sent
-                );
-                return Err(refused());
-            }
-            std::thread::sleep(Duration::from_millis(2));
         }
-    })();
-    helper.finish()?;
-    result
+        if stderr_eof {
+            self.stderr.take();
+        }
+        Ok(())
+    }
+    fn read_output(&mut self, deadlines: &mut ProbeDeadlines) -> Result<(), Error> {
+        let mut buffer = [0; 512];
+        loop {
+            match self.stdout.read(&mut buffer) {
+                Ok(0) => {
+                    self.eof = true;
+                    break;
+                }
+                Ok(count) => {
+                    if self.bytes.len() + count > 4096 {
+                        return Err(Error::Capacity);
+                    }
+                    // Older compatible images do not emit the readiness marker.
+                    // Their first output starts the same bounded response window.
+                    deadlines.ready();
+                    self.bytes.extend_from_slice(&buffer[..count]);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return Err(refused()),
+            }
+        }
+        Ok(())
+    }
+}
+struct ProbeDeadlines {
+    startup: Instant,
+    execution: Option<Instant>,
+}
+impl ProbeDeadlines {
+    fn new(state: bool) -> Self {
+        Self {
+            startup: Instant::now() + MAX_STARTUP_WAIT,
+            execution: state.then(|| Instant::now() + Duration::from_secs(5)),
+        }
+    }
+    fn ready(&mut self) {
+        self.execution
+            .get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+    }
+    fn check(&self, state: bool, stdout_bytes: usize, eof: bool, sent: usize) -> Result<(), Error> {
+        if Instant::now() >= self.execution.unwrap_or(self.startup) {
+            eprintln!(
+                "image preflight deadline exceeded (state={}, ready={}, stdout_bytes={}, eof={}, sent={})",
+                state, self.execution.is_some(), stdout_bytes, eof, sent
+            );
+            return Err(refused());
+        }
+        Ok(())
+    }
+}
+fn validate_contract(
+    bytes: &[u8],
+    input_complete: bool,
+    expected_digest: Option<String>,
+) -> Result<Contract, Error> {
+    let contract: Contract = serde_json::from_slice(bytes).map_err(|_| refused())?;
+    if !input_complete
+        || contract.protocol != VERSION
+        || contract.state_format != STATE_FORMAT
+        || contract.authority_codec != CODEC
+        || contract.architecture != "aarch64"
+        || contract.image_version.is_empty()
+        || contract.image_version.len() > 256
+        || contract.sha256.len() != 64
+        || !contract.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || contract.state_digest != expected_digest
+    {
+        return Err(refused());
+    }
+    Ok(contract)
 }
 struct Helper(Option<std::process::Child>);
 impl Helper {
