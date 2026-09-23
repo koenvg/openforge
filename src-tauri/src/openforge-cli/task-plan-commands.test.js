@@ -9,6 +9,18 @@ import {
 } from './cli-test-utils.js';
 
 describe('OpenForge task plan commands', () => {
+  it('owns the plan command spec outside the ordinary task command module', async () => {
+    const { TASK_PLAN_COMMAND_SPECS } = await import('./task-plan-commands.js');
+    const { TASK_COMMAND_SPECS } = await import('./task-commands.js');
+
+    expect(TASK_PLAN_COMMAND_SPECS.map(({ path, flags, usage }) => ({ path, flags, usage }))).toEqual([{
+      path: ['task', 'plan', 'apply'],
+      flags: ['file'],
+      usage: 'openforge task plan apply --file <plan.json>',
+    }]);
+    expect(TASK_COMMAND_SPECS.some(({ path }) => path.includes('plan'))).toBe(false);
+  });
+
   it('prints nested task plan apply help before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
