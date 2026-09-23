@@ -111,6 +111,25 @@ describe("SelfReviewView — hide addressed comments", () => {
     expect(screen.getByRole('tab', { name: 'Changed files' }).getAttribute('aria-selected')).toBe('true');
   });
 
+	it("omits an empty count and updates it when GitHub comments load", async () => {
+		let resolveComments!: (comments: PrComment[]) => void;
+		const comments = new Promise<PrComment[]>((resolve) => { resolveComments = resolve; });
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+		vi.mocked(getPrComments).mockReturnValue(comments);
+		renderSelfReviewView();
+
+		const emptyCommentsTab = screen.getByRole("tab", { name: "GitHub comments" });
+		expect(emptyCommentsTab.textContent?.trim()).toBe("");
+		expect(screen.getByRole("tab", { name: "Changed files" }).getAttribute("aria-selected")).toBe("true");
+
+		resolveComments(Array.from({ length: 12 }, (_, index) => makeComment(index + 1, 0)));
+
+		const populatedCommentsTab = await screen.findByRole("tab", { name: "GitHub comments (12)" });
+		expect(within(populatedCommentsTab).getByText("12")).toBeTruthy();
+		expect(screen.getByRole("tab", { name: "Changed files" }).getAttribute("aria-selected")).toBe("true");
+	});
+
   it('does not carry selected GitHub feedback into another task linked to the same PR', async () => {
     ticketPrs.set(new Map([['task-1', [mockPr]], ['task-2', [mockPr]]]));
     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
@@ -278,21 +297,25 @@ describe("SelfReviewView — hide addressed comments", () => {
 			reviewerRoot,
 			{ ...makeComment(2, 0, "Reply one"), author: "author", in_reply_to_id: 1 },
 			{ ...makeComment(3, 0, "Reply two"), author: "reviewer", in_reply_to_id: 1 },
-			{ ...makeComment(4, 0, "Own root"), author: "AUTHOR" },
+			{ ...makeComment(4, 1, "Own root"), author: "AUTHOR" },
 		];
 		vi.mocked(getConfig).mockImplementation(async (key) => key === "github_username" ? "author" : null);
 		vi.mocked(getPrComments).mockResolvedValue(comments);
 		ticketPrs.set(new Map([["task-1", [{ ...mockPr, unaddressed_comment_count: 1 }]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		await renderFeedbackView();
+		renderSelfReviewView();
+
+		const commentsTab = await screen.findByRole("tab", { name: "GitHub comments (2)" });
+		expect(within(commentsTab).getByText("2")).toBeTruthy();
+		expect(screen.getByRole("tab", { name: "Changed files" }).getAttribute("aria-selected")).toBe("true");
+		await fireEvent.click(commentsTab);
 
 		expect(await screen.findByText("Reviewer root")).toBeTruthy();
 		expect(screen.queryByText("Reply one")).toBeNull();
 		expect(screen.queryByText("Reply two")).toBeNull();
 		expect(screen.queryByText("Own root")).toBeNull();
 		expect(screen.getAllByRole("button", { name: /mark addressed/i })).toHaveLength(1);
-		expect(screen.getByRole("tab", { name: "GitHub comments (2)" })).toBeTruthy();
 	});
 
 	it("keeps failed Review comment addressing visible and retryable", async () => {
