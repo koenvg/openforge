@@ -150,7 +150,6 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewportHeight =
@@ -183,112 +182,13 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    Text('Create Task', style: theme.textTheme.headlineSmall),
-                    const SizedBox(height: QuietPaperSpacing.related),
-                    Text('Project', style: theme.textTheme.labelLarge),
-                    const SizedBox(height: QuietPaperSpacing.compact),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                        borderRadius: BorderRadius.circular(
-                          QuietPaperShapes.controlRadius,
-                        ),
+                    _ProjectHeader(projectName: widget.projectName),
+                    if (_suggestions.isNotEmpty)
+                      _PromptSuggestionList(
+                        suggestions: _suggestions,
+                        maxHeight: suggestionHeight,
+                        onSelected: _selectSuggestion,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(
-                          QuietPaperSpacing.related,
-                        ),
-                        child: Row(
-                          children: <Widget>[
-                            Icon(
-                              Icons.layers_outlined,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: QuietPaperSpacing.compact),
-                            Expanded(
-                              child: Text(
-                                widget.projectName,
-                                style: theme.textTheme.titleSmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: QuietPaperSpacing.related),
-                    Text(
-                      'Creates a Task in Backlog using desktop-saved Project defaults.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: QuietPaperSpacing.section),
-                    if (_suggestions.isNotEmpty) ...<Widget>[
-                      Material(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        shape: RoundedRectangleBorder(
-                          side: BorderSide(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                          borderRadius: BorderRadius.circular(
-                            QuietPaperShapes.controlRadius,
-                          ),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: suggestionHeight,
-                          ),
-                          child: ListView.builder(
-                            primary: false,
-                            shrinkWrap: true,
-                            itemCount: _suggestions.length,
-                            itemBuilder: (context, index) {
-                              final suggestion = _suggestions[index];
-                              final description = suggestion.description
-                                  ?.trim();
-                              final source = suggestion.source?.trim();
-                              return ListTile(
-                                leading: Icon(
-                                  suggestion.kind ==
-                                          TaskPromptSuggestionKind.skill
-                                      ? Icons.bolt_outlined
-                                      : Icons.terminal_outlined,
-                                  semanticLabel:
-                                      suggestion.kind ==
-                                          TaskPromptSuggestionKind.skill
-                                      ? 'Skill'
-                                      : 'Command',
-                                ),
-                                title: Text(suggestion.name),
-                                subtitle:
-                                    description == null || description.isEmpty
-                                    ? null
-                                    : Text(
-                                        description,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                trailing:
-                                    suggestion.kind ==
-                                            TaskPromptSuggestionKind.command &&
-                                        source != null &&
-                                        source.isNotEmpty
-                                    ? Text(
-                                        source,
-                                        style: theme.textTheme.labelSmall,
-                                      )
-                                    : null,
-                                onTap: () => _selectSuggestion(suggestion),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      if (MediaQuery.textScalerOf(context).scale(1) <= 1.5)
-                        const SizedBox(height: QuietPaperSpacing.compact),
-                    ],
                     TextField(
                       key: _promptKey,
                       controller: _promptController,
@@ -309,29 +209,11 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                       onChanged: _handlePromptChanged,
                     ),
                     const SizedBox(height: 16),
-                    OverflowBar(
-                      alignment: MainAxisAlignment.end,
-                      spacing: QuietPaperSpacing.related,
-                      overflowSpacing: QuietPaperSpacing.compact,
-                      children: <Widget>[
-                        TextButton(
-                          onPressed: _submitting
-                              ? null
-                              : () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: _canSubmit ? _submit : null,
-                          child: _submitting
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('Create Task'),
-                        ),
-                      ],
+                    _SubmitControls(
+                      submitting: _submitting,
+                      canSubmit: _canSubmit,
+                      onCancel: () => Navigator.of(context).pop(),
+                      onSubmit: _submit,
                     ),
                   ],
                 ),
@@ -340,6 +222,160 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProjectHeader extends StatelessWidget {
+  const _ProjectHeader({required this.projectName});
+
+  final String projectName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text('Create Task', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: QuietPaperSpacing.related),
+        Text('Project', style: theme.textTheme.labelLarge),
+        const SizedBox(height: QuietPaperSpacing.compact),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(QuietPaperShapes.controlRadius),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(QuietPaperSpacing.related),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.layers_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: QuietPaperSpacing.compact),
+                Expanded(
+                  child: Text(projectName, style: theme.textTheme.titleSmall),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: QuietPaperSpacing.related),
+        Text(
+          'Creates a Task in Backlog using desktop-saved Project defaults.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: QuietPaperSpacing.section),
+      ],
+    );
+  }
+}
+
+class _PromptSuggestionList extends StatelessWidget {
+  const _PromptSuggestionList({
+    required this.suggestions,
+    required this.maxHeight,
+    required this.onSelected,
+  });
+
+  final List<TaskPromptSuggestion> suggestions;
+  final double maxHeight;
+  final ValueChanged<TaskPromptSuggestion> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Material(
+          color: theme.colorScheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(QuietPaperShapes.controlRadius),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: ListView.builder(
+              primary: false,
+              shrinkWrap: true,
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final suggestion = suggestions[index];
+                final description = suggestion.description?.trim();
+                final source = suggestion.source?.trim();
+                return ListTile(
+                  leading: Icon(
+                    suggestion.kind == TaskPromptSuggestionKind.skill
+                        ? Icons.bolt_outlined
+                        : Icons.terminal_outlined,
+                    semanticLabel:
+                        suggestion.kind == TaskPromptSuggestionKind.skill
+                        ? 'Skill'
+                        : 'Command',
+                  ),
+                  title: Text(suggestion.name),
+                  subtitle: description == null || description.isEmpty
+                      ? null
+                      : Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                  trailing:
+                      suggestion.kind == TaskPromptSuggestionKind.command &&
+                          source != null &&
+                          source.isNotEmpty
+                      ? Text(source, style: theme.textTheme.labelSmall)
+                      : null,
+                  onTap: () => onSelected(suggestion),
+                );
+              },
+            ),
+          ),
+        ),
+        if (MediaQuery.textScalerOf(context).scale(1) <= 1.5)
+          const SizedBox(height: QuietPaperSpacing.compact),
+      ],
+    );
+  }
+}
+
+class _SubmitControls extends StatelessWidget {
+  const _SubmitControls({
+    required this.submitting,
+    required this.canSubmit,
+    required this.onCancel,
+    required this.onSubmit,
+  });
+
+  final bool submitting;
+  final bool canSubmit;
+  final VoidCallback onCancel;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return OverflowBar(
+      alignment: MainAxisAlignment.end,
+      spacing: QuietPaperSpacing.related,
+      overflowSpacing: QuietPaperSpacing.compact,
+      children: <Widget>[
+        TextButton(
+          onPressed: submitting ? null : onCancel,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: canSubmit ? onSubmit : null,
+          child: submitting
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Create Task'),
+        ),
+      ],
     );
   }
 }
