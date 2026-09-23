@@ -17,6 +17,7 @@ import { checkPackedFeedback } from './feedback-publication-contract.mjs'
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
 const fixturePath = join(packageRoot, 'scripts', 'fixtures', 'current-authoring-contract.ts')
+const completionConsumerFixturePath = join(packageRoot, 'scripts', 'fixtures', 'completion-analytics-consumer.ts')
 const sourceSchemaPath = join(packageRoot, 'src', 'openforgePackageMetadataSchema.json')
 const hostCapabilityReleases = [
   {
@@ -384,6 +385,7 @@ if (typeof vite?.createOpenForgePluginSdkSourceAliases !== 'function') {
   run(process.execPath, ['./esm-resolution.mjs'], { cwd: consumerRoot })
 
   writeFileSync(join(consumerRoot, 'authoring-contract.ts'), readFileSync(fixturePath, 'utf8'))
+  writeFileSync(join(consumerRoot, 'completion-analytics-consumer.ts'), readFileSync(completionConsumerFixturePath, 'utf8'))
   writeFileSync(join(consumerRoot, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
       target: 'ES2022',
@@ -394,7 +396,7 @@ if (typeof vite?.createOpenForgePluginSdkSourceAliases !== 'function') {
       noEmit: true,
       types: ['svelte'],
     },
-    files: ['./authoring-contract.ts', ...replacementAuthoringFiles, ...feedbackAuthoringFiles],
+    files: ['./authoring-contract.ts', './completion-analytics-consumer.ts', ...replacementAuthoringFiles, ...feedbackAuthoringFiles],
   }, null, 2)}\n`)
 
   run('pnpm', ['exec', 'tsc', '--project', join(consumerRoot, 'tsconfig.json')], { cwd: consumerRoot })

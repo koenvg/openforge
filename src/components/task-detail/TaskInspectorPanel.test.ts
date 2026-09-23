@@ -64,6 +64,7 @@ const baseTask: TaskDetail = {
   labels: [],
   createdAt: 1700000000,
   updatedAt: 1700000000,
+  completedAt: null,
 }
 
 describe('TaskInspectorPanel', () => {

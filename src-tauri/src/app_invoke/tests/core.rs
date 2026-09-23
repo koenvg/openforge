@@ -951,6 +951,36 @@ async fn update_task_status_rejects_done_and_leaves_status_unchanged() {
 }
 
 #[tokio::test]
+async fn update_task_status_rejects_reopening_completed_task() {
+    let (state, _temp_dir) = test_state("app_invoke_reject_completed_reopen");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project("Project", "/tmp/openforge-reject-reopen")
+            .expect("create Project");
+        db.create_task("Legacy Completed", "done", Some(&project.id), None, None)
+            .expect("create completed Task")
+            .id
+    };
+    let rejected = invoke(
+        &state,
+        "update_task_status",
+        json!({ "id": task_id, "status": "backlog" }),
+    )
+    .await
+    .expect_err("Completed Task cannot reopen");
+    assert_eq!(rejected.0, StatusCode::CONFLICT);
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_task(&task_id)
+            .expect("read Task")
+            .expect("Task remains")
+            .status,
+        "done"
+    );
+}
+
+#[tokio::test]
 async fn process_memory_history_commands_persist_and_apply_the_opt_in_lifecycle() {
     let (state, _temp_dir) = test_state("app_invoke_process_memory_history");
 

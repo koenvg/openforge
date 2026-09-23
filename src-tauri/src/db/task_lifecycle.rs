@@ -10,8 +10,10 @@ pub enum CompleteTaskWriteOutcome {
 
 #[derive(Debug, Error)]
 pub enum TaskStatusUpdateError {
-    #[error("project {project_id} already contains the maximum of {max} active Tasks")]
-    ActiveTaskLimit { project_id: String, max: usize },
+    #[error("completed Task {task_id} cannot return to an active state")]
+    TerminalState { task_id: String },
+    #[error("cannot assign non-writable board status: {status}")]
+    NonWritableStatus { status: String },
     #[error("{0}")]
     Storage(#[from] rusqlite::Error),
 }
@@ -24,27 +26,16 @@ impl super::Database {
     ) -> std::result::Result<(), TaskStatusUpdateError> {
         let mut connection = self.lock_conn()?;
         let transaction = connection.transaction()?;
-        let current = transaction
-            .query_row(
-                "SELECT status, project_id FROM tasks WHERE id = ?1",
-                [id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-            )
-            .optional()?;
-        if let Some((current_status, Some(project_id))) = &current {
-            if current_status == "done" && status != "done" {
-                let active_count: i64 = transaction.query_row(
-                    "SELECT COUNT(*) FROM tasks WHERE project_id = ?1 AND status != 'done'",
-                    [project_id],
-                    |row| row.get(0),
-                )?;
-                if active_count >= super::task_creation::MAX_ACTIVE_TASKS_PER_PROJECT as i64 {
-                    return Err(TaskStatusUpdateError::ActiveTaskLimit {
-                        project_id: project_id.clone(),
-                        max: super::task_creation::MAX_ACTIVE_TASKS_PER_PROJECT,
-                    });
-                }
-            }
+        if status == "done" {
+            return Err(TaskStatusUpdateError::NonWritableStatus {
+                status: status.to_string(),
+            });
+        }
+        let current = task_status(&transaction, id)?;
+        if current.as_deref() == Some("done") {
+            return Err(TaskStatusUpdateError::TerminalState {
+                task_id: id.to_string(),
+            });
         }
         let now = super::current_unix_timestamp()?;
         transaction.execute(
@@ -143,6 +134,9 @@ impl super::Database {
             if expected_status.is_some_and(|expected| expected != current_status) {
                 return Ok(CompleteTaskWriteOutcome::StaleState { current_status });
             }
+            if !matches!(current_status.as_str(), "doing" | "in_progress") {
+                return Ok(CompleteTaskWriteOutcome::StaleState { current_status });
+            }
 
             delete_runtime_children(&conn, id)?;
             let now = super::current_unix_timestamp()?;
@@ -150,7 +144,8 @@ impl super::Database {
                 "UPDATE tasks
                  SET status = 'done',
                      updated_at = ?1,
-                     execution_started_at = COALESCE(execution_started_at, ?1)
+                     execution_started_at = COALESCE(execution_started_at, ?1),
+                     completed_at = COALESCE(completed_at, ?1)
                  WHERE id = ?2",
                 rusqlite::params![now, id],
             )?;
@@ -283,6 +278,7 @@ mod tests {
             "doing"
         );
 
+        assert_eq!(completion_date(&db, &task.id), None);
         assert_eq!(
             db.complete_task_if_status(&task.id, "doing")
                 .expect("guarded completion"),
@@ -301,6 +297,16 @@ mod tests {
             CompleteTaskWriteOutcome::NotFound
         );
 
+        let completed_at = completion_date(&db, &task.id).expect("completed Task has a date");
+        assert!(completed_at > 0);
+        assert_eq!(
+            db.complete_task_if_status(&task.id, "doing")
+                .expect("repeated guarded completion"),
+            CompleteTaskWriteOutcome::StaleState {
+                current_status: "done".to_string()
+            }
+        );
+        assert_eq!(completion_date(&db, &task.id), Some(completed_at));
         drop(db);
     }
 
@@ -413,7 +419,65 @@ mod tests {
         );
         assert_runtime_children_present(&db, &task.id);
 
+        assert_eq!(completion_date(&db, &task.id), None);
         drop(db);
+    }
+
+    #[test]
+    fn agent_session_completion_does_not_complete_its_task() {
+        let (db, _temp_dir) = make_test_db("task_agent_session_not_completion");
+        let task = db
+            .create_task("Running", "doing", None, None, None)
+            .expect("create Task");
+        db.create_agent_session(
+            "task-agent-session",
+            &task.id,
+            None,
+            "implement",
+            "running",
+            "pi",
+        )
+        .expect("create Agent Session");
+        db.update_agent_session("task-agent-session", "implement", "completed", None, None)
+            .expect("complete Agent Session");
+        assert_eq!(completion_date(&db, &task.id), None);
+        assert_eq!(
+            db.get_task(&task.id)
+                .expect("read Task")
+                .expect("Task remains")
+                .status,
+            "doing"
+        );
+    }
+
+    #[test]
+    fn completion_date_survives_reopen_and_metadata_edit() {
+        let (db, temp_dir) = make_test_db("task_completion_date_restart");
+        let task = db
+            .create_task("Doing", "doing", None, None, None)
+            .expect("create Task");
+        db.complete_task_if_status(&task.id, "doing")
+            .expect("complete Task");
+        let date = completion_date(&db, &task.id).expect("completed date");
+        let path = temp_dir.path().join("test.db");
+        drop(db);
+        let reopened = Database::new(path).expect("reopen database");
+        assert_eq!(completion_date(&reopened, &task.id), Some(date));
+        reopened
+            .update_task_title(&task.id, "Edited")
+            .expect("edit completed Task title");
+        assert_eq!(completion_date(&reopened, &task.id), Some(date));
+    }
+
+    fn completion_date(db: &Database, task_id: &str) -> Option<i64> {
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        conn.query_row(
+            "SELECT completed_at FROM tasks WHERE id = ?1",
+            [task_id],
+            |row| row.get(0),
+        )
+        .expect("read completion date")
     }
 
     fn task_status_and_execution_start(db: &Database, task_id: &str) -> (String, Option<i64>) {
@@ -546,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    fn restoring_a_completed_task_respects_the_active_project_limit_atomically() {
+    fn reopening_a_completed_task_fails_even_at_the_active_project_limit() {
         let (db, _temp_dir) = make_test_db("restore_active_task_limit");
         let project = db
             .create_project("Project", "/tmp/restore-active-task-limit")
@@ -570,12 +634,39 @@ mod tests {
             .expect_err("restoration beyond the limit must fail");
         assert!(matches!(
             error,
-            super::TaskStatusUpdateError::ActiveTaskLimit { .. }
+            super::TaskStatusUpdateError::TerminalState { .. }
         ));
         assert_eq!(
             db.get_task(&completed.id)
                 .expect("load Task")
                 .expect("Task exists")
+                .status,
+            "done"
+        );
+    }
+    #[test]
+    fn completed_task_cannot_reopen_below_the_active_limit() {
+        let (db, _temp_dir) = make_test_db("completed_task_terminal_state");
+        let task = db
+            .create_task("Doing", "doing", None, None, None)
+            .expect("create Task");
+        db.complete_task_if_status(&task.id, "doing")
+            .expect("complete Task");
+        let date = completion_date(&db, &task.id);
+        for status in ["backlog", "doing"] {
+            let error = db
+                .update_task_status(&task.id, status)
+                .expect_err("Completed Task cannot reopen");
+            assert!(matches!(
+                error,
+                super::TaskStatusUpdateError::TerminalState { .. }
+            ));
+            assert_eq!(completion_date(&db, &task.id), date);
+        }
+        assert_eq!(
+            db.get_task(&task.id)
+                .expect("read Task")
+                .expect("Task remains")
                 .status,
             "done"
         );

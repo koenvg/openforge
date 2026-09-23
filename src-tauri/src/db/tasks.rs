@@ -22,6 +22,8 @@ pub struct TaskRow {
     pub project_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing)]
+    pub completed_at: Option<i64>,
     pub prompt: Option<String>,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
@@ -62,6 +64,7 @@ pub struct TaskSummary {
     pub depends_on: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub completed_at: Option<i64>,
     pub prompt_preview: String,
     pub labels: Vec<TaskLabelRow>,
     pub source_ticket_url: Option<String>,
@@ -77,6 +80,7 @@ pub struct TaskDetail {
     pub depends_on: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub completed_at: Option<i64>,
     pub prompt_preview: String,
     pub labels: Vec<TaskLabelRow>,
     pub source_ticket_url: Option<String>,
@@ -96,6 +100,8 @@ pub struct CompletedTaskQuery {
     #[serde(default)]
     pub labels: Vec<String>,
     pub cursor: Option<String>,
+    pub completed_from: Option<i64>,
+    pub completed_before: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -103,6 +109,24 @@ pub struct CompletedTaskQuery {
 pub struct CompletedTaskPage {
     pub tasks: Vec<TaskSummary>,
     pub next_cursor: Option<String>,
+    pub completion_coverage: CompletionCoverage,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CompletionRangeStatus {
+    Complete,
+    Partial,
+    Unavailable,
+    NotRequested,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionCoverage {
+    pub tracked_from: Option<i64>,
+    pub unknown_completed_task_count: i64,
+    pub range_status: CompletionRangeStatus,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -129,6 +153,8 @@ pub enum TaskReadError {
     LabelNameTooLong { requested: usize, max: usize },
     #[error("invalid Completed Task cursor")]
     InvalidCursor,
+    #[error("invalid Completed Task completion range")]
+    InvalidCompletionRange,
     #[error("database error: {0}")]
     Database(#[from] rusqlite::Error),
 }
@@ -205,6 +231,7 @@ impl From<&TaskRow> for TaskSummary {
             depends_on: task.depends_on.clone(),
             created_at: task.created_at,
             updated_at: task.updated_at,
+            completed_at: task.completed_at,
             prompt_preview: prompt_preview(&task.initial_prompt),
             labels: task.labels.clone(),
             source_ticket_url: task.source_ticket_url.clone(),
@@ -222,6 +249,7 @@ impl From<&TaskRow> for TaskDetail {
             depends_on: task.depends_on.clone(),
             created_at: task.created_at,
             updated_at: task.updated_at,
+            completed_at: task.completed_at,
             prompt_preview: prompt_preview(&task.initial_prompt),
             labels: task.labels.clone(),
             source_ticket_url: task.source_ticket_url.clone(),
@@ -417,6 +445,7 @@ mod tests {
             project_id: Some("P-1".to_string()),
             created_at: 10,
             updated_at: 20,
+            completed_at: Some(15),
             prompt: Some("legacy execution override".to_string()),
             agent: Some("pi".to_string()),
             permission_mode: Some("workspace-write".to_string()),
@@ -430,6 +459,10 @@ mod tests {
             labels: vec![label.clone()],
         };
 
+        assert!(serde_json::to_value(&task)
+            .expect("serialize legacy Task row")
+            .get("completed_at")
+            .is_none());
         let reference = super::TaskReference::from(&task);
         assert_eq!(
             serde_json::to_value(reference).expect("serialize reference"),
@@ -454,6 +487,7 @@ mod tests {
                 "dependsOn": ["P-1-41"],
                 "createdAt": 10,
                 "updatedAt": 20,
+                "completedAt": 15,
                 "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
                 "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
                 "sourceTicketUrl": "https://example.com/tickets/42",
@@ -476,6 +510,7 @@ mod tests {
                 "dependsOn": ["P-1-41"],
                 "createdAt": 10,
                 "updatedAt": 20,
+                "completedAt": 15,
                 "promptPreview": "Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical authoring prompt Canonical au",
                 "labels": [{ "id": 7, "projectId": "P-1", "name": "feature" }],
                 "sourceTicketUrl": "https://example.com/tickets/42",
@@ -499,6 +534,7 @@ mod tests {
             project_id: None,
             created_at: 1,
             updated_at: 2,
+            completed_at: None,
             prompt: Some("Execution override".to_string()),
             agent: None,
             permission_mode: None,

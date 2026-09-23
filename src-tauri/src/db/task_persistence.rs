@@ -9,14 +9,14 @@ use super::{
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
 
-pub(super) const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
+pub(super) const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url, completed_at";
 
 macro_rules! task_row_query {
     ($suffix:literal) => {
         concat!(
             "SELECT id, initial_prompt, status, project_id, created_at, updated_at, ",
             "prompt, agent, permission_mode, title, title_source, title_generated_at, ",
-            "worktree_source, worktree_branch, source_ticket_url FROM tasks ",
+            "worktree_source, worktree_branch, source_ticket_url, completed_at FROM tasks ",
             $suffix
         )
     };
@@ -100,6 +100,7 @@ pub(super) fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
         worktree_source: row.get(12)?,
         worktree_branch: row.get(13)?,
         source_ticket_url: row.get(14)?,
+        completed_at: row.get(15)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })

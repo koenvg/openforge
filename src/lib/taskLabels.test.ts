@@ -23,6 +23,7 @@ function task(id: string, status: TaskDetail['status'], labels: TaskLabel[] = []
     projectId: 'proj-1',
     createdAt: 1000,
     updatedAt: 1000,
+    completedAt: null,
     labels,
   }
 }

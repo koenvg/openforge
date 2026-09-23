@@ -46,6 +46,11 @@ fn map_task_read_error(error: db::TaskReadError) -> TaskReadHttpError {
         db::TaskReadError::InvalidCursor => {
             task_read_error(StatusCode::BAD_REQUEST, "invalid_cursor", error.to_string())
         }
+        db::TaskReadError::InvalidCompletionRange => task_read_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_completion_range",
+            error.to_string(),
+        ),
         db::TaskReadError::Database(_) => task_read_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "task_read_failed",
@@ -66,17 +71,31 @@ pub async fn active_tasks_handler(
         .map_err(map_task_read_error)
 }
 
-fn parse_completed_task_query(params: Vec<(String, String)>) -> db::CompletedTaskQuery {
+fn parse_completed_task_query(
+    params: Vec<(String, String)>,
+) -> Result<db::CompletedTaskQuery, TaskReadHttpError> {
     let mut query = db::CompletedTaskQuery::default();
     for (key, value) in params {
         match key.as_str() {
             "search" => query.search = Some(value),
             "labels" => query.labels.push(value),
             "cursor" => query.cursor = Some(value),
+            "completedFrom" => {
+                query.completed_from =
+                    Some(value.parse().map_err(|_| {
+                        map_task_read_error(db::TaskReadError::InvalidCompletionRange)
+                    })?)
+            }
+            "completedBefore" => {
+                query.completed_before =
+                    Some(value.parse().map_err(|_| {
+                        map_task_read_error(db::TaskReadError::InvalidCompletionRange)
+                    })?)
+            }
             _ => {}
         }
     }
-    query
+    Ok(query)
 }
 
 pub async fn completed_tasks_handler(
@@ -84,7 +103,7 @@ pub async fn completed_tasks_handler(
     Path(project_id): Path<String>,
     Query(params): Query<Vec<(String, String)>>,
 ) -> Result<Json<db::CompletedTaskPage>, TaskReadHttpError> {
-    let query = parse_completed_task_query(params);
+    let query = parse_completed_task_query(params)?;
     let database = db::acquire_db(&state.db);
     database
         .tasks()
@@ -123,9 +142,14 @@ mod tests {
             ("labels".to_string(), "backend".to_string()),
             ("limit".to_string(), "200".to_string()),
             ("status".to_string(), "doing".to_string()),
-        ]);
+            ("completedFrom".to_string(), "1700000000".to_string()),
+            ("completedBefore".to_string(), "1700000001".to_string()),
+        ])
+        .expect("valid range");
         assert_eq!(query.search.as_deref(), Some("needle"));
         assert_eq!(query.labels, ["urgent", "backend"]);
         assert!(query.cursor.is_none());
+        assert_eq!(query.completed_from, Some(1_700_000_000));
+        assert_eq!(query.completed_before, Some(1_700_000_001));
     }
 }

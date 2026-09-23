@@ -23,6 +23,7 @@ function task(id: string, projectId = 'P-1'): TaskDetail {
     dependsOn: [],
     createdAt: 1,
     updatedAt: 1,
+    completedAt: null,
     labels: [],
     sourceTicketUrl: null,
     agent: null,

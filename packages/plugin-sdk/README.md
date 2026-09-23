@@ -330,6 +330,7 @@ Value binding, linked helper/error text, and `onValueChange` work with either la
 ## Documentation
 
 - [Plugin authoring guide](https://github.com/koenvg/openforge/blob/main/docs/plugin-authoring.md)
+- [Completion-date analytics and coverage](https://github.com/koenvg/openforge/blob/main/docs/plugin-authoring.md#completion-dates-and-historical-coverage) — SDK 0.3.9 (planned), first host build with KVG-5266; older hosts cannot provide this contract.
 - [Shared search palette and theme hooks](https://github.com/koenvg/openforge/blob/main/docs/sdk-search-palette.md)
 - [SDK reference](https://github.com/koenvg/openforge/blob/main/docs/plugins/sdk-reference.md)
 - [Application themes and recovery](https://github.com/koenvg/openforge/blob/main/docs/plugins/theming.md)

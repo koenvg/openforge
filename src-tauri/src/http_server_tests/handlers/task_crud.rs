@@ -693,3 +693,104 @@ async fn canonical_task_reads_are_bounded_and_preserve_legacy_routes() {
     let legacy = response_body_json(legacy_response).await;
     assert!(legacy[0].get("initial_prompt").is_some());
 }
+
+#[tokio::test]
+async fn completed_http_period_query_preserves_coverage_and_rejects_invalid_bounds() {
+    let (state, _temp_dir) = test_state("http_completed_period");
+    let (project_id, dated_id) = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/http-period")
+            .expect("project");
+        let dated = db
+            .create_task("Dated", "done", Some(&project.id), None, None)
+            .expect("dated task");
+        db.create_task("Undated", "done", Some(&project.id), None, None)
+            .expect("undated task");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock connection");
+        conn.execute(
+            "UPDATE tasks SET completed_at = 1700000000 WHERE id = ?1",
+            [&dated.id],
+        )
+        .expect("seed date");
+        conn.execute(
+            "UPDATE task_completion_coverage SET tracked_from = 1700000000",
+            [],
+        )
+        .expect("seed coverage");
+        (project.id, dated.id)
+    };
+    let router = create_router(state);
+    let base = format!("/v2/projects/{project_id}/tasks/completed");
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "{base}?completedFrom=1700000000&completedBefore=1700000001"
+                ))
+                .body(Body::empty())
+                .expect("period request"),
+        )
+        .await
+        .expect("period response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let page = response_body_json(response).await;
+    assert_eq!(page["tasks"][0]["id"], dated_id);
+    assert_eq!(page["tasks"][0]["completedAt"], 1_700_000_000);
+    assert_eq!(page["completionCoverage"]["unknownCompletedTaskCount"], 1);
+    assert_eq!(page["completionCoverage"]["rangeStatus"], "complete");
+    let empty = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "{base}?completedFrom=1700000001&completedBefore=1700000002"
+                ))
+                .body(Body::empty())
+                .expect("empty request"),
+        )
+        .await
+        .expect("empty response");
+    let empty_page = response_body_json(empty).await;
+    assert_eq!(empty_page["tasks"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        empty_page["completionCoverage"]["unknownCompletedTaskCount"],
+        1
+    );
+    for query in [
+        "completedFrom=bad&completedBefore=1700000001",
+        "completedFrom=1700000000",
+        "completedFrom=1700000001&completedBefore=1700000000",
+    ] {
+        let invalid = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{base}?{query}"))
+                    .body(Body::empty())
+                    .expect("invalid request"),
+            )
+            .await
+            .expect("invalid response");
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_body_json(invalid).await["code"],
+            "invalid_completion_range"
+        );
+    }
+    let detail = router
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v2/projects/{project_id}/tasks/{dated_id}"))
+                .body(Body::empty())
+                .expect("detail request"),
+        )
+        .await
+        .expect("detail response");
+    assert_eq!(
+        response_body_json(detail).await["task"]["completedAt"],
+        1_700_000_000
+    );
+}

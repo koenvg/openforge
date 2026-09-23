@@ -78,6 +78,7 @@ const mockTask: TaskDetail = {
   labels: [],
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
 }
 
 describe('AddTaskDialog injection point', () => {

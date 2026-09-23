@@ -22,6 +22,7 @@ const baseTask: TaskDetail = {
   labels: [],
   createdAt: 1000,
   updatedAt: 2000,
+  completedAt: null,
 }
 
 describe('TaskInitialPrompt', () => {

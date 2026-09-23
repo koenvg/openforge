@@ -24,6 +24,7 @@ function createTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
     projectId: 'project-1',
     createdAt: 1000,
     updatedAt: 2000,
+    completedAt: null,
     labels: [],
     ...overrides,
   }

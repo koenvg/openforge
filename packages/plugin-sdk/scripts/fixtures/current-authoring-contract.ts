@@ -17,6 +17,8 @@ import {
   type PluginCommandInvocationContext,
   type ActiveTasks,
   type CompletedTaskPage,
+  type CompletedTaskQuery,
+  type CompletionCoverage,
   type TaskDetail,
   type TaskRead,
   type TaskReference,
@@ -94,12 +96,20 @@ declare const page: CompletedTaskPage
 declare const read: TaskRead
 void reference.dependsOn
 void summary.promptPreview
+const completionDate: number | null = summary.completedAt
+void completionDate
+void detail.completedAt
 void detail.prompt
 void active.related
 void page.nextCursor
-void read.task
+const coverage: CompletionCoverage = page.completionCoverage
+void coverage.trackedFrom
+void coverage.unknownCompletedTaskCount
+void coverage.rangeStatus
+void read.task.completedAt
 void tasks.active('P-4')
-void tasks.completed('P-4', { search: 'completed task' })
+const period: CompletedTaskQuery = { completedFrom: 1_700_000_000, completedBefore: 1_700_086_400 }
+void tasks.completed('P-4', period)
 void tasks.detail('P-4', 'KVG-3423')
 
 const taskChangeReasons = ['created', 'updated', 'completed', 'attention', 'execution'] satisfies TaskChangeReason[]

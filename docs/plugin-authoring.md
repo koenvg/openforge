@@ -494,15 +494,13 @@ For reads, choose the projection that matches the work:
 const active = await openforge.tasks.active(projectId)
 // active.tasks contains every selection-ready non-Completed TaskDetail for the project.
 
-let page = await openforge.tasks.completed(projectId, {
-  search: 'billing',
-  labels: ['scheduled']
-})
+const query = { search: 'billing', labels: ['scheduled'] }
+let page = await openforge.tasks.completed(projectId, query)
 for (const summary of page.tasks) {
   console.log(summary.id, summary.promptPreview)
 }
 if (page.nextCursor) {
-  page = await openforge.tasks.completed(projectId, { cursor: page.nextCursor })
+  page = await openforge.tasks.completed(projectId, { ...query, cursor: page.nextCursor })
 }
 
 const read = await openforge.tasks.detail(projectId, 'T-123')
@@ -511,6 +509,42 @@ console.log(read?.related) // Immediate TaskReference records.
 ```
 
 `TaskReference` is for links, `TaskSummary` is for fixed 50-item Completed pages, and `TaskDetail` is for an active or selected Task. Completed pages never include full prompts, and cursors are opaque and bound to the project and normalized filters. `tasks.list()` and `tasks.get()` remain available only to API version 1 plugins. They are deprecated, emit at most one warning per plugin activation, and will be removed in version 2. The host preserves their complete-array behavior; migrate rather than relying on that unbounded read.
+
+### Completion dates and historical coverage
+
+Completion analytics requires **SDK 0.3.9 or later (planned release)** and the **first OpenForge desktop host build containing KVG-5266**. No released host version has that contract yet; confirm the desktop release/build includes it before enabling analytics. `openforge.apiVersion` stays `1` and does not negotiate this capability. An older host returning no `completionCoverage` is unsupported, not evidence of zero completed tasks. SDK publication alone does not upgrade an installed host.
+
+`TaskSummary.completedAt` and `TaskDetail.completedAt` are Unix **seconds** or `null`. A non-null value is the first successful doing-to-done transition; done tasks cannot reopen. Creating a done row directly does not prove completion and leaves the date unknown. Do not substitute `createdAt`, `updatedAt`, agent session dates, token events, or migration time for `null`. Completed pages retain `id` and `projectId` so a plugin can join its own per-task usage index.
+
+Use paired `completedFrom` and `completedBefore` nonnegative safe-integer Unix seconds for `[from, before)`. Null completion dates are omitted from period results. An unfiltered completed read retains `updatedAt DESC, id DESC` browsing order and includes unknown-date tasks; a period read uses immutable `completedAt DESC, id DESC`. Both return at most 50 summaries and an opaque `nextCursor`. Repeat the same project, search, labels, and period bounds when paging; mismatched or malformed cursors fail. Edits that change search/label membership, or new completions while paging, may require restarting after a task invalidation; pages are not snapshot exports.
+
+Every completed page, including an empty page, has `completionCoverage`: `trackedFrom` (Unix seconds or `null`) is the start of verified continuous tracking; `unknownCompletedTaskCount` counts retained done tasks with unknown dates in that project and the same **non-date** filters before pagination; `rangeStatus` is `complete`, `partial`, `unavailable`, or `notRequested` without period bounds. A zero known count is a verified zero for the selected period only when `rangeStatus === 'complete'`. `partial` and `unavailable` still return any independently verified dated matches but do not prove a total. `trackedFrom` does not recover deleted tasks, other installations, or unverified older writers/imports; a downgrade can invalidate continuity.
+
+Convert each local-calendar boundary separately to seconds. Do not add 86,400 seconds across daylight-saving changes:
+
+```ts
+import type { CompletionCoverage } from '@openforge-app/plugin-sdk'
+const start = new Date(year, monthIndex, day)
+const end = new Date(year, monthIndex, day + 1)
+const query = { completedFrom: Math.floor(start.getTime() / 1000), completedBefore: Math.floor(end.getTime() / 1000) }
+let cursor: string | null = null
+let knownCount = 0
+let usageTotal = 0
+let coverage: CompletionCoverage | null = null
+do {
+  const page = await openforge.tasks.completed(projectId, { ...query, cursor })
+  if (!page.completionCoverage) throw new Error('Update OpenForge before counting completions')
+  coverage = page.completionCoverage
+  for (const task of page.tasks) {
+    knownCount += 1
+    usageTotal += usageByTaskId.get(task.id) ?? 0 // Plugin-owned index scoped to this project.
+  }
+  // Keep coverage alongside knownCount; an unavailable zero is not history.
+  cursor = page.nextCursor
+} while (cursor)
+```
+
+A [typechecked consumer fixture](../packages/plugin-sdk/scripts/fixtures/completion-analytics-consumer.ts) demonstrates coverage, project-scoped pagination, and task-ID usage joins; its tests include 23- and 25-hour days.
 
 Frontend plugins can subscribe to invalidations when plugin-owned state must stay current after the initial bounded read:
 

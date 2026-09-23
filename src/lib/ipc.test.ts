@@ -824,8 +824,9 @@ describe('canonical IPC Task reads', () => {
         related: [{ id: 'T-related', status: 'todo' }],
       })
       .mockResolvedValueOnce({
-        tasks: [{ id: 'T-done', status: 'done' }],
+        tasks: [{ id: 'T-done', status: 'done', completedAt: 1700000000 }],
         nextCursor: 'cursor-2',
+        completionCoverage: { trackedFrom: 1700000000, unknownCompletedTaskCount: 1, rangeStatus: 'complete' },
       })
       .mockResolvedValueOnce({
         task: { id: 'T-done', status: 'done', prompt: 'Full prompt' },
@@ -837,10 +838,12 @@ describe('canonical IPC Task reads', () => {
     expect(active.tasks[0].status).toBe('doing')
     expect(active.related[0].status).toBe('backlog')
 
-    const completed = await readCompletedTasks('P-1', { labels: ['feature'] })
+    const completed = await readCompletedTasks('P-1', { labels: ['feature'], completedFrom: 1700000000, completedBefore: 1700000001 })
     expect(completed.tasks[0].status).toBe('done')
     expect(completed.nextCursor).toBe('cursor-2')
 
+    expect(completed.tasks[0].completedAt).toBe(1700000000)
+    expect(completed.completionCoverage).toEqual({ trackedFrom: 1700000000, unknownCompletedTaskCount: 1, rangeStatus: 'complete' })
     await expect(readTaskDetail('P-1', 'T-done')).resolves.toMatchObject({
       task: { id: 'T-done', status: 'done', prompt: 'Full prompt' },
       related: [{ id: 'T-related', status: 'doing' }],
@@ -849,7 +852,7 @@ describe('canonical IPC Task reads', () => {
 
     expect(invokeMock.mock.calls).toEqual([
       ['tasks_active', { projectId: 'P-1' }],
-      ['tasks_completed', { projectId: 'P-1', query: { labels: ['feature'] } }],
+      ['tasks_completed', { projectId: 'P-1', query: { labels: ['feature'], completedFrom: 1700000000, completedBefore: 1700000001 } }],
       ['tasks_detail', { projectId: 'P-1', taskId: 'T-done' }],
       ['tasks_detail', { projectId: 'P-1', taskId: 'T-missing' }],
     ])

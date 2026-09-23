@@ -299,6 +299,7 @@ fn insert_task_row(
         project_id: opts.project_id.map(str::to_string),
         created_at: now,
         updated_at: now,
+        completed_at: None,
         prompt: Some(opts.prompt.to_string()),
         agent: None,
         permission_mode: opts.permission_mode.map(str::to_string),

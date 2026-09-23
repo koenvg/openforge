@@ -144,6 +144,7 @@ pub(super) fn task_with_provider_options(
         project_id: Some("P-provider-options".to_string()),
         created_at: 1,
         updated_at: 1,
+        completed_at: None,
         prompt: None,
         agent: agent.map(str::to_string),
         permission_mode: permission_mode.map(str::to_string),
