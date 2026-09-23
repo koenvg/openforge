@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { once } from 'node:events'
@@ -35,6 +35,8 @@ with (runtime / 'daemon.lock').open() as lock:
     print('READY', flush=True)
     sys.stdin.readline()
     (runtime / 'restart.json').write_text('committed')
+    print('WRITTEN', flush=True)
+    sys.stdin.readline()
 `, runtime], { stdio: ['pipe', 'pipe', 'pipe'] })
   writers.push(writer)
   await new Promise((resolve, reject) => {
@@ -49,12 +51,17 @@ with (runtime / 'daemon.lock').open() as lock:
   try {
     await new Promise(resolve => setTimeout(resolve, 150))
     expect(settled).toBe(false)
+    const written = once(writer.stdout, 'data')
+    writer.stdin.write('\n')
+    expect((await written)[0].toString()).toContain('WRITTEN')
+    expect(await readFile(join(runtime, 'restart.json'), 'utf8')).toBe('committed')
+    expect(await readFile(join(runRoot, 'sentinel'), 'utf8')).toBe('runtime')
+    expect(settled, 'cleanup must wait until the writer releases its lock').toBe(false)
     writer.stdin.end('\n')
     await once(writer, 'exit')
-    expect(await readFile(join(runtime, 'restart.json'), 'utf8')).toBe('committed')
     await cleanup
-    expect(await readFile(join(runtime, 'restart.json')).catch(error => error.code)).toBe('ENOENT')
-    expect(await readFile(join(runRoot, 'sentinel')).catch(error => error.code)).toBe('ENOENT')
+    expect(await stat(daemonRoot).catch(error => error.code)).toBe('ENOENT')
+    expect(await stat(runRoot).catch(error => error.code)).toBe('ENOENT')
   } finally {
     if (!writer.stdin.writableEnded) writer.stdin.end('\n')
     await cleanup.catch(() => {})
