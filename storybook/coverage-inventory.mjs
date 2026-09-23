@@ -450,7 +450,6 @@ const inventory = {
     { source: 'packages/pr-review-ui/src/InlineReviewThread.svelte', stories: ['components-review-comment-thread--conversation', 'components-orphaned-review-threads--detached'] },
     { source: 'packages/pr-review-ui/src/OrphanedReviewThreads.svelte', stories: ['components-orphaned-review-threads--detached'] },
     { source: 'packages/pr-review-ui/src/RichMarkdownDiff.svelte', stories: ['components-rich-markdown-review--rich-diff'] },
-    { source: 'packages/pr-review-ui/src/visual/RichMarkdownDiffVisualHarness.svelte', stories: ['components-rich-markdown-review--rich-diff'] },
     { source: 'packages/pr-review-ui/src/MediaViewerDialog.svelte', stories: ['components-review-media-viewer--images'] },
     { source: 'packages/pr-review-ui/src/ReviewVideoPreview.svelte', stories: ['components-review-video-preview--unavailable'] },
     { source: 'plugins/github-sync/src/review/pr/AgentTab.svelte', stories: ['components-pr-review-agent--project-required'] },
@@ -469,7 +468,6 @@ const inventory = {
     { source: 'src/components/plugin/PluginSlot.svelte', stories: ['components-plugin-settings-slot--global'] },
     { source: 'src/components/plugin/PluginFolderDiscovery.svelte', stories: ['components-plugin-folder-discovery--installable'] },
     { source: 'src/components/plugin/PluginFolderPackages.svelte', stories: ['components-plugin-folder-discovery--installable'] },
-    { source: 'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte', stories: ['components-interaction-overlay--scrollable-settings'] },
     { source: 'packages/pr-review-ui/src/ui/Card.svelte', stories: ['components-github-sync-review-request-card--active'] },
     { source: 'packages/pr-review-ui/src/ui/PrStatusChip.svelte', stories: ['components-github-sync-pull-request-card--passing'] },
     { source: 'plugins/file-viewer/src/PdfPreview.svelte', stories: ['components-file-viewer--content-document'] },
@@ -490,6 +488,8 @@ const inventory = {
   ],
   // Every exclusion must remain nonvisual or test-only; discovery verifies the stated kind.
   exclusions: [
+    { source: 'packages/pr-review-ui/src/visual/RichMarkdownDiffVisualHarness.svelte', kind: 'test-only-wrapper', reason: 'Visual-only mount for Storybook and screenshot tests; never imported by production.' },
+    { source: 'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte', kind: 'test-only-wrapper', reason: 'Visual-only mount for Storybook and screenshot tests; never imported by production.' },
     { source: 'packages/plugin-sdk/src/ui/TooltipBrowserTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Mounts SDK tooltip controls in isolated Chromium tests.' },
     ...[
       'AnchoredMenuTestWrapper', 'CheckboxTestWrapper', 'CollapsibleSectionTestWrapper',
