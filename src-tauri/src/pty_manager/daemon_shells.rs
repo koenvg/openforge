@@ -481,15 +481,14 @@ impl DaemonShells {
         data: Vec<u8>,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.run(publisher, move |client, key| {
-            let session = find(client, key)?.ok_or(Error::StalePty)?;
-            client.write_ordered(
-                &session.pty,
-                session.next_io_sequence.ok_or(Error::Capacity)?,
-                &data,
+        self.transport
+            .run_input(
+                self.key().to_owned(),
+                self.fence.clone(),
+                publisher,
+                move |client, pty, sequence| client.write_ordered(pty, sequence, &data),
             )
-        })
-        .await
+            .await
     }
 
     pub(crate) async fn resize(
@@ -498,16 +497,14 @@ impl DaemonShells {
         rows: u16,
         publisher: RuntimeEventPublisher,
     ) -> Result<(), String> {
-        self.read(publisher, move |client, key| {
-            let session = find(client, key)?.ok_or(Error::StalePty)?;
-            client.resize_ordered(
-                &session.pty,
-                session.next_io_sequence.ok_or(Error::Capacity)?,
-                columns,
-                rows,
+        self.transport
+            .read_input(
+                self.key().to_owned(),
+                self.fence.clone(),
+                publisher,
+                move |client, pty, sequence| client.resize_ordered(pty, sequence, columns, rows),
             )
-        })
-        .await
+            .await
     }
 
     pub(crate) async fn terminate(&self, publisher: RuntimeEventPublisher) -> Result<(), String> {
@@ -661,10 +658,8 @@ fn latest_sessions(sessions: Vec<Session>) -> Vec<Session> {
 }
 
 fn find(client: &Client, key: &str) -> Result<Option<Session>, Error> {
-    Ok(client
-        .inventory()?
-        .sessions
-        .into_iter()
-        .filter(|s| s.session_key == key)
-        .max_by_key(|s| s.pty.instance.value()))
+    Ok(super::daemon_transport::newest_session(
+        client.inventory()?.sessions,
+        key,
+    ))
 }

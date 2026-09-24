@@ -1,10 +1,12 @@
 //! Shared controller and event lifetime for selected daemon sessions.
 //! Dropping the last handle closes the event stream, never the daemon or its PTYs.
 use super::daemon_restart::{Intent, Phase};
+mod input_routes;
 mod restart;
 use crate::app_events::RuntimeEventPublisher;
 use crate::github_runtime::task_pr_discovery::{daemon::DaemonOutput, Discovery, LocalDiscovery};
 use base64::Engine;
+use input_routes::InputRoutes;
 use openforge_session_client::{Client, SubscriptionCloser};
 use openforge_session_host::{PtyIdentity, TerminalColorProfile};
 use openforge_session_protocol::{Error, Event, EventBatch, Inventory, Session};
@@ -28,6 +30,7 @@ struct Shared {
     executable: PathBuf,
     selects: Box<dyn Fn(&str) -> bool + Send + Sync>,
     connection: Mutex<Option<Client>>,
+    input_routes: Mutex<InputRoutes>,
     publisher: RwLock<Option<RuntimeEventPublisher>>,
     events: Mutex<Option<SubscriptionCloser>>,
     completion: Mutex<Option<LocalDiscovery>>,
@@ -76,6 +79,7 @@ impl DaemonTransport {
             executable,
             selects: Box::new(selects),
             connection: Mutex::new(None),
+            input_routes: Mutex::default(),
             publisher: RwLock::new(None),
             events: Mutex::new(None),
             completion: Mutex::new(None),
@@ -142,8 +146,51 @@ impl DaemonTransport {
         publisher: RuntimeEventPublisher,
         operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
     ) -> Result<T, String> {
-        self.run_admitted(key, fence, publisher, false, operation)
+        let shared = Arc::clone(&self.0);
+        self.run_admitted(key, fence, publisher, false, move |client, key| {
+            let result = operation(client, key);
+            input_routes(&shared).clear();
+            result
+        })
+        .await
+    }
+
+    pub(super) async fn run_input(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        self.input_admitted(key, fence, publisher, false, send)
             .await
+    }
+
+    pub(super) async fn read_input(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        self.input_admitted(key, fence, publisher, true, send).await
+    }
+
+    async fn input_admitted(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        allow_fenced: bool,
+        mut send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        let shared = Arc::clone(&self.0);
+        self.run_admitted(key, None, publisher, allow_fenced, move |client, key| {
+            input_routes(&shared).send(client, key, fence.as_ref(), |pty, sequence| {
+                send(client, pty, sequence)
+            })
+        })
+        .await
     }
 
     pub(super) async fn read<T: Send + 'static>(
@@ -214,11 +261,7 @@ impl DaemonTransport {
                 if inventory.controller != fence.controller {
                     return Err(Error::StaleController);
                 }
-                let current = inventory
-                    .sessions
-                    .into_iter()
-                    .filter(|session| session.session_key == key)
-                    .max_by_key(|session| session.pty.instance.value());
+                let current = newest_session(inventory.sessions, &key);
                 if current.is_none_or(|session| session.pty.instance.value() != fence.instance_id) {
                     return Err(Error::StalePty);
                 }
@@ -361,6 +404,20 @@ fn changes_sessions(known: &HashSet<PtyIdentity>, batch: &EventBatch) -> bool {
             Event::Exited { .. } => true,
             Event::Output { pty, .. } | Event::RecoveryRequired { pty } => !known.contains(pty),
         })
+}
+
+fn input_routes(shared: &Shared) -> std::sync::MutexGuard<'_, InputRoutes> {
+    shared
+        .input_routes
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+}
+
+pub(super) fn newest_session(sessions: Vec<Session>, key: &str) -> Option<Session> {
+    sessions
+        .into_iter()
+        .filter(|session| session.session_key == key)
+        .max_by_key(|session| session.pty.instance.value())
 }
 
 fn publisher(shared: &Shared) -> RuntimeEventPublisher {
