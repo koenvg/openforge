@@ -11,6 +11,7 @@ mod notification_journal;
 #[cfg(test)]
 mod notification_journal_tests;
 mod output;
+mod own_processes;
 mod process;
 mod process_native;
 mod quiescence;

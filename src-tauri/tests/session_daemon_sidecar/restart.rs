@@ -107,7 +107,7 @@ fn authorized_restart_preserves_shell_but_normal_quit_stops_daemon() {
     let instance = fixture.invoke("pty_spawn_shell", json!({
         "taskId": "T-proof", "terminalIndex": 3, "cwd": fixture.root.path(), "cols": 80, "rows": 24,
     }));
-    fixture.write("stty -echo; kept=alive; printf 'RESTART-PID=%s\\n' \"$$\"\n");
+    fixture.write("stty -echo; kept=alive; printf 'RESTART-PID''=%s\\n' \"$$\"\n");
     let before = fixture.output("RESTART-PID=");
     let pid = regex::Regex::new(r"RESTART-PID=(\d+)")
         .unwrap()
