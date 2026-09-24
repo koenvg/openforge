@@ -180,6 +180,7 @@
   header { display: flex; min-height: 3.5rem; flex-shrink: 0; align-items: center; gap: var(--of-space4); border-bottom: var(--of-border-width) solid var(--of-border); background: var(--of-surface); padding: var(--of-space4) var(--of-space6); }
   h2 { margin: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--of-text); font-size: var(--of-text-md); font-weight: 600; }
   .zoom-controls { display: flex; align-items: center; gap: var(--of-space2); }
+  .zoom-controls :global(button[data-control-kind='text']) { font-size: var(--of-text-sm); line-height: 1rem; }
   output { min-width: 5rem; color: color-mix(in oklab, var(--of-text) 70%, transparent); text-align: center; font-size: var(--of-text-sm); font-variant-numeric: tabular-nums; }
   header :global(svg) { width: 1rem; height: 1rem; }
   header > :global(button:last-child svg) { width: 1.25rem; height: 1.25rem; }

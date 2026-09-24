@@ -419,23 +419,6 @@ const inventory = {
       'components-file-viewer--content-large',
     ] },
     { source: 'plugins/file-viewer/src/MarkdownFilePreview.svelte', stories: ['components-file-viewer--markdown'] },
-    { source: 'plugins/file-viewer/src/FilePreviewHeader.svelte', stories: [
-      'components-file-viewer--content', 'components-file-viewer--content-image',
-      'components-file-viewer--content-video', 'components-file-viewer--content-binary',
-      'components-file-viewer--content-document', 'components-file-viewer--content-large',
-      'components-file-viewer--content-empty', 'components-file-viewer--content-overflow',
-    ] },
-    { source: 'plugins/file-viewer/src/FileTextPreview.svelte', stories: [
-      'components-file-viewer--content', 'components-file-viewer--content-empty',
-      'components-file-viewer--content-overflow',
-    ] },
-    { source: 'plugins/file-viewer/src/FileMediaPreview.svelte', stories: [
-      'components-file-viewer--content-image', 'components-file-viewer--content-video',
-    ] },
-    { source: 'plugins/file-viewer/src/FileUnavailablePreview.svelte', stories: [
-      'components-file-viewer--content-binary', 'components-file-viewer--content-document',
-      'components-file-viewer--content-large',
-    ] },
     { source: 'packages/plugin-sdk/src/ui/LoadingIndicator.svelte', stories: ['components-self-review-panels--diff-loading'] },
     { source: 'packages/plugin-sdk/src/ui/MermaidDiagramPreview.svelte', stories: ['sdk-markdown--diagram'] },
     { source: 'packages/pr-review-ui/src/InlineCommentForm.svelte', stories: ['components-pr-review-inline-comment-form--populated'] },
@@ -491,6 +474,7 @@ const inventory = {
   // Every exclusion must remain nonvisual or test-only; discovery verifies the stated kind.
   exclusions: [
     { source: 'packages/plugin-sdk/src/ui/TooltipBrowserTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Mounts SDK tooltip controls in isolated Chromium tests.' },
+    { source: 'packages/plugin-sdk/src/ui/browser/SdkViewsBrowserFixture.svelte', kind: 'test-only-wrapper', reason: 'Mounts token-only SDK views for isolated browser tests; not imported by production.' },
     ...[
       'AnchoredMenuTestWrapper', 'CheckboxTestWrapper', 'CollapsibleSectionTestWrapper',
       'MermaidDiagramPreviewTestWrapper', 'ModalFooterTestWrapper', 'ModalTestWrapper',

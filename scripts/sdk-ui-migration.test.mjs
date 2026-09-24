@@ -49,7 +49,7 @@ describe('SDK presentation inventory', () => {
         (source.path.startsWith('packages/plugin-sdk/src/ui/') && source.path.endsWith('.svelte') && !/(?:TestWrapper|TestHarness)\.svelte$/.test(source.path)) || routedFixtures.has(source.path)),
       { path: packedFixture, contents: readFileSync(new URL(`../${packedFixture}`, import.meta.url), 'utf8') },
     ]
-    expect(sources.map(source => source.path)).toContain('packages/plugin-sdk/src/ui/browser/SdkViewsFixture.svelte')
+    expect(sources.map(source => source.path)).toContain('packages/plugin-sdk/src/ui/browser/SdkViewsBrowserFixture.svelte')
     expect(sources.map(source => source.path)).toContain(packedFixture)
     const records = inventoryLegacyUiConsumers(sources)
     // The only script candidate is a callback name, `toggle`, or fixture scenario
