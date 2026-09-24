@@ -38,6 +38,15 @@ describe('IconRail', () => {
     commandHeld.set(false)
   })
 
+  it('reserves room for the window controls only when the app sidebar is collapsed', () => {
+    const { container, unmount } = render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), sidebarCollapsed: true } })
+    expect(container.querySelector('.of-window-controls-spacer')).not.toBeNull()
+    unmount()
+
+    const expanded = render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), sidebarCollapsed: false } })
+    expect(expanded.container.querySelector('.of-window-controls-spacer')).toBeNull()
+  })
+
   it('clicking Board calls onNavigate with "board"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate } })

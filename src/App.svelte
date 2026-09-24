@@ -371,7 +371,7 @@
   {/snippet}
   {#snippet projectNavigation()}
     {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
-      <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+      <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} sidebarCollapsed={appSidebarCollapsed} />
     {/if}
   {/snippet}
   {#snippet children()}
