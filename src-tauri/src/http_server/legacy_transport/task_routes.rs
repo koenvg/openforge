@@ -4,7 +4,7 @@ use crate::{
     http_server::{AppState, TaskOperation},
 };
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{Json, Path, State},
     http::StatusCode,
 };
 
@@ -408,28 +408,6 @@ pub async fn link_task_chain_handler(
     }))
 }
 
-pub async fn get_task_info_handler(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<GetTaskInfoResponse>, StatusCode> {
-    let db = db::acquire_db(&state.db);
-
-    match db
-        .get_task(&id)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        Some(task) => Ok(Json(GetTaskInfoResponse {
-            id: task.id,
-            initial_prompt: task.initial_prompt,
-            prompt: task.prompt,
-            status: task.status,
-            depends_on: task.depends_on,
-            labels: task.labels,
-        })),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-
 pub async fn list_task_labels_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -521,81 +499,6 @@ pub async fn get_project_task_labels_handler(
     })?;
 
     Ok(Json(labels))
-}
-
-pub async fn get_tasks_handler(
-    State(state): State<AppState>,
-    Query(query): Query<TasksQuery>,
-) -> Result<Json<Vec<TaskListRow>>, (StatusCode, String)> {
-    if let Some(task_state) = query.state.as_deref() {
-        if !matches!(task_state, "backlog" | "doing" | "done") {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("Invalid state '{task_state}'. Expected one of: backlog, doing, done"),
-            ));
-        }
-    }
-
-    let compact = query.compact.unwrap_or(false);
-    let exclude_done = query.exclude_done.unwrap_or(false) || !query.include_done.unwrap_or(true);
-    let db = db::acquire_db(&state.db);
-
-    if compact {
-        let tasks = match query.state.as_deref() {
-            Some(task_state) => db
-                .get_compact_tasks_for_project_by_state(&query.project_id, task_state)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get compact tasks by state: {e}"),
-                    )
-                })?,
-            None if exclude_done => db
-                .get_compact_tasks_for_project_excluding_state(&query.project_id, "done")
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get compact tasks excluding done: {e}"),
-                    )
-                })?,
-            None => db
-                .get_compact_tasks_for_project(&query.project_id)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get compact tasks: {e}"),
-                    )
-                })?,
-        };
-        return Ok(Json(tasks.into_iter().map(TaskListRow::Compact).collect()));
-    }
-
-    let tasks = match query.state.as_deref() {
-        Some(task_state) => db
-            .get_tasks_for_project_by_state(&query.project_id, task_state)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get tasks by state: {e}"),
-                )
-            })?,
-        None if exclude_done => db
-            .get_tasks_for_project_excluding_state(&query.project_id, "done")
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get tasks excluding done: {e}"),
-                )
-            })?,
-        None => db.get_tasks_for_project(&query.project_id).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get tasks: {e}"),
-            )
-        })?,
-    };
-
-    Ok(Json(tasks.into_iter().map(TaskListRow::Full).collect()))
 }
 
 pub async fn get_project_attention_handler(

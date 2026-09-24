@@ -33,8 +33,6 @@ impl PluginHost {
             "openforge.agentSessions.release" => {
                 self.release_scoped_agent_session_for_host(params).await
             }
-            "openforge.tasks.list" => self.list_tasks_for_host(params),
-            "openforge.tasks.get" => self.get_task_for_host(params),
             "openforge.tasks.active" => self.active_tasks_for_host(params),
             "openforge.tasks.completed" => self.completed_tasks_for_host(params),
             "openforge.tasks.detail" => self.task_detail_for_host(params),

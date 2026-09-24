@@ -82,7 +82,6 @@ export type RuntimeEventHandler = (payload: unknown) => void
 export type RuntimeHostBridge = {
   listProjects?(): Promise<Project[]>
   getProject?(projectId: string): Promise<Project | null>
-  listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   listAgentSessions?(request: ListAgentSessionsRequest): Promise<AgentSessionSummaryPage>
   startScopedAgentSession?(request: StartScopedAgentSessionRequest): Promise<ScopedAgentSessionState>
   getScopedAgentSessionStatus?(scope: SessionScope): Promise<ScopedAgentSessionState | null>
@@ -99,7 +98,6 @@ export type RuntimeHostBridge = {
   setReviewThreadAwaiting?(request: SetReviewThreadAwaitingRequest): Promise<ReviewThread>
   markReviewThreadSeen?(request: MarkReviewThreadSeenRequest): Promise<ReviewThread>
   subscribeReviewThreadChanges?(scope: ReviewThreadScope, handler: (event: ReviewThreadChangeEvent) => void): Disposable
-  getTask?(taskId: string): Promise<Task | null>
   activeTasks?(projectId: string): Promise<ActiveTasks>
   completedTasks?(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>
   taskDetail?(projectId: string, taskId: string): Promise<TaskRead | null>

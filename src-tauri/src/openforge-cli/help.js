@@ -25,7 +25,6 @@ Task listing:
   task completed requires --project-id and returns a fixed page of at most 50 TaskSummary records plus nextCursor.
   Repeat task completed with --cursor <nextCursor>; cursors are opaque and bound to the project and filters.
   task detail requires --project-id and --task-id and returns the TaskDetail plus immediate relationship references.
-  task list and task get are deprecated version 1 compatibility commands and will be removed in version 2.
 
 Task prerequisites:
   task dependencies remove deletes only the named direct prerequisite and leaves the others intact.

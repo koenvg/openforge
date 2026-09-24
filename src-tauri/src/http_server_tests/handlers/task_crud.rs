@@ -1,126 +1,41 @@
 use super::*;
 
 #[tokio::test]
-async fn test_get_tasks_handler_returns_tasks_for_project() {
-    let (state, _temp_dir) = test_state("http_get_tasks_handler_returns_tasks");
-    {
+async fn retired_task_reads_are_absent_but_task_label_route_remains() {
+    let (state, _temp_dir) = test_state("http_retired_task_reads");
+    let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        db.create_task("Task A", "backlog", Some(&project.id), None, None)
-            .expect("create task a");
-        db.create_task("Task B", "doing", Some(&project.id), None, None)
-            .expect("create task b");
-        db.create_task("Task C", "done", Some(&project.id), None, None)
-            .expect("create task c");
-    }
-
-    let router = create_router(state);
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/tasks?project_id=P-1")
-                .method("GET")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let json = response_body_json(response).await;
-    let tasks = json.as_array().expect("array response");
-    assert_eq!(tasks.len(), 3);
-    assert!(tasks.iter().any(|task| task["status"] == "done"));
-    assert!(tasks[0].get("initial_prompt").is_some());
-}
-
-#[tokio::test]
-async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
-    let (state, _temp_dir) = test_state("http_get_tasks_handler_excludes_done_compact");
-    let open_task_id = {
-        let db = state.db.lock().expect("lock db");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-        let open_task = db
-            .create_task(
-                "Open task full prompt",
-                "backlog",
-                Some(&project.id),
-                Some("Open task runtime prompt"),
-                None,
-            )
-            .expect("create open task");
-        let _done_task = db
-            .create_task(
-                "Done task full prompt",
-                "done",
-                Some(&project.id),
-                Some("Done task runtime prompt"),
-                None,
-            )
-            .expect("create done task");
-        open_task.id
+        db.create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task")
+            .id
     };
-
     let router = create_router(state);
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/tasks?project_id=P-1&exclude_done=true&compact=true")
-                .method("GET")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let json = response_body_json(response).await;
-    let tasks = json.as_array().expect("array response");
-    assert_eq!(tasks.len(), 1);
-    assert_eq!(tasks[0]["id"], open_task_id);
-    assert_eq!(tasks[0]["status"], "backlog");
-    assert_eq!(tasks[0]["title"], "Open task full prompt");
-    assert!(tasks[0].get("initial_prompt").is_none());
-    assert!(tasks[0].get("prompt").is_none());
-    assert!(tasks[0].get("summary").is_none());
-}
-
-#[tokio::test]
-async fn test_get_tasks_handler_excludes_done_when_include_done_is_false() {
-    let (state, _temp_dir) = test_state("http_get_tasks_handler_include_done_false");
-    {
-        let db = state.db.lock().expect("lock db");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-        db.create_task("Task A", "backlog", Some(&project.id), None, None)
-            .expect("create task a");
-        db.create_task("Task B", "done", Some(&project.id), None, None)
-            .expect("create task b");
+    for path in [format!("/tasks?project_id=P-1"), format!("/task/{task_id}")] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request succeeds");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
-
-    let router = create_router(state);
-    let response = router
+    let labels = router
         .oneshot(
             Request::builder()
-                .uri("/tasks?project_id=P-1&include_done=false")
-                .method("GET")
+                .uri(format!("/task/{task_id}/labels"))
                 .body(Body::empty())
                 .expect("build request"),
         )
         .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let json = response_body_json(response).await;
-    let tasks = json.as_array().expect("array response");
-    assert_eq!(tasks.len(), 1);
-    assert_eq!(tasks[0]["status"], "backlog");
-    assert!(tasks[0].get("initial_prompt").is_some());
+        .expect("labels request succeeds");
+    assert_eq!(labels.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -383,64 +298,6 @@ async fn create_task_infers_project_when_registered_path_is_missing() {
 }
 
 #[tokio::test]
-async fn test_get_tasks_handler_filters_by_state() {
-    let (state, _temp_dir) = test_state("http_get_tasks_handler_filters_by_state");
-    {
-        let db = state.db.lock().expect("lock db");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-        db.create_task("Task backlog", "backlog", Some(&project.id), None, None)
-            .expect("create backlog task");
-        db.create_task("Task doing", "doing", Some(&project.id), None, None)
-            .expect("create doing task");
-    }
-
-    let router = create_router(state);
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/tasks?project_id=P-1&state=doing")
-                .method("GET")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let json = response_body_json(response).await;
-    let tasks = json.as_array().expect("array response");
-    assert_eq!(tasks.len(), 1);
-    assert_eq!(tasks[0]["status"], "doing");
-}
-
-#[tokio::test]
-async fn test_get_tasks_handler_rejects_invalid_state() {
-    let (state, _temp_dir) = test_state("http_get_tasks_handler_rejects_invalid_state");
-    {
-        let db = state.db.lock().expect("lock db");
-        let _ = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-    }
-
-    let router = create_router(state);
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/tasks?project_id=P-1&state=blocked")
-                .method("GET")
-                .body(Body::empty())
-                .expect("build request"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
 async fn test_update_task_handler_updates_never_started_initial_prompt() {
     let (state, _temp_dir) = test_state("http_update_task_initial_prompt");
     let task_id = {
@@ -530,7 +387,7 @@ async fn test_update_task_handler_rejects_started_initial_prompt_with_replacemen
 }
 
 #[tokio::test]
-async fn canonical_task_reads_are_bounded_and_preserve_legacy_routes() {
+async fn canonical_task_reads_are_bounded() {
     let (state, _temp_dir) = test_state("http_canonical_task_reads");
     let (project_id, active_id, completed_id) = {
         let db = state.db.lock().expect("lock db");
@@ -679,19 +536,6 @@ async fn canonical_task_reads_are_bounded_and_preserve_legacy_routes() {
         response_body_json(missing_response).await["code"],
         "task_not_found"
     );
-
-    let legacy_response = router
-        .oneshot(
-            Request::builder()
-                .uri(format!("/tasks?project_id={project_id}"))
-                .body(Body::empty())
-                .expect("legacy request"),
-        )
-        .await
-        .expect("legacy response");
-    assert_eq!(legacy_response.status(), StatusCode::OK);
-    let legacy = response_body_json(legacy_response).await;
-    assert!(legacy[0].get("initial_prompt").is_some());
 }
 
 #[tokio::test]

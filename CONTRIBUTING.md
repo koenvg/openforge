@@ -173,7 +173,7 @@ openforge task update --task-id T-123 --initial-prompt "Corrected backlog prompt
 openforge task create --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
 
-The CLI talks to the local Open Forge HTTP bridge and is used by the installed provider skills. Use the nested commands above instead of the deprecated `task get` and `task list` commands. The current commands do not accept `--full` or `--state`; choose `task detail` for full task details, `task active` for non-Completed work, or `task completed` for paginated Completed work. Check `openforge --help` or a concrete command's help, such as `openforge task completed --help`, against your installed version.
+The CLI talks to the local Open Forge HTTP bridge and is used by the installed provider skills. The version 1 `task get` and `task list` commands have been removed. Use `task detail` for full task details, `task active` for non-Completed work, or `task completed` for paginated Completed work. The current commands do not accept `--full` or `--state`. Check `openforge --help` or a concrete command's help against your installed version.
 
 `task detail`, `task active`, and `task completed` require an explicit `--project-id`. Find it with `openforge project list` and replace `P-1` in these examples with that ID. `task create` can infer the project from `--worktree "$PWD"` when no project ID is known.
 

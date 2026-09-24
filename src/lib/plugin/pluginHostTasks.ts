@@ -16,13 +16,11 @@ import type {
 } from '@openforge-app/plugin-sdk'
 import {
   createTask,
-  getAllTasks,
   getLatestSession,
   listAgentSessionSummaries,
   getProjectConfig,
   getProjects,
   getTaskDetail,
-  getTasksForProject,
   getTaskWorkspace,
   listAgentSessions,
   readActiveTasks,
@@ -45,9 +43,7 @@ const START_PROMPT_CONTRIBUTIONS_KEY = 'start_prompt_contributions'
 
 type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'subscribeTaskChanges'
-  | 'listTasks'
   | 'listAgentSessions'
-  | 'getTask'
   | 'activeTasks'
   | 'completedTasks'
   | 'taskDetail'
@@ -63,7 +59,7 @@ type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'listTaskSessions'
 >>
 
-function legacyTask(detail: TaskDetail): Task {
+function taskWriteResponse(detail: TaskDetail): Task {
   return {
     id: detail.id,
     initial_prompt: detail.prompt,
@@ -95,7 +91,7 @@ async function createTaskFromPluginRequest(request: CreateTaskRequest): Promise<
       labelNames: request.labelNames ?? [],
     },
   )
-  return legacyTask(detail)
+  return taskWriteResponse(detail)
 }
 
 export async function composeTaskFromPluginRequest(request: ComposeTaskRequest) {
@@ -107,7 +103,7 @@ export async function composeTaskFromPluginRequest(request: ComposeTaskRequest) 
     activeProjectId.set(projectId)
   }
   const result = await requestTaskCompose(request)
-  return result ? { ...result, task: legacyTask(result.task) } : null
+  return result ? { ...result, task: taskWriteResponse(result.task) } : null
 }
 
 function stringArray(value: unknown): string[] {
@@ -252,9 +248,7 @@ async function startTaskImplementationFromPluginRequest(request: StartTaskImplem
 export function createPluginTaskHostCapabilities(pluginId: string): TaskHostCapabilities {
   return {
     subscribeTaskChanges: (projectId, handler) => subscribeToTaskInvalidations(pluginId, projectId, handler),
-    listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     listAgentSessions: (request: ListAgentSessionsRequest) => listAgentSessionSummaries(request),
-    getTask: (taskId) => getTaskDetail(taskId),
     activeTasks: (projectId) => readActiveTasks(projectId),
     completedTasks: (projectId, query) => readCompletedTasks(projectId, query),
     taskDetail: (projectId, taskId) => readTaskDetail(projectId, taskId),
