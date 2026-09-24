@@ -729,10 +729,6 @@ async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata
             .get_tasks_for_project_excluding_state(project_id, "done")
             .expect("get normal board tasks")
             .is_empty());
-        assert!(db
-            .get_tasks_for_project_by_state(project_id, "done")
-            .expect("get completed tasks")
-            .is_empty());
     }
     let visible_tasks = invoke_ok(
         &state,

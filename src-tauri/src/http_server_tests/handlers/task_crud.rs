@@ -13,7 +13,10 @@ async fn retired_task_reads_are_absent_but_task_label_route_remains() {
             .id
     };
     let router = create_router(state);
-    for path in [format!("/tasks?project_id=P-1"), format!("/task/{task_id}")] {
+    for path in [
+        "/tasks?project_id=P-1".to_string(),
+        format!("/task/{task_id}"),
+    ] {
         let response = router
             .clone()
             .oneshot(
