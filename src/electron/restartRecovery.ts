@@ -33,6 +33,7 @@ export class RestartRecovery {
     const operation = await RestartOperation.open(this.actions.root)
     let record = await operation?.status()
     if (!operation || !record || ['committed', 'cancelled', 'terminated'].includes(record.phase)) return false
+    if (record.intent !== 'restart') return false
     if (failure && record.failure !== 'cold-process-loss') {
       await operation.fail(record.operationId, record.phase === 'prepared' && failure !== 'cold-process-loss' ? 'preparation-failed' : failure)
       record = (await operation.status())!
@@ -41,6 +42,7 @@ export class RestartRecovery {
       const choice = quit ? 'quit' : await this.actions.prompt(record, error)
       const latest = await operation.status()
       if (!latest || ['committed', 'cancelled', 'terminated'].includes(latest.phase)) return true
+      if (latest.operationId !== record.operationId || latest.intent !== 'restart') return true
       record = latest
       if (choice === 'wait') return true
       quit = false

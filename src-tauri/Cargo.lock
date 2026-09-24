@@ -1722,6 +1722,7 @@ dependencies = [
  "openforge-session-client",
  "openforge-session-host",
  "openforge-session-protocol",
+ "openforge-update-helper",
  "portable-pty",
  "rand 0.8.7",
  "rcgen",
@@ -1756,6 +1757,7 @@ dependencies = [
  "libc",
  "openforge-session-host",
  "openforge-session-protocol",
+ "ring",
  "serde",
  "serde_json",
  "sha2",
@@ -1784,6 +1786,22 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "openforge-update-helper"
+version = "0.1.0"
+dependencies = [
+ "core-foundation 0.10.1",
+ "libc",
+ "openforge-session-client",
+ "openforge-session-protocol",
+ "ring",
+ "security-framework 3.7.0",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
 ]
 
 [[package]]

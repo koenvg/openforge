@@ -34,6 +34,11 @@ pub(super) struct Operation {
     pub phase: Phase,
 }
 
+pub(super) enum ReconnectContext {
+    Startup,
+    ConnectionRetry,
+}
+
 impl Operation {
     pub fn new(
         operation_id: String,
@@ -88,7 +93,11 @@ impl Operation {
         result
     }
 
-    pub fn reconnect(root: &Path, client: &Client) -> Result<Option<Self>, Error> {
+    pub fn reconnect(
+        root: &Path,
+        client: &Client,
+        context: ReconnectContext,
+    ) -> Result<Option<Self>, Error> {
         let runtime = RuntimeDirectory::open_existing(root)?;
         let file = match std::fs::OpenOptions::new()
             .read(true)
@@ -123,7 +132,14 @@ impl Operation {
         if operation.controller.installation != client.controller().installation {
             return Err(Error::ForeignInstallation);
         }
-        if matches!(operation.phase, Phase::Committed | Phase::Cancelled) {
+        let requested = std::env::var("OPENFORGE_RESTART_OPERATION").ok();
+        // A new update launch must restore again after a lost commit reply.
+        // Ordinary startup and connection retries must not reopen a completed operation.
+        let retrying_update = matches!(context, ReconnectContext::Startup)
+            && operation.intent == Intent::Update
+            && operation.phase == Phase::Committed
+            && requested.as_deref() == Some(operation.operation_id.as_str());
+        if matches!(operation.phase, Phase::Committed | Phase::Cancelled) && !retrying_update {
             return Ok(Some(operation));
         }
         if operation.controller.lifetime != client.controller().lifetime {
@@ -135,7 +151,6 @@ impl Operation {
         if operation.intent == Intent::Quit {
             return Err(Error::Host("previous Quit cleanup is incomplete".into()));
         }
-        let requested = std::env::var("OPENFORGE_RESTART_OPERATION").ok();
         if operation.phase == Phase::Prepared && requested.is_none() {
             operation.phase = Phase::Cancelled;
             operation.persist(root)?;

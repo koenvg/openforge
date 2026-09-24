@@ -25,4 +25,5 @@ mod review_threads;
 mod runtime;
 mod task_dependency_removal;
 mod task_labels;
+mod update_recovery;
 mod whisper;

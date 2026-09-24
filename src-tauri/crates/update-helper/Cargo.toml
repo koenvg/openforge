@@ -1,0 +1,38 @@
+[package]
+name = "openforge-update-helper"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+
+[dependencies]
+libc = "0.2"
+ring = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+openforge-session-client = { path = "../session-client" }
+openforge-session-protocol = { path = "../session-protocol" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+security-framework = "3.7"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+test-fixtures = []
+
+[[example]]
+name = "install-transaction-fixture"
+required-features = ["test-fixtures"]
+
+[[example]]
+name = "install-transaction-fixture-v2"
+required-features = ["test-fixtures"]
+
+[[bin]]
+name = "openforge-update-target-fixture"
+path = "tests/fixtures/target.rs"
+required-features = ["test-fixtures"]

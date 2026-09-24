@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto'
+import type { Writable } from 'node:stream'
+import { admitSidecarStartup, sidecarStartupConfig } from './sidecarStartupAdmission.js'
+import { UpdateSidecarExit } from './updateSidecarExit.js'
 import { StringDecoder } from 'node:string_decoder'
 import { DEFAULT_HTTP_BRIDGE_PORT } from './httpBridgePortContract.js'
 import { createFailureReport, reportFailure } from './failureReporting.js'
@@ -13,6 +16,7 @@ export interface SidecarOutputStreamLike {
 
 export interface ChildProcessLike {
   readonly killed: boolean
+  readonly stdin?: Pick<Writable, 'end' | 'once'> | null
   readonly stdout?: SidecarOutputStreamLike | null
   readonly stderr?: SidecarOutputStreamLike | null
   readonly pid?: number
@@ -179,6 +183,8 @@ export interface StartSidecarDeps {
   fetch: HealthFetch
   sleep: Sleep
   onSpawned?: (child: ChildProcessLike) => void
+  /** A native helper must register this exact child before its stdin is released. */
+  authorizeStartup?: (child: ChildProcessLike) => Promise<string>
   healthTimeoutMs?: number
   healthIntervalMs?: number
   logSidecarOutput?: boolean
@@ -501,11 +507,18 @@ export async function stopSidecar(
   return { status: 'killed', signal: 'SIGKILL', timedOut: true, error: null }
 }
 
+async function stopFailedStartup(child: ChildProcessLike, updateExit: UpdateSidecarExit | null, sleep: Sleep): Promise<void> {
+  if (updateExit) await updateExit.retire(child)
+  else await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep })
+}
+
 export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidecarDeps): Promise<SidecarHandle> {
+  config = sidecarStartupConfig(config, deps.authorizeStartup)
   const child = deps.spawn(config.command, config.args, {
     env: config.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [deps.authorizeStartup ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   })
+  const updateExit = deps.authorizeStartup ? new UpdateSidecarExit(child) : null
   deps.onSpawned?.(child)
 
   if (deps.logSidecarOutput) {
@@ -513,6 +526,7 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
   }
 
   try {
+    if (deps.authorizeStartup) await admitSidecarStartup(child, deps.authorizeStartup)
     await waitForSidecarHealth({
       healthUrl: config.healthUrl,
       token: config.token,
@@ -530,7 +544,7 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
       remediation: 'Stop stale OpenForge sidecar processes and launch again.',
       decision: 'quit',
     }))
-    await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
+    await stopFailedStartup(child, updateExit, deps.sleep)
     throw error
   }
 
@@ -607,10 +621,12 @@ export async function startSidecarReadiness(
   config: SidecarLaunchConfig,
   deps: StartSidecarReadinessDeps,
 ): Promise<SidecarReadinessHandle> {
+  config = sidecarStartupConfig(config, deps.authorizeStartup)
   const child = deps.spawn(config.command, config.args, {
     env: config.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [deps.authorizeStartup ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   })
+  const updateExit = deps.authorizeStartup ? new UpdateSidecarExit(child) : null
   deps.onSpawned?.(child)
 
   if (deps.logSidecarOutput) {
@@ -622,6 +638,7 @@ export async function startSidecarReadiness(
   let snapshot: SidecarReadinessSnapshot | null = null
 
   try {
+    if (deps.authorizeStartup) await admitSidecarStartup(child, deps.authorizeStartup)
     const readinessAbort = new AbortController()
     const readiness = await withReadinessDeadline(waitForSidecarReadiness({
       readinessUrl: config.readinessUrl,
@@ -663,7 +680,7 @@ export async function startSidecarReadiness(
     }))
     eventStream?.stop()
     await waitForEventStreamTeardown(eventRunSettled, deps.sleep)
-    await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
+    await stopFailedStartup(child, updateExit, deps.sleep)
     throw error
   }
 
@@ -672,7 +689,7 @@ export async function startSidecarReadiness(
   let intentionalStop = false
   let stopPromise: Promise<SidecarStopReport> | null = null
   if (!resolvedSnapshot || !resolvedEventStream) {
-    await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
+    await stopFailedStartup(child, updateExit, deps.sleep)
     throw new Error('sidecar readiness did not produce a snapshot')
   }
 

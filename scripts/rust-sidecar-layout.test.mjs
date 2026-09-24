@@ -70,5 +70,6 @@ describe('Rust sidecar backend layout Module', () => {
     expect(layout.sessionCrates.protocol.manifestPath).toBe('/repo/backend/crates/session-protocol/Cargo.toml')
     expect(layout.sessionCrates.host.manifestPath).toBe('/repo/backend/crates/session-host/Cargo.toml')
     expect(layout.sessionCrates.daemon.binaryPath).toBe('/repo/backend/crates/session-daemon/target/debug/openforge-session-daemon')
+    expect(layout.updateHelper.manifestPath).toBe('/repo/backend/crates/update-helper/Cargo.toml')
   })
 })

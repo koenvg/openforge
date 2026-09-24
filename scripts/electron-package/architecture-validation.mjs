@@ -30,6 +30,7 @@ export async function assertPackageArchitectureCompatibility({
   appExecutablePath,
   sidecarPath,
   daemonPath,
+  helperPath,
   readExecutableArchitectures = readDarwinExecutableArchitectures,
 } = {}) {
   const expectedArch = cargoBuildTarget
@@ -52,6 +53,13 @@ export async function assertPackageArchitectureCompatibility({
     const architectures = await readExecutableArchitectures(daemonPath)
     if (!architectures.includes(expectedArch)) {
       throw new Error(`Session Daemon architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${architectures.join(', ') || 'unknown'}`)
+    }
+  }
+
+  if (helperPath) {
+    const architectures = await readExecutableArchitectures(helperPath)
+    if (!architectures.includes(expectedArch)) {
+      throw new Error(`Updater helper architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${architectures.join(', ') || 'unknown'}`)
     }
   }
 

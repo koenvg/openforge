@@ -11,6 +11,9 @@ mod provider_scoping;
 mod providers;
 #[path = "session_daemon_sidecar/restart.rs"]
 mod restart;
+#[cfg(target_os = "macos")]
+#[path = "session_daemon_sidecar/source_owner.rs"]
+mod source_owner;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::{
@@ -39,6 +42,8 @@ struct Fixture {
     agent_selection: Vec<(String, String)>,
     provider_bin: Option<PathBuf>,
     provider_env: Vec<(String, String)>,
+    #[cfg(target_os = "macos")]
+    source_owner: bool,
     token: String,
     http: reqwest::blocking::Client,
 }
@@ -59,6 +64,8 @@ impl Fixture {
             agent_selection: Vec::new(),
             provider_bin: None,
             provider_env: Vec::new(),
+            #[cfg(target_os = "macos")]
+            source_owner: false,
             token: String::new(),
             http: reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(10))
@@ -153,6 +160,12 @@ impl Fixture {
             command.env_remove("OPENFORGE_SESSION_DAEMON_ROOT");
             command.env("OPENFORGE_E2E", "0");
         }
+        #[cfg(target_os = "macos")]
+        let mut command = if self.source_owner {
+            source_owner::launcher(&command, &log_path)
+        } else {
+            command
+        };
         self.child = Some(command.spawn().unwrap());
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
@@ -237,6 +250,10 @@ impl Drop for Fixture {
             let _ = child.wait();
         }
         let cleanup = (|| -> Result<(), String> {
+            #[cfg(target_os = "macos")]
+            if self.source_owner {
+                source_owner::wait_for_fixture_exit(self.root.path())?;
+            }
             if !self.daemon_root().join("session-v1/control.sock").exists() {
                 return Ok(());
             }

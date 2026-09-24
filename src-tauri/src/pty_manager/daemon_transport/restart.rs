@@ -3,29 +3,42 @@
 //! Callers hold the transport's connection lock for every method. The operation
 //! mutex protects storage only; it does not replace command admission or controller
 //! fencing under that connection lock.
-use super::super::daemon_restart::{Intent, Operation, Phase};
+use super::super::daemon_restart::{Intent, Operation, Phase, ReconnectContext};
 use openforge_session_client::Client;
 use openforge_session_protocol::Error;
 use std::path::Path;
 use std::sync::Mutex;
 
 #[derive(Default)]
+struct State {
+    operation: Option<Operation>,
+    initialized: bool,
+}
+
+#[derive(Default)]
 pub(super) struct Restart {
-    operation: Mutex<Option<Operation>>,
+    state: Mutex<State>,
 }
 
 impl Restart {
     pub(super) fn reconnect(&self, root: &Path, client: &Client) -> Result<(), Error> {
-        *self.operation.lock().map_err(|_| Error::OutcomeUnknown)? =
-            Operation::reconnect(root, client)?;
+        let mut state = self.state.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let context = if state.initialized {
+            ReconnectContext::ConnectionRetry
+        } else {
+            ReconnectContext::Startup
+        };
+        state.operation = Operation::reconnect(root, client, context)?;
+        state.initialized = true;
         Ok(())
     }
 
     pub(super) fn blocks_mutations(&self) -> Result<bool, Error> {
         Ok(self
-            .operation
+            .state
             .lock()
             .map_err(|_| Error::OutcomeUnknown)?
+            .operation
             .as_ref()
             .is_some_and(Operation::blocks_mutations))
     }
@@ -38,7 +51,8 @@ impl Restart {
         intent: Intent,
     ) -> Result<(), Error> {
         client.inventory()?;
-        let mut operation = self.operation.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let mut state = self.state.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let operation = &mut state.operation;
         if operation.as_ref().is_some_and(Operation::blocks_mutations) {
             return Err(Error::OperationConflict);
         }
@@ -66,8 +80,8 @@ impl Restart {
         to: Phase,
     ) -> Result<(), Error> {
         client.inventory()?;
-        let mut slot = self.operation.lock().map_err(|_| Error::OutcomeUnknown)?;
-        let operation = slot.as_mut().ok_or(Error::OperationConflict)?;
+        let mut state = self.state.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let operation = state.operation.as_mut().ok_or(Error::OperationConflict)?;
         if operation.operation_id == operation_id && operation.phase == to {
             return Ok(());
         }
@@ -87,7 +101,8 @@ impl Restart {
     }
 
     pub(super) fn shutdown(&self, root: &Path, client: &Client) -> Result<(), Error> {
-        let mut slot = self.operation.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let mut state = self.state.lock().map_err(|_| Error::OutcomeUnknown)?;
+        let slot = &mut state.operation;
         if slot.as_ref().is_some_and(Operation::preserves_sessions) {
             return Ok(());
         }

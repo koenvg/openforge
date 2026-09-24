@@ -225,10 +225,20 @@ fn run_desktop_test_fixture_if_requested() -> Result<bool, String> {
 }
 
 fn sidecar_resource_dir() -> Result<PathBuf, String> {
-    std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(PathBuf::from))
-        .ok_or_else(|| "failed to resolve backend resource directory".to_string())
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let directory = executable
+        .parent()
+        .ok_or("failed to resolve backend resource directory")?;
+    if directory.file_name().is_some_and(|name| name == "MacOS")
+        && directory
+            .parent()
+            .and_then(std::path::Path::file_name)
+            .is_some_and(|name| name == "Contents")
+    {
+        Ok(directory.with_file_name("Resources"))
+    } else {
+        Ok(directory.to_path_buf())
+    }
 }
 
 fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
@@ -262,8 +272,8 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
             None if cfg!(debug_assertions) => {
                 std::env::current_exe()?.with_file_name("openforge-session-daemon")
             }
-            None => std::env::current_exe()?
-                .with_file_name("session-runtime")
+            None => resource_dir
+                .join("session-runtime")
                 .join("openforge-session-daemon"),
         };
         let root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
@@ -386,6 +396,22 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
+    let update_startup = match openforge_update_helper::authorize_sidecar_startup() {
+        Ok(update_startup) => update_startup,
+        Err(error) => {
+            eprintln!("[update-startup] refused: {error}");
+            std::process::exit(1);
+        }
+    };
+    // The ownership mode adds a parent-exit guard, never update startup authority.
+    let electron_owned = cfg!(target_os = "macos")
+        && std::env::var("OPENFORGE_ELECTRON_SIDECAR").as_deref() == Ok("1");
+    if update_startup || electron_owned {
+        if let Err(error) = openforge_update_helper::exit_with_host() {
+            eprintln!("[sidecar-owner] cannot watch owning app: {error}");
+            std::process::exit(1);
+        }
+    }
     if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
     }

@@ -1,6 +1,6 @@
 import type { RestartTerminalController } from './restartWorkspace.js'
 
-const components = ['app', 'sidecar', 'daemon', 'cli'] as const
+const components = ['app', 'sidecar', 'daemon', 'cli', 'helper'] as const
 export type UpdateImages = Record<typeof components[number], string>
 
 /** Content identities, not display versions. These identify the verified staged bytes. */
@@ -13,14 +13,20 @@ export interface UpdateTarget {
 
 /**
  * Trusted host boundary, never supplied by IPC payloads or environment variables.
- * No production implementation is available until release trust verification exists.
- * Preflight must verify publisher trust, stage/pin target and fallback assets, check
- * compatibility, and verify the helper before returning. A checksum alone is not trust.
+ * Preflight stages and authorizes the complete target, using verified publisher
+ * policy or explicit local approval. Native preparation follows durable recovery
+ * recording; a checksum alone is not trust.
  */
 export interface AppUpdateDriver {
   preflight(identity: { installationId: string; operationId: string }): Promise<UpdateTarget>
+  /** May prepare the runtime only after the host durably records this update. */
+  prepare(target: UpdateTarget): Promise<void>
+  /** Release prepared helper/runtime ownership before detach. */
+  cancel(target: UpdateTarget): Promise<void>
   /** Authorize the verified helper, not app.relaunch or a direct bundle copy. */
   replace(target: UpdateTarget): Promise<void>
+  /** Persist native commit only after authenticated readiness and workspace restoration. */
+  commit(target: UpdateTarget): Promise<void>
   /** Authenticate the ready replacement and measure its running executable identities. */
   readiness(target: UpdateTarget): Promise<{
     operationId: string
