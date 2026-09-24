@@ -24,6 +24,18 @@ describe('story plugin filesystem', () => {
     await expect(adapter.api.fs.readFile({ ...request, path: '/etc/passwd' })).rejects.toThrow('not found')
     await adapter.dispose()
   })
+  it('keeps document previews scoped to the task fake when story files are overlaid', async () => {
+    const preview = { status: 'unavailable' as const, reason: 'invalid-document' as const, size: 0, maxBytes: 16777216 }
+    const adapter = createStoryPluginAdapter({
+      filesystem: { directories: { '': [] }, files: {} },
+      taskWorkspaces: { 'T-42': { documents: { 'guide.pdf': preview } } },
+    })
+    adapter.install()
+    await expect(adapter.api.fs.task.readDocument({ taskId: 'T-42', path: 'guide.pdf' })).resolves.toEqual(preview)
+    await expect(adapter.api.fs.task.readDocument({ taskId: 'T-43', path: 'guide.pdf' })).rejects.toThrow('DOCUMENT_PREVIEW_NOT_FOUND')
+    await expect(adapter.api.fs.readDocument({ projectId: 'P-1', path: 'guide.pdf' })).rejects.toThrow('DOCUMENT_PREVIEW_NOT_FOUND')
+    await adapter.dispose()
+  })
   it('releases deferred reads, retries failures, and cancels pending reads on teardown', async () => {
     const adapter = createStoryPluginAdapter({ filesystem: {
       directories: { '': [] }, files: { 'missing.txt': createTextFileContent({ content: 'Restored' }) },
