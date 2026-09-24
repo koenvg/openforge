@@ -100,11 +100,7 @@ export interface TestingOpenForgeApiOptions {
   projectDocuments?: Readonly<Record<string, Readonly<Record<string, import('../domain.js').DocumentPreviewRead>>>>
   /** Task workspaces exposed through `fs.task`, keyed by Task ID. Missing IDs reject. */
   taskWorkspaces?: Readonly<Record<string, TestingTaskWorkspaceFixture>>
-  /**
-   * Tasks returned by `tasks.list`. The mock filters them by the requested
-   * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,
-   * mirroring the host capability. Defaults to an empty list.
-   */
+  /** Seed Tasks for canonical project-scoped Task reads. Defaults to an empty list. */
   tasks?: Task[]
   /** Verified tracking start in Unix seconds. Null (default) means historical coverage is unavailable. */
   taskCompletionTrackedFrom?: number | null
@@ -136,7 +132,6 @@ export interface TestingOpenForgeApiCalls {
   startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]
-  taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
   taskActiveRequests: Array<{ projectId: string }>
   taskCompletedRequests: Array<{ projectId: string } & CompletedTaskQuery>
   taskDetailRequests: Array<{ projectId: string; taskId: string }>

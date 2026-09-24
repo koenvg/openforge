@@ -29,15 +29,12 @@ describe('plugin-host backend host APIs', () => {
         async activate(openforge, context) {
           context.subscriptions.add(openforge.backend.registerMethod('taskApis', {
             async handler() {
-              const projectTasks = await openforge.tasks.list({ projectId: 'P-1', includeDone: true })
-              const allTasks = await openforge.tasks.list()
               const agentSessions = await openforge.agentSessions.list({
                 provider: 'pi',
                 overlaps: { startInclusive: 2, endExclusive: 500 },
                 taskId: 'T-existing',
                 pageSize: 100,
               })
-              const existing = await openforge.tasks.get('T-existing')
               const created = await openforge.tasks.create({
                 initialPrompt: 'Scheduled prompt',
                 projectId: 'P-1',
@@ -59,7 +56,7 @@ describe('plugin-host backend host APIs', () => {
               const workspace = await openforge.tasks.getWorkspace(created.id)
               const latestSession = await openforge.tasks.getLatestSession(created.id)
               const sessions = await openforge.tasks.listSessions({ taskId: created.id, provider: 'pi', createdAtOrAfter: 2 })
-              return { projectTasks, allTasks, agentSessions, existing, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession, sessions }
+              return { agentSessions, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession, sessions }
             }
           }))
         }
@@ -88,7 +85,6 @@ describe('plugin-host backend host APIs', () => {
     const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
       calls.push(request)
       switch (request.method) {
-        case 'openforge.tasks.list': return request.params.projectId === 'P-1' ? [task] : [task, { ...task, id: 'T-other', project_id: 'P-2' }]
         case 'openforge.agentSessions.list': return {
           items: [{
             id: 'session-history',
@@ -101,7 +97,6 @@ describe('plugin-host backend host APIs', () => {
           }],
           nextCursor: null,
         }
-        case 'openforge.tasks.get': return { ...task, id: request.params.taskId }
         case 'openforge.tasks.create': return createdTask
         case 'openforge.tasks.compose': return { task: createdTask, started: false }
         case 'openforge.tasks.sendFollowUp': return { taskId: request.params.taskId, sessionId: 'session-1', disposition: 'queued' }
@@ -117,8 +112,6 @@ describe('plugin-host backend host APIs', () => {
     }
 
     await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'scheduler', backendPath, command: 'taskApis' })).resolves.toEqual({
-      projectTasks: [task],
-      allTasks: [task, { ...task, id: 'T-other', project_id: 'P-2' }],
       agentSessions: {
         items: [{
           id: 'session-history',
@@ -131,7 +124,6 @@ describe('plugin-host backend host APIs', () => {
         }],
         nextCursor: null,
       },
-      existing: { ...task, id: 'T-existing' },
       created: createdTask,
       composed: { task: createdTask, started: false },
       followUp: { taskId: 'T-created', sessionId: 'session-1', disposition: 'queued' },
@@ -143,8 +135,6 @@ describe('plugin-host backend host APIs', () => {
       sessions: [{ id: 'session-1', ticket_id: 'T-created', opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }],
     })
     expect(calls).toEqual([
-      { method: 'openforge.tasks.list', params: { projectId: 'P-1', includeDone: true } },
-      { method: 'openforge.tasks.list', params: {} },
       {
         method: 'openforge.agentSessions.list',
         params: {
@@ -155,7 +145,6 @@ describe('plugin-host backend host APIs', () => {
           pluginId: 'scheduler',
         },
       },
-      { method: 'openforge.tasks.get', params: { taskId: 'T-existing' } },
       { method: 'openforge.tasks.create', params: { initialPrompt: 'Scheduled prompt', projectId: 'P-1', dependsOn: ['T-parent'], labelNames: ['scheduled'] } },
       { method: 'openforge.tasks.compose', params: { projectId: 'P-1', initialPrompt: 'Composed prompt' } },
       { method: 'openforge.tasks.sendFollowUp', params: { taskId: 'T-created', message: 'Review the task' } },

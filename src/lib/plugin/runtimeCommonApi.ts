@@ -146,17 +146,8 @@ export class RuntimeCommonApiRegistry {
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
   private readonly contextChangeHandlers = new Set<OpenForgeContextChangeHandler>()
   private eventListenerSequence = 0
-  private didWarnLegacyTaskReads = false
 
   constructor(private readonly services: RuntimeRegistryServices) {}
-
-  private warnLegacyTaskReads(): void {
-    if (this.didWarnLegacyTaskReads) return
-    this.didWarnLegacyTaskReads = true
-    console.warn(
-      `[OpenForge plugin ${this.services.pluginId}] tasks.list() and tasks.get() are deprecated; use tasks.active(), tasks.completed(), or tasks.detail()`,
-    )
-  }
 
   createApi(): RuntimeCommonApi {
     const api: RuntimeCommonApi = {
@@ -270,18 +261,6 @@ export class RuntimeCommonApiRegistry {
             ? this.services.host.subscribeTaskChanges(projectId, handler)
             : unavailableCapability('tasks.onDidChange')
           return this.services.trackDisposable(subscription)
-        },
-        list: async (request) => {
-          this.warnLegacyTaskReads()
-          return this.services.host.listTasks
-            ? this.services.host.listTasks(request)
-            : unavailableCapability('tasks.list')
-        },
-        get: async (taskId) => {
-          this.warnLegacyTaskReads()
-          return this.services.host.getTask
-            ? this.services.host.getTask(taskId)
-            : unavailableCapability('tasks.get')
         },
         active: async (projectId) => this.services.host.activeTasks
           ? this.services.host.activeTasks(projectId)

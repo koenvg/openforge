@@ -11,6 +11,11 @@ import {
 } from './cli-test-utils.js';
 
 describe('OpenForge CLI', () => {
+  it.each(['list', 'get'])('rejects retired task %s commands before contacting the bridge', async (command) => {
+    await expect(runCli(['task', command, '--project-id', 'P-1', '--task-id', 'T-1']))
+      .rejects.toMatchObject({ stderr: expect.stringContaining('unknown command') });
+  });
+
   it('keeps the auto-installed task-management skill concise while covering safe commands', async () => {
     const skill = await readFile(SKILL_PATH, 'utf8');
 
@@ -73,7 +78,7 @@ describe('OpenForge CLI', () => {
     expect(stdout).toContain('task completed requires --project-id and returns a fixed page of at most 50');
     expect(stdout).toContain('Repeat task completed with --cursor <nextCursor>');
     expect(stdout).toContain('task detail requires --project-id and --task-id');
-    expect(stdout).toContain('deprecated version 1 compatibility commands');
+    expect(stdout).not.toContain('task list and task get');
     expect(stdout).toContain('Task creation hygiene:');
     expect(stdout).toContain('include useful --label values and dependency links when creating related follow-up Tasks');
     expect(stdout).toContain('link prerequisites immediately with --depends-on or task dependencies link');

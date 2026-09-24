@@ -508,7 +508,13 @@ console.log(read?.task.prompt) // The canonical authoring prompt.
 console.log(read?.related) // Immediate TaskReference records.
 ```
 
-`TaskReference` is for links, `TaskSummary` is for fixed 50-item Completed pages, and `TaskDetail` is for an active or selected Task. Completed pages never include full prompts, and cursors are opaque and bound to the project and normalized filters. `tasks.list()` and `tasks.get()` remain available only to API version 1 plugins. They are deprecated, emit at most one warning per plugin activation, and will be removed in version 2. The host preserves their complete-array behavior; migrate rather than relying on that unbounded read.
+`TaskReference` is for links, `TaskSummary` is for fixed 50-item Completed pages, and `TaskDetail` is for an active or selected Task. Completed pages never include full prompts, and cursors are opaque and bound to the project and normalized filters. Version 1 `tasks.list()` and `tasks.get()` have been removed. Migrate to project-scoped `active`, `completed`, and `detail` reads; there is no unscoped complete-array Task read. Task write methods remain available.
+
+### Migrating version 1 Task reads
+
+Replace `tasks.get(taskId)` with `tasks.detail(projectId, taskId)` and read `result?.task`. The new Task detail uses camelCase fields (`projectId`, `prompt`, `title`) rather than the old row's `project_id` and `initial_prompt`. Supply the owning Project ID from the Task context or a trusted local association; `detail` will not search all Projects for an unknown Task ID.
+
+Replace project-scoped `tasks.list({ projectId })` with `tasks.active(projectId)`. For Completed Tasks, page through `tasks.completed(projectId, query)` using each opaque `nextCursor` until it is `null`, then call `tasks.detail(projectId, taskId)` only for selected full prompts. There is no replacement for the unscoped complete-array read. CLI callers should use `openforge task active|completed|detail --project-id <id>`; the old `task list` and `task get` commands and HTTP `GET /tasks` and `GET /task/:id` routes are gone. Task creation, updates, and other write commands have not changed.
 
 ### Completion dates and historical coverage
 

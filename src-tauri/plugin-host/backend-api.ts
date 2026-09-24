@@ -64,14 +64,6 @@ function normalizeImplementationRun(value: unknown): ImplementationRun {
   }
 }
 
-function taskListCallbackParams(request?: { projectId?: string | null; includeDone?: boolean }): Record<string, unknown> {
-  if (!request) return {}
-  const params: Record<string, unknown> = {}
-  if (request.projectId !== undefined) params.projectId = request.projectId ?? null
-  if (request.includeDone !== undefined) params.includeDone = request.includeDone
-  return params
-}
-
 function objectCallbackParams(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
@@ -382,14 +374,6 @@ export function createBackendApi(
     if (observer.readyError) throw observer.readyError
   }
 
-  let didWarnLegacyTaskReads = false
-  const warnLegacyTaskReads = (): void => {
-    if (didWarnLegacyTaskReads) return
-    didWarnLegacyTaskReads = true
-    console.warn(
-      `[OpenForge plugin ${state.pluginId}] tasks.list() and tasks.get() are deprecated; use tasks.active(), tasks.completed(), or tasks.detail()`,
-    )
-  }
   const api: BackendOpenForgeAPI = {
     commands: {
       register: registration => contributions.registerCommand(state, registration),
@@ -465,14 +449,6 @@ export function createBackendApi(
       ),
     },
     tasks: {
-      list: async request => {
-        warnLegacyTaskReads()
-        return await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request))
-      },
-      get: async taskId => {
-        warnLegacyTaskReads()
-        return await hostCallback<Task | null>('openforge.tasks.get', { taskId })
-      },
       active: async (projectId: string) => await hostCallback<ActiveTasks>(
         'openforge.tasks.active',
         { projectId },

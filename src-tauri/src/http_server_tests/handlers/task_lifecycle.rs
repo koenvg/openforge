@@ -78,7 +78,7 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/task/T-1")
+                .uri("/v2/projects/P-1/tasks/T-1")
                 .method("GET")
                 .body(Body::empty())
                 .expect("build request"),
@@ -90,7 +90,7 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/tasks?project_id=P-1&exclude_done=true&compact=true")
+                .uri("/v2/projects/P-1/tasks/active")
                 .method("GET")
                 .body(Body::empty())
                 .expect("build request"),
@@ -99,9 +99,9 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
         .expect("list visible tasks should succeed");
     assert_eq!(normal_list_response.status(), StatusCode::OK);
     let normal_list = response_body_json(normal_list_response).await;
-    let normal_ids: Vec<_> = normal_list
+    let normal_ids: Vec<_> = normal_list["tasks"]
         .as_array()
-        .expect("normal list array")
+        .expect("active tasks array")
         .iter()
         .map(|row| row["id"].as_str().expect("task id"))
         .collect();
@@ -110,7 +110,7 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
     let completed_list_response = router
         .oneshot(
             Request::builder()
-                .uri("/tasks?project_id=P-1&state=done&compact=true")
+                .uri("/v2/projects/P-1/tasks/completed")
                 .method("GET")
                 .body(Body::empty())
                 .expect("build request"),
@@ -119,9 +119,9 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
         .expect("list completed tasks should succeed");
     assert_eq!(completed_list_response.status(), StatusCode::OK);
     let completed_list = response_body_json(completed_list_response).await;
-    assert!(completed_list
+    assert!(completed_list["tasks"]
         .as_array()
-        .expect("completed list array")
+        .expect("completed tasks array")
         .is_empty());
 
     let _ = std::fs::remove_file(path);

@@ -128,8 +128,6 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     },
     tasks: {
       onDidChange: () => ({ dispose: () => undefined }),
-      list: unavailable('tasks.list'),
-      get: unavailable('tasks.get'),
       active: unavailable('tasks.active'),
       completed: unavailable('tasks.completed'),
       detail: unavailable('tasks.detail'),
