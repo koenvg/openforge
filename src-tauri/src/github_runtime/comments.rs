@@ -59,6 +59,23 @@ pub async fn get_pr_file_diffs(
         .map_err(|e| format!("Failed to get PR files: {e}"))
 }
 
+pub async fn get_pr_head_sha(
+    github_client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+) -> Result<String, String> {
+    let token = github_client
+        .github_token()
+        .await?
+        .ok_or_else(|| "github_token not configured".to_string())?;
+    github_client
+        .get_pr_details(owner, repo, pr_number, &token)
+        .await
+        .map(|pull_request| pull_request.head.sha)
+        .map_err(|e| format!("Failed to get PR head: {e}"))
+}
+
 pub async fn get_file_content(
     github_client: &GitHubClient,
     owner: &str,

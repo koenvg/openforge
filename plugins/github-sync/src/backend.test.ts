@@ -13,6 +13,7 @@ function getPackageMetadata() {
 
 interface BackendHarnessOptions {
   fileDiffError?: Error
+  remoteHeadSha?: string
   store?: Map<string, unknown>
 }
 
@@ -23,8 +24,11 @@ function makeBackendHarness(options: BackendHarnessOptions = {}) {
     'project-app': { owner: 'acme', name: 'app' },
   }
   const invokeGlobal = vi.fn(async (id: string, payload?: unknown) => {
-    if (id === 'openforge.getReviewPrs' || id === 'openforge.fetchReviewPrs') {
+    if (id === 'openforge.getReviewPrs') {
       return [{ id: 42, repo_owner: 'octo', repo_name: 'frontend', number: 7, head_sha: 'sha123' }]
+    }
+    if (id === 'openforge.getPrHeadSha') {
+      return options.remoteHeadSha ?? 'sha123'
     }
     if (id === 'openforge.getPrFileDiffs') {
       if (options.fileDiffError) throw options.fileDiffError
@@ -244,6 +248,46 @@ describe('startAgentWalkthrough backend handler', () => {
         owner: 'octo', repo: 'frontend', prNumber: 7,
       })
     })
+  })
+
+  it('checks the head revision with a single pull request lookup instead of a full review sync', async () => {
+    const { invokeGlobal, handlers } = await activateBackend()
+
+    await handlers.get('startAgentWalkthrough')!(walkthroughRequest())
+
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getPrHeadSha', {
+      owner: 'octo', repo: 'frontend', prNumber: 7,
+    })
+    expect(invokeGlobal.mock.calls.map(([id]) => id)).not.toContain('openforge.fetchReviewPrs')
+  })
+
+  it('validates a legacy ready walkthrough against a single pull request head lookup', async () => {
+    const store = new Map<string, unknown>([['walkthrough:42:sha123', {
+      pr_id: 42,
+      head_sha: 'sha123',
+      walkthrough_session_key: null,
+      status: 'ready',
+      steps_json: null,
+      error_message: null,
+      created_at: 1,
+      updated_at: 1,
+    }]])
+    const { invokeGlobal, handlers } = await activateBackend({ store })
+
+    await handlers.get('getPrWalkthrough')!({ reviewPrId: 42, headSha: 'sha123' })
+
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getPrHeadSha', {
+      owner: 'octo', repo: 'frontend', prNumber: 7,
+    })
+    expect(invokeGlobal.mock.calls.map(([id]) => id)).not.toContain('openforge.fetchReviewPrs')
+  })
+
+  it('rejects generation when the pull request head moved on GitHub', async () => {
+    const { handlers, agentSessions } = await activateBackend({ remoteHeadSha: 'sha456' })
+
+    await expect(handlers.get('startAgentWalkthrough')!(walkthroughRequest()))
+      .rejects.toThrow('Walkthrough snapshot stale: expected sha123, received sha456')
+    expect(agentSessions.input).not.toHaveBeenCalled()
   })
 
   it('never reads, writes, or deletes retired local review data', async () => {
