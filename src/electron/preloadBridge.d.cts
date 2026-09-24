@@ -15,7 +15,9 @@ declare const preloadBridge: {
   readonly OPENFORGE_INVOKE_CHANNEL: 'openforge:invoke'
   readonly OPENFORGE_EVENT_CHANNEL: 'openforge:event'
   readonly OPENFORGE_APP_EVENTS_RECONNECTED_EVENT: 'openforge-app-events-reconnected'
+  readonly OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX: '--openforge-window-chrome='
   createOpenForgePreloadApi(ipcRenderer: PreloadBridgeIpcRenderer): OpenForgePreloadApi
+  readWindowChromeArgument(argv: readonly string[]): 'inset' | 'native'
 }
 
 export = preloadBridge

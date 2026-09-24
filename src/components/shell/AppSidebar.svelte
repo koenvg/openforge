@@ -69,8 +69,11 @@
   label="sidebar"
 >
   <aside class="of-app-sidebar shrink-0 h-full flex flex-col" style="width: {collapsed ? '4rem' : '100%'}">
+    {#if collapsed}
+      <div class="of-window-controls-spacer of-window-drag" aria-hidden="true"></div>
+    {/if}
     {#if appMode === 'dev'}
-      <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
+      <div class="of-window-drag w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
          <span class="text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
          {#if branchName && !collapsed}
            <span class="font-mono text-[10px] text-white/80 truncate max-w-full px-2" title={branchName}>{branchName}</span>
@@ -78,7 +81,7 @@
        </div>
     {/if}
 
-    <div class="of-sidebar-header h-12 px-2 flex items-center {collapsed ? 'justify-center' : 'justify-end'}">
+    <div class="of-sidebar-header of-window-drag h-12 px-2 flex items-center {collapsed ? 'justify-center' : 'justify-end'}">
       <IconButton
         type="button"
         size="sm"

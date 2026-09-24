@@ -18,3 +18,7 @@ export interface OpenForgePreloadApi {
 }
 
 export const createOpenForgePreloadApi: (ipcRenderer: PreloadIpcRenderer) => OpenForgePreloadApi = preloadBridge.createOpenForgePreloadApi
+
+export type WindowChrome = 'inset' | 'native'
+export const OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX: '--openforge-window-chrome=' = preloadBridge.OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX
+export const readWindowChromeArgument: (argv: readonly string[]) => WindowChrome = preloadBridge.readWindowChromeArgument

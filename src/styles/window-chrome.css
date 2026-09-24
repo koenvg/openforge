@@ -1,0 +1,30 @@
+:root[data-window-chrome='inset'] {
+  --of-window-controls-clearance: 2.5rem;
+}
+
+:root[data-window-chrome='inset'] .of-window-drag {
+  -webkit-app-region: drag;
+}
+
+:root[data-window-chrome='inset'] :is(
+  .of-window-drag :is(button, a, input, textarea, select, label, summary, [draggable='true'], [contenteditable], [tabindex], [role='button'], [role='tab'], [role='link'], [role='switch'], [role='checkbox'], [role='menuitem'], [role='option']),
+  .resize-handle,
+  body > :not(#app)
+) {
+  -webkit-app-region: no-drag;
+}
+
+:root[data-window-chrome='inset'] .of-window-controls-offset {
+  padding-top: var(--of-window-controls-clearance);
+}
+
+.of-window-controls-spacer {
+  display: none;
+}
+
+:root[data-window-chrome='inset'] .of-window-controls-spacer {
+  display: block;
+  height: var(--of-window-controls-clearance);
+  flex-shrink: 0;
+  background: var(--of-surface);
+}
