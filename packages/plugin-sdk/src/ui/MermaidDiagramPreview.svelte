@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import TooltipControl from './TooltipControl.svelte'
+  import IconButton from './IconButton.svelte'
+  import Button from './Button.svelte'
   import {
     FIT_MERMAID_ZOOM,
     calculateMermaidFitScale,
@@ -24,7 +25,6 @@
   let { svg, onClose }: Props = $props()
   let viewport = $state<HTMLDivElement | null>(null)
   let svgHost = $state<HTMLDivElement | null>(null)
-  let closeButton = $state<HTMLButtonElement | null>(null)
   let viewportSize = $state<MermaidSize>({ width: 0, height: 0 })
   let zoom = $state<MermaidZoomState>(FIT_MERMAID_ZOOM)
   let resizeObserver: ResizeObserver | undefined
@@ -136,91 +136,62 @@
   ariaLabel="Mermaid diagram preview"
   showHeader={false}
   maxWidth="calc(100vw - 2rem)"
-  boxClass="mermaid-diagram-preview h-[calc(100vh-2rem)] !max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)]"
-  initialFocus={() => closeButton}
+  boxClass="mermaid-diagram-preview"
+  initialFocus='button[aria-label="Close diagram preview"]'
   onKeydown={handleKeydown}
 >
-  <div class="flex min-h-0 flex-1 flex-col bg-base-300/40">
-    <header class="mermaid-diagram-preview-toolbar flex min-h-14 shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 px-4 py-2">
-      <h2 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold text-base-content">Mermaid diagram preview</h2>
-
-      <div class="flex items-center gap-1" role="group" aria-label="Diagram zoom controls">
-        <TooltipControl content="Zoom out (-)" side="bottom" disabled={!canZoomMermaidOut(zoom, fitScale)} triggerAttributes={{
-          type: 'button',
-          class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
-          'aria-label': 'Zoom out (-)',
-          disabled: !canZoomMermaidOut(zoom, fitScale),
-          onclick: zoomOut,
-        }}>
-          {#snippet trigger(props)}
-          <button {...props}>
-          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+  <div class="preview">
+    <header class="mermaid-diagram-preview-toolbar">
+      <h2>Mermaid diagram preview</h2>
+      <div class="zoom-controls" role="group" aria-label="Diagram zoom controls">
+        <IconButton label="Zoom out (-)" tooltipSide="bottom" size="lg" type="button" disabled={!canZoomMermaidOut(zoom, fitScale)} onClick={zoomOut}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3M8 11h6" />
           </svg>
-          </button>
-          {/snippet}
-        </TooltipControl>
-
-        <output class="min-w-20 text-center text-xs tabular-nums text-base-content/70" aria-live="polite">{zoomLabel}</output>
-
-        <TooltipControl content="Zoom in (+)" side="bottom" disabled={!canZoomMermaidIn(zoom, fitScale)} triggerAttributes={{
-          type: 'button',
-          class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
-          'aria-label': 'Zoom in (+)',
-          disabled: !canZoomMermaidIn(zoom, fitScale),
-          onclick: zoomIn,
-        }}>
-          {#snippet trigger(props)}
-          <button {...props}>
-          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        </IconButton>
+        <output aria-live="polite">{zoomLabel}</output>
+        <IconButton label="Zoom in (+)" tooltipSide="bottom" size="lg" type="button" disabled={!canZoomMermaidIn(zoom, fitScale)} onClick={zoomIn}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
           </svg>
-          </button>
-          {/snippet}
-        </TooltipControl>
-
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm h-11 min-h-11 px-3"
-          aria-label="Reset zoom to 100%"
-          title="Reset zoom to 100% (0)"
-          onclick={resetZoom}
-        >100%</button>
-
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm h-11 min-h-11 px-3"
-          aria-label="Fit diagram to window"
-          aria-pressed={zoom.mode === 'fit'}
-          title="Fit diagram to window (F)"
-          onclick={fitToWindow}
-        >Fit</button>
+        </IconButton>
+        <Button variant="ghost" size="lg" type="button" aria-label="Reset zoom to 100%" title="Reset zoom to 100% (0)" onClick={resetZoom}>100%</Button>
+        <Button variant="ghost" size="lg" type="button" aria-label="Fit diagram to window" aria-pressed={zoom.mode === 'fit'} title="Fit diagram to window (F)" onClick={fitToWindow}>Fit</Button>
       </div>
-
-      <TooltipControl content="Close diagram preview" side="bottom" triggerAttributes={{
-        type: 'button',
-        class: 'btn btn-ghost btn-sm h-11 min-h-11 w-11 p-0',
-        'aria-label': 'Close diagram preview',
-        onclick: onClose,
-      }}>
-        {#snippet trigger(props)}
-        <button {...props} bind:this={closeButton}>
-        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <IconButton label="Close diagram preview" tooltipSide="bottom" size="lg" type="button" onClick={onClose}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M18 6 6 18M6 6l12 12" />
         </svg>
-        </button>
-        {/snippet}
-      </TooltipControl>
+      </IconButton>
     </header>
-
-    <div bind:this={viewport} data-testid="mermaid-preview-viewport" class="mermaid-diagram-preview-viewport min-h-0 flex-1 overflow-auto p-4">
-      <div data-testid="mermaid-preview-canvas" class="mermaid-diagram-preview-canvas flex h-max min-h-full w-max min-w-full items-center justify-center">
-        <div bind:this={svgHost} class="shrink-0">
-          {@html svg}
-        </div>
+    <div bind:this={viewport} data-testid="mermaid-preview-viewport" class="viewport">
+      <div data-testid="mermaid-preview-canvas" class="canvas">
+        <div bind:this={svgHost} class="svg-host">{@html svg}</div>
       </div>
     </div>
   </div>
 </Modal>
+
+<style>
+  :global(.of-modal-box.mermaid-diagram-preview) { width: calc(100vw - 2rem); height: calc(100vh - 2rem); max-height: calc(100vh - 2rem); }
+  .preview { display: flex; min-height: 0; flex: 1; flex-direction: column; background: color-mix(in oklab, var(--of-border) 40%, transparent); }
+  header { display: flex; min-height: 3.5rem; flex-shrink: 0; align-items: center; gap: var(--of-space4); border-bottom: var(--of-border-width) solid var(--of-border); background: var(--of-surface); padding: var(--of-space4) var(--of-space6); }
+  h2 { margin: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--of-text); font-size: var(--of-text-md); font-weight: 600; }
+  .zoom-controls { display: flex; align-items: center; gap: var(--of-space2); }
+  .zoom-controls :global(button[data-control-kind='text']) { font-size: var(--of-text-sm); line-height: 1rem; }
+  output { min-width: 5rem; color: color-mix(in oklab, var(--of-text) 70%, transparent); text-align: center; font-size: var(--of-text-sm); font-variant-numeric: tabular-nums; }
+  header :global(svg) { width: 1rem; height: 1rem; }
+  header > :global(button:last-child svg) { width: 1.25rem; height: 1.25rem; }
+  .viewport { min-height: 0; flex: 1; overflow: auto; padding: var(--of-space6); }
+  .canvas { display: flex; width: max-content; min-width: 100%; height: max-content; min-height: 100%; align-items: center; justify-content: center; }
+  .svg-host { flex-shrink: 0; }
+  @media (max-width: 700px) {
+    header { flex-wrap: wrap; height: auto; }
+    .zoom-controls { order: 3; width: 100%; min-width: 0; flex-wrap: wrap; justify-content: center; }
+  }
+  @media (max-width: 400px) {
+    .zoom-controls :global(button) { min-width: var(--of-control-height-touch); }
+  }
+</style>

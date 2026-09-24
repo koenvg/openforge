@@ -124,9 +124,9 @@
   })
 </script>
 
-<div class="flex h-full flex-col border-r border-base-300 bg-base-100">
+<div class="of-project-file-tree">
   <div
-    class="flex-1 overflow-y-auto py-2"
+    class="tree-scroll"
     bind:this={scrollContainer}
     onscroll={handleScroll}
     role="tree"
@@ -142,7 +142,7 @@
         {@const sizeId = `${projectFileTreePathToId(entry.path)}-size`}
         {@const a11y = getProjectFileTreeItemAccessibility(node, { expandedDirs, selectedPath, labelId, sizeId })}
         <div
-          class="outline-none [&:focus-visible>div:first-child]:ring-2 [&:focus-visible>div:first-child]:ring-inset [&:focus-visible>div:first-child]:ring-primary/60"
+          class="tree-item"
           role="treeitem"
           tabindex={focusedPath === entry.path ? 0 : -1}
           aria-level={a11y.level}
@@ -164,17 +164,17 @@
           }}
         >
           <div
-            class="w-full flex items-center gap-2 text-xs cursor-pointer transition-colors py-1.5 pr-3 {entry.isDir ? 'text-base-content hover:bg-base-content/5' : isSelected ? 'bg-primary/10 text-primary font-medium border-l-2 border-l-primary hover:bg-primary/15' : 'text-base-content hover:bg-base-content/5'}"
+            class="tree-row" class:directory={entry.isDir} class:selected={!entry.isDir && isSelected}
             style="padding-left: {entry.isDir || !isSelected ? 12 + getProjectFileTreeDepth(entry.path) * 16 : 10 + getProjectFileTreeDepth(entry.path) * 16}px"
           >
             {#if entry.isDir}
-              <span class="text-[0.6rem] text-base-content/50 shrink-0" data-testid={`dir-indicator-${entry.path}`} aria-hidden="true">{isExpanded ? '▼' : '▶'}</span>
-              <FileTypeIcon folder open={isExpanded} class="w-3.5 h-3.5" />
-              <span id={labelId} class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" data-testid="entry-label">{entry.name}/</span>
+              <span class="directory-indicator" data-testid={`dir-indicator-${entry.path}`} aria-hidden="true">{isExpanded ? '▼' : '▶'}</span>
+              <FileTypeIcon folder open={isExpanded} class="tree-file-icon" />
+              <span id={labelId} class="entry-label" data-testid="entry-label">{entry.name}/</span>
             {:else}
-              <FileTypeIcon filename={entry.path} class="w-3.5 h-3.5" />
-              <span id={labelId} class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" data-testid="entry-label">{entry.name}</span>
-              <span id={sizeId} class="text-base-content/50 text-[0.7rem] ml-auto">{formatProjectFileTreeSize(entry.size)}</span>
+              <FileTypeIcon filename={entry.path} class="tree-file-icon" />
+              <span id={labelId} class="entry-label" data-testid="entry-label">{entry.name}</span>
+              <span id={sizeId} class="file-size">{formatProjectFileTreeSize(entry.size)}</span>
             {/if}
           </div>
 
@@ -190,3 +190,20 @@
     {@render renderNodes(treeNodes)}
   </div>
 </div>
+
+<style>
+  .of-project-file-tree { display: flex; height: 100%; flex-direction: column; border-right: var(--of-border-width) solid var(--of-border); background: var(--of-surface); }
+  .tree-scroll { flex: 1; overflow-y: auto; padding-block: var(--of-space4); }
+  .tree-item { outline: none; }
+  .tree-item:focus-visible { outline: var(--of-focus-width) solid var(--of-focus-ring); outline-offset: var(--of-space1); }
+  .tree-item:focus-visible > .tree-row { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--of-accent) 60%, transparent); }
+  .tree-row { display: flex; width: 100%; align-items: center; gap: var(--of-space4); padding-block: .375rem; padding-right: var(--of-space5); color: var(--of-text); font-size: var(--of-text-sm); line-height: 1rem; cursor: pointer; transition: background-color 150ms; }
+  .tree-row:hover { background: color-mix(in oklab, var(--of-text) 5%, transparent); }
+  .tree-row.selected { border-left: 2px solid var(--of-accent); background: color-mix(in oklab, var(--of-accent) 10%, transparent); color: var(--of-accent); font-weight: 500; }
+  .tree-row.selected:hover { background: color-mix(in oklab, var(--of-accent) 15%, transparent); }
+  .directory-indicator { flex-shrink: 0; color: color-mix(in oklab, var(--of-text) 50%, transparent); font-size: .6rem; }
+  :global(.of-project-file-tree .tree-file-icon) { width: .875rem; height: .875rem; flex-shrink: 0; }
+  .entry-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .file-size { margin-left: auto; color: color-mix(in oklab, var(--of-text) 50%, transparent); font-size: .7rem; }
+  @media (prefers-reduced-motion: reduce) { .tree-row { transition: none; } }
+</style>

@@ -35,7 +35,7 @@
       <ProjectFileTree {entries} expandedDirs={expanded} selectedPath={selected} onToggleDir={toggle} onSelectFile={(path) => { selected = path }} />
     </PluginViewState>
   </ResizablePanel>
-  <div class="min-w-0 flex-1 overflow-auto border-l border-base-300 p-4">
+  <div class="min-w-0 flex-1 overflow-auto border-l border-of-border p-4">
     {#if selected}
       <MarkdownContent content={selected === 'README.md' ? '# Repository guide\n\nRun `pnpm test` before publishing.\n\n- Use typed commands\n- Keep plugin data local' : `# ${selected}\n\n\`\`\`typescript\nexport const plugin = { id: 'local.example' }\n\`\`\``} />
     {:else}

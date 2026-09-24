@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SDK views without host styles</title></head>
+<body><script type="module">
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/600.css'
+import { mount } from 'svelte'
+import App from './SdkViewsBrowserFixture.svelte'
+mount(App, { target: document.body, props: { themes: window.sdkViewThemes } })
+</script></body></html>

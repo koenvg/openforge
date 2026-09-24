@@ -474,6 +474,7 @@ const inventory = {
   // Every exclusion must remain nonvisual or test-only; discovery verifies the stated kind.
   exclusions: [
     { source: 'packages/plugin-sdk/src/ui/TooltipBrowserTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Mounts SDK tooltip controls in isolated Chromium tests.' },
+    { source: 'packages/plugin-sdk/src/ui/browser/SdkViewsBrowserFixture.svelte', kind: 'test-only-wrapper', reason: 'Mounts token-only SDK views for isolated browser tests; not imported by production.' },
     ...[
       'AnchoredMenuTestWrapper', 'CheckboxTestWrapper', 'CollapsibleSectionTestWrapper',
       'MermaidDiagramPreviewTestWrapper', 'ModalFooterTestWrapper', 'ModalTestWrapper',
