@@ -45,21 +45,11 @@ impl ResourceEnvelope {
                     .map(|_| count + 1)
                     .map_err(|_| HostError::CapacityExceeded(CapacityKind::FileDescriptors))
             })?;
+        let occupied_processes = crate::own_processes::ids()
+            .map_err(|_| HostError::Capacity)?
+            .len() as u128;
         let mut system = sysinfo::System::new();
         system.refresh_memory();
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::All,
-            true,
-            sysinfo::ProcessRefreshKind::nothing().with_user(sysinfo::UpdateKind::Always),
-        );
-        // SAFETY: geteuid reads the effective UID without dereferencing pointers.
-        let uid = sysinfo::Uid::try_from(unsafe { libc::geteuid() } as usize)
-            .map_err(|_| HostError::Capacity)?;
-        let occupied_processes = system
-            .processes()
-            .values()
-            .filter(|process| process.user_id() == Some(&uid))
-            .count() as u128;
         Ok(Self {
             descriptor_limit: limit(libc::RLIMIT_NOFILE)?,
             open_descriptors,
@@ -127,13 +117,13 @@ impl Record {
             let cursor = lock(journal).cursor;
             let recovery = process.recover(cursor);
             if recovery.is_err() {
-                lock(journal).publish(Event::RecoveryRequired {
+                journal.publish(Event::RecoveryRequired {
                     pty: self.metadata.pty.clone(),
                 });
             }
             self.final_recovery = Some(recovery);
             self.process.take();
-            lock(journal).publish(Event::Exited {
+            journal.publish(Event::Exited {
                 pty: self.metadata.pty.clone(),
                 code,
             });
@@ -252,6 +242,14 @@ impl Backend {
             }
         });
         Ok(())
+    }
+    pub fn next_deadline(&self) -> Result<Option<std::time::Instant>, Error> {
+        Ok(self
+            .table()?
+            .records
+            .values()
+            .filter_map(|record| record.process.as_ref()?.drain_deadline())
+            .min())
     }
     pub fn session(&self, hosted: &HostedSession) -> Result<Session, HostError> {
         let table = self.table()?;

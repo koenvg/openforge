@@ -1,16 +1,19 @@
 //! Shared controller and event lifetime for selected daemon sessions.
-//! Dropping the last handle stops polling, never the daemon or its PTYs.
+//! Dropping the last handle closes the event stream, never the daemon or its PTYs.
 use super::daemon_restart::{Intent, Phase};
+mod input_routes;
 mod restart;
 use crate::app_events::RuntimeEventPublisher;
 use crate::github_runtime::task_pr_discovery::{daemon::DaemonOutput, Discovery, LocalDiscovery};
 use base64::Engine;
-use openforge_session_client::Client;
-use openforge_session_host::TerminalColorProfile;
-use openforge_session_protocol::{Error, Event};
+use input_routes::InputRoutes;
+use openforge_session_client::{Client, SubscriptionCloser};
+use openforge_session_host::{PtyIdentity, TerminalColorProfile};
+use openforge_session_protocol::{Error, Event, EventBatch, Inventory, Session};
 use restart::Restart;
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -26,19 +29,22 @@ struct Shared {
     root: PathBuf,
     executable: PathBuf,
     selects: Box<dyn Fn(&str) -> bool + Send + Sync>,
-    connection: Mutex<Option<Connection>>,
+    connection: Mutex<Option<Client>>,
+    input_routes: Mutex<InputRoutes>,
+    publisher: RwLock<Option<RuntimeEventPublisher>>,
+    events: Mutex<Option<SubscriptionCloser>>,
     completion: Mutex<Option<LocalDiscovery>>,
     discovery: LocalDiscovery,
     restart: Restart,
     color_profile: Arc<std::sync::RwLock<TerminalColorProfile>>,
 }
 
-struct Connection {
-    client: Client,
-    cursor: u64,
-    publisher: RuntimeEventPublisher,
-    discovery: DaemonOutput,
-    disconnected: bool,
+impl Drop for Shared {
+    fn drop(&mut self) {
+        if let Some(events) = self.events.get_mut().unwrap_or_else(|p| p.into_inner()) {
+            events.close();
+        }
+    }
 }
 
 impl DaemonTransport {
@@ -73,6 +79,9 @@ impl DaemonTransport {
             executable,
             selects: Box::new(selects),
             connection: Mutex::new(None),
+            input_routes: Mutex::default(),
+            publisher: RwLock::new(None),
+            events: Mutex::new(None),
             completion: Mutex::new(None),
             discovery: LocalDiscovery::default(),
             restart: Restart::default(),
@@ -85,12 +94,7 @@ impl DaemonTransport {
     }
 
     pub(super) fn publisher(&self) -> RuntimeEventPublisher {
-        self.0
-            .connection
-            .lock()
-            .ok()
-            .and_then(|slot| slot.as_ref().map(|connection| connection.publisher.clone()))
-            .unwrap_or_else(|| RuntimeEventPublisher::new(None, None))
+        publisher(&self.0)
     }
 
     pub(super) async fn prepare_restart(
@@ -133,7 +137,7 @@ impl DaemonTransport {
         .await
     }
 
-    /// Serializes commands and event polling under the same controller.
+    /// Serializes commands under the same controller. Events never take this lock.
     /// A stale controller is never replaced here: reconnect requires a new transport.
     pub(super) async fn run<T: Send + 'static>(
         &self,
@@ -142,8 +146,51 @@ impl DaemonTransport {
         publisher: RuntimeEventPublisher,
         operation: impl FnOnce(&Client, &str) -> Result<T, Error> + Send + 'static,
     ) -> Result<T, String> {
-        self.run_admitted(key, fence, publisher, false, operation)
+        let shared = Arc::clone(&self.0);
+        self.run_admitted(key, fence, publisher, false, move |client, key| {
+            let result = operation(client, key);
+            input_routes(&shared).clear();
+            result
+        })
+        .await
+    }
+
+    pub(super) async fn run_input(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        self.input_admitted(key, fence, publisher, false, send)
             .await
+    }
+
+    pub(super) async fn read_input(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        self.input_admitted(key, fence, publisher, true, send).await
+    }
+
+    async fn input_admitted(
+        &self,
+        key: String,
+        fence: Option<CommandFence>,
+        publisher: RuntimeEventPublisher,
+        allow_fenced: bool,
+        mut send: impl FnMut(&Client, &PtyIdentity, u64) -> Result<(), Error> + Send + 'static,
+    ) -> Result<(), String> {
+        let shared = Arc::clone(&self.0);
+        self.run_admitted(key, None, publisher, allow_fenced, move |client, key| {
+            input_routes(&shared).send(client, key, fence.as_ref(), |pty, sequence| {
+                send(client, pty, sequence)
+            })
+        })
+        .await
     }
 
     pub(super) async fn read<T: Send + 'static>(
@@ -185,35 +232,18 @@ impl DaemonTransport {
                     .read()
                     .map_err(|_| Error::OutcomeUnknown)?;
                 publish_color_profile(&client, profile)?;
-                let cursor = client.inventory()?.cursor;
-                let mut discovery = DaemonOutput::new(shared.discovery.clone());
-                discovery.resume(cursor);
+                let inventory = client.inventory()?;
                 shared.restart.reconnect(&shared.root, &client)?;
-                *slot = Some(Connection {
-                    client,
-                    cursor,
-                    publisher: publisher.clone(),
-                    discovery,
-                    disconnected: false,
-                });
+                *slot = Some(client.clone());
+                *shared
+                    .publisher
+                    .write()
+                    .map_err(|_| Error::OutcomeUnknown)? = Some(publisher.clone());
+                let follower = EventFollower::new(&shared, client, inventory);
                 let weak = Arc::downgrade(&shared);
                 std::thread::Builder::new()
                     .name("daemon-shell-events".into())
-                    .spawn(move || {
-                        while let Some(shared) = weak.upgrade() {
-                            let result = pump(&shared);
-                            drop(shared);
-                            if matches!(
-                                result,
-                                Err(Error::StaleController | Error::ForeignInstallation)
-                            ) {
-                                break;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(
-                                if result.is_ok() { 20 } else { 250 },
-                            ));
-                        }
-                    })
+                    .spawn(move || follower.run(&weak))
                     .map_err(|error| Error::Host(error.to_string()))?;
             }
             if !allow_fenced && shared.restart.blocks_mutations()? {
@@ -221,23 +251,22 @@ impl DaemonTransport {
                     "restart preparing; request not executed".into(),
                 ));
             }
-            let connection = slot.as_mut().ok_or(Error::OutcomeUnknown)?;
-            connection.publisher = publisher;
+            let client = slot.as_ref().ok_or(Error::OutcomeUnknown)?;
+            *shared
+                .publisher
+                .write()
+                .map_err(|_| Error::OutcomeUnknown)? = Some(publisher);
             if let Some(fence) = fence {
-                let inventory = connection.client.inventory()?;
+                let inventory = client.inventory()?;
                 if inventory.controller != fence.controller {
                     return Err(Error::StaleController);
                 }
-                let current = inventory
-                    .sessions
-                    .into_iter()
-                    .filter(|session| session.session_key == key)
-                    .max_by_key(|session| session.pty.instance.value());
+                let current = newest_session(inventory.sessions, &key);
                 if current.is_none_or(|session| session.pty.instance.value() != fence.instance_id) {
                     return Err(Error::StalePty);
                 }
             }
-            operation(&connection.client, &key)
+            operation(client, &key)
         })
         .await
         .map_err(|error| error.to_string())?
@@ -252,110 +281,203 @@ pub(super) fn publish_color_profile(
     client.set_terminal_color_profile_ordered(profile)
 }
 
-fn pump(shared: &Shared) -> Result<(), Error> {
-    let mut slot = shared
-        .connection
-        .lock()
-        .map_err(|_| Error::OutcomeUnknown)?;
-    let Some(connection) = slot.as_mut() else {
-        return Ok(());
-    };
-    let result = pump_connection(shared, connection);
-    if result.is_err() {
-        connection.discovery.disconnect();
-        connection.disconnected = true;
-    }
-    result
+struct EventFollower {
+    client: Client,
+    cursor: u64,
+    known: HashSet<PtyIdentity>,
+    selected: Vec<Session>,
+    discovery: DaemonOutput,
+    reconnecting: bool,
 }
 
-fn pump_connection(shared: &Shared, connection: &mut Connection) -> Result<(), Error> {
-    let batch = connection.client.events(connection.cursor)?;
-    let inventory = connection.client.inventory()?;
-    if connection.disconnected {
-        // Resume from current authority, not output accumulated while disconnected.
-        connection.cursor = inventory.cursor;
-        connection.discovery.resume(inventory.cursor);
-        connection.disconnected = false;
-        connection
-            .publisher
-            .publish("openforge-app-events-reconnected", &serde_json::json!({}));
-        return Ok(());
+impl EventFollower {
+    fn new(shared: &Shared, client: Client, inventory: Inventory) -> Self {
+        let mut follower = Self {
+            client,
+            cursor: 0,
+            known: HashSet::new(),
+            selected: Vec::new(),
+            discovery: DaemonOutput::new(shared.discovery.clone()),
+            reconnecting: false,
+        };
+        follower.resync(shared, inventory);
+        follower
     }
-    let current: Vec<_> = inventory
-        .sessions
-        .into_iter()
-        .filter(|session| (shared.selects)(&session.session_key))
-        .collect();
-    connection.discovery.accept(&current, &batch);
-    if batch.gap {
-        // Existing transport reconciliation requests fresh authority snapshots, not raw replay.
-        connection
-            .publisher
-            .publish("openforge-app-events-reconnected", &serde_json::json!({}));
-        for session in &current {
-            if batch.events.iter().any(|event| event.is_exit(&session.pty)) {
-                connection.publisher.publish(
-                    &format!("pty-exit-{}", session.session_key),
-                    &serde_json::json!({ "instance_id": session.pty.instance }),
-                );
+
+    fn run(mut self, shared: &Weak<Shared>) {
+        while shared.strong_count() > 0 {
+            match self.follow(shared) {
+                Ok(()) | Err(Error::StaleController | Error::ForeignInstallation) => return,
+                Err(_) if shared.strong_count() == 0 => return,
+                Err(_) => {
+                    self.discovery.disconnect();
+                    self.reconnecting = true;
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
             }
         }
-        // A suffix after a missing prefix is not an ordered stream. Recovery restores
-        // both terminal state and liveness; never forward this suffix after an exit.
-        connection.cursor = batch.cursor;
-        return Ok(());
     }
-    for session in current {
-        for event in &batch.events {
-            match event {
-                Event::Output {
-                    pty,
-                    sequence,
-                    data,
-                } if pty == &session.pty => {
-                    connection.publisher.publish(
-                        &format!("pty-model-output-{}", session.session_key),
-                        &serde_json::json!({
-                            "instance_id": pty.instance,
-                            "start_sequence": sequence,
-                            "sequence": sequence,
-                            "data": base64::engine::general_purpose::STANDARD.encode(data),
-                        }),
-                    );
-                }
-                Event::Exited { pty, code } if pty == &session.pty => {
-                    if let openforge_session_protocol::TerminalOwner::Agent { task_id } =
-                        &session.owner
-                    {
-                        if task_id == &session.session_key {
-                            if let Some(discovery) = shared
-                                .completion
-                                .lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .as_ref()
-                            {
-                                discovery.agent_exited(task_id, pty.instance.value(), *code == 0);
-                                discovery.finish(task_id, pty.instance.value());
-                            }
-                        }
-                    }
-                    connection.publisher.publish(
+
+    /// Returns `Ok` only once the transport is gone.
+    fn follow(&mut self, weak: &Weak<Shared>) -> Result<(), Error> {
+        if self.reconnecting {
+            let inventory = self.client.inventory()?;
+            let Some(shared) = weak.upgrade() else {
+                return Ok(());
+            };
+            // Resume from current authority, not output accumulated while disconnected.
+            self.resync(&shared, inventory);
+            self.reconnecting = false;
+            publisher(&shared).publish("openforge-app-events-reconnected", &serde_json::json!({}));
+        }
+        let mut subscription = self.client.subscribe(self.cursor)?;
+        {
+            let Some(shared) = weak.upgrade() else {
+                return Ok(());
+            };
+            *shared.events.lock().map_err(|_| Error::OutcomeUnknown)? =
+                Some(subscription.closer()?);
+        }
+        loop {
+            let batch = subscription.recv()?;
+            let Some(shared) = weak.upgrade() else {
+                return Ok(());
+            };
+            self.accept(&shared, batch)?;
+        }
+    }
+
+    fn resync(&mut self, shared: &Shared, inventory: Inventory) {
+        self.cursor = inventory.cursor;
+        self.discovery.resume(inventory.cursor);
+        self.adopt(shared, inventory);
+    }
+
+    fn adopt(&mut self, shared: &Shared, inventory: Inventory) {
+        self.known = inventory
+            .sessions
+            .iter()
+            .map(|session| session.pty.clone())
+            .collect();
+        self.selected = inventory
+            .sessions
+            .into_iter()
+            .filter(|session| (shared.selects)(&session.session_key))
+            .collect();
+    }
+
+    fn accept(&mut self, shared: &Shared, batch: EventBatch) -> Result<(), Error> {
+        if changes_sessions(&self.known, &batch) {
+            let inventory = self.client.inventory()?;
+            self.adopt(shared, inventory);
+        }
+        let publisher = publisher(shared);
+        self.discovery.accept(&self.selected, &batch);
+        self.cursor = batch.cursor;
+        if batch.gap {
+            // Existing transport reconciliation requests fresh authority snapshots, not raw replay.
+            publisher.publish("openforge-app-events-reconnected", &serde_json::json!({}));
+            for session in &self.selected {
+                if batch.events.iter().any(|event| event.is_exit(&session.pty)) {
+                    publisher.publish(
                         &format!("pty-exit-{}", session.session_key),
-                        &serde_json::json!({ "instance_id": pty.instance }),
+                        &serde_json::json!({ "instance_id": session.pty.instance }),
                     );
                 }
-                Event::RecoveryRequired { pty } if pty == &session.pty => {
-                    connection.publisher.publish(
-                        &format!("pty-model-disabled-{}", session.session_key),
-                        &serde_json::json!({ "instance_id": pty.instance }),
-                    );
-                }
-                _ => {}
+            }
+            // A suffix after a missing prefix is not an ordered stream. Recovery restores
+            // both terminal state and liveness; never forward this suffix after an exit.
+            return Ok(());
+        }
+        for session in &self.selected {
+            for event in &batch.events {
+                publish_event(shared, &publisher, session, event);
             }
         }
+        Ok(())
     }
-    connection.cursor = batch.cursor;
-    Ok(())
+}
+
+fn changes_sessions(known: &HashSet<PtyIdentity>, batch: &EventBatch) -> bool {
+    batch.gap
+        || batch.events.iter().any(|event| match event {
+            Event::Exited { .. } => true,
+            Event::Output { pty, .. } | Event::RecoveryRequired { pty } => !known.contains(pty),
+        })
+}
+
+fn input_routes(shared: &Shared) -> std::sync::MutexGuard<'_, InputRoutes> {
+    shared
+        .input_routes
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+}
+
+pub(super) fn newest_session(sessions: Vec<Session>, key: &str) -> Option<Session> {
+    sessions
+        .into_iter()
+        .filter(|session| session.session_key == key)
+        .max_by_key(|session| session.pty.instance.value())
+}
+
+fn publisher(shared: &Shared) -> RuntimeEventPublisher {
+    shared
+        .publisher
+        .read()
+        .ok()
+        .and_then(|publisher| publisher.clone())
+        .unwrap_or_else(|| RuntimeEventPublisher::new(None, None))
+}
+
+fn publish_event(
+    shared: &Shared,
+    publisher: &RuntimeEventPublisher,
+    session: &Session,
+    event: &Event,
+) {
+    match event {
+        Event::Output {
+            pty,
+            sequence,
+            data,
+        } if pty == &session.pty => {
+            publisher.publish(
+                &format!("pty-model-output-{}", session.session_key),
+                &serde_json::json!({
+                    "instance_id": pty.instance,
+                    "start_sequence": sequence,
+                    "sequence": sequence,
+                    "data": base64::engine::general_purpose::STANDARD.encode(data),
+                }),
+            );
+        }
+        Event::Exited { pty, code } if pty == &session.pty => {
+            if let openforge_session_protocol::TerminalOwner::Agent { task_id } = &session.owner {
+                if task_id == &session.session_key {
+                    if let Some(discovery) = shared
+                        .completion
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .as_ref()
+                    {
+                        discovery.agent_exited(task_id, pty.instance.value(), *code == 0);
+                        discovery.finish(task_id, pty.instance.value());
+                    }
+                }
+            }
+            publisher.publish(
+                &format!("pty-exit-{}", session.session_key),
+                &serde_json::json!({ "instance_id": pty.instance }),
+            );
+        }
+        Event::RecoveryRequired { pty } if pty == &session.pty => {
+            publisher.publish(
+                &format!("pty-model-disabled-{}", session.session_key),
+                &serde_json::json!({ "instance_id": pty.instance }),
+            );
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]

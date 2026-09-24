@@ -258,7 +258,7 @@ impl Backend {
         agent_runtime: AgentRuntime,
     ) -> Result<Self, Error> {
         saved.validate(installation, lifetime)?;
-        let journal = Arc::new(Mutex::new(saved.journal));
+        let journal = Arc::new(crate::journal::JournalCell::new(saved.journal));
         let mut records = BTreeMap::new();
         for record in saved.records {
             let agent = record

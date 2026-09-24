@@ -461,6 +461,10 @@ export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv
     env.OPENFORGE_APP_DATA_DIR = runtimeOptions.appDataDir
   }
 
+  if (sidecarPath && env.OPENFORGE_SESSION_DAEMON_ROOT && !env.OPENFORGE_SESSION_DAEMON_PATH) {
+    env.OPENFORGE_SESSION_DAEMON_PATH = join(dirname(sidecarPath), 'openforge-session-daemon')
+  }
+
   if (sidecarPath) {
     env.OPENFORGE_SIDECAR_PATH = sidecarPath
     env.OPENFORGE_ELECTRON_SIDECAR = '1'

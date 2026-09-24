@@ -30,6 +30,26 @@ pnpm performance:idle -- \
 
 `--no-thresholds` records a baseline without failing. The JSON report includes cumulative CPU-time deltas, average cores, RSS, current and peak `vmmap` footprints, event payload bytes, and the busiest event names. The script reads the local Sidecar token from its process environment but never prints it.
 
+## Wakeups and the Session Daemon
+
+The report also records wakeup evidence. The sampler reads `top` counters before and after the window. Each process has `wakeups` with context switch and idle wakeup deltas and per-second rates. The top-level `wakeups` field has the totals. Wakeups have no threshold.
+
+The Session Daemon is not a child of Electron. The sampler reports it only when you name its root directory, and only when exactly one daemon command references that root. Other daemons, such as the installed app daemon, are never selected. The `sessionDaemon` field has its CPU, RSS, wakeups, and `childCount` (its direct child shells). Daemon CPU is not part of the core `averageCores` total.
+
+```bash
+pnpm performance:idle -- --session-daemon-scope "<app-data>/session-daemon"
+```
+
+## Idle shells in the invariant harness
+
+`--idle-shells <n>` starts an isolated Session Daemon in the run root. The scenario then spawns `n` extra shells for the seeded task, waits until their CPU counters stop moving, and samples. Other scenarios in the same run also use that daemon. Reuse mode rejects the option. Cleanup stops the owned daemon before the run root is removed.
+
+```bash
+pnpm e2e:invariants -- --scenario idle-resources --idle-shells 5 --idle-duration 30
+```
+
+The run writes the evidence to `idle.json` in the artifact directory. `idleShells` lists the spawned shell instance IDs.
+
 ## KVG-4355 characterization
 
 The original installed build reached a 4.2 GiB Rust Sidecar peak footprint. A 30-second sample captured 9,231 event envelopes, including 5,670 `pty-model-output` and 3,561 `pty-output` envelopes carrying 1.79 MiB in total.

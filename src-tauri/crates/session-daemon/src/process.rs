@@ -5,9 +5,12 @@ pub(crate) use checkpoint::ProcessCheckpoint;
 #[cfg(test)]
 #[path = "process_checkpoint_tests.rs"]
 mod checkpoint_tests;
+#[cfg(test)]
+#[path = "process_reader_tests.rs"]
+mod reader_tests;
 
 use crate::input::InputWriter;
-use crate::journal::{lock, SharedJournal};
+use crate::journal::SharedJournal;
 use crate::managed_process::{
     terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity, RootReapMode,
 };
@@ -21,6 +24,7 @@ use openforge_session_host::CapacityKind;
 use openforge_session_protocol::*;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::Read;
+use std::os::fd::AsRawFd;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -33,7 +37,7 @@ pub struct Process {
     identity: ManagedProcessIdentity,
     writer: Arc<Mutex<InputWriter>>,
     model: Arc<TerminalModelSession>,
-    stopping: Arc<AtomicBool>,
+    reader: Arc<ReaderSignal>,
     reader_done: Arc<AtomicBool>,
     pty: PtyIdentity,
     root_exit: Option<(u32, Instant)>,
@@ -76,7 +80,8 @@ impl Process {
         if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
             return Err(host_error(std::io::Error::last_os_error()));
         }
-        let reader = pair.master.try_clone_reader().map_err(host_error)?;
+        let reader = crate::process_native::duplicate(fd)?;
+        let reader_signal = ReaderSignal::new(false)?;
         let writer = Arc::new(Mutex::new(InputWriter::new(
             pair.master.take_writer().map_err(host_error)?,
         )));
@@ -87,7 +92,12 @@ impl Process {
             command.owner.session_key(),
             pty.instance.value(),
             options,
-            event_sink(pty.clone(), journal, Arc::clone(&writer)),
+            event_sink(
+                pty.clone(),
+                journal,
+                Arc::clone(&writer),
+                Arc::clone(&reader_signal),
+            ),
         )
         .map_err(host_error)?;
         let model = Arc::new(model);
@@ -119,7 +129,7 @@ impl Process {
             identity,
             writer,
             model,
-            stopping: Arc::new(AtomicBool::new(false)),
+            reader: reader_signal,
             reader_done: Arc::new(AtomicBool::new(false)),
             pty,
             root_exit: None,
@@ -134,11 +144,11 @@ impl Process {
 
     fn start_reader(
         &self,
-        mut reader: Box<dyn Read + Send>,
+        mut reader: std::fs::File,
         feeder: TerminalModelFeeder,
     ) -> Result<(), Error> {
         let pid = self.pid();
-        let stopping = Arc::clone(&self.stopping);
+        let signal = Arc::clone(&self.reader);
         let reader_done = Arc::clone(&self.reader_done);
         let barrier = Arc::clone(&self.model);
         let reader_writer = Arc::clone(&self.writer);
@@ -147,24 +157,36 @@ impl Process {
             .name(format!("session-read-{pid}"))
             .spawn(move || {
                 let mut buffer = [0; 8192];
-                while !stopping.load(Ordering::Acquire) {
-                    let Some(_admission) = reader_gate.enter() else {
-                        std::thread::sleep(Duration::from_millis(2));
+                while !signal.stopping() {
+                    let Some(admission) = reader_gate.enter() else {
+                        reader_gate.wait_until_open();
                         continue;
                     };
                     // An abandoned restore sets stopping before reopening its gate.
                     // Recheck after admission so that teardown cannot race one read/write.
-                    if stopping.load(Ordering::Acquire) {
+                    if signal.stopping() {
                         break;
                     }
-                    if let Ok(mut writer) = reader_writer.lock() {
+                    let input_pending = reader_writer.lock().is_ok_and(|mut writer| {
                         let _ = writer.progress();
-                    }
+                        writer.has_pending()
+                    });
                     match reader.read(&mut buffer) {
                         Ok(0) => break,
                         Ok(size) => feeder.feed(&buffer[..size]),
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                            std::thread::sleep(Duration::from_millis(5))
+                            // Pause must not wait behind an idle PTY.
+                            drop(admission);
+                            let ready = crate::wake::wait(
+                                reader.as_raw_fd(),
+                                input_pending,
+                                &signal.wake,
+                                None,
+                            );
+                            if ready.is_err() {
+                                break;
+                            }
+                            signal.wake.drain();
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
                         Err(_) => break,
@@ -173,6 +195,7 @@ impl Process {
                 // Cross the authority queue before publishing the final process exit.
                 let _ = barrier.portable_snapshot();
                 reader_done.store(true, Ordering::Release);
+                crate::wake::daemon().notify();
             })
             .map_err(host_error)?;
         Ok(())
@@ -195,21 +218,24 @@ impl Process {
     pub fn output_drained(&self) -> bool {
         if self
             .root_exit
-            .is_some_and(|(_, observed)| observed.elapsed() >= Duration::from_millis(250))
+            .is_some_and(|(_, observed)| observed.elapsed() >= OUTPUT_DRAIN_GRACE)
         {
-            self.stopping.store(true, Ordering::Release);
+            self.reader.stop();
         }
         // The reader crosses the bounded authority barrier before setting this flag.
         self.reader_done.load(Ordering::Acquire)
     }
 
+    pub fn drain_deadline(&self) -> Option<Instant> {
+        let (_, observed) = self.root_exit?;
+        (!self.reader.stopping()).then_some(observed + OUTPUT_DRAIN_GRACE)
+    }
+
     pub fn operate(&self, action: &IoAction) -> Result<(), Error> {
         match action {
-            IoAction::Write(bytes) => self
-                .writer
-                .lock()
-                .map_err(|_| Error::OutcomeUnknown)?
-                .submit(bytes),
+            IoAction::Write(bytes) => {
+                write_input(&self.writer, &self.reader, |writer| writer.submit(bytes))
+            }
             IoAction::Resize { columns, rows } => {
                 self.master.resize(size(*columns, *rows))?;
                 self.model.resize(*columns, *rows);
@@ -285,33 +311,65 @@ impl Drop for Process {
                 eprintln!("session cleanup failed: {error}");
             }
         }
-        self.stopping.store(true, Ordering::Release);
+        self.reader.stop();
     }
+}
+
+const OUTPUT_DRAIN_GRACE: Duration = Duration::from_millis(250);
+
+pub(crate) struct ReaderSignal {
+    stopping: AtomicBool,
+    wake: crate::wake::Wake,
+}
+impl ReaderSignal {
+    fn new(stopping: bool) -> Result<Arc<Self>, Error> {
+        Ok(Arc::new(Self {
+            stopping: AtomicBool::new(stopping),
+            wake: crate::wake::Wake::new().map_err(host_error)?,
+        }))
+    }
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::Acquire)
+    }
+    fn stop(&self) {
+        self.stopping.store(true, Ordering::Release);
+        self.wake.notify();
+    }
+}
+
+fn write_input(
+    writer: &Mutex<InputWriter>,
+    reader: &ReaderSignal,
+    write: impl FnOnce(&mut InputWriter) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let mut writer = writer.lock().map_err(|_| Error::OutcomeUnknown)?;
+    let result = write(&mut writer);
+    if writer.has_pending() {
+        // The reader owns retrying the suffix once the PTY becomes writable.
+        reader.wake.notify();
+    }
+    result
 }
 
 fn event_sink(
     pty: PtyIdentity,
     journal: SharedJournal,
     writer: Arc<Mutex<InputWriter>>,
+    reader: Arc<ReaderSignal>,
 ) -> TerminalModelEventSink {
     Arc::new(move |event| match event {
-        TerminalModelEvent::Output(frame) => lock(&journal).publish(Event::Output {
+        TerminalModelEvent::Output(frame) => journal.publish(Event::Output {
             pty: pty.clone(),
             sequence: frame.sequence,
             data: frame.bytes,
         }),
         TerminalModelEvent::ProtocolReply { bytes, .. } => {
-            if writer
-                .lock()
-                .map_err(|_| Error::OutcomeUnknown)
-                .and_then(|mut writer| writer.reply(&bytes))
-                .is_err()
-            {
-                lock(&journal).publish(Event::RecoveryRequired { pty: pty.clone() });
+            if write_input(&writer, &reader, |writer| writer.reply(&bytes)).is_err() {
+                journal.publish(Event::RecoveryRequired { pty: pty.clone() });
             }
         }
         TerminalModelEvent::Disabled { .. } => {
-            lock(&journal).publish(Event::RecoveryRequired { pty: pty.clone() });
+            journal.publish(Event::RecoveryRequired { pty: pty.clone() });
         }
     })
 }

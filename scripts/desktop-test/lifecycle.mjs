@@ -12,6 +12,7 @@ import {
   waitForDevTools,
   waitForPlaywrightPage,
 } from '../electron-process.mjs'
+import { createDaemonOwnershipRegistry } from './daemon-ownership.mjs'
 import { createFixtureRepository, seedFixtureAppData } from './fixture.mjs'
 import {
   discoverSidecarForElectron,
@@ -247,6 +248,8 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
   const remove = deps.rm ?? rm
   const write = deps.writeFile ?? writeFile
   const resolveRepositoryRoot = deps.repositoryRoot ?? repositoryRoot
+  const createDaemonOwnership = deps.createDaemonOwnershipRegistry ?? createDaemonOwnershipRegistry
+  const ownsSessionDaemon = policy.mode !== 'reuse' && options.isolatedSessionDaemon === true
 
   let startPromise = null
   let shutdownPromise = null
@@ -256,6 +259,7 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
   let launcher = null
   let browser = null
   let page = null
+  let daemonOwnership = null
 
   async function ensurePaths() {
     if (policy.mode === 'reuse') {
@@ -277,7 +281,9 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
       return paths
     }
 
-    runRoot ??= await makeTempDir(join(tmpdir(), 'openforge-desktop-test-'))
+    // The daemon control socket path must stay below the 104-byte macOS limit.
+    const tempBase = ownsSessionDaemon && process.platform === 'darwin' ? '/tmp' : tmpdir()
+    runRoot ??= await makeTempDir(join(tempBase, 'openforge-desktop-test-'))
     const artifactRoot = options.outputDir
       ? resolve(options.outputDir)
       : join(resolveRepositoryRoot(), 'artifacts', 'desktop-test', basename(runRoot))
@@ -317,9 +323,18 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
       if (paths && launcher) {
         await write(paths.childLogPath, launcher.output()).catch(() => {})
       }
-      if (policy.ownsData && runRoot && !options.retainRuntime) {
+      let daemonCleanupError = null
+      if (daemonOwnership) {
+        try {
+          await daemonOwnership.cleanup()
+        } catch (error) {
+          daemonCleanupError = error
+        }
+      }
+      if (policy.ownsData && runRoot && !options.retainRuntime && !daemonCleanupError) {
         await remove(runRoot, { recursive: true, force: true }).catch(() => {})
       }
+      if (daemonCleanupError) throw daemonCleanupError
     })()
     return shutdownPromise
   }
@@ -374,6 +389,22 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
           : {}
         const homeDir = join(resolvedPaths.runRoot, 'home')
         await makeDir(homeDir, { recursive: true })
+        const sessionDaemonEnv = {}
+        if (ownsSessionDaemon) {
+          daemonOwnership = await createDaemonOwnership({ mode: 'isolated', runRoot: resolvedPaths.runRoot })
+          sessionDaemonEnv.OPENFORGE_SESSION_DAEMON_ROOT = join(resolvedPaths.appDataDir, 'session-daemon')
+        }
+        const launchEnv = {
+          ...process.env,
+          ...ghosttyOptimizeEnv,
+          ...sessionDaemonEnv,
+          OPENFORGE_BACKEND_PORT: String(backendPort),
+          OPENFORGE_HTTP_PORT: String(backendPort),
+        }
+        if (!ownsSessionDaemon) {
+          delete launchEnv.OPENFORGE_SESSION_DAEMON_ROOT
+          delete launchEnv.OPENFORGE_SESSION_DAEMON_PATH
+        }
         launcher = createLauncher({
           captureOutput: true,
           electronLaunchAdapter: policy.playwrightAccess === 'electron'
@@ -381,12 +412,7 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
             : undefined,
           chromiumDebugPort,
           desktopTest: true,
-          env: {
-            ...process.env,
-            ...ghosttyOptimizeEnv,
-            OPENFORGE_BACKEND_PORT: String(backendPort),
-            OPENFORGE_HTTP_PORT: String(backendPort),
-          },
+          env: launchEnv,
           runtimeOptions: {
             homeDir,
             rendererPort,

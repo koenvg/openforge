@@ -19,6 +19,10 @@ use std::{
     io::Read,
     os::{fd::AsRawFd, unix::process::CommandExt},
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -120,6 +124,7 @@ fn image_shape(image: &images::Image, directory: &Path) -> Result<(), Error> {
 struct Pending {
     index: usize,
     started: Instant,
+    finished: Arc<AtomicBool>,
     worker: std::thread::JoinHandle<Result<images::Image, Error>>,
 }
 pub(crate) struct Manager {
@@ -175,7 +180,7 @@ impl Manager {
         let Some(pending) = &self.pending else {
             return;
         };
-        if !pending.worker.is_finished() {
+        if !pending.finished.load(Ordering::Acquire) {
             if pending.started.elapsed() > preparation_timeout()
                 && self.jobs[pending.index].state == ReplacementState::Preparing
             {
@@ -202,6 +207,11 @@ impl Manager {
                 self.clean();
             }
         }
+    }
+    pub fn next_deadline(&self) -> Option<Instant> {
+        let pending = self.pending.as_ref()?;
+        (self.jobs[pending.index].state == ReplacementState::Preparing)
+            .then(|| pending.started + preparation_timeout())
     }
     fn busy(&self) -> bool {
         self.pending.is_some()
@@ -320,9 +330,16 @@ impl Manager {
         let current = self.current.clone().ok_or(Error::UnsupportedReplacement)?;
         let directory = self.directory.clone();
         let requested = executable.clone();
+        let finished = Arc::new(AtomicBool::new(false));
+        let worker_finished = Arc::clone(&finished);
         let worker = std::thread::Builder::new()
             .name("image-preflight".into())
-            .spawn(move || images::prepare(&directory, &current, &requested))
+            .spawn(move || {
+                let result = images::prepare(&directory, &current, &requested);
+                worker_finished.store(true, Ordering::Release);
+                crate::wake::daemon().notify();
+                result
+            })
             .map_err(|_| Error::Capacity)?;
         let index = self.jobs.len();
         self.jobs.push(Job {
@@ -335,6 +352,7 @@ impl Manager {
         });
         self.pending = Some(Pending {
             index,
+            finished,
             worker,
             started: Instant::now(),
         });
