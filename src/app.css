@@ -35,6 +35,7 @@
 @import "./styles/terminal-presentation.css";
 @import "./styles/task-status-states.css";
 @import "./styles/animation-utilities.css";
+@import "./styles/window-chrome.css";
 
 @plugin "daisyui";
 

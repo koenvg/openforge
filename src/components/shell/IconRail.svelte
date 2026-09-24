@@ -32,7 +32,7 @@
   let navItems = $derived(getIconRailNavItems(pluginNavItems, dashboardNavItem))
 </script>
 
-<nav class="of-icon-rail" aria-label="Project tools">
+<nav class="of-icon-rail of-window-drag" aria-label="Project tools">
   <AnimatedNavList activeId={currentView} class="rail-navigation-items">
     {#snippet children(registerItem)}
       {#each navItems as { view, icon, shortcut, label }}
