@@ -44,7 +44,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { ContributionRegistry } from './contribution-registry'
-import type { HostCallbackHandler, HostCallbackOptions, InvokeBackendInput, RuntimeEventHandler, RuntimePluginState } from './runtime-types'
+import type { HostCallbackHandler, HostCallbackOptions, InvokeBackendInput, RuntimeEventHandler, RuntimePluginState, ScopedAgentSessionChangeSignal } from './runtime-types'
 
 function requireImplementationRunString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.length > 0) return value
@@ -208,6 +208,15 @@ export type BackendApiRuntime = {
   invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown>
   listCommands(sourcePluginId: string): Promise<ReturnType<ContributionRegistry['listCommands']>>
   emitGlobalEvent(event: string, payload: unknown, sourcePluginId: string): Promise<void>
+  onScopedAgentSessionChange(listener: (signal: ScopedAgentSessionChangeSignal) => void): () => void
+}
+
+const SCOPED_OBSERVE_RETRY_INITIAL_MS = 1_000
+const SCOPED_OBSERVE_RETRY_MAX_MS = 30_000
+
+function scopedStateRevision(state: ScopedAgentSessionState | null): string {
+  if (state === null) return 'missing'
+  return [state.id, state.turnId, state.status, state.updatedAt, state.queuePosition, state.workspaceAvailable].join('\0')
 }
 
 export function createBackendApi(
@@ -251,15 +260,17 @@ export function createBackendApi(
 
   type ScopedSessionObserver = {
     disposed: boolean
-    polling: boolean
-    previous: string
-    previousOutputRevision: number | null | undefined
+    observing: boolean
+    stale: boolean
+    retryDelayMs: number
+    retryTimer: ReturnType<typeof setTimeout> | null
+    stateRevision: string | undefined
     cursor: number | null
     ready: Promise<void>
     markReady: (() => void) | null
     readyError: unknown
     handlers: Set<(event: ScopedAgentSessionChangeEvent) => void>
-    interval: ReturnType<typeof setInterval> | null
+    unsubscribe: () => void
   }
   const scopedSessionObservers = new Map<string, ScopedSessionObserver>()
   const subscribeScopedSession = (
@@ -273,24 +284,36 @@ export function createBackendApi(
       const ready = new Promise<void>(resolve => { markReady = resolve })
       const created: ScopedSessionObserver = {
         disposed: false,
-        polling: false,
-        previous: '',
-        previousOutputRevision: undefined,
+        observing: false,
+        stale: false,
+        retryDelayMs: SCOPED_OBSERVE_RETRY_INITIAL_MS,
+        retryTimer: null,
+        stateRevision: undefined,
         cursor: null,
         ready,
         markReady,
         readyError: null,
         handlers: new Set(),
-        interval: null,
+        unsubscribe: () => {},
       }
-      const poll = async () => {
-        if (created.disposed || created.polling) return
-        created.polling = true
-        let pollAgain = false
+      const emit = (sessionState: ScopedAgentSessionState | null) => {
+        const event = { ...scope, state: sessionState }
+        for (const currentHandler of [...created.handlers]) currentHandler(event)
+      }
+      const observe = async () => {
+        if (created.disposed) return
+        if (created.observing) {
+          created.stale = true
+          return
+        }
+        if (created.retryTimer) clearTimeout(created.retryTimer)
+        created.retryTimer = null
+        created.observing = true
+        created.stale = false
+        let observeAgain = false
         try {
           const current = await scopedHostCallback<{
             state: ScopedAgentSessionState | null
-            outputRevision: number | null
             cursor?: number
             transitions?: Array<{ sequence: number, state: ScopedAgentSessionState }>
             hasMore?: boolean
@@ -300,52 +323,49 @@ export function createBackendApi(
               : { scope, afterSequence: created.cursor },
           )
           if (created.disposed) return
-          const next = JSON.stringify({
-            state: current.state,
-            outputRevision: current.outputRevision,
-          })
+          const currentRevision = scopedStateRevision(current.state)
           const transitions = current.transitions ?? []
-          const isInitialObservation = created.cursor === null
-          if (!isInitialObservation && transitions.length > 0) {
-            for (const transition of transitions) {
-              const event = { ...scope, state: transition.state }
-              for (const currentHandler of [...created.handlers]) currentHandler(event)
-            }
-            const finalTransition = transitions.at(-1)
-            const currentDiffersFromFinalTransition = JSON.stringify(finalTransition?.state) !== JSON.stringify(current.state)
-            const outputRevisionChanged = created.previousOutputRevision !== undefined
-              && created.previousOutputRevision !== current.outputRevision
-            if (!current.hasMore && (currentDiffersFromFinalTransition || outputRevisionChanged)) {
-              const event = { ...scope, state: current.state }
-              for (const currentHandler of [...created.handlers]) currentHandler(event)
-            }
-          } else if (!isInitialObservation && !current.hasMore && created.previous !== next) {
-            const event = { ...scope, state: current.state }
-            for (const currentHandler of [...created.handlers]) currentHandler(event)
+          if (created.cursor !== null) {
+            for (const transition of transitions) emit(transition.state)
+            const lastEmittedRevision = transitions.length > 0
+              ? scopedStateRevision(transitions[transitions.length - 1].state)
+              : created.stateRevision
+            if (!current.hasMore && lastEmittedRevision !== currentRevision) emit(current.state)
+          } else if (created.readyError !== null) {
+            emit(current.state)
           }
           created.cursor = current.cursor ?? created.cursor ?? 0
-          if (!current.hasMore) {
-            created.previous = next
-            created.previousOutputRevision = current.outputRevision
-          }
-          pollAgain = current.hasMore === true
+          if (!current.hasMore) created.stateRevision = currentRevision
+          observeAgain = current.hasMore === true
+          created.retryDelayMs = SCOPED_OBSERVE_RETRY_INITIAL_MS
           created.readyError = null
           created.markReady?.()
           created.markReady = null
         } catch (error) {
-          // Direct operations retain structured failures; this is an invalidation poll.
           if (created.cursor === null) {
             created.readyError = error
             created.markReady?.()
             created.markReady = null
           }
+          if (!created.disposed) {
+            created.retryTimer = setTimeout(() => { void observe() }, created.retryDelayMs)
+            created.retryDelayMs = Math.min(created.retryDelayMs * 2, SCOPED_OBSERVE_RETRY_MAX_MS)
+          }
         } finally {
-          created.polling = false
-          if (pollAgain && !created.disposed) void poll()
+          created.observing = false
+          if ((observeAgain || created.stale) && !created.disposed) void observe()
         }
       }
-      void poll()
-      created.interval = setInterval(() => { void poll() }, 1_000)
+      created.unsubscribe = runtime.onScopedAgentSessionChange((signal) => {
+        if (signal.kind === 'resync'
+          || (signal.pluginId === state.pluginId
+            && signal.namespace === scope.namespace
+            && signal.targetKey === scope.targetKey
+            && signal.revision === scope.revision)) {
+          void observe()
+        }
+      })
+      void observe()
       observer = created
       scopedSessionObservers.set(key, observer)
     }
@@ -358,7 +378,9 @@ export function createBackendApi(
         observer.handlers.delete(handler)
         if (observer.handlers.size > 0) return
         observer.disposed = true
-        if (observer.interval) clearInterval(observer.interval)
+        observer.unsubscribe()
+        if (observer.retryTimer) clearTimeout(observer.retryTimer)
+        observer.retryTimer = null
         observer.markReady?.()
         observer.markReady = null
         scopedSessionObservers.delete(key)

@@ -113,3 +113,105 @@ async fn process_diagnostics_round_trip_uses_bounded_content_free_contract() {
     assert_eq!(diagnostics.plugins[0].reload_count, 1);
     assert!(!diagnostics.plugins_truncated);
 }
+
+const NOTIFICATION_RECORDING_SIDECAR: &str = r#"const readline = require('node:readline');
+const notifications = [];
+const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  if (!line.trim()) return;
+  const message = JSON.parse(line);
+  if (message.id === undefined) {
+    notifications.push({ method: message.method, params: message.params });
+    return;
+  }
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: notifications }) + '\n');
+});
+rl.on('close', () => process.exit(0));"#;
+
+async fn recorded_notifications(
+    host: &super::PluginHost,
+    backend_path: &std::path::Path,
+    expected: usize,
+) -> serde_json::Value {
+    let mut notifications = json!([]);
+    for _ in 0..50 {
+        notifications = host
+            .invoke_backend("com.example.review", "probe", backend_path, json!({}))
+            .await
+            .expect("probe should succeed");
+        if notifications
+            .as_array()
+            .is_some_and(|items| items.len() >= expected)
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    notifications
+}
+
+fn scoped_change() -> serde_json::Value {
+    json!({
+        "pluginId": "com.example.review",
+        "namespace": "review",
+        "targetKey": "PR-42",
+        "revision": "sha-1",
+    })
+}
+
+#[tokio::test]
+async fn forwards_scoped_agent_session_changes_to_the_sidecar_as_notifications() {
+    let harness = StdioTestHarness::new(NOTIFICATION_RECORDING_SIDECAR).await;
+    let backend_path = harness.write_file("backend.mjs", "");
+    let bus = crate::app_events::AppEventBus::new(16, 8);
+    let sender = Some(bus.sender());
+    let host = super::PluginHost::with_app_event_sender(
+        crate::backend_runtime::AppHandle::new(),
+        sender.clone(),
+    );
+    host.start_sidecar().await.expect("sidecar should start");
+
+    crate::app_events::publish_app_event(&sender, "pty-output-review-key", &json!({ "data": "x" }));
+    crate::app_events::publish_app_event(&sender, "scoped-agent-session-changed", &scoped_change());
+
+    let notifications = recorded_notifications(&host, &backend_path, 1).await;
+    host.stop_sidecar().await.expect("sidecar should stop");
+
+    assert_eq!(
+        notifications,
+        json!([{ "method": "plugin.agentSessions.changed", "params": scoped_change() }])
+    );
+}
+
+#[tokio::test]
+async fn asks_the_sidecar_to_resync_when_scoped_changes_were_dropped() {
+    let harness = StdioTestHarness::new(NOTIFICATION_RECORDING_SIDECAR).await;
+    let backend_path = harness.write_file("backend.mjs", "");
+    let bus = crate::app_events::AppEventBus::new(2, 2);
+    let sender = Some(bus.sender());
+    let host = super::PluginHost::with_app_event_sender(
+        crate::backend_runtime::AppHandle::new(),
+        sender.clone(),
+    );
+    host.start_sidecar().await.expect("sidecar should start");
+
+    for _ in 0..8 {
+        crate::app_events::publish_app_event(
+            &sender,
+            "scoped-agent-session-changed",
+            &scoped_change(),
+        );
+    }
+
+    let notifications = recorded_notifications(&host, &backend_path, 3).await;
+    host.stop_sidecar().await.expect("sidecar should stop");
+
+    assert_eq!(
+        notifications,
+        json!([
+            { "method": "plugin.agentSessions.resync" },
+            { "method": "plugin.agentSessions.changed", "params": scoped_change() },
+            { "method": "plugin.agentSessions.changed", "params": scoped_change() },
+        ])
+    );
+}

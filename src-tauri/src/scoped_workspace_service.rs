@@ -1,8 +1,10 @@
 use crate::{
+    app_events::RuntimeEventPublisher,
     db::{self, Database, NewScopedWorkspace, ScopedWorkspaceRow},
     git_origin_fetch::{fetch_origin, ORIGIN_FETCH_TIMEOUT},
     git_worktree,
     pty_manager::{scoped_agent_session_key, SessionScope, SessionScopeError},
+    scoped_agent_session_service::publish_scope_change,
 };
 use std::{
     collections::HashMap,
@@ -166,6 +168,7 @@ pub(crate) struct ScopedWorkspaceService {
     remover: Arc<dyn WorkspaceRemover>,
     max_workspaces: usize,
     max_bytes: u64,
+    events: RuntimeEventPublisher,
 }
 
 pub(crate) struct ScopedWorkspaceLease {
@@ -201,7 +204,13 @@ impl ScopedWorkspaceService {
             remover: Arc::new(GitWorkspaceRemover),
             max_workspaces: MAX_SCOPED_WORKSPACES,
             max_bytes: MAX_SCOPED_WORKSPACE_BYTES,
+            events: RuntimeEventPublisher::default(),
         }
+    }
+
+    pub(crate) fn with_events(mut self, events: RuntimeEventPublisher) -> Self {
+        self.events = events;
+        self
     }
 
     #[cfg(test)]
@@ -720,6 +729,15 @@ impl ScopedWorkspaceService {
         self.with_database(|database| {
             database.mark_scoped_workspace_cleanup_pending(&workspace.id)
         })?;
+        publish_scope_change(
+            &self.events,
+            &workspace.owner_plugin_id,
+            SessionScope {
+                namespace: &workspace.namespace,
+                target_key: &workspace.target_key,
+                revision: &workspace.revision,
+            },
+        );
         self.remover
             .remove(
                 Path::new(&workspace.repo_path),

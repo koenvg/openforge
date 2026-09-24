@@ -276,14 +276,18 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
             .create(&root)?;
         pty_manager.enable_installation_daemon(root, executable);
     }
-    let scoped_workspaces = scoped_workspace_service::ScopedWorkspaceService::new(
-        Arc::clone(&db_arc),
-        app_data_dir.join("scoped-workspaces"),
-    );
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
+    let scoped_workspaces = scoped_workspace_service::ScopedWorkspaceService::new(
+        Arc::clone(&db_arc),
+        app_data_dir.join("scoped-workspaces"),
+    )
+    .with_events(app_events::RuntimeEventPublisher::new(
+        Some(app.clone()),
+        None,
+    ));
     let scoped_runtime = Arc::new(scoped_agent_session_service::ScopedProviderRuntime::new(
         app.clone(),
         pty_manager.clone(),
@@ -293,37 +297,14 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&db_arc),
         Arc::new(scoped_workspaces.clone()),
         scoped_runtime.clone(),
+        app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
     );
     let completion_service = scoped_agent_sessions.clone();
-    let completion_db = Arc::clone(&db_arc);
-    let completion_app = app.clone();
     scoped_runtime.set_completion_observer(Arc::new(move |session_id, instance_id, succeeded| {
         let service = completion_service.clone();
-        let database = Arc::clone(&completion_db);
-        let app = completion_app.clone();
         tokio::spawn(async move {
-            match service.complete(&session_id, instance_id, succeeded).await {
-                Ok(true) => {
-                    if let Ok(Some(row)) =
-                        db::acquire_db(&database).scoped_agent_session_by_id(&session_id)
-                    {
-                        app_events::publish_app_event_to_runtime(
-                            Some(&app),
-                            &None,
-                            "scoped-agent-session-changed",
-                            &serde_json::json!({
-                                "pluginId": row.owner_plugin_id,
-                                "namespace": row.namespace,
-                                "targetKey": row.target_key,
-                                "revision": row.revision,
-                            }),
-                        );
-                    }
-                }
-                Ok(false) => {}
-                Err(error) => {
-                    warn!("[scoped-agent-session] failed to record provider exit: {error}");
-                }
+            if let Err(error) = service.complete(&session_id, instance_id, succeeded).await {
+                warn!("[scoped-agent-session] failed to record provider exit: {error}");
             }
         });
     }));

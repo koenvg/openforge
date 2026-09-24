@@ -1,7 +1,17 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
-import { createPluginHostRuntime } from './index'
+import { createPluginHostRuntime, type PluginHostRuntime } from './index'
 import { expectOnlyPluginHostStderr, unicodeLineSeparatorFixturePath, writeBackendModule } from './backend-module.test-fixtures'
+
+const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+
+function pushScopedChange(runtime: PluginHostRuntime, pluginId: string, changedScope: typeof scope): void {
+  runtime.handleJsonRpcNotification({
+    jsonrpc: '2.0',
+    method: 'plugin.agentSessions.changed',
+    params: { pluginId, ...changedScope },
+  })
+}
 
 describe('plugin-host backend host APIs', () => {
   it.each(['project', 'task'] as const)('round-trips maximum %s document bytes through the backend runtime callback', async scope => {
@@ -856,7 +866,7 @@ describe('plugin-host backend host APIs', () => {
     ])
   })
 
-  it('delivers scoped Agent Session output invalidations through the packaged backend runtime', async () => {
+  it('delivers pushed scoped Agent Session changes to every subscriber of the exact scope', async () => {
     const backendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
@@ -887,38 +897,211 @@ describe('plugin-host backend host APIs', () => {
         }
       }
     `)
-    let revision = 0
+    const paused = { id: 'sas-1', turnId: 'turn-1', status: 'paused', updatedAt: 3 }
     const calls: Array<{ method: string; params: Record<string, unknown> }> = []
     const hostCallbacks = vi.fn(async (request: { method: string; params: Record<string, unknown> }) => {
       calls.push(request)
       if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
-      revision += 1
-      return {
-        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
-        outputRevision: revision,
-      }
+      return calls.length === 1
+        ? { state: { id: 'sas-1', turnId: 'turn-1', status: 'running', updatedAt: 2 }, cursor: 0, transitions: [] }
+        : { state: paused, cursor: 0, transitions: [] }
     })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
 
-    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
-      pluginId: 'com.example.reviewer',
-      backendPath,
-      command: 'watchScopedSession',
-    })).resolves.toEqual([
-      {
-        namespace: 'review', targetKey: 'PR-42', revision: 'sha-1',
-        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
-      },
-      {
-        namespace: 'review', targetKey: 'PR-42', revision: 'sha-1',
-        state: { id: 'sas-1', status: 'running', updatedAt: 2 },
-      },
+    const invocation = runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'watchScopedSession' })
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    pushScopedChange(runtime, 'com.example.other', scope)
+    pushScopedChange(runtime, 'com.example.reviewer', { ...scope, revision: 'sha-2' })
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+
+    await expect(invocation).resolves.toEqual([
+      { ...scope, state: paused },
+      { ...scope, state: paused },
     ])
     expect(calls).toHaveLength(2)
-    expect(calls.every(call => call.method === 'openforge.agentSessions.observe'
-      && call.params.pluginId === 'com.example.reviewer')).toBe(true)
+    expect(calls.every(call => call.params.pluginId === 'com.example.reviewer')).toBe(true)
   }, 5_000)
 
-  it('replays every scoped Agent turn transition observed between backend polls', async () => {
+  it('stays idle between pushes and emits only when the lifecycle state changes', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('watchScopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timed out waiting for completion')), 4000)
+                const subscription = openforge.agentSessions.onDidChange(scope, event => {
+                  clearTimeout(timeout)
+                  subscription.dispose()
+                  resolve(event.state.status)
+                })
+              })
+            }
+          }))
+        }
+      }
+    `)
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+    let observations = 0
+    const hostCallbacks = vi.fn(async (request: { method: string }) => {
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      observations += 1
+      return {
+        state: { id: 'sas-1', turnId: 'turn-1', status: observations < 4 ? 'running' : 'completed', updatedAt: observations < 4 ? 2 : 3 },
+        cursor: 0,
+        transitions: [],
+      }
+    })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+
+    try {
+      const invocation = runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'watchScopedSession' })
+      await vi.waitFor(() => expect(observations).toBe(1))
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(observations).toBe(1)
+      for (const expected of [2, 3, 4]) {
+        pushScopedChange(runtime, 'com.example.reviewer', scope)
+        await vi.waitFor(() => expect(observations).toBe(expected))
+      }
+
+      await expect(invocation).resolves.toBe('completed')
+      expect(setIntervalSpy).not.toHaveBeenCalled()
+    } finally {
+      setIntervalSpy.mockRestore()
+    }
+  }, 5_000)
+
+  it('stops observing a scope after its last subscription is disposed', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('subscribeThenDispose', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              openforge.agentSessions.onDidChange(scope, () => {}).dispose()
+            }
+          }))
+        }
+      }
+    `)
+    const hostCallbacks = vi.fn(async (request: { method: string }) => {
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      return { state: null, cursor: 0, transitions: [] }
+    })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+    await runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'subscribeThenDispose' })
+    const observationsAfterDispose = hostCallbacks.mock.calls.length
+
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    expect(hostCallbacks).toHaveBeenCalledTimes(observationsAfterDispose)
+  })
+
+  it('re-reads every observed scope when the host asks for a resync', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('watchScopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timed out waiting for resync')), 4000)
+                const subscription = openforge.agentSessions.onDidChange(scope, event => {
+                  clearTimeout(timeout)
+                  subscription.dispose()
+                  resolve(event.state.status)
+                })
+              })
+            }
+          }))
+        }
+      }
+    `)
+    let observations = 0
+    const hostCallbacks = vi.fn(async (request: { method: string }) => {
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      observations += 1
+      return {
+        state: { id: 'sas-1', turnId: 'turn-1', status: observations === 1 ? 'running' : 'completed', updatedAt: observations },
+        cursor: 0,
+        transitions: [],
+      }
+    })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+
+    const invocation = runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'watchScopedSession' })
+    await vi.waitFor(() => expect(observations).toBe(1))
+    runtime.handleJsonRpcNotification({ jsonrpc: '2.0', method: 'plugin.agentSessions.resync' })
+
+    await expect(invocation).resolves.toBe('completed')
+  })
+
+  it('retries a failed first observation and reports the recovered state', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('watchScopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timed out waiting for retry')), 4000)
+                const subscription = openforge.agentSessions.onDidChange(scope, event => {
+                  clearTimeout(timeout)
+                  subscription.dispose()
+                  resolve(event.state.status)
+                })
+              })
+            }
+          }))
+        }
+      }
+    `)
+    let observations = 0
+    const hostCallbacks = vi.fn(async (request: { method: string }) => {
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      observations += 1
+      if (observations === 1) throw new Error('INTERNAL: database busy')
+      return { state: { id: 'sas-1', turnId: 'turn-1', status: 'running', updatedAt: 1 }, cursor: 0, transitions: [] }
+    })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+
+    const status = await runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'watchScopedSession' })
+
+    expect(status).toBe('running')
+    expect(observations).toBe(2)
+  }, 5_000)
+
+  it('stops retrying a failed observation after its last subscription is disposed', async () => {
+    const backendPath = await writeBackendModule(`
+      let subscription
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('subscribe', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              subscription = openforge.agentSessions.onDidChange(scope, () => {})
+            }
+          }))
+          context.subscriptions.add(openforge.backend.registerMethod('dispose', {
+            async handler() { subscription.dispose() }
+          }))
+        }
+      }
+    `)
+    const hostCallbacks = vi.fn(async () => { throw new Error('INTERNAL: database busy') })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+    await runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'subscribe' })
+    await vi.waitFor(() => expect(hostCallbacks).toHaveBeenCalledTimes(1))
+
+    await runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'dispose' })
+    await new Promise(resolve => setTimeout(resolve, 1_200))
+
+    expect(hostCallbacks).toHaveBeenCalledTimes(1)
+  }, 5_000)
+
+  it('replays every scoped Agent turn transition committed before a pushed change', async () => {
     const backendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
@@ -948,14 +1131,12 @@ describe('plugin-host backend host APIs', () => {
       if (poll === 1) {
         return {
           state: { id: 'sas-1', turnId: null, status: 'running', updatedAt: 1 },
-          outputRevision: 0,
           cursor: 0,
           transitions: [],
         }
       }
       return {
         state: { id: 'sas-1', turnId: 'turn-2', status: 'running', updatedAt: 4 },
-        outputRevision: 0,
         cursor: 3,
         transitions: [
           { sequence: 1, state: { id: 'sas-1', turnId: 'turn-1', status: 'running', updatedAt: 2 } },
@@ -964,12 +1145,17 @@ describe('plugin-host backend host APIs', () => {
         ],
       }
     })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
 
-    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+    const invocation = runtime.invokeBackend({
       pluginId: 'com.example.reviewer',
       backendPath,
       command: 'watchTurnTransitions',
-    })).resolves.toMatchObject([
+    })
+    await vi.waitFor(() => expect(poll).toBe(1))
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+
+    await expect(invocation).resolves.toMatchObject([
       { state: { turnId: 'turn-1', status: 'running' } },
       { state: { turnId: 'turn-1', status: 'paused' } },
       { state: { turnId: 'turn-2', status: 'running' } },
@@ -978,6 +1164,54 @@ describe('plugin-host backend host APIs', () => {
       method: 'openforge.agentSessions.observe',
       params: expect.objectContaining({ afterSequence: 0 }),
     }))
+  }, 5_000)
+
+  it('re-observes a change pushed while an observation is in flight', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('watchScopedSession', {
+            async handler() {
+              const scope = { namespace: 'review', targetKey: 'PR-42', revision: 'sha-1' }
+              return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timed out waiting for completion')), 4000)
+                const subscription = openforge.agentSessions.onDidChange(scope, event => {
+                  clearTimeout(timeout)
+                  subscription.dispose()
+                  resolve(event.state.status)
+                })
+              })
+            }
+          }))
+        }
+      }
+    `)
+    let releaseSecond!: () => void
+    const secondGate = new Promise<void>(resolve => { releaseSecond = resolve })
+    let poll = 0
+    const hostCallbacks = vi.fn(async (request: { method: string }) => {
+      if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
+      poll += 1
+      const current = poll
+      if (current === 2) await secondGate
+      return {
+        state: { id: 'sas-1', turnId: 'turn-1', status: current < 3 ? 'running' : 'completed', updatedAt: current < 3 ? 1 : 2 },
+        cursor: 0,
+        transitions: [],
+      }
+    })
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+
+    const invocation = runtime.invokeBackend({ pluginId: 'com.example.reviewer', backendPath, command: 'watchScopedSession' })
+    await vi.waitFor(() => expect(poll).toBe(1))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+    await vi.waitFor(() => expect(poll).toBe(2))
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+    releaseSecond()
+
+    await expect(invocation).resolves.toBe('completed')
+    expect(poll).toBe(3)
   }, 5_000)
 
   it('establishes the scoped transition cursor before sending subscribed input', async () => {
@@ -1009,7 +1243,6 @@ describe('plugin-host backend host APIs', () => {
         await observeGate
         return {
           state: { id: 'sas-1', turnId: 'old-turn', status: 'completed', updatedAt: 1 },
-          outputRevision: 0,
           cursor: 7,
           transitions: [],
         }
@@ -1068,11 +1301,11 @@ describe('plugin-host backend host APIs', () => {
       if (request.method !== 'openforge.agentSessions.observe') throw new Error(`unexpected callback: ${request.method}`)
       poll += 1
       if (poll === 1) {
-        return { state: state(0), outputRevision: 0, cursor: 0, transitions: [], hasMore: false }
+        return { state: state(0), cursor: 0, transitions: [], hasMore: false }
       }
       if (poll === 2) {
         return {
-          state: state(101), outputRevision: 0, cursor: 100, hasMore: true,
+          state: state(101), cursor: 100, hasMore: true,
           transitions: Array.from({ length: 100 }, (_, index) => ({
             sequence: index + 1,
             state: state(index + 1),
@@ -1080,16 +1313,22 @@ describe('plugin-host backend host APIs', () => {
         }
       }
       return {
-        state: state(101), outputRevision: 0, cursor: 101, hasMore: false,
+        state: state(101), cursor: 101, hasMore: false,
         transitions: [{ sequence: 101, state: state(101) }],
       }
     })
 
-    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+    const invocation = runtime.invokeBackend({
       pluginId: 'com.example.reviewer',
       backendPath,
       command: 'watchPagedTransitions',
-    })).resolves.toEqual(Array.from({ length: 101 }, (_, index) => `turn-${index + 1}`))
+    })
+    await vi.waitFor(() => expect(poll).toBe(1))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+
+    await expect(invocation).resolves.toEqual(Array.from({ length: 101 }, (_, index) => `turn-${index + 1}`))
     expect(poll).toBe(3)
   }, 5_000)
 
@@ -1123,18 +1362,18 @@ describe('plugin-host backend host APIs', () => {
       if (poll === 1) {
         return {
           state: { id: 'sas-1', turnId: 'turn-a', status: 'running', updatedAt: 1 },
-          outputRevision: 0, cursor: 1, transitions: [], hasMore: false,
+          cursor: 1, transitions: [], hasMore: false,
         }
       }
       if (poll === 2) {
         return {
           state: { id: 'sas-1', turnId: 'turn-b', status: 'running', updatedAt: 3 },
-          outputRevision: 0, cursor: 1, transitions: [], hasMore: true,
+          cursor: 1, transitions: [], hasMore: true,
         }
       }
       return {
         state: { id: 'sas-1', turnId: 'turn-b', status: 'running', updatedAt: 3 },
-        outputRevision: 0, cursor: 3, hasMore: false,
+        cursor: 3, hasMore: false,
         transitions: [
           { sequence: 2, state: { id: 'sas-1', turnId: 'turn-a', status: 'paused', updatedAt: 2 } },
           { sequence: 3, state: { id: 'sas-1', turnId: 'turn-b', status: 'running', updatedAt: 3 } },
@@ -1142,11 +1381,17 @@ describe('plugin-host backend host APIs', () => {
       }
     })
 
-    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+    const runtime = createPluginHostRuntime({ hostCallbacks })
+    const invocation = runtime.invokeBackend({
       pluginId: 'com.example.reviewer',
       backendPath,
       command: 'watchConcurrentTransitions',
-    })).resolves.toEqual(['turn-a', 'turn-b'])
+    })
+    await vi.waitFor(() => expect(poll).toBe(1))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    pushScopedChange(runtime, 'com.example.reviewer', scope)
+
+    await expect(invocation).resolves.toEqual(['turn-a', 'turn-b'])
     expect(poll).toBe(3)
   }, 5_000)
 })

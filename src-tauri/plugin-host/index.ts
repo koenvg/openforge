@@ -17,6 +17,7 @@ import type {
   JsonRpcResponse,
   ReadyBackendInput,
   RuntimeOptions,
+  ScopedAgentSessionChangeSignal,
 } from './runtime-types'
 import { StdioHostCallbackBridge, startStdioServer, writeJsonRpcResponse } from './stdio-transport'
 import { assertLocalId, isNonEmptyString, requireAgentInvocationContext, RuntimeValidationError } from './validation'
@@ -29,6 +30,7 @@ export class PluginHostRuntime {
   private readonly coordinatorCallbacks: HostCallbackHandler | null
   private readonly activationTails = new Map<string, Promise<void>>()
   private readonly invocationTails = new Map<string, Promise<void>>()
+  private readonly scopedAgentSessionChangeListeners = new Set<(signal: ScopedAgentSessionChangeSignal) => void>()
 
   constructor(options: RuntimeOptions = {}) {
     this.hostCallbacks = options.hostCallbacks ?? null
@@ -45,6 +47,10 @@ export class PluginHostRuntime {
         invokeGlobalCommand: (qualifiedId, payload, callerPluginId) => this.invokeGlobalCommand(qualifiedId, payload, callerPluginId),
         listCommands: sourcePluginId => this.listCommands(sourcePluginId),
         emitGlobalEvent: (event, payload, sourcePluginId) => this.emitGlobalEvent(event, payload, sourcePluginId),
+        onScopedAgentSessionChange: (listener) => {
+          this.scopedAgentSessionChangeListeners.add(listener)
+          return () => { this.scopedAgentSessionChangeListeners.delete(listener) }
+        },
       }, globalContributionRegistry),
     })
   }
@@ -307,6 +313,12 @@ export class PluginHostRuntime {
     }
   }
 
+  handleJsonRpcNotification(notification: JsonRpcRequest): void {
+    const signal = scopedAgentSessionChangeSignal(notification)
+    if (!signal) return
+    for (const listener of [...this.scopedAgentSessionChangeListeners]) listener(signal)
+  }
+
   private requirePluginId(params: JsonRpcRequest['params']): string {
     const pluginId = params?.pluginId
     if (!isNonEmptyString(pluginId)) throw new Error('Missing pluginId')
@@ -379,6 +391,15 @@ export class PluginHostRuntime {
   }
 }
 
+function scopedAgentSessionChangeSignal(notification: JsonRpcRequest): ScopedAgentSessionChangeSignal | null {
+  if (notification.method === 'plugin.agentSessions.resync') return { kind: 'resync' }
+  if (notification.method !== 'plugin.agentSessions.changed') return null
+  const { pluginId, namespace, targetKey, revision } = notification.params ?? {}
+  if (!isNonEmptyString(pluginId) || !isNonEmptyString(namespace)
+    || !isNonEmptyString(targetKey) || !isNonEmptyString(revision)) return null
+  return { kind: 'changed', pluginId, namespace, targetKey, revision }
+}
+
 export function createPluginHostRuntime(options?: RuntimeOptions): PluginHostRuntime {
   return new PluginHostRuntime(options)
 }
@@ -398,6 +419,10 @@ if (pluginBackendWorker) {
 
 export async function handleRequest(request: JsonRpcRequest): Promise<void> {
   if (!defaultRuntime) throw new Error('The parent plugin host runtime is unavailable inside a backend worker')
+  if (request.id === undefined) {
+    defaultRuntime.handleJsonRpcNotification(request)
+    return
+  }
   writeJsonRpcResponse(await defaultRuntime.handleJsonRpcRequest(request))
 }
 
