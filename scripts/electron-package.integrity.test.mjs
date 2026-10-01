@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { packageElectronApp } from './electron-package/package-assembly.mjs'
+import { sealLocalApplication } from './electron-package/local-integrity.mjs'
 
 const roots = []
 const enabled = process.platform === 'darwin' && process.env.RUN_ELECTRON_PACKAGE_CONTRACT === '1'
@@ -15,6 +16,31 @@ describe.skipIf(!enabled)('local packaged application integrity', () => {
   afterEach(async () => {
     await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
   })
+
+  it('seals an unsigned Electron crashpad helper before its framework without changing retained daemon bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'openforge-package-integrity-'))
+    roots.push(root)
+    const outputAppPath = join(root, 'Open Forge.app')
+    const codesign = args => execFileSync('/usr/bin/codesign', args, {
+      env: { PATH: '/usr/bin:/bin', HOME: root, TMPDIR: root }, timeout: 30_000, stdio: 'pipe',
+    })
+    await packageElectronApp({
+      outputAppPath,
+      sealApplication: async appPath => {
+        const helper = join(appPath, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler')
+        // Model the unsigned helper shipped in the x64 Electron template on either host architecture.
+        codesign(['--force', '--sign', '-', '--timestamp=none', helper])
+        codesign(['--remove-signature', helper])
+        expect(() => codesign(['--verify', '--strict', helper])).toThrow()
+        const daemon = join(appPath, 'Contents/Resources/session-runtime/openforge-session-daemon')
+        const before = await digest(daemon)
+        await sealLocalApplication(appPath)
+        expect(await digest(daemon)).toBe(before)
+        codesign(['--verify', '--strict', helper])
+      },
+    })
+    codesign(['--verify', '--deep', '--strict', outputAppPath])
+  }, 120_000)
 
   it('seals the complete app after assembly without changing retained daemon bytes, and refuses resource tampering', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openforge-package-integrity-'))

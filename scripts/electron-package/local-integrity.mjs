@@ -22,6 +22,12 @@ export async function sealLocalApplication(appPath) {
       }
     }
   }
+  // Electron's x64 template ships this nested helper unsigned. Seal it before
+  // its enclosing framework, without touching the retained runtime binaries.
+  await codesign([
+    '--force', '--sign', '-', '--timestamp=none', '--preserve-metadata=entitlements',
+    join(appPath, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler'),
+  ])
   await sealBundles(join(appPath, 'Contents/Frameworks'))
   await codesign(['--force', '--sign', '-', '--timestamp=none', '--preserve-metadata=entitlements', appPath])
   await codesign(['--verify', '--deep', '--strict', appPath])
