@@ -1,7 +1,7 @@
 //! Bind the kernel's loaded code identity to authenticated on-disk bytes.
 //! Code-signature validity here does not establish publisher trust.
 #[cfg(target_os = "macos")]
-pub(crate) use macos::{verify, verify_integrity};
+pub(crate) use macos::{running_hash, source_code_hash, verify, verify_integrity};
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn verify(_pid: u32, _executable: &std::path::Path) -> Result<(), String> {
@@ -42,6 +42,20 @@ mod macos {
         ) -> libc::c_int;
     }
 
+    pub(crate) fn running_hash(pid: i32) -> Result<Option<Vec<u8>>, String> {
+        let mut hash = vec![0_u8; 20];
+        // SAFETY: hash spans the kernel's 20-byte CDHash output.
+        if unsafe { csops(pid, 5, hash.as_mut_ptr().cast(), hash.len()) } != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ESRCH) {
+                return Ok(None);
+            }
+            return Err(format!(
+                "cannot identify process {pid}'s loaded image: {error}"
+            ));
+        }
+        Ok(Some(hash))
+    }
     pub(crate) fn verify(pid: u32, executable: &Path) -> Result<(), String> {
         let pid = i32::try_from(pid).map_err(|_| "invalid image process")?;
         if pid <= 1 {
@@ -81,13 +95,23 @@ mod macos {
         Ok(())
     }
 
-    fn code_hash(executable: &Path) -> Result<Vec<u8>, String> {
+    // For identifying old source code only, executable pages remain validated
+    // even when inert legacy resource links no longer resolve.
+    pub(crate) fn source_code_hash(executable: &Path) -> Result<Vec<u8>, String> {
+        checked_hash(executable, Flags::DO_NOT_VALIDATE_RESOURCES)
+    }
+
+    pub(crate) fn code_hash(executable: &Path) -> Result<Vec<u8>, String> {
+        checked_hash(executable, Flags::NONE)
+    }
+
+    fn checked_hash(executable: &Path, flags: Flags) -> Result<Vec<u8>, String> {
         let path = CFURL::from_path(executable, false).ok_or("invalid image path")?;
         let code = SecStaticCode::from_path(&path, Flags::NONE).map_err(message)?;
         let requirement: SecRequirement = "true".parse().map_err(message)?;
         // Integrity is independent of the separately authenticated publisher/local grant.
         code.check_validity(
-            Flags::STRICT_VALIDATE | Flags::NO_NETWORK_ACCESS,
+            Flags::STRICT_VALIDATE | Flags::NO_NETWORK_ACCESS | flags,
             &requirement,
         )
         .map_err(message)?;

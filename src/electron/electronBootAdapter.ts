@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import { UpdateSidecarExit } from './updateSidecarExit.js'
 import { NativeRestartRecovery } from './nativeRestartRecovery.js'
 import { RestartOperation } from './restartOperation.js'
@@ -519,6 +520,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       updateLaunchAuthorized = Boolean(await preflightProductionUpdateLaunch(app.getPath('userData'), {
         operationId: launchOperation, authorize: target => updates().authorizeLaunch(target),
       }))
+      if (!updateLaunchAuthorized && app.isPackaged && process.platform === 'darwin') {
+        const bundle = resolve(dirname(process.execPath), '..', '..')
+        await promisify(execFile)(join(bundle, 'Contents/MacOS/openforge-update-helper'), ['--cold-startup', bundle, app.getPath('userData')], { timeout: 30_000, env: options.env })
+      }
     },
 
     resolveSidecarPath(): string | null {

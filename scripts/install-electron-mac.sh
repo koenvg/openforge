@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "--cold" ]]; then
+  shift
+  exec node "$(dirname -- "${BASH_SOURCE[0]}")/cold-install-mac.mjs" "$@"
+fi
+
 # Do not fall back to process-name cleanup or direct bundle replacement. The
 # packaged ReleaseStore preflight refuses replacement until publisher trust and
 # the verified install-to-relaunch handoff are available. Source installs must

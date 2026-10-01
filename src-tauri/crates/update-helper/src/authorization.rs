@@ -15,8 +15,18 @@ pub(crate) struct Authorization {
     pub bundle_path: PathBuf,
     pub launch: Option<LaunchContext>,
     pub first_adoption: Option<FirstAdoption>,
+    pub cold_install: Option<ColdInstallApproval>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ColdInstallApproval {
+    pub installed_manifest_sha256: String,
+    pub daemon_root: PathBuf,
+    pub daemon_installation: String,
+    pub electron_user_data: PathBuf,
+    pub helper_sha256: String,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct FirstAdoption {
@@ -25,6 +35,13 @@ pub(crate) struct FirstAdoption {
 
 impl Authorization {
     pub fn installed_digest(&self, path: &Path) -> Result<String, String> {
+        if let Some(approval) = &self.cold_install {
+            let digest = crate::bundle::cold_source_sha256(path)?;
+            if digest != approval.installed_manifest_sha256 {
+                return Err("cold-install source bundle changed".into());
+            }
+            return Ok(digest);
+        }
         let Some(approval) = &self.first_adoption else {
             return crate::bundle::measure_daemon_source(path);
         };
@@ -136,6 +153,15 @@ pub(crate) fn read(
             .first_adoption
             .as_ref()
             .is_some_and(|approval| decode_mac(&approval.installed_manifest_sha256).is_err())
+        || record.cold_install.as_ref().is_some_and(|approval| {
+            record.source != "local-build"
+                || record.first_adoption.is_some()
+                || !approval.daemon_root.is_absolute()
+                || !approval.electron_user_data.is_absolute()
+                || uuid::Uuid::parse_str(&approval.daemon_installation).is_err()
+                || decode_mac(&approval.helper_sha256).is_err()
+                || decode_mac(&approval.installed_manifest_sha256).is_err()
+        })
     {
         return Err("invalid update authorization identity".into());
     }

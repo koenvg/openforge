@@ -12,6 +12,9 @@ pub enum Phase {
     Prepared,
     Replacing,
     Installed,
+    /// Offline publication may be observed by ordinary startup. Never roll it back.
+    ColdReplacing,
+    ColdCommitted,
     LaunchStarted,
     Committed,
     /// A committed install has started a new, uncommitted recovery launch.
@@ -25,7 +28,11 @@ impl Phase {
     }
 
     pub(crate) fn may_own_domain(self) -> bool {
-        self.awaiting_commit() || self == Self::Committed
+        self.awaiting_commit()
+            || matches!(
+                self,
+                Self::Committed | Self::ColdReplacing | Self::ColdCommitted
+            )
     }
 }
 

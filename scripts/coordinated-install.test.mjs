@@ -52,3 +52,30 @@ it('refuses source replacement without trusted handoff support and leaves instal
   expect(await readFile(cli, 'utf8')).toBe('current-cli')
   expect(await readFile(join(retained, 'daemon'), 'utf8')).toBe('live-daemon-asset')
 })
+
+it('exposes an explicit cold-install command without enabling ordinary replacement', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--help'], process.env)
+  expect(result.status).toBe(0)
+  expect(result.stdout).toContain('--skip-build')
+  expect(result.stdout).toContain('local build approval')
+  expect(result.stdout).toContain('running OpenForge')
+})
+
+it('rejects a caller-supplied approval switch before touching an installation', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--approved'], process.env)
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Unknown cold-install option')
+})
+
+it('refuses forged recovery state before executing a retained helper', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'openforge-cold-recovery-'))
+  roots.push(root)
+  const profile = join(root, 'profile')
+  const native = join(profile, 'updates/native')
+  await mkdir(native, { recursive: true, mode: 0o700 })
+  await writeFile(join(native, 'journal.key'), Buffer.alloc(32, 42), { mode: 0o600 })
+  await writeFile(join(native, 'current.json'), JSON.stringify({ payload: '{}', mac: '00'.repeat(32) }), { mode: 0o600 })
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover', '--profile', profile], process.env)
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Invalid cold recovery authentication')
+})

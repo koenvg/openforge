@@ -104,35 +104,51 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     sync_directory(path.parent().ok_or("update file has no parent")?)
 }
 
+pub(crate) fn check_destination(
+    mut lock: &File,
+    root: &Path,
+    installation: &str,
+) -> Result<(), String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let expected = serde_json::to_vec(&(
+        root.canonicalize().map_err(|error| error.to_string())?,
+        installation,
+    ))
+    .map_err(|error| error.to_string())?;
+    let size = lock.metadata().map_err(|error| error.to_string())?.len();
+    if size > 16 * 1024 {
+        return Err("invalid destination ownership record".into());
+    }
+    lock.seek(SeekFrom::Start(0))
+        .map_err(|error| error.to_string())?;
+    let mut current = Vec::new();
+    lock.take(16 * 1024 + 1)
+        .read_to_end(&mut current)
+        .map_err(|error| error.to_string())?;
+    if !current.is_empty() && current != expected {
+        return Err("destination belongs to another update recovery root or installation".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn bind_destination(
     mut lock: &File,
     root: &Path,
     installation: &str,
 ) -> Result<(), String> {
-    use std::io::{Read, Write};
-    let expected = serde_json::to_vec(&(
-        root.canonicalize().map_err(|e| e.to_string())?,
-        installation,
-    ))
-    .map_err(|e| e.to_string())?;
-    let size = lock.metadata().map_err(|e| e.to_string())?.len();
-    if size == 0 {
+    use std::io::{Seek, SeekFrom, Write};
+    check_destination(lock, root, installation)?;
+    if lock.metadata().map_err(|error| error.to_string())?.len() == 0 {
+        let expected = serde_json::to_vec(&(
+            root.canonicalize().map_err(|error| error.to_string())?,
+            installation,
+        ))
+        .map_err(|error| error.to_string())?;
+        lock.seek(SeekFrom::Start(0))
+            .map_err(|error| error.to_string())?;
         lock.write_all(&expected)
             .and_then(|()| lock.sync_all())
-            .map_err(|e| e.to_string())?;
-    } else {
-        if size > 16 * 1024 {
-            return Err("invalid destination ownership record".into());
-        }
-        let mut current = Vec::new();
-        lock.take(16 * 1024 + 1)
-            .read_to_end(&mut current)
-            .map_err(|e| e.to_string())?;
-        if current != expected {
-            return Err(
-                "destination belongs to another update recovery root or installation".into(),
-            );
-        }
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }

@@ -18,6 +18,9 @@ impl InstallTransaction {
             &self.destination,
             &record.staging,
         )?;
+        if authority.cold_install.is_some() {
+            return Err("cold approval cannot authorize a session-preserving update".into());
+        }
         if authority.manifest_sha256 != record.target_hash
             || bundle::measure(&authority.bundle_path)? != record.target_hash
         {
