@@ -17,6 +17,7 @@
     modalsOpen?: boolean
     activeRepoReviewRequestCount?: number
     activeProjectAttentionCount?: number
+    sidebarCollapsed?: boolean
   }
 
   let {
@@ -27,12 +28,16 @@
     modalsOpen = false,
     activeRepoReviewRequestCount = 0,
     activeProjectAttentionCount = 0,
+    sidebarCollapsed = false,
   }: Props = $props()
 
   let navItems = $derived(getIconRailNavItems(pluginNavItems, dashboardNavItem))
 </script>
 
 <nav class="of-icon-rail of-window-drag" aria-label="Project tools">
+  {#if sidebarCollapsed}
+    <div class="rail-window-controls-spacer of-window-controls-spacer" aria-hidden="true"></div>
+  {/if}
   <AnimatedNavList activeId={currentView} class="rail-navigation-items">
     {#snippet children(registerItem)}
       {#each navItems as { view, icon, shortcut, label }}
@@ -79,6 +84,10 @@
     padding: var(--of-space4) 0;
     border-right: var(--of-border-width) solid var(--of-border);
     background: var(--of-surface);
+  }
+
+  .rail-window-controls-spacer {
+    align-self: stretch;
   }
 
   :global(.of-icon-rail > .animated-nav-list) {
