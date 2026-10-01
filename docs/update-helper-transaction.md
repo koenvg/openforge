@@ -44,7 +44,7 @@ Recovery, authorization and staging storage must be outside both replaceable bun
 
 ## Packaging and ordinary-startup evidence
 
-Packaging now seals nested code bundles before the outer app and verifies the result with strict code-signature checks. It does not deep-sign arbitrary retained executables or rewrite daemon manifest hashes. Ad-hoc sealing proves local integrity, not publisher trust or notarization.
+Packaging verifies the three copied native entry points before creating the retained runtime manifest. It preserves valid signatures, ad-hoc signs only unsigned copies, and refuses invalid signatures without repairing them or mutating input artifacts. It then seals Electron's crashpad helper and nested code bundles before the outer app and verifies the result with strict code-signature checks. It does not deep-sign arbitrary retained executables or rewrite daemon manifest hashes. Ad-hoc sealing proves local integrity, not publisher trust or notarization.
 
 Runtime and plugin-host resources live under `Contents/Resources/session-runtime` and `Contents/Resources/plugin-host`; the CLI payload is under `Contents/Resources/openforge-cli`. Mach-O entry points remain under `Contents/MacOS`.
 

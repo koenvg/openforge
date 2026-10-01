@@ -25,7 +25,7 @@ import {
 import { assertExists, pathExists } from './file-system.mjs'
 import { repoRootFromScript } from './repo-root.mjs'
 import { packageRuntimeRelease } from './runtime-release.mjs'
-import { sealLocalApplication } from './local-integrity.mjs'
+import { prepareLocalApplication, sealLocalApplication } from './local-integrity.mjs'
 
 async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier = ELECTRON_BUNDLE_IDENTIFIER } = {}) {
   const plistPath = join(appPath, 'Contents', 'Info.plist')
@@ -106,6 +106,7 @@ export async function packageElectronApp({
   sessionDaemonBinaryPath = join(dirname(sidecarBinaryPath), 'openforge-session-daemon'),
   updateHelperBinaryPath = join(dirname(sidecarBinaryPath), 'openforge-update-helper'),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
+  prepareApplication = prepareLocalApplication,
   sealApplication = sealLocalApplication,
 } = {}) {
   const rendererDist = join(repoRoot, 'dist')
@@ -183,6 +184,7 @@ export async function packageElectronApp({
   await copyIcon(rustSidecarLayout, resourcesDir)
   await copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout)
   const cliAssetsPath = join(resourcesDir, 'openforge-cli')
+  await prepareApplication(outputAppPath)
   await packageRuntimeRelease({
     daemonPath: daemonTargetPath,
     cliAssetsPath: await pathExists(cliAssetsPath) ? cliAssetsPath : undefined,

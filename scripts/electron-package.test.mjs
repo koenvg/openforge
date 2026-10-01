@@ -22,7 +22,7 @@ import { readBuiltinPluginCatalog } from './electron-package/runtime-assets.mjs'
 import { BACKEND_LAYOUT_CONFIG_FILE, resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 // These unit fixtures use text executables. Real sealing is covered by the macOS contract.
-const packageElectronApp = options => assembleElectronApp({ sealApplication: async () => {}, ...options })
+const packageElectronApp = options => assembleElectronApp({ prepareApplication: async () => {}, sealApplication: async () => {}, ...options })
 
 const currentLayoutConfig = {
   backendCrateRoot: 'src-tauri',

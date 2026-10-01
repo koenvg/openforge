@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { packageElectronApp } from './electron-package/package-assembly.mjs'
 import { sealLocalApplication } from './electron-package/local-integrity.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const roots = []
 const enabled = process.platform === 'darwin' && process.env.RUN_ELECTRON_PACKAGE_CONTRACT === '1'
@@ -16,6 +17,58 @@ describe.skipIf(!enabled)('local packaged application integrity', () => {
   afterEach(async () => {
     await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
   })
+
+  it.each(['signed', 'unsigned', 'invalid'])('prepares %s native executables before retention without mutating inputs or repairing invalid signatures', async state => {
+    const root = await mkdtemp(join(tmpdir(), 'openforge-package-integrity-'))
+    roots.push(root)
+    const outputAppPath = join(root, 'Open Forge.app')
+    const layout = resolveRustSidecarLayout({ repoRoot: process.cwd() })
+    const sidecar = layout.releaseSidecarBinaryPath({ cargoBuildTarget: process.env.CARGO_BUILD_TARGET ?? '' })
+    const sources = {
+      sidecarBinaryPath: sidecar,
+      sessionDaemonBinaryPath: join(dirname(sidecar), 'openforge-session-daemon'),
+      updateHelperBinaryPath: join(dirname(sidecar), 'openforge-update-helper'),
+    }
+    const options = { outputAppPath }
+    const codesign = args => execFileSync('/usr/bin/codesign', args, {
+      env: { PATH: '/usr/bin:/bin', HOME: root, TMPDIR: root }, timeout: 30_000, stdio: 'pipe',
+    })
+    await mkdir(join(root, 'inputs'))
+    for (const [option, source] of Object.entries(sources)) {
+      const input = join(root, 'inputs', option)
+      await cp(source, input)
+      codesign(['--force', '--sign', '-', '--timestamp=none', input])
+      if (state === 'unsigned') {
+        codesign(['--remove-signature', input])
+        expect(() => codesign(['--verify', '--strict', input])).toThrow()
+      }
+      if (state === 'invalid' && option === 'updateHelperBinaryPath') {
+        const bytes = await readFile(input)
+        // Change a signed code page without changing the Mach-O architecture header.
+        bytes[4096] ^= 1
+        await writeFile(input, bytes)
+        expect(() => codesign(['--verify', '--strict', input])).toThrow()
+      }
+      options[option] = input
+    }
+    const original = await digest(options.sessionDaemonBinaryPath)
+    if (state === 'invalid') {
+      const helperBefore = await digest(options.updateHelperBinaryPath)
+      await expect(packageElectronApp(options)).rejects.toThrow(/invalid signature/)
+      expect(await digest(join(outputAppPath, 'Contents/MacOS/openforge-update-helper'))).toBe(helperBefore)
+      return
+    }
+    await packageElectronApp(options)
+    expect(await digest(options.sessionDaemonBinaryPath)).toBe(original)
+    const retained = join(outputAppPath, 'Contents/Resources/session-runtime')
+    const manifest = JSON.parse(await readFile(join(retained, 'manifest.json'), 'utf8'))
+    const daemonHash = await digest(join(outputAppPath, 'Contents/MacOS/openforge-session-daemon'))
+    if (state === 'signed') expect(daemonHash).toBe(original)
+    expect(await digest(join(retained, 'openforge-session-daemon'))).toBe(daemonHash)
+    expect(manifest.files.find(file => file.path === 'openforge-session-daemon').sha256).toBe(daemonHash)
+    codesign(['--verify', '--strict', join(retained, 'openforge-session-daemon')])
+    codesign(['--verify', '--deep', '--strict', outputAppPath])
+  }, 120_000)
 
   it('seals an unsigned Electron crashpad helper before its framework without changing retained daemon bytes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openforge-package-integrity-'))
